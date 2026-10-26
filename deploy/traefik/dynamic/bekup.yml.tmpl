@@ -1,0 +1,80 @@
+# Traefik DYNAMIC configuration for bekup (file provider; task 0.7b).
+# Template: __BEKUP_DOMAIN__ is replaced by deploy/traefik/entrypoint.sh with
+# the validated BEKUP_DOMAIN. TLS (certificate resolver or static
+# certificate) is configured on the `websecure` entrypoint; TLS options are
+# in tls.yml.
+
+http:
+  routers:
+    # Everything for the bekup host: UI, GraphQL (POST + WebSocket upgrade on
+    # /graphql) and the streamed downloads. Traefik proxies WebSocket
+    # upgrades natively; nothing is buffered here, so downloads stream.
+    bekup:
+      entryPoints: [websecure]
+      rule: "Host(`__BEKUP_DOMAIN__`)"
+      service: bekup
+      middlewares: [bekup-headers, bekup-ratelimit, bekup-inflight]
+    # Requests that carry a body get a hard size limit. Traefik's only body
+    # limit is the buffering middleware, which also buffers the RESPONSE, so
+    # it must not apply to downloads or WebSockets (both are GET). The
+    # longer rule gives this router the higher priority.
+    bekup-body:
+      entryPoints: [websecure]
+      rule: "Host(`__BEKUP_DOMAIN__`) && (Method(`POST`) || Method(`PUT`) || Method(`PATCH`) || Method(`DELETE`))"
+      service: bekup
+      middlewares: [bekup-headers, bekup-ratelimit, bekup-inflight, bekup-body-limit]
+
+  middlewares:
+    # Defence in depth: bekup sends these (and its CSP, D-082) itself. The
+    # headers middleware *sets* (replaces) values, so they are not doubled.
+    bekup-headers:
+      headers:
+        # HSTS: 2 years, subdomains, preload-ready (submit to
+        # hstspreload.org only when every subdomain serves HTTPS).
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        contentTypeNosniff: true
+        frameDeny: true
+        customResponseHeaders:
+          Server: ""
+          X-Powered-By: ""
+        # Traefik rewrites X-Forwarded-* itself (clients are not trusted) but
+        # passes the RFC 7239 Forwarded header through: drop it.
+        customRequestHeaders:
+          Forwarded: ""
+
+    # Light per-client-IP rate limit (remote address of the TCP connection;
+    # client-supplied X-Forwarded-For is ignored). bekup applies its own,
+    # stricter limits to logins and sensitive mutations (task 1.1).
+    bekup-ratelimit:
+      rateLimit:
+        average: 50
+        period: 1s
+        burst: 100
+
+    # Concurrent requests (including open WebSockets) per client IP.
+    bekup-inflight:
+      inFlightReq:
+        amount: 100
+
+    # Request bodies above 2 MiB are rejected with 413 (bekup itself allows
+    # [server] max_body_bytes, 1 MiB by default).
+    bekup-body-limit:
+      buffering:
+        maxRequestBodyBytes: 2097152
+        memRequestBodyBytes: 2097152
+        memResponseBodyBytes: 4194304
+
+  services:
+    bekup:
+      loadBalancer:
+        passHostHeader: true
+        # Flush streamed responses (downloads) immediately.
+        responseForwarding:
+          flushInterval: "-1ms"
+        servers:
+          # Fixed internal URL on the `frontend` network (no Docker socket,
+          # no discovery). Plain HTTP never leaves that internal network.
+          - url: "http://serve:8080"

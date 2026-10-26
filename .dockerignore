@@ -1,0 +1,52 @@
+# Keep the build context minimal: nothing secret, nothing generated, nothing
+# that would bust the cache needlessly. Allowlist style would be stricter but
+# breaks `COPY . .` for new packages, so everything risky is denied here.
+
+# Secrets, keys and local configuration (never sent to the daemon).
+secrets/
+certs/
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.age
+**/id_ed25519*
+**/.env
+**/.env.*
+bekup.toml
+runner.toml
+scratch/
+data/
+
+# VCS, editors, agents.
+.git/
+.github/
+.idea/
+.vscode/
+.claude/
+.mcp.json
+**/.DS_Store
+
+# Build outputs and dependency caches (rebuilt inside the image).
+bin/
+dist/
+tmp/
+/bekup
+**/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+web/playwright-report/
+web/test-results/
+**/*.tsbuildinfo
+coverage.*
+*.out
+*.test
+
+# Not needed in the image.
+plans/
+docs/
+deploy/dev/
+docker-compose*.yml
+Dockerfile
+.dockerignore

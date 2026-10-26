@@ -1,0 +1,97 @@
+# Traefik STATIC configuration for bekup (task 0.7b, profile `traefik`).
+# Template: deploy/traefik/entrypoint.sh renders it to /tmp/traefik/traefik.yml
+# (placeholders __NAME__ are replaced with validated values; Traefik itself
+# does not expand environment variables in its static file). In ACME mode the
+# certificatesResolvers block from static-acme.yml.tmpl is appended.
+#
+# Security notes:
+# - No Docker provider: Traefik never gets the Docker socket. Routing comes
+#   from the file provider (dynamic/), pointing at the fixed service URL
+#   http://serve:8080 on the internal `frontend` network.
+# - No API/dashboard, no anonymous usage reporting, no version checks.
+# - Listens on unprivileged ports (8080/8443) as UID 65532 without any
+#   capability; compose maps host 80/443 to them.
+# - X-Forwarded-* sent by clients is NOT trusted (no forwardedHeaders
+#   trustedIPs): Traefik replaces it with what it observed itself.
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  format: common
+  noColor: true
+
+# No access log: bekup logs requests itself, and the download ticket is part
+# of the URL path (/api/download/{ticket}, single-use, D-056).
+
+api:
+  dashboard: false
+  insecure: false
+
+ping:
+  entryPoint: ping
+
+entryPoints:
+  web:
+    address: ":8080"
+    http:
+      redirections:
+        entryPoint:
+          # Public HTTPS port (443 in production; host port mapping in dev).
+          to: ":__HTTPS_PUBLIC_PORT__"
+          scheme: https
+          permanent: true
+      aliasHeadersStrategy: delete
+    transport:
+      respondingTimeouts:
+        readTimeout: 10s
+        writeTimeout: 10s
+        idleTimeout: 30s
+  websecure:
+    address: ":8443"
+    http:
+      tls:
+        options: default
+        # __CERT_RESOLVER__
+      # Drop headers whose names alias a managed header (X_Forwarded_For,
+      # X.Forwarded.For, ...) so they can never be mistaken for real ones.
+      aliasHeadersStrategy: delete
+      # bekup's paths never need encoded special characters; rejecting them
+      # prevents path-confusion ("split view") between proxy and backend.
+      encodedCharacters:
+        allowEncodedSlash: false
+        allowEncodedBackSlash: false
+        allowEncodedNullCharacter: false
+        allowEncodedSemicolon: false
+        allowEncodedPercent: false
+        allowEncodedQuestionMark: false
+        allowEncodedHash: false
+    http2:
+      maxConcurrentStreams: 128
+    transport:
+      respondingTimeouts:
+        # Reading the whole request (bodies are capped at 2 MiB anyway).
+        readTimeout: 60s
+        # 0 = no limit on writing the response: streamed backup downloads
+        # (GET /api/download/{ticket}) can take hours.
+        writeTimeout: 0s
+        idleTimeout: 180s
+      lifeCycle:
+        graceTimeOut: 30s
+  # Healthcheck only, loopback inside the container (`traefik healthcheck`).
+  ping:
+    address: "127.0.0.1:8082"
+    http:
+      aliasHeadersStrategy: delete
+
+providers:
+  file:
+    directory: /tmp/traefik/dynamic
+    watch: false
+
+serversTransport:
+  # Upstream is plain HTTP on the internal network; never skip verification
+  # for anything else.
+  insecureSkipVerify: false

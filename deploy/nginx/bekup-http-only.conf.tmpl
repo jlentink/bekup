@@ -1,0 +1,27 @@
+# Bootstrap site configuration (task 0.7b): used only in ACME mode until the
+# first certificate exists. Serves the ACME HTTP-01 challenge on port 80 and
+# nothing else; there is no HTTPS listener yet and bekup is NOT reachable.
+# deploy/nginx/entrypoint.sh switches to bekup-https.conf.tmpl and reloads
+# nginx as soon as certbot has written the certificate.
+
+server {
+    listen 8080 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 8080;
+    server_name ${BEKUP_DOMAIN};
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        default_type text/plain;
+        return 503 "certificate not issued yet\n";
+    }
+}

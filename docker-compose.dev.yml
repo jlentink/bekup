@@ -1,0 +1,433 @@
+# bekup DEVELOPMENT override (task 0.7). Never use in production.
+#
+#   deploy/dev/gen-dev-keys.sh                     # once: dev keys/passwords/certs
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#   (or `just dev`)
+#
+# Adds: serve with air hot reload (dev mode), sample target DBs (PG 15,
+# MySQL 8.4, MariaDB 11.4) with seed data, a PG target reachable ONLY through
+# an SSH bastion (tunnel tests), minio with Object Lock, an SFTP server,
+# mailpit, and an optional Vite dev server (`--profile web`).
+#
+# Host ports are bound to 127.0.0.1 only. The production hardening of the
+# bekup services is kept (read-only rootfs, no capabilities, nonroot); the
+# few dev-only relaxations are marked "DEV ONLY".
+#
+# Docker Desktop (macOS/Windows): the socket is root:root inside the VM, so
+# run with DOCKER_GID=0 for the runner (see docs/installation/compose.md).
+
+x-dev-hardening: &dev-hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-bekup-build: &bekup-build
+  context: .
+  target: runtime
+  args:
+    WEB_BUILD: ${BEKUP_WEB_BUILD:-skip}
+
+services:
+  # -------------------------------------------------------------------------
+  # bekup services
+  # -------------------------------------------------------------------------
+  certs-init:
+    build: *bekup-build
+
+  migrate:
+    build: *bekup-build
+
+  runner:
+    build: *bekup-build
+
+  serve:
+    # Go toolchain + air instead of the distroless binary.
+    build:
+      context: .
+      target: dev
+    image: bekup:dev-air
+    # Build output goes to /air (nonroot-owned volume) because the source is
+    # mounted read-only and /tmp is noexec.
+    entrypoint:
+      - air
+      - -c
+      - .air.toml
+      - --tmp_dir=/air
+      - --build.cmd=go build -trimpath -o /air/bekup ./cmd/bekup
+      - --build.entrypoint=/air/bekup
+    command: []
+    environment:
+      # DEV ONLY: relaxed guardrails (http base_url, no trusted_proxies).
+      BEKUP_DEV: "1"
+      # DEV ONLY: listen on all interfaces so the published port works
+      # (production binds to the frontend address only).
+      BEKUP_SERVER_LISTEN: 0.0.0.0:8080
+      # https://bekup.localhost:8443 when using a proxy profile (see below).
+      BEKUP_SERVER_BASE_URL: ${BEKUP_DEV_BASE_URL:-http://localhost:8080}
+    volumes:
+      # Read-only source, and ONLY what `go build ./cmd/bekup` needs: the
+      # working tree also holds secrets/ (owner DB URL, postgres superuser
+      # password, the unencrypted dev CA key, dev TLS keys), certs/, local
+      # bekup.toml/runner.toml and .env files, none of which the dev serve
+      # may read. Its own secrets arrive as Docker secrets like in
+      # production. Add new top-level Go source dirs here (task 2.4:
+      # ./proto). The container can never modify the working tree.
+      - ./go.mod:/src/go.mod:ro
+      - ./go.sum:/src/go.sum:ro
+      - ./.air.toml:/src/.air.toml:ro
+      - ./cmd:/src/cmd:ro
+      - ./internal:/src/internal:ro
+      - ./web/embed.go:/src/web/embed.go:ro
+      - ./web/dist:/src/web/dist:ro
+      - go-mod:/go/pkg/mod
+      # GOCACHE and GOTMPDIR (go build needs more room than the /tmp tmpfs).
+      - go-build:/home/nonroot/.cache
+      - air-build:/air
+    # DEV ONLY: no reverse proxy in dev; published on loopback only.
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # The air image has no `bekup` on PATH; dev relies on air's restarts.
+      disable: true
+    deploy:
+      resources:
+        # go build needs more memory than the running server.
+        limits: { cpus: "4.00", memory: 4G, pids: 1024 }
+
+  # -------------------------------------------------------------------------
+  # Optional Vite dev server: docker compose ... --profile web up
+  # (or run `pnpm dev` in web/ on the host, which is usually faster).
+  # -------------------------------------------------------------------------
+  web:
+    <<: *dev-hardening
+    profiles: [web]
+    image: node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+    user: "1000:1000"
+    working_dir: /src/web
+    environment:
+      HOME: /tmp
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      COREPACK_HOME: /tmp/corepack
+      BEKUP_DEV_BACKEND: http://serve:8080
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        corepack enable --install-directory /tmp/bin &&
+        PATH=/tmp/bin:$$PATH pnpm install --frozen-lockfile --store-dir /pnpm-store &&
+        PATH=/tmp/bin:$$PATH exec pnpm dev --host 0.0.0.0
+    volumes:
+      - ./web:/src/web
+      - ./VERSION:/src/VERSION:ro
+      # Linux-built node_modules, kept separate from the host's.
+      - web-node-modules:/src/web/node_modules
+      - pnpm-store:/pnpm-store
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    networks: [egress]
+    ports:
+      - "127.0.0.1:5173:5173"
+
+  # -------------------------------------------------------------------------
+  # Reverse-proxy profiles in dev (task 0.7b): a static local certificate for
+  # bekup.localhost instead of ACME, published on loopback only:
+  #   deploy/dev/gen-dev-tls.sh            # mkcert (or self-signed fallback)
+  #   BEKUP_DEV_BASE_URL=https://bekup.localhost:8443 \
+  #     docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  #     --profile traefik up               # or --profile nginx
+  # -> https://bekup.localhost:8443 (http://bekup.localhost:8000 redirects)
+  # -------------------------------------------------------------------------
+  traefik:
+    environment: &dev-proxy-env
+      BEKUP_DOMAIN: ${BEKUP_DOMAIN:-bekup.localhost}
+      PROXY_TLS_MODE: static
+      PROXY_HTTPS_PUBLIC_PORT: "8443"
+    volumes: &dev-proxy-certs
+      - type: bind
+        source: ${BEKUP_DEV_TLS_DIR:-./secrets/dev/tls}
+        target: /certs
+        read_only: true
+        bind:
+          create_host_path: false
+    ports: !override
+      - "127.0.0.1:8000:8080"
+      - "127.0.0.1:8443:8443"
+
+  nginx:
+    environment: *dev-proxy-env
+    volumes: *dev-proxy-certs
+    ports: !override
+      - "127.0.0.1:8000:8080"
+      - "127.0.0.1:8443:8443"
+
+  # No ACME in dev: certbot never starts.
+  certbot:
+    profiles: !override [dev-disabled]
+
+  # -------------------------------------------------------------------------
+  # Sample target databases (runner-only `targets` network). No host ports:
+  # like production, only the runner can reach them.
+  # -------------------------------------------------------------------------
+  pg15:
+    <<: *dev-hardening
+    image: postgres:15-alpine@sha256:a8e042598834300dfaa17a54f695b87b7f25d3490433bbbe2ef3bffbb9747f24
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=1m,uid=70,gid=70,mode=0700
+    cap_drop: [ALL]
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_PASSWORD_FILE: /run/secrets/dev_pg_password
+    secrets: [dev_pg_password]
+    volumes:
+      - pg15-data:/var/lib/postgresql/data
+      - ./deploy/dev/seed/postgres:/docker-entrypoint-initdb.d:ro
+    networks: [targets]
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=/var/run/postgresql", "--dbname=shop", "--username=postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # Reachable ONLY via the bastion (network `tunnel-only`); proves that SSH
+  # tunnels work and that the runner cannot bypass them.
+  pg15-tunneled:
+    <<: *dev-hardening
+    image: postgres:15-alpine@sha256:a8e042598834300dfaa17a54f695b87b7f25d3490433bbbe2ef3bffbb9747f24
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=1m,uid=70,gid=70,mode=0700
+    cap_drop: [ALL]
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_PASSWORD_FILE: /run/secrets/dev_pg_password
+    secrets: [dev_pg_password]
+    volumes:
+      - pg15-tunneled-data:/var/lib/postgresql/data
+      - ./deploy/dev/seed/postgres:/docker-entrypoint-initdb.d:ro
+    networks: [tunnel-only]
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=/var/run/postgresql", "--dbname=shop", "--username=postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  mysql:
+    <<: *dev-hardening
+    image: mysql:8.4@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+    environment:
+      MYSQL_DATABASE: shop
+      MYSQL_USER: bekup
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/dev_mysql_root_password
+      MYSQL_PASSWORD_FILE: /run/secrets/dev_mysql_password
+    secrets: [dev_mysql_root_password, dev_mysql_password]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/dev/seed/mysql:/docker-entrypoint-initdb.d:ro
+    networks: [targets]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--silent", "--protocol=socket"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mariadb:
+    <<: *dev-hardening
+    image: mariadb:11.4@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
+    environment:
+      MARIADB_DATABASE: shop
+      MARIADB_USER: bekup
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/dev_mariadb_root_password
+      MARIADB_PASSWORD_FILE: /run/secrets/dev_mariadb_password
+    secrets: [dev_mariadb_root_password, dev_mariadb_password]
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./deploy/dev/seed/mysql:/docker-entrypoint-initdb.d:ro
+    networks: [targets]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # -------------------------------------------------------------------------
+  # SSH bastion: key-only login as user `tunnel` (port 2222), TCP forwarding
+  # enabled by a pinned init script (configs.bastion_tcp_forwarding). On `targets` (runner reaches it) and
+  # `tunnel-only` (it reaches pg15-tunneled).
+  # -------------------------------------------------------------------------
+  bastion:
+    <<: *dev-hardening
+    image: lscr.io/linuxserver/openssh-server:10.3_p1-r1-ls240@sha256:b07414bb329b86a00525c9256711a7855fc3a369e9f62c36f1de8d1923197580
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      USER_NAME: tunnel
+      PUBLIC_KEY_FILE: /run/secrets/dev_bekup_ssh_pub
+      PASSWORD_ACCESS: "false"
+      SUDO_ACCESS: "false"
+      LOG_STDOUT: "true"
+    # AllowTcpForwarding via the image's own custom-init hook instead of
+    # DOCKER_MODS: a mod would be fetched unpinned from ghcr.io at runtime.
+    # Compose copies `content` configs into the container (root-owned). The
+    # `mode` IS applied to such copied configs despite compose's "not
+    # supported outside Swarm mode" warning; without it the hook skips the
+    # script as non-executable.
+    configs:
+      - source: bastion_tcp_forwarding
+        target: /custom-cont-init.d/10-allow-tcp-forwarding
+        mode: 0555
+    secrets: [dev_bekup_ssh_pub]
+    volumes:
+      # Keeps the host keys stable so the pinned host key survives restarts.
+      - bastion-config:/config
+    networks: [targets, tunnel-only]
+
+  # -------------------------------------------------------------------------
+  # Destinations and SMTP (reached by serve over `egress`; add their names or
+  # the egress subnet to [netguard] allow lists in dev).
+  # -------------------------------------------------------------------------
+  # MinIO's own images are no longer published on Docker Hub/quay; Chainguard
+  # builds MinIO from source (only :latest is free, so the digest is the pin).
+  minio:
+    <<: *dev-hardening
+    image: cgr.dev/chainguard/minio:latest@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/dev_minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/dev_minio_root_password
+      MINIO_BROWSER_REDIRECT: "false"
+    secrets: [dev_minio_root_user, dev_minio_root_password]
+    volumes:
+      - minio-data:/data
+    networks: [egress]
+    ports:
+      - "127.0.0.1:9001:9001"   # console
+
+  # Creates the dev buckets: `bekup-dev` (versioned) and `bekup-dev-locked`
+  # (Object Lock, GOVERNANCE 1 day default retention), then exits.
+  minio-init:
+    <<: *dev-hardening
+    image: cgr.dev/chainguard/minio-client:latest-dev@sha256:e505a9bf01fe246c1beb7724d9b0b6d25159a027a1d840dade492042b239aad4
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop: [ALL]
+    environment:
+      HOME: /tmp
+    secrets: [dev_minio_root_user, dev_minio_root_password]
+    entrypoint: ["/bin/sh", "-ec"]
+    # The credentials are read from the Docker secret files inside this shell
+    # and handed to mc only through the MC_HOST_dev environment variable of
+    # this short-lived process: never on any argv (visible in /proc and
+    # `ps`), never in the compose file or `docker inspect`, never in an mc
+    # config file. (The generated values are URL-safe base64.)
+    command:
+      - |
+        MC_HOST_dev="http://$$(cat /run/secrets/dev_minio_root_user):$$(cat /run/secrets/dev_minio_root_password)@minio:9000"
+        export MC_HOST_dev
+        export MC_CONFIG_DIR=/tmp/mc
+        i=0; until mc ready dev >/dev/null 2>&1; do i=$$((i+1)); [ $$i -lt 60 ] || exit 1; sleep 1; done
+        mc mb --ignore-existing dev/bekup-dev
+        mc version enable dev/bekup-dev
+        mc mb --ignore-existing --with-lock dev/bekup-dev-locked
+        mc retention set --default GOVERNANCE 1d dev/bekup-dev-locked
+        echo "minio buckets ready"
+    networks: [egress]
+    depends_on: [minio]
+    restart: "no"
+
+  # SFTP destination: user `bekup` (key only), writable dir /upload.
+  sftp:
+    <<: *dev-hardening
+    image: atmoz/sftp:alpine@sha256:43dd1c023cf1bae487127d4b54660b0aee6e94c188a6599be36fb89ba115f961
+    command: ["bekup::1001:1001:upload"]
+    volumes:
+      - ./secrets/dev/bekup_ssh_ed25519.pub:/home/bekup/.ssh/keys/bekup.pub:ro
+      - ./secrets/dev/sftp_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro
+    # No volume for /home/bekup/upload: atmoz only chowns directories it
+    # creates itself. Uploads are lost when the container is re-created.
+    networks: [egress]
+
+  # SMTP sink with a web UI at http://127.0.0.1:8025.
+  mailpit:
+    <<: *dev-hardening
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    environment:
+      MP_DATABASE: /tmp/mailpit.db
+    networks: [egress]
+    ports:
+      - "127.0.0.1:8025:8025"
+
+networks:
+  # Bastion <-> pg15-tunneled only. Internal: no egress, runner not attached.
+  tunnel-only:
+    internal: true
+
+volumes:
+  go-mod: {}
+  go-build: {}
+  air-build: {}
+  web-node-modules: {}
+  pnpm-store: {}
+  pg15-data: {}
+  pg15-tunneled-data: {}
+  mysql-data: {}
+  mariadb-data: {}
+  bastion-config: {}
+  minio-data: {}
+
+# DEV ONLY: dev-mode configs (no secrets inside; see the files).
+configs:
+  bekup_toml:
+    file: ./deploy/dev/bekup.dev.toml
+  runner_toml:
+    file: ./deploy/dev/runner.dev.toml
+  # Bastion: enable TCP forwarding (pinned replacement for the ssh-tunnel
+  # mod). Runs after the image's init has written /config/sshd/sshd_config.
+  bastion_tcp_forwarding:
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      f=/config/sshd/sshd_config
+      sed -i 's/^AllowTcpForwarding no$$/AllowTcpForwarding yes/' "$$f"
+      grep -qx 'AllowTcpForwarding yes' "$$f"
+      echo "bastion: AllowTcpForwarding enabled"
+
+secrets:
+  dev_pg_password:
+    file: ./secrets/dev/pg_password
+  dev_mysql_root_password:
+    file: ./secrets/dev/mysql_root_password
+  dev_mysql_password:
+    file: ./secrets/dev/mysql_password
+  dev_mariadb_root_password:
+    file: ./secrets/dev/mariadb_root_password
+  dev_mariadb_password:
+    file: ./secrets/dev/mariadb_password
+  dev_minio_root_user:
+    file: ./secrets/dev/minio_root_user
+  dev_minio_root_password:
+    file: ./secrets/dev/minio_root_password
+  dev_bekup_ssh_pub:
+    file: ./secrets/dev/bekup_ssh_ed25519.pub

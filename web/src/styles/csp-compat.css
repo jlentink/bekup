@@ -1,0 +1,32 @@
+/*
+ * Static replacements for styles that third-party libraries would otherwise
+ * inject at runtime with <style> elements. Those injections are blocked by our
+ * CSP (`style-src 'self'`, no 'unsafe-inline', no nonce) and are removed at
+ * build time by vite-plugins/csp-strict-styles.ts. See docs/DECISIONS.md
+ * ("CSP style-src without unsafe-inline").
+ */
+
+/* sonner: its stylesheet is imported as a file instead of being injected. */
+@import "sonner/dist/styles.css";
+
+/* react-remove-scroll(-bar) via react-style-singleton: scroll lock while a
+ * modal Radix layer is open. The library still sets the data attribute on
+ * <body> through the DOM API, which CSP does not restrict. The scrollbar gap
+ * compensation is replaced by `scrollbar-gutter: stable` on <html>. */
+body[data-scroll-locked] {
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+}
+
+/* @radix-ui/react-select and @radix-ui/react-scroll-area: hide the native
+ * scrollbar of their viewports. */
+[data-radix-select-viewport],
+[data-radix-scroll-area-viewport] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+[data-radix-select-viewport]::-webkit-scrollbar,
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  display: none;
+}

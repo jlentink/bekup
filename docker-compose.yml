@@ -1,0 +1,580 @@
+# bekup production example (task 0.7). Documentation: docs/installation/compose.md
+#
+# Components and trust boundaries (plan "Components & trust boundaries"):
+#
+#   reverse proxy (profiles traefik | nginx) ──frontend──> serve
+#   serve ──backend──> postgres            (role bekup_app; migrations as bekup_owner)
+#   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
+#   runner ──targets──> target databases   (runner only; serve can never reach them)
+#   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
+#
+# Before the first `docker compose up -d`:
+#   1. Create ./bekup.toml and ./runner.toml from the *.example.toml files.
+#   2. Create the secret files in ./secrets/ (see the docs; `just keygen`).
+#   3. Generate the mTLS certificates once:
+#        docker compose --profile setup run --rm certs-init
+#   4. Start with ONE reverse-proxy profile for HTTPS (traefik | nginx):
+#        BEKUP_DOMAIN=backup.example.com ACME_EMAIL=ops@example.com \
+#          docker compose --profile traefik up -d
+#      and set bekup.toml [server] trusted_proxies = ["10.213.250.5/32"].
+#
+# Every image is pinned by tag AND digest; Renovate keeps the digests current
+# (renovate.json, D-061). Set BEKUP_IMAGE to a released, digest-pinned
+# ghcr.io/jlentink/bekup reference in production.
+
+name: bekup
+
+# ---------------------------------------------------------------------------
+# Shared hardening for every bekup container (merged with `<<:`).
+# ---------------------------------------------------------------------------
+x-bekup-hardening: &bekup-hardening
+  image: ${BEKUP_IMAGE:-bekup:dev}
+  # distroless "nonroot" UID/GID; never root.
+  user: "65532:65532"
+  # Immutable root filesystem: a compromised process cannot drop binaries or
+  # persist anything outside the explicitly mounted volumes.
+  read_only: true
+  # The only writable scratch space; noexec so nothing written there can run.
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+  # bekup needs no Linux capabilities at all (it binds ports >1024).
+  cap_drop: [ALL]
+  # Blocks privilege gain through setuid/setgid binaries or file capabilities.
+  security_opt:
+    - no-new-privileges:true
+  # Bounded logs so a noisy container cannot fill the host disk.
+  logging: &bekup-logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  # -------------------------------------------------------------------------
+  # certs-init: one-shot generation of the private CA and per-component mTLS
+  # certificates (task 0.6, `bekup certs init`). Run it explicitly:
+  #   docker compose --profile setup run --rm certs-init
+  # It prompts (no echo) for a CA key passphrase (min 16 characters) and
+  # writes below ./secrets/certs (docs/security/mtls-certs.md):
+  #   ca/ca.crt, ca/ca.key (age-encrypted)  -> move ca/ OFFLINE afterwards
+  #   runner/{runner.crt,runner.key,ca.crt}, serve/{serve.crt,serve.key,ca.crt}
+  # It is the ONLY container that ever sees the CA private key. serve and
+  # runner each receive only their own directory's files as Docker secrets
+  # (see `secrets:`). Rotation (with ca/ temporarily restored):
+  #   docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --all
+  # -------------------------------------------------------------------------
+  certs-init:
+    <<: *bekup-hardening
+    profiles: [setup]
+    command:
+      - certs
+      - init
+      - --dir=/certs
+      - --component=runner
+      - --component=serve
+    volumes:
+      - type: bind
+        source: ./secrets/certs
+        target: /certs
+        bind:
+          create_host_path: false
+    # No network at all: certificate generation needs none.
+    network_mode: none
+    restart: "no"
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 128M, pids: 32 }
+
+  # -------------------------------------------------------------------------
+  # migrate: applies the goose migrations as bekup_owner, then exits.
+  # Only this one-shot container ever holds the owner credentials; serve runs
+  # as bekup_app and can therefore never alter the schema or the audit-log
+  # protections (D-054).
+  # -------------------------------------------------------------------------
+  migrate:
+    <<: *bekup-hardening
+    command: [migrate, up]
+    environment:
+      # Path, not a secret: [database] owner_url_file (this is also the
+      # default). migrate never receives the bekup_app URL, and serve never
+      # receives this owner secret.
+      BEKUP_DATABASE_OWNER_URL_FILE: /run/secrets/bekup_database_owner_url
+    configs:
+      - source: bekup_toml
+        target: /etc/bekup/bekup.toml
+    secrets:
+      - bekup_database_owner_url
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 256M, pids: 64 }
+
+  # -------------------------------------------------------------------------
+  # serve: GraphQL API, UI, scheduler and River workers.
+  # Plain HTTP on the internal `frontend` network only; TLS is terminated by
+  # the reverse proxy (D-017). Its port is deliberately NOT published.
+  # -------------------------------------------------------------------------
+  serve:
+    <<: *bekup-hardening
+    command: [serve]
+    configs:
+      - source: bekup_toml
+        target: /etc/bekup/bekup.toml
+    secrets:
+      - bekup_master_key
+      - bekup_database_url
+      - source: serve_ca_crt
+        target: bekup_ca.crt
+      - source: bekup_client_crt
+        target: bekup_client.crt
+      - source: bekup_client_key
+        target: bekup_client.key
+    volumes:
+      # Root of disk destinations (confined via os.Root, D-055).
+      - bekup-backups:/var/lib/bekup/backups
+      # Restore staging (D-022). Size it for your largest artifact.
+      - bekup-scratch:/var/lib/bekup/scratch
+    networks:
+      frontend:
+        # Fixed address so [server] listen can bind to this interface only
+        # (listen = "10.213.250.10:8080"): serve is then unreachable from the
+        # backend, egress and runner-ctl networks.
+        ipv4_address: ${SERVE_FRONTEND_IP:-10.213.250.10}
+      backend: {}
+      runner-ctl: {}
+      egress: {}
+    # NO `ports:`. Never publish serve; only the reverse proxy reaches it.
+    healthcheck:
+      # Exec form: distroless has no shell. Planned subcommand (proposed
+      # decision) that probes /readyz on the configured listen address.
+      test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "serve"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_started
+    restart: unless-stopped
+    stop_grace_period: 60s
+    deploy:
+      resources:
+        # argon2id (64 MiB x argon2_max_concurrent) + S3 multipart buffers
+        # (part size x concurrency) dominate memory; raise with care.
+        limits: { cpus: "2.00", memory: 2G, pids: 512 }
+
+  # -------------------------------------------------------------------------
+  # runner: the ONLY component with Docker access (D-003). Starts the
+  # digest-pinned dump containers with a fixed, hardened spec.
+  # -------------------------------------------------------------------------
+  runner:
+    <<: *bekup-hardening
+    command: [runner]
+    # Do not set `hostname:`: the runner detects its own container through
+    # the default hostname (container ID) to join per-run networks. If that
+    # fails, set runner.toml [docker] self_container
+    # (env BEKUP_DOCKER_SELF_CONTAINER).
+    configs:
+      - source: runner_toml
+        target: /etc/bekup/runner.toml
+    secrets:
+      - source: runner_ca_crt
+        target: bekup_ca.crt
+      - source: runner_crt
+        target: runner.crt
+      - source: runner_key
+        target: runner.key
+    # Access to the Docker socket is equivalent to root on the host. That is
+    # why it is confined to this small, typed, mTLS-only service that accepts
+    # no free-form commands and runs only allowlisted images (D-029–D-033).
+    # `:ro` does NOT restrict the Docker API; it only stops the socket inode
+    # being replaced. See docs/installation/rootless-docker.md for rootless
+    # Docker / userns-remap as additional hardening.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # Supplementary group owning the socket on the host:
+    #   stat -c %g /var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-999}"
+    networks:
+      runner-ctl:
+        # Fixed address so [listen] address can bind to this interface only
+        # (listen address = "10.213.251.10:7443"). The gRPC port is then
+        # unreachable from the targets network and from dump containers on
+        # the per-run networks.
+        ipv4_address: ${RUNNER_CTL_IP:-10.213.251.10}
+      targets: {}
+    # Deliberately NOT on `backend`: the runner has no database access.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "runner"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    deploy:
+      resources:
+        # The runner only proxies streams; dump containers get their own
+        # limits from runner.toml [docker].
+        limits: { cpus: "1.00", memory: 512M, pids: 256 }
+
+  # -------------------------------------------------------------------------
+  # postgres: bekup's own app database (not a backup target).
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
+    # Run directly as the image's postgres user (UID 70 on alpine): the
+    # entrypoint then needs no root, no chown and no gosu, so every
+    # capability can be dropped.
+    user: "70:70"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /var/run/postgresql:rw,noexec,nosuid,nodev,size=1m,uid=70,gid=70,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    shm_size: 256m
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      # SCRAM everywhere; no trust/md5 for TCP connections.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256 --data-checksums"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      # Read only by deploy/postgres/init/10-bekup-roles.sh (NOT bekup config
+      # keys): the role passwords as Docker secret files.
+      POSTGRES_BEKUP_OWNER_PASSWORD_FILE: /run/secrets/bekup_owner_password
+      POSTGRES_BEKUP_APP_PASSWORD_FILE: /run/secrets/bekup_app_password
+    command:
+      - postgres
+      - -c
+      - password_encryption=scram-sha-256
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+    secrets:
+      - postgres_password
+      - bekup_owner_password
+      - bekup_app_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates bekup_owner / bekup_app and the bekup database on first start.
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    # NO `ports:`: only serve and migrate reach the database.
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=/var/run/postgresql", "--username=postgres", "--dbname=postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging: *bekup-logging
+    deploy:
+      resources:
+        limits: { cpus: "2.00", memory: 1G, pids: 256 }
+
+  # =========================================================================
+  # Reverse proxy (task 0.7b). Enable EXACTLY ONE profile:
+  #   docker compose --profile traefik up -d     or     --profile nginx
+  # TLS for the UI is terminated here (D-017, D-048); serve stays unpublished
+  # on the internal `frontend` network. Neither proxy gets the Docker socket.
+  # Proxy-only environment (compose variables, NOT bekup config keys; set
+  # them in your shell or a .env file next to this file):
+  #   BEKUP_DOMAIN    public host name, e.g. backup.example.com (required)
+  #   ACME_EMAIL      Let's Encrypt account e-mail (required for ACME)
+  #   ACME_CA_SERVER  ACME directory (default Let's Encrypt production; use
+  #                   https://acme-staging-v02.api.letsencrypt.org/directory
+  #                   while testing)
+  #   PROXY_TLS_MODE  acme (default) | static (own certificate in /certs)
+  #   PROXY_FRONTEND_IP  the proxy's fixed address on `frontend`
+  #                   (default 10.213.250.5); bekup.toml [server]
+  #                   trusted_proxies must name exactly this address (/32).
+  # Docs: docs/installation/reverse-proxy.md
+  # =========================================================================
+
+  # One-shot: hands the ACME storage volume to UID 65532 (Docker creates
+  # named volumes root-owned). Only CHOWN/FOWNER, no network.
+  traefik-init:
+    image: &traefik-image traefik:v3.7.16@sha256:c8a121e4bb1347e8fd52657fab12f2cb70b68f8a018895e2068f92c9e519b9c2
+    profiles: [traefik]
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown 65532:65532 /acme && chmod 0700 /acme"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - traefik-acme:/acme
+    network_mode: none
+    restart: "no"
+    logging: *bekup-logging
+
+  # Traefik v3 with Let's Encrypt (HTTP-01). Static + dynamic configuration
+  # from deploy/traefik/ via the FILE provider: no Docker provider, so no
+  # Docker socket. Routes to the fixed URL http://serve:8080.
+  traefik:
+    image: *traefik-image
+    profiles: [traefik]
+    user: "65532:65532"
+    entrypoint: ["/bin/sh", "/etc/traefik/bekup/entrypoint.sh"]
+    command: []
+    environment:
+      BEKUP_DOMAIN: ${BEKUP_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_CA_SERVER: ${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+      PROXY_TLS_MODE: ${PROXY_TLS_MODE:-acme}
+      PROXY_HTTPS_PUBLIC_PORT: "443"
+    read_only: true
+    tmpfs:
+      # Rendered configuration lives here (deploy/traefik/entrypoint.sh).
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,uid=65532,gid=65532,mode=0700
+    # Unprivileged ports inside the container: no NET_BIND_SERVICE needed.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./deploy/traefik:/etc/traefik/bekup:ro
+      # acme.json (account key + certificates), 0600 inside a 0700 dir.
+      - traefik-acme:/acme
+    ports:
+      - "80:8080"
+      - "443:8443"
+    networks:
+      frontend:
+        ipv4_address: ${PROXY_FRONTEND_IP:-10.213.250.5}
+      edge: {}
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--configFile=/tmp/traefik/traefik.yml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      traefik-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *bekup-logging
+    deploy:
+      resources:
+        limits: { cpus: "1.00", memory: 256M, pids: 256 }
+
+  # One-shot: hands the certificate and challenge volumes to UID 65532.
+  nginx-init:
+    image: &nginx-image nginxinc/nginx-unprivileged:1.31.7-alpine3.24@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
+    profiles: [nginx]
+    user: "0:0"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - chown 65532:65532 /etc/letsencrypt /var/www/acme && chmod 0700 /etc/letsencrypt && chmod 0755 /var/www/acme
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - nginx-certs:/etc/letsencrypt
+      - nginx-acme-webroot:/var/www/acme
+    network_mode: none
+    restart: "no"
+    logging: *bekup-logging
+
+  # Hardened plain nginx (unprivileged image, static config from
+  # deploy/nginx/). nginx-proxy + acme-companion were rejected because both
+  # need the Docker socket (root-equivalent); see D-094.
+  nginx:
+    image: *nginx-image
+    profiles: [nginx]
+    user: "65532:65532"
+    entrypoint: ["/bin/sh", "/etc/nginx/bekup/entrypoint.sh"]
+    command: []
+    # Reaps the short-lived helper processes of the entrypoint loop.
+    init: true
+    environment:
+      BEKUP_DOMAIN: ${BEKUP_DOMAIN:-}
+      PROXY_TLS_MODE: ${PROXY_TLS_MODE:-acme}
+      PROXY_HTTPS_PUBLIC_PORT: "443"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx:/etc/nginx/bekup:ro
+      - nginx-certs:/etc/letsencrypt:ro
+      - nginx-acme-webroot:/var/www/acme:ro
+    ports:
+      - "80:8080"
+      - "443:8443"
+    networks:
+      frontend:
+        ipv4_address: ${PROXY_FRONTEND_IP:-10.213.250.5}
+      edge: {}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      nginx-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *bekup-logging
+    deploy:
+      resources:
+        limits: { cpus: "1.00", memory: 256M, pids: 256 }
+
+  # ACME companion for nginx: certbot (webroot / HTTP-01) in a loop. No
+  # inbound ports, no Docker socket; shares only the two volumes with nginx.
+  certbot:
+    image: certbot/certbot:v5.8.0@sha256:f70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20
+    profiles: [nginx]
+    user: "65532:65532"
+    entrypoint: ["/bin/sh", "/opt/bekup/certbot.sh"]
+    command: []
+    init: true
+    environment:
+      BEKUP_DOMAIN: ${BEKUP_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+      ACME_CA_SERVER: ${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=65532,gid=65532,mode=0700
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./deploy/nginx/certbot.sh:/opt/bekup/certbot.sh:ro
+      - nginx-certs:/etc/letsencrypt
+      - nginx-acme-webroot:/var/www/acme
+    # Outbound only (ACME API). Not on `frontend`.
+    networks: [edge]
+    depends_on:
+      nginx:
+        condition: service_started
+    restart: unless-stopped
+    logging: *bekup-logging
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 256M, pids: 64 }
+
+# ---------------------------------------------------------------------------
+# Networks: segmented so every component reaches only what it needs.
+# `internal: true` networks have no route to the outside world.
+#
+# The two fixed subnets lie outside Docker's default address pools
+# (172.17-31.0.0/16, 192.168.0.0/16) so they cannot collide with networks
+# Docker allocates automatically. If they clash with your LAN, override the
+# compose variables (shell or .env next to this file) AND update bekup.toml /
+# runner.toml to match:
+#   FRONTEND_SUBNET, SERVE_FRONTEND_IP, PROXY_FRONTEND_IP, RUNNER_CTL_SUBNET,
+#   RUNNER_CTL_IP
+# (compose interpolation only; these are not bekup configuration keys).
+# ---------------------------------------------------------------------------
+networks:
+  # Reverse proxy <-> serve. The proxy has the fixed address
+  # PROXY_FRONTEND_IP (10.213.250.5), so [server] trusted_proxies can name
+  # exactly that address (D-048, D-093).
+  frontend:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${FRONTEND_SUBNET:-10.213.250.0/24}
+  # serve/migrate <-> postgres.
+  backend:
+    internal: true
+  # serve <-> runner (mTLS gRPC).
+  runner-ctl:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${RUNNER_CTL_SUBNET:-10.213.251.0/24}
+  # runner -> target databases (and SSH bastions). Not internal: targets may
+  # live anywhere; the runner's target allowlist decides (D-029).
+  targets: {}
+  # serve -> destinations (S3, SFTP), SMTP and webhooks. Not internal; every
+  # dial goes through the app's SSRF guard (D-055).
+  egress: {}
+  # Reverse proxy <-> internet (published 80/443, ACME). Only the proxy
+  # profiles (traefik | nginx, certbot) attach here. Published ports need a
+  # non-internal network, so the proxy cannot publish them on `frontend`.
+  edge: {}
+
+volumes:
+  postgres-data: {}
+  bekup-backups: {}
+  bekup-scratch: {}
+  # Reverse-proxy state (profiles traefik / nginx). Contains the ACME account
+  # key and the TLS private keys: back up like a secret.
+  traefik-acme: {}
+  nginx-certs: {}
+  nginx-acme-webroot: {}
+
+# ---------------------------------------------------------------------------
+# Configuration files: mounted read-only at /etc/bekup/ (search path step 3,
+# D-019). They hold no secrets. Keep them root-owned and not group/world
+# writable (bekup refuses to start otherwise).
+# ---------------------------------------------------------------------------
+configs:
+  bekup_toml:
+    file: ./bekup.toml
+  runner_toml:
+    file: ./runner.toml
+
+# ---------------------------------------------------------------------------
+# Secrets: file-based Docker secrets from ./secrets/ (gitignored), mounted at
+# /run/secrets/<name>. Secrets are never put in environment variables, argv or
+# the TOML files (D-019). Each service receives only the secrets it needs.
+# The file must be readable by the consuming container's UID (65532 for
+# bekup, 70 for postgres) with mode 0400/0600; see the docs.
+# ---------------------------------------------------------------------------
+secrets:
+  bekup_master_key:
+    file: ./secrets/bekup_master_key
+  # postgres://bekup_app:...@postgres:5432/bekup?sslmode=...
+  bekup_database_url:
+    file: ./secrets/bekup_database_url
+  # postgres://bekup_owner:...@postgres:5432/bekup (migrate only)
+  bekup_database_owner_url:
+    file: ./secrets/bekup_database_owner_url
+  postgres_password:
+    file: ./secrets/postgres_password
+  bekup_owner_password:
+    file: ./secrets/bekup_owner_password
+  bekup_app_password:
+    file: ./secrets/bekup_app_password
+  # Written by certs-init. The CA *key* (./secrets/certs/ca/ca.key) is never
+  # given to any long-running service. Each component gets the CA trust
+  # bundle from its own directory (it holds both CAs during a CA rotation),
+  # so ./secrets/certs/ca/ can be kept offline.
+  serve_ca_crt:
+    file: ./secrets/certs/serve/ca.crt
+  bekup_client_crt:
+    file: ./secrets/certs/serve/serve.crt
+  bekup_client_key:
+    file: ./secrets/certs/serve/serve.key
+  runner_ca_crt:
+    file: ./secrets/certs/runner/ca.crt
+  runner_crt:
+    file: ./secrets/certs/runner/runner.crt
+  runner_key:
+    file: ./secrets/certs/runner/runner.key

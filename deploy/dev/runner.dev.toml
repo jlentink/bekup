@@ -1,0 +1,11 @@
+# DEV ONLY configuration for `bekup runner` in docker-compose.dev.yml.
+# Mounted read-only at /etc/bekup/runner.toml.
+
+[listen]
+# Bind to the runner-ctl address only (see docker-compose.yml), so the gRPC
+# port is unreachable from `targets` and from per-run networks.
+address = "10.213.251.10:7443"
+
+[targets]
+# The sample targets. pg15-tunneled is reached through the bastion only.
+allow_hosts = ["pg15", "mysql", "mariadb", "bastion"]

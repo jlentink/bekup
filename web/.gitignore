@@ -1,0 +1,2 @@
+# Local build of the CSP check (pnpm csp-check); never shipped.
+.csp-check-dist/

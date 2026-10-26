@@ -1,0 +1,156 @@
+/*
+ * bekup design tokens: "Vault Ledger".
+ *
+ * Every color is OKLCH. Light mode is ink on vellum; dark mode is paper-white
+ * on vault slate. One accent (ledger ink blue) carries interaction and the
+ * "running" state; every other hue is reserved for run status so that status
+ * never competes with chrome.
+ *
+ * Contrast is enforced by src/styles/theme.test.ts (WCAG AA): body text and
+ * status text >= 4.5:1, solid status marks, inputs and focus rings >= 3:1.
+ * If you change a value here, run `pnpm test`.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- Surfaces ------------------------------------------------------ */
+  --background: oklch(0.978 0.005 85);
+  --foreground: oklch(0.21 0.018 262);
+  --surface: oklch(0.995 0.002 85);
+  --surface-sunken: oklch(0.955 0.007 85);
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface);
+  --popover-foreground: var(--foreground);
+
+  /* ---- Chrome -------------------------------------------------------- */
+  --primary: oklch(0.46 0.15 262);
+  --primary-foreground: oklch(0.985 0.004 85);
+  --secondary: oklch(0.935 0.01 262);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.945 0.007 85);
+  --muted-foreground: oklch(0.47 0.016 262);
+  --accent: oklch(0.935 0.014 262);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.52 0.19 27);
+  --destructive-foreground: oklch(0.99 0.004 85);
+  --border: oklch(0.885 0.008 85);
+  --border-strong: oklch(0.6 0.012 262);
+  --input: oklch(0.6 0.012 262);
+  --ring: oklch(0.55 0.15 262);
+  --rule: oklch(0.91 0.007 85);
+
+  /* ---- Sidebar ------------------------------------------------------- */
+  --sidebar: var(--surface-sunken);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-muted-foreground: oklch(0.46 0.016 262);
+  --sidebar-accent: oklch(0.915 0.012 262);
+  --sidebar-accent-foreground: oklch(0.2 0.03 262);
+  --sidebar-border: var(--border);
+
+  /* ---- Run status -----------------------------------------------------
+   * solid: dots, icons, bars (non-text, >= 3:1 on background)
+   * fg:    text inside a status badge (>= 4.5:1 on soft)
+   * soft:  badge background
+   */
+  --status-success: oklch(0.56 0.13 150);
+  --status-success-fg: oklch(0.4 0.1 150);
+  --status-success-soft: oklch(0.95 0.035 150);
+
+  --status-partial: oklch(0.6 0.14 70);
+  --status-partial-fg: oklch(0.44 0.1 62);
+  --status-partial-soft: oklch(0.955 0.045 85);
+
+  --status-failed: oklch(0.55 0.19 27);
+  --status-failed-fg: oklch(0.45 0.16 27);
+  --status-failed-soft: oklch(0.95 0.025 27);
+
+  --status-running: oklch(0.55 0.15 255);
+  --status-running-fg: oklch(0.43 0.14 260);
+  --status-running-soft: oklch(0.95 0.025 260);
+
+  --status-missed: oklch(0.52 0.15 320);
+  --status-missed-fg: oklch(0.43 0.13 320);
+  --status-missed-soft: oklch(0.95 0.025 320);
+
+  --status-insecure: oklch(0.6 0.17 45);
+  --status-insecure-fg: oklch(0.44 0.13 40);
+  --status-insecure-soft: oklch(0.955 0.035 55);
+
+  --status-neutral: oklch(0.56 0.012 262);
+  --status-neutral-fg: oklch(0.42 0.014 262);
+  --status-neutral-soft: oklch(0.94 0.006 85);
+
+  /* ---- Shape, depth, motion ----------------------------------------- */
+  --radius: 0.375rem;
+  --shadow-raised: 0 1px 0 oklch(0.2 0.02 262 / 0.04), 0 1px 3px oklch(0.2 0.02 262 / 0.06);
+  --shadow-overlay: 0 0 0 1px var(--border), 0 16px 40px -12px oklch(0.2 0.03 262 / 0.28);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+
+  /* ---- Layout -------------------------------------------------------- */
+  --shell-sidebar-width: 15rem;
+  --shell-topbar-height: 3.25rem;
+  --content-max-width: 88rem;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.165 0.012 258);
+  --foreground: oklch(0.93 0.008 85);
+  --surface: oklch(0.2 0.014 258);
+  --surface-sunken: oklch(0.145 0.011 258);
+
+  --primary: oklch(0.76 0.12 255);
+  --primary-foreground: oklch(0.17 0.025 262);
+  --secondary: oklch(0.26 0.016 258);
+  --muted: oklch(0.235 0.014 258);
+  --muted-foreground: oklch(0.72 0.014 258);
+  --accent: oklch(0.275 0.022 258);
+  --destructive: oklch(0.68 0.19 25);
+  --destructive-foreground: oklch(0.16 0.02 25);
+  --border: oklch(0.3 0.014 258);
+  --border-strong: oklch(0.5 0.016 258);
+  --input: oklch(0.52 0.016 258);
+  --ring: oklch(0.72 0.13 255);
+  --rule: oklch(0.255 0.013 258);
+
+  --sidebar: var(--surface-sunken);
+  --sidebar-muted-foreground: oklch(0.7 0.014 258);
+  --sidebar-accent: oklch(0.24 0.022 258);
+  --sidebar-accent-foreground: oklch(0.95 0.01 85);
+
+  --status-success: oklch(0.72 0.15 152);
+  --status-success-fg: oklch(0.85 0.12 152);
+  --status-success-soft: oklch(0.27 0.05 152);
+
+  --status-partial: oklch(0.8 0.15 80);
+  --status-partial-fg: oklch(0.88 0.12 85);
+  --status-partial-soft: oklch(0.28 0.05 75);
+
+  --status-failed: oklch(0.68 0.19 25);
+  --status-failed-fg: oklch(0.84 0.1 25);
+  --status-failed-soft: oklch(0.27 0.06 25);
+
+  --status-running: oklch(0.72 0.13 250);
+  --status-running-fg: oklch(0.85 0.08 250);
+  --status-running-soft: oklch(0.27 0.05 255);
+
+  --status-missed: oklch(0.7 0.15 320);
+  --status-missed-fg: oklch(0.85 0.09 320);
+  --status-missed-soft: oklch(0.27 0.05 320);
+
+  --status-insecure: oklch(0.74 0.16 50);
+  --status-insecure-fg: oklch(0.86 0.1 55);
+  --status-insecure-soft: oklch(0.28 0.06 45);
+
+  --status-neutral: oklch(0.64 0.014 258);
+  --status-neutral-fg: oklch(0.82 0.01 258);
+  --status-neutral-soft: oklch(0.26 0.012 258);
+
+  --shadow-raised: 0 1px 0 oklch(1 0 0 / 0.03) inset, 0 1px 3px oklch(0 0 0 / 0.4);
+  --shadow-overlay: 0 0 0 1px var(--border), 0 20px 48px -12px oklch(0 0 0 / 0.65);
+}

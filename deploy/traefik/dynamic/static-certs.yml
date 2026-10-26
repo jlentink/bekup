@@ -1,0 +1,13 @@
+# Static certificate (PROXY_TLS_MODE=static; dev with mkcert, or your own
+# PKI). Only copied into the active configuration in static mode. Mount the
+# certificate chain and key read-only at /certs (deploy/dev/gen-dev-tls.sh
+# writes them for bekup.localhost).
+tls:
+  certificates:
+    - certFile: /certs/tls.crt
+      keyFile: /certs/tls.key
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/tls.crt
+        keyFile: /certs/tls.key

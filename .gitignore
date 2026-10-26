@@ -1,0 +1,78 @@
+# ---------------------------------------------------------------------------
+# Go
+# ---------------------------------------------------------------------------
+/bekup
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+*.coverprofile
+go.work
+go.work.sum
+# air hot-reload output (.air.toml tmp_dir) and its build-error log
+/tmp/
+air-build-errors.log
+
+# ---------------------------------------------------------------------------
+# Node / Vite (web/)
+# ---------------------------------------------------------------------------
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+web/.vite/
+web/coverage/
+web/playwright-report/
+web/test-results/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---------------------------------------------------------------------------
+# IDE / editors
+# ---------------------------------------------------------------------------
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+.claude/settings.local.json
+
+# ---------------------------------------------------------------------------
+# OS files
+# ---------------------------------------------------------------------------
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# ---------------------------------------------------------------------------
+# Local configuration and secrets: never commit these.
+# The annotated *.example.toml files ARE committed.
+# ---------------------------------------------------------------------------
+bekup.toml
+runner.toml
+!bekup.example.toml
+!runner.example.toml
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.age
+id_ed25519*
+secrets/
+/certs/
+/scratch/
+/data/

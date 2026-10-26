@@ -1,0 +1,14 @@
+bekup
+Copyright (c) 2026 Jason Lentink. Licensed under the MIT License (see LICENSE).
+
+This product includes third-party material:
+
+EFF Large Wordlist for Passphrases
+  File:    internal/crypto/eff_large_wordlist.txt (embedded in the bekup binary)
+  Source:  https://www.eff.org/dice
+           https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+  Author:  Electronic Frontier Foundation (EFF)
+  License: Creative Commons Attribution 3.0 United States (CC BY 3.0 US)
+           https://creativecommons.org/licenses/by/3.0/us/
+  Changes: the dice-roll column was removed, leaving one word per line;
+           the words and their order are unchanged.

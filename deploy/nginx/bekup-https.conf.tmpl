@@ -1,0 +1,98 @@
+# bekup site configuration (task 0.7b), rendered by deploy/nginx/entrypoint.sh
+# with envsubst. Only ${BEKUP_DOMAIN}, ${TLS_CERT}, ${TLS_KEY} and
+# ${HTTPS_PUBLIC_PORT}/${HTTPS_PORT_SUFFIX} are substituted (all validated);
+# every other $variable is nginx's own.
+
+# --- HTTP (port 80 on the host) --------------------------------------------
+# Unknown host names: close the connection without a response.
+server {
+    listen 8080 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 8080;
+    server_name ${BEKUP_DOMAIN};
+
+    # ACME HTTP-01 challenges (certbot webroot, read-only here).
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    # Everything else: permanent redirect to HTTPS on the configured name
+    # (never to a client-supplied Host).
+    location / {
+        return 308 https://${BEKUP_DOMAIN}${HTTPS_PORT_SUFFIX}$request_uri;
+    }
+}
+
+# --- HTTPS (port 443 on the host) ------------------------------------------
+# No SNI or an unknown name: abort the handshake (no certificate is shown).
+server {
+    listen 8443 ssl default_server;
+    ssl_reject_handshake on;
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name ${BEKUP_DOMAIN};
+
+    ssl_certificate     ${TLS_CERT};
+    ssl_certificate_key ${TLS_KEY};
+
+    limit_req  zone=bekup_req burst=100 nodelay;
+    limit_conn bekup_conn 100;
+
+    # Defence in depth: bekup sends these (and its CSP, D-082) itself. Hide
+    # the upstream copies so each header appears exactly once.
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header X-Powered-By;
+    # HSTS: 2 years, subdomains, preload-ready (submit to hstspreload.org
+    # only when every subdomain serves HTTPS).
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    location / {
+        # Resolved per request through Docker DNS on the internal `frontend`
+        # network. Plain HTTP never leaves that network.
+        set $bekup_upstream serve:8080;
+        proxy_pass http://$bekup_upstream;
+        proxy_http_version 1.1;
+        proxy_redirect off;
+
+        # Forwarded headers are SET, never appended: whatever the client sent
+        # is discarded. bekup trusts them only from this proxy's address
+        # ([server] trusted_proxies).
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  ${HTTPS_PUBLIC_PORT};
+        proxy_set_header Forwarded         "";
+
+        # WebSocket passthrough (GraphQL subscriptions on /graphql).
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $bekup_connection_upgrade;
+
+        # Stream responses (downloads, WebSockets) instead of buffering them
+        # in memory or temp files. Request bodies are small (2 MiB max) and
+        # are still buffered, so slow clients cannot tie up serve.
+        proxy_buffering off;
+        proxy_request_buffering on;
+        proxy_max_temp_file_size 0;
+
+        proxy_connect_timeout 5s;
+        proxy_send_timeout    300s;
+        # Between two reads from serve: long enough for idle WebSockets
+        # (graphql-ws keep-alives) and pauses in large streamed downloads.
+        proxy_read_timeout    3600s;
+    }
+}

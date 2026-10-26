@@ -1,0 +1,135 @@
+# bekup.toml: configuration of `bekup serve` and `bekup worker`.
+#
+# Copy to ./bekup.toml or /etc/bekup/bekup.toml (or pass --config <path> /
+# BEKUP_CONFIG). The first file found wins; files are never merged. The file
+# must be a regular file owned by the bekup user or root and must not be
+# group- or world-writable (chmod 0644 or stricter). Unknown keys are errors.
+#
+# Precedence: built-in defaults < this file < BEKUP_<SECTION>_<KEY> env vars
+# < command-line flags. Example: [server] base_url -> BEKUP_SERVER_BASE_URL.
+# Lists in env vars are comma-separated; durations use Go syntax ("15m").
+#
+# Secrets are NEVER written here: secret keys only exist as *_file paths
+# (Docker secrets). Secret files must not be group/world-writable or
+# world-readable (chmod 0400/0600). Every value below is the built-in default
+# unless marked "example".
+#
+# Full reference: docs/configuration.md
+
+[server]
+# Plain-HTTP listener on the internal proxy network. Never publish this port.
+# Example; match your network: serve's fixed `frontend` address in
+# docker-compose.yml (SERVE_FRONTEND_IP). The built-in default ":8080" binds
+# every interface and is refused outside dev mode unless
+# allow_wildcard_listen = true.
+listen = "10.213.250.10:8080"
+# Allow a wildcard listen address (":8080", "0.0.0.0:8080", "[::]:8080")
+# outside dev mode. Logs a warning at every startup.
+allow_wildcard_listen = false
+# Public https URL served by the reverse proxy (example; required). http is
+# only accepted in dev mode or with allow_insecure_http = true.
+base_url = "https://backup.example.com"
+# Knowingly run over plain HTTP without the TLS reverse proxy (D-095).
+# Sessions and credentials then travel UNENCRYPTED; bekup warns at every
+# startup and shows a permanent red banner. trusted_proxies may then be empty.
+allow_insecure_http = false
+# CIDRs of the reverse proxy; X-Forwarded-* from anyone else is ignored
+# (example; required outside dev mode). 0.0.0.0/0 is rejected. With the
+# compose proxy profiles (traefik | nginx) name exactly the proxy's fixed
+# `frontend` address (PROXY_FRONTEND_IP), not the whole subnet.
+trusted_proxies = ["10.213.250.5/32"]
+read_header_timeout = "10s"
+shutdown_timeout = "30s"
+# Maximum request body size in bytes (1 MiB).
+max_body_bytes = 1048576
+max_ws_connections_per_user = 5
+
+[database]
+# File with the Postgres URL of the bekup app DB (postgres://bekup_app:...).
+url_file = "/run/secrets/bekup_database_url"
+# Dev mode only, rejected otherwise:
+# url = "postgres://bekup:bekup@localhost:5432/bekup?sslmode=disable"
+# File with the Postgres URL of the bekup_owner role (postgres://bekup_owner:...).
+# Only `bekup migrate` reads it; mount it only where migrations run.
+owner_url_file = "/run/secrets/bekup_database_owner_url"
+# Dev mode only, rejected otherwise:
+# owner_url = "postgres://bekup_owner:bekup_owner@localhost:5432/bekup?sslmode=disable"
+max_conns = 10
+min_conns = 0
+conn_max_lifetime = "1h"
+conn_max_idle_time = "30m"
+connect_timeout = "10s"
+statement_timeout = "30s"
+
+[security]
+# Master keyring created by `bekup keys generate`. Back it up (escrow):
+# without it the stored credentials cannot be decrypted.
+master_key_file = "/run/secrets/bekup_master_key"
+# Dev mode only, rejected otherwise:
+# master_key = "..."
+session_idle_timeout = "30m"
+session_absolute_timeout = "12h"
+# Fresh second factor validity for sensitive actions (at most 5m).
+stepup_max_age = "5m"
+# argon2id parameters can only be raised above these defaults.
+argon2_memory_kib = 65536
+argon2_iterations = 3
+argon2_parallelism = 1
+# Concurrent hash operations (each uses argon2_memory_kib of memory).
+argon2_max_concurrent = 4
+password_min_length = 12
+# First-run setup token lifetime (at most 1h).
+setup_token_ttl = "1h"
+
+[runner]
+# mTLS gRPC endpoint of `bekup runner` (certificates from `bekup certs init`).
+address = "runner:7443"
+server_name = "runner"
+cert_file = "/run/secrets/bekup_client.crt"
+key_file = "/run/secrets/bekup_client.key"
+ca_file = "/run/secrets/bekup_ca.crt"
+dial_timeout = "10s"
+
+[storage]
+# Disk destinations are confined below this directory.
+disk_root = "/var/lib/bekup/backups"
+scratch_dir = "/var/lib/bekup/scratch"
+
+[workers]
+max_concurrent_runs = 4
+max_runs_per_connection = 1
+max_concurrent_downloads = 4
+backup_timeout = "6h"
+restore_timeout = "12h"
+notify_timeout = "30s"
+
+[scheduler]
+enabled = true
+tick_interval = "15s"
+
+[notifications]
+max_per_user_per_hour = 30
+collapse_window = "15m"
+webhook_failure_threshold = 5
+
+[netguard]
+# Bootstrap SSRF allowlist for private destinations (S3/SMTP/SFTP/webhooks).
+# Empty = all private, loopback, link-local and metadata ranges are denied.
+allow_cidrs = []
+allow_hosts = []
+
+[metrics]
+# Prometheus /metrics on an internal address only.
+enabled = true
+listen = "127.0.0.1:9464"
+
+[log]
+# debug | info | warn | error
+level = "info"
+# json | text (text is the default in dev mode)
+format = "json"
+
+[dev]
+# Dev mode relaxes guardrails (http base_url, no trusted_proxies, inline
+# secrets, runs without a config file). Never enable it in production.
+enabled = false

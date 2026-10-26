@@ -1,0 +1,193 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./theme.css";
+@import "./csp-compat.css";
+
+/* Class-based dark mode; the class is set by public/theme-init.js before first
+ * paint and kept in sync by ThemeProvider. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Typography: Instrument Sans for UI, Instrument Serif for display moments,
+   * JetBrains Mono for anything an operator copies or compares. */
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-display: 2.5rem;
+  --text-display--line-height: 1.05;
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 1;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-rule: var(--rule);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-status-success: var(--status-success);
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-success-soft: var(--status-success-soft);
+  --color-status-partial: var(--status-partial);
+  --color-status-partial-fg: var(--status-partial-fg);
+  --color-status-partial-soft: var(--status-partial-soft);
+  --color-status-failed: var(--status-failed);
+  --color-status-failed-fg: var(--status-failed-fg);
+  --color-status-failed-soft: var(--status-failed-soft);
+  --color-status-running: var(--status-running);
+  --color-status-running-fg: var(--status-running-fg);
+  --color-status-running-soft: var(--status-running-soft);
+  --color-status-missed: var(--status-missed);
+  --color-status-missed-fg: var(--status-missed-fg);
+  --color-status-missed-soft: var(--status-missed-soft);
+  --color-status-insecure: var(--status-insecure);
+  --color-status-insecure-fg: var(--status-insecure-fg);
+  --color-status-insecure-soft: var(--status-insecure-soft);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --color-status-neutral-soft: var(--status-neutral-soft);
+
+  --radius-xs: calc(var(--radius) - 3px);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --shadow-raised: var(--shadow-raised);
+  --shadow-overlay: var(--shadow-overlay);
+  --ease-out-soft: var(--ease-out);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    /* Reserve the scrollbar gutter so modal scroll locking never shifts the
+     * layout (replaces react-remove-scroll's injected gap styles; see
+     * csp-compat.css). */
+    scrollbar-gutter: stable;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background font-sans text-sm text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Numbers line up in tables, timestamps and sizes. */
+  table,
+  time,
+  .font-mono,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 24%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Small uppercase mono label above a value or section ("eyebrow"). */
+  .eyebrow {
+    @apply font-mono text-2xs font-medium tracking-[0.12em] text-muted-foreground uppercase;
+  }
+
+  /* Hazard hatching: the signature of any weakened security setting
+   * (unencrypted backups, insecure transport). Never used decoratively. */
+  .hatch-insecure {
+    background-color: var(--status-insecure-soft);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent 0 5px,
+      color-mix(in oklch, var(--status-insecure) 14%, var(--status-insecure-soft)) 5px 10px
+    );
+  }
+
+  /* Ledger paper: faint ruled grid used on the auth pages. */
+  .ledger-grid {
+    background-image:
+      linear-gradient(to right, var(--rule) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
+    background-size: 2rem 2rem;
+  }
+
+  .running-pulse {
+    animation: running-pulse 1.6s var(--ease-out) infinite;
+  }
+}
+
+@keyframes running-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--status-running) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* sonner theming through tokens (no inline style attributes). */
+[data-sonner-toaster] {
+  --normal-bg: var(--popover);
+  --normal-text: var(--popover-foreground);
+  --normal-border: var(--border);
+  --border-radius: var(--radius);
+  font-family: var(--font-sans);
+}
+[data-sonner-toast][data-styled="true"] {
+  box-shadow: var(--shadow-overlay);
+}
+[data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--muted-foreground);
+}

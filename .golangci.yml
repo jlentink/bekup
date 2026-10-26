@@ -1,0 +1,155 @@
+# golangci-lint v2 configuration.
+# Run via `just lint` (task 0.1b). Security linters are enabled on purpose;
+# do not disable a finding without a `//nolint:<linter> // <reason>` comment.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    - asasalint
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gochecksumtype
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - makezero
+    - misspell
+    - musttag
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - perfsprint
+    - prealloc
+    - reassign
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - unnamedResult
+        - whyNoLint
+    gosec:
+      excludes: []
+      config:
+        global:
+          audit: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+    sloglint:
+      no-mixed-args: true
+      kv-only: false
+      attr-only: false
+      context: scope
+      static-msg: true
+      key-naming-case: snake
+  exclusions:
+    generated: strict
+    warn-unused: false
+    presets:
+      - std-error-handling
+    paths:
+      # Generated code (sqlc, gqlgen, protoc) is checked by its generator.
+      - internal/db/sqlc
+      - internal/graph/generated
+      - internal/graph/model/models_gen\.go
+      - proto/.*\.pb\.go$
+      - web/node_modules
+    rules:
+      # Tests may use unchecked type assertions and weaker crypto fixtures,
+      # but never disable security linters for production code.
+      - path: _test\.go
+        linters:
+          - forcetypeassert
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G101|G404"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jlentink/bekup
+  exclusions:
+    generated: strict
+    paths:
+      - internal/db/sqlc
+      - internal/graph/generated
+      - proto/.*\.pb\.go$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

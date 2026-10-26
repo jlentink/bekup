@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "claude-opus-5-5",
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    }
+  },
+  "plansDirectory": "./plans",
+  "disableClaudeAiConnectors": true,
+  "enableAllProjectMcpServers": false,
+  "deniedMcpServers": [
+  ]
+}

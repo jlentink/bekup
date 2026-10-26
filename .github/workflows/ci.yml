@@ -1,0 +1,354 @@
+# CI baseline (task 0.9, D-027, D-061, D-091).
+#
+# Rules for this file:
+# - Every action is pinned by full commit SHA with a `# vX.Y.Z` comment
+#   (Renovate keeps both up to date, see renovate.json).
+# - Least privilege: the workflow token is read-only; no secrets are used;
+#   no `pull_request_target`; checkout never persists credentials.
+# - Jobs call the same `just` recipes developers run locally where possible.
+# - step-security/harden-runner (egress audit) is the first step of every job.
+# - Tools installed with `go install`/`go run` are pinned to an exact version
+#   and verified against the Go checksum database.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Superseded PR runs are cancelled; every commit on main is checked.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # renovate: datasource=go depName=golang.org/x/vuln
+  GOVULNCHECK_VERSION: v1.9.0
+  # renovate: datasource=github-releases depName=google/osv-scanner
+  OSV_SCANNER_VERSION: v2.7.0
+  # renovate: datasource=github-releases depName=rhysd/actionlint
+  ACTIONLINT_VERSION: v1.7.12
+  NODE_VERSION: "22"
+  FORCE_COLOR: "1"
+
+jobs:
+  go:
+    name: Go (build, vet, test, lint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests (race detector)
+        run: go test -race -count=1 ./...
+
+      - name: golangci-lint (incl. gosec)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          # Same as `just lint`: integration-tagged files are linted too.
+          args: --build-tags integration
+
+      # Same as `just lint`. sqlc is pinned through the go.mod `tool`
+      # directive, so no extra download is needed. The `generated` job also
+      # catches stale code via `just gen`; `sqlc diff` fails earlier and
+      # names the cause.
+      - name: sqlc vet
+        run: go tool sqlc vet
+
+      - name: sqlc diff (generated code is up to date)
+        run: go tool sqlc diff
+
+  go-integration:
+    name: Go integration tests (testcontainers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: 1.58.0
+
+      - name: Integration tests
+        run: just test-int
+
+  web:
+    name: Web (lint, typecheck, test, build, CSP)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm (version from web/package.json packageManager)
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit tests
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
+
+      - name: CSP regression check (headless Chrome)
+        run: |
+          CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable)"
+          export CHROME_PATH
+          pnpm run csp-check
+
+  security:
+    name: Security scans (govulncheck, osv-scanner)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: 1.58.0
+
+      - name: Install scanners (pinned, checksum-verified by the Go sumdb)
+        run: |
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          go install "github.com/google/osv-scanner/v2/cmd/osv-scanner@${OSV_SCANNER_VERSION}"
+
+      - name: just sec
+        run: just sec
+
+  generated:
+    name: Generated code is committed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up pnpm (version from web/package.json packageManager)
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: 1.58.0
+
+      - name: go.mod and go.sum are tidy
+        run: go mod tidy -diff
+
+      # Generators that do not exist yet (gqlgen before task 1.2, ...) are
+      # skipped by the recipe with a "not available yet" note.
+      - name: Run all code generators
+        run: just gen
+
+      - name: No uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            git diff
+            echo "::error::Generated code is out of date. Run 'just gen' and commit the result."
+            exit 1
+          fi
+
+  scripts:
+    name: Scripts and justfile
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The justfile evaluates `go env GOPATH` on load, so every job running
+      # just needs Go.
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: 1.58.0
+
+      - name: justfile formatting
+        run: just --fmt --check
+
+      - name: shellcheck (preinstalled on the runner)
+        run: |
+          shellcheck --version
+          shopt -s globstar nullglob
+          shellcheck scripts/*.sh scripts/lib.bash deploy/**/*.sh
+
+      - name: Script tests
+        run: just test-scripts
+
+  compose:
+    name: Compose files are valid
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: docker compose config (all profiles)
+        run: |
+          docker compose version
+          if [ -f docker-compose.yml ]; then
+            docker compose -f docker-compose.yml --profile '*' config --quiet
+            echo "docker-compose.yml: ok"
+          fi
+          if [ -f docker-compose.yml ] && [ -f docker-compose.dev.yml ]; then
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile '*' config --quiet
+            echo "docker-compose.yml + docker-compose.dev.yml: ok"
+          fi
+
+  workflows:
+    name: Workflow lint (actionlint, zizmor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # actionlint also runs shellcheck (preinstalled) on every `run:` block.
+      - name: actionlint
+        run: go run "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}" -color
+
+      # SARIF upload (advanced-security) would need security-events: write;
+      # plain output keeps the token read-only and fails the job on findings.
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: 1.31.1
+          advanced-security: false
+          persona: regular

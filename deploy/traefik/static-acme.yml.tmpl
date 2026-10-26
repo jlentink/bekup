@@ -1,0 +1,15 @@
+
+# --- appended in ACME mode only (PROXY_TLS_MODE=acme) -----------------------
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: "__ACME_EMAIL__"
+      caServer: "__ACME_CA_SERVER__"
+      # Named volume `traefik-acme`, owned by UID 65532, directory 0700.
+      # Traefik creates acme.json with mode 0600 and refuses looser modes.
+      storage: /acme/acme.json
+      keyType: EC256
+      # HTTP-01 on the `web` entrypoint (port 80). Traefik answers the
+      # challenge before the HTTP->HTTPS redirect applies.
+      httpChallenge:
+        entryPoint: web

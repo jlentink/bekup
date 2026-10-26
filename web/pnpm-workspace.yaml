@@ -1,0 +1,18 @@
+# pnpm 11 reads its settings from this file (not from .npmrc).
+# Single-package workspace: the web UI.
+packages:
+  - .
+
+# Pin exact versions on `pnpm add` (D-061 supply chain).
+saveExact: true
+# Refuse versions published less than 3 days ago (matches the Renovate policy, D-065).
+minimumReleaseAge: 4320
+# No dependency may run install scripts unless explicitly allowed here.
+strictDepBuilds: true
+allowBuilds:
+  esbuild: false
+# eslint-plugin-jsx-a11y 6.10.2 has not declared ESLint 10 support yet but works
+# with the flat config; remove once it ships a release that lists ^10.
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-jsx-a11y>eslint: "10"
