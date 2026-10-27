@@ -149,7 +149,7 @@ Both profiles enforce the same baseline:
 | Other headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`; the upstream copies are replaced, never duplicated. The CSP comes from bekup only (D-082) |
 | Request bodies | 2 MiB max at the proxy (`413`); bekup enforces `[server] max_body_bytes` (1 MiB) itself |
 | Rate limits | light, per client IP: 50 req/s (burst 100), 100 concurrent requests/connections. bekup adds strict limits for logins and sensitive mutations |
-| WebSockets | upgrade passthrough for GraphQL subscriptions on `/graphql` |
+| Live events | GraphQL subscriptions are Server-Sent Events (`POST /graphql` with `Accept: text/event-stream`, D-124): never buffered, HTTP/2 to the browser (HTTP/1.1 allows only 6 connections per origin), 3 min read timeout on `/graphql` (serve sends a keepalive at least every minute). No WebSocket upgrades are passed |
 | Downloads | responses are streamed, not buffered; no total response timeout; 1 h idle read timeout from serve |
 | Logging | Traefik: no access log. nginx: JSON access log without query strings and with `/api/download/{ticket}` redacted |
 | Containers | UID 65532, read-only root, `cap_drop: ALL` (ports 8080/8443 inside, mapped to 80/443), `no-new-privileges`, resource limits |
@@ -168,14 +168,30 @@ Both profiles enforce the same baseline:
   environment variables in its static file, which is why the templates exist.
 
 Traefik's only body-size control (the `buffering` middleware) also buffers
-the response, so it applies only to `POST`/`PUT`/`PATCH`/`DELETE` requests.
-Downloads and WebSockets (both `GET`) are never buffered. Encoded `/`, `\`,
+the response, so it applies only to `POST`/`PUT`/`PATCH`/`DELETE` requests,
+and not to event streams: the router `bekup-stream` (POST `/graphql` with
+`Accept: text/event-stream`, highest priority) skips it, and bekup caps
+those bodies itself (`graphql.max_body_bytes`). Downloads (`GET`) are never
+buffered either. `flushInterval: -1ms` forwards every event at once.
+The `websecure` entrypoint keeps `readTimeout: 60s`. It bounds only the
+reading of a request (Traefik has no separate header timeout, so it is
+the slowloris guard) and doesn't end responses that are still streaming.
+Event streams outlive it over both HTTP/2 and HTTP/1.1, also when a
+stream stays quiet for more than 60 s. This was checked with the pinned
+Traefik image and this configuration (M2 review L19): a 100 s stream on
+each protocol, a 75 s quiet HTTP/1.1 stream, and a client trickling its
+headers, which was cut off after 60 s. Don't set `readTimeout` to `0`. Encoded `/`, `\`,
 `%`, `?`, `#`, `;` and NUL in paths are rejected, which rules out path
 confusion between proxy and backend.
 
 ### nginx (`deploy/nginx/`)
 
 - `nginx.conf`: main configuration (TLS, limits, logging, resolver).
+- `location = /graphql` streams subscription events: `proxy_buffering off`,
+  `proxy_cache off`, `proxy_read_timeout 180s` (three times the longest
+  allowed `graphql.stream_keepalive_interval`); bekup also sends
+  `X-Accel-Buffering: no`. `Upgrade`/`Connection` are cleared: there are no
+  WebSockets.
 - `bekup-https.conf.tmpl`: the site. `bekup-http-only.conf.tmpl`: used only
   before the first certificate exists, and serves nothing but the ACME
   challenge.
@@ -253,17 +269,16 @@ it). Then set `trusted_proxies` to your proxy's address. Requirements:
 
 - TLS 1.2+ only, AEAD ciphers, HSTS, and an HTTP→HTTPS redirect;
 - overwrite (never append) `X-Forwarded-For`, and set `X-Forwarded-Proto: https`;
-- pass WebSocket upgrades on `/graphql`;
-- don't buffer responses (streamed downloads) and set no total response
-  timeout;
+- don't buffer responses (subscription event streams on `/graphql`,
+  streamed downloads), allow at least 3 minutes between two reads from
+  bekup on `/graphql` and set no total response timeout;
+- serve HTTP/2 to browsers (each subscription is one long-lived request);
 - limit request bodies to a few MiB;
 - don't log query strings, and redact `/api/download/*` paths.
 
 ### Generic nginx
 
 ```nginx
-map $http_upgrade $connection_upgrade { default upgrade; "" ""; }
-
 server {
     listen 80;
     server_name backup.example.com;
@@ -292,10 +307,10 @@ server {
         proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Forwarded         "";
-        proxy_set_header Upgrade           $http_upgrade;
-        proxy_set_header Connection        $connection_upgrade;
-        proxy_buffering off;
-        proxy_read_timeout 3600s;
+        proxy_set_header Connection        "";
+        proxy_buffering off;               # event streams and downloads
+        proxy_cache off;
+        proxy_read_timeout 3600s;          # >= 180s for /graphql event streams
     }
 }
 ```
@@ -303,8 +318,8 @@ server {
 ### Caddy
 
 Caddy obtains certificates automatically and uses TLS 1.2+ with modern
-ciphers by default. Its `reverse_proxy` handles WebSockets and streams
-responses. Caddy **ignores** incoming `X-Forwarded-*` unless you set
+ciphers by default. Its `reverse_proxy` streams responses
+(`flush_interval -1` also flushes the subscription event streams at once). Caddy **ignores** incoming `X-Forwarded-*` unless you set
 `trusted_proxies`, so leave that unset unless something sits in front of it.
 
 ```caddyfile

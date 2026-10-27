@@ -3,14 +3,14 @@
 package app_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/coder/websocket"
 
 	"github.com/jlentink/bekup/internal/app"
 	"github.com/jlentink/bekup/internal/auth"
@@ -18,7 +18,7 @@ import (
 	"github.com/jlentink/bekup/internal/db/sqlc"
 )
 
-const wsTestOrigin = "http://127.0.0.1:8080"
+const streamTestOrigin = "http://127.0.0.1:8080"
 
 // startApp runs a serve instance on d until the test ends.
 func startApp(t *testing.T, d dbtest.DB) string {
@@ -71,7 +71,7 @@ func gqlPost(t *testing.T, addr, cookie, query string) (map[string]any, string) 
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", wsTestOrigin)
+	req.Header.Set("Origin", streamTestOrigin)
 	if cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
@@ -90,7 +90,7 @@ func gqlPost(t *testing.T, addr, cookie, query string) (map[string]any, string) 
 	}
 	set := ""
 	for _, c := range resp.Cookies() {
-		if c.Name == auth.CookiePolicyFor(wsTestOrigin).Name() && c.Value != "" {
+		if c.Name == auth.CookiePolicyFor(streamTestOrigin).Name() && c.Value != "" {
 			set = c.Name + "=" + c.Value
 		}
 	}
@@ -109,7 +109,7 @@ func createUser(t *testing.T, d dbtest.DB, email, password string) {
 	}
 	pool := d.AppPool(t)
 	if _, err := sqlc.New(pool).InsertUser(t.Context(), sqlc.InsertUserParams{
-		Email: email, DisplayName: "WS User", PasswordHash: &hash, Role: sqlc.UserRoleUser,
+		Email: email, DisplayName: "Stream User", PasswordHash: &hash, Role: sqlc.UserRoleUser,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -124,100 +124,133 @@ func login(t *testing.T, addr, email, password string) string {
 	return cookie
 }
 
-// dialWS upgrades with the cookie and returns the HTTP status.
-func dialWS(t *testing.T, addr, cookie string) (*websocket.Conn, int, error) {
+// streamResp is a response whose body the test cleanup closes.
+type streamResp struct {
+	StatusCode int
+	Header     http.Header
+	Body       io.Reader
+}
+
+// openStream opens a sessionEvents event stream with the cookie and
+// returns the response (the caller checks the status).
+func openStream(t *testing.T, addr, cookie string) *streamResp {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	h := http.Header{"Origin": {wsTestOrigin}, "Cookie": {cookie}}
-	c, resp, err := websocket.Dial(ctx, "ws://"+addr+"/graphql", &websocket.DialOptions{HTTPHeader: h, Subprotocols: []string{"graphql-transport-ws"}})
-	status := 0
-	if resp != nil {
-		status = resp.StatusCode
-		if resp.Body != nil {
-			if cerr := resp.Body.Close(); cerr != nil {
-				t.Log(cerr)
+	body := `{"query":"subscription { sessionEvents { kind current } }"}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/graphql", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Origin", streamTestOrigin)
+	req.Header.Set("Cookie", cookie)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Log(err)
+		}
+	})
+	return &streamResp{StatusCode: resp.StatusCode, Header: resp.Header, Body: resp.Body}
+}
+
+// subscribeSessionEvents opens the stream and fails unless it started.
+func subscribeSessionEvents(t *testing.T, addr, cookie string) *streamResp {
+	t.Helper()
+	resp := openStream(t, addr, cookie)
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("stream: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	return resp
+}
+
+// endCode reads the stream until its complete event and returns the code
+// of the final error event ("" if none).
+func endCode(t *testing.T, resp *streamResp, within time.Duration) string {
+	t.Helper()
+	type result struct {
+		code     string
+		complete bool
+	}
+	ch := make(chan result, 1)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		code, event := "", ""
+		for sc.Scan() {
+			line := sc.Text()
+			switch {
+			case strings.HasPrefix(line, "event:"):
+				event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+				if event == "complete" {
+					ch <- result{code, true}
+					return
+				}
+			case strings.HasPrefix(line, "data:") && event == "next":
+				var r struct {
+					Errors []struct {
+						Extensions map[string]any `json:"extensions"`
+					} `json:"errors"`
+				}
+				if json.Unmarshal([]byte(strings.TrimPrefix(line, "data:")), &r) == nil && len(r.Errors) > 0 {
+					if c, ok := r.Errors[0].Extensions["code"].(string); ok {
+						code = c
+					}
+				}
 			}
 		}
-	}
-	if c != nil {
-		t.Cleanup(func() {
-			if err := c.CloseNow(); err != nil {
-				return
-			}
-		})
-	}
-	return c, status, err
-}
-
-// subscribeSessionEvents opens a subscription socket with the cookie.
-func subscribeSessionEvents(t *testing.T, addr, cookie string) *websocket.Conn {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	c, status, err := dialWS(t, addr, cookie)
-	if err != nil {
-		t.Fatalf("dial: %v (%d)", err, status)
-	}
-	if err := c.Write(ctx, websocket.MessageText, []byte(`{"type":"connection_init"}`)); err != nil {
-		t.Fatal(err)
-	}
-	_, b, err := c.Read(ctx)
-	if err != nil || !strings.Contains(string(b), "connection_ack") {
-		t.Fatalf("init: %s %v", b, err)
-	}
-	if err := c.Write(ctx, websocket.MessageText, []byte(`{"id":"1","type":"subscribe","payload":{"query":"subscription { sessionEvents { kind current } }"}}`)); err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
-func closeCode(t *testing.T, c *websocket.Conn, within time.Duration) websocket.StatusCode {
-	t.Helper()
+		ch <- result{code, false}
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), within)
 	defer cancel()
-	for {
-		if _, _, err := c.Read(ctx); err != nil {
-			return websocket.CloseStatus(err)
+	select {
+	case r := <-ch:
+		if !r.complete {
+			t.Fatalf("stream closed without complete (code %q)", r.code)
 		}
+		return r.code
+	case <-ctx.Done():
+		t.Fatal("stream not ended in time")
+		return ""
 	}
 }
 
-// TestLogoutClosesSocketOnOtherInstance runs two serve instances on one
-// database: a logout on instance A closes the subscription socket on
-// instance B through LISTEN/NOTIFY, far below the periodic re-check (30s).
-func TestLogoutClosesSocketOnOtherInstance(t *testing.T) {
+// TestLogoutEndsStreamOnOtherInstance runs two serve instances on one
+// database: a logout on instance A ends the event stream on instance B
+// through LISTEN/NOTIFY, far below the periodic re-check (30s).
+func TestLogoutEndsStreamOnOtherInstance(t *testing.T) {
 	d := dbtest.Migrated(t)
-	createUser(t, d, "ws@example.com", "blue-mountain-river-42")
+	createUser(t, d, "stream@example.com", "blue-mountain-river-42")
 	a := startApp(t, d)
 	b := startApp(t, d)
-	cookie := login(t, a, "ws@example.com", "blue-mountain-river-42")
+	cookie := login(t, a, "stream@example.com", "blue-mountain-river-42")
 	c := subscribeSessionEvents(t, b, cookie)
 
 	start := time.Now()
 	if out, _ := gqlPost(t, a, cookie, `mutation { logout }`); out["errors"] != nil {
 		t.Fatalf("logout: %v", out)
 	}
-	if code := closeCode(t, c, 5*time.Second); code != 4401 {
-		t.Fatalf("close code %d, want 4401", code)
+	if code := endCode(t, c, 5*time.Second); code != "UNAUTHENTICATED" {
+		t.Fatalf("end code %q, want UNAUTHENTICATED", code)
 	}
 	if d := time.Since(start); d > 3*time.Second {
-		t.Fatalf("socket closed after %s", d)
+		t.Fatalf("stream ended after %s", d)
 	}
-	// The ended session cannot open a new socket.
-	if _, status, err := dialWS(t, b, cookie); err == nil || status != http.StatusUnauthorized {
-		t.Fatalf("upgrade with a logged-out cookie: %v (%d)", err, status)
+	// The ended session cannot open a new stream.
+	if resp := openStream(t, b, cookie); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("stream with a logged-out cookie: %d", resp.StatusCode)
 	}
 }
 
-// TestRevokeSessionClosesSocket: revoking a session from another session
-// of the same user closes the revoked session's socket (same instance).
-func TestRevokeSessionClosesSocket(t *testing.T) {
+// TestRevokeSessionEndsStream: revoking a session from another session
+// of the same user ends the revoked session's stream (same instance).
+func TestRevokeSessionEndsStream(t *testing.T) {
 	d := dbtest.Migrated(t)
-	createUser(t, d, "ws2@example.com", "blue-mountain-river-42")
+	createUser(t, d, "stream2@example.com", "blue-mountain-river-42")
 	a := startApp(t, d)
-	victim := login(t, a, "ws2@example.com", "blue-mountain-river-42")
-	other := login(t, a, "ws2@example.com", "blue-mountain-river-42")
+	victim := login(t, a, "stream2@example.com", "blue-mountain-river-42")
+	other := login(t, a, "stream2@example.com", "blue-mountain-river-42")
 	c := subscribeSessionEvents(t, a, victim)
 
 	out, _ := gqlPost(t, a, other, `{ mySessions { id current } }`)
@@ -248,7 +281,7 @@ func TestRevokeSessionClosesSocket(t *testing.T) {
 	if out, _ := gqlPost(t, a, other, `mutation { revokeSession(id: "`+victimID+`") }`); out["errors"] != nil {
 		t.Fatalf("revokeSession: %v", out)
 	}
-	if code := closeCode(t, c, 5*time.Second); code != 4401 {
-		t.Fatalf("close code %d, want 4401", code)
+	if code := endCode(t, c, 5*time.Second); code != "UNAUTHENTICATED" {
+		t.Fatalf("end code %q, want UNAUTHENTICATED", code)
 	}
 }

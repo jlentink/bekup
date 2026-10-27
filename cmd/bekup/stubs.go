@@ -15,7 +15,6 @@ type stub struct {
 // stubs are subcommands that later tasks implement.
 var stubs = []stub{
 	{"worker", "Run background workers only", "3.4"},
-	{"runner", "Run the Docker runner (mTLS gRPC, reads runner.toml)", "2.4"},
 	{"verify", "Verify a backup artifact offline", "4.7"},
 	{"decrypt", "Decrypt a backup artifact offline", "4.7"},
 }

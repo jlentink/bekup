@@ -37,6 +37,25 @@ export default defineConfig(
       "no-eval": "error",
       "no-implied-eval": "error",
       "no-new-func": "error",
+      // Live events are Server-Sent Events only (D-124). graphql-ws is in
+      // the lockfile only as a transitive dependency of graphql-codegen and
+      // an optional Apollo peer; the app must never import it.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "graphql-ws",
+              message: "No WebSocket transport (D-124): use the SSE link in src/lib/apollo.ts.",
+            },
+            {
+              name: "@apollo/client/link/subscriptions",
+              message: "No WebSocket transport (D-124): use the SSE link in src/lib/apollo.ts.",
+            },
+            { name: "subscriptions-transport-ws", message: "No WebSocket transport (D-124)." },
+          ],
+        },
+      ],
       "no-restricted-syntax": [
         "error",
         {

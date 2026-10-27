@@ -15,6 +15,250 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ConnectionEngine string
+
+const (
+	ConnectionEnginePostgres ConnectionEngine = "postgres"
+	ConnectionEngineMysql    ConnectionEngine = "mysql"
+	ConnectionEngineMariadb  ConnectionEngine = "mariadb"
+)
+
+func (e *ConnectionEngine) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ConnectionEngine(s)
+	case string:
+		*e = ConnectionEngine(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ConnectionEngine: %T", src)
+	}
+	return nil
+}
+
+type NullConnectionEngine struct {
+	ConnectionEngine ConnectionEngine `json:"connectionEngine"`
+	Valid            bool             `json:"valid"` // Valid is true if ConnectionEngine is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullConnectionEngine) Scan(value interface{}) error {
+	if value == nil {
+		ns.ConnectionEngine, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ConnectionEngine.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullConnectionEngine) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ConnectionEngine), nil
+}
+
+func (e ConnectionEngine) Valid() bool {
+	switch e {
+	case ConnectionEnginePostgres,
+		ConnectionEngineMysql,
+		ConnectionEngineMariadb:
+		return true
+	}
+	return false
+}
+
+func AllConnectionEngineValues() []ConnectionEngine {
+	return []ConnectionEngine{
+		ConnectionEnginePostgres,
+		ConnectionEngineMysql,
+		ConnectionEngineMariadb,
+	}
+}
+
+type ConnectionSshAuth string
+
+const (
+	ConnectionSshAuthNone       ConnectionSshAuth = "none"
+	ConnectionSshAuthPassword   ConnectionSshAuth = "password"
+	ConnectionSshAuthPrivateKey ConnectionSshAuth = "private_key"
+)
+
+func (e *ConnectionSshAuth) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ConnectionSshAuth(s)
+	case string:
+		*e = ConnectionSshAuth(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ConnectionSshAuth: %T", src)
+	}
+	return nil
+}
+
+type NullConnectionSshAuth struct {
+	ConnectionSshAuth ConnectionSshAuth `json:"connectionSshAuth"`
+	Valid             bool              `json:"valid"` // Valid is true if ConnectionSshAuth is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullConnectionSshAuth) Scan(value interface{}) error {
+	if value == nil {
+		ns.ConnectionSshAuth, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ConnectionSshAuth.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullConnectionSshAuth) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ConnectionSshAuth), nil
+}
+
+func (e ConnectionSshAuth) Valid() bool {
+	switch e {
+	case ConnectionSshAuthNone,
+		ConnectionSshAuthPassword,
+		ConnectionSshAuthPrivateKey:
+		return true
+	}
+	return false
+}
+
+func AllConnectionSshAuthValues() []ConnectionSshAuth {
+	return []ConnectionSshAuth{
+		ConnectionSshAuthNone,
+		ConnectionSshAuthPassword,
+		ConnectionSshAuthPrivateKey,
+	}
+}
+
+type ConnectionTlsMode string
+
+const (
+	ConnectionTlsModePinned     ConnectionTlsMode = "pinned"
+	ConnectionTlsModeUnverified ConnectionTlsMode = "unverified"
+	ConnectionTlsModeDisabled   ConnectionTlsMode = "disabled"
+)
+
+func (e *ConnectionTlsMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ConnectionTlsMode(s)
+	case string:
+		*e = ConnectionTlsMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ConnectionTlsMode: %T", src)
+	}
+	return nil
+}
+
+type NullConnectionTlsMode struct {
+	ConnectionTlsMode ConnectionTlsMode `json:"connectionTlsMode"`
+	Valid             bool              `json:"valid"` // Valid is true if ConnectionTlsMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullConnectionTlsMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.ConnectionTlsMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ConnectionTlsMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullConnectionTlsMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ConnectionTlsMode), nil
+}
+
+func (e ConnectionTlsMode) Valid() bool {
+	switch e {
+	case ConnectionTlsModePinned,
+		ConnectionTlsModeUnverified,
+		ConnectionTlsModeDisabled:
+		return true
+	}
+	return false
+}
+
+func AllConnectionTlsModeValues() []ConnectionTlsMode {
+	return []ConnectionTlsMode{
+		ConnectionTlsModePinned,
+		ConnectionTlsModeUnverified,
+		ConnectionTlsModeDisabled,
+	}
+}
+
+type DestinationType string
+
+const (
+	DestinationTypeDisk DestinationType = "disk"
+	DestinationTypeS3   DestinationType = "s3"
+	DestinationTypeSftp DestinationType = "sftp"
+)
+
+func (e *DestinationType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DestinationType(s)
+	case string:
+		*e = DestinationType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DestinationType: %T", src)
+	}
+	return nil
+}
+
+type NullDestinationType struct {
+	DestinationType DestinationType `json:"destinationType"`
+	Valid           bool            `json:"valid"` // Valid is true if DestinationType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDestinationType) Scan(value interface{}) error {
+	if value == nil {
+		ns.DestinationType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DestinationType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDestinationType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DestinationType), nil
+}
+
+func (e DestinationType) Valid() bool {
+	switch e {
+	case DestinationTypeDisk,
+		DestinationTypeS3,
+		DestinationTypeSftp:
+		return true
+	}
+	return false
+}
+
+func AllDestinationTypeValues() []DestinationType {
+	return []DestinationType{
+		DestinationTypeDisk,
+		DestinationTypeS3,
+		DestinationTypeSftp,
+	}
+}
+
 type RiverJobState string
 
 const (
@@ -173,6 +417,70 @@ type AuditLog struct {
 	Details     json.RawMessage `json:"details"`
 	PrevHash    []byte          `json:"prevHash"`
 	Hash        []byte          `json:"hash"`
+}
+
+type Connection struct {
+	ID                      uuid.UUID         `json:"id"`
+	Name                    string            `json:"name"`
+	Engine                  ConnectionEngine  `json:"engine"`
+	VersionKey              string            `json:"versionKey"`
+	ImageKey                string            `json:"imageKey"`
+	Host                    string            `json:"host"`
+	Port                    int32             `json:"port"`
+	Username                string            `json:"username"`
+	HasPassword             bool              `json:"hasPassword"`
+	ClientCertPem           *string           `json:"clientCertPem"`
+	TlsMode                 ConnectionTlsMode `json:"tlsMode"`
+	TlsPinCertPem           *string           `json:"tlsPinCertPem"`
+	TlsPinSpki              []byte            `json:"tlsPinSpki"`
+	TlsPinNotAfter          *time.Time        `json:"tlsPinNotAfter"`
+	TlsPinnedAt             *time.Time        `json:"tlsPinnedAt"`
+	TlsPinnedBy             *uuid.UUID        `json:"tlsPinnedBy"`
+	TlsBackupPinCertPem     *string           `json:"tlsBackupPinCertPem"`
+	TlsBackupPinSpki        []byte            `json:"tlsBackupPinSpki"`
+	TlsBackupPinNotAfter    *time.Time        `json:"tlsBackupPinNotAfter"`
+	TlsBackupPinnedAt       *time.Time        `json:"tlsBackupPinnedAt"`
+	TlsBackupPinnedBy       *uuid.UUID        `json:"tlsBackupPinnedBy"`
+	SshEnabled              bool              `json:"sshEnabled"`
+	SshHost                 *string           `json:"sshHost"`
+	SshPort                 *int32            `json:"sshPort"`
+	SshUser                 *string           `json:"sshUser"`
+	SshAuth                 ConnectionSshAuth `json:"sshAuth"`
+	SshHasPassphrase        bool              `json:"sshHasPassphrase"`
+	SshPublicKey            *string           `json:"sshPublicKey"`
+	SshHostKeyType          *string           `json:"sshHostKeyType"`
+	SshHostKeyFingerprint   *string           `json:"sshHostKeyFingerprint"`
+	SshHostKeyAuthorizedKey *string           `json:"sshHostKeyAuthorizedKey"`
+	SshHostKeyConfirmedAt   *time.Time        `json:"sshHostKeyConfirmedAt"`
+	SshHostKeyConfirmedBy   *uuid.UUID        `json:"sshHostKeyConfirmedBy"`
+	SecretEnc               []byte            `json:"secretEnc"`
+	Temporary               bool              `json:"temporary"`
+	ExpiresAt               *time.Time        `json:"expiresAt"`
+	CreatedForRestoreID     *uuid.UUID        `json:"createdForRestoreId"`
+	CreatedBy               *uuid.UUID        `json:"createdBy"`
+	CreatedAt               time.Time         `json:"createdAt"`
+	UpdatedAt               time.Time         `json:"updatedAt"`
+	DeletedAt               *time.Time        `json:"deletedAt"`
+}
+
+type Destination struct {
+	ID                      uuid.UUID       `json:"id"`
+	Name                    string          `json:"name"`
+	Type                    DestinationType `json:"type"`
+	Config                  json.RawMessage `json:"config"`
+	SecretEnc               []byte          `json:"secretEnc"`
+	NoDelete                bool            `json:"noDelete"`
+	ObjectLockMode          *string         `json:"objectLockMode"`
+	ObjectLockRetentionDays *int32          `json:"objectLockRetentionDays"`
+	HostKeyType             *string         `json:"hostKeyType"`
+	HostKeyFingerprint      *string         `json:"hostKeyFingerprint"`
+	HostKeyAuthorizedKey    *string         `json:"hostKeyAuthorizedKey"`
+	HostKeyConfirmedAt      *time.Time      `json:"hostKeyConfirmedAt"`
+	HostKeyConfirmedBy      *uuid.UUID      `json:"hostKeyConfirmedBy"`
+	CreatedBy               *uuid.UUID      `json:"createdBy"`
+	CreatedAt               time.Time       `json:"createdAt"`
+	UpdatedAt               time.Time       `json:"updatedAt"`
+	DeletedAt               *time.Time      `json:"deletedAt"`
 }
 
 type InstanceKey struct {

@@ -75,8 +75,8 @@ const (
 	ActionSettingChanged Action = "setting.changed"
 
 	// Security posture changes (D-001: weakened settings are audited).
-	// Reserved: recorded from tasks 2.11/2.12 (per-connection and
-	// per-destination opt-outs, step-up + badge), alerted in task 5.5.
+	// Recorded from task 2.11 (TLS downgrade of a connection, step-up +
+	// badge) and later per-destination/job opt-outs, alerted in task 5.5.
 	ActionSecurityOptOut Action = "security.opt_out"
 	// Reserved: a runtime switch to plain HTTP (task 5.5 alerting); the
 	// startup posture is system.insecure_transport_started (D-095).
@@ -113,8 +113,38 @@ const (
 	ActionAuditHeadExportFailed Action = "audit.head_export.failed"
 	// Reserved: recorded from task 3.9 (download tickets).
 	ActionDownloadTicketCreated Action = "download.ticket_created"
-	// Reserved: recorded from tasks 2.7a/2.11 (DB certificate pinning).
-	ActionConnectionPinConfirmed Action = "connection.pin_confirmed"
+
+	// Connections (task 2.11, D-135). Details name the changed fields;
+	// credential fields only ever appear by name (and additionally as a
+	// secret.changed entry), never with a value.
+	ActionConnectionCreated          Action = "connection.created"
+	ActionConnectionUpdated          Action = "connection.updated"
+	ActionConnectionDeleted          Action = "connection.deleted"
+	ActionConnectionTLSMode          Action = "connection.tls_mode_changed"
+	ActionConnectionPinConfirmed     Action = "connection.pin_confirmed"
+	ActionConnectionBackupPinStaged  Action = "connection.backup_pin_staged"
+	ActionConnectionHostKeyConfirmed Action = "connection.host_key_confirmed"
+	ActionConnectionSSHKeyGenerated  Action = "connection.ssh_key_generated"
+	// ActionConnectionPinMismatch: the runner refused a connection because
+	// the target's certificate does not match the pin (security event,
+	// alerted in task 5.5).
+	ActionConnectionPinMismatch Action = "connection.tls_pin_mismatch"
+	// ActionConnectionHostKeyMismatch: the SSH bastion presented another
+	// host key than the pinned one (security event, alerted in task 5.5).
+	ActionConnectionHostKeyMismatch Action = "connection.ssh_host_key_mismatch"
+
+	// Destinations (task 2.12, D-131). Details name the changed fields;
+	// credential fields only ever appear as "changed" (and additionally as
+	// a secret.changed entry), never with a value.
+	ActionDestinationCreated          Action = "destination.created"
+	ActionDestinationUpdated          Action = "destination.updated"
+	ActionDestinationDeleted          Action = "destination.deleted"
+	ActionDestinationHostKeyConfirmed Action = "destination.host_key_confirmed"
+	ActionDestinationSSHKeyGenerated  Action = "destination.ssh_key_generated"
+	// ActionDestinationHostKeyMismatch: an SFTP server presented another
+	// host key than the pinned one during a test (security event, D-140;
+	// alerted in task 5.5).
+	ActionDestinationHostKeyMismatch Action = "destination.ssh_host_key_mismatch"
 )
 
 // Passkey actions (task 1.8). Enrollment and removal use auth.mfa.enrolled
@@ -152,7 +182,12 @@ var catalog = []Action{
 	ActionCLIAdminDisabled,
 	ActionKeysRotated, ActionKeysCheckValueStored, ActionInstanceKeyCreated, ActionCertsRotated,
 	ActionAuditVerifyFailed, ActionAuditHeadExportFailed,
-	ActionDownloadTicketCreated, ActionConnectionPinConfirmed,
+	ActionDownloadTicketCreated,
+	ActionConnectionCreated, ActionConnectionUpdated, ActionConnectionDeleted, ActionConnectionTLSMode,
+	ActionConnectionPinConfirmed, ActionConnectionBackupPinStaged, ActionConnectionHostKeyConfirmed,
+	ActionConnectionSSHKeyGenerated, ActionConnectionPinMismatch, ActionConnectionHostKeyMismatch,
+	ActionDestinationCreated, ActionDestinationUpdated, ActionDestinationDeleted,
+	ActionDestinationHostKeyConfirmed, ActionDestinationSSHKeyGenerated, ActionDestinationHostKeyMismatch,
 }
 
 // actionRe is the syntax of an action: at least two dot-separated words,

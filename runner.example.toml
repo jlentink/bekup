@@ -22,6 +22,12 @@ address = "10.213.251.10:7443"
 # Allow a wildcard listen address (":7443", "0.0.0.0:7443", "[::]:7443")
 # outside dev mode. Logs a warning at every startup.
 allow_wildcard = false
+# Container-local unix socket serving only the standard gRPC health service
+# (no TLS, no runner API) for `bekup healthcheck runner`, the compose
+# healthcheck. The directory is created 0700 and must belong to the runner
+# user; keep it on the container's private /tmp tmpfs, never on a shared
+# volume. "" disables it.
+health_socket = "/tmp/bekup-runner/health.sock"
 
 [tls]
 # Certificates from `bekup certs init` (TLS 1.3, private CA).
@@ -39,27 +45,44 @@ host = "unix:///var/run/docker.sock"
 # Group that owns the Docker socket (0 = do not add a group). Example: 998.
 gid = 0
 # ID or name of the runner's own container, used to join the per-run networks.
-# Empty = auto-detect from the container hostname (so do not set `hostname:`
-# in compose). Example: "bekup-runner-1".
+# Empty = auto-detect from /proc/self/mountinfo, then the container hostname
+# (so do not set `hostname:` in compose); the container must carry one of the
+# runner's own addresses. Example: "bekup-runner-1".
 self_container = ""
 # Limits applied to every dump/restore container.
 memory_mib = 1024
 cpus = 1.0
 pids_limit = 256
 pull_timeout = "10m"
+# Private IPv4 pool for the per-run internal networks: every run gets its own
+# /28 (runner = .2, dump container = .3). Targets inside the pool are always
+# denied and the gRPC port refuses connections from it. Pick a range that
+# does not overlap your Docker networks or targets.allow_cidrs.
+run_subnet_pool = "10.214.0.0/16"
 
 [images]
 # Optional extra allowlisted images (pinned by digest) on top of the embedded
-# catalog. Empty = embedded catalog only.
+# catalog. Empty = embedded catalog only. Same schema as the embedded
+# internal/engine/catalog.toml (schema_version = 1, [[images]] entries); it
+# can add release series but never replace an embedded one, and every entry
+# must meet the per-series client floors (docs/architecture.md, Engines).
 extra_file = ""
 
 [targets]
 # Target allowlist. Empty allow lists deny everything. Loopback, link-local
 # and cloud metadata addresses are always denied; 0.0.0.0/0 is rejected.
+# Docker networks (their subnets and gateways) are denied unless an
+# allow_cidrs entry inside the Docker subnet (a gateway: its exact /32)
+# allows them; allow_hosts never opens one. allow_hosts takes host names
+# only (IPs go into allow_cidrs as /32).
 allow_cidrs = ["10.20.0.0/16"] # example
 allow_hosts = ["db.internal.example.com"] # example
 deny_cidrs = []
 deny_hosts = []
+# Per-bastion target lists, "<bastion>=<CIDR or host name>": a bastion
+# listed here may only forward to its listed targets. Unlisted bastions may
+# forward anywhere they reach (startup warning).
+bastion_targets = [] # e.g. ["bastion.example.com=10.30.0.0/24", "bastion.example.com=db.internal"]
 
 [limits]
 max_concurrent_runs = 4

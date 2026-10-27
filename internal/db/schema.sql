@@ -30,6 +30,54 @@ ALTER SCHEMA public OWNER TO bekup_owner;
 CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
 
 --
+-- Name: connection_engine; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.connection_engine AS ENUM (
+    'postgres',
+    'mysql',
+    'mariadb'
+);
+
+ALTER TYPE public.connection_engine OWNER TO bekup_owner;
+
+--
+-- Name: connection_ssh_auth; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.connection_ssh_auth AS ENUM (
+    'none',
+    'password',
+    'private_key'
+);
+
+ALTER TYPE public.connection_ssh_auth OWNER TO bekup_owner;
+
+--
+-- Name: connection_tls_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.connection_tls_mode AS ENUM (
+    'pinned',
+    'unverified',
+    'disabled'
+);
+
+ALTER TYPE public.connection_tls_mode OWNER TO bekup_owner;
+
+--
+-- Name: destination_type; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.destination_type AS ENUM (
+    'disk',
+    's3',
+    'sftp'
+);
+
+ALTER TYPE public.destination_type OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -284,6 +332,112 @@ ALTER SEQUENCE public.audit_log_id_seq OWNER TO bekup_owner;
 --
 
 ALTER SEQUENCE public.audit_log_id_seq OWNED BY public.audit_log.id;
+
+--
+-- Name: connections; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.connections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    engine public.connection_engine NOT NULL,
+    version_key text NOT NULL,
+    image_key text NOT NULL,
+    host text NOT NULL,
+    port integer NOT NULL,
+    username text NOT NULL,
+    has_password boolean DEFAULT false NOT NULL,
+    client_cert_pem text,
+    tls_mode public.connection_tls_mode DEFAULT 'pinned'::public.connection_tls_mode NOT NULL,
+    tls_pin_cert_pem text,
+    tls_pin_spki bytea,
+    tls_pin_not_after timestamp with time zone,
+    tls_pinned_at timestamp with time zone,
+    tls_pinned_by uuid,
+    tls_backup_pin_cert_pem text,
+    tls_backup_pin_spki bytea,
+    tls_backup_pin_not_after timestamp with time zone,
+    tls_backup_pinned_at timestamp with time zone,
+    tls_backup_pinned_by uuid,
+    ssh_enabled boolean DEFAULT false NOT NULL,
+    ssh_host text,
+    ssh_port integer,
+    ssh_user text,
+    ssh_auth public.connection_ssh_auth DEFAULT 'none'::public.connection_ssh_auth NOT NULL,
+    ssh_has_passphrase boolean DEFAULT false NOT NULL,
+    ssh_public_key text,
+    ssh_host_key_type text,
+    ssh_host_key_fingerprint text,
+    ssh_host_key_authorized_key text,
+    ssh_host_key_confirmed_at timestamp with time zone,
+    ssh_host_key_confirmed_by uuid,
+    secret_enc bytea,
+    temporary boolean DEFAULT false NOT NULL,
+    expires_at timestamp with time zone,
+    created_for_restore_id uuid,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT connections_backup_pin_complete CHECK ((((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pin_not_after IS NULL)) AND ((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pinned_at IS NULL)) AND ((tls_backup_pin_spki IS NULL) OR (tls_backup_pin_cert_pem IS NOT NULL)))),
+    CONSTRAINT connections_client_cert_size CHECK ((octet_length(client_cert_pem) <= 32768)),
+    CONSTRAINT connections_host_key_complete CHECK ((((ssh_host_key_type IS NULL) = (ssh_host_key_fingerprint IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_authorized_key IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_confirmed_at IS NULL)))),
+    CONSTRAINT connections_host_key_fingerprint_format CHECK (((ssh_host_key_fingerprint IS NULL) OR (ssh_host_key_fingerprint ~ '^SHA256:[A-Za-z0-9+/]{43}$'::text))),
+    CONSTRAINT connections_host_length CHECK (((char_length(host) >= 1) AND (char_length(host) <= 253))),
+    CONSTRAINT connections_key_length CHECK ((((char_length(version_key) >= 1) AND (char_length(version_key) <= 16)) AND ((char_length(image_key) >= 1) AND (char_length(image_key) <= 16)))),
+    CONSTRAINT connections_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT connections_pin_complete CHECK ((((tls_pin_cert_pem IS NULL) = (tls_pin_not_after IS NULL)) AND ((tls_pin_cert_pem IS NULL) = (tls_pinned_at IS NULL)) AND ((tls_pin_spki IS NULL) OR (tls_pin_cert_pem IS NOT NULL)))),
+    CONSTRAINT connections_pin_size CHECK (((octet_length(tls_pin_cert_pem) <= 32768) AND (octet_length(tls_backup_pin_cert_pem) <= 32768))),
+    CONSTRAINT connections_pin_spki_length CHECK ((((tls_pin_spki IS NULL) OR (octet_length(tls_pin_spki) = 32)) AND ((tls_backup_pin_spki IS NULL) OR (octet_length(tls_backup_pin_spki) = 32)))),
+    CONSTRAINT connections_port_range CHECK (((port >= 1) AND (port <= 65535))),
+    CONSTRAINT connections_restore_ref_temporary CHECK (((created_for_restore_id IS NULL) OR temporary)),
+    CONSTRAINT connections_secret_flags CHECK (((secret_enc IS NOT NULL) OR ((NOT has_password) AND (ssh_auth = 'none'::public.connection_ssh_auth) AND (client_cert_pem IS NULL)))),
+    CONSTRAINT connections_secret_size CHECK ((octet_length(secret_enc) <= 131072)),
+    CONSTRAINT connections_ssh_complete CHECK (((NOT ssh_enabled) OR ((ssh_host IS NOT NULL) AND (ssh_port IS NOT NULL) AND (ssh_user IS NOT NULL)))),
+    CONSTRAINT connections_ssh_lengths CHECK ((((ssh_host IS NULL) OR ((char_length(ssh_host) >= 1) AND (char_length(ssh_host) <= 253))) AND ((ssh_user IS NULL) OR ((char_length(ssh_user) >= 1) AND (char_length(ssh_user) <= 128))) AND ((ssh_public_key IS NULL) OR (octet_length(ssh_public_key) <= 16384)) AND ((ssh_host_key_authorized_key IS NULL) OR (octet_length(ssh_host_key_authorized_key) <= 8192)))),
+    CONSTRAINT connections_ssh_port_range CHECK (((ssh_port IS NULL) OR ((ssh_port >= 1) AND (ssh_port <= 65535)))),
+    CONSTRAINT connections_temporary_expiry CHECK ((temporary = (expires_at IS NOT NULL))),
+    CONSTRAINT connections_username_length CHECK (((char_length(username) >= 1) AND (char_length(username) <= 128)))
+);
+
+ALTER TABLE public.connections OWNER TO bekup_owner;
+
+--
+-- Name: destinations; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.destinations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    type public.destination_type NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    secret_enc bytea,
+    no_delete boolean DEFAULT false NOT NULL,
+    object_lock_mode text,
+    object_lock_retention_days integer,
+    host_key_type text,
+    host_key_fingerprint text,
+    host_key_authorized_key text,
+    host_key_confirmed_at timestamp with time zone,
+    host_key_confirmed_by uuid,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT destinations_config_object CHECK ((jsonb_typeof(config) = 'object'::text)),
+    CONSTRAINT destinations_config_size CHECK ((octet_length((config)::text) <= 524288)),
+    CONSTRAINT destinations_host_key_complete CHECK ((((host_key_type IS NULL) = (host_key_fingerprint IS NULL)) AND ((host_key_type IS NULL) = (host_key_authorized_key IS NULL)) AND ((host_key_type IS NULL) = (host_key_confirmed_at IS NULL)))),
+    CONSTRAINT destinations_host_key_fingerprint_format CHECK (((host_key_fingerprint IS NULL) OR (host_key_fingerprint ~ '^SHA256:[A-Za-z0-9+/]{43}$'::text))),
+    CONSTRAINT destinations_host_key_sftp_only CHECK (((host_key_type IS NULL) OR (type = 'sftp'::public.destination_type))),
+    CONSTRAINT destinations_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT destinations_object_lock_complete CHECK (((object_lock_mode IS NULL) = (object_lock_retention_days IS NULL))),
+    CONSTRAINT destinations_object_lock_days CHECK (((object_lock_retention_days IS NULL) OR ((object_lock_retention_days >= 1) AND (object_lock_retention_days <= 36500)))),
+    CONSTRAINT destinations_object_lock_mode CHECK (((object_lock_mode IS NULL) OR (object_lock_mode = ANY (ARRAY['governance'::text, 'compliance'::text])))),
+    CONSTRAINT destinations_object_lock_s3_only CHECK (((object_lock_mode IS NULL) OR (type = 's3'::public.destination_type))),
+    CONSTRAINT destinations_secret_size CHECK ((octet_length(secret_enc) <= 131072))
+);
+
+ALTER TABLE public.destinations OWNER TO bekup_owner;
 
 --
 -- Name: goose_db_version; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -640,6 +794,20 @@ ALTER TABLE ONLY public.audit_log
     ADD CONSTRAINT audit_log_prev_hash_key UNIQUE (prev_hash);
 
 --
+-- Name: connections connections_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_pkey PRIMARY KEY (id);
+
+--
+-- Name: destinations destinations_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.destinations
+    ADD CONSTRAINT destinations_pkey PRIMARY KEY (id);
+
+--
 -- Name: goose_db_version goose_db_version_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -789,6 +957,24 @@ CREATE INDEX audit_log_target_id_idx ON public.audit_log USING btree (target_typ
 CREATE INDEX audit_log_ts_idx ON public.audit_log USING btree (ts);
 
 --
+-- Name: connections_name_active_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX connections_name_active_key ON public.connections USING btree (lower(name)) WHERE ((deleted_at IS NULL) AND (NOT temporary));
+
+--
+-- Name: connections_temporary_expiry_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX connections_temporary_expiry_idx ON public.connections USING btree (expires_at) WHERE (temporary AND (deleted_at IS NULL));
+
+--
+-- Name: destinations_name_active_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX destinations_name_active_key ON public.destinations USING btree (lower(name)) WHERE (deleted_at IS NULL);
+
+--
 -- Name: instance_keys_one_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -909,6 +1095,18 @@ CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON public.audit_log FOR EAC
 CREATE TRIGGER audit_log_no_update_delete BEFORE DELETE OR UPDATE ON public.audit_log FOR EACH STATEMENT EXECUTE FUNCTION public.audit_log_append_only();
 
 --
+-- Name: connections connections_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER connections_set_updated_at BEFORE UPDATE ON public.connections FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: destinations destinations_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
 -- Name: settings settings_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -926,6 +1124,48 @@ CREATE TRIGGER users_set_updated_at BEFORE UPDATE ON public.users FOR EACH ROW E
 
 ALTER TABLE ONLY public.audit_chain_heads
     ADD CONSTRAINT audit_chain_heads_key_id_fkey FOREIGN KEY (key_id) REFERENCES public.instance_keys(id);
+
+--
+-- Name: connections connections_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: connections connections_ssh_host_key_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_ssh_host_key_confirmed_by_fkey FOREIGN KEY (ssh_host_key_confirmed_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: connections connections_tls_backup_pinned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_tls_backup_pinned_by_fkey FOREIGN KEY (tls_backup_pinned_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: connections connections_tls_pinned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.connections
+    ADD CONSTRAINT connections_tls_pinned_by_fkey FOREIGN KEY (tls_pinned_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: destinations destinations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.destinations
+    ADD CONSTRAINT destinations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: destinations destinations_host_key_confirmed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.destinations
+    ADD CONSTRAINT destinations_host_key_confirmed_by_fkey FOREIGN KEY (host_key_confirmed_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 --
 -- Name: recovery_codes recovery_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1039,6 +1279,18 @@ GRANT SELECT,USAGE ON SEQUENCE public.audit_chain_heads_id_seq TO bekup_app;
 --
 
 GRANT SELECT,INSERT ON TABLE public.audit_log TO bekup_app;
+
+--
+-- Name: TABLE connections; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.connections TO bekup_app;
+
+--
+-- Name: TABLE destinations; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.destinations TO bekup_app;
 
 --
 -- Name: TABLE instance_keys; Type: ACL; Schema: public; Owner: bekup_owner

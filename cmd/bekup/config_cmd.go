@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jlentink/bekup/internal/config"
-	"github.com/jlentink/bekup/internal/logging"
 )
 
 func newConfigCmd(g *globalFlags) *cobra.Command {
@@ -66,27 +65,15 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 func withConfig(c *cobra.Command, g *globalFlags, runner bool,
 	fn func(path string, dev bool, warnings []string, write func(io.Writer) error) error,
 ) error {
-	opts := g.options(c)
-	stderr := c.ErrOrStderr()
 	if runner {
-		// runner.toml has no [log] section; --log-level only affects this
-		// command's own logging.
-		opts.Flags = nil
-		res, err := config.LoadRunner(opts)
-		if err != nil {
-			return fmt.Errorf("invalid runner configuration:\n%w", err)
-		}
-		format := "json"
-		if res.Dev {
-			format = "text"
-		}
-		logger, err := logging.New(stderr, logging.Options{Level: g.logLevel, Format: format})
+		res, _, err := loadRunnerConfig(c, g)
 		if err != nil {
 			return err
 		}
-		logLoaded(c, logger, res.Path, res.Warnings)
 		return fn(res.Path, res.Dev, res.Warnings, res.WriteRedacted)
 	}
+	opts := g.options(c)
+	stderr := c.ErrOrStderr()
 	res, err := config.LoadBekup(opts)
 	if err != nil {
 		return fmt.Errorf("invalid configuration:\n%w", err)

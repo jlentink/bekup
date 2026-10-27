@@ -59,7 +59,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/graphql": { target: backend, ws: true, changeOrigin: false },
+      "/graphql": { target: backend, changeOrigin: false },
       "/api": { target: backend, changeOrigin: false },
     },
   },
@@ -89,7 +89,7 @@ export default defineConfig({
             },
             {
               name: "graphql",
-              test: /[\\/]node_modules[\\/](@apollo|graphql|graphql-ws|rxjs|@wry|optimism|tslib)[\\/]/,
+              test: /[\\/]node_modules[\\/](@apollo|graphql|graphql-sse|rxjs|@wry|optimism|tslib)[\\/]/,
             },
             {
               name: "ui",

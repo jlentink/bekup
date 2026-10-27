@@ -15,6 +15,7 @@ import (
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/logging"
+	"github.com/jlentink/bekup/internal/testutil/dockertest"
 )
 
 func connectWith(ctx context.Context, url string, o db.TLSOptions) (*pgxpool.Pool, error) {
@@ -90,7 +91,7 @@ func TestTLSRejectsCertificateFromAnotherCA(t *testing.T) {
 
 func TestTLSRejectsWrongHostName(t *testing.T) {
 	if pgHost != "localhost" {
-		t.Skipf("needs a Docker host reachable as localhost and 127.0.0.1 (got %q)", pgHost)
+		dockertest.Skipf(t, "needs a Docker host reachable as localhost and 127.0.0.1 (got %q)", pgHost)
 	}
 	ctx := withTimeout(t, time.Minute)
 	d := migratedDB(t)

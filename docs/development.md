@@ -41,8 +41,8 @@ Recipes whose tooling arrives in a later task fail with
 | dev | `just web-dev` | Vite dev server with hot reload on `http://localhost:5173`, proxying the API to `:8080` |
 | dev | `just dev-full` | The full containerised stack (profile `full`: air serve, runner, sample DBs, MinIO, SFTP, bastion) |
 | dev | `just dev-down` | Stops every dev container of every profile; volumes are kept |
-| dev | `just gen` | Runs sqlc, gqlgen, graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
-| quality | `just lint` | `golangci-lint` (incl. gosec, also `integration`-tagged files), `sqlc vet` + `sqlc diff`; with `web/`: eslint + `tsc --noEmit` |
+| dev | `just gen` | Runs sqlc, `buf generate` (runner API: `proto/` → `internal/runnerpb`), gqlgen, graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
+| quality | `just lint` | `golangci-lint` (incl. gosec, also `integration`-tagged files), `sqlc vet` + `sqlc diff`, `buf lint` + `buf format --diff` (+ `buf breaking` against `main` once `proto/` exists there); with `web/`: eslint + `tsc --noEmit` |
 | quality | `just test` | Script tests, `go test -race ./...`; with `web/`: vitest |
 | quality | `just test-scripts` | Tests for the release scripts (semver math, bump refusals, happy path) |
 | quality | `just test-int` | Integration tests (`-tags integration`, testcontainers; needs Docker) |
@@ -180,7 +180,12 @@ with the SQL of the new River versions; never use River's own migrator.
 
 **Integration tests** use the `integration` build tag and testcontainers
 (`postgres:17-alpine`, digest-pinned like `docker-compose.yml`); they create
-the roles exactly like the deploy init script.
+the roles exactly like the deploy init script. A test that needs a (Linux)
+Docker daemon skips **only** through
+`dockertest.Skipf(t, ...)` (`internal/testutil/dockertest`), never with a
+bare `t.Skipf`. Locally it skips without Docker; with `CI=true` (set in the
+`go-integration` job) it fails, so a missing daemon in CI can't turn the
+integration suite silently green.
 
 ## Releases and version bumping
 
@@ -222,7 +227,7 @@ the annotated tag `v$(cat VERSION)` and that its signature verifies, then runs
 
 Stack (D-026, D-084): Vite 8, React 19, TypeScript 6 (strict +
 `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`), Tailwind CSS v4,
-shadcn/ui (Radix), Apollo Client 4 (HTTP + `graphql-ws`), graphql-codegen
+shadcn/ui (Radix), Apollo Client 4 (HTTP + `graphql-sse`), graphql-codegen
 (client preset), React Router 8 (data mode), react-hook-form + zod,
 lucide-react. The package manager is pnpm, pinned through `packageManager`. Its
 settings live in `web/pnpm-workspace.yaml`: exact versions, a 3-day minimum
@@ -231,7 +236,7 @@ release age, and no dependency install scripts.
 ```sh
 cd web
 pnpm install
-pnpm dev          # http://localhost:5173; proxies /graphql (incl. WebSocket) and /api to :8080
+pnpm dev          # http://localhost:5173; proxies /graphql (incl. subscription event streams) and /api to :8080
 pnpm gen          # graphql-codegen -> src/graphql/gen (from internal/graph/schema)
 pnpm lint         # eslint: typescript-eslint strict-type-checked, react-hooks, jsx-a11y strict
 pnpm typecheck    # tsc -b --noEmit
@@ -249,7 +254,8 @@ browser's real `Origin: http://localhost:5173` while `server.base_url` is
 `http://localhost:8080`. The Origin/`Sec-Fetch-Site` checks of
 `internal/httpserver` (D-050, D-102) therefore accept
 `http://localhost:5173` and `http://127.0.0.1:5173` **in dev mode only**,
-for state-changing requests (GraphQL POSTs) and the WebSocket upgrade.
+for state-changing requests (GraphQL POSTs, including the subscription
+event streams).
 Outside dev mode, only the `base_url` origin is accepted. Don't "fix" this with `changeOrigin: true`:
 that rewrites only the `Host` header, not `Origin`, and would hide
 host-header mistakes.
@@ -258,9 +264,24 @@ and exposes `web.DistFS()`. `web/dist/.gitkeep` is committed, and the build
 recreates it, so `go build ./...` works before the first web build.
 
 **GraphQL client.** `src/lib/apollo.ts` sends queries and mutations as POST +
-JSON to `/graphql` with `credentials: "same-origin"`. Subscriptions use
-`graphql-ws` on the same path, with `ws:`/`wss:` derived from the page
-location. `codegen.ts` generates the typed `graphql()` helper in
+JSON to `/graphql` with `credentials: "same-origin"`. Subscriptions are
+Server-Sent Events on the same path (D-124): the Apollo link built on
+`graphql-sse` (distinct connections mode) POSTs each subscription with
+`Accept: text/event-stream`. A stream the server ends carries a final
+error code: `UNAUTHENTICATED`/`FORBIDDEN` navigate to `/login`,
+`SESSION_ROTATED` reopens at once, `UNAVAILABLE` and network errors reopen
+with backoff. There is no WebSocket; don't add one. `graphql-ws` still shows
+up in `web/pnpm-lock.yaml`, but only as a transitive dependency of
+`@graphql-codegen/cli` (through `@graphql-tools/url-loader`, a dev
+dependency) that pnpm also uses to satisfy Apollo's *optional*
+`graphql-ws` peer. It can't be dropped without breaking codegen. No app
+code imports it, and the production bundle doesn't contain it. ESLint
+(`no-restricted-imports`) rejects imports of `graphql-ws`,
+`@apollo/client/link/subscriptions` and `subscriptions-transport-ws`.
+Without a proxy the
+browser talks HTTP/1.1 (6 connections per origin), so keep a page to 2 or
+3 subscriptions (the server allows `graphql.stream_max_per_session`, 4 by
+default). `codegen.ts` generates the typed `graphql()` helper in
 `src/graphql/gen/` from the server schema `internal/graph/schema/*.graphqls`
 (`just gen` runs gqlgen first, then graphql-codegen). The scalars `Time` and
 `UUID` are strings on the client.
@@ -306,7 +327,7 @@ call the same `just` recipes you run locally where possible, so a green
 | Job | What it runs | Local equivalent |
 |---|---|---|
 | `go` | `go build ./...`, `go vet ./...`, `go test -race ./...`, golangci-lint (incl. gosec, `--build-tags integration`), `sqlc vet`, `sqlc diff` | `just lint` + `just test` |
-| `go-integration` | Integration tests with testcontainers (Docker on the runner) | `just test-int` |
+| `go-integration` | Integration tests with testcontainers (Docker on the runner, checked first; `CI=true`, so Docker-dependent tests fail instead of skipping) | `just test-int` |
 | `web` | frozen `pnpm install`, `lint`, `typecheck`, `test`, `build`, `csp-check` (headless Google Chrome) | `just lint` + `just test` + `just build`, then `pnpm csp-check` |
 | `security` | govulncheck + osv-scanner (pinned versions) | `just sec` |
 | `generated` | `go mod tidy -diff`, `just gen`, then fails on any uncommitted change | `go mod tidy && just gen`, then commit |

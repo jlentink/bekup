@@ -18,12 +18,15 @@ import (
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
+	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/runnerclient"
 )
 
 // ApplicationName is reported to Postgres by serve's pool.
@@ -74,7 +77,13 @@ type App struct {
 	twoFactorPolicy *auth.TwoFactorPolicies
 	// secondFactor is the two-step login and step-up (task 1.9).
 	secondFactor *auth.SecondFactorFlow
-	// subs is the WebSocket subscription machinery (task 1.10).
+	// destinations is the destination service (task 2.12).
+	destinations *destinations.Service
+	// runner is the mTLS runner client and connections the connection
+	// service on top of it (task 2.11).
+	runner      *runnerclient.Client
+	connections *connections.Service
+	// subs is the subscription machinery (tasks 1.10, 2.13).
 	subs       subscriptions
 	addr       net.Addr
 	components []Component
@@ -128,6 +137,12 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 		return nil, err
 	}
 	if a.secondFactor, err = a.newSecondFactorFlow(); err != nil {
+		return nil, err
+	}
+	if a.destinations, err = a.newDestinations(); err != nil {
+		return nil, err
+	}
+	if a.connections, err = a.newConnections(); err != nil {
 		return nil, err
 	}
 	h, err := a.newHTTP(ctx)
@@ -209,6 +224,12 @@ func (a *App) Close() {
 				a.opts.Logger.Warn("closing component failed", slog.String("component", c.Name()), slog.Any("error", err))
 			}
 		}
+	}
+	if a.runner != nil {
+		if err := a.runner.Close(); err != nil {
+			a.opts.Logger.Warn("closing the runner client failed", slog.Any("error", err))
+		}
+		a.runner = nil
 	}
 	if a.pool != nil {
 		a.pool.Close()
@@ -300,6 +321,8 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 
 		SecondFactor:    a.secondFactor,
 		TwoFactorPolicy: a.twoFactorPolicy,
+		Destinations:    a.destinations,
+		Connections:     a.connections,
 		Dev:             a.opts.Dev,
 		ServerInfo: model.ServerInfo{
 			Version:           a.opts.Version,
@@ -309,7 +332,7 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		MaxComplexity: cfg.GraphQL.MaxComplexity,
 		MaxDepth:      cfg.GraphQL.MaxDepth,
 		MaxBodyBytes:  cfg.GraphQL.MaxBodyBytes,
-		WebSocket:     a.subs.ws,
+		Streams:       a.subs.streams,
 	})
 }
 

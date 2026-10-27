@@ -1,15 +1,19 @@
-# WebSocket subscriptions (task 1.10, D-050, D-105). Subscriptions run only
-# over a WebSocket on /graphql with the graphql-transport-ws protocol; the
-# caller is the session of the cookie sent with the upgrade (connection_init
-# payloads are not accepted). The socket closes with 4401 when the session
-# ends, 4403 when its access changes and 4001 when it was rotated (reconnect).
-# Every event is re-authorized when it is delivered.
+# Subscriptions (tasks 1.10 and 2.13, D-050, D-105). Subscriptions run only
+# as Server-Sent Events: POST /graphql with Content-Type application/json and
+# Accept: text/event-stream, one subscription per request (graphql-sse,
+# distinct connections mode); the caller is the session of the cookie sent
+# with that request. When the server ends a stream it sends a final error
+# event whose extensions.code is UNAUTHENTICATED (the session ended),
+# FORBIDDEN (its access changed), SESSION_ROTATED (it was rotated: open the
+# stream again) or UNAVAILABLE (shutdown or a failed session check: retry
+# later), then the complete event. Every event is re-authorized when it is
+# delivered.
 
 type Subscription {
   """
   Changes to your own sessions (one revoked or rotated, or all of them
   revoked), e.g. to refresh the session list. When the change ends the
-  session of this connection, the socket closes (see the close codes
+  session of this stream, the stream ends with its final error event (see
   above) and the notice may not arrive first.
   """
   sessionEvents: SessionEvent! @authenticated
@@ -30,6 +34,6 @@ type SessionEvent {
   kind: SessionEventKind!
   "The session that changed; null when all sessions were revoked."
   sessionId: UUID
-  "True when the change concerns the session of this connection."
+  "True when the change concerns the session of this stream."
   current: Boolean!
 }

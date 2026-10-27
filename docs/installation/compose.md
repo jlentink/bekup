@@ -4,9 +4,12 @@
 > `bekup_owner`, TLS 1.3 + SCRAM channel binding), `serve` (healthy,
 > unpublished, bound to its `frontend` address only), the `admin` one-shot,
 > and both reverse-proxy profiles `traefik` / `nginx` (HTTPS, redirect,
-> HSTS, CSP, WebSocket upgrades, TLS 1.2/1.3 AEAD only). The `runner`
-> subcommand is still a stub until task 2.4, so the `runner` container
-> restarts in a loop for now; `serve` does not depend on it being healthy.
+> HSTS, CSP, TLS 1.2/1.3 AEAD only; since task 2.13 subscriptions are
+> unbuffered Server-Sent Events instead of WebSocket upgrades). Since task 2.4
+> the `runner` container starts its mTLS gRPC listener and turns healthy
+> (`bekup healthcheck runner` on its local health socket, D-125); since
+> tasks 2.5–2.7a it serves its full RPC set (probe, certificate and
+> host-key capture, dump, verify, restore) with per-run isolated networks.
 > TLS for the UI comes from the opt-in reverse-proxy profiles
 > ([reverse-proxy.md](reverse-proxy.md)); the dev stack works without a
 > proxy over plain HTTP on `127.0.0.1:8080`.
@@ -62,7 +65,7 @@ Every bekup service gets the same baseline:
 | resource limits (`cpus`, `memory`, `pids`) | a runaway process cannot starve the host |
 | bounded `json-file` logs | logs cannot fill the disk |
 | `restart: unless-stopped` | long-running services come back after a crash or reboot |
-| exec-form healthchecks (`bekup healthcheck serve|runner`) | work without a shell; `serve` probes `/healthz` (task 1.1, D-080, D-102), `runner` arrives in task 2.4 |
+| exec-form healthchecks (`bekup healthcheck serve|runner`) | work without a shell; `serve` probes `/healthz` (task 1.1, D-080, D-102), `runner` queries the standard gRPC health service on its container-local unix socket `listen.health_socket` (task 2.4, D-125) |
 
 The app database (`postgres:17-alpine`) runs as UID 70 directly, with a
 read-only root filesystem, no capabilities, SCRAM-SHA-256 for both local and
@@ -142,9 +145,22 @@ export DOCKER_GID=$(stat -c %g /var/run/docker.sock)
 On Docker Desktop (macOS/Windows) the socket is `root:root` inside the VM, so
 use `DOCKER_GID=0`.
 
-Do not set `hostname:` on the runner: it finds its own container through the
-default hostname to join per-run networks. If that fails, set
-`[docker] self_container` in `runner.toml`.
+Do not set `hostname:` on the runner: it finds its own container through
+`/proc/self/mountinfo` or the default hostname to join per-run networks, and
+accepts it only if the container carries one of the runner's own addresses.
+If that fails (the runner logs "runner executor not ready" and runs fail
+with `UNAVAILABLE`), set `[docker] self_container` in `runner.toml`.
+
+Every run gets its own internal `/28` network from `[docker]
+run_subnet_pool` (default `10.214.0.0/16`, labels `bekup.managed=true`,
+names `bekup-run-<run id>`). Pick a range that your Docker networks and
+databases do not use. Leftovers (after a crash) are removed at startup and
+every five minutes. The runner requires **Docker Engine 26.0.0 or newer**
+and refuses older daemons at startup (they forwarded DNS queries from
+internal networks to the host's resolvers, CVE-2024-29018). Docker networks
+on the same daemon (their subnets and gateways) are denied as targets unless
+`[targets] allow_cidrs` lists a CIDR inside them
+([target-allowlist.md](../security/target-allowlist.md)).
 
 Bind the runner's listener to its `runner-ctl` address
 (`[listen] address = "10.213.251.10:7443"`) and `serve` to its `frontend`

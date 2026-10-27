@@ -1,0 +1,179 @@
+{
+  "Config": {
+    "Hostname": "bekup-run",
+    "Domainname": "",
+    "User": "999:999",
+    "AttachStdin": true,
+    "AttachStdout": true,
+    "AttachStderr": true,
+    "Tty": false,
+    "OpenStdin": true,
+    "StdinOnce": true,
+    "Env": [
+      "HOME=/tmp",
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "TZ=UTC",
+      "PGPASSFILE=/tmp/bekup/pgpass",
+      "PGSYSCONFDIR=/tmp/bekup",
+      "PGSERVICEFILE=/tmp/bekup/pg_service.conf",
+      "PSQLRC=/dev/null",
+      "PSQL_HISTORY=/dev/null",
+      "MYSQL_HISTFILE=/dev/null",
+      "MYSQL_TEST_LOGIN_FILE=/dev/null"
+    ],
+    "Cmd": [
+      "mariadb-dump",
+      "--defaults-file=/tmp/bekup/my.cnf",
+      "--protocol=TCP",
+      "--host=10.20.0.5",
+      "--port=3306",
+      "--user=backup",
+      "--ssl",
+      "--ssl-ca=/tmp/bekup/ca.pem",
+      "--ssl-verify-server-cert",
+      "--tls-version=TLSv1.2,TLSv1.3",
+      "--single-transaction",
+      "--routines",
+      "--triggers",
+      "--events",
+      "--hex-blob",
+      "--no-tablespaces",
+      "--default-character-set=utf8mb4",
+      "--",
+      "app"
+    ],
+    "Healthcheck": {
+      "Test": [
+        "NONE"
+      ]
+    },
+    "Image": "mariadb@sha256:<catalog-digest>",
+    "Volumes": null,
+    "WorkingDir": "/tmp",
+    "Entrypoint": [
+      "/bin/sh",
+      "-c",
+      "set -eu\numask 077\nd=/tmp/bekup\nfail() { printf 'bekup-preamble: %s\\n' \"$1\" \u003e\u00262; exit 97; }\nmkdir -m 700 \"$d\" 2\u003e/dev/null || fail 'cannot create the preamble directory'\nIFS= read -r line || fail 'missing header'\n[ \"$line\" = 'BEKUP-PREAMBLE 1' ] || fail 'bad header'\nn=0\nwhile :; do\n  IFS= read -r line || fail 'truncated preamble'\n  [ \"$line\" = 'END' ] \u0026\u0026 break\n  n=$((n + 1))\n  [ \"$n\" -le 5 ] || fail 'too many records'\n  t=${line%% *}\n  len=${line#* }\n  [ \"$t $len\" = \"$line\" ] || fail 'bad record header'\n  case $len in ''|*[!0-9]*|0?*) fail 'bad record length' ;; esac\n  [ \"${#len}\" -le 5 ] || fail 'record too large'\n  [ \"$len\" -le 65536 ] || fail 'record too large'\n  case $t in\n    pgpass) f=$d/pgpass ;;\n    mycnf) f=$d/my.cnf ;;\n    ca) f=$d/ca.pem ;;\n    clientcert) f=$d/client-cert.pem ;;\n    clientkey) f=$d/client-key.pem ;;\n    *) fail 'unknown record type' ;;\n  esac\n  [ ! -e \"$f\" ] || fail 'duplicate record'\n  IFS= read -r line || fail 'truncated record'\n  case $line in *[!A-Za-z0-9+/=]*) fail 'bad record encoding' ;; esac\n  printf '%s' \"$line\" | base64 -d \u003e\"$f\" 2\u003e/dev/null || fail 'bad record encoding'\n  [ \"$(($(wc -c \u003c\"$f\")))\" -eq \"$len\" ] || fail 'record length mismatch'\n  chmod 600 \"$f\"\ndone\nunset line t len f n\nexec \"$@\"\n",
+      "--"
+    ],
+    "Labels": {
+      "bekup.managed": "true",
+      "bekup.run_id": "0b7f5a3c-2c1e-4d7a-9a51-8c3f0e6d2b19"
+    },
+    "StopSignal": "SIGTERM",
+    "StopTimeout": 10
+  },
+  "HostConfig": {
+    "Binds": null,
+    "ContainerIDFile": "",
+    "LogConfig": {
+      "Type": "none",
+      "Config": null
+    },
+    "NetworkMode": "bekup-run-0b7f5a3c",
+    "PortBindings": null,
+    "RestartPolicy": {
+      "Name": "no",
+      "MaximumRetryCount": 0
+    },
+    "AutoRemove": false,
+    "VolumeDriver": "",
+    "VolumesFrom": null,
+    "ConsoleSize": [
+      0,
+      0
+    ],
+    "CapAdd": null,
+    "CapDrop": [
+      "ALL"
+    ],
+    "CgroupnsMode": "private",
+    "Dns": null,
+    "DnsOptions": null,
+    "DnsSearch": null,
+    "ExtraHosts": null,
+    "GroupAdd": null,
+    "IpcMode": "private",
+    "Cgroup": "",
+    "Links": null,
+    "OomScoreAdj": 0,
+    "PidMode": "",
+    "Privileged": false,
+    "PublishAllPorts": false,
+    "ReadonlyRootfs": true,
+    "SecurityOpt": [
+      "no-new-privileges:true"
+    ],
+    "Tmpfs": {
+      "/tmp": "rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=999,gid=999"
+    },
+    "UTSMode": "",
+    "UsernsMode": "",
+    "ShmSize": 16777216,
+    "Isolation": "",
+    "CpuShares": 0,
+    "Memory": 1073741824,
+    "NanoCpus": 1000000000,
+    "CgroupParent": "",
+    "BlkioWeight": 0,
+    "BlkioWeightDevice": null,
+    "BlkioDeviceReadBps": null,
+    "BlkioDeviceWriteBps": null,
+    "BlkioDeviceReadIOps": null,
+    "BlkioDeviceWriteIOps": null,
+    "CpuPeriod": 0,
+    "CpuQuota": 0,
+    "CpuRealtimePeriod": 0,
+    "CpuRealtimeRuntime": 0,
+    "CpusetCpus": "",
+    "CpusetMems": "",
+    "Devices": null,
+    "DeviceCgroupRules": null,
+    "DeviceRequests": null,
+    "MemoryReservation": 0,
+    "MemorySwap": 1073741824,
+    "MemorySwappiness": null,
+    "OomKillDisable": null,
+    "PidsLimit": 256,
+    "Ulimits": [
+      {
+        "Name": "core",
+        "Hard": 0,
+        "Soft": 0
+      },
+      {
+        "Name": "nofile",
+        "Hard": 1024,
+        "Soft": 1024
+      }
+    ],
+    "CpuCount": 0,
+    "CpuPercent": 0,
+    "IOMaximumIOps": 0,
+    "IOMaximumBandwidth": 0,
+    "MaskedPaths": null,
+    "ReadonlyPaths": null,
+    "Init": false
+  },
+  "NetworkingConfig": {
+    "EndpointsConfig": {
+      "bekup-run-0b7f5a3c": {
+        "IPAMConfig": null,
+        "Links": null,
+        "Aliases": null,
+        "DriverOpts": null,
+        "GwPriority": 0,
+        "NetworkID": "",
+        "EndpointID": "",
+        "Gateway": "",
+        "IPAddress": "",
+        "MacAddress": "",
+        "IPPrefixLen": 0,
+        "IPv6Gateway": "",
+        "GlobalIPv6Address": "",
+        "GlobalIPv6PrefixLen": 0,
+        "DNSNames": null
+      }
+    }
+  }
+}

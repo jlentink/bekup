@@ -194,7 +194,7 @@ func (s SessionsResolver) Resolve(ctx context.Context, token string, meta auth.R
 }
 
 // Check re-validates the session id for a long-lived connection
-// (wsconn.Validator) and rebuilds its principal exactly like Resolve does
+// (streams.Validator in internal/graph/streams) and rebuilds its principal exactly like Resolve does
 // for a request, including the 2FA enrollment check (M1 review L2).
 func (s SessionsResolver) Check(ctx context.Context, sessionID uuid.UUID) (auth.Principal, error) {
 	p, user, err := s.Sessions.Check(ctx, sessionID)

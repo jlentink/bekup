@@ -77,7 +77,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-049](#d-049-outbound-tls-without-pinning) | Outbound TLS without pinning | accepted |
 | [D-050](#d-050-http-and-graphql-hardening) | HTTP and GraphQL hardening | accepted |
 | [D-051](#d-051-notifications-engine) | Notifications engine | accepted |
-| [D-052](#d-052-websocket-subscriptions) | WebSocket subscriptions | accepted |
+| [D-052](#d-052-websocket-subscriptions) | WebSocket subscriptions | accepted (transport superseded by D-124) |
 | [D-053](#d-053-central-deny-by-default-authorization) | Central deny-by-default authorization | accepted |
 | [D-054](#d-054-least-privilege-db-roles-and-audit-hash-chain) | Least-privilege DB roles and audit hash chain | accepted |
 | [D-055](#d-055-ssrf-guard-and-disk-confinement) | SSRF guard and disk confinement | accepted |
@@ -128,15 +128,15 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-100](#d-100-tls-for-the-app-database-connection-configurable-verified-by-default) | TLS for the app database connection: configurable, verified by default | accepted |
 | [D-101](#d-101-audit-api-fail-closed-policy-signed-chain-heads-and-instance_keys-task-13) | Audit API fail-closed policy, signed chain heads and `instance_keys` (task 1.3) | accepted |
 | [D-102](#d-102-http-layer-details-middleware-trusted-proxies-origin-policy-rate-limits-health-and-schema-checks-task-11) | HTTP layer details: middleware, trusted proxies, Origin policy, rate limits, health and schema checks (task 1.1) | accepted |
-| [D-103](#d-103-app-db-tls-details-url-handling-require--ca-channel-binding-postgres-certificate-and-wrapper-task-10) | App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0) | proposed (item 3 superseded by D-104) |
+| [D-103](#d-103-app-db-tls-details-url-handling-require--ca-channel-binding-postgres-certificate-and-wrapper-task-10) | App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0) | accepted (item 3 superseded by D-104) |
 | [D-104](#d-104-app-db-tls-ecdsa-postgres-issuer-and-required-scram-channel-binding) | App DB TLS: ECDSA postgres issuer and required SCRAM channel binding | accepted |
 | [D-105](#d-105-graphql-server-details-transport-limits-access-convention-error-codes-task-12) | GraphQL server details: transport, limits, access convention, error codes (task 1.2) | accepted |
 | [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted |
-| [D-107](#d-107-passwords-sessions-lockout-and-the-login-api-task-15) | Passwords, sessions, lockout and the login API (task 1.5) | proposed ("Login = step-up" superseded by D-112; lockout counting superseded by D-117) |
-| [D-108](#d-108-websocket-subscription-transport-session-watcher-and-session-event-bus-task-110) | WebSocket subscription transport, session watcher and session event bus (task 1.10) | proposed (re-validation details superseded by D-118) |
-| [D-109](#d-109-webauthn-passkeys-as-a-second-factor-task-18) | WebAuthn passkeys as a second factor (task 1.8) | proposed (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116) |
-| [D-110](#d-110-first-run-setup-code-user-administration-and-break-glass-cli-task-16) | First-run setup code, user administration and break-glass CLI (task 1.6) | proposed (setup-code part superseded by D-113) |
-| [D-111](#d-111-totp-recovery-codes-and-second-factor-failures-task-17) | TOTP, recovery codes and second-factor failures (task 1.7) | proposed (last-factor error code superseded by D-112) |
+| [D-107](#d-107-passwords-sessions-lockout-and-the-login-api-task-15) | Passwords, sessions, lockout and the login API (task 1.5) | accepted ("Login = step-up" superseded by D-112; lockout counting superseded by D-117) |
+| [D-108](#d-108-websocket-subscription-transport-session-watcher-and-session-event-bus-task-110) | WebSocket subscription transport, session watcher and session event bus (task 1.10) | accepted (re-validation details superseded by D-118; transport, caps, close codes and web client superseded by D-124) |
+| [D-109](#d-109-webauthn-passkeys-as-a-second-factor-task-18) | WebAuthn passkeys as a second factor (task 1.8) | accepted (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116) |
+| [D-110](#d-110-first-run-setup-code-user-administration-and-break-glass-cli-task-16) | First-run setup code, user administration and break-glass CLI (task 1.6) | accepted (setup-code part superseded by D-113) |
+| [D-111](#d-111-totp-recovery-codes-and-second-factor-failures-task-17) | TOTP, recovery codes and second-factor failures (task 1.7) | accepted (last-factor error code superseded by D-112) |
 | [D-112](#d-112-2fa-policy-two-step-login-forced-enrollment-and-step-up-task-19) | 2FA policy, two-step login, forced enrollment and step-up (task 1.9) | accepted |
 | [D-113](#d-113-first-admin-created-via-cli-only-web-setup-flow-removed) | First admin created via CLI only; web setup flow removed | accepted (migration 00011 detail superseded by D-118) |
 | [D-114](#d-114-just-dev-runs-infra-only-postgres-mailpit-adminer-app-runs-natively) | `just dev` runs infra only (postgres, mailpit, adminer); app runs natively | accepted |
@@ -145,6 +145,28 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-117](#d-117-credential-verification-hardening-single-root-operations-limiters-atomic-lockouts) | Credential-verification hardening: single-root operations, limiters, atomic lockouts | accepted |
 | [D-118](#d-118-m1-review-fixes-websocket-principal-rebuild-shutdown-posture-audits-and-smaller-items) | M1 review fixes: WebSocket principal rebuild, shutdown, posture audits and smaller items | accepted |
 | [D-119](#d-119-key-check-values-stored-per-key-id-and-verified-at-startup) | Key-check values stored per key ID and verified at startup | accepted |
+| [D-120](#d-120-ssrf-guard-details-range-tables-allowlist-limits-no-proxy-error-normalization-task-23) | SSRF guard details: range tables, allowlist limits, no proxy, error normalization (task 2.3) | accepted |
+| [D-121](#d-121-storage-interface-object-keys-and-the-disk-backend-task-28) | Storage interface, object keys and the disk backend (task 2.8) | accepted |
+| [D-122](#d-122-ssh-tunnel-client-algorithms-host-key-pin-format-mandatory-dialer-task-22) | SSH tunnel client: algorithms, host-key pin format, mandatory dialer (task 2.2) | accepted (amended by D-140) |
+| [D-123](#d-123-engine-catalog-client-floors-tls-modes-and-argv-builder-details-task-21) | Engine catalog, client floors, TLS modes and argv builder details (task 2.1) | accepted |
+| [D-124](#d-124-live-events-over-sse-no-websocket) | Live events over SSE, no WebSocket | accepted |
+| [D-125](#d-125-runner-container-healthcheck-over-a-local-health-socket-task-24) | Runner container healthcheck over a local health socket (task 2.4) | accepted |
+| [D-126](#d-126-runner-api-proto-conventions-and-code-generation-task-24) | Runner API proto conventions and code generation (task 2.4) | accepted |
+| [D-127](#d-127-runner-grpc-transport-policy-interceptors-limits-keepalive-client-task-24) | Runner gRPC transport policy: interceptors, limits, keepalive, client (task 2.4) | accepted |
+| [D-128](#d-128-sftp-backend-host-key-pin-hard-link-finalize-symlink-checks-connection-policy-task-210) | SFTP backend: host-key pin, hard-link finalize, symlink checks, connection policy (task 2.10) | accepted (amended by D-140) |
+| [D-129](#d-129-s3-backend-own-multipart-uploader-static-credentials-only-conditional-writes-version-exact-deletes-task-29) | S3 backend: own multipart uploader, static credentials only, conditional writes, version-exact deletes (task 2.9) | accepted |
+| [D-130](#d-130-runner-request-validation-target-allowlist-hardened-container-spec-and-the-stdin-preamble-task-25) | Runner request validation, target allowlist, hardened container spec and the stdin preamble (task 2.5) | accepted |
+| [D-131](#d-131-destinations-api-storage-of-credentials-step-up-for-every-change-and-the-sftp-host-key-flow-task-212) | Destinations API: storage of credentials, step-up for every change and the SFTP host-key flow (task 2.12) | accepted (amended by D-140) |
+| [D-132](#d-132-runner-docker-executor-per-run-network-plan-ip-literal-targets-proxy-kill-and-reaper-policy-task-26) | Runner Docker executor: per-run network plan, IP-literal targets, proxy, kill and reaper policy (task 2.6) | accepted |
+| [D-133](#d-133-target-db-certificate-pinning-capture-leaf-spki-pre-flight-trust-anchor-and-mismatch-signalling-task-27a) | Target-DB certificate pinning: capture, leaf-SPKI pre-flight, trust anchor and mismatch signalling (task 2.7a) | accepted (amended by D-138, D-139) |
+| [D-134](#d-134-runner-rpcs-go-driver-pre-checks-normalized-target-errors-offline-verify-and-the-globals-fallback-task-27) | Runner RPCs: Go-driver pre-checks, normalized target errors, offline verify and the globals fallback (task 2.7) | accepted |
+| [D-135](#d-135-connections-api-storage-pin-and-host-key-flows-tls-downgrade-and-runner-wiring-task-211) | Connections API: storage, pin and host-key flows, TLS downgrade and runner wiring (task 2.11) | accepted (amended by D-140) |
+| [D-136](#d-136-s3-multipart-complete-detached-from-the-caller-and-verified-after-an-ambiguous-failure-m2-review) | S3 multipart Complete detached from the caller and verified after an ambiguous failure (M2 review) | accepted |
+| [D-137](#d-137-docker-dependent-tests-skip-locally-but-fail-in-ci-m2-review) | Docker-dependent tests skip locally but fail in CI (M2 review) | accepted |
+| [D-138](#d-138-runner-hardening-after-the-m2-review-image-volumes-psql-restrict-docker-networks-bastion-targets-docker-floor-and-rpc-fixes) | Runner hardening after the M2 review: image volumes, psql restrict, Docker networks, bastion targets, Docker floor and RPC fixes | accepted |
+| [D-139](#d-139-pin-anchors-are-a-self-signed-leaf-or-a-private-ca-the-same-ca-leaf-window-is-accepted-residual-risk) | Pin anchors are a self-signed leaf or a private CA; the same-CA leaf window is accepted residual risk | accepted |
+| [D-140](#d-140-ssh-policy-and-host-names-in-one-place-endpoint-bound-host-key-and-pin-confirmation-no-password-reuse-after-retargeting-m2-review) | SSH policy and host names in one place, endpoint-bound host-key and pin confirmation, no password reuse after retargeting (M2 review) | accepted |
+| [D-141](#d-141-backup-completeness-evidence-source-stats-and-test-restore-comparison) | Backup completeness evidence: source stats and test-restore comparison | accepted |
 
 ---
 
@@ -1023,7 +1045,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-052: WebSocket subscriptions
 
 - **Date:** 2026-10-26
-- **Status:** accepted
+- **Status:** accepted (transport superseded by D-124: subscriptions run as Server-Sent Events; the goals stand)
 - **Decided by:** user
 - **Context:** Live run logs and notifications.
 - **Decision:** Cookie auth on upgrade; the session is re-validated
@@ -3044,7 +3066,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-108: WebSocket subscription transport, session watcher and session event bus (task 1.10)
 
 - **Date:** 2026-10-26
-- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (re-validation details superseded by D-118)
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (re-validation details superseded by D-118) (transport, admission caps, close codes, web client and CSP parts superseded by D-124; the session watcher, session event bus and delivery-time authz stand)
 - **Decided by:** agent with user approval (task 1.10)
 - **Context:** D-052 fixes the goals for subscriptions (cookie auth on the
   upgrade, periodic and per-event session re-validation, authz at delivery
@@ -4015,3 +4037,1886 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   nothing about the encryption subkeys (D-086). No trust boundary changes.
 - **Related:** D-046, D-085, D-086, D-101; `internal/app/keycheck.go`,
   `internal/crypto/kcv.go`, `docs/security/key-management.md`.
+
+## D-120: SSRF guard details: range tables, allowlist limits, no proxy, error normalization (task 2.3)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval
+- **Context:** D-055 fixes the dial-time SSRF guard but not its range
+  table, what the allowlist may contain, how proxies, redirects and error
+  messages are handled, or how the runtime (admin UI) allowlist combines
+  with `[netguard]` in the TOML.
+- **Decision:**
+  - **Deny table.** Every address is unmapped (`::ffff:a.b.c.d`) and its
+    zone dropped before classification. *Hard* (never allowlistable):
+    0.0.0.0/8, ::, loopback (127/8, ::1) outside dev mode, link-local
+    (169.254/16, fe80::/10), cloud metadata (169.254.169.254,
+    100.100.100.200, fd00:ec2::254), multicast, broadcast, 240/4,
+    IPv4-compatible `::/96`, IPv4-translated `::ffff:0:0:0/96`, Teredo
+    2001::/32, all IPv6 outside 2000::/3 except the soft ranges below, and
+    NAT64 64:ff9b::/96 or 6to4 2002::/16 addresses whose embedded IPv4
+    address is denied. *Soft* (allowlistable): RFC 1918, 100.64/10,
+    192.0.0/24, documentation and benchmarking ranges, 192.88.99/24,
+    fc00::/7, fec0::/10, 100::/64, 64:ff9b:1::/48, 2001::/23, 3fff::/20,
+    5f00::/16.
+  - **Allowlist.** CIDRs and host names (exact or `*.suffix` with at least
+    two labels; IP literals rejected). CIDRs that are /0, cover the whole
+    mapped range, overlap a hard range (except a metadata address strictly
+    inside, e.g. 100.64.0.0/10, which stays denied because classification
+    runs first), lie outside the allowlistable IPv6 ranges or overlap 6to4
+    are rejected at load. Host entries match the name the caller dialed
+    and re-allow soft-denied addresses only. The effective list is the
+    TOML bootstrap list plus the runtime list, swapped atomically by
+    `Guard.SetAllowlist` after validation. Loopback is allowlistable only
+    when `dev.enabled` (FromConfig).
+  - **Dialing.** `Guard.DialContext` (tcp/tcp4/tcp6 only) resolves on
+    every call (no caching), tries at most 8 addresses with one overall
+    timeout, and connects to IP literals through a `net.Dialer` whose
+    `Control` hook re-checks the exact socket address. `Guard.Dialer()`
+    exposes the hook for libraries that need a `*net.Dialer` (CIDR
+    entries only). `ResolveAndCheck` validates input when it is entered.
+  - **HTTP.** `NewHTTPTransport` has `Proxy: nil`: **no egress-proxy
+    support**, because a proxy resolves and connects to the target itself
+    and would bypass the dial-time check. TLS ≥ 1.2, HTTP/2, handshake 10s,
+    response headers 30s, 64 KiB header cap. `NewHTTPClient` never follows
+    redirects (`ErrRedirect`); `ReadAllLimited` / `LimitReader` cap bodies.
+  - **Errors.** `*BlockedAddressError` (IP + reason) is for admins only.
+    `Normalize` maps errors for everyone else to `ErrNotAllowed`,
+    `ErrUnreachable` (refused, reset, timeout and DNS alike), `ErrTLS`,
+    `ErrRedirect`, `ErrResponseTooLarge` or `ErrFailed`, so "test
+    connection" cannot be used as a port scanner.
+  - `netguard.allow_hosts` in the TOML accepts `*.suffix`.
+- **Alternatives considered:** Resolve-then-check only (DNS rebinding).
+  Honoring `HTTPS_PROXY` (bypasses the guard; an egress proxy would need
+  its own SSRF policy). Rejecting any CIDR that overlaps a metadata
+  address (would forbid allowlisting 100.64/10 or fc00::/7 for no gain).
+  Allowing loopback allowlisting in production (lets admins point
+  destinations at serve's own internal services).
+- **Consequences:** Deployments that require an egress proxy cannot use
+  S3/SMTP/webhook destinations through it; they must allowlist direct
+  routes. Private endpoints need explicit entries. Hard-denied ranges are
+  unreachable even by mistake or by a compromised admin account. Security
+  impact: closes SSRF via rebinding, redirects, IPv6 transition forms and
+  proxies; reduces port-scan oracles for non-admins.
+- **Related:** tasks 2.3, 2.9, 2.10, 5.1, 5.2, 6.9; D-049, D-055;
+  `internal/netguard`, `internal/config` (`[netguard]`).
+
+## D-121: Storage interface, object keys and the disk backend (task 2.8)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.8; interface incl. `Test(ctx, prefix)` accepted by the coordinator)
+- **Context:** Tasks 2.9 (S3), 2.10 (SFTP), 3.1 (pipeline), 3.8 (retention),
+  4.1 (restore) and 2.12 (destination test) need one backend contract with
+  identical semantics for atomicity, overwrite, delete and errors, and the
+  plan requires disk destinations confined to `storage.disk_root` with
+  atomic finalization (DS-6, WK-6).
+- **Decision:**
+  1. **Interface** (`internal/storage.Destination`): `Capabilities()`,
+     `Put(ctx, key, r, PutOptions) (ObjectInfo, error)`,
+     `Get(ctx, key) (io.ReadCloser, ObjectInfo, error)`, `Stat`,
+     `List(ctx, prefix, ListOptions) (ListPage, error)` (one page, ≤1000,
+     `StartAfter`, strict byte-wise key order = S3 order, objects strictly
+     below a segment-aligned prefix), `Delete` (idempotent),
+     `Test(ctx, prefix) TestResult`, `Close`. `storage.All` iterates pages.
+     Errors are wrapped sentinels (`ErrInvalidKey`, `ErrNotFound`,
+     `ErrAlreadyExists`, `ErrDeleteNotPermitted`, `ErrChecksumMismatch`,
+     `ErrUnsupported`, `ErrInsufficientSpace`, `ErrPermission`,
+     `ErrClosed`, `ErrInvalidArgument`, `ErrSource` for producer errors);
+     `Classify` maps any error to a fixed `ErrorCode` whose `Message()` is
+     the only text shown to users (raw backend errors may hold hosts,
+     paths or provider messages).
+  2. **Put semantics:** streaming, never visible under its key before all
+     bytes are written, verified (`ExpectedSHA256`) and durable; a failed
+     or canceled Put leaves no object; **never overwrites**
+     (`ErrAlreadyExists`); always returns size + SHA-256. Object-lock
+     options on a backend without object lock fail closed with
+     `ErrUnsupported` (`CheckPutOptions`), never silently ignored.
+  3. **Delete:** idempotent (missing = success); refused with
+     `ErrDeleteNotPermitted` in no-delete mode or under an active lock.
+  4. **Test(ctx, prefix)** (deviation from a plain `Test(ctx)`): the probe
+     is written below the destination prefix the jobs use, so it checks
+     the permissions that matter (bucket policies are often
+     prefix-scoped): `{prefix}/bekup-probe/{timestamp}-{128-bit hex}.probe`,
+     write → read/compare → delete. In no-delete mode the delete step is
+     skipped, `ProbeRemains` is set and a fixed note tells the operator to
+     rely on lifecycle rules. Steps carry codes, never raw errors.
+     Shared by all backends via `storage.RunProbe`.
+  5. **Keys:** only via `ParseKey`/`ParsePrefix`/`BuildKey`: relative,
+     ≤1024 bytes, ≤32 segments of 1..255 bytes from
+     `[A-Za-z0-9._~%+=@-]`, no segment starting with a dot (dot names are
+     reserved for backend temporaries), no `.`/`..`, backslashes, control
+     or non-ASCII bytes. Layout `{prefix}/{job-slug}/{2006-01-02T150405Z}/{file}`;
+     job slugs `[a-z0-9][a-z0-9_-]{0,99}`; database names are encoded
+     canonically (`[A-Za-z0-9_-]` kept, every other byte `%XX`
+     upper-case, so the name never contains a dot and the encoding is
+     injective); encodings over 180 bytes become `~` + base32(SHA-256)
+     (not reversible; the manifest holds the real name). `Key`
+     unmarshalling re-validates.
+  6. **Disk backend:** every access through `os.Root` opened on
+     `disk_root` (+ optional validated subdirectory); files 0600,
+     directories 0700. Put writes `.<32 hex>.partial` (O_EXCL) in the
+     target directory, fsyncs, then finalizes with a **hard link**
+     (`Root.Link`, fails with EEXIST, so no check-then-rename race) and
+     removes the temporary name, then fsyncs the directory chain; file
+     systems without hard links fall back to Lstat + rename (documented
+     small race). Symbolic links are never followed for objects or
+     directories (Get/Stat report them missing, List skips them, Put and
+     Delete refuse to go through them; `os.Root` confines them anyway).
+     Delete removes now-empty parent directories. `CleanupPartials`
+     removes crash leftovers older than a cutoff (also in no-delete mode).
+     `FreeSpace`/`CheckFreeSpace` (statfs) back an early check for
+     `SizeHint`. On case-insensitive file systems (macOS) keys differing
+     only in case collide and yield `ErrAlreadyExists`, never an
+     overwrite.
+  7. **Conformance suite** `internal/storage/storagetest.Run` (streamed
+     round trip, checksum, atomic visibility, source error, no overwrite,
+     pagination/order, delete, no-delete, invalid keys, concurrent and
+     same-key puts, cancel, probe, fail-closed lock options) must pass for
+     every backend.
+- **Alternatives considered:** rename-based finalize with a prior
+  existence check (race can overwrite); following in-root symlinks (an
+  attacker with write access below the root could redirect writes);
+  ignoring lock options on unsupported backends (silent loss of
+  immutability); a `Test(ctx)` probe at the bucket root (misses
+  prefix-scoped permission problems and needs wider permissions);
+  lossy/lower-case DB-name encodings (collisions).
+- **Consequences:** Backends share one tested contract; retention and
+  restore can rely on order, no-overwrite and idempotent delete. Disk
+  destinations still have no immutability (DS-3 residual). The probe
+  object remains in no-delete mode. Trust boundaries unchanged; SECURITY
+  DS-6, DS-7 and WK-6 updated.
+- **Related:** D-007, D-055, D-120; `internal/storage`,
+  `internal/storage/storagetest`, `docs/guides/destinations.md`.
+
+## D-122: SSH tunnel client: algorithms, host-key pin format, mandatory dialer (task 2.2)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.2; mandatory dialer, secret consumption, RSA
+  policy, "type not offered = mismatch" and the password limitation accepted
+  by the coordinator)
+- **Context:** D-035 requires SSH tunnels with a mandatory host-key pin and a
+  TOFU fingerprint flow; the runner (task 2.6) needs a small client that it
+  can drive through its target-allowlist dialer (task 2.5), and task 2.11 /
+  the UI need the fingerprint capture step. The plan leaves algorithms, the
+  pin format, RSA handling and error semantics open.
+- **Decision:** `internal/tunnel` (x/crypto/ssh):
+  1. **Pin format** `HostKeyPin{Type, FingerprintSHA256, AuthorizedKey}`:
+     either key type + OpenSSH `SHA256:<base64>` fingerprint, or an
+     authorized_keys line, or both (they must agree). No pin =
+     `ErrInvalidConfig`; there is no insecure mode. The callback compares
+     type and the SHA-256 of the wire key in constant time.
+  2. **Host-key algorithms** offered are only those of the pinned type
+     (`ssh-ed25519`, `ecdsa-sha2-nistp256/384/521`, `ssh-rsa` as
+     `rsa-sha2-512`/`rsa-sha2-256`). RSA host keys must be ≥ 2048 bits; SHA-1
+     (`ssh-rsa` signatures), `ssh-dss`, `sk-*` and certificate host keys are
+     never accepted. A server that does **not offer the pinned key type**
+     is reported as a host-key mismatch (`HostKeyMismatchError` with an
+     empty presented type), i.e. a security event, so a server cannot
+     downgrade to an unpinned key type.
+  3. **Transport algorithms**: KEX `mlkem768x25519-sha256`,
+     `curve25519-sha256`; ciphers `chacha20-poly1305@openssh.com`,
+     `aes256-gcm`, `aes128-gcm`; MACs `hmac-sha2-256/512-etm`. Older servers
+     fail with `ErrHandshake`.
+  4. **Mandatory `Dialer`**: every connection (Dial and FetchHostKey) goes
+     through a caller-supplied dialer; a nil dialer is a configuration
+     error, so the allowlist cannot be bypassed by omission.
+  5. **Credentials** `Auth{PrivateKey, Passphrase, Password}` as
+     `*crypto.Secret`, exactly one of key or password. `Dial` **consumes**
+     them (destroys every secret before it returns, success or failure) and
+     zeroes the parsed private key afterwards (ed25519 bytes, RSA big.Int
+     limbs; ECDSA scalars and RSA precomputed internals are unreachable).
+     Client keys: ed25519, ECDSA, RSA ≥ 2048 (signing with rsa-sha2 only);
+     DSA rejected. Limitation: x/crypto/ssh takes passwords as a Go string,
+     which cannot be zeroed; key authentication is preferred.
+  6. **TOFU**: `FetchHostKey` runs the key exchange only, captures the host
+     key and aborts in the host-key callback, so no authentication is ever
+     attempted; the result is shown for out-of-band confirmation and never
+     trusted automatically.
+  7. **Lifecycle**: dial + handshake bounded by `DialTimeout` (default 15 s,
+     max 2 min) and ctx; `keepalive@openssh.com` every 15 s with one request
+     in flight, the tunnel closes after 3 intervals without a reply.
+     `DialTarget` reaches only the configured target; `Forward` serves a
+     listener with at most `MaxConns` (default 8) concurrent connections,
+     half-closes, and waits for all handlers.
+  8. **Errors** are `*Error{Kind, Op, Addr}` with kinds `ErrInvalidConfig`,
+     `ErrHostKeyMismatch`, `ErrUnsupportedHostKey`, `ErrAuthFailed`,
+     `ErrUnreachable`, `ErrTimeout`, `ErrHandshake`, `ErrClosed` (or a
+     plain `context.Canceled`); key-parser errors are never attached, so
+     messages carry no secret material. Fingerprints are public and may be
+     logged and shown in the alert (task 5.5).
+- **Alternatives considered:** defaulting to `net.Dialer` when no dialer is
+  given (silent allowlist bypass); keeping caller ownership of the secrets
+  (copies would outlive the handshake); accepting `ssh-rsa` SHA-1
+  signatures for old bastions; treating a missing pinned type as a plain
+  handshake error (would hide a possible downgrade/impersonation); offering
+  all host-key types and comparing only the fingerprint (lets a server pick
+  an unpinned type); keyboard-interactive auth (not needed, larger surface).
+- **Consequences:** Bastions must run a reasonably modern OpenSSH (≥ 8.x
+  for curve25519/etm; RSA host keys with rsa-sha2). Host-key mismatches
+  fail the run and are surfaced as security events (task 5.5). Tunneled
+  connections (SSH channels) do not support deadlines; callers bound them
+  with ctx. Trust boundary B8 unchanged in shape; SECURITY RN-8 detailed.
+- **Related:** D-035, D-029, D-034, D-120; tasks 2.5, 2.6, 2.11, 5.5;
+  `internal/tunnel`, `docs/guides/connections.md`.
+
+## D-123: Engine catalog, client floors, TLS modes and argv builder details (task 2.1)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (coordinator answers reflecting the user's
+  security-first stance; awaiting the user's confirmation)
+- **Context:** Task 2.1 implements `internal/engine`: the embedded image
+  catalog, version-compatibility rules and pure argv builders that D-031,
+  D-033, D-034 and D-036 describe. Several details were open: which MySQL
+  and MariaDB series to pin, how to make sure every pinned client has the
+  restore safety flags, how the MySQL option file is passed, which TLS modes
+  exist and how PostgreSQL overwrites and drops are done safely.
+- **Decision:**
+  1. **Catalog schema** (`internal/engine/catalog.toml`, embedded):
+     `schema_version = 1` and `[[images]]` entries with `engine`, `key`,
+     `image = "repo:tag@sha256:<index digest>"`, `legacy` and
+     `binaries`. Strict TOML (unknown keys rejected). The client version is
+     derived from the tag (no separate field Renovate could forget); `key`
+     must equal the tag's series (PG major, MySQL/MariaDB major.minor);
+     MySQL/MariaDB tags need a full x.y.z. Embedded entries must use the
+     official repository named like the engine; binary names must equal a
+     fixed per-engine set (`pg_dump`/`pg_dumpall`/`pg_restore`/`psql`,
+     `mysqldump`/`mysql`, `mariadb-dump`/`mariadb`). The extra-images file
+     (`[images] extra_file`) uses the same schema, may use any registry,
+     must be digest-pinned, may not replace an embedded key, max 1 MiB /
+     256 entries. `Entry` values have unexported fields, so builders only
+     accept entries that came from a validated catalog.
+  2. **Pinned images** (multi-arch OCI index digests, 2026-10-27, checked
+     identical on Docker Hub, mirror.gcr.io and public.ecr.aws): PostgreSQL
+     13.23 (legacy), 14.24, 15.19, 16.15, 17.11, 18.6 (alpine); MySQL 8.0.46
+     (legacy), 8.4.13 LTS, **9.7.4 LTS**, no innovation release (26.x);
+     MariaDB 10.6.28 (legacy), 10.11.19, 11.4.13, 11.8.9 and **12.3.3 LTS**.
+  3. **Client floors per series** (validated for embedded and extra
+     entries): PG `\restrict` fix (13.22, 14.19, 15.14, 16.10, 17.6, 18+);
+     MySQL `--system-command` and `--commands` (8.0.43, 8.4.6, 9.4+; 8.1-8.3
+     and 9.0-9.3 rejected); MariaDB `--sandbox` (10.5.25, 10.6.18, 10.11.8,
+     11.0.6, 11.1.5, 11.2.4, 11.4.2, 11.5.2+; 10.7-10.10 and 11.3 rejected).
+     The flags were verified with `--help` in every pinned MySQL/MariaDB
+     image and `--restrict-key` in PG 13.23 and 18.6. The `--commands`
+     floors of older patch releases were not verified in images; a client
+     without the flag fails closed with "unknown option".
+  4. **Compatibility:** minimum servers PG 10, MySQL 8.0, MariaDB 10.4.
+     PG: client major >= server major (block); dump client = lowest such
+     major. MySQL/MariaDB: same series, else lowest newer, else newest older
+     with a `client_older_than_server` warning. Restore client = the rule
+     applied to max(dump client, target). Legacy entries add a
+     `legacy_client` warning.
+  5. **TLS modes:** `pinned` (zero value, default: pinned cert as the only
+     trust anchor; `sslmode=verify-full` + `sslrootcert`,
+     `--ssl-mode=VERIFY_IDENTITY` + `--ssl-ca`, `--ssl --ssl-ca
+     --ssl-verify-server-cert`), `unverified` (encrypted, server not
+     verified: `sslmode=require` without `sslrootcert`, `REQUIRED`,
+     `--skip-ssl-verify-server-cert`) and `disabled`. `unverified` and
+     `disabled` are admin-only, step-up, audited downgrades with an alert
+     and an "insecure transport" badge (D-034). TLS modes also pin the
+     protocol to TLS 1.2+.
+  6. **MySQL/MariaDB option file:** `--defaults-file=/tmp/bekup/my.cnf` as
+     the first option (instead of `--defaults-extra-file`), so the image's
+     `/etc/mysql` configs and `~/.my.cnf` are never read. The file holds
+     only `[client]` `password="..."` with `\ " ' TAB BS` escaped; NUL, CR
+     and LF are rejected (escaping verified with `--print-defaults` in
+     mysqldump 8.0.46 and mariadb-dump 12.3.3). PG uses a `passfile` line
+     `host:port:*:user:password` (`\` and `:` escaped).
+  7. **Argv details:** PG tools get a single-quoted keyword/value
+     `--dbname=` conninfo (`passfile`, `gssencmode=disable`,
+     `application_name=bekup`, `connect_timeout=10`); `pg_dump
+     --format=custom --compress=0`; `pg_restore --list` and restores read
+     stdin. MySQL dumps end with `--` before the positional database;
+     restores use `--database=<db>`, MySQL `--system-command=OFF
+     --commands=OFF --local-infile=0`, MariaDB `--sandbox --local-infile=0`
+     (also for CREATE/DROP via `--execute`).
+  8. **Temporary names and overwrite:** `<db>__bekup_restore_<id>` /
+     `<db>__bekup_old_<id>` (id `[a-z0-9]{1,26}`, db truncated to fit 63
+     bytes). `CREATE DATABASE ... TEMPLATE template0`. The PG swap is three
+     steps: Prepare (block connections, terminate backends), Swap (one
+     transaction: terminate again, rename db to old, temp to db; retried by
+     the caller), Rollback (re-allow connections). `DropDatabase` only
+     accepts bekup temporary names (`WITH (FORCE)` on PG 13+ servers).
+     System and maintenance databases are never created, restored into,
+     swapped or dropped.
+- **Alternatives considered:** `--defaults-extra-file` (rejected: the
+  image's config files would still be read). MySQL innovation releases
+  (rejected: short support windows). Only pinned/off TLS (rejected: some
+  managed services cannot be pinned; the downgrade stays explicit and
+  audited). A separate `client_version` field (rejected: Renovate would
+  update the tag but not the field). One `--command` swap without a
+  rollback step (rejected: a failure could leave the target refusing
+  connections).
+- **Consequences:** Renovate digest/tag updates are validated by tests and
+  at runner startup; an update that crosses a series or drops below a
+  floor fails. The extra file can add series (for example PG 19) but never
+  weaken the embedded ones. Residual risk: a malicious globals file can
+  still use psql meta-commands during the separate, admin-only globals
+  restore (artifacts are signed and the container is isolated);
+  MySQL/MariaDB have no rename, so their overwrite strategy is decided in
+  task 4.x. Security impact: tightens RN-2, RN-3, DC-3, DC-4, DC-5.
+- **Related:** D-031, D-033, D-034, D-036, D-065; tasks 2.1, 2.5, 2.7,
+  2.7a, 4.2, 4.3; `internal/engine`, `docs/architecture.md`, `SECURITY.md`.
+
+## D-124: Live events over SSE, no WebSocket
+
+- **Date:** 2026-10-27
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** Every live stream in bekup goes from the server to the
+  browser (run status and logs, task 3.7; the notification inbox, task
+  5.3b; session-ended signals). Task 1.10 built GraphQL subscriptions on a
+  WebSocket (`graphql-transport-ws`, D-108). The user's rule is: no
+  WebSocket unless it is 100% needed, and it is not. Tasks 3.7, 5.3b and
+  M6 build on whichever transport exists, so it is swapped now (task 2.13).
+- **Decision:**
+  - **Transport:** GraphQL subscriptions are delivered as **Server-Sent
+    Events** (the graphql-sse protocol, "distinct connections" mode): one
+    `POST /graphql` with `Content-Type: application/json` and `Accept:
+    text/event-stream` per subscription, answered with
+    `text/event-stream` (`next` events, then `complete`). Subscriptions run
+    only as event streams and event streams carry only subscriptions (a
+    query or mutation with `Accept: text/event-stream` and a subscription
+    over a plain POST get FORBIDDEN). The WebSocket transport, `GET
+    /graphql` upgrades and every WebSocket library are removed (a `GET`
+    stays 405; a POST with an `Upgrade` header stays 400).
+  - **Own transports on gqlgen's executor:** `internal/graph` runs gqlgen's
+    `executor` directly with its own two transports (one JSON response;
+    one event stream) instead of `handler.Server` + `transport.POST/SSE`.
+    gqlgen's `handler/transport` package always links
+    github.com/coder/websocket, so using it would keep a WebSocket library
+    in the build; the own transports are small, never echo request bodies
+    (gqlgen's SSE transport logs and returns them on decode errors) and let
+    the stream end with a typed error event. `go.mod` no longer requires
+    any WebSocket module (`go mod why -vendor -m
+    github.com/coder/websocket`: not needed; the go.sum line remains only
+    for tests of gqlgen's own packages).
+  - **Admission (in this order):** the HTTP layer's Origin/`Sec-Fetch-Site`
+    check, rate limits, body limit and session middleware apply unchanged
+    (it is a POST); the handler then requires an `Origin` header equal to
+    an allowed origin (defense in depth), a principal resolved **from the
+    cookie** (401), no pending second factor (401) and no required 2FA
+    enrollment (403), a free slot and an operation the transport gate
+    admits (only a subscription; deny-by-default directive +
+    `RootFieldOperations` + `Access.CheckOperation`). Refusals are plain
+    JSON with 401/403/422/429/503 before any stream starts, so clients
+    never retry them as broken streams.
+  - **Caps:** `graphql.stream_max_per_session` (default 4, 1 to 20; 429),
+    `graphql.stream_max_per_user` (10, 1 to 100; 429) and
+    `graphql.stream_max_total` (1000 per instance; 503). One stream is one
+    subscription, so the per-connection subscription cap and subscribe-rate
+    bucket of D-108 are gone; every stream request counts against the
+    per-IP and per-user HTTP rate limits instead. Browsers allow 6
+    HTTP/1.1 connections per origin: the reverse proxies serve HTTP/2, and
+    pages should use at most 2 to 3 subscriptions (e.g. one aggregated per
+    page).
+  - **Session watcher (`internal/graph/streams`, was `wsconn`):** unchanged
+    semantics: the per-stream principal, periodic
+    (`graphql.stream_revalidate_interval`, 30s), per-event (session bus /
+    LISTEN-NOTIFY, with follow-ups) and pre-delivery
+    (`graphql.stream_session_check_ttl`, 5s) re-validation with the full
+    principal rebuild incl. restrictions (D-118), `Deliver` + `Authorize`
+    for delivery-time authorization, the hub's closed flag (503 after
+    shutdown). Instead of WebSocket close codes a stream the server ends
+    gets a **final GraphQL error event** carrying the `apierror` code, then
+    `complete`, and the response closes: `UNAUTHENTICATED` (was 4401),
+    `FORBIDDEN` (4403), the new `SESSION_ROTATED` (4001: reopen with the
+    new cookie) and the new `UNAVAILABLE` (1013 check failed / 1001
+    shutdown: retry later). Shutdown ends all streams through the hub, so
+    `http.Server.Shutdown` does not wait for them.
+  - **Long-lived responses:** per stream the server's read and write
+    deadlines are lifted (`httpserver.LiftDeadlines`) and every write gets
+    its own 30s write deadline (a client that stops reading is dropped);
+    a keepalive comment every `graphql.stream_keepalive_interval` (25s, 5s
+    to 1m); headers `Cache-Control: no-store` and `X-Accel-Buffering: no`.
+  - **Proxies:** nginx: `location = /graphql` with `proxy_buffering off`,
+    `proxy_cache off`, `proxy_read_timeout 180s` (3x the maximum
+    keepalive), HTTP/1.1 to serve with the `Upgrade`/`Connection` headers
+    cleared (the WebSocket `map` is removed). Traefik: a `bekup-stream`
+    router (POST `/graphql` with `Accept: text/event-stream`, highest
+    priority) that skips the buffering middleware, which would otherwise
+    hold the whole response; `flushInterval: -1ms` stays.
+  - **Web client:** an Apollo link on `graphql-sse` (exact pin 2.6.3,
+    `credentials: 'same-origin'`, distinct connections, no library
+    retries): `UNAUTHENTICATED`/`FORBIDDEN` and a 401 refusal call
+    `onAuthLost` (navigate to `/login`); `SESSION_ROTATED` reopens at once;
+    `UNAVAILABLE`, network errors, 429 and 5xx reopen with jittered
+    exponential backoff (1s to 30s); other refusals end the subscription.
+    `graphql-ws` is removed.
+  - **CSP:** D-082 is unchanged; streams are same-origin `fetch` requests
+    covered by `connect-src 'self'` on every CSP level (no `ws:`/`wss:`
+    question). `pnpm csp-check` proves a same-origin stream opens with the
+    page Origin and a cross-origin one is blocked.
+  - **Config:** `server.max_ws_connections_per_user` and `graphql.ws_*`
+    are replaced by `graphql.stream_*` without aliases (nothing is
+    released; VERSION 0.0.0).
+- **Alternatives considered:** Keeping the WebSocket (works, but a second
+  protocol with its own CSRF special case, a GET upgrade exception in the
+  Origin rules, hijacked connections outside `http.Server.Shutdown`, a
+  library in the binary and the CSP2 `ws:` gap, for no client-to-server
+  need). gqlgen's `transport.SSE` (rejected: links a WebSocket library and
+  echoes bodies in errors). graphql-sse "single connection" mode (one
+  stream plus reservation tokens and separate POSTs per operation: more
+  state, a token in headers; distinct mode keeps every stream an ordinary
+  cookie-authenticated POST). Native `EventSource` (GET only, no body:
+  queries in URLs and a GET exception to the CSRF rules).
+- **Consequences:** Every security property of D-052/D-108 is kept: cookie
+  authentication only, the Origin check, caps, periodic and event-driven
+  revalidation with the full principal rebuild, delivery-time authz,
+  immediate termination on logout, revocation, role or restriction change,
+  IDs-only NOTIFY. The attack surface shrinks: no protocol upgrade, no
+  upgrade exception in the Origin middleware's path, no credentials or
+  messages from the client after the request, no WebSocket code in the
+  binary. Clients must open one HTTP request per subscription, which makes
+  the per-session cap and HTTP/2 at the proxy relevant (documented). The
+  per-IP limits of the proxies (nginx `limit_conn 100`, Traefik
+  `inFlightReq 100`) count open streams.
+- **Related:** task 2.13 (supersedes the transport parts of task 1.10);
+  D-050, D-052, D-082, D-102, D-105, D-108, D-118; `internal/graph`
+  (`handler.go`, `stream.go`), `internal/graph/streams`,
+  `internal/httpserver/stream.go`, `internal/app/subscriptions.go`,
+  `internal/config` (`graphql.stream_*`), `web/src/lib/apollo.ts`,
+  `web/scripts/csp-check.mjs`, `deploy/nginx`, `deploy/traefik`.
+
+## D-125: Runner container healthcheck over a local health socket (task 2.4)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.4; accepted by the coordinator, awaiting
+  the user's confirmation)
+- **Context:** D-080 asks for `bekup healthcheck runner`, a local check of
+  the runner's gRPC listener without a client certificate. The runner only
+  speaks mTLS: a TCP probe without a certificate fails the handshake and
+  cannot tell a healthy runner from a broken one, and the runner's own
+  certificate has only the serverAuth EKU.
+- **Decision:** The runner additionally serves the **standard
+  `grpc.health.v1` service, and nothing else**, as plaintext gRPC on a
+  **container-local unix socket**, `runner.toml` `[listen] health_socket`
+  (default `/tmp/bekup-runner/health.sock` on the container's private
+  `/tmp` tmpfs; `""` disables it). The directory is created `0700`; the
+  runner refuses a directory that is a symlink, belongs to another user or
+  grants group/other access, removes a stale path only if it is a socket it
+  owns, chmods the socket `0600` and removes it on shutdown. Validation:
+  absolute clean path, ≤ 100 bytes, in a dedicated directory (not directly
+  in `/`, `/tmp`, `/run`, ...), never under `/run/secrets`. The status of
+  `runner.v1.RunnerService` (and `""`) is `SERVING` only after the mTLS
+  listener is bound, while the runner's own certificate is valid
+  (re-checked every minute) and until shutdown starts. `bekup healthcheck
+  runner` loads `runner.toml`, dials `unix://<socket>` (no proxy, no
+  retries, 3 s) and exits 0 only on `SERVING`. Compose keeps the exec-form
+  healthcheck. Refines D-080.
+- **Alternatives considered:** the runner's own certificate as a client
+  certificate (needs the clientAuth EKU on the server cert, weakening D-089);
+  a dedicated "healthcheck" client identity (more key material and an
+  allowlist entry that could call every RPC); a TCP connect probe (cannot
+  distinguish healthy from broken TLS); an HTTP health port (another
+  network listener).
+- **Consequences:** No network exposure and no credentials for the
+  healthcheck. Anyone already inside the runner container (same UID) can
+  read SERVING/NOT_SERVING, which reveals nothing. The socket must never be
+  placed on a shared volume (documented). Trust boundary B5 gains a note;
+  RN-1 updated.
+- **Related:** D-080, D-089, D-098; task 2.4; `internal/runner/health.go`,
+  `cmd/bekup/healthcheck_cmd.go`, `internal/config/runner.go`,
+  `docker-compose.yml`, `docs/operations.md`.
+
+## D-126: Runner API proto conventions and code generation (task 2.4)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.4; accepted by the coordinator, awaiting
+  the user's confirmation)
+- **Context:** D-030 fixes a small typed gRPC API between serve/worker and
+  the runner; the plan lists the RPCs but not the message shapes, the
+  generator setup or how credential fields are protected.
+- **Decision:**
+  1. `proto/runner/v1/runner.proto`, package `runner.v1`, one service
+     `RunnerService` with the 11 RPCs of the plan: `Health`, `Probe`,
+     `FetchServerCertificate`, `FetchHostKey` (unary), `Dump` and
+     `DumpGlobals` (server streams: `oneof` chunk | log | result, exactly
+     one result at the end), `VerifyDump` (client stream: header first,
+     then chunks), `Restore` (bidirectional: header + chunks in, log lines +
+     result out), `CreateDatabase`, `RenameSwapDatabase` (names derived by
+     the runner from a `temp_id`, D-123), `PrePull`. Unique request/response
+     messages per RPC (buf `STANDARD`); every enum has an `UNSPECIFIED`
+     zero value that the runner rejects; `TlsMode` mirrors D-123 (`PINNED`
+     default, `UNVERIFIED`, `DISABLED`); `HostKeyPin` mirrors D-122;
+     `Target.pins` holds at most two certificate pins (current + staged
+     backup, D-034).
+  2. **No free-form fields:** no command, argument, environment, image or
+     path field exists; a test fails on such field names.
+  3. **Credential fields** are `bytes` annotated with the custom option
+     `[(runner.v1.secret) = true]` (extension 51001 on `FieldOptions`).
+     `runnerpb.ZeroSecrets` zeroes and clears them by reflection; a test
+     fails when a credential-looking field (password, passphrase,
+     private_key, key_pem, ...) lacks the option or is not `bytes`.
+  4. **Limits:** data chunks ≤ 1 MiB (`runnerpb.MaxChunkBytes`), messages ≤
+     1 MiB + 64 KiB in both directions.
+  5. **Generation:** buf v1.74.0, protoc-gen-go v1.36.12 and
+     protoc-gen-go-grpc v1.6.2 are go.mod `tool` dependencies (buf 1.75
+     would pull a pre-release protobuf runtime); `buf.yaml` (v2, lint
+     `STANDARD`, breaking `FILE`) and `buf.gen.yaml` (local plugins via `go
+     tool`, no registry or network). Generated code in `internal/runnerpb`
+     is committed. `just gen` runs `buf generate`; `just lint` and CI run
+     `buf lint` and `buf format --diff`; `buf breaking` against `main` runs
+     only once the proto exists on `main` (CI: pull requests).
+- **Alternatives considered:** ConnectRPC (another stack next to grpc-go);
+  protoc binaries via `just doctor` (unpinned, needs network); `string`
+  credential fields (cannot be zeroed); a free-form "options" map (argv
+  injection risk, D-030); a field-name list instead of an option (silently
+  misses new fields).
+- **Consequences:** The API is reviewable in one file, and wire
+  compatibility is enforced once released. Zeroing covers the decoded
+  messages; copies in gRPC's pooled receive buffers are outside our control
+  (documented limitation). B5 updated.
+- **Related:** D-030, D-033, D-034, D-122, D-123; tasks 2.4, 2.5–2.7a;
+  `proto/`, `buf.yaml`, `buf.gen.yaml`, `internal/runnerpb`, `justfile`,
+  `.github/workflows/ci.yml`.
+
+## D-127: Runner gRPC transport policy: interceptors, limits, keepalive, client (task 2.4)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.4; concurrency limits and connection
+  recycling accepted by the coordinator, awaiting the user's confirmation)
+- **Context:** The runner is equivalent to root on the host (D-003); its
+  gRPC server needs an explicit policy for identity, abuse limits and
+  long-running streams, and serve/worker need a matching client.
+- **Decision:**
+  1. **Server** (`internal/runner`): credentials from
+     `certs.ServerTLSConfig` (TLS 1.3, private CA, allowlist in the
+     handshake, no resumption); refuses to start when the certificate is
+     not valid now (warns 30 days ahead) or the listen address is a
+     wildcard outside dev without `allow_wildcard` (D-098, re-checked).
+     Limits: max message 1 MiB + 64 KiB, 64 streams per connection, 16 KiB
+     metadata, 10 s handshake. Keepalive: client pings no more often than
+     every 30 s (also without streams), server pings after 2 min idle
+     (20 s timeout), idle connections close after 15 min, every
+     connection is recycled after 30 min with a grace of
+     `limits.max_run_duration` + 1 min, so a client whose certificate
+     expired cannot keep a connection forever while dumps are never cut.
+     Shutdown: 45 s graceful, then in-flight calls are cancelled.
+  2. **Interceptor chain** (unary and stream alike): logging (method,
+     caller, code, duration; never payloads or status messages; Health at
+     debug) → panic recovery (`INTERNAL "internal error"`, logs only the
+     panic type and stack) → guard: caller identity re-checked against the
+     allowlist (`PERMISSION_DENIED`), deny-by-default method table (a test
+     checks it covers exactly the service), mandatory deadline
+     (`INVALID_ARGUMENT` without one) clamped to `max_run_duration`,
+     non-blocking limiter (`RESOURCE_EXHAUSTED`): class *run* (`Dump`,
+     `DumpGlobals`, `VerifyDump`, `Restore`, `CreateDatabase`,
+     `RenameSwapDatabase`) = `limits.max_concurrent_runs`, class *control*
+     (`Probe`, `FetchServerCertificate`, `FetchHostKey`, `PrePull`) = 8,
+     `Health` unlimited → zeroing of received messages that carry secret
+     fields after the handler (at most 4 such messages per stream).
+  3. **Client** (`internal/runnerclient`): `certs.ClientTLSConfig`; refuses
+     configurations below TLS 1.3, without a root pool or with
+     `InsecureSkipVerify`; no proxy, no service config, no transparent
+     retries; keepalive 60 s / 20 s; default deadlines for unary calls
+     without one (Health 5 s, others 2 min); streams without a deadline are
+     refused. Only `Health` is retried: up to three attempts with jittered
+     backoff, and only on `UNAVAILABLE`.
+- **Alternatives considered:** queueing instead of failing fast (hides
+  overload, ties up workers); no connection age limit (expired clients keep
+  access); a short age grace (cuts long dumps); retries for all RPCs (dumps
+  and restores are not idempotent); certificate hot-reload (more code in
+  the root-equivalent process; a restart is required instead).
+- **Consequences:** Overload is visible as `RESOURCE_EXHAUSTED` and must be
+  handled by the worker's own concurrency (task 3.6). Certificate rotation
+  requires a runner restart (documented). B5 and RN-9 updated.
+- **Related:** D-003, D-030, D-089, D-098, D-126; tasks 2.4, 2.6, 3.6;
+  `internal/runner`, `internal/runnerclient`, `docs/security/mtls-certs.md`.
+
+## D-128: SFTP backend: host-key pin, hard-link finalize, symlink checks, connection policy (task 2.10)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.10)
+- **Context:** Task 2.10 adds the SFTP destination. It must satisfy the
+  D-121 contract (atomic, never-overwriting Put, idempotent Delete, S3-order
+  List, normalized Test errors), pin the server's host key (D-018), dial
+  through the SSRF guard (D-120) and must not be redirected out of its base
+  directory by server-side symbolic links.
+- **Decision:**
+  1. **Package** `internal/storage/sftp` on `github.com/pkg/sftp` v1.13.12
+     over `x/crypto/ssh`. `Open(Config)` validates only (no network); the
+     first operation connects, so `Test` reports connection problems as
+     normalized steps. One SSH connection per destination, shared by
+     concurrent operations, re-dialed after it died; reconnects are
+     serialized.
+  2. **Transport policy = the tunnel's (D-122)**, implemented locally
+     because its helpers are unexported (dedup later): mandatory pin
+     (`Type` + `SHA256:` fingerprint and/or authorized-key line,
+     constant-time compare), only the pinned key type offered as
+     host-key algorithm, host keys ed25519/ECDSA/RSA ≥ 2048 (SHA-2
+     only), kex mlkem768x25519/curve25519, ChaCha20-Poly1305/AES-GCM.
+     No insecure or TOFU mode here (`tunnel.FetchHostKey` serves 2.12).
+     A mismatch is a `*HostKeyMismatchError` (pinned and presented
+     fingerprints for admins), classified `permission_denied`.
+  3. **Auth:** private key (ed25519, ECDSA, RSA ≥ 2048 with SHA-2
+     signatures; optional passphrase) or password as `crypto.Secret`.
+     `Open` takes ownership: PEM and passphrase are destroyed before it
+     returns (the parsed key stays in memory for reconnects and is zeroed
+     on `Close`); the password is kept for reconnects and destroyed on
+     `Close`. Parser errors are replaced by fixed messages.
+  4. **Network:** a `*netguard.Guard` is mandatory (typed, so no
+     unguarded dialer can be passed); dial + handshake + SFTP init + base
+     resolution are bounded by `DialTimeout` (15 s, ≤ 2 m) and ctx;
+     keepalive@openssh.com every 15 s, connection closed after 3 missed
+     replies (ends hung requests); `MaxConcurrentRequests` per file
+     (32, ≤ 128).
+  5. **Paths:** `BasePath` must be absolute and clean; it is resolved once
+     per connection with SSH_FXP_REALPATH and must be a directory; the
+     optional `Dir` (key-prefix syntax) is created below it. Objects are
+     `root + "/" + key` with validated keys only. Every directory below
+     the root is checked with Lstat (Put creates missing ones, 0700, and
+     refuses non-directories); objects must be regular files; Get compares
+     the opened file's fstat with the Lstat result. Symbolic links below
+     the root are therefore refused (Put), reported missing (Get, Stat,
+     Delete) or skipped (List, CleanupPartials).
+  6. **Put:** exclusive create of `.<32 hex>.partial` (0600) in the target
+     directory (a dot name, so never a valid key and never listed; the key
+     name is not embedded to stay within NAME_MAX), stream with SHA-256,
+     verify, `fsync@openssh.com` when advertised, check the stored size,
+     then **finalize with `hardlink@openssh.com`** (fails if the key
+     exists, so never-overwrite is atomic) and remove the partial name.
+     Without the extension: Lstat check + SSH_FXP_RENAME (SFTP v3 says it
+     fails on an existing target; a server that overwrites leaves a small
+     race; logged once, `ExclusiveCreate` reported false).
+     `posix-rename@openssh.com` is never used because it overwrites by
+     design. On any error or cancel the partial is removed (best effort;
+     `CleanupPartials(ctx, olderThan)` removes crash leftovers, also in
+     no-delete mode).
+  7. **Delete:** refused with `ErrDeleteNotPermitted` in no-delete mode
+     (without connecting); otherwise idempotent, removes now-empty parent
+     directories. Operators should also withhold the delete right on the
+     server (`internal-sftp -P remove,rmdir,rename,posix-rename`).
+  8. **Errors:** SFTP status codes map to the storage sentinels
+     (not found, permission, unsupported); auth failures →
+     `permission_denied`; netguard blocks, connection loss and handshake
+     failures → `network`; timeouts → `timeout`. Raw errors stay in the
+     chain for admin logs only.
+- **Alternatives considered:** posix-rename after an existence check
+  (overwrites in the race); check + rename as the primary path (race);
+  trusting REALPATH alone for symlink detection (servers differ in whether
+  they resolve links); a TOFU/insecure host-key option (MITM); one
+  connection per operation (slow handshakes, more exposure); importing
+  `internal/tunnel` (helpers unexported, concurrent task).
+- **Consequences:** SFTP destinations pass the shared conformance suite
+  against OpenSSH (atmoz/sftp) and an in-process server. Residual risk:
+  SFTP has no O_NOFOLLOW/openat, so a party that can modify the server's
+  tree concurrently can win a check-then-use race; the server is trusted
+  for its permissions and chroot, integrity rests on age + the signed
+  manifest. SFTP offers no immutability (DS-3). The host-key and
+  algorithm policy exists twice (tunnel, sftp) until deduplicated.
+  SECURITY DS-3, DS-4, DS-6, DS-7 and WK-6 updated; trust boundaries
+  unchanged (B4).
+- **Related:** D-018, D-055, D-120, D-121, D-122; `internal/storage/sftp`,
+  `docs/guides/destinations.md`.
+
+## D-129: S3 backend: own multipart uploader, static credentials only, conditional writes, version-exact deletes (task 2.9)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.9)
+- **Context:** Task 2.9 needs an S3/S3-compatible `storage.Destination`
+  (D-121) with https-only endpoints, the netguard (D-120), ≥64 MiB parts,
+  the `WhenRequired` checksum setting, SSE, Object Lock / versioning and
+  no-delete mode (D-007). Several details are not fixed by the plan.
+- **Decision:**
+  1. **Package `internal/storage/s3store`** on `aws-sdk-go-v2/service/s3`
+     (pinned in go.mod). The client is built with `s3.New(s3.Options{...})`
+     only, **never** `config.LoadDefaultConfig`: credentials come from a
+     static provider over the destination's key pair (`crypto.Secret`);
+     no environment, shared files, SSO, container or instance-metadata
+     credentials (an IMDS fallback would be an SSRF/credential-confusion
+     vector). S3 Express session auth and multi-region access points are
+     disabled. The SDK needs the key as a Go string; that copy lives in
+     the SDK credentials cache while the destination is open (residual).
+  2. **Transport:** `Guard.NewHTTPClient` (dial-time netguard, no proxy, no
+     redirects, TLS ≥ 1.2), wrapped so response bodies are capped (1 MiB
+     for errors, 16 MiB for list/XML responses; successful GetObject
+     bodies are streamed unlimited). Netguard denials, redirects and
+     oversized responses are never retried. Endpoint: `https://host[:port]`
+     without user info, path, query or fragment; `http://` only with
+     `AllowHTTP` (dev mode), with a startup warning. An optional CA bundle
+     **replaces** the system roots for that destination. Bucket names are
+     validated (3–63 of `[a-z0-9._-]`, no IP form, no `..`).
+  3. **Own multipart uploader instead of `feature/s3/manager`.** The
+     manager module is deprecated, aborts with the caller's (possibly
+     canceled) context so a canceled Put can leave the upload behind, does
+     not pass `If-None-Match` to `CompleteMultipartUpload`, and cannot
+     verify `ExpectedSHA256` before completing. bekup's uploader: objects
+     ≤ part size → one `PutObject`; larger → `CreateMultipartUpload`,
+     parts of `PartSize` (default 64 MiB, min 5 MiB, max 5 GiB) with at
+     most `Concurrency` (default 2, max 16) part buffers in existence, so
+     memory per Put is exactly part × concurrency; SHA-256 hashed while
+     streaming and verified before `Complete`; any failure (source error,
+     checksum mismatch, cancellation, part error, refused Complete) calls
+     `AbortMultipartUpload` on `context.WithoutCancel` with a 30 s timeout.
+     Maximum object size = part × 10,000 (625 GiB by default; no silent
+     part-size growth, which would break the memory bound).
+     `CleanupIncompleteUploads(cutoff)` aborts crash leftovers; a bucket
+     lifecycle `AbortIncompleteMultipartUpload` rule is documented.
+  4. **Never overwrite:** a HEAD pre-check fails early, and
+     `If-None-Match: *` on `PutObject` **and** `CompleteMultipartUpload`
+     makes it atomic (`ExclusiveCreate`). `ConditionalWrites=false` for
+     stores that reject the header leaves only the pre-check (documented
+     race; on versioned buckets the earlier version survives).
+  5. **Checksums:** the SDK always runs with
+     `RequestChecksumCalculation=WhenRequired` (no aws-chunked trailers);
+     bekup sets headers itself. Mode `when_supported` (default): per-request
+     `x-amz-checksum-sha256` (composite SHA-256 for multipart), response
+     validation on. Mode `when_required`: no checksum headers except
+     Content-MD5 on Object Lock buckets (protocol requirement). The full
+     SHA-256 is stored as `x-amz-meta-bekup-sha256` when known before the
+     upload starts (single-part, or `ExpectedSHA256` given); otherwise the
+     manifest/DB hold it (S3 metadata cannot be added after Complete).
+  6. **Object Lock / versioning detected at Open** (`GetBucketVersioning`,
+     `GetObjectLockConfiguration`; "not configured"/`NotImplemented` mean
+     off, other errors fail Open). A configured default lock mode +
+     retention days on a bucket without Object Lock fails with
+     `ErrUnsupported`; lock options on such buckets fail closed (D-121).
+     The default retention applies to every Put without its own lock
+     options, but **not** to the Test probe.
+  7. **Delete on versioned/locked buckets removes the key's versions
+     permanently** (`ListObjectVersions`, exact key; data versions first,
+     then delete markers), never just a delete marker that would hide a
+     locked object and make retention believe it freed space. Locked
+     versions (retention in the future or legal hold, pre-checked with
+     HEAD, plus the store's refusal) → `ErrDeleteNotPermitted`. The
+     governance-bypass header is never sent. No-delete mode refuses every
+     Delete.
+  8. **Errors:** SDK errors map to the storage sentinels; `NoSuchBucket`
+     maps to the same permission class as `AccessDenied` (no bucket
+     existence oracle); every transport failure (DNS, refused, TLS,
+     netguard denial) maps to `CodeNetwork`, like `netguard.Normalize`.
+     The raw error stays in the chain for admins/logs only.
+  9. **Test:** `storage.RunProbe` with the probe written without the
+     default retention; if the bucket's own default retention locks it,
+     the refused delete step is reported as passed (code
+     `delete_not_permitted`) with a fixed note and `ProbeRemains`.
+  10. **Storage classes** limited to immediately readable ones (archive
+      classes would make restores fail); minio's `ListObjectsV2` may report
+      a full page as not truncated, so a full page is confirmed with a
+      one-key probe.
+- **Alternatives considered:** `feature/s3/manager` (see 3) or the
+  pre-1.0 `transfermanager`; `LoadDefaultConfig` with static credentials
+  first (still consults env/shared config for other settings and makes the
+  fallback chain one config mistake away); delete markers only (locks not
+  enforced, space never freed); storing the SHA-256 via a post-upload
+  CopyObject or tags (rewrites/mutable); auto-raising the part size for
+  huge objects (unbounded memory).
+- **Consequences:** Predictable memory (part × concurrency per Put, 128 MiB
+  by default per destination upload); the IAM policy needs
+  `GetBucketVersioning`, `GetBucketObjectLockConfiguration`,
+  `ListBucketVersions` and `DeleteObjectVersion` (documented). Private
+  endpoints need a netguard allowlist entry. Security impact: no ambient
+  credentials, SSRF-guarded and redirect-free transport, fail-closed
+  locks, atomic never-overwrite, aborted uploads on every failure.
+  SECURITY.md DS-3/4/5/7, WK-6 updated.
+- **Related:** D-007, D-018, D-049, D-055, D-120, D-121; task 2.9;
+  `internal/storage/s3store`, `docs/guides/destinations.md`,
+  `docs/security/immutable-backups.md`.
+
+## D-130: Runner request validation, target allowlist, hardened container spec and the stdin preamble (task 2.5)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (security-first defaults; awaiting the user's
+  confirmation)
+- **Context:** Task 2.5 implements the pure parts of the runner that
+  D-029, D-031, D-032 and D-033 describe: request validation, the target
+  allowlist, the container spec and the secret preamble. Several details
+  were open: the default of an empty allowlist, how hosts behind an SSH
+  bastion are checked, what "unknown fields rejected" means for proto3, how
+  pins and keys are checked without leaving key copies in memory, the exact
+  container settings, the non-root user per image and the preamble framing.
+- **Decision:**
+  1. **Validation** (`internal/runner/validate`): every RPC request has a
+     validator returning a typed view or a gRPC status: InvalidArgument for
+     malformed input, PermissionDenied for allowlist denials,
+     FailedPrecondition for unresolvable hosts. Messages are static and
+     name only the field (never values or secrets; fuzz tests assert it).
+     Rules: unknown proto fields anywhere in the message (incl. nested and
+     list elements) are rejected; unary requests and stream headers are at
+     most 256 KiB, chunk messages at most `runnerpb.MaxMessageBytes`;
+     `run_id` is a lowercase UUID; engine/version key must be in the merged
+     catalog (embedded + `images.extra_file`); host per `engine.ValidateHost`,
+     port 1-65535, user per `engine.ValidateUser`, DB names per
+     `engine.ValidateDBName` (write operations also refuse system databases;
+     the server-reported list is checked by the executor, D-033); passwords
+     at most 1 KiB without NUL/CR/LF; `pinned` TLS needs 1-2 distinct
+     parseable DER anchors (16 KiB each), `leaf_spki_sha256` is empty or 32
+     bytes and mandatory (and must match) when the anchor is not a CA; other
+     TLS modes take no pins; a client certificate needs TLS, `cert_pem` is
+     1-8 parseable CERTIFICATE blocks (32 KiB), `key_pem` exactly one
+     unencrypted private-key PEM block (16 KiB). Private keys (TLS and SSH)
+     are checked structurally only (PEM type, no trailing data, decoded
+     bytes zeroed) and never parsed, so the validator leaves no unzeroable
+     key copies; a mismatching key fails in the native client / SSH
+     handshake. SSH tunnels: exactly one of password/key, passphrase only
+     with a key, the internal/tunnel user rules, a mandatory host-key pin
+     (`tunnel.HostKeyPin.Validate`). DumpGlobals, RenameSwap and globals
+     verify/restore are PostgreSQL only; `no_owner` only for PostgreSQL
+     database restores; `total_bytes` 1 byte-64 TiB; a `Stream` checks that
+     only non-empty chunks of at most 1 MiB follow the header and exactly
+     `total_bytes` arrive. Validated views never copy secret fields.
+  2. **Target allowlist** (`internal/runner/targets`): order of checks per
+     address: always denied (every range `netguard.Classify` marks hard:
+     loopback, link-local incl. metadata, unspecified, multicast, reserved,
+     Teredo, NAT64/6to4 embedding a denied IPv4, ...; IPv4-mapped addresses
+     are unmapped first) → the runner's own networks (`SetOwnNetworks`, fed
+     by task 2.6 with the control network and every per-run subnet) →
+     `deny_hosts` / `deny_cidrs` → `allow_cidrs` / `allow_hosts` (exact
+     names) → deny. **An empty allowlist denies every target** (secure
+     default) and the runner logs a startup warning; requests then fail with
+     PermissionDenied. Names in `deny_hosts` are refused before any DNS
+     query. Validation resolves the host and requires **every** address to
+     pass (at most 16 addresses); `Guard.DialContext` resolves again and
+     re-checks each socket address in the dialer's `Control` hook (DNS
+     rebinding). An IP literal in `allow_hosts` fails runner startup (use a
+     CIDR). Startup also fails on an invalid `images.extra_file`.
+  3. **Hosts behind an SSH bastion:** the runner dials only the bastion, so
+     the bastion goes through the full allowlist; the database host is
+     resolved by the bastion and only checked against `deny_hosts`,
+     `deny_cidrs` and, for IP literals, the always-denied ranges except
+     loopback (a database on the bastion's own loopback is a common setup;
+     metadata/link-local behind the bastion stay denied).
+  4. **Container spec** (`internal/runner/spec`, pure, moby `api` v1.56.1
+     types): image `repository@sha256:<index digest>` only, `User` the
+     catalog entry's non-root UID:GID (new optional catalog key `uid`,
+     default postgres alpine 70, mysql/mariadb 999, never 0), entrypoint
+     `/bin/sh -c <preamble.Script> --`, `Cmd` the engine argv (tool must be
+     one of the entry's binaries; no NUL, bounded size), constant env
+     (`HOME=/tmp`, fixed `PATH`, `TZ=UTC`, `PGPASSFILE`, `PGSYSCONFDIR`,
+     `PGSERVICEFILE`, `PSQLRC`/`PSQL_HISTORY`/`MYSQL_HISTFILE=/dev/null`,
+     `MYSQL_TEST_LOGIN_FILE=/dev/null`), `ReadonlyRootfs`, a single tmpfs
+     `/tmp` (`rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=,gid=`),
+     `CapDrop: ALL`, `no-new-privileges:true`, default seccomp/AppArmor
+     (never overridden), `Privileged: false`, no binds/mounts/volumes/
+     devices/ports/links/DNS overrides, default masked `/proc` paths,
+     private IPC (16 MiB shm) and cgroup namespace, `Memory = MemorySwap`
+     and `NanoCPUs`/`PidsLimit` from `[docker]`, ulimits `core=0` (no core
+     dumps with secrets) and `nofile=1024`, `Init: false`, log driver
+     `none` (tool output only travels over the attach stream), restart
+     `no`, `AutoRemove: false`, `StopTimeout` 10 s, no TTY, `OpenStdin` +
+     `StdinOnce`, healthcheck `NONE`, labels `bekup.managed=true` and
+     `bekup.run_id`, `NetworkMode` the per-run network (`bekup-*` names
+     only) and an optional `ExtraHosts` entry target name → proxy IP.
+     Image-defined environment variables remain (image constants, no
+     secrets). Snapshot tests pin the spec (catalog digests normalized).
+  5. **Preamble framing v1** (`internal/runner/preamble`): `BEKUP-PREAMBLE
+     1\n`, then per record `<type> <length>\n<base64>\n` (types `pgpass`,
+     `mycnf`, `ca`, `clientcert`, `clientkey`, each at most once, fixed
+     paths under `/tmp/bekup`; decimal length without leading zeros, at most
+     64 KiB; standard base64 on one line), then `END\n`; the payload
+     (restore data) follows untouched. The wrapper is a reviewed constant
+     using only POSIX sh (busybox ash, dash, bash); it creates `/tmp/bekup`
+     0700 with umask 077, decodes through the `printf` builtin and a pipe
+     (no secret in any child's argv), checks the decoded length, `chmod
+     600`, and exits 97 with a fixed message on any error before the tool
+     runs; then `exec "$@"`. The Go encoder allocates the exact size once
+     (the caller zeroes it); `ForCommand` sends exactly the files the engine
+     command needs. Verified by an integration test in all 14 pinned images
+     (files, modes, owner, payload, builtin printf, read-only root, noexec
+     /tmp, malformed preambles).
+- **Alternatives considered:** An empty allowlist allowing all private
+  ranges (rejected: deny by default). Checking the database host behind a
+  bastion against the allow lists (rejected: the runner cannot resolve it
+  and loopback-on-bastion setups would break; the bastion is the dial
+  target). Parsing private keys to match them to certificates (rejected:
+  unzeroable key copies; the native client reports a mismatch). Image
+  references with tag and digest (rejected: digest only is unambiguous).
+  The default json-file log driver (rejected: tool stderr would be kept
+  on the daemon's disk). Here-documents in the wrapper (rejected: bash may
+  spool them to a temporary file).
+- **Consequences:** A fresh runner refuses every target until `[targets]`
+  is configured. Some exotic setups (IP literal in `allow_hosts`, encrypted
+  TLS client keys, non-official images without `uid`) need configuration
+  changes. `docker logs` shows nothing for dump containers. Security
+  impact: implements RN-2/3/4/5/6/11 controls and B8 (target allowlist);
+  SECURITY.md rows updated.
+- **Related:** D-029, D-031, D-032, D-033, D-034, D-035, D-098, D-120,
+  D-122, D-123, D-126, D-127; tasks 2.5, 2.6, 2.7, 2.7a;
+  `internal/runner/validate`, `internal/runner/targets`,
+  `internal/runner/spec`, `internal/runner/preamble`,
+  `docs/security/target-allowlist.md`, `docs/architecture.md`.
+
+## D-131: Destinations API: storage of credentials, step-up for every change and the SFTP host-key flow (task 2.12)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.12)
+- **Context:** Task 2.12 exposes destinations (D-007, D-018, D-121, D-128,
+  D-129) through GraphQL. The plan fixes "CRUD (admin, step-up), metadata
+  (maintainer), soft delete, test, confirmHostKey, generateSshKeypair" but
+  not the storage layout, which changes need step-up, how credentials are
+  kept write-only, how maintainers may test, or the host-key flow.
+- **Decision:**
+  1. **Table** `destinations` (migration 00011): `type` enum
+     (`disk|s3|sftp`), `config` jsonb with the non-secret per-type
+     settings only, `secret_enc` (all credentials of the row in one blob,
+     `Keyring.Seal` under AAD `destinations:<id>:secret`; the id is chosen
+     by the application so the blob is sealed before the insert),
+     `no_delete`, `object_lock_mode`/`object_lock_retention_days` (S3
+     only, CHECKs), the SFTP host-key pin columns (type, fingerprint,
+     authorized key, confirmed at/by; all or none; SFTP only),
+     `created_by`, `deleted_at`. Names are unique case-insensitively among
+     non-deleted rows (partial unique index). The blob uses a small
+     tag-length-value encoding so credentials never pass through Go
+     strings in bekup's own code (gqlgen still decodes inputs into
+     strings; the byte copies are zeroed, inputs are registered with the
+     log redaction registry during the call).
+  2. **Service `internal/destinations`** is the only code touching the
+     table: per-type validation at save time (S3 through
+     `s3store.Config.Validate`, https only unless dev mode, endpoint host
+     resolved with `netguard.ResolveAndCheck`; SFTP through
+     `sftp.ValidateTarget` + `ResolveAndCheck`, private keys parsed
+     (ed25519/ECDSA/RSA ≥ 2048, passphrase checked) and their public key
+     stored; disk paths through `storage.ParsePrefix` below
+     `storage.disk_root`; CA bundles must be PEM certificates only,
+     ≤ 256 KiB). Updates validate (including DNS) before locking the row
+     and fail with CONFLICT if it changed meanwhile. A settings input
+     replaces the whole non-secret configuration of its type; omitted
+     credentials keep the stored value; an SFTP password and key are
+     mutually exclusive (setting one removes the other). Changing an SFTP
+     host or port removes the host-key pin. `Open(ctx, id)` builds the
+     backend for the 3.x workers with the guard and keyring; S3 keys are
+     destroyed on `Close`.
+  3. **Authorization:** list/view and test for admins and maintainers;
+     maintainers get metadata only (`settings` null: name, type, mode
+     flags, readiness, timestamps). **Every** create/update/delete,
+     host-key confirmation and keypair generation is admin + step-up
+     (`destination.update` and `destination.delete` now require step-up:
+     a changed endpoint or bucket redirects backups as surely as a changed
+     secret, and deleting a destination stops backups); an update that
+     sets credentials is additionally checked against
+     `destination.secret_update`. New operation
+     `destination.host_key_fetch` (admin, no step-up: it only reads a
+     public key). Owners get nothing here; task 3.5 shows name/type of a
+     job's destinations through the job.
+  4. **Test and host-key fetch** are rate limited per user (10/min, burst
+     5), at most 4 run at once (else RATE_LIMITED), bounded to 60 s, and
+     single-root fields (D-117 extension: one outbound probe per
+     request). Test results carry only `storage.ErrorCode`s and fixed
+     messages (a "connect" step precedes the probe steps), so they are fit
+     for maintainers; raw errors go to the server log only. A destination
+     that is not ready answers CONFLICT with a fixed reason.
+  5. **SFTP host keys (TOFU):** `fetchDestinationHostKey(host, port)`
+     resolves and checks the host, then runs `tunnel.FetchHostKey` through
+     the guard and returns type, fingerprint and authorized-key line; it
+     never stores anything. `confirmDestinationHostKey(id, line)` pins an
+     accepted key type (comments dropped, options refused) and is audited
+     with the old and new fingerprint. An SFTP destination is ready only
+     with a pin and a credential.
+  6. **Keypairs:** `generateDestinationSshKeypair(id)` creates an ed25519
+     key with `crypto.GenerateSSHKeypair`, seals the private key
+     (replacing a stored password or key) and returns only the public
+     key and fingerprint.
+  7. **Audit:** `destination.created|updated|deleted|host_key_confirmed|
+     ssh_key_generated` with the changed field names (old/new values for
+     short non-secret fields; CA bundle and public key by name only);
+     credential changes are listed by name and additionally recorded as
+     `secret.changed`. No-op updates record nothing.
+  8. **Soft delete** always; the in-use check is a hook
+     (`checkUnused`) that task 3.5 fills (refuse while a job targets the
+     destination); artifacts keep referencing soft-deleted rows.
+- **Alternatives considered:** step-up only for secret/mode changes (an
+  unstepped endpoint change can exfiltrate every following backup); a
+  union type for settings (harder for the generated client than one
+  object with per-type fields); JSON for the sealed blob (secrets in
+  strings); storing the host key at fetch time (TOFU without
+  confirmation); letting maintainers fetch host keys (an SSRF-style probe
+  of arbitrary hosts for a non-admin role).
+- **Consequences:** Admins re-authenticate for every destination change.
+  Maintainers can probe configured destinations only (rate limited,
+  normalized results), never arbitrary hosts. Moving an SFTP server
+  requires a new host-key confirmation. Security impact: credentials are
+  write-only, sealed per row and never logged or audited; outbound
+  connections stay behind the guard; trust boundary B4 unchanged
+  (SECURITY.md updated).
+- **Related:** D-007, D-018, D-055, D-106, D-117, D-120, D-121, D-122,
+  D-128, D-129; `internal/destinations`,
+  `internal/graph/schema/destinations.graphqls`,
+  `docs/guides/destinations.md`.
+
+## D-132: Runner Docker executor: per-run network plan, IP-literal targets, proxy, kill and reaper policy (task 2.6)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted the IP-literal limitation)
+- **Decided by:** agent with user approval (security-first defaults; awaiting the user's
+  confirmation)
+- **Context:** D-029 fixes the shape (per-run `internal` network, the
+  runner joins it, a TCP proxy / SSH tunnel to exactly one target,
+  `ExtraHosts` so TLS verification stays end to end, orphan reaper). Task
+  2.6 had to decide the address plan, how IP-literal targets keep host
+  verification (there is no host name to map), how the runner proves the
+  container it joins is its own, the stream, kill and cleanup semantics,
+  and how leftovers are reaped without touching another runner's runs.
+- **Decision:** `internal/runner/executor`, moby client over the
+  `docker.host` unix socket only:
+  1. **Address plan.** New key `[docker] run_subnet_pool` (default
+     `10.214.0.0/16`; canonical private IPv4, /8 to /24). Every run gets
+     its own /28: `.1` gateway (IPAM only), `.2` runner/proxy, `.3` dump
+     container (fixed address). Subnets already used by any Docker network
+     are skipped; exhaustion is `RESOURCE_EXHAUSTED`. The whole pool, the
+     runner's control network (the network holding `listen.address`),
+     every own address (/32) and every active per-run subnet are the
+     target guard's "own networks", so no target or bastion can resolve
+     into them.
+  2. **Network options.** `bekup-run-<run_id>`, bridge, `Internal: true`,
+     IPv4 only, `com.docker.network.bridge.inhibit_ipv4=true` (the gateway
+     address is never put on the host's bridge: the host is unreachable and
+     the host's routing is untouched), `enable_ip_masquerade=false`,
+     labels `bekup.managed`, `bekup.run_id`, `bekup.runner` (the runner's
+     container ID). The container has no default route; Docker's embedded
+     DNS does not forward queries from internal networks (verified by the
+     integration test; older Docker Engines forwarded them, so a current
+     Engine is required).
+  3. **Self-join.** The runner's container is `docker.self_container` or
+     detected from `/proc/self/mountinfo` (`.../containers/<id>/hostname`)
+     and then the host name, and is accepted only if one of its Docker
+     addresses is an address of the runner's own interfaces. Until that
+     succeeds (and Docker answers) runs fail with `UNAVAILABLE`; the runner
+     keeps serving `Health` and retries every 15 s. The plan's
+     `BEKUP_RUNNER_CONTAINER` override is the existing config key's env
+     override `BEKUP_DOCKER_SELF_CONTAINER`.
+  4. **Per-run proxy.** Listens on the runner's per-run address and the
+     target port, accepts only the dump container's fixed address (others
+     are closed and logged), at most 16 connections, and forwards each to
+     the one target: directly through `targets.Guard.DialContext`
+     (re-resolved and re-checked per connection) or through the SSH tunnel
+     whose bastion leg uses the same dialer. TLS is never terminated.
+  5. **What the client dials.** A DNS name: the name, mapped by
+     `ExtraHosts` to the proxy. An IP literal or `localhost` without host
+     verification (TLS unverified/disabled): the proxy address. An IP
+     literal **with** host verification behind an SSH tunnel: a /29 built
+     around the literal, the runner's proxy holds that exact address, so
+     the client dials the literal and verifies the IP SAN; the /29 is
+     refused (fail closed) when it is not IPv4, in an always-denied range,
+     the network/broadcast address, or overlaps the pool, the runner's
+     networks, any Docker network or the run's own bastion, and is
+     `RESOURCE_EXHAUSTED` while another run uses an overlapping range or
+     dials into it. An IP literal or `localhost` with host verification
+     and **no** tunnel fails closed with `FAILED_PRECONDITION`: the runner
+     cannot hold an address it must also dial in the same network
+     namespace. Such targets need a DNS name that matches the certificate
+     or an SSH tunnel.
+  6. **gRPC isolation.** Besides binding `listen.address` to the control
+     address (D-098), the gRPC listener closes every connection whose peer
+     is in the pool or an active per-run subnet before the TLS handshake,
+     also on wildcard listeners.
+  7. **Streams.** Attach before start; the preamble is written and zeroed
+     at once, then the restore payload; stdin is closed only after a clean
+     end of the payload, a read error kills the container instead (never a
+     truncated input that looks complete). Stdout goes to the caller in
+     chunks of ≤ 256 KiB synchronously (backpressure through Docker's pipe
+     to the tool, at most one chunk buffered); stderr becomes lines capped
+     by `limits.max_log_line_bytes` / `max_log_lines`, with control
+     characters and invalid UTF-8 replaced and the run's secret values,
+     the process registry and credential patterns redacted. The executor
+     consumes the preamble material and the tunnel credentials (zeroed on
+     every path).
+  8. **Kill.** Timeout (request or `max_run_duration`): SIGTERM, then
+     SIGKILL after 10 s. Cancellation, output loss, stdin failure or a
+     failed wait: SIGKILL at once. A non-zero exit is a result, not an
+     error (exit 97 = preamble failure).
+  9. **Cleanup.** A defer chain removes, in this order, the container
+     (force), the proxy, the runner's network membership, the network, the
+     tunnel and the subnet reservation, on every path including panics. If
+     the network membership or network cannot be removed, the subnet stays
+     denied ("zombie") until the reaper removed the network.
+  10. **Reaper.** At startup and every 5 minutes: containers and networks
+     with `bekup.managed=true` and a `bekup-run-` name whose run is not
+     active here; this runner's leftovers after 2 minutes (immediately at
+     startup), another runner's only when that runner's container no
+     longer exists. Networks are emptied (force disconnect, including the
+     runner) before removal.
+  11. Concurrency: the executor re-checks `limits.max_concurrent_runs`
+     (non-blocking, `RESOURCE_EXHAUSTED`) behind the interceptor.
+- **Alternatives considered:** A forwarder container holding the target's
+  IP literal (would support direct IP-literal targets with verification,
+  but adds a second container per run running bekup code and a second
+  network; possible later). Proxy ARP / TPROXY / policy routing in the
+  runner (needs `NET_ADMIN`). Rewriting the client's host to the proxy
+  address for verified IP literals (breaks verification). One shared
+  network for all runs (cross-run reachability). Docker-assigned subnets
+  (no fixed client address for the proxy's peer check). A /28 around IP
+  literals (shadows more of the target's neighbourhood). Queueing on pool
+  exhaustion (hides overload).
+- **Consequences:** Dump containers can reach exactly the runner's proxy
+  for their own target: not the runner's gRPC port, other runs, the host,
+  the internet or DNS (integration test in a containerized runner).
+  Pinned TLS to a direct IP-literal target needs a DNS name or a tunnel.
+  The pool range must not be needed for targets. Trust boundaries B6/B7
+  are now implemented; SECURITY.md RN rows updated.
+- **Related:** D-003, D-029, D-031, D-032, D-034, D-035, D-098, D-122,
+  D-125, D-127, D-130; tasks 2.6, 2.7, 2.7a;
+  `internal/runner/executor`, `internal/runner/server.go`,
+  `internal/config/runner.go`, `docs/architecture.md`,
+  `docs/security/target-allowlist.md`.
+
+## D-133: Target-DB certificate pinning: capture, leaf-SPKI pre-flight, trust anchor and mismatch signalling (task 2.7a)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals) (items 4, 6 and 7 amended by D-138 and D-139)
+- **Decided by:** agent with user approval (security-first defaults; awaiting the user's
+  confirmation)
+- **Context:** D-034 and D-123 fix the model (the pinned certificate is the
+  native client's only trust anchor, plus a leaf SPKI check in Go before
+  every run; mismatch = hard fail + security alert; a staged backup pin;
+  30/7-day expiry warnings). Task 2.7a had to decide how the chain is
+  captured without trusting it or sending credentials, the exact pre-flight
+  semantics with two pins, which certificate to suggest as the anchor, how
+  serve recognizes a mismatch, and how expiry information reaches serve.
+- **Decision:** package `internal/runner/pinning`:
+  1. **TLS upgrade** per engine on a connection opened through the target
+     guard (`targets.Guard.DialContext`) or the SSH tunnel
+     (`pinning.Connect`): PostgreSQL sends the 8-byte SSLRequest and reads
+     exactly one byte (`S` continues, `N` = "no TLS", anything else is a
+     protocol error; bytes after `S` stay in the socket and break the
+     handshake, CVE-2021-23222). Default `UpgradeAuto` falls back to PG 17+
+     direct TLS (ALPN `postgresql`, required to be negotiated) on a fresh
+     connection only when the SSLRequest got no protocol answer; an explicit
+     `N` is final. MySQL/MariaDB: the HandshakeV10 greeting is read with a
+     1 KiB bound (length checked from the header before any read; sequence
+     id 0, protocol 10, error packet = "rejected", NUL-terminated version of
+     at most 255 bytes, filler 0), the SSL and 4.1 capability flags are
+     required, and the 32-byte SSLRequest (sequence id 1, no user, no
+     password, no database) is sent. Dial + upgrade + handshake are bounded
+     by 15 s (ctx-driven close for SSH channels without deadlines).
+  2. **Capture** (`FetchServerCertificate`): the only `InsecureSkipVerify`
+     in bekup. `VerifyConnection` records the chain (at most 8
+     certificates) and returns an error, so the client aborts the handshake
+     itself: no Finished, no application data, never credentials (unit test
+     with fake servers asserting the exact pre-TLS bytes, a failed
+     server-side handshake and zero application bytes). The response adds
+     per certificate the PEM and the SPKI SHA-256 as base64 and hex, plus
+     `suggested_anchor_index` (the leaf if self-signed, else the self-signed
+     root the presented chain leads to through verified signatures, else -1:
+     OpenSSL-based clients need a self-signed anchor, an intermediate alone
+     fails without a partial-chain flag) and `leaf_spki_sha256` (always).
+  3. **Pre-flight** before every PINNED connection: the same upgrade, then a
+     handshake with `RootCAs` = exactly the pinned anchors (never empty, so
+     never the system roots), `ServerName` = the target host (DNS name or IP
+     literal; IP SANs are checked) and TLS >= 1.2; `VerifyConnection` then
+     requires **one pin** to satisfy both checks: the chain verifies with
+     that pin's anchor as the only root (host name/IP, validity, server-auth
+     EKU) **and** the leaf's SPKI SHA-256 equals that pin's leaf SPKI
+     (constant-time; a CA pin without a leaf SPKI checks the chain only).
+     Anchor and leaf of different pins never combine. The current pin wins
+     over the staged one. The connection is closed right after the
+     handshake. `ClientTLSConfig` gives the runner's own Go drivers (Probe)
+     the same check.
+  4. **Mismatch signalling:** `*MismatchError` (matches `ErrPinMismatch`)
+     with a fixed reason `leaf_spki`, `untrusted_chain`, `hostname`,
+     `expired` or `no_certificate`. `pinning.Status` maps it to
+     `FAILED_PRECONDITION` "target certificate does not match the pinned
+     certificate" with a `google.rpc.ErrorInfo` (domain `runner.bekup`,
+     reason `TLS_PIN_MISMATCH`, metadata `check` = the reason);
+     `pinning.PinMismatch(err)` reads it on the serve side (task 5.5 alert).
+     No certificate content is returned for a failed check.
+  5. **Expiry and staged pin:** the pre-flight `Report` carries the matched
+     pin index, the leaf/anchor expiry and the earliest expiry of the
+     verified chain, plus the warning codes `tls_staged_pin_in_use`,
+     `tls_certificate_expires_within_30_days` / `..._7_days` (only the more
+     urgent one) for the run result's warnings.
+  6. **Trust anchor:** `TrustAnchor(pins)` = the PEM of every pin's anchor
+     (current first, then the staged one, deduplicated); it becomes the
+     preamble's `ca` record. The engine argv already sets `sslrootcert` +
+     `verify-full`, `--ssl-ca` + `VERIFY_IDENTITY`, `--ssl-ca` +
+     `--ssl-verify-server-cert`, and never a CA path, so no client reads the
+     system roots. Both anchors are delivered so a planned rotation does not
+     break the native client; the per-pin pairing is enforced by the
+     pre-flight.
+  7. **Leaf SPKI vs. native client:** with a CA anchor the native client
+     cannot check the leaf key; another leaf from the same CA passes the
+     native client but fails the pre-flight, and the runner never starts the
+     container then. Admins who want the native client itself to refuse
+     other leaves pin a self-signed leaf (the integration test proves that
+     another self-signed leaf fails both).
+  8. **IP literals** (D-132): the pre-flight verifies IP SANs for IP-literal
+     targets directly and through the tunnel; the dump container's limits of
+     D-132 are unchanged.
+  9. **Fail closed:** `pinning.FailClosed()` rejects every call; the RPC
+     handlers fall back to it when no checker is wired.
+- **Alternatives considered:** Capturing with pgx / go-sql-driver (they
+  start authentication right after TLS and would need credentials or abort
+  late; our own upgrade sends nothing). Verifying with a pool of both
+  anchors only (a leaf of the staged CA could pass with the current pin's
+  leaf SPKI). Pinning the immediate issuer (fails in libpq/MySQL clients
+  without a self-signed root). Comparing the anchor fingerprint instead of
+  verifying the chain (no host-name and validity check). Sending only the
+  matching anchor to the native client (the runner would have to decide
+  before the container dials; the pre-flight already enforces the pairing).
+- **Consequences:** A server certificate without a SAN for the target name
+  fails the pre-flight (Go does not fall back to the CN, unlike libpq);
+  SHA-1-signed chains fail. A pin mismatch is distinguishable from transport
+  errors without parsing messages. One extra TCP+TLS connection per RPC.
+  Security impact: implements DC-6 / B7 pinning controls (SECURITY.md
+  updated); the capture path is the only unverified TLS in bekup and never
+  carries data.
+- **Related:** D-029, D-034, D-123, D-126, D-127, D-130, D-132; tasks 2.7,
+  2.7a, 2.11, 5.5; `internal/runner/pinning`, `proto/runner/v1/runner.proto`,
+  `docs/guides/connections.md`, `docs/security/hardening.md`.
+
+## D-134: Runner RPCs: Go-driver pre-checks, normalized target errors, offline verify and the globals fallback (task 2.7)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (security-first defaults; awaiting the user's
+  confirmation)
+- **Context:** Task 2.7 implements Probe, Dump, DumpGlobals, VerifyDump,
+  Restore, CreateDatabase, RenameSwapDatabase and PrePull on top of the
+  validator (D-130), the executor (D-132) and the pin checker (D-133).
+  Open points: how D-033's "database must be in the server-reported list"
+  and the PostgreSQL client-compat rule are enforced before a container
+  runs, how errors are normalized so Probe is no port scanner, how a dump
+  is verified without network or credentials, how the
+  `--no-role-passwords` fallback avoids mixing two outputs, and the
+  per-RPC limits.
+- **Decision:**
+  1. **Pre-checks with the Go drivers inside the runner** (new package
+     `internal/runner/dbprobe`: pgx `pgconn`, go-sql-driver/mysql for
+     MySQL and MariaDB, version parsing per engine). Every RPC that
+     touches a database first opens a fresh upstream (`pinning.Connect`:
+     the target allowlist dialer or an SSH tunnel), runs the pin
+     pre-flight for TLS mode PINNED, then connects with the driver: the
+     pinned anchors as the only roots via `pinning.ClientTLSConfig`
+     (UNVERIFIED: encrypted, `InsecureSkipVerify`, TLS 1.2+; DISABLED: no
+     TLS; an optional client certificate is presented). It reads the
+     server version and the database list (system databases removed,
+     invalid names skipped and counted, at most 10 000). Dump and Restore
+     require the database in that list; CreateDatabase requires it to be
+     absent; RenameSwap requires `<db>` and the derived temp name and the
+     absence of the derived old name. Dump/DumpGlobals refuse a server
+     the requested client cannot dump (`engine.CheckDumpCompat`:
+     PostgreSQL client major >= server major); Restore selects the client
+     itself (`SelectRestoreClient`: max(dump client, server)). The
+     upstream is closed before the container runs; the executor opens its
+     own (a second SSH handshake when tunneled). pgconn is configured
+     without environment influence on the security settings (no
+     fallbacks, explicit TLS, `/dev/null` passfile and service file); the
+     MySQL driver disallows cleartext/old passwords, LOCAL INFILE,
+     multi-statements and plaintext fallback, and its own logger is
+     discarded. Limitation: both drivers take the password (and the
+     parsed client key) as unzeroable Go values, like the SSH password in
+     `internal/tunnel`.
+  2. **Normalized target errors** (`runnerpb.Reason`, an
+     `errdetails.ErrorInfo` with domain `runner.bekup` and a fixed message
+     per reason): `TARGET_UNREACHABLE` (Unavailable),
+     `TARGET_AUTH_FAILED`, `TARGET_TLS_FAILED`, `TLS_PIN_MISMATCH` (the
+     D-133 status incl. the `check` metadata), `TARGET_PERMISSION_DENIED`,
+     `TARGET_UNSUPPORTED_SERVER`, `SSH_HOST_KEY_MISMATCH`,
+     `SSH_AUTH_FAILED`, `TARGET_FAILED` (FailedPrecondition),
+     `TARGET_TIMEOUT` (DeadlineExceeded), `TARGET_DATABASE_NOT_FOUND`
+     (NotFound), `TARGET_DATABASE_EXISTS` (AlreadyExists). Everything
+     before the database answered as a database (refused, filtered,
+     timeouts, DNS, resets, a non-database protocol, a TLS handshake that
+     is not a certificate decision, an SSH target-leg failure) is
+     `TARGET_UNREACHABLE` with one message. Certificate verification
+     failures of the driver are pin mismatches. Server messages are never
+     returned or logged; the runner log gets the reason plus a fixed
+     detail (SQLSTATE, MySQL error number, error class).
+     `runnerpb.ErrorReason` decodes the reason for serve.
+  3. **Dump:** stdout chunks (256 KiB, ≤ 1 MiB) and stderr lines are
+     relayed; exactly one `DumpResult` ends a successful stream (a
+     non-zero exit is a result, not an error). `verified` is set for
+     MySQL/MariaDB (exit 0 + "-- Dump completed" trailer); PostgreSQL
+     archives are verified with VerifyDump. MySQL/MariaDB dumps warn
+     `non_innodb_tables`; pin warnings (D-133) and compat warnings are
+     passed on.
+  4. **DumpGlobals:** the first `pg_dumpall --globals-only` attempt is
+     held back in memory (at most 4 MiB, zeroed after use); if it exits
+     non-zero and stderr shows a role-catalog privilege error (`pg_authid`
+     is matched, so localized messages work too, plus "permission denied"
+     / "must be superuser") it is discarded and the call is retried once
+     with `--no-role-passwords`, announced by a runner log line and the
+     `roles_without_passwords` flag and warning. Beyond 4 MiB the output
+     streams and no retry is possible. `verified` checks pg_dumpall's
+     "dump complete" trailer.
+  5. **VerifyDump:** MySQL/MariaDB dumps and PostgreSQL globals are
+     checked in Go on the streamed tail (trailers) without a container.
+     PostgreSQL archives run `pg_restore --format=custom --file=/dev/null`
+     (amends D-123 item 7, which used `--list`: `--list` stops after the
+     table of contents and passed a truncated archive in the integration
+     test) in an **offline container**: new executor/spec mode with
+     `NetworkMode: none`, no per-run network, proxy or tunnel, and no
+     preamble files (no credentials ever reach it), same hardening
+     otherwise. The stream must deliver exactly `total_bytes`; the rest
+     of the stream is still received and counted after the tool exits.
+  6. **Restore:** a pump goroutine is the only receiver of the client
+     stream and feeds the container's stdin through a pipe (backpressure);
+     a validation or receive error closes the pipe with that error, so the
+     executor kills the container instead of closing stdin. Tool stdout is
+     counted, never returned (it may echo data). Restores are never
+     retried.
+  7. **CreateDatabase / RenameSwapDatabase:** statements run in a
+     container (psql / mysql with the restore safety flags); a non-zero
+     exit maps to permission / exists / not found / failed by fixed
+     stderr patterns. The PostgreSQL swap runs Prepare, then Swap up to 3
+     times (2 s apart, only while the failure is generic), and Rollback
+     (re-allow connections, on its own bounded context) when Prepare or
+     the last Swap fails. RenameSwap on MySQL/MariaDB is
+     FailedPrecondition. PrePull reports `already_present` and pulls by
+     digest only.
+  8. **Limits:** the interceptor deadline (≤ `limits.max_run_duration`)
+     bounds every call; Probe is capped at 1 min, CreateDatabase at 2 min,
+     RenameSwap at 5 min; containers get the remaining deadline as their
+     timeout (graceful kill), cancellation kills at once. Concurrency stays
+     with the interceptor classes and the executor semaphore.
+  9. **Audit:** one `runner_rpc_audit` line per call (rpc, run_id,
+     caller, engine, version key, TLS mode, tunnel flag, database name,
+     code, reason, exit code, bytes, duration); never payloads, server
+     text or secrets. The request's passwords are registered for
+     redaction of tool output; the interceptor zeroes the request.
+  10. `ProbeResponse` gains `version_key_compatible` and `warnings`
+     (wire-compatible additions).
+- **Alternatives considered:** Pre-checks through the executor's tunnel
+  (one SSH handshake, but the image must be chosen before the server
+  version is known). Detecting a non-superuser upfront for DumpGlobals
+  (the task asked for stderr detection; a query would also need extra
+  privileges on some services). Streaming the first globals attempt
+  (the fallback would follow partial output). `pg_restore --list` (misses
+  truncation). Running verify containers on a per-run network (no need
+  for any network). Distinct messages for refused/filtered ports
+  (port-scanning oracle).
+- **Consequences:** Every database operation logs in to the target twice
+  (pre-check + tool) and, with a tunnel, opens two SSH sessions. Probe
+  can still be timed (a refused port answers faster than a filtered one);
+  the target allowlist and the admin-only API in serve bound this. A TLS
+  handshake failure that is not about the certificate reads as
+  "unreachable". PostgreSQL verification now costs a full read of the
+  archive. Security impact: RN rows in SECURITY.md updated (D-033 list
+  check implemented, normalized errors, verify containers without
+  network or credentials).
+- **Related:** D-029, D-031, D-033, D-034, D-036, D-123, D-126, D-127,
+  D-130, D-132, D-133; tasks 2.7, 2.11, 3.6, 4.2, 4.3;
+  `internal/runner/ops*.go`, `internal/runner/dbprobe`,
+  `internal/runnerpb/reasons.go`, `internal/runner/executor`,
+  `internal/runner/spec`, `internal/engine/postgres.go`,
+  `docs/architecture.md`, `SECURITY.md`.
+
+## D-135: Connections API: storage, pin and host-key flows, TLS downgrade and runner wiring (task 2.11)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (task 2.11; security-first defaults, awaiting the
+  user's confirmation)
+- **Context:** Task 2.11 exposes database connections through GraphQL on
+  top of the runner RPCs (D-133, D-134). The plan fixes the roles (admin
+  CRUD; maintainers use connections, may test them, never touch pins or
+  host keys), pinning (admin confirms with step-up, staged backup pin,
+  expiry warnings), the TLS-downgrade opt-out and the SSH keypair
+  generator, but not the table layout, the confirmation semantics, how
+  runner failures reach the API, which operations are single-root or the
+  runner FetchHostKey RPC (still Unimplemented after 2.7).
+- **Decision:**
+  1. **Table** `connections` (migration 00012): engine enum, `version_key`
+     (catalog key of the server's series) and `image_key` (catalog key of
+     the client image sent as `Target.version_key`), host, port, username,
+     no database column (selection is per job), `tls_mode` enum (default
+     `pinned`), the current pin (anchor PEM, leaf SPKI SHA-256 or NULL for
+     a CA pin that allows leaf rotation, `tls_pin_not_after`, pinned at/by)
+     and one staged backup pin with the same columns, SSH columns (enabled,
+     host, port, user, auth kind, passphrase flag, the public key of a
+     stored private key, the host-key pin columns), the public TLS client
+     certificate, `has_password`, `secret_enc` (database password, SSH
+     password or private key + passphrase, TLS client key in one
+     tag-length-value blob sealed under AAD `connections:<id>:secret`, as
+     D-131), `temporary` + `expires_at` + `created_for_restore_id`
+     (CHECK-coupled, unused until task 4.4; all queries exclude temporary
+     rows), `created_by`, soft delete, case-insensitive unique names among
+     non-deleted rows. CHECKs keep pins, host keys and SSH settings
+     complete and bounded.
+  2. **Service `internal/connections`** is the only code touching the
+     table. Keys must exist in the embedded catalog for the engine
+     (runner `images.extra_file` additions are not selectable from serve
+     yet); a PostgreSQL image older than the server series is refused;
+     host/port/user follow the runner's rules (`engine.Validate*`);
+     passwords follow D-123 (no NUL/CR/LF, ≤ 1 KiB); client certificates
+     and SSH keys are shape-checked (SSH keys parsed: ed25519, ECDSA,
+     RSA ≥ 2048, passphrase verified). **D-132 rule:** TLS mode PINNED with
+     an IP literal or `localhost` host and no SSH tunnel is a VALIDATION
+     error that explains D-132 (use a DNS name, a tunnel or an opt-out
+     mode); the same check runs on `setTlsMode`. Changing the host or port
+     clears both pins; changing the bastion's host or port (or removing
+     the tunnel) clears its host-key pin; the engine is immutable.
+     Updates validate before locking and fail with CONFLICT when the row
+     changed meanwhile. Audit: `connection.created|updated|deleted|
+     tls_mode_changed|pin_confirmed|backup_pin_staged|host_key_confirmed|
+     ssh_key_generated` with changed field names (old/new values for short
+     non-secret fields), credential changes additionally as
+     `secret.changed`; no-op updates record nothing.
+  3. **Pins.** `fetchCertificate` returns the runner's captured chain
+     (subject, issuer, SANs, validity, SPKI SHA-256 base64/hex, DER
+     SHA-256, the suggested anchor) and stores nothing.
+     `confirmCertificatePin` / `stageBackupPin` take either a `certIndex`
+     (the chain is **captured again** and must present the leaf SPKI the
+     admin passes, so a certificate swapped between fetch and confirm is
+     refused) or an out-of-band PEM (one certificate). The anchor must be
+     self-signed (leaf or root CA; intermediates fail in libpq/MySQL
+     clients), valid now and ≤ 16 KiB; a leaf anchor needs its own SPKI as
+     the leaf pin; a CA anchor needs the leaf SPKI unless
+     `allowLeafRotation` is set. `tls_pin_not_after` is the anchor's
+     expiry or, with a bound leaf from a capture, the earlier of anchor and
+     leaf. Staging needs a current pin and a different pin; confirming the
+     staged pin promotes it. The API reports `pinStatus` (NOT_REQUIRED,
+     MISSING, VALID, EXPIRES_WITHIN_30_DAYS, EXPIRES_WITHIN_7_DAYS,
+     EXPIRED) and `pinExpiresAt` to maintainers too.
+  4. **SSH host keys (TOFU).** New runner implementation of
+     `FetchHostKey`: validated request (bastion through the target
+     allowlist), `tunnel.FetchHostKey` through `targets.Guard` (no
+     authentication), 30 s cap, a `runner_rpc_audit` line with the
+     bastion, key type and fingerprint; failures other than a denied
+     address (PermissionDenied) or an unsupported key type (new reason
+     `SSH_HOST_KEY_UNSUPPORTED`) are `TARGET_UNREACHABLE`.
+     `fetchSshHostKey(id)` calls it for the connection's bastion (serve
+     re-parses the returned line); `confirmSshHostKey` pins an accepted
+     key type (options refused, comment dropped), audited with the old and
+     new fingerprint. `generateConnectionSshKeypair` creates an ed25519 key
+     (`crypto.GenerateSSHKeypair`), seals it (replacing an SSH password or
+     key; other credentials untouched) and returns only the public key.
+  5. **TLS downgrade.** `setTlsMode` to UNVERIFIED or DISABLED (and
+     `createConnection` with such a mode) additionally needs
+     `connection.tls_downgrade` (admin + step-up); a weakening change
+     records `connection.tls_mode_changed` plus `security.opt_out`
+     (`setting: connection.tls_mode`, from, to) and raises the alert hook;
+     upgrades record only the mode change. Pins are kept across mode
+     changes. `insecureTransport` on the type is the badge flag. A client
+     certificate blocks DISABLED.
+  6. **Runner failures.** Requests are built per call from the row and
+     the unsealed credentials (copies; `runnerpb.ZeroSecrets` after the
+     call; values registered with the log redaction registry during the
+     call); a pinned connection without a pin, or a tunnel without host
+     key or credential, is NOT READY (CONFLICT) without a runner call.
+     Runner reasons map to fixed messages; `TLS_PIN_MISMATCH` and
+     `SSH_HOST_KEY_MISMATCH` are recorded as `connection.tls_pin_mismatch`
+     / `connection.ssh_host_key_mismatch` (with the runner's `check`, the
+     host and the pinned fingerprint; fail closed if the audit write
+     fails), passed to the `AlertFunc` (default: a WARN log line; task 5.5
+     makes them security alerts) and returned as the new API codes
+     `TLS_PIN_MISMATCH` / `SSH_HOST_KEY_MISMATCH`. Other failures are
+     `CONNECTION_FAILED` with a fixed message (runner down, allowlist
+     denial, invalid request, timeout), except in `testConnection`, which
+     reports them as `ok: false` + code + message.
+  7. **Authorization.** Read: admins and maintainers (maintainers get
+     metadata; `settings` null). Every change (create, update, delete,
+     setTlsMode, pin confirm/stage, host-key confirm, keypair) is admin +
+     step-up: `connection.update` and `connection.delete` now require
+     step-up as for destinations (D-131); credentials in an update also
+     check `connection.secret_update`. Maintainers may `testConnection`,
+     `detectVersion`, `listDatabases` and `prePullImage` (D-106; a
+     narrowing of `prePullImage` to admins was withdrawn by the user,
+     D-140). New operation `connection.host_key_fetch` (admin). `engineVersions`
+     lists the catalog for the UI (`connection.list`).
+  8. **Single-root and limits.** `testConnection`, `detectVersion`,
+     `listDatabases`, `prePullImage`, `fetchCertificate`,
+     `confirmCertificatePin`, `stageBackupPin` and `fetchSshHostKey` are
+     single-root (D-117; their operations are credential operations, so
+     startup fails if one is missing). Runner calls are limited per user
+     (10/min, burst 5), at most 4 at once (RATE_LIMITED), and bounded to
+     60 s (pre-pull 10 min).
+  9. **Wiring.** `serve` builds the runner client from `[runner]` at
+     startup (`runnerclient.New`, D-127); unreadable or invalid client
+     certificates refuse startup, a runner that is down only fails the
+     runner operations. The list-databases call is a mutation (it opens an
+     outbound connection with stored credentials, like testDestination).
+- **Alternatives considered:** one catalog key for version and image (no
+  room for a newer PostgreSQL client than the server); storing the last
+  fetched chain server-side for `certIndex` (stale state, a TOCTOU window
+  without the leaf binding); trusting a pin without leaf binding by default
+  (a CA pin accepts any leaf the CA issues); auto-upgrading the TLS mode on
+  pin confirmation (hides the opt-out state); fetching host keys from
+  serve (serve must never reach targets or bastions); a test result
+  instead of an error for pin mismatches (security events must not look
+  like ordinary failures).
+- **Consequences:** Admins re-authenticate for every connection change and
+  compare certificates and host keys out of band. Moving a server or
+  bastion requires a new confirmation. IP-literal targets need a tunnel or
+  an opt-out. Operators with runner-only catalog extras cannot select them
+  yet (follow-up). Security impact: credentials are write-only, sealed per
+  row, never logged, audited or returned; pin and host-key mismatches are
+  audited and alerted; serve still never reaches targets (all I/O through
+  the runner's mTLS API); trust boundaries B6/B7 gain the FetchHostKey RPC
+  (SECURITY.md updated).
+- **Related:** D-034, D-035, D-106, D-117, D-122, D-123, D-127, D-131,
+  D-132, D-133, D-134; tasks 2.11, 4.4, 5.5, 6.3; `internal/connections`,
+  `internal/runner/ops_hostkey.go`, `internal/graph/schema/connections.graphqls`,
+  `internal/db/migrations/00012_connections.sql`, `docs/guides/connections.md`.
+
+## D-136: S3 multipart Complete detached from the caller and verified after an ambiguous failure (M2 review)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (M2 code review M11; awaiting the user's
+  confirmation)
+- **Context:** `s3store.Put` ran `CompleteMultipartUpload` on the caller's
+  context. A caller that gave up right after the server committed (or a
+  lost response whose SDK retry then got `NoSuchUpload` /
+  `PreconditionFailed`) reported a failure for an object that exists, and
+  the abort that followed could not remove it: the backup would be
+  recorded as failed while an orphaned object stayed in the bucket.
+- **Decision:** Once every part is stored, Complete runs on
+  `context.WithoutCancel(ctx)` bounded by `completeTimeout` (10 min; S3
+  may need minutes to assemble large objects); the abort on failure stays
+  detached with `abortTimeout` (30 s). After a failed or ambiguous
+  Complete the object is HEADed (detached, 30 s). It counts as **this**
+  upload only if its size matches and at least one strong content check
+  matches while none mismatches: the `bekup-sha256` metadata (when the
+  caller supplied the SHA-256 up front), the composite SHA-256 native
+  checksum (base64(sha256(part checksums))-N, `when_supported` mode) or
+  the composite ETag (md5 of the part MD5s -N, only when every part ETag
+  is a plain MD5). Then Put succeeds (warning
+  `s3_complete_verified_after_error`); otherwise the classified Complete
+  error is returned and the upload aborted. Size alone never counts.
+- **Alternatives considered:** keeping the caller's context (the reported
+  bug); trusting `NoSuchUpload` after a retry as success (another writer
+  or a lifecycle abort produce the same answer); accepting a size match
+  (any same-size object would pass); reading the object back to hash it
+  (doubles the egress of every ambiguous Complete for large backups).
+- **Consequences:** A cancelled backup may still end as a stored,
+  verified object when the server committed first; the caller then gets
+  success, never a failure for an object that exists. The composite ETag
+  rests on MD5, but it only decides between "our object" and "error" when
+  no SHA-256 check is available, and the backup format is itself
+  authenticated (age) and SHA-256-verified on restore. Security impact:
+  no new trust; never-overwrite (`If-None-Match: *`) and the abort
+  guarantees are unchanged.
+- **Related:** D-121, D-129; task 2.9; `internal/storage/s3store/put.go`,
+  `internal/storage/s3store/put_test.go`.
+
+## D-137: Docker-dependent tests skip locally but fail in CI (M2 review)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (M2 code review L23; awaiting the user's
+  confirmation)
+- **Context:** The runner, pinning, executor, spec and graph integration
+  harnesses called `t.Skipf` when no (Linux) Docker daemon was reachable.
+  In CI that turns the whole Docker-dependent suite silently green.
+- **Decision:** Every "Docker missing or unsuitable" condition goes
+  through `dockertest.Skipf(t, ...)` (`internal/testutil/dockertest`):
+  it skips when `CI` is unset or false and **fails** the test when `CI`
+  parses as true. The `go-integration` job checks `docker info` first and
+  sets `CI: "true"` explicitly (GitHub sets it too). Skips unrelated to
+  Docker (inner-harness guards, `-short`) are unchanged.
+- **Alternatives considered:** always failing without Docker (breaks
+  `just test-int` on machines without Docker); a separate env var such as
+  `BEKUP_REQUIRE_DOCKER` (another knob CI could forget; `CI` is the
+  convention every CI system sets).
+- **Consequences:** A broken or missing Docker daemon in CI fails the
+  build loudly. Local runs keep skipping. Security impact: the isolation
+  tests of the runner (D-130, D-132, D-133) can no longer be skipped
+  unnoticed in CI.
+- **Related:** D-020, D-132; `internal/testutil/dockertest`,
+  `.github/workflows/ci.yml`, `docs/development.md`.
+
+## D-138: Runner hardening after the M2 review: image volumes, psql restrict, Docker networks, bastion targets, Docker floor and RPC fixes
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (M2 security review M1, M2, L4, L5, L6, L9 and code
+  review H1, H2, M4, M5, L15, L21, L22; task 2.14 follow-ups; awaiting the
+  user's confirmation)
+- **Context:** The M2 reviews found gaps in the runner: official images
+  declare `VOLUME`s, so Docker created a writable, persistent anonymous
+  volume (e.g. `/var/lib/postgresql/data`, `/var/lib/mysql`) despite the
+  read-only root; psql executed meta-commands (`\!`, `\o |cmd`,
+  `\copy ... program`) from a restored globals script; the D-132 /29 could
+  shadow the runner's resolver or default gateway; the target guard let
+  broad `allow_cidrs` (172.16.0.0/12) and `allow_hosts` names reach Docker
+  networks and their gateways (the host); a bastion could forward to any
+  host it reaches; no Docker Engine floor; FetchServerCertificate bypassed
+  the RPC normalization and audit; the startup reap ran while runs were
+  already admitted; the final stream message could race a blocked output
+  reader; the zeroing interceptor raced the pump goroutine; serve could not
+  see the runner's extra images; IP literals in `targets.allow_hosts` only
+  failed at runner start; the log redactor masked `version_key`.
+- **Decision:**
+  1. **Image volumes.** `PrePull`/`ensureImage` inspect `Config.Volumes`
+     (`Docker.ImageInspect`); every path except `/tmp` gets a read-only,
+     one-page tmpfs mount (`HostConfig.Mounts`, Docker's tmpfs defaults
+     noexec/nosuid/nodev) via `spec.Params.ImageVolumes`, so no anonymous
+     volume is ever created. More than 32 paths, a relative, unclean or `/`
+     path refuses the image (`ErrImage`). Integration test: writing to the
+     data directory fails in every pinned image and the container has only
+     tmpfs mounts.
+  2. **psql restrict.** Every psql run reads stdin first (`--file=-`) and
+     stdin starts with `\restrict <64 hex chars>` from crypto/rand
+     (`engine.PSQLRestrictPrefix`, `Command.StdinPrefix`, written after the
+     preamble and zeroed with it); `spec.Build` refuses a psql command
+     without a valid prefix and any other tool with one. The globals
+     restore removes the dump's own complete `\restrict`/`\unrestrict`
+     lines (`engine.StripRestrictLines`), which would otherwise end the
+     restore with ON_ERROR_STOP; removing them cannot lift the runner's
+     restriction. All pinned clients (13.23-18.6) support it (catalog
+     floor CVE-2025-8714); the integration test runs a hostile script
+     (`\!`, `\o |cmd`, `\copy ... program`, a guessed `\unrestrict`) with
+     every client 13-18 and a pg_dumpall-style script that restores.
+  3. **/29 forbidden set.** `aroundTarget` also refuses a /29 holding the
+     runner's `/etc/resolv.conf` name servers, its default gateways
+     (`/proc/net/route`, `/proc/net/ipv6_route`) and every Docker network
+     gateway.
+  4. **Docker networks in the guard.** The executor hands every Docker
+     network's subnets and IPAM gateways to `targets.Guard.SetDockerNetworks`
+     at Init, before every run and every minute. Such an address is denied
+     (`docker network`) unless an `allow_cidrs` entry lying inside that
+     Docker subnet contains it; a gateway needs an entry of exactly its
+     address (/32, /128). `allow_hosts` never opens one.
+  5. **Bastion targets.** `targets.bastion_targets` (string list,
+     `<bastion>=<CIDR or host name>`; the config format has only two levels,
+     so no array of tables): a bastion matched by name or any resolved
+     address may only forward to its listed targets (IP literals in a CIDR,
+     names exactly; with several matching entries all must allow).
+     Unlisted bastions keep the previous rule (deny lists only), with a
+     startup warning when the list is empty and a `runner_bastion_unrestricted`
+     warning once per unlisted bastion in use.
+  6. **Docker Engine floor 26.0.0**, checked at executor Init (retried with a
+     clear error): 26.0.0 fixes CVE-2024-29018 (internal networks could
+     reach external DNS through the embedded resolver); patched 25.0.5 /
+     23.0.11 builds are not detected reliably and are refused.
+  7. **FetchServerCertificate** runs in `operations` like every target RPC:
+     validator, `pinning.Connect`, capture, `targetStatus` (normalized
+     `runnerpb.Reason`) and a `runner_rpc_audit` line. The pin-mismatch
+     status moves to `runnerpb.PinMismatchStatus` / `PinMismatchCheck`
+     (metadata `check`); `pinning.Status`, `pinning.PinMismatch`, the
+     duplicate ErrorDomain/reason constants, `pinning.PinVerifier`,
+     `withCap` and a dead password-clearing line are removed (amends D-133
+     item 4).
+  8. **Startup reap** runs before `ready` is set: no run is admitted until
+     it completed.
+  9. **Stream sends.** Stdout/log relays and the final message share the
+     output lock; `output.Final` marks the output abandoned, so a reader
+     still blocked in Send after the executor's drain timeout never sends
+     concurrently with, or after, the final message (every handler return
+     path abandons it).
+  10. **Zeroing interceptor** guards its held messages with a mutex; a
+      credential message received after the handler returned is zeroed at
+      once.
+  11. **Steps.** Sequential containers of one run (rename swap: prepare,
+      swap1-3, rollback) use `RunSpec.Step`; network and container are
+      `bekup-run-<run id>-<step>`, so a step never collides with a
+      predecessor whose cleanup is pending.
+  12. **ListImages** RPC (control class) returns the merged allowlist
+      (engine, version key, digest reference, client version, legacy,
+      extra) and `runnerclient.Client.ListImages` exposes it for serve.
+  13. **Config validation** rejects IP literals (and all-numeric names) in
+      `targets.allow_hosts`/`deny_hosts`.
+  14. **Redactor.** Exact non-secret names (`version_key`,
+      `source_version_key`, `target_version_key`, `client_version_key`,
+      `image_key`, `catalog_key`, and the audit flags `host_key_cleared`,
+      `host_key_changed`, `host_key_confirmed`) are not redacted by the log
+      handler or the audit redactor; every other `*key*` name (including
+      `host_key`) still is.
+  15. **InsecureSkipVerify inventory:** exactly three uses (pin capture,
+      D-133; TLS mode UNVERIFIED, D-123/D-134/D-135; app DB
+      `tls_mode = require`, D-100/D-103); comments corrected (D-133's "the
+      only InsecureSkipVerify" is outdated).
+  16. **Kill without a drained attach.** Docker's SIGKILL waits until the
+      container stopped, which blocks while its attached output is not
+      read (found by the cancel integration test: a canceled dump took
+      30 s to be killed). The executor closes the attach connection right
+      before SIGKILL (the output is discarded anyway at that point).
+  17. **SSH details shared:** the runner validates SSH user names with
+      `sshpolicy.ValidateUser`; tunnel errors (`*tunnel.Error` wrapping the
+      sshpolicy details) map to `SSH_HOST_KEY_MISMATCH`,
+      `SSH_HOST_KEY_UNSUPPORTED` and `SSH_AUTH_FAILED` both in `targetStatus`
+      and in `executor.Status`.
+- **Alternatives considered:** a `VolumeDriver`/`--volumes-from` trick or
+  deleting volumes after the run (they would still exist during it and on
+  a crash); a writable tmpfs over volumes (gives the tool a scratch area it
+  never needs); filtering psql meta-commands in Go (incomplete; psql's own
+  restrict mode is authoritative); refusing globals dumps with `\restrict`
+  lines (every current pg_dumpall writes them); denying every RFC 1918
+  address that a Docker network uses only at dial time (no clear
+  configuration rule); `[[targets.bastions]]` tables (needs a third config
+  level); detecting patched 25.x/23.x builds from version strings
+  (backports are distribution specific).
+- **Consequences:** Operators whose databases run in Docker networks on the
+  same daemon must list the Docker subnet (or a narrower CIDR inside it)
+  explicitly; broad private ranges no longer reach them. Docker < 26 stops
+  the executor. Globals restores lose the dump's own restrict key lines
+  (the runner's key replaces them). Security impact: closes a persistent
+  writable path, a psql command-execution path from restored scripts, a
+  /29 shadowing of runner infrastructure, a pivot to the Docker host and
+  other containers, and an optional bastion pivot; SECURITY.md B4/B8 and
+  `docs/security/target-allowlist.md` updated.
+- **Related:** D-029, D-031, D-123, D-130, D-132, D-133, D-134, D-139; task
+  2.14; `internal/runner/{executor,spec,targets,validate,pinning}`,
+  `internal/engine`, `internal/config`, `internal/logging`,
+  `proto/runner/v1/runner.proto`.
+
+## D-139: Pin anchors are a self-signed leaf or a private CA; the same-CA leaf window is accepted residual risk
+
+- **Date:** 2026-10-27
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** D-133 lets an admin pin a CA. With a CA anchor the native
+  client cannot check the leaf key, so another leaf of the same CA passes
+  the native client while the Go pre-flight (leaf SPKI) refuses it; the
+  reviews asked how to treat this window (task 2.7a acceptance note) and
+  whether a public CA may be pinned at all.
+- **Decision:** A pin anchor must be a **self-signed leaf or a private
+  CA**. An anchor that is, or chains to, a certificate of the system trust
+  store (a public CA) is refused: by the runner in every request
+  (`validate.checkPins`) and by serve when a pin is confirmed (helper
+  `pinning.IsPublicAnchor`, x509 `SystemCertPool`; the connections service
+  calls it). With a private CA, the window in which another leaf of the
+  same CA passes the native client between the pre-flight and the
+  container's connection (the leaf SPKI is checked by the pre-flight only)
+  is **accepted residual risk**: issuing such a leaf requires the
+  operator's own private CA. The 2.7a acceptance note is resolved this way.
+- **Alternatives considered:** allowing public CAs with a leaf SPKI pin
+  (the native client would trust every certificate the public CA issues
+  for the name); requiring self-signed leaves only (breaks rotation with a
+  private CA); passing the leaf SPKI to the native clients (not supported
+  by libpq / the MySQL clients).
+- **Consequences:** Targets with publicly issued certificates must be
+  pinned by their leaf only if self-signed, or use a private CA; such
+  targets are otherwise limited to TLS mode UNVERIFIED (audited downgrade).
+  Without a system trust store the check cannot recognize public CAs
+  (the shipped images carry one). Amends D-133 items 6 and 7. Security
+  impact: removes the public-CA misissuance path; the same-private-CA leaf
+  window is documented residual risk.
+- **Related:** D-034, D-123, D-133, D-135, D-138; tasks 2.7a, 2.11, 2.14;
+  `internal/runner/validate/anchor.go`, `internal/runner/pinning`.
+
+## D-140: SSH policy and host names in one place, endpoint-bound host-key and pin confirmation, no password reuse after retargeting (M2 review)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-27, user accepted all M2 proposals)
+- **Decided by:** agent with user approval (M2 review fixes, task 2.14; security-first
+  defaults, awaiting the user's confirmation)
+- **Context:** The M2 reviews found the SSH host-key/algorithm policy
+  duplicated in `internal/tunnel` and `internal/storage/sftp` (and partly
+  in the connection/destination services), four slightly different
+  host-name validators (the SFTP backend accepted names the SSRF guard
+  refused), a host-key confirmation not bound to the endpoint the key was
+  fetched from, a captured-chain pin confirmation that did not check that
+  the leaf chains to the chosen anchor, stored passwords that stayed in
+  place (and would be sent) when an endpoint was changed, a free host/port
+  host-key fetch with distinguishable errors, an SFTP host-key mismatch
+  reported as `permission_denied`, and soft-deleted destinations that the
+  workers could no longer open.
+- **Decision:**
+  1. **`internal/sshpolicy`** is the only SSH client policy: transport
+     algorithms, accepted host keys (ed25519, ECDSA, RSA ≥ 2048 with
+     SHA-2), host-key algorithms per pinned type, the pin format
+     (`Pin`, `NormalizedPin`), the pin callback (`NewPinCallback`,
+     `PinCheck.Violation`, `MismatchError`), admin-entered host-key lines
+     (`ParseHostKeyLine`, one line, no options, **at most 8 KiB** for
+     connections and destinations alike), client keys (`ParseClientKey`
+     with best-effort zeroing), user names (`ValidateUser`), the bounded
+     handshake (`Handshake`) and the keepalive loop (`Keepalive`).
+     `tunnel.HostKeyPin`, `tunnel.HostKeyMismatchError`,
+     `sftp.HostKeyPin` and `sftp.HostKeyMismatchError` are aliases;
+     `tunnel.Dial` now returns a mismatch as `*tunnel.Error` (kind
+     `ErrHostKeyMismatch`) wrapping the `*MismatchError`.
+  2. **`internal/hostname.Validate`** is the only host rule (IP literal
+     without zone, or RFC 1123 name: labels of letters, digits and inner
+     hyphens, no underscore, no trailing dot, not digits-and-dots only),
+     used by the engine (`engine.ValidateHost`), the SSRF guard (after
+     lowercasing and stripping one trailing dot), the tunnel and the SFTP
+     backend (which also accepts a bracketed IPv6 literal).
+  3. **`internal/serviceutil`** holds what connections and destinations
+     share: `FieldError` (aliased by both), the per-user rate limit plus
+     concurrency bound (`Limiter`, `RateLimitedError`, `ErrBusy`),
+     `IsUniqueViolation`, and the API-facing SSH checks
+     (`CheckSSHPrivateKey`, `HostKeyLine`).
+  4. **Endpoint-bound host-key confirmation.** `fetchSshHostKey` and
+     `fetchDestinationHostKey` return the host and port they probed;
+     `confirmSshHostKey` / `confirmDestinationHostKey` take
+     `expectedHost`/`expectedPort` and fail with CONFLICT under the row
+     lock if the record points elsewhere. `fetchDestinationHostKey` now
+     takes the destination **id** and probes only the stored host/port
+     (no free host/port argument), and its failures are normalized like
+     the runner's: refused address, unsupported key type, otherwise one
+     "unreachable" category (refused, filtered, timeout, handshake
+     failure, non-SSH service), reported as CONNECTION_FAILED.
+  5. **Chain check at pin confirmation.** With `certIndex`, the captured
+     chain must verify with the chosen anchor as the only root, for the
+     connection's host, at the confirmation time (the runner's pre-flight
+     check); otherwise VALIDATION. An out-of-band PEM is not checked
+     against a capture (it may be staged before the server presents it).
+     Public anchors are refused at confirmation (`pinning.IsPublicAnchor`,
+     D-139).
+  6. **No password reuse after retargeting.** A stored password is never
+     sent to a new endpoint: changing a connection's host or port, adding
+     or removing its tunnel or moving its bastion (host/port) requires the
+     database password to be entered again or cleared in the same update;
+     changing the bastion's host, port or user requires the SSH password
+     again (or a key); changing an SFTP destination's host, port, user or
+     base path requires its password again (or a key). Otherwise
+     VALIDATION. Private keys and TLS client keys may stay (they do not
+     reveal the secret to the peer). The update's audit entry lists the
+     re-entered fields (`reentered_for_new_endpoint`).
+  7. **`storage.CodeHostKeyMismatch`** (`host_key_mismatch`): the SFTP
+     backend classifies a pin violation with it (an unsupported key as
+     `unsupported`); `testDestination` records it as the security event
+     `destination.ssh_host_key_mismatch` (audited, fail closed; WARN log;
+     alerted in task 5.5).
+  8. **Workers open deleted destinations:** `destinations.Service.Open`
+     reads with the unfiltered `GetDestinationIncludingDeleted`; the API
+     (list, get, test, changes) keeps hiding deleted rows.
+  9. The unique name index of connections ignores temporary rows
+     (`WHERE deleted_at IS NULL AND NOT temporary`).
+  10. **`prePullImage` is admin and maintainer** again, as D-106 allows
+      (the narrowing noted in D-135 item 7 is withdrawn by the user).
+- **Alternatives considered:** keeping two synchronized copies of the SSH
+  policy (drifted already); one validator per layer with tests for the
+  subset relation (still drifts); binding host-key confirmation to
+  `updatedAt` (any unrelated edit would invalidate a fetch); verifying an
+  out-of-band PEM against a fresh capture (breaks staging a pin before a
+  rotation); clearing stored passwords silently on retargeting (the
+  connection would stop working without a visible reason); keeping a free
+  host/port fetch for SFTP (a port-scanning oracle).
+- **Consequences:** Moving a server or bastion now needs the password in
+  the same update (or a key). An SFTP destination must be saved before its
+  host key can be fetched. Hosts with underscores or a trailing dot are
+  refused everywhere. Security impact: one audited policy for every SSH
+  client; no layer accepts a host another refuses; stored passwords cannot
+  be redirected to an attacker-chosen endpoint by an edit; host-key and
+  certificate confirmations cannot be applied to another endpoint than
+  the one the admin compared; host-key mismatches on destinations are
+  security events.
+- **Related:** D-034, D-035, D-106, D-120, D-122, D-128, D-131, D-133,
+  D-135, D-139; task 2.14; `internal/sshpolicy`, `internal/hostname`,
+  `internal/serviceutil`, `internal/connections`, `internal/destinations`.
+
+## D-141: Backup completeness evidence: source stats and test-restore comparison
+
+- **Date:** 2026-10-27
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** Dump verification (D-134), checksums, signed manifests and
+  restore staging prove a backup is intact and untampered, but not that it
+  is complete: a backup role lacking privileges silently skips objects,
+  non-transactional MySQL/MariaDB tables are dumped inconsistently, and a
+  non-superuser PG globals dump omits role passwords. The planned "row-count
+  sanity check" for test restores was too weak to catch this.
+- **Decision:** At dump time the runner records source statistics (object
+  counts; per-table row counts) and completeness warnings (task 3.10).
+  PostgreSQL stats are taken inside an exported snapshot that `pg_dump
+  --snapshot` reuses, so they are exact; MySQL/MariaDB stats are taken in a
+  consistent snapshot just before the dump and tables written meanwhile are
+  marked approximate. A per-job `verification` level chooses exact counts
+  (`deep`) or cheap estimates (`standard`). The stats are signed into the
+  manifest. Scheduled test restores (task 4.6) compare the restored scratch
+  database against them: object counts exactly, row counts exactly where the
+  stats are exact, warnings with deltas otherwise; missing objects fail the
+  check. Warnings and verdicts are shown per run and alerted.
+- **Alternatives considered:** row-count sanity only (too weak); full
+  per-table content checksums (exact but costly and engine-specific; may be
+  added later as an opt-in `paranoid` level); locking MySQL tables to get an
+  exact snapshot (needs RELOAD and blocks writes).
+- **Consequences:** A backup can be shown to be complete, not just intact.
+  `deep` verification costs a `count(*)` per table at dump time. The stats
+  contain table names and counts but no data, and are covered by the
+  manifest signature; they are as sensitive as the manifest itself.
+- **Related:** tasks 3.1, 3.6, 3.10, 4.6, 4.7, 6.6, 7.1; D-134, D-133.
+

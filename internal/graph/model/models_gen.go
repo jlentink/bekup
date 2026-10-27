@@ -56,6 +56,200 @@ type AuditLogFilter struct {
 	To *time.Time `json:"to,omitempty"`
 }
 
+// A captured certificate chain. Nothing is trusted: compare it out of band.
+type CertificateChain struct {
+	// Leaf first, as presented by the server.
+	Certificates []ChainCertificate `json:"certificates"`
+	// The certificate to pin (self-signed leaf or root CA); null when the server presented none (supply the root CA as PEM).
+	SuggestedAnchorIndex *int `json:"suggestedAnchorIndex,omitempty"`
+	// The leaf's SPKI SHA-256 (base64): pass it to confirmCertificatePin.
+	LeafSpkiSha256 string `json:"leafSpkiSha256"`
+}
+
+// A confirmed certificate pin (public data).
+type CertificatePin struct {
+	// The anchor: a self-signed server certificate or the root CA.
+	CertificatePem string `json:"certificatePem"`
+	Subject        string `json:"subject"`
+	Issuer         string `json:"issuer"`
+	IsCa           bool   `json:"isCa"`
+	// Expected leaf SPKI SHA-256 (base64); null for a CA pin that allows leaf rotation.
+	LeafSpkiSha256 *string   `json:"leafSpkiSha256,omitempty"`
+	NotAfter       time.Time `json:"notAfter"`
+	PinnedAt       time.Time `json:"pinnedAt"`
+}
+
+type CertificatePinInput struct {
+	// Index into the chain fetchCertificate returned (re-captured and checked against leafSpkiSha256).
+	CertIndex *int `json:"certIndex,omitempty"`
+	// The anchor as PEM, supplied out of band (e.g. a root CA the server does not send).
+	CertificatePem *string `json:"certificatePem,omitempty"`
+	// The leaf's SPKI SHA-256 (base64 or hex) you compared; required unless allowLeafRotation.
+	LeafSpkiSha256 *string `json:"leafSpkiSha256,omitempty"`
+	// CA pins only: accept any leaf the CA issues for the host (no leaf binding).
+	AllowLeafRotation *bool `json:"allowLeafRotation,omitempty"`
+}
+
+type ChainCertificate struct {
+	Pem         string    `json:"pem"`
+	Subject     string    `json:"subject"`
+	Issuer      string    `json:"issuer"`
+	DNSNames    []string  `json:"dnsNames"`
+	IPAddresses []string  `json:"ipAddresses"`
+	NotBefore   time.Time `json:"notBefore"`
+	NotAfter    time.Time `json:"notAfter"`
+	IsCa        bool      `json:"isCa"`
+	SelfSigned  bool      `json:"selfSigned"`
+	// SPKI SHA-256 as base64 and hex.
+	SpkiSha256    string `json:"spkiSha256"`
+	SpkiSha256Hex string `json:"spkiSha256Hex"`
+	// SHA-256 of the certificate (DER, hex).
+	FingerprintSha256 string `json:"fingerprintSha256"`
+}
+
+// A database connection.
+type Connection struct {
+	ID     uuid.UUID      `json:"id"`
+	Name   string         `json:"name"`
+	Engine DatabaseEngine `json:"engine"`
+	// Image catalog key of the server's release series (e.g. 17, 8.4, 11.8).
+	VersionKey string `json:"versionKey"`
+	// The version or client image is an end-of-life series.
+	LegacyVersion bool              `json:"legacyVersion"`
+	Host          string            `json:"host"`
+	Port          int               `json:"port"`
+	TLSMode       ConnectionTLSMode `json:"tlsMode"`
+	// Badge: TLS is not pinned (UNVERIFIED or DISABLED).
+	InsecureTransport bool         `json:"insecureTransport"`
+	PinStatus         TLSPinStatus `json:"pinStatus"`
+	// Expiry of the current pin (the earliest of the confirmed certificates).
+	PinExpiresAt *time.Time `json:"pinExpiresAt,omitempty"`
+	SSHEnabled   bool       `json:"sshEnabled"`
+	// True when the connection can be used (pin and, with SSH, host key and credential present).
+	Ready bool `json:"ready"`
+	// What is missing when not ready.
+	NotReadyReason *string   `json:"notReadyReason,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	// The full non-secret configuration. Admins only: null for maintainers.
+	Settings *ConnectionSettings `json:"settings,omitempty"`
+}
+
+type ConnectionDatabases struct {
+	// Databases reported by the server, without the engine's system databases.
+	Databases []string `json:"databases"`
+	Warnings  []string `json:"warnings"`
+}
+
+type ConnectionSettings struct {
+	// Image catalog key of the client image the runner uses.
+	ImageKey    string `json:"imageKey"`
+	Username    string `json:"username"`
+	HasPassword bool   `json:"hasPassword"`
+	// Public TLS client certificate (its key is stored encrypted); null when none.
+	ClientCertificatePem *string `json:"clientCertificatePem,omitempty"`
+	// The current certificate pin; null until confirmCertificatePin.
+	TLSPin *CertificatePin `json:"tlsPin,omitempty"`
+	// A staged backup pin for a planned certificate rotation.
+	BackupPin *CertificatePin `json:"backupPin,omitempty"`
+	// The SSH tunnel; null when the database is reached directly.
+	SSH *ConnectionSSHSettings `json:"ssh,omitempty"`
+}
+
+type ConnectionSSHInput struct {
+	Host string `json:"host"`
+	// Default 22.
+	Port *int   `json:"port,omitempty"`
+	User string `json:"user"`
+	// Write-only; replaces a stored private key. Omit to keep the stored
+	// credential, except when host, port or user changes: a stored SSH
+	// password must then be entered again (or replaced by a key).
+	Password *string `json:"password,omitempty"`
+	// Write-only PEM private key; replaces a stored password. Prefer generateConnectionSshKeypair.
+	PrivateKey *string `json:"privateKey,omitempty"`
+	// Write-only; only together with privateKey.
+	PrivateKeyPassphrase *string `json:"privateKeyPassphrase,omitempty"`
+}
+
+// The public half of a generated SSH keypair; the private key is stored encrypted and never returned.
+type ConnectionSSHKeypair struct {
+	Connection *Connection `json:"connection"`
+	// The authorized_keys line to install on the bastion.
+	PublicKey         string `json:"publicKey"`
+	FingerprintSha256 string `json:"fingerprintSha256"`
+}
+
+type ConnectionSSHSettings struct {
+	Host          string                  `json:"host"`
+	Port          int                     `json:"port"`
+	User          string                  `json:"user"`
+	AuthMethod    ConnectionSSHAuthMethod `json:"authMethod"`
+	HasPassword   bool                    `json:"hasPassword"`
+	HasPrivateKey bool                    `json:"hasPrivateKey"`
+	HasPassphrase bool                    `json:"hasPassphrase"`
+	// The authorized_keys line of the stored private key (install it on the bastion).
+	PublicKey *string `json:"publicKey,omitempty"`
+	// The pinned host key; null until confirmSshHostKey.
+	HostKey *SSHHostKey `json:"hostKey,omitempty"`
+}
+
+// The result of testConnection: normalized codes and fixed messages only.
+type ConnectionTestResult struct {
+	Ok bool `json:"ok"`
+	// Failure code (e.g. TARGET_UNREACHABLE, TARGET_AUTH_FAILED, INCOMPATIBLE_CLIENT).
+	Code          *string `json:"code,omitempty"`
+	Message       *string `json:"message,omitempty"`
+	ServerVersion *string `json:"serverVersion,omitempty"`
+	// Catalog key matching the server; null when no allowlisted client fits.
+	DetectedVersionKey *string `json:"detectedVersionKey,omitempty"`
+	// The connection's client image can back up this server.
+	Compatible bool `json:"compatible"`
+	Legacy     bool `json:"legacy"`
+	// Stable warning codes (compatibility, certificate expiry, staged pin in use).
+	Warnings      []string `json:"warnings"`
+	DatabaseCount int      `json:"databaseCount"`
+}
+
+type ConnectionVersionInfo struct {
+	ServerVersion string `json:"serverVersion"`
+	// The catalog key to use as versionKey and imageKey; null when none fits.
+	SuggestedVersionKey *string `json:"suggestedVersionKey,omitempty"`
+	Legacy              bool    `json:"legacy"`
+	// The connection's current client image fits the server.
+	CurrentCompatible bool     `json:"currentCompatible"`
+	Warnings          []string `json:"warnings"`
+}
+
+type CreateConnectionInput struct {
+	Name       string         `json:"name"`
+	Engine     DatabaseEngine `json:"engine"`
+	VersionKey string         `json:"versionKey"`
+	// Default: versionKey.
+	ImageKey *string `json:"imageKey,omitempty"`
+	Host     string  `json:"host"`
+	// Default: 5432 (PostgreSQL) or 3306.
+	Port     *int   `json:"port,omitempty"`
+	Username string `json:"username"`
+	// Write-only.
+	Password *string `json:"password,omitempty"`
+	// Default PINNED; anything else is an audited opt-out.
+	TLSMode              *ConnectionTLSMode `json:"tlsMode,omitempty"`
+	ClientCertificatePem *string            `json:"clientCertificatePem,omitempty"`
+	// Write-only; required together with clientCertificatePem.
+	ClientKeyPem *string             `json:"clientKeyPem,omitempty"`
+	SSH          *ConnectionSSHInput `json:"ssh,omitempty"`
+}
+
+type CreateDestinationInput struct {
+	Name string          `json:"name"`
+	Type DestinationType `json:"type"`
+	// Never delete from this destination (default false).
+	NoDelete *bool                 `json:"noDelete,omitempty"`
+	Disk     *DiskDestinationInput `json:"disk,omitempty"`
+	S3       *S3DestinationInput   `json:"s3,omitempty"`
+	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
+}
+
 type CreateUserInput struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"displayName"`
@@ -66,6 +260,86 @@ type CreateUserInput struct {
 type CreatedUser struct {
 	User              *User              `json:"user"`
 	TemporaryPassword *TemporaryPassword `json:"temporaryPassword"`
+}
+
+// A backup destination.
+type Destination struct {
+	ID   uuid.UUID       `json:"id"`
+	Name string          `json:"name"`
+	Type DestinationType `json:"type"`
+	// True when bekup never deletes from this destination (retention is left to lifecycle rules).
+	NoDelete bool `json:"noDelete"`
+	// The S3 default Object Lock retention applied to every upload (null when off).
+	ObjectLockMode          *ObjectLockMode `json:"objectLockMode,omitempty"`
+	ObjectLockRetentionDays *int            `json:"objectLockRetentionDays,omitempty"`
+	// True when the destination can be used (credentials and, for SFTP, a confirmed host key are present).
+	Ready bool `json:"ready"`
+	// What is missing when not ready.
+	NotReadyReason *string   `json:"notReadyReason,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+	// The full non-secret configuration. Admins only: null for maintainers.
+	Settings *DestinationSettings `json:"settings,omitempty"`
+}
+
+// Per-type settings; exactly the field of the destination's type is set.
+type DestinationSettings struct {
+	Disk *DiskDestinationSettings `json:"disk,omitempty"`
+	S3   *S3DestinationSettings   `json:"s3,omitempty"`
+	Sftp *SftpDestinationSettings `json:"sftp,omitempty"`
+}
+
+// The public half of a generated SSH keypair; the private key is stored encrypted and never returned.
+type DestinationSSHKeypair struct {
+	Destination *Destination `json:"destination"`
+	// The authorized_keys line to install on the SFTP server.
+	PublicKey         string `json:"publicKey"`
+	FingerprintSha256 string `json:"fingerprintSha256"`
+}
+
+// The result of testDestination: normalized codes and fixed messages only.
+type DestinationTestResult struct {
+	Ok bool `json:"ok"`
+	// Steps in order: connect, write, read, delete.
+	Steps []DestinationTestStep `json:"steps"`
+	// The probe object's key (below the destination's prefix).
+	ProbeKey *string `json:"probeKey,omitempty"`
+	// True when the probe object was left behind (no-delete mode, Object Lock or a failed delete).
+	ProbeRemains bool    `json:"probeRemains"`
+	Note         *string `json:"note,omitempty"`
+}
+
+type DestinationTestStep struct {
+	Name string `json:"name"`
+	Ok   bool   `json:"ok"`
+	// A normalized error class (ok, permission_denied, network, timeout, ...).
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type DiskDestinationInput struct {
+	// Directory below storage.disk_root (relative; no '..').
+	Path string `json:"path"`
+}
+
+type DiskDestinationSettings struct {
+	// Directory below storage.disk_root.
+	Path string `json:"path"`
+}
+
+// An allowlisted engine version of the image catalog.
+type EngineVersion struct {
+	Engine DatabaseEngine `json:"engine"`
+	Key    string         `json:"key"`
+	// The client version of the pinned image.
+	ClientVersion string `json:"clientVersion"`
+	Legacy        bool   `json:"legacy"`
+}
+
+type ImagePrePullResult struct {
+	// The digest-pinned image reference.
+	ImageRef       string `json:"imageRef"`
+	AlreadyPresent bool   `json:"alreadyPresent"`
 }
 
 // The result of login.
@@ -127,6 +401,48 @@ type RecoveryCodes struct {
 	Codes []string `json:"codes"`
 }
 
+type S3DestinationInput struct {
+	// https URL of an S3-compatible service (http only in dev mode); omit for AWS S3.
+	Endpoint     *string         `json:"endpoint,omitempty"`
+	Region       string          `json:"region"`
+	Bucket       string          `json:"bucket"`
+	Prefix       *string         `json:"prefix,omitempty"`
+	PathStyle    *bool           `json:"pathStyle,omitempty"`
+	Encryption   *S3Encryption   `json:"encryption,omitempty"`
+	KmsKeyID     *string         `json:"kmsKeyId,omitempty"`
+	StorageClass *string         `json:"storageClass,omitempty"`
+	ChecksumMode *S3ChecksumMode `json:"checksumMode,omitempty"`
+	// Default true.
+	ConditionalWrites *bool `json:"conditionalWrites,omitempty"`
+	// Default Object Lock retention (requires a bucket with Object Lock).
+	ObjectLockMode          *ObjectLockMode `json:"objectLockMode,omitempty"`
+	ObjectLockRetentionDays *int            `json:"objectLockRetentionDays,omitempty"`
+	AccessKeyID             string          `json:"accessKeyId"`
+	// Write-only. Required when creating; omit to keep the stored key.
+	SecretAccessKey *string `json:"secretAccessKey,omitempty"`
+	CaBundlePem     *string `json:"caBundlePem,omitempty"`
+}
+
+type S3DestinationSettings struct {
+	// The endpoint URL of an S3-compatible service; null means AWS S3.
+	Endpoint *string `json:"endpoint,omitempty"`
+	Region   string  `json:"region"`
+	Bucket   string  `json:"bucket"`
+	// Key prefix inside the bucket (empty: the bucket root).
+	Prefix       string         `json:"prefix"`
+	PathStyle    bool           `json:"pathStyle"`
+	Encryption   S3Encryption   `json:"encryption"`
+	KmsKeyID     *string        `json:"kmsKeyId,omitempty"`
+	StorageClass *string        `json:"storageClass,omitempty"`
+	ChecksumMode S3ChecksumMode `json:"checksumMode"`
+	// Atomic never-overwrite with If-None-Match (disable only for stores that reject it).
+	ConditionalWrites  bool   `json:"conditionalWrites"`
+	AccessKeyID        string `json:"accessKeyId"`
+	HasSecretAccessKey bool   `json:"hasSecretAccessKey"`
+	// A custom CA bundle (PEM) that replaces the system roots for the endpoint.
+	CaBundlePem *string `json:"caBundlePem,omitempty"`
+}
+
 // The result of resetUserSecondFactors.
 type SecondFactorReset struct {
 	User *User `json:"user"`
@@ -173,8 +489,60 @@ type SessionEvent struct {
 	Kind SessionEventKind `json:"kind"`
 	// The session that changed; null when all sessions were revoked.
 	SessionID *uuid.UUID `json:"sessionId,omitempty"`
-	// True when the change concerns the session of this connection.
+	// True when the change concerns the session of this stream.
 	Current bool `json:"current"`
+}
+
+type SftpDestinationInput struct {
+	Host string `json:"host"`
+	// Default 22.
+	Port     *int    `json:"port,omitempty"`
+	User     string  `json:"user"`
+	BasePath string  `json:"basePath"`
+	Dir      *string `json:"dir,omitempty"`
+	// Write-only; replaces a stored private key. Omit to keep the stored
+	// credential, except when host, port, user or basePath changes: a stored
+	// password must then be entered again (or replaced by a key).
+	Password *string `json:"password,omitempty"`
+	// Write-only PEM private key; replaces a stored password. Prefer generateDestinationSshKeypair.
+	PrivateKey *string `json:"privateKey,omitempty"`
+	// Write-only; only together with privateKey.
+	PrivateKeyPassphrase *string `json:"privateKeyPassphrase,omitempty"`
+}
+
+type SftpDestinationSettings struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+	User string `json:"user"`
+	// Absolute base directory on the server.
+	BasePath string `json:"basePath"`
+	// Subdirectory below basePath (empty: basePath itself).
+	Dir           string         `json:"dir"`
+	AuthMethod    SftpAuthMethod `json:"authMethod"`
+	HasPassword   bool           `json:"hasPassword"`
+	HasPrivateKey bool           `json:"hasPrivateKey"`
+	HasPassphrase bool           `json:"hasPassphrase"`
+	// The authorized_keys line of the stored private key (install it on the server).
+	PublicKey *string `json:"publicKey,omitempty"`
+	// The pinned host key; null until confirmDestinationHostKey.
+	HostKey *SSHHostKey `json:"hostKey,omitempty"`
+}
+
+// An SSH host key (public data).
+type SSHHostKey struct {
+	// Key type, e.g. ssh-ed25519.
+	Type string `json:"type"`
+	// OpenSSH SHA-256 fingerprint (SHA256:...).
+	FingerprintSha256 string `json:"fingerprintSha256"`
+	// The key as an authorized_keys line (type and base64, no comment).
+	AuthorizedKey string `json:"authorizedKey"`
+	// When an admin pinned it; null for a fetched, unconfirmed key.
+	ConfirmedAt *time.Time `json:"confirmedAt,omitempty"`
+	// The server the key was fetched from (fetch results only; null for a
+	// pinned key). Pass host and port back as expectedHost/expectedPort when
+	// confirming: the pin is refused (CONFLICT) if the record changed since.
+	Host *string `json:"host,omitempty"`
+	Port *int    `json:"port,omitempty"`
 }
 
 // How the caller can step up (beginStepUp).
@@ -251,6 +619,39 @@ type TwoFactorStatus struct {
 	TotpEnrollmentPending bool `json:"totpEnrollmentPending"`
 	// Unused recovery codes left.
 	RecoveryCodesRemaining int `json:"recoveryCodesRemaining"`
+}
+
+// Fields to change; unset fields stay unchanged. The engine and TLS mode cannot change here.
+type UpdateConnectionInput struct {
+	Name       *string `json:"name,omitempty"`
+	VersionKey *string `json:"versionKey,omitempty"`
+	ImageKey   *string `json:"imageKey,omitempty"`
+	Host       *string `json:"host,omitempty"`
+	Port       *int    `json:"port,omitempty"`
+	Username   *string `json:"username,omitempty"`
+	// Write-only; omit to keep the stored password. When host or port (or the
+	// tunnel route) changes, a stored password must be entered again or
+	// cleared in the same update (VALIDATION otherwise): bekup never sends a
+	// stored password to a new endpoint.
+	Password             *string `json:"password,omitempty"`
+	ClearPassword        *bool   `json:"clearPassword,omitempty"`
+	ClientCertificatePem *string `json:"clientCertificatePem,omitempty"`
+	// Write-only; required together with clientCertificatePem.
+	ClientKeyPem           *string `json:"clientKeyPem,omitempty"`
+	ClearClientCertificate *bool   `json:"clearClientCertificate,omitempty"`
+	// Sets (and enables) the SSH tunnel.
+	SSH *ConnectionSSHInput `json:"ssh,omitempty"`
+	// Removes the SSH tunnel with its credentials and host-key pin.
+	DisableSSH *bool `json:"disableSsh,omitempty"`
+}
+
+// Fields to change; unset fields stay unchanged.
+type UpdateDestinationInput struct {
+	Name     *string               `json:"name,omitempty"`
+	NoDelete *bool                 `json:"noDelete,omitempty"`
+	Disk     *DiskDestinationInput `json:"disk,omitempty"`
+	S3       *S3DestinationInput   `json:"s3,omitempty"`
+	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
 }
 
 // Fields to change; unset fields stay unchanged.
@@ -380,6 +781,297 @@ func (e AuditActorKind) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// The credential the SSH tunnel authenticates with.
+type ConnectionSSHAuthMethod string
+
+const (
+	ConnectionSSHAuthMethodNone       ConnectionSSHAuthMethod = "NONE"
+	ConnectionSSHAuthMethodPassword   ConnectionSSHAuthMethod = "PASSWORD"
+	ConnectionSSHAuthMethodPrivateKey ConnectionSSHAuthMethod = "PRIVATE_KEY"
+)
+
+var AllConnectionSSHAuthMethod = []ConnectionSSHAuthMethod{
+	ConnectionSSHAuthMethodNone,
+	ConnectionSSHAuthMethodPassword,
+	ConnectionSSHAuthMethodPrivateKey,
+}
+
+func (e ConnectionSSHAuthMethod) IsValid() bool {
+	switch e {
+	case ConnectionSSHAuthMethodNone, ConnectionSSHAuthMethodPassword, ConnectionSSHAuthMethodPrivateKey:
+		return true
+	}
+	return false
+}
+
+func (e ConnectionSSHAuthMethod) String() string {
+	return string(e)
+}
+
+func (e *ConnectionSSHAuthMethod) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConnectionSSHAuthMethod(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConnectionSshAuthMethod", str)
+	}
+	return nil
+}
+
+func (e ConnectionSSHAuthMethod) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConnectionSSHAuthMethod) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConnectionSSHAuthMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Transport security towards the database server.
+type ConnectionTLSMode string
+
+const (
+	// TLS verified against the pinned certificate only (the default).
+	ConnectionTLSModePinned ConnectionTLSMode = "PINNED"
+	// TLS without verification (insecure: audited opt-out).
+	ConnectionTLSModeUnverified ConnectionTLSMode = "UNVERIFIED"
+	// No TLS (insecure: audited opt-out).
+	ConnectionTLSModeDisabled ConnectionTLSMode = "DISABLED"
+)
+
+var AllConnectionTLSMode = []ConnectionTLSMode{
+	ConnectionTLSModePinned,
+	ConnectionTLSModeUnverified,
+	ConnectionTLSModeDisabled,
+}
+
+func (e ConnectionTLSMode) IsValid() bool {
+	switch e {
+	case ConnectionTLSModePinned, ConnectionTLSModeUnverified, ConnectionTLSModeDisabled:
+		return true
+	}
+	return false
+}
+
+func (e ConnectionTLSMode) String() string {
+	return string(e)
+}
+
+func (e *ConnectionTLSMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConnectionTLSMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConnectionTlsMode", str)
+	}
+	return nil
+}
+
+func (e ConnectionTLSMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConnectionTLSMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConnectionTLSMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Database engines. MySQL and MariaDB are separate engines.
+type DatabaseEngine string
+
+const (
+	DatabaseEnginePostgres DatabaseEngine = "POSTGRES"
+	DatabaseEngineMysql    DatabaseEngine = "MYSQL"
+	DatabaseEngineMariadb  DatabaseEngine = "MARIADB"
+)
+
+var AllDatabaseEngine = []DatabaseEngine{
+	DatabaseEnginePostgres,
+	DatabaseEngineMysql,
+	DatabaseEngineMariadb,
+}
+
+func (e DatabaseEngine) IsValid() bool {
+	switch e {
+	case DatabaseEnginePostgres, DatabaseEngineMysql, DatabaseEngineMariadb:
+		return true
+	}
+	return false
+}
+
+func (e DatabaseEngine) String() string {
+	return string(e)
+}
+
+func (e *DatabaseEngine) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DatabaseEngine(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DatabaseEngine", str)
+	}
+	return nil
+}
+
+func (e DatabaseEngine) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DatabaseEngine) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DatabaseEngine) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Destination types.
+type DestinationType string
+
+const (
+	DestinationTypeDisk DestinationType = "DISK"
+	DestinationTypeS3   DestinationType = "S3"
+	DestinationTypeSftp DestinationType = "SFTP"
+)
+
+var AllDestinationType = []DestinationType{
+	DestinationTypeDisk,
+	DestinationTypeS3,
+	DestinationTypeSftp,
+}
+
+func (e DestinationType) IsValid() bool {
+	switch e {
+	case DestinationTypeDisk, DestinationTypeS3, DestinationTypeSftp:
+		return true
+	}
+	return false
+}
+
+func (e DestinationType) String() string {
+	return string(e)
+}
+
+func (e *DestinationType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DestinationType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DestinationType", str)
+	}
+	return nil
+}
+
+func (e DestinationType) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DestinationType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DestinationType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// S3 Object Lock retention modes.
+type ObjectLockMode string
+
+const (
+	ObjectLockModeGovernance ObjectLockMode = "GOVERNANCE"
+	ObjectLockModeCompliance ObjectLockMode = "COMPLIANCE"
+)
+
+var AllObjectLockMode = []ObjectLockMode{
+	ObjectLockModeGovernance,
+	ObjectLockModeCompliance,
+}
+
+func (e ObjectLockMode) IsValid() bool {
+	switch e {
+	case ObjectLockModeGovernance, ObjectLockModeCompliance:
+		return true
+	}
+	return false
+}
+
+func (e ObjectLockMode) String() string {
+	return string(e)
+}
+
+func (e *ObjectLockMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ObjectLockMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ObjectLockMode", str)
+	}
+	return nil
+}
+
+func (e ObjectLockMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ObjectLockMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ObjectLockMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Roles of bekup users (D-011).
 type Role string
 
@@ -433,6 +1125,124 @@ func (e *Role) UnmarshalJSON(b []byte) error {
 }
 
 func (e Role) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How integrity checksums are sent to S3.
+type S3ChecksumMode string
+
+const (
+	// A SHA-256 checksum with every upload (AWS S3 and compatible stores).
+	S3ChecksumModeWhenSupported S3ChecksumMode = "WHEN_SUPPORTED"
+	// Only where the protocol requires one (stores without flexible checksums).
+	S3ChecksumModeWhenRequired S3ChecksumMode = "WHEN_REQUIRED"
+)
+
+var AllS3ChecksumMode = []S3ChecksumMode{
+	S3ChecksumModeWhenSupported,
+	S3ChecksumModeWhenRequired,
+}
+
+func (e S3ChecksumMode) IsValid() bool {
+	switch e {
+	case S3ChecksumModeWhenSupported, S3ChecksumModeWhenRequired:
+		return true
+	}
+	return false
+}
+
+func (e S3ChecksumMode) String() string {
+	return string(e)
+}
+
+func (e *S3ChecksumMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = S3ChecksumMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid S3ChecksumMode", str)
+	}
+	return nil
+}
+
+func (e S3ChecksumMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *S3ChecksumMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e S3ChecksumMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// S3 server-side encryption.
+type S3Encryption string
+
+const (
+	S3EncryptionNone S3Encryption = "NONE"
+	// SSE-S3 (provider-managed keys, AES256).
+	S3EncryptionSseS3 S3Encryption = "SSE_S3"
+	// SSE-KMS (kmsKeyId optional: the account's default key).
+	S3EncryptionSseKms S3Encryption = "SSE_KMS"
+)
+
+var AllS3Encryption = []S3Encryption{
+	S3EncryptionNone,
+	S3EncryptionSseS3,
+	S3EncryptionSseKms,
+}
+
+func (e S3Encryption) IsValid() bool {
+	switch e {
+	case S3EncryptionNone, S3EncryptionSseS3, S3EncryptionSseKms:
+		return true
+	}
+	return false
+}
+
+func (e S3Encryption) String() string {
+	return string(e)
+}
+
+func (e *S3Encryption) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = S3Encryption(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid S3Encryption", str)
+	}
+	return nil
+}
+
+func (e S3Encryption) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *S3Encryption) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e S3Encryption) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -557,6 +1367,64 @@ func (e SessionEventKind) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// The credential an SFTP destination authenticates with.
+type SftpAuthMethod string
+
+const (
+	SftpAuthMethodNone       SftpAuthMethod = "NONE"
+	SftpAuthMethodPassword   SftpAuthMethod = "PASSWORD"
+	SftpAuthMethodPrivateKey SftpAuthMethod = "PRIVATE_KEY"
+)
+
+var AllSftpAuthMethod = []SftpAuthMethod{
+	SftpAuthMethodNone,
+	SftpAuthMethodPassword,
+	SftpAuthMethodPrivateKey,
+}
+
+func (e SftpAuthMethod) IsValid() bool {
+	switch e {
+	case SftpAuthMethodNone, SftpAuthMethodPassword, SftpAuthMethodPrivateKey:
+		return true
+	}
+	return false
+}
+
+func (e SftpAuthMethod) String() string {
+	return string(e)
+}
+
+func (e *SftpAuthMethod) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SftpAuthMethod(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SftpAuthMethod", str)
+	}
+	return nil
+}
+
+func (e SftpAuthMethod) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SftpAuthMethod) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SftpAuthMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // How a step-up is performed.
 type StepUpMethod string
 
@@ -614,6 +1482,72 @@ func (e *StepUpMethod) UnmarshalJSON(b []byte) error {
 }
 
 func (e StepUpMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// State of a connection's certificate pin.
+type TLSPinStatus string
+
+const (
+	// The TLS mode is not PINNED.
+	TLSPinStatusNotRequired TLSPinStatus = "NOT_REQUIRED"
+	// PINNED without a confirmed pin: the connection cannot be used.
+	TLSPinStatusMissing             TLSPinStatus = "MISSING"
+	TLSPinStatusValid               TLSPinStatus = "VALID"
+	TLSPinStatusExpiresWithin30Days TLSPinStatus = "EXPIRES_WITHIN_30_DAYS"
+	TLSPinStatusExpiresWithin7Days  TLSPinStatus = "EXPIRES_WITHIN_7_DAYS"
+	TLSPinStatusExpired             TLSPinStatus = "EXPIRED"
+)
+
+var AllTLSPinStatus = []TLSPinStatus{
+	TLSPinStatusNotRequired,
+	TLSPinStatusMissing,
+	TLSPinStatusValid,
+	TLSPinStatusExpiresWithin30Days,
+	TLSPinStatusExpiresWithin7Days,
+	TLSPinStatusExpired,
+}
+
+func (e TLSPinStatus) IsValid() bool {
+	switch e {
+	case TLSPinStatusNotRequired, TLSPinStatusMissing, TLSPinStatusValid, TLSPinStatusExpiresWithin30Days, TLSPinStatusExpiresWithin7Days, TLSPinStatusExpired:
+		return true
+	}
+	return false
+}
+
+func (e TLSPinStatus) String() string {
+	return string(e)
+}
+
+func (e *TLSPinStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TLSPinStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TlsPinStatus", str)
+	}
+	return nil
+}
+
+func (e TLSPinStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TLSPinStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TLSPinStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

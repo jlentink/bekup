@@ -35,9 +35,9 @@ importers:
       graphql:
         specifier: 17.0.2
         version: 17.0.2
-      graphql-ws:
-        specifier: 6.4.1
-        version: 6.4.1(graphql@17.0.2)(ws@8.22.0)
+      graphql-sse:
+        specifier: 2.6.3
+        version: 2.6.3(graphql@17.0.2)
       lucide-react:
         specifier: 1.61.0
         version: 1.61.0(@types/react@19.3.0)(react@19.3.1)
@@ -2611,6 +2611,12 @@ packages:
     peerDependenciesMeta:
       cosmiconfig-toml-loader:
         optional: true
+
+  graphql-sse@2.6.3:
+    resolution: {integrity: sha512-UCSx3a+IklDOqJt8gpxGwDhnmWiZLJ5wNPMJ7TLGOQ68PhiKIDxLJBB2i+nKEGyWYLtiSLpTJ5fFEG5kkAxppA==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      graphql: '>=0.11 <=17'
 
   graphql-tag@2.12.7:
     resolution: {integrity: sha512-xnE/NFzy+0eIesvAsREJZ284zTl/wYuBAvpsFSDhRGRdRHdnE90M21Q3xAWyYInb0J756c6x0pIQ62+vtvOs1Q==}
@@ -6671,6 +6677,10 @@ snapshots:
       - crossws
       - typescript
       - utf-8-validate
+
+  graphql-sse@2.6.3(graphql@17.0.2):
+    dependencies:
+      graphql: 17.0.2
 
   graphql-tag@2.12.7(graphql@17.0.2):
     dependencies:

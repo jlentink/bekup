@@ -1,18 +1,20 @@
 # Architecture
 
-> **Status:** partial (end of M1). Components, networks, trust boundaries and
+> **Status:** partial (end of M2). Components, networks, trust boundaries and
 > data flows below describe the design and the compose topology that exist
 > today. Implemented: the CLI parts (`config`, `migrate`, `keys`, `certs`,
 > `audit`, `admin`, `healthcheck`), `internal/config`, `internal/logging`,
 > `internal/db` (with app-DB TLS verify-full and SCRAM channel binding,
-> D-100, D-104), `internal/crypto` and `internal/certs`, and in `serve`: the
-> HTTP layer (task 1.1), the GraphQL API including WebSocket subscriptions
-> (tasks 1.2, 1.10), authorization (1.4), authentication (passwords,
-> sessions, TOTP and recovery codes, passkeys, the 2FA policy and step-up;
-> tasks 1.5–1.9), the audit log with signed chain heads (1.3) and the
-> pubsub bridge (1.10). Still to come: the runner, engines, storage,
-> connections and destinations in M2 (tasks 2.x, with the runner's design
-> section here), backup execution in M3, restore and the download and
+> D-100, D-104), `internal/crypto` and `internal/certs`; in `serve`: the
+> HTTP layer (task 1.1), the GraphQL API including subscriptions as
+> Server-Sent Events (tasks 1.2, 1.10, 2.13), authorization (1.4),
+> authentication (passwords, sessions, TOTP and recovery codes, passkeys,
+> the 2FA policy and step-up; tasks 1.5–1.9), the audit log with signed
+> chain heads (1.3), the pubsub bridge (1.10), and the connections and
+> destinations APIs (2.11, 2.12); the SSRF guard (2.3), the engine catalog
+> (2.1), the SSH tunnel (2.2), the storage backends disk, S3 and SFTP
+> (2.8–2.10) and the complete runner (2.4–2.7a, design section below).
+> Still to come: backup execution in M3, restore and the download and
 > offline recovery flows in M4, notifications and monitoring in M5, the web
 > UI in M6. The page is completed in task 7.5.
 
@@ -26,11 +28,11 @@ section 6: STRIDE per component). This page summarizes it. Decisions are in
 
 | Component | Role | Status |
 |---|---|---|
-| Reverse proxy (`traefik` or `nginx` profile, opt-in) | Terminates TLS for the UI, HSTS, HTTP→HTTPS redirect, size and rate limits, WebSocket passthrough (D-017, D-048). Traefik uses only its file provider; nginx is the unprivileged image plus a certbot companion. Neither mounts the Docker socket (D-093, D-094). | shipped (task 0.7b) |
-| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and WebSocket subscriptions (1.2, 1.10), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3); scheduler, workers and pipeline in M3–M5 |
+| Reverse proxy (`traefik` or `nginx` profile, opt-in) | Terminates TLS for the UI, HSTS, HTTP→HTTPS redirect, size and rate limits, unbuffered event streams (D-017, D-048, D-124). Traefik uses only its file provider; nginx is the unprivileged image plus a certbot companion. Neither mounts the Docker socket (D-093, D-094). | shipped (task 0.7b) |
+| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and SSE subscriptions (1.2, 1.10, 2.13), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3); scheduler, workers and pipeline in M3–M5 |
 | `bekup migrate` | One-shot: applies the embedded goose migrations as `bekup_owner`, under an advisory lock (D-042, D-078). The only process that holds the owner credentials. | implemented (task 0.4) |
-| `bekup runner` | The **only** component with Docker access (D-003). Small typed mTLS gRPC API, image and target allowlists from its own `runner.toml`, builds the hardened dump-container spec itself (D-029–D-033). | tasks 2.4–2.7a |
-| Dump containers | Short-lived official, digest-pinned DB images (`pg_dump`, `mysqldump`, `mariadb-dump`, restore clients). Alone on a per-run `internal` network, reaching exactly one target through the runner's proxy or SSH tunnel; secrets only through a stdin preamble (D-032). | task 2.6 |
+| `bekup runner` | The **only** component with Docker access (D-003). Small typed mTLS gRPC API, image and target allowlists from its own `runner.toml`, builds the hardened dump-container spec itself (D-029–D-033). | implemented (tasks 2.4–2.7a) |
+| Dump containers | Short-lived official, digest-pinned DB images (`pg_dump`, `mysqldump`, `mariadb-dump`, restore clients). Alone on a per-run `internal` network, reaching exactly one target through the runner's proxy or SSH tunnel; secrets only through a stdin preamble (D-032). | implemented (tasks 2.5, 2.6) |
 | Postgres app DB | bekup's own state: users, jobs, runs, encrypted credentials, the hash-chained audit log, River queue tables. Least-privilege roles `bekup_owner` / `bekup_app` (D-054, D-092). | implemented (task 0.4) |
 | `certs-init` (profile `setup`) | One-shot, no network: creates the private CA and the per-component mTLS certificates (D-079, D-089). | implemented (task 0.6) |
 | Offline CLI | `bekup verify` / `bekup decrypt` for recovery without the bekup DB (D-040). | task 4.7 |
@@ -80,7 +82,7 @@ Summarized from [SECURITY.md §5](../SECURITY.md#5-trust-boundaries-and-data-flo
 | B1 | browser ↔ reverse proxy | TLS 1.2/1.3, ECDHE+AEAD only, HSTS, redirect, size/rate limits (D-048, D-093) |
 | B2 | proxy ↔ `serve` | `serve` only on internal `frontend`; forwarded headers only from `trusted_proxies`; CSP, Origin checks and headers set by `serve` too (D-050, D-082) |
 | B3 | `serve` ↔ app DB | `bekup_app` DML only, migrations as `bekup_owner` in a separate container, envelope-encrypted secrets, append-only hash-chained audit log (D-046, D-054, D-078) |
-| B4 | `serve` ↔ destinations, SMTP, webhooks | dial-time SSRF guard, no redirects, TLS ≥ 1.2, SFTP host-key pins, disk confined via `os.Root` (D-049, D-055) |
+| B4 | `serve` ↔ destinations, SMTP, webhooks | dial-time SSRF guard (`internal/netguard`: socket-address check after DNS, allowlist that never re-allows hard ranges), no proxy, no redirects, TLS ≥ 1.2, SFTP host-key pins, disk confined via `os.Root` (D-049, D-055, D-120) |
 | B5 | `serve` ↔ runner | mTLS (TLS 1.3, private name-constrained CA, SPIFFE URI SAN check), typed RPCs (D-030, D-089) |
 | B6 | runner ↔ Docker | image allowlist (digest-pinned), fixed hardened spec built by the runner (D-031) |
 | B7 | dump container ↔ everything else | alone on a per-run internal network, no runner gRPC, no internet; secrets via stdin (D-029, D-032) |
@@ -154,7 +156,7 @@ are added as further components.
 | 4 | recovery | panic → generic 500, stack only in the log |
 | 5 | security headers | exact D-082 CSP, `nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy`, COOP/CORP `same-origin`, HSTS only when `base_url` is https (D-095), `Cache-Control: no-store` by default |
 | 6 | rate limit | per-client-IP token bucket (IPv6 per /64), bounded LRU; 429 + `Retry-After` |
-| 7 | Origin check | non-GET/HEAD/OPTIONS requests and WebSocket upgrades need `Sec-Fetch-Site: same-origin` and/or an `Origin` equal to the `base_url` origin (dev mode also accepts the Vite origins `http://localhost:5173`, `http://127.0.0.1:5173`); 403 otherwise |
+| 7 | Origin check | non-GET/HEAD/OPTIONS requests (incl. event streams) and upgrade requests (none is served) need `Sec-Fetch-Site: same-origin` and/or an `Origin` equal to the `base_url` origin (dev mode also accepts the Vite origins `http://localhost:5173`, `http://127.0.0.1:5173`); 403 otherwise |
 | 8 | body limit | `server.max_body_bytes`; 413 |
 
 **Routes.** `GET /healthz` (liveness), `GET /readyz` (DB ping + schema
@@ -168,10 +170,11 @@ and `/assets/`.
 
 **Timeouts.** `http.Server` uses `server.read_header_timeout`,
 `read_timeout`, `write_timeout`, `idle_timeout` and `max_header_bytes`.
-`write_timeout` bounds every response, so long-lived routes (WebSocket
-subscriptions, task 1.10; artifact downloads, task 3.9) must lift it per
+`write_timeout` bounds every response, so long-lived routes (subscription
+event streams, task 2.13; artifact downloads, task 3.9) must lift it per
 request with `http.ResponseController.SetWriteDeadline`
-(`httpserver.LiftDeadlines` does this for the WebSocket upgrade).
+(`httpserver.LiftDeadlines` lifts the read and write deadlines of an event
+stream, which then bounds each write itself).
 
 Health endpoints and the container healthcheck are described in
 [operations.md](operations.md#health-endpoints).
@@ -191,8 +194,11 @@ other methods get 405, other content types (multipart, form-encoded,
 `application/graphql`, ...) 415, bodies above `graphql.max_body_bytes` 413,
 and anything but one JSON request object (batches, unknown fields such as
 persisted-query ids) 400 without echoing the body. The HTTP middleware
-(Origin check, rate limit) runs first. No GET (except a WebSocket
-upgrade, below), no APQ.
+(Origin check, rate limit) runs first. A request that accepts
+`text/event-stream` is a subscription stream (below); everything else gets
+one JSON response. No GET, no WebSocket, no APQ. The transports are
+`internal/graph`'s own on gqlgen's executor (gqlgen's transport package
+links a WebSocket library; D-124).
 
 **Limits.** `graphql.max_depth` (fields, fragments expanded),
 `graphql.max_complexity` (1 per field by default), a parser token limit
@@ -226,46 +232,52 @@ of a credential operation (`graph.CredentialOperations`) is missing from
 the list. Every root field beyond the first of any operation costs one
 more token of the caller's per-user rate limit.
 
-### Subscriptions over WebSocket (task 1.10, D-052, D-108)
+### Subscriptions as Server-Sent Events (tasks 1.10, 2.13; D-052, D-108, D-124)
 
 ```
-browser ──GET /graphql, Upgrade, Origin, session cookie──▶ HTTP middleware (Origin, rate limit, session)
-        ◀──101 graphql-transport-ws──  graph.serveWebSocket (Origin again, subprotocol, principal, caps)
-                                          │ wsconn.Conn: principal of the upgrade + session watcher
+browser ──POST /graphql, Accept: text/event-stream, Origin, cookie──▶ HTTP middleware (Origin, rate limit, body limit, session)
+        ◀──200 text/event-stream: next … complete──  graph.serveStream (Origin again, principal, caps, transport gate)
+                                          │ streams.Conn: principal of the request + session watcher
 auth.Sessions ──RevokeTx/RevokeAllTx/RotateTx──▶ pubsub.Publisher ──▶ local Bus (at once)
                                           └──pg_notify (on commit)──▶ Postgres ──LISTEN──▶ Listener (every instance) ──▶ Bus
-Bus ──▶ wsconn.Hub ──▶ Conn: re-check session ──▶ close 4401 / 4403 / 4001
+Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error event (UNAUTHENTICATED / FORBIDDEN / SESSION_ROTATED / UNAVAILABLE) + complete
 ```
 
-- **Transport.** `GET /graphql` with a WebSocket upgrade and the
-  `graphql-transport-ws` subprotocol only (legacy `graphql-ws` → 400).
-  The upgrade needs an allowed `Origin` (checked by the middleware and
-  again by the handler), a session cookie (401 without; the principal is
-  never taken from `connection_init`, whose payload must be empty or the
-  socket closes with 4400) and a free slot
-  (`server.max_ws_connections_per_user` → 429,
-  `graphql.ws_max_connections` → 503). `connection_init` within
-  `graphql.ws_init_timeout`, server pings every `graphql.ws_ping_interval`,
-  client messages up to `graphql.ws_max_message_bytes`, at most
-  `graphql.ws_max_subscriptions_per_connection` active subscriptions and a
-  subscribe-rate limit per connection. Only subscriptions run over the
-  socket and subscriptions only over the socket.
-- **Session watcher.** Each connection re-checks its session by id and
-  rebuilds its principal like the session middleware, including the 2FA
-  enrollment check (`httpserver.SessionsResolver.Check` →
-  `auth.Sessions.Check`, no touch: a socket does not extend the idle
-  timeout; D-118) every `graphql.ws_revalidate_interval`, on each session event
-  for its session or user (with short follow-ups, since the local event
-  can precede the commit), after lost events and before delivering an
-  event once the last check is older than `graphql.ws_session_check_ttl`.
-  New step-up and second-factor times refresh the principal used for
-  delivery-time checks. An upgrade of a principal that must enroll a
-  second factor is refused (403); after shutdown upgrades get 503.
-  Close codes: 4401 session ended, 4403 user/role/AAL or a restriction
-  (pending second factor, temporary password, required enrollment) changed, 4001
-  rotated (reconnect with the new cookie), 1013 check failed (fail
-  closed), 1001 shutdown. The web client sends the user to `/login` on
-  4401/4403.
+- **Transport.** One `POST /graphql` with `Content-Type: application/json`
+  and `Accept: text/event-stream` per subscription (graphql-sse,
+  "distinct connections" mode): `next` events carry execution results, a
+  `complete` event ends the stream, comment lines are keepalives
+  (`graphql.stream_keepalive_interval`). It is an ordinary POST, so the
+  Origin check, rate limits, body limit and session middleware apply; the
+  handler additionally requires an allowed `Origin`, a cookie session (401
+  without), no pending second factor (401) or required enrollment (403)
+  and a free slot (`graphql.stream_max_per_session` and
+  `graphql.stream_max_per_user` → 429, `graphql.stream_max_total` → 503;
+  503 after shutdown). Only subscriptions run as streams and subscriptions
+  only as streams (FORBIDDEN otherwise). Refusals are plain JSON before any
+  stream starts. The read and write deadlines are lifted per stream, each
+  write has its own 30s deadline; responses carry `Cache-Control:
+  no-store` and `X-Accel-Buffering: no`. Browsers open at most 6 HTTP/1.1
+  connections per origin, so the proxies serve HTTP/2 and pages use at most
+  2 to 3 subscriptions.
+- **Session watcher (`internal/graph/streams`).** Each stream re-checks its
+  session by id and rebuilds its principal like the session middleware,
+  including the 2FA enrollment check (`httpserver.SessionsResolver.Check` →
+  `auth.Sessions.Check`, no touch: a stream does not extend the idle
+  timeout; D-118) every `graphql.stream_revalidate_interval`, on each
+  session event for its session or user (with short follow-ups, since the
+  local event can precede the commit), after lost events and before
+  delivering an event once the last check is older than
+  `graphql.stream_session_check_ttl`. New step-up and second-factor times
+  refresh the principal used for delivery-time checks. A stream the server
+  ends gets a final GraphQL error event, then `complete`:
+  `UNAUTHENTICATED` session ended, `FORBIDDEN` user/role/AAL or a
+  restriction (pending second factor, temporary password, required
+  enrollment) changed, `SESSION_ROTATED` (reopen with the new cookie),
+  `UNAVAILABLE` check failed (fail closed) or shutdown. The web client
+  (`graphql-sse` Apollo link) sends the user to `/login` on
+  `UNAUTHENTICATED`/`FORBIDDEN`, reopens at once after `SESSION_ROTATED`
+  and with backoff after `UNAVAILABLE` or network errors.
 - **Session events and `internal/pubsub`.** The session store publishes
   `revoked`/`rotated`/`user_revoked` inside the revoking transaction:
   in-process at once and via `pg_notify` to every instance on commit. A
@@ -275,12 +287,13 @@ Bus ──▶ wsconn.Hub ──▶ Conn: re-check session ──▶ close 4401 /
   Run events (3.7) and in-app notifications (5.3b) reuse the bridge with
   their own channels.
 - **Delivery-time authz.** Subscription resolvers send through
-  `wsconn.Deliver` + `wsconn.Authorize(policy, op, ...)`: the session check
+  `streams.Deliver` + `streams.Authorize(policy, op, ...)`: the session check
   and `Policy.Authorize` run for every event, so a caller who loses access
   stops receiving events. `Subscription.sessionEvents` (own sessions) is
   the first field.
-- **CSP.** `connect-src 'self'` covers same-origin `ws:`/`wss:` (CSP3);
-  `pnpm csp-check` verifies it in Chrome.
+- **CSP.** Streams are same-origin `fetch` requests covered by
+  `connect-src 'self'`; `pnpm csp-check` verifies in Chrome that a
+  same-origin stream opens and a cross-origin one is blocked.
 
 ### Authentication (`internal/auth`, task 1.5, D-047, D-095, D-107)
 
@@ -424,7 +437,7 @@ Bus ──▶ wsconn.Hub ──▶ Conn: re-check session ──▶ close 4401 /
   answers `secondFactorRequired` with the usable factors. Its principal
   (`MFAPending`) may only call `beginPasskeyLogin`,
   `completeSecondFactor(method, code | assertion)` and `logout`
-  (`SECOND_FACTOR_REQUIRED` otherwise; no WebSocket). Completion verifies
+  (`SECOND_FACTOR_REQUIRED` otherwise; no event streams). Completion verifies
   TOTP, a recovery code or a passkey assertion bound to the pending
   session, then rotates it (`Sessions.CompleteSecondFactorTx`: rotated
   event, new token, AAL2, `stepup_at` = now and, for TOTP or a passkey
@@ -515,8 +528,275 @@ mutation); the UI uses `insecureTransport` (and the
 page's own protocol) for the permanent "Connection is not encrypted (no
 HTTPS)" banner (D-095).
 
+## Storage (`internal/storage`, task 2.8, D-121)
+
+Every destination backend implements `storage.Destination`: `Put`
+(streaming, atomic, never overwrites, optional expected SHA-256, object-lock
+options that fail closed where unsupported), `Get`, `Stat`, `List` (pages of
+up to 1000 in S3 key order, segment-aligned prefixes), `Delete` (idempotent;
+refused in no-delete mode or under a lock), `Test(prefix)` (write, read and
+delete probe below the job prefix) and `Capabilities`. Errors are wrapped
+sentinels; users only see the fixed text of `storage.Classify(err)`.
+
+Object keys are validated values built as
+`{prefix}/{job-slug}/{2026-10-26T030000Z}/{enc(db)}.{ext}` plus
+`manifest.json`; `enc(db)` is a canonical percent encoding (hashed when
+over 180 bytes). Keys never contain `..`, absolute paths, dot-prefixed
+segments, control or non-ASCII bytes.
+
+The disk backend is implemented: all access goes through an `os.Root` on
+`storage.disk_root` (plus an optional subdirectory), files are 0600 and
+directories 0700, symbolic links are never followed, and an object is
+written as `.<random>.partial`, fsynced and published with an exclusive
+hard link. Crash leftovers are removed by `CleanupPartials`. S3 (task 2.9)
+and SFTP (task 2.10) run the same conformance suite
+(`internal/storage/storagetest`).
+
+## Engines (`internal/engine`, task 2.1)
+
+`internal/engine` is pure Go (no Docker, no network) and is used by the
+runner only. It provides (D-031, D-033, D-036, D-123):
+
+- **Image catalog.** `internal/engine/catalog.toml` is embedded in the
+  binary: per engine and release series one official image pinned by its
+  multi-arch index digest, a `legacy` flag and the fixed client binary
+  names. Pinned today: PostgreSQL 13 (legacy), 14, 15, 16, 17, 18; MySQL
+  8.0 (legacy), 8.4 LTS, 9.7 LTS; MariaDB 10.6 (legacy), 10.11, 11.4, 11.8,
+  12.3. The runner's `[images] extra_file` adds entries with the same
+  schema (any registry, digest required, cannot replace embedded keys).
+  Every entry must meet the per-series client floors: the psql
+  `\restrict` fix (CVE-2025-8714), MySQL `--system-command` and
+  `--commands`, MariaDB `--sandbox`. Renovate updates the `image = ...`
+  lines; tests reject an update that changes the series or drops below a
+  floor.
+- **Version rules.** Server versions are parsed from
+  `server_version_num` / `VERSION()` (MySQL and MariaDB strings are never
+  confused). PostgreSQL: client major >= server major, otherwise the run is
+  blocked; MySQL/MariaDB fall back to an older client only with a warning.
+  The restore client is chosen for max(dump client, target server).
+  Minimum servers: PostgreSQL 10, MySQL 8.0, MariaDB 10.4.
+- **Argv builders.** Each operation returns a `Command`: image, argv and
+  the tmpfs files the stdin preamble must write (password file, pinned CA,
+  client certificate). Names are validated (strict charset, no leading
+  `-`); PostgreSQL tools get a quoted keyword/value `--dbname=` conninfo;
+  MySQL/MariaDB tools get `--defaults-file=/tmp/bekup/my.cnf` first, `--`
+  before the positional database, and restores run with
+  `--system-command=OFF --commands=OFF --local-infile=0` (MySQL) or
+  `--sandbox --local-infile=0` (MariaDB).
+- **TLS modes.** `pinned` (default; pinned certificate as the only trust
+  anchor with host-name verification), `unverified` and `disabled`; the
+  latter two are admin-only, audited downgrades (D-034).
+- **PostgreSQL overwrite.** A restore goes into
+  `<db>__bekup_restore_<id>` (created from `template0`); the swap blocks
+  and terminates connections to the target, then renames target to
+  `<db>__bekup_old_<id>` and the temp database to the target in one
+  transaction, with a rollback step that re-allows connections. Only these
+  bekup temporary databases can be dropped.
+
 ## Runner design
 
-Filled in by tasks 2.4–2.7a: gRPC API, per-run network lifecycle, TCP proxy
-and SSH tunnel, preamble wrapper, orphan reaper. Until then, see D-029–D-035
-in [DECISIONS.md](DECISIONS.md).
+Implemented in tasks 2.4–2.7a: gRPC API, request validation, target
+allowlist, container spec, preamble wrapper, the Docker executor with
+per-run networks, proxy and orphan reaper, the RPC handlers (2.7) and
+certificate pinning (2.7a), and `FetchHostKey` (2.11: the bastion's host
+key through the target-allowlist dialer, key exchange only, for the admin's
+TOFU confirmation). serve's only caller of the connection RPCs is
+`internal/connections` (D-135). See also D-029–D-035, D-132, D-133, D-134
+and D-135 in [DECISIONS.md](DECISIONS.md).
+
+**gRPC API** (`proto/runner/v1/runner.proto`, package `runner.v1`, task 2.4,
+D-126): one service `RunnerService` with `Health`, `Probe`,
+`FetchServerCertificate`, `FetchHostKey`, `Dump` and `DumpGlobals` (server
+streams: data chunks ≤ 1 MiB interleaved with log lines, ending in one
+result), `VerifyDump` (client stream: header, then chunks), `Restore`
+(bidirectional: header + chunks in, log lines + result out),
+`CreateDatabase`, `RenameSwapDatabase`, `PrePull` and `ListImages`. There is no field for
+a command, argument, environment variable, image or path; images are chosen
+by engine + allowlisted version key and container specs are built by the
+runner. Credential fields are `bytes` annotated `[(runner.v1.secret) =
+true]`; `runnerpb.ZeroSecrets` zeroes them and a test fails for an
+unannotated credential-looking field. Go code is generated into
+`internal/runnerpb` by `just gen` (buf and the protoc plugins are go.mod
+tool dependencies); `just lint` runs `buf lint`/`buf format` and, once the
+file is on `main`, `buf breaking`.
+
+**Server** (`internal/runner`, D-127): the interceptor chain is logging
+(method, caller, code, duration; never payloads) → panic recovery
+(`INTERNAL "internal error"`) → guard (verified caller identity against the
+allowlist, mandatory deadline clamped to `max_run_duration`, deny-by-default
+method table, fail-fast limiter: run class = `limits.max_concurrent_runs`,
+control class = 8, `Health` unlimited) → zeroing of received secret fields
+after the handler. Keepalive, connection recycling and message limits are
+in [mtls-certs.md](security/mtls-certs.md). The container healthcheck uses
+a separate, plaintext, container-local unix socket that serves only the
+standard health service (D-125). `internal/runnerclient` is the client
+used by `serve` and the workers.
+
+**SSH tunnels** (`internal/tunnel`, task 2.2, D-122): the runner dials the
+bastion through its allowlist dialer, accepts only the pinned host key (and
+only its key type), authenticates with a key or password it then destroys,
+and forwards each connection of the per-run proxy to the single configured
+target. Keepalives detect a dead bastion; a host-key mismatch is a security
+event. `FetchHostKey` provides the TOFU step without authenticating.
+
+**Request validation** (`internal/runner/validate`, task 2.5, D-130): every
+RPC request is validated before anything else happens. Unknown proto fields
+anywhere in a message are rejected, unary requests and stream headers are
+limited to 256 KiB, and every field has a size and syntax rule: lowercase
+UUID `run_id`; engine + version key from the merged image allowlist
+(embedded catalog + `images.extra_file`); host, port, user and database
+names per `internal/engine` (write operations refuse system databases);
+passwords ≤ 1 KiB without NUL/CR/LF; `pinned` TLS with one or two parseable
+DER anchors and a 32-byte leaf SPKI hash (mandatory for a leaf anchor); a
+client certificate only with TLS; SSH tunnels with exactly one credential
+and a mandatory host-key pin. Private keys are only checked structurally
+(PEM type, decoded bytes zeroed), never parsed into unzeroable key objects.
+After a `VerifyDump`/`Restore` header only non-empty chunks of ≤ 1 MiB may
+follow, and exactly `total_bytes` must arrive. Errors are gRPC statuses
+with static messages (`InvalidArgument`, `PermissionDenied` for the target
+allowlist, `FailedPrecondition` for unresolvable hosts); they never echo
+values. All validators are fuzz-tested.
+
+**Target allowlist** (`internal/runner/targets`, D-029, D-130): see
+[target-allowlist.md](security/target-allowlist.md). It is checked when a
+request is validated (every resolved address must pass) and again at dial
+time (`Guard.DialContext` re-checks the exact socket address), and it
+denies everything while `[targets]` is empty.
+
+**Container spec** (`internal/runner/spec`, D-031, D-130): a pure builder
+returns the Docker API structs. The image is referenced by digest only;
+the user is the catalog entry's non-root UID (`uid`, default 70 for the
+alpine PostgreSQL images and 999 for MySQL/MariaDB); the entrypoint is the
+fixed preamble wrapper and `Cmd` the engine's argv; the environment is a
+constant list (`HOME=/tmp`, `PGPASSFILE`, `MYSQL_HISTFILE=/dev/null`,
+`MYSQL_TEST_LOGIN_FILE=/dev/null`, ...). Hardening: read-only root, one
+tmpfs `/tmp` (noexec, nosuid, nodev, 64 MiB, 0700), `CapDrop: ALL`,
+`no-new-privileges`, default seccomp/AppArmor, not privileged, no mounts,
+devices or ports, private IPC/cgroup namespaces, memory (no swap), CPU and
+pids limits from `[docker]`, no core dumps, log driver `none`, no restart,
+labels `bekup.managed=true` and `bekup.run_id`, the per-run network and an
+`ExtraHosts` entry mapping the target name to the runner's proxy.
+
+**Secret preamble** (`internal/runner/preamble`, D-032, D-130): the
+container starts `/bin/sh -c <fixed script> -- <argv>`. The script reads
+from stdin:
+
+```
+BEKUP-PREAMBLE 1
+<type> <length>        (pgpass | mycnf | ca | clientcert | clientkey)
+<base64 on one line>
+...
+END
+<payload: restore/verify data>
+```
+
+Each type maps to a fixed file under `/tmp/bekup` (directory 0700, files
+0600, written through the shell's `printf` builtin and `base64 -d`, so no
+secret appears in any process's argv or environment); the decoded length is
+checked, and any framing error exits with code 97 before the tool runs.
+Then the script `exec`s the tool, which reads the remaining stdin. The
+script works in busybox ash, dash and bash and is tested in every pinned
+image.
+
+**Docker executor** (`internal/runner/executor`, task 2.6, D-132): the
+only code that talks to the Docker daemon (moby client, `docker.host` unix
+socket only). One run:
+
+```
+                       runner container
+           ┌────────────────────────────────────────────┐
+ runner-ctl│ 10.213.251.10:7443 mTLS gRPC                │ targets network
+ ──────────┤   (refuses peers from the pool / run nets)  ├──────────────> target DB
+           │                                            │   (target allowlist dialer,
+           │ per-run proxy 10.214.0.2:<db port>         │    or SSH tunnel to a bastion)
+           │   accepts only 10.214.0.3                  │
+           └──────────────┬─────────────────────────────┘
+                          │ bekup-run-<run_id>: internal, IPv4, /28 from
+                          │ docker.run_subnet_pool, inhibit_ipv4 (no host
+                          │ address), no masquerade, no default route
+           ┌──────────────┴──────────────┐
+           │ dump container 10.214.0.3   │  ExtraHosts: db.example.com → 10.214.0.2
+           │ pg_dump ... host=db.example.com sslmode=verify-full
+           └─────────────────────────────┘
+```
+
+1. Pull the allowlisted image if missing (digest only).
+2. Reserve the address plan: a /28 from `docker.run_subnet_pool` (`.2`
+   runner, `.3` dump container), skipping subnets of other Docker
+   networks; it becomes one of the target guard's own networks until the
+   run is cleaned up.
+3. Create the network and connect the runner's own container (configured
+   `docker.self_container`, or found in `/proc/self/mountinfo` / the host
+   name, and only accepted when it carries one of the runner's own
+   addresses) with the fixed proxy address.
+4. Start the proxy on that address and the target port; it accepts only
+   the dump container's address and forwards each connection to the one
+   target (dial-time allowlist check, or the SSH tunnel). TLS stays end to
+   end, so `verify-full` checks the real server.
+5. Create the hardened container (`spec`), attach stdin/stdout/stderr,
+   start it, write the preamble (zeroed right after) and the restore
+   payload; stdout goes to the RPC in ≤ 256 KiB chunks with backpressure,
+   stderr becomes bounded, sanitized, redacted log lines.
+6. Wait for the exit code. Timeout: SIGTERM, SIGKILL after 10 s;
+   cancellation, stream loss or a broken restore input: SIGKILL at once
+   (stdin is never closed cleanly on a broken input).
+7. Clean up in reverse order on every path (container, proxy, network
+   membership, network, tunnel, subnet), also on panics.
+
+What the client dials: a DNS name is mapped to the proxy with `ExtraHosts`.
+An IP literal without host verification is replaced by the proxy address.
+An IP literal with `verify-full` behind an SSH tunnel gets a /29 built
+around it in which the runner's proxy holds that exact address, so the IP
+SAN is verified; without a tunnel this is refused (`FAILED_PRECONDITION`),
+because the runner cannot hold an address it must also dial: use a DNS name
+that matches the certificate or a tunnel.
+
+The dump container has no route beyond its /28, the gateway address is not
+on the host, Docker's embedded DNS does not answer for external names on
+internal networks, other runs are on other subnets, and the gRPC listener
+closes connections from the pool and every per-run subnet. An integration
+test runs the executor inside a container and proves that a dump container
+cannot reach the runner's gRPC port (control or per-run address, also on a
+wildcard listener), another run's proxy or container, the gateway, its
+target without the proxy, the internet or DNS, and that `verify-full` works
+through the proxy (DNS name, DNS name and IP literal through an OpenSSH
+bastion) and fails for a name the certificate lacks.
+
+The orphan reaper runs at startup and every 5 minutes and removes
+`bekup.managed` containers and networks whose run is not active: this
+runner's after 2 minutes (immediately at startup), another runner's only
+once that runner's container is gone (label `bekup.runner`).
+
+**RPC handlers** (`internal/runner/ops*.go`, task 2.7, D-134). Every call
+goes validate (D-130) → target allowlist → pin pre-flight (TLS mode
+PINNED, D-133) → Go-driver pre-check → executor, and every call writes one
+`runner_rpc_audit` line (identifiers, code, reason, exit code, bytes; never
+payloads, server messages or secrets).
+
+| RPC | What the runner does |
+|---|---|
+| `Probe` | Go driver inside the runner (`internal/runner/dbprobe`: pgx, go-sql-driver/mysql for MySQL and MariaDB) over the allowlist dialer or an SSH tunnel; returns the server version, the databases without system databases, the matching allowlisted client (`detected_version_key`), whether the requested client can dump the server and warnings. No container. |
+| `Dump` | Pre-check: the database must be in the server-reported list, the client must handle the server (PostgreSQL client major ≥ server major, else `TARGET_UNSUPPORTED_SERVER`). Then the engine's dump argv in a container; stdout chunks and stderr lines stream back, one `DumpResult` ends the stream (`verified` for the MySQL/MariaDB trailer; PostgreSQL uses `VerifyDump`). |
+| `DumpGlobals` | PostgreSQL only. The first `pg_dumpall --globals-only` attempt is held back (≤ 4 MiB); on a role-catalog privilege error it is discarded and retried once with `--no-role-passwords` (`roles_without_passwords`). |
+| `VerifyDump` | MySQL/MariaDB dumps and PostgreSQL globals: trailer check in Go, no container. PostgreSQL archives: `pg_restore --format=custom --file=/dev/null` (reads every block) in an **offline** container: `NetworkMode: none`, no proxy, no preamble files. Exactly `total_bytes` must arrive. |
+| `Restore` | Pre-check (database exists), client = max(dump client, server), the stream feeds the container's stdin through a pump with backpressure; an invalid or short stream kills the container. Hardened client flags (D-123), never retried, tool stdout never returned. psql (globals) runs under a random `\restrict` key and the dump's own `\restrict` lines are removed (D-138). |
+| `CreateDatabase` | Pre-check (name not taken), `CREATE DATABASE` through psql / mysql in a container. |
+| `RenameSwapDatabase` | PostgreSQL only (MySQL/MariaDB: `FAILED_PRECONDITION`). Names derived from `temp_id`; Prepare, Swap (up to 3 attempts), Rollback when it fails; each step has its own container/network name (`bekup-run-<run id>-<step>`). |
+| `PrePull` | Pulls the allowlisted image by digest only, reports `already_present`. |
+| `ListImages` | The merged image allowlist (embedded catalog + `images.extra_file`): engine, version key, digest reference, client version, legacy, extra. |
+| `FetchServerCertificate` | Captures the chain (no credentials sent) through the same validation, upstream and error normalization as the other target RPCs; audited. |
+
+Target errors are normalized (`runnerpb.Reason` in an `ErrorInfo`, domain
+`runner.bekup`, one fixed message per reason): unreachable, authentication,
+TLS, pin mismatch, permission, timeout, unsupported server, database
+not found / exists, SSH host key / authentication. Refused, filtered,
+timed-out and non-database endpoints all read `TARGET_UNREACHABLE`, so
+Probe is no port scanner. Deadlines: the interceptor's (≤
+`max_run_duration`), Probe ≤ 1 min, CreateDatabase ≤ 2 min, RenameSwap ≤
+5 min; containers get the remaining deadline, cancellation kills them. An
+integration test runs the runner in a container against PostgreSQL 13/16/18,
+MySQL 8.4/9.7 and MariaDB 10.11/11.8 (Probe per target, the PostgreSQL
+compat refusal, every error category, Dump → VerifyDump → Restore with
+equal data per engine, globals as a non-superuser, CreateDatabase and the
+swap, an SSH-tunneled probe and dump, and that cancelling a dump removes
+its container).

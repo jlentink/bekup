@@ -61,6 +61,41 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.unlockUser":             authz.OpUserUpdate,
 	"Mutation.deleteUser":             authz.OpUserDelete,
 	"Mutation.revokeUserSessions":     authz.OpUserSessionsRevoke,
+
+	// Destinations (task 2.12, D-131): admin CRUD with step-up;
+	// maintainers see metadata and may test.
+	"Query.destinations":                     authz.OpDestinationList,
+	"Query.destination":                      authz.OpDestinationView,
+	"Mutation.createDestination":             authz.OpDestinationCreate,
+	"Mutation.updateDestination":             authz.OpDestinationUpdate,
+	"Mutation.deleteDestination":             authz.OpDestinationDelete,
+	"Mutation.testDestination":               authz.OpDestinationTest,
+	"Mutation.fetchDestinationHostKey":       authz.OpDestinationHostKeyFetch,
+	"Mutation.confirmDestinationHostKey":     authz.OpDestinationHostKeyConfirm,
+	"Mutation.generateDestinationSshKeypair": authz.OpDestinationSSHKeyGenerate,
+
+	// Connections (task 2.11, D-135): admin CRUD with step-up for every
+	// change; maintainers see metadata, may test and list databases.
+	// setTlsMode additionally checks connection.tls_downgrade when it
+	// leaves PINNED, updateConnection connection.secret_update when it
+	// sets credentials.
+	"Query.connections":                     authz.OpConnectionList,
+	"Query.connection":                      authz.OpConnectionView,
+	"Query.engineVersions":                  authz.OpConnectionList,
+	"Mutation.createConnection":             authz.OpConnectionCreate,
+	"Mutation.updateConnection":             authz.OpConnectionUpdate,
+	"Mutation.deleteConnection":             authz.OpConnectionDelete,
+	"Mutation.testConnection":               authz.OpConnectionTest,
+	"Mutation.detectVersion":                authz.OpConnectionTest,
+	"Mutation.listDatabases":                authz.OpConnectionListDatabases,
+	"Mutation.prePullImage":                 authz.OpConnectionPrePull,
+	"Mutation.fetchCertificate":             authz.OpConnectionCertFetch,
+	"Mutation.confirmCertificatePin":        authz.OpConnectionPinConfirm,
+	"Mutation.stageBackupPin":               authz.OpConnectionPinConfirm,
+	"Mutation.fetchSshHostKey":              authz.OpConnectionHostKeyFetch,
+	"Mutation.confirmSshHostKey":            authz.OpConnectionHostKeyConfirm,
+	"Mutation.setTlsMode":                   authz.OpConnectionUpdate,
+	"Mutation.generateConnectionSshKeypair": authz.OpConnectionSSHKeyGenerate,
 }
 
 // PolicyAccess is the Access backed by internal/authz and the principal

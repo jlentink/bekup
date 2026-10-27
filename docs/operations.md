@@ -45,7 +45,29 @@ readiness, so a short database outage does not mark the container unhealthy
 (D-102); point external monitoring at `/readyz` through the proxy or the
 internal network if you want readiness alerts.
 
-`bekup healthcheck runner` arrives with the runner (task 2.4).
+`bekup healthcheck runner` (D-125) reads `runner.toml` and asks the
+standard gRPC health service on the runner's container-local unix socket
+`listen.health_socket` (default `/tmp/bekup-runner/health.sock`, on the
+container's private `/tmp` tmpfs) for `runner.v1.RunnerService`, with a
+3-second timeout. No client certificate is needed: the socket is plaintext,
+its directory is `0700` and the socket `0600`, both owned by the runner user,
+and it serves nothing but the health status. It reports `SERVING` (prints
+`ok`, exit 0) only while the mTLS listener is up, the runner's own
+certificate is valid and no shutdown is in progress; otherwise it exits 1.
+An empty `listen.health_socket` disables the socket (and the healthcheck
+then always fails).
+
+## Startup checks of `bekup runner`
+
+`runner` refuses to start, with a clear error and exit code 1, when the
+configuration is invalid, the listen address is a wildcard outside dev mode
+without `listen.allow_wildcard` (D-098), the server certificate, key or
+client CA cannot be loaded (TLS 1.3, ed25519, private CA only), the
+certificate is not valid at this moment, or the health socket directory is
+not a private (`0700`, owned by the runner user, not a symlink) directory.
+It logs a warning when its certificate expires within 30 days. On SIGINT /
+SIGTERM it stops accepting calls and gives in-flight calls 45 seconds
+before cancelling them (compose `stop_grace_period` is 60s).
 
 ## Startup checks of `bekup serve`
 

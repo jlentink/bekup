@@ -264,6 +264,11 @@ services:
       targets: {}
     # Deliberately NOT on `backend`: the runner has no database access.
     healthcheck:
+      # Exec form (distroless). Queries the standard gRPC health service on
+      # the container-local unix socket listen.health_socket (default
+      # /tmp/bekup-runner/health.sock on the private /tmp tmpfs; D-125). It is
+      # SERVING only while the mTLS listener is up and the runner certificate
+      # is valid. No client certificate is involved.
       test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "runner"]
       interval: 30s
       timeout: 5s

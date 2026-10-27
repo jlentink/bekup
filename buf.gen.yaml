@@ -1,0 +1,12 @@
+# Generates internal/runnerpb from proto/ (`just gen`). The plugins are
+# pinned as go.mod tool dependencies, so no network or registry is used.
+version: v2
+plugins:
+  - local: ["go", "tool", "protoc-gen-go"]
+    out: .
+    opt:
+      - module=github.com/jlentink/bekup
+  - local: ["go", "tool", "protoc-gen-go-grpc"]
+    out: .
+    opt:
+      - module=github.com/jlentink/bekup

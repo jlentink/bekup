@@ -58,7 +58,4 @@ func TestHealthcheckServe(t *testing.T) {
 	if _, _, err := run(t, "--config", cfg, "healthcheck", "serve"); err == nil || !strings.Contains(err.Error(), "unhealthy") {
 		t.Fatalf("down: %v", err)
 	}
-	if _, _, err := run(t, "--config", cfg, "healthcheck", "runner"); err == nil || !strings.Contains(err.Error(), "task 2.4") {
-		t.Fatalf("runner: %v", err)
-	}
 }

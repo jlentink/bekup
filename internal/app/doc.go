@@ -14,12 +14,15 @@
 // the CLI), stops all of them, each draining within
 // server.shutdown_timeout, and the pool is closed last.
 //
-// Components today: the HTTP server (GraphQL, WebSocket subscriptions,
+// Components today: the HTTP server (GraphQL, subscriptions as event streams,
 // embedded UI, health endpoints), the audit chain-head signer (task 1.3),
-// the pubsub LISTEN/NOTIFY listener and the WebSocket hub (task 1.10), and
+// the pubsub LISTEN/NOTIFY listener and the event stream hub (tasks 1.10, 2.13), and
 // the session cleanup. New also wires the authentication services
 // (sessions, user administration, TOTP, passkeys, the 2FA policy and the
-// second-factor/step-up flow; tasks 1.5–1.9) into the GraphQL resolvers.
+// second-factor/step-up flow; tasks 1.5–1.9), the destination service
+// (task 2.12) and the runner client from [runner] with the connection
+// service on top (task 2.11; invalid runner client certificates refuse
+// startup, the gRPC connection itself is lazy) into the GraphQL resolvers.
 //
 // Extension points for later tasks: add River workers (3.4) and the
 // scheduler (3.3) as further Components appended in New. A Component's Run

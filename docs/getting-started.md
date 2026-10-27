@@ -1,13 +1,18 @@
 # Getting started
 
-> **Status:** partial (end of M1). The development quick start and the
+> **Status:** partial (end of M2). The development quick start and the
 > production outline below match the current files. `bekup serve` runs with
-> the HTTP layer, the GraphQL API (incl. WebSocket subscriptions), sign-in,
-> sessions, second factors and step-up; the web UI is still a placeholder
-> shell until M6 (task 6.1 onwards), and `bekup runner` arrives in task 2.4.
+> the HTTP layer, the GraphQL API (incl. subscriptions as Server-Sent
+> Events), sign-in, sessions, second factors and step-up, and the
+> connection and destination APIs (tasks 2.11, 2.12); the web UI is still a
+> placeholder shell until M6 (task 6.1 onwards). `bekup runner` serves its
+> complete mTLS gRPC API (probe, certificate and host-key capture, dump,
+> verify, restore; tasks 2.4–2.7a), but nothing schedules backups yet:
+> jobs, the backup pipeline and runs follow in M3 (tasks 3.1–3.6).
 > Creating the first admin (CLI only, D-113) and enrolling a second factor
-> (tasks 1.7–1.9) are described below, the first connection, destination
-> and job by tasks 2.11–3.5, and the page is completed in task 7.5.
+> (tasks 1.7–1.9) are described below; connections and destinations exist
+> in the API (UI in M6), backup jobs follow in task 3.5, and the page is
+> completed in task 7.5.
 
 There are two ways to run bekup with Docker Compose:
 
@@ -113,7 +118,8 @@ and [installation/reverse-proxy.md](installation/reverse-proxy.md):
    `migrate` applies the database migrations before `serve` starts.
 5. Create the first admin on the host with `bekup admin create`
    ([first admin](#first-admin)), sign in, enroll a passkey or TOTP, then add
-   a connection, a destination and a backup job (tasks 2.11–3.5, UI in M6).
+   a connection and a destination (API since tasks 2.11/2.12) and, from M3
+   on, a backup job (task 3.5; UI in M6).
 
 Running production without a proxy over plain HTTP requires an explicit
 `server.allow_insecure_http = true` and raises a startup warning, a UI

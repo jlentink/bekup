@@ -30,7 +30,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "graphql": "17.0.2",
-    "graphql-ws": "6.4.1",
+    "graphql-sse": "2.6.3",
     "lucide-react": "1.61.0",
     "radix-ui": "1.8.1",
     "react": "19.3.1",

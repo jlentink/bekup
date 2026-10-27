@@ -100,7 +100,36 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   unknown actions are rejected. Areas: `auth.*`, `user.*`, `session.*`,
   `secret.changed`, `setting.changed`, `security.*`, `system.*`,
   `cli.admin.*`, `keys.*` (incl. `keys.check_value_stored`), `certs.rotated`, `audit.*`,
-  `download.*`, `connection.*`, `mfa_policy.*`.
+  `download.*`, `connection.*`, `destination.*`, `mfa_policy.*`.
+- Destinations (task 2.12, D-131): `destination.created` (settings
+  without credentials, `credentials_set` names), `destination.updated`
+  (`changed` field names, `values` with old/new for short non-secret
+  fields; CA bundle and public key by name only; `host_key_cleared`),
+  `destination.deleted`, `destination.host_key_confirmed` (type,
+  fingerprint, `previous_fingerprint`) and `destination.ssh_key_generated`
+  (public key fingerprint), and the security event
+  `destination.ssh_host_key_mismatch` (host, port, pinned fingerprint;
+  recorded when a test meets another host key, D-140). An update that
+  moves an SFTP destination lists the re-entered password in
+  `reentered_for_new_endpoint`. Credential changes are listed by name only and
+  additionally recorded as `secret.changed` (`fields`, `via`). No-op
+  updates record nothing.
+- Connections (task 2.11, D-135): `connection.created` (settings without
+  credentials, `credentials_set` names), `connection.updated` (`changed`
+  field names, `values` old/new for short non-secret fields,
+  `tls_pins_cleared`, `host_key_cleared`, `reentered_for_new_endpoint`
+  when a changed endpoint required the passwords again, D-140),
+  `connection.deleted`,
+  `connection.tls_mode_changed` (from, to, `downgrade`; a downgrade also
+  records `security.opt_out` with `setting: connection.tls_mode`),
+  `connection.pin_confirmed` / `connection.backup_pin_staged` (subject,
+  issuer, anchor SHA-256, leaf SPKI or `leaf_rotation_allowed`, expiry,
+  `source` captured/pem, `previous_anchor_sha256`, `promoted_backup_pin`),
+  `connection.host_key_confirmed` (type, fingerprint,
+  `previous_fingerprint`, bastion), `connection.ssh_key_generated` and the security
+  events `connection.tls_pin_mismatch` (`check`, host, port, operation) and
+  `connection.ssh_host_key_mismatch` (bastion, pinned fingerprint).
+  Credentials appear by name only (and as `secret.changed`).
 - User administration (D-110) records `user.created`,
   `user.updated`, `user.role_changed`, `user.disabled`, `user.enabled`,
   `user.password_reset`, `user.unlocked`, `user.deleted`,
@@ -154,7 +183,7 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   again). An attacker hammering a locked account therefore cannot flood
   the hash-chained log.
 - **Reserved actions** exist in the catalog before the feature that
-  records them: `secret.changed` (tasks 2.11, 2.12, 5.1),
+  records them: `secret.changed` (tasks 2.11, 5.1; recorded by 2.12),
   `setting.changed` (2.3, 5.1, 6.9), `security.opt_out` (2.11, 2.12;
   alert 5.5), `security.insecure_http` (5.5), `audit.verify.failed`
   (5.6), `download.ticket_created` (3.9) and `connection.pin_confirmed`

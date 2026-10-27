@@ -42,6 +42,15 @@ const (
 	// step succeeded and that waits for its second factor; only
 	// completeSecondFactor, beginPasskeyLogin and logout work (task 1.9).
 	SecondFactorRequired Code = "SECOND_FACTOR_REQUIRED"
+	// ConnectionFailed: the runner could not reach or use a database
+	// connection; the message is a fixed, normalized reason (task 2.11).
+	ConnectionFailed Code = "CONNECTION_FAILED"
+	// TLSPinMismatch: the database's certificate does not match the pinned
+	// certificate (security event: audited and alerted; task 2.11).
+	TLSPinMismatch Code = "TLS_PIN_MISMATCH"
+	// SSHHostKeyMismatch: the SSH bastion presented another host key than
+	// the pinned one (security event: audited and alerted; task 2.11).
+	SSHHostKeyMismatch Code = "SSH_HOST_KEY_MISMATCH"
 )
 
 // Codes not produced by *Error but by the server itself.
@@ -55,6 +64,13 @@ const (
 	// QueryTooComplex: the operation exceeds graphql.max_complexity (the
 	// code gqlgen's complexity extension uses).
 	QueryTooComplex Code = "COMPLEXITY_LIMIT_EXCEEDED"
+	// SessionRotated ends an event stream whose session was rotated
+	// (privilege change): the client opens the stream again with the new
+	// cookie (internal/graph/streams).
+	SessionRotated Code = "SESSION_ROTATED"
+	// Unavailable ends an event stream when the server shuts down or the
+	// session could not be checked: retry later.
+	Unavailable Code = "UNAVAILABLE"
 )
 
 // Codes lists the user-facing codes of *Error.
@@ -62,6 +78,7 @@ func Codes() []Code {
 	return []Code{
 		Unauthenticated, Forbidden, StepUpRequired, Requires2FAEnrollment,
 		Validation, NotFound, RateLimited, Conflict, PasswordChangeRequired, SecondFactorRequired,
+		ConnectionFailed, TLSPinMismatch, SSHHostKeyMismatch,
 	}
 }
 

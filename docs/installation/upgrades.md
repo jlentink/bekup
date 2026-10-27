@@ -1,12 +1,13 @@
 # Upgrades
 
-> **Status:** partial (end of M1). The migration mechanics are implemented
+> **Status:** partial (end of M2). The migration mechanics are implemented
 > (task 0.4), the compose `migrate` service exists (task 0.7), `serve`
-> refuses to start on an outdated schema (task 1.1) and the postgres
-> certificate rotation is described below (task 1.0, D-104). Image catalog
-> deprecations (task 2.1), runner certificate rotation (M2), re-encryption
-> after a keyring rotation and the release/verification steps (task 7.4)
-> are added later; completed in task 7.5.
+> refuses to start on an outdated schema (task 1.1), the postgres
+> certificate rotation is described below (task 1.0, D-104), and so are
+> image catalog changes (task 2.1). Runner certificate and CA rotation are in
+> [mTLS certificates](../security/mtls-certs.md). Re-encryption after a
+> keyring rotation and the release/verification steps (task 7.4) are added
+> later; completed in task 7.5.
 
 ## Before you upgrade
 
@@ -121,5 +122,12 @@ the previous image.
 - **Postgres major versions** of the app database (for example 17 → 18)
   need a dump and restore or `pg_upgrade`; changing the image tag alone does
   not upgrade a data directory.
-- Catalog deprecations of legacy target engine versions are documented here
-  by task 2.1.
+- **Engine image catalog.** The dump/restore images are embedded in the
+  binary (`internal/engine/catalog.toml`, digest-pinned), so an upgrade can
+  update, add, flag as `legacy` or remove a release series. Read the
+  CHANGELOG for catalog changes before upgrading. The version rules in
+  [architecture.md](../architecture.md#engines-internalengine-task-21)
+  decide which client serves which server (PostgreSQL needs a client major
+  ≥ the server major, otherwise the run is blocked). A removed series can
+  be added back with `[images] extra_file` in `runner.toml` if it still
+  meets the client floors.

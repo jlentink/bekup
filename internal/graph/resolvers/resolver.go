@@ -17,6 +17,8 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
+	"github.com/jlentink/bekup/internal/connections"
+	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/model"
 )
 
@@ -49,4 +51,10 @@ type Resolver struct {
 	// users (task 1.9; nil: the policy fields fail, the standing reads as
 	// not required).
 	TwoFactorPolicy *auth.TwoFactorPolicies
+	// Destinations backs the destination fields (task 2.12; nil: those
+	// fields fail with an internal error).
+	Destinations *destinations.Service
+	// Connections backs the connection fields (task 2.11; nil: those
+	// fields fail with an internal error).
+	Connections *connections.Service
 }

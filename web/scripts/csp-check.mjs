@@ -6,14 +6,16 @@
 // 2. Serves it with the production Content-Security-Policy.
 // 3. Drives headless Chrome through every page and overlay component and
 //    fails if the browser reports any CSP violation.
-// 4. Opens a same-origin WebSocket to /graphql (the subscription transport,
-//    task 1.10): `connect-src 'self'` must allow it (CSP3 matches ws:/wss:
-//    of the page's host), while a cross-origin WebSocket must be blocked.
+// 4. Opens a same-origin event stream (POST /graphql with Accept:
+//    text/event-stream, the subscription transport of task 2.13) the way
+//    graphql-sse does: `connect-src 'self'` must allow it and the browser
+//    must send its Origin (the server's Origin check; the stub server here
+//    refuses any other origin with 403, like serve). A cross-origin stream
+//    must be blocked by connect-src.
 //
 // Usage: pnpm csp-check            (uses the installed Google Chrome)
 //        CHROME_PATH=/path/to/chrome pnpm csp-check
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
@@ -72,9 +74,49 @@ const TYPES = {
   ".woff": "font/woff",
 };
 
+/** Origins seen on stream requests (the page must send its own). */
+const streamOrigins = [];
+
+/**
+ * Stub of serve's event stream endpoint: POST /graphql with Accept:
+ * text/event-stream and the exact page Origin gets one next event and the
+ * complete event; any other Origin gets 403 (serve's Origin check).
+ */
+function serveStream(req, res, allowedOrigin) {
+  const origin = req.headers.origin;
+  streamOrigins.push(origin ?? "");
+  const accept = String(req.headers.accept ?? "");
+  if (req.method !== "POST" || !accept.includes("text/event-stream")) {
+    res.writeHead(405).end();
+    return;
+  }
+  if (origin !== allowedOrigin) {
+    res
+      .writeHead(403, { "Content-Type": "application/json" })
+      .end('{"errors":[{"message":"origin not allowed"}]}');
+    return;
+  }
+  req.resume();
+  req.on("end", () => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+      "Content-Security-Policy": CSP,
+    });
+    res.write(":\n\n");
+    res.write('event: next\ndata: {"data":{"sessionEvents":{"kind":"REVOKED"}}}\n\n');
+    res.end("event: complete\ndata:\n\n");
+  });
+}
+
 function serve() {
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname === "/graphql") {
+      serveStream(req, res, `http://127.0.0.1:${server.address().port}`);
+      return;
+    }
     let file = normalize(join(outDir, decodeURIComponent(url.pathname)));
     if (!file.startsWith(outDir)) {
       res.writeHead(400).end();
@@ -88,34 +130,6 @@ function serve() {
       "Referrer-Policy": "no-referrer",
     });
     res.end(readFileSync(file));
-  });
-  // Minimal WebSocket handshake on /graphql so the browser can open the
-  // socket (no frames are exchanged).
-  server.on("upgrade", (req, socket) => {
-    const key = req.headers["sec-websocket-key"];
-    if (
-      new URL(req.url ?? "/", "http://localhost").pathname !== "/graphql" ||
-      typeof key !== "string"
-    ) {
-      socket.destroy();
-      return;
-    }
-    const accept = createHash("sha1")
-      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-      .digest("base64");
-    const offered = String(req.headers["sec-websocket-protocol"] ?? "")
-      .split(",")
-      .map((p) => p.trim());
-    const lines = [
-      "HTTP/1.1 101 Switching Protocols",
-      "Upgrade: websocket",
-      "Connection: Upgrade",
-      `Sec-WebSocket-Accept: ${accept}`,
-    ];
-    if (offered.includes("graphql-transport-ws"))
-      lines.push("Sec-WebSocket-Protocol: graphql-transport-ws");
-    socket.write(`${lines.join("\r\n")}\r\n\r\n`);
-    setTimeout(() => socket.destroy(), 2000);
   });
   return new Promise((ok) => {
     server.listen(0, "127.0.0.1", () => {
@@ -174,8 +188,13 @@ async function exercise(page, base, colorScheme) {
   await page.waitForTimeout(300);
 }
 
-/** Opens a WebSocket from the page; reports whether it opened and whether a connect-src violation fired. */
-function openWebSocket(page, url) {
+/**
+ * Opens an event stream from the page like graphql-sse (fetch, POST, JSON
+ * body, Accept: text/event-stream, credentials same-origin) and reads it
+ * to the end; reports whether a next event arrived and whether a
+ * connect-src violation fired.
+ */
+function openEventStream(page, url) {
   return page.evaluate(
     (target) =>
       new Promise((ok) => {
@@ -183,18 +202,29 @@ function openWebSocket(page, url) {
         document.addEventListener("securitypolicyviolation", (e) => {
           if (e.effectiveDirective === "connect-src") violated = true;
         });
-        const done = (open) => setTimeout(() => ok({ open, violated }), 200);
-        try {
-          const ws = new WebSocket(target, "graphql-transport-ws");
-          ws.onopen = () => {
-            ws.close();
-            done(true);
-          };
-          ws.onerror = () => done(false);
-        } catch {
-          done(false);
-        }
-        setTimeout(() => ok({ open: false, violated }), 3000);
+        const done = (open, status) => setTimeout(() => ok({ open, status, violated }), 200);
+        setTimeout(() => ok({ open: false, status: 0, violated }), 3000);
+        fetch(target, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            accept: "text/event-stream",
+          },
+          body: JSON.stringify({ query: "subscription { sessionEvents { kind } }" }),
+        })
+          .then(async (res) => {
+            if (!res.ok || !res.body) return done(false, res.status);
+            const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+            let text = "";
+            for (;;) {
+              const { value, done: end } = await reader.read();
+              if (end) break;
+              text += value;
+            }
+            done(text.includes("event: next") && text.includes("event: complete"), res.status);
+          })
+          .catch(() => done(false, 0));
       }),
     url,
   );
@@ -235,11 +265,17 @@ async function main() {
           `[${scheme}] UI walk-through failed at ${page.url()}: ${err.message.split("\n")[0]}`,
         );
       }
-      // Same-origin WebSocket (subscriptions): must open without a violation.
-      const sameOrigin = await openWebSocket(page, `ws://127.0.0.1:${port}/graphql`);
+      // Same-origin event stream (subscriptions): must open without a
+      // violation, carrying the page's Origin.
+      streamOrigins.length = 0;
+      const sameOrigin = await openEventStream(page, `${base}/graphql`);
       if (!sameOrigin.open || sameOrigin.violated)
         problems.push(
-          `[${scheme}] same-origin WebSocket: open=${sameOrigin.open} violation=${sameOrigin.violated}`,
+          `[${scheme}] same-origin event stream: open=${sameOrigin.open} status=${sameOrigin.status} violation=${sameOrigin.violated}`,
+        );
+      if (!streamOrigins.includes(base))
+        problems.push(
+          `[${scheme}] event stream request without the page Origin: ${streamOrigins.join(", ")}`,
         );
       const seen = await page.evaluate(() => window.__csp);
       violations.push(...seen.map((v) => `[${scheme}] ${v}`));
@@ -258,14 +294,29 @@ async function main() {
       );
       if (!control)
         problems.push(`[${scheme}] positive control: injected <style> was NOT reported`);
-      // Positive control: a cross-origin WebSocket (other host name) is blocked.
-      const crossOrigin = await openWebSocket(page, `ws://localhost:${port}/graphql`);
-      if (crossOrigin.open || !crossOrigin.violated)
+      // Positive control: a cross-origin event stream (other host name) is
+      // blocked by connect-src before it reaches any server.
+      streamOrigins.length = 0;
+      const crossOrigin = await openEventStream(page, `http://localhost:${port}/graphql`);
+      if (crossOrigin.open || !crossOrigin.violated || streamOrigins.length > 0)
         problems.push(
-          `[${scheme}] cross-origin WebSocket was NOT blocked by connect-src (open=${crossOrigin.open})`,
+          `[${scheme}] cross-origin event stream was NOT blocked by connect-src (open=${crossOrigin.open}, reached server=${streamOrigins.length > 0})`,
         );
       await page.close();
     }
+    // The stub refuses a stream with a foreign Origin, like serve's Origin
+    // check (a non-browser client is not stopped by the CSP).
+    const foreign = await fetch(`${base}/graphql`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "text/event-stream",
+        origin: "https://evil.example",
+      },
+      body: "{}",
+    });
+    if (foreign.status !== 403)
+      problems.push(`cross-origin stream POST was not refused (status ${foreign.status})`);
   } finally {
     await browser.close();
     server.close();
@@ -279,7 +330,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    "csp-check passed: no CSP or Trusted Types violations in light and dark mode; same-origin WebSocket allowed, cross-origin blocked.",
+    "csp-check passed: no CSP or Trusted Types violations in light and dark mode; same-origin event stream allowed, cross-origin blocked.",
   );
 }
 

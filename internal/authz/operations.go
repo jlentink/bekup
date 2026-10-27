@@ -63,17 +63,20 @@ const (
 	OpSSRFAllowlistView   Operation = "ssrf_allowlist.view"
 	OpSSRFAllowlistUpdate Operation = "ssrf_allowlist.update"
 
-	// Connections (task 2.11). Maintainers use connections: non-secret
-	// metadata, test/detect/list databases; no CRUD, no secrets, no pins.
+	// Connections (task 2.11, D-135). Maintainers use connections:
+	// non-secret metadata, test/detect/list databases; no CRUD, no
+	// secrets, no pins or host keys, no image pulls. Every admin change
+	// needs step-up (as for destinations, D-131).
 	OpConnectionList            Operation = "connection.list"
 	OpConnectionView            Operation = "connection.view"
 	OpConnectionCreate          Operation = "connection.create"
-	OpConnectionUpdate          Operation = "connection.update" // non-secret fields
-	OpConnectionSecretUpdate    Operation = "connection.secret_update"
+	OpConnectionUpdate          Operation = "connection.update"        // non-secret fields, TLS mode upgrades
+	OpConnectionSecretUpdate    Operation = "connection.secret_update" // checked in addition when an update sets credentials
 	OpConnectionDelete          Operation = "connection.delete"
 	OpConnectionTest            Operation = "connection.test" // test, detect version
 	OpConnectionListDatabases   Operation = "connection.list_databases"
 	OpConnectionPrePull         Operation = "connection.pre_pull"
+	OpConnectionHostKeyFetch    Operation = "connection.host_key_fetch" // TOFU fetch through the runner, never trusted automatically
 	OpConnectionHostKeyConfirm  Operation = "connection.host_key_confirm"
 	OpConnectionCertFetch       Operation = "connection.cert_fetch"
 	OpConnectionPinConfirm      Operation = "connection.pin_confirm" // confirmCertificatePin, stageBackupPin
@@ -81,14 +84,20 @@ const (
 	OpConnectionSSHKeyGenerate  Operation = "connection.ssh_key_generate"
 	OpTemporaryConnectionCreate Operation = "connection.temporary_create" // restore wizard (task 4.4)
 
-	// Destinations (task 2.12).
+	// Destinations (task 2.12, D-131). Maintainers use destinations:
+	// metadata (name, type, mode flags, readiness) and test; no CRUD, no
+	// configuration details, no secrets. Every change needs step-up: a
+	// changed endpoint can redirect backups as surely as a changed secret.
+	// Owners (task 3.5) will see name/type of the destinations their jobs
+	// use through the job, not through these operations.
 	OpDestinationList           Operation = "destination.list"
 	OpDestinationView           Operation = "destination.view"
 	OpDestinationCreate         Operation = "destination.create"
-	OpDestinationUpdate         Operation = "destination.update" // non-secret fields
-	OpDestinationSecretUpdate   Operation = "destination.secret_update"
+	OpDestinationUpdate         Operation = "destination.update"
+	OpDestinationSecretUpdate   Operation = "destination.secret_update" // checked in addition when an update sets credentials
 	OpDestinationDelete         Operation = "destination.delete"
 	OpDestinationTest           Operation = "destination.test"
+	OpDestinationHostKeyFetch   Operation = "destination.host_key_fetch" // TOFU fetch, never trusted automatically
 	OpDestinationHostKeyConfirm Operation = "destination.host_key_confirm"
 	OpDestinationSSHKeyGenerate Operation = "destination.ssh_key_generate"
 	OpStorageUsageView          Operation = "destination.usage_view"
@@ -236,12 +245,13 @@ var policy = map[Operation]Rule{
 	OpConnectionList:            {Roles: staff},
 	OpConnectionView:            {Roles: staff},
 	OpConnectionCreate:          {Roles: adminOnly, Fresh: FreshStepUp},
-	OpConnectionUpdate:          {Roles: adminOnly},
+	OpConnectionUpdate:          {Roles: adminOnly, Fresh: FreshStepUp},
 	OpConnectionSecretUpdate:    {Roles: adminOnly, Fresh: FreshStepUp},
-	OpConnectionDelete:          {Roles: adminOnly},
+	OpConnectionDelete:          {Roles: adminOnly, Fresh: FreshStepUp},
 	OpConnectionTest:            {Roles: staff},
 	OpConnectionListDatabases:   {Roles: staff},
-	OpConnectionPrePull:         {Roles: staff},
+	OpConnectionPrePull:         {Roles: staff}, // D-106: maintainers may pre-pull (D-135 amended)
+	OpConnectionHostKeyFetch:    {Roles: adminOnly},
 	OpConnectionHostKeyConfirm:  {Roles: adminOnly, Fresh: FreshStepUp},
 	OpConnectionCertFetch:       {Roles: adminOnly},
 	OpConnectionPinConfirm:      {Roles: adminOnly, Fresh: FreshStepUp},
@@ -252,10 +262,11 @@ var policy = map[Operation]Rule{
 	OpDestinationList:           {Roles: staff},
 	OpDestinationView:           {Roles: staff},
 	OpDestinationCreate:         {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationUpdate:         {Roles: adminOnly},
+	OpDestinationUpdate:         {Roles: adminOnly, Fresh: FreshStepUp},
 	OpDestinationSecretUpdate:   {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationDelete:         {Roles: adminOnly},
+	OpDestinationDelete:         {Roles: adminOnly, Fresh: FreshStepUp},
 	OpDestinationTest:           {Roles: staff},
+	OpDestinationHostKeyFetch:   {Roles: adminOnly},
 	OpDestinationHostKeyConfirm: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpDestinationSSHKeyGenerate: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpStorageUsageView:          {Roles: staff},

@@ -66,9 +66,170 @@ type ComplexityRoot struct {
 		Ts          func(childComplexity int) int
 	}
 
+	CertificateChain struct {
+		Certificates         func(childComplexity int) int
+		LeafSpkiSha256       func(childComplexity int) int
+		SuggestedAnchorIndex func(childComplexity int) int
+	}
+
+	CertificatePin struct {
+		CertificatePem func(childComplexity int) int
+		IsCa           func(childComplexity int) int
+		Issuer         func(childComplexity int) int
+		LeafSpkiSha256 func(childComplexity int) int
+		NotAfter       func(childComplexity int) int
+		PinnedAt       func(childComplexity int) int
+		Subject        func(childComplexity int) int
+	}
+
+	ChainCertificate struct {
+		DNSNames          func(childComplexity int) int
+		FingerprintSha256 func(childComplexity int) int
+		IPAddresses       func(childComplexity int) int
+		IsCa              func(childComplexity int) int
+		Issuer            func(childComplexity int) int
+		NotAfter          func(childComplexity int) int
+		NotBefore         func(childComplexity int) int
+		Pem               func(childComplexity int) int
+		SelfSigned        func(childComplexity int) int
+		SpkiSha256        func(childComplexity int) int
+		SpkiSha256Hex     func(childComplexity int) int
+		Subject           func(childComplexity int) int
+	}
+
+	Connection struct {
+		CreatedAt         func(childComplexity int) int
+		Engine            func(childComplexity int) int
+		Host              func(childComplexity int) int
+		ID                func(childComplexity int) int
+		InsecureTransport func(childComplexity int) int
+		LegacyVersion     func(childComplexity int) int
+		Name              func(childComplexity int) int
+		NotReadyReason    func(childComplexity int) int
+		PinExpiresAt      func(childComplexity int) int
+		PinStatus         func(childComplexity int) int
+		Port              func(childComplexity int) int
+		Ready             func(childComplexity int) int
+		SSHEnabled        func(childComplexity int) int
+		Settings          func(childComplexity int) int
+		TLSMode           func(childComplexity int) int
+		UpdatedAt         func(childComplexity int) int
+		VersionKey        func(childComplexity int) int
+	}
+
+	ConnectionDatabases struct {
+		Databases func(childComplexity int) int
+		Warnings  func(childComplexity int) int
+	}
+
+	ConnectionSettings struct {
+		BackupPin            func(childComplexity int) int
+		ClientCertificatePem func(childComplexity int) int
+		HasPassword          func(childComplexity int) int
+		ImageKey             func(childComplexity int) int
+		SSH                  func(childComplexity int) int
+		TLSPin               func(childComplexity int) int
+		Username             func(childComplexity int) int
+	}
+
+	ConnectionSshKeypair struct {
+		Connection        func(childComplexity int) int
+		FingerprintSha256 func(childComplexity int) int
+		PublicKey         func(childComplexity int) int
+	}
+
+	ConnectionSshSettings struct {
+		AuthMethod    func(childComplexity int) int
+		HasPassphrase func(childComplexity int) int
+		HasPassword   func(childComplexity int) int
+		HasPrivateKey func(childComplexity int) int
+		Host          func(childComplexity int) int
+		HostKey       func(childComplexity int) int
+		Port          func(childComplexity int) int
+		PublicKey     func(childComplexity int) int
+		User          func(childComplexity int) int
+	}
+
+	ConnectionTestResult struct {
+		Code               func(childComplexity int) int
+		Compatible         func(childComplexity int) int
+		DatabaseCount      func(childComplexity int) int
+		DetectedVersionKey func(childComplexity int) int
+		Legacy             func(childComplexity int) int
+		Message            func(childComplexity int) int
+		Ok                 func(childComplexity int) int
+		ServerVersion      func(childComplexity int) int
+		Warnings           func(childComplexity int) int
+	}
+
+	ConnectionVersionInfo struct {
+		CurrentCompatible   func(childComplexity int) int
+		Legacy              func(childComplexity int) int
+		ServerVersion       func(childComplexity int) int
+		SuggestedVersionKey func(childComplexity int) int
+		Warnings            func(childComplexity int) int
+	}
+
 	CreatedUser struct {
 		TemporaryPassword func(childComplexity int) int
 		User              func(childComplexity int) int
+	}
+
+	Destination struct {
+		CreatedAt               func(childComplexity int) int
+		ID                      func(childComplexity int) int
+		Name                    func(childComplexity int) int
+		NoDelete                func(childComplexity int) int
+		NotReadyReason          func(childComplexity int) int
+		ObjectLockMode          func(childComplexity int) int
+		ObjectLockRetentionDays func(childComplexity int) int
+		Ready                   func(childComplexity int) int
+		Settings                func(childComplexity int) int
+		Type                    func(childComplexity int) int
+		UpdatedAt               func(childComplexity int) int
+	}
+
+	DestinationSettings struct {
+		Disk func(childComplexity int) int
+		S3   func(childComplexity int) int
+		Sftp func(childComplexity int) int
+	}
+
+	DestinationSshKeypair struct {
+		Destination       func(childComplexity int) int
+		FingerprintSha256 func(childComplexity int) int
+		PublicKey         func(childComplexity int) int
+	}
+
+	DestinationTestResult struct {
+		Note         func(childComplexity int) int
+		Ok           func(childComplexity int) int
+		ProbeKey     func(childComplexity int) int
+		ProbeRemains func(childComplexity int) int
+		Steps        func(childComplexity int) int
+	}
+
+	DestinationTestStep struct {
+		Code    func(childComplexity int) int
+		Message func(childComplexity int) int
+		Name    func(childComplexity int) int
+		Ok      func(childComplexity int) int
+	}
+
+	DiskDestinationSettings struct {
+		Path func(childComplexity int) int
+	}
+
+	EngineVersion struct {
+		ClientVersion func(childComplexity int) int
+		Engine        func(childComplexity int) int
+		Key           func(childComplexity int) int
+		Legacy        func(childComplexity int) int
+	}
+
+	ImagePrePullResult struct {
+		AlreadyPresent func(childComplexity int) int
+		ImageRef       func(childComplexity int) int
 	}
 
 	LoginResult struct {
@@ -80,32 +241,53 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		BeginPasskeyLogin         func(childComplexity int) int
-		BeginPasskeyRegistration  func(childComplexity int) int
-		BeginStepUp               func(childComplexity int) int
-		BeginTotpEnrollment       func(childComplexity int) int
-		ChangePassword            func(childComplexity int, currentPassword string, newPassword string) int
-		CompleteSecondFactor      func(childComplexity int, method model.SecondFactorKind, code *string, assertion model.JSON) int
-		CompleteStepUp            func(childComplexity int, method model.StepUpMethod, code *string, password *string, assertion model.JSON) int
-		ConfirmTotpEnrollment     func(childComplexity int, code string) int
-		CreateUser                func(childComplexity int, input model.CreateUserInput) int
-		DeletePasskey             func(childComplexity int, id uuid.UUID) int
-		DeleteUser                func(childComplexity int, id uuid.UUID) int
-		DisableTotp               func(childComplexity int) int
-		DisableUser               func(childComplexity int, id uuid.UUID) int
-		EnableUser                func(childComplexity int, id uuid.UUID) int
-		FinishPasskeyRegistration func(childComplexity int, name string, response model.JSON) int
-		Login                     func(childComplexity int, email string, password string) int
-		Logout                    func(childComplexity int) int
-		RegenerateRecoveryCodes   func(childComplexity int) int
-		RenamePasskey             func(childComplexity int, id uuid.UUID, name string) int
-		ResetUserPassword         func(childComplexity int, id uuid.UUID) int
-		ResetUserSecondFactors    func(childComplexity int, userID uuid.UUID) int
-		RevokeSession             func(childComplexity int, id uuid.UUID) int
-		RevokeUserSessions        func(childComplexity int, userID uuid.UUID) int
-		UnlockUser                func(childComplexity int, id uuid.UUID) int
-		UpdateTwoFactorPolicy     func(childComplexity int, input model.TwoFactorPolicyInput) int
-		UpdateUser                func(childComplexity int, id uuid.UUID, input model.UpdateUserInput) int
+		BeginPasskeyLogin             func(childComplexity int) int
+		BeginPasskeyRegistration      func(childComplexity int) int
+		BeginStepUp                   func(childComplexity int) int
+		BeginTotpEnrollment           func(childComplexity int) int
+		ChangePassword                func(childComplexity int, currentPassword string, newPassword string) int
+		CompleteSecondFactor          func(childComplexity int, method model.SecondFactorKind, code *string, assertion model.JSON) int
+		CompleteStepUp                func(childComplexity int, method model.StepUpMethod, code *string, password *string, assertion model.JSON) int
+		ConfirmCertificatePin         func(childComplexity int, id uuid.UUID, input model.CertificatePinInput) int
+		ConfirmDestinationHostKey     func(childComplexity int, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) int
+		ConfirmSSHHostKey             func(childComplexity int, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) int
+		ConfirmTotpEnrollment         func(childComplexity int, code string) int
+		CreateConnection              func(childComplexity int, input model.CreateConnectionInput) int
+		CreateDestination             func(childComplexity int, input model.CreateDestinationInput) int
+		CreateUser                    func(childComplexity int, input model.CreateUserInput) int
+		DeleteConnection              func(childComplexity int, id uuid.UUID) int
+		DeleteDestination             func(childComplexity int, id uuid.UUID) int
+		DeletePasskey                 func(childComplexity int, id uuid.UUID) int
+		DeleteUser                    func(childComplexity int, id uuid.UUID) int
+		DetectVersion                 func(childComplexity int, id uuid.UUID) int
+		DisableTotp                   func(childComplexity int) int
+		DisableUser                   func(childComplexity int, id uuid.UUID) int
+		EnableUser                    func(childComplexity int, id uuid.UUID) int
+		FetchCertificate              func(childComplexity int, id uuid.UUID) int
+		FetchDestinationHostKey       func(childComplexity int, id uuid.UUID) int
+		FetchSSHHostKey               func(childComplexity int, id uuid.UUID) int
+		FinishPasskeyRegistration     func(childComplexity int, name string, response model.JSON) int
+		GenerateConnectionSSHKeypair  func(childComplexity int, id uuid.UUID) int
+		GenerateDestinationSSHKeypair func(childComplexity int, id uuid.UUID) int
+		ListDatabases                 func(childComplexity int, id uuid.UUID) int
+		Login                         func(childComplexity int, email string, password string) int
+		Logout                        func(childComplexity int) int
+		PrePullImage                  func(childComplexity int, id uuid.UUID) int
+		RegenerateRecoveryCodes       func(childComplexity int) int
+		RenamePasskey                 func(childComplexity int, id uuid.UUID, name string) int
+		ResetUserPassword             func(childComplexity int, id uuid.UUID) int
+		ResetUserSecondFactors        func(childComplexity int, userID uuid.UUID) int
+		RevokeSession                 func(childComplexity int, id uuid.UUID) int
+		RevokeUserSessions            func(childComplexity int, userID uuid.UUID) int
+		SetTLSMode                    func(childComplexity int, id uuid.UUID, mode model.ConnectionTLSMode) int
+		StageBackupPin                func(childComplexity int, id uuid.UUID, input model.CertificatePinInput) int
+		TestConnection                func(childComplexity int, id uuid.UUID) int
+		TestDestination               func(childComplexity int, id uuid.UUID) int
+		UnlockUser                    func(childComplexity int, id uuid.UUID) int
+		UpdateConnection              func(childComplexity int, id uuid.UUID, input model.UpdateConnectionInput) int
+		UpdateDestination             func(childComplexity int, id uuid.UUID, input model.UpdateDestinationInput) int
+		UpdateTwoFactorPolicy         func(childComplexity int, input model.TwoFactorPolicyInput) int
+		UpdateUser                    func(childComplexity int, id uuid.UUID, input model.UpdateUserInput) int
 	}
 
 	PageInfo struct {
@@ -130,6 +312,11 @@ type ComplexityRoot struct {
 
 	Query struct {
 		AuditLog          func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
+		Connection        func(childComplexity int, id uuid.UUID) int
+		Connections       func(childComplexity int) int
+		Destination       func(childComplexity int, id uuid.UUID) int
+		Destinations      func(childComplexity int) int
+		EngineVersions    func(childComplexity int, engine *model.DatabaseEngine) int
 		Me                func(childComplexity int) int
 		MyPasskeys        func(childComplexity int) int
 		MySessions        func(childComplexity int) int
@@ -144,6 +331,22 @@ type ComplexityRoot struct {
 
 	RecoveryCodes struct {
 		Codes func(childComplexity int) int
+	}
+
+	S3DestinationSettings struct {
+		AccessKeyID        func(childComplexity int) int
+		Bucket             func(childComplexity int) int
+		CaBundlePem        func(childComplexity int) int
+		ChecksumMode       func(childComplexity int) int
+		ConditionalWrites  func(childComplexity int) int
+		Encryption         func(childComplexity int) int
+		Endpoint           func(childComplexity int) int
+		HasSecretAccessKey func(childComplexity int) int
+		KmsKeyID           func(childComplexity int) int
+		PathStyle          func(childComplexity int) int
+		Prefix             func(childComplexity int) int
+		Region             func(childComplexity int) int
+		StorageClass       func(childComplexity int) int
 	}
 
 	SecondFactorReset struct {
@@ -176,6 +379,29 @@ type ComplexityRoot struct {
 		Current   func(childComplexity int) int
 		Kind      func(childComplexity int) int
 		SessionID func(childComplexity int) int
+	}
+
+	SftpDestinationSettings struct {
+		AuthMethod    func(childComplexity int) int
+		BasePath      func(childComplexity int) int
+		Dir           func(childComplexity int) int
+		HasPassphrase func(childComplexity int) int
+		HasPassword   func(childComplexity int) int
+		HasPrivateKey func(childComplexity int) int
+		Host          func(childComplexity int) int
+		HostKey       func(childComplexity int) int
+		Port          func(childComplexity int) int
+		PublicKey     func(childComplexity int) int
+		User          func(childComplexity int) int
+	}
+
+	SshHostKey struct {
+		AuthorizedKey     func(childComplexity int) int
+		ConfirmedAt       func(childComplexity int) int
+		FingerprintSha256 func(childComplexity int) int
+		Host              func(childComplexity int) int
+		Port              func(childComplexity int) int
+		Type              func(childComplexity int) int
 	}
 
 	StepUpChallenge struct {
@@ -262,6 +488,27 @@ type MutationResolver interface {
 	Logout(ctx context.Context) (bool, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) (bool, error)
 	ChangePassword(ctx context.Context, currentPassword string, newPassword string) (bool, error)
+	CreateConnection(ctx context.Context, input model.CreateConnectionInput) (*model.Connection, error)
+	UpdateConnection(ctx context.Context, id uuid.UUID, input model.UpdateConnectionInput) (*model.Connection, error)
+	DeleteConnection(ctx context.Context, id uuid.UUID) (bool, error)
+	TestConnection(ctx context.Context, id uuid.UUID) (*model.ConnectionTestResult, error)
+	DetectVersion(ctx context.Context, id uuid.UUID) (*model.ConnectionVersionInfo, error)
+	ListDatabases(ctx context.Context, id uuid.UUID) (*model.ConnectionDatabases, error)
+	PrePullImage(ctx context.Context, id uuid.UUID) (*model.ImagePrePullResult, error)
+	FetchCertificate(ctx context.Context, id uuid.UUID) (*model.CertificateChain, error)
+	ConfirmCertificatePin(ctx context.Context, id uuid.UUID, input model.CertificatePinInput) (*model.Connection, error)
+	StageBackupPin(ctx context.Context, id uuid.UUID, input model.CertificatePinInput) (*model.Connection, error)
+	FetchSSHHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error)
+	ConfirmSSHHostKey(ctx context.Context, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) (*model.Connection, error)
+	SetTLSMode(ctx context.Context, id uuid.UUID, mode model.ConnectionTLSMode) (*model.Connection, error)
+	GenerateConnectionSSHKeypair(ctx context.Context, id uuid.UUID) (*model.ConnectionSSHKeypair, error)
+	CreateDestination(ctx context.Context, input model.CreateDestinationInput) (*model.Destination, error)
+	UpdateDestination(ctx context.Context, id uuid.UUID, input model.UpdateDestinationInput) (*model.Destination, error)
+	DeleteDestination(ctx context.Context, id uuid.UUID) (bool, error)
+	TestDestination(ctx context.Context, id uuid.UUID) (*model.DestinationTestResult, error)
+	FetchDestinationHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error)
+	ConfirmDestinationHostKey(ctx context.Context, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) (*model.Destination, error)
+	GenerateDestinationSSHKeypair(ctx context.Context, id uuid.UUID) (*model.DestinationSSHKeypair, error)
 	BeginTotpEnrollment(ctx context.Context) (*model.TotpEnrollment, error)
 	ConfirmTotpEnrollment(ctx context.Context, code string) (*model.RecoveryCodes, error)
 	DisableTotp(ctx context.Context) (bool, error)
@@ -290,6 +537,11 @@ type QueryResolver interface {
 	AuditLog(ctx context.Context, filter *model.AuditLogFilter, first *int, after *string) (*model.AuditLogConnection, error)
 	Me(ctx context.Context) (*model.User, error)
 	MySessions(ctx context.Context) ([]model.Session, error)
+	Connections(ctx context.Context) ([]model.Connection, error)
+	Connection(ctx context.Context, id uuid.UUID) (*model.Connection, error)
+	EngineVersions(ctx context.Context, engine *model.DatabaseEngine) ([]model.EngineVersion, error)
+	Destinations(ctx context.Context) ([]model.Destination, error)
+	Destination(ctx context.Context, id uuid.UUID) (*model.Destination, error)
 	MyTwoFactorStatus(ctx context.Context) (*model.TwoFactorStatus, error)
 	TwoFactorPolicy(ctx context.Context) (*model.TwoFactorPolicy, error)
 	Users(ctx context.Context, filter *model.UserFilter, first *int, after *string) (*model.UserConnection, error)
@@ -411,6 +663,460 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.AuditLogEntry.Ts(childComplexity), true
 
+	case "CertificateChain.certificates":
+		if e.ComplexityRoot.CertificateChain.Certificates == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificateChain.Certificates(childComplexity), true
+	case "CertificateChain.leafSpkiSha256":
+		if e.ComplexityRoot.CertificateChain.LeafSpkiSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificateChain.LeafSpkiSha256(childComplexity), true
+	case "CertificateChain.suggestedAnchorIndex":
+		if e.ComplexityRoot.CertificateChain.SuggestedAnchorIndex == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificateChain.SuggestedAnchorIndex(childComplexity), true
+
+	case "CertificatePin.certificatePem":
+		if e.ComplexityRoot.CertificatePin.CertificatePem == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.CertificatePem(childComplexity), true
+	case "CertificatePin.isCa":
+		if e.ComplexityRoot.CertificatePin.IsCa == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.IsCa(childComplexity), true
+	case "CertificatePin.issuer":
+		if e.ComplexityRoot.CertificatePin.Issuer == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.Issuer(childComplexity), true
+	case "CertificatePin.leafSpkiSha256":
+		if e.ComplexityRoot.CertificatePin.LeafSpkiSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.LeafSpkiSha256(childComplexity), true
+	case "CertificatePin.notAfter":
+		if e.ComplexityRoot.CertificatePin.NotAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.NotAfter(childComplexity), true
+	case "CertificatePin.pinnedAt":
+		if e.ComplexityRoot.CertificatePin.PinnedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.PinnedAt(childComplexity), true
+	case "CertificatePin.subject":
+		if e.ComplexityRoot.CertificatePin.Subject == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CertificatePin.Subject(childComplexity), true
+
+	case "ChainCertificate.dnsNames":
+		if e.ComplexityRoot.ChainCertificate.DNSNames == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.DNSNames(childComplexity), true
+	case "ChainCertificate.fingerprintSha256":
+		if e.ComplexityRoot.ChainCertificate.FingerprintSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.FingerprintSha256(childComplexity), true
+	case "ChainCertificate.ipAddresses":
+		if e.ComplexityRoot.ChainCertificate.IPAddresses == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.IPAddresses(childComplexity), true
+	case "ChainCertificate.isCa":
+		if e.ComplexityRoot.ChainCertificate.IsCa == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.IsCa(childComplexity), true
+	case "ChainCertificate.issuer":
+		if e.ComplexityRoot.ChainCertificate.Issuer == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.Issuer(childComplexity), true
+	case "ChainCertificate.notAfter":
+		if e.ComplexityRoot.ChainCertificate.NotAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.NotAfter(childComplexity), true
+	case "ChainCertificate.notBefore":
+		if e.ComplexityRoot.ChainCertificate.NotBefore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.NotBefore(childComplexity), true
+	case "ChainCertificate.pem":
+		if e.ComplexityRoot.ChainCertificate.Pem == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.Pem(childComplexity), true
+	case "ChainCertificate.selfSigned":
+		if e.ComplexityRoot.ChainCertificate.SelfSigned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.SelfSigned(childComplexity), true
+	case "ChainCertificate.spkiSha256":
+		if e.ComplexityRoot.ChainCertificate.SpkiSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.SpkiSha256(childComplexity), true
+	case "ChainCertificate.spkiSha256Hex":
+		if e.ComplexityRoot.ChainCertificate.SpkiSha256Hex == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.SpkiSha256Hex(childComplexity), true
+	case "ChainCertificate.subject":
+		if e.ComplexityRoot.ChainCertificate.Subject == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ChainCertificate.Subject(childComplexity), true
+
+	case "Connection.createdAt":
+		if e.ComplexityRoot.Connection.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.CreatedAt(childComplexity), true
+	case "Connection.engine":
+		if e.ComplexityRoot.Connection.Engine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Engine(childComplexity), true
+	case "Connection.host":
+		if e.ComplexityRoot.Connection.Host == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Host(childComplexity), true
+	case "Connection.id":
+		if e.ComplexityRoot.Connection.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.ID(childComplexity), true
+	case "Connection.insecureTransport":
+		if e.ComplexityRoot.Connection.InsecureTransport == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.InsecureTransport(childComplexity), true
+	case "Connection.legacyVersion":
+		if e.ComplexityRoot.Connection.LegacyVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.LegacyVersion(childComplexity), true
+	case "Connection.name":
+		if e.ComplexityRoot.Connection.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Name(childComplexity), true
+	case "Connection.notReadyReason":
+		if e.ComplexityRoot.Connection.NotReadyReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.NotReadyReason(childComplexity), true
+	case "Connection.pinExpiresAt":
+		if e.ComplexityRoot.Connection.PinExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.PinExpiresAt(childComplexity), true
+	case "Connection.pinStatus":
+		if e.ComplexityRoot.Connection.PinStatus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.PinStatus(childComplexity), true
+	case "Connection.port":
+		if e.ComplexityRoot.Connection.Port == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Port(childComplexity), true
+	case "Connection.ready":
+		if e.ComplexityRoot.Connection.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Ready(childComplexity), true
+	case "Connection.sshEnabled":
+		if e.ComplexityRoot.Connection.SSHEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.SSHEnabled(childComplexity), true
+	case "Connection.settings":
+		if e.ComplexityRoot.Connection.Settings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Settings(childComplexity), true
+	case "Connection.tlsMode":
+		if e.ComplexityRoot.Connection.TLSMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.TLSMode(childComplexity), true
+	case "Connection.updatedAt":
+		if e.ComplexityRoot.Connection.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.UpdatedAt(childComplexity), true
+	case "Connection.versionKey":
+		if e.ComplexityRoot.Connection.VersionKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.VersionKey(childComplexity), true
+
+	case "ConnectionDatabases.databases":
+		if e.ComplexityRoot.ConnectionDatabases.Databases == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionDatabases.Databases(childComplexity), true
+	case "ConnectionDatabases.warnings":
+		if e.ComplexityRoot.ConnectionDatabases.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionDatabases.Warnings(childComplexity), true
+
+	case "ConnectionSettings.backupPin":
+		if e.ComplexityRoot.ConnectionSettings.BackupPin == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.BackupPin(childComplexity), true
+	case "ConnectionSettings.clientCertificatePem":
+		if e.ComplexityRoot.ConnectionSettings.ClientCertificatePem == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.ClientCertificatePem(childComplexity), true
+	case "ConnectionSettings.hasPassword":
+		if e.ComplexityRoot.ConnectionSettings.HasPassword == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.HasPassword(childComplexity), true
+	case "ConnectionSettings.imageKey":
+		if e.ComplexityRoot.ConnectionSettings.ImageKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.ImageKey(childComplexity), true
+	case "ConnectionSettings.ssh":
+		if e.ComplexityRoot.ConnectionSettings.SSH == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.SSH(childComplexity), true
+	case "ConnectionSettings.tlsPin":
+		if e.ComplexityRoot.ConnectionSettings.TLSPin == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.TLSPin(childComplexity), true
+	case "ConnectionSettings.username":
+		if e.ComplexityRoot.ConnectionSettings.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSettings.Username(childComplexity), true
+
+	case "ConnectionSshKeypair.connection":
+		if e.ComplexityRoot.ConnectionSshKeypair.Connection == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshKeypair.Connection(childComplexity), true
+	case "ConnectionSshKeypair.fingerprintSha256":
+		if e.ComplexityRoot.ConnectionSshKeypair.FingerprintSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshKeypair.FingerprintSha256(childComplexity), true
+	case "ConnectionSshKeypair.publicKey":
+		if e.ComplexityRoot.ConnectionSshKeypair.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshKeypair.PublicKey(childComplexity), true
+
+	case "ConnectionSshSettings.authMethod":
+		if e.ComplexityRoot.ConnectionSshSettings.AuthMethod == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.AuthMethod(childComplexity), true
+	case "ConnectionSshSettings.hasPassphrase":
+		if e.ComplexityRoot.ConnectionSshSettings.HasPassphrase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.HasPassphrase(childComplexity), true
+	case "ConnectionSshSettings.hasPassword":
+		if e.ComplexityRoot.ConnectionSshSettings.HasPassword == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.HasPassword(childComplexity), true
+	case "ConnectionSshSettings.hasPrivateKey":
+		if e.ComplexityRoot.ConnectionSshSettings.HasPrivateKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.HasPrivateKey(childComplexity), true
+	case "ConnectionSshSettings.host":
+		if e.ComplexityRoot.ConnectionSshSettings.Host == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.Host(childComplexity), true
+	case "ConnectionSshSettings.hostKey":
+		if e.ComplexityRoot.ConnectionSshSettings.HostKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.HostKey(childComplexity), true
+	case "ConnectionSshSettings.port":
+		if e.ComplexityRoot.ConnectionSshSettings.Port == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.Port(childComplexity), true
+	case "ConnectionSshSettings.publicKey":
+		if e.ComplexityRoot.ConnectionSshSettings.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.PublicKey(childComplexity), true
+	case "ConnectionSshSettings.user":
+		if e.ComplexityRoot.ConnectionSshSettings.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionSshSettings.User(childComplexity), true
+
+	case "ConnectionTestResult.code":
+		if e.ComplexityRoot.ConnectionTestResult.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Code(childComplexity), true
+	case "ConnectionTestResult.compatible":
+		if e.ComplexityRoot.ConnectionTestResult.Compatible == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Compatible(childComplexity), true
+	case "ConnectionTestResult.databaseCount":
+		if e.ComplexityRoot.ConnectionTestResult.DatabaseCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.DatabaseCount(childComplexity), true
+	case "ConnectionTestResult.detectedVersionKey":
+		if e.ComplexityRoot.ConnectionTestResult.DetectedVersionKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.DetectedVersionKey(childComplexity), true
+	case "ConnectionTestResult.legacy":
+		if e.ComplexityRoot.ConnectionTestResult.Legacy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Legacy(childComplexity), true
+	case "ConnectionTestResult.message":
+		if e.ComplexityRoot.ConnectionTestResult.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Message(childComplexity), true
+	case "ConnectionTestResult.ok":
+		if e.ComplexityRoot.ConnectionTestResult.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Ok(childComplexity), true
+	case "ConnectionTestResult.serverVersion":
+		if e.ComplexityRoot.ConnectionTestResult.ServerVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.ServerVersion(childComplexity), true
+	case "ConnectionTestResult.warnings":
+		if e.ComplexityRoot.ConnectionTestResult.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Warnings(childComplexity), true
+
+	case "ConnectionVersionInfo.currentCompatible":
+		if e.ComplexityRoot.ConnectionVersionInfo.CurrentCompatible == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionVersionInfo.CurrentCompatible(childComplexity), true
+	case "ConnectionVersionInfo.legacy":
+		if e.ComplexityRoot.ConnectionVersionInfo.Legacy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionVersionInfo.Legacy(childComplexity), true
+	case "ConnectionVersionInfo.serverVersion":
+		if e.ComplexityRoot.ConnectionVersionInfo.ServerVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionVersionInfo.ServerVersion(childComplexity), true
+	case "ConnectionVersionInfo.suggestedVersionKey":
+		if e.ComplexityRoot.ConnectionVersionInfo.SuggestedVersionKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionVersionInfo.SuggestedVersionKey(childComplexity), true
+	case "ConnectionVersionInfo.warnings":
+		if e.ComplexityRoot.ConnectionVersionInfo.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionVersionInfo.Warnings(childComplexity), true
+
 	case "CreatedUser.temporaryPassword":
 		if e.ComplexityRoot.CreatedUser.TemporaryPassword == nil {
 			break
@@ -423,6 +1129,212 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CreatedUser.User(childComplexity), true
+
+	case "Destination.createdAt":
+		if e.ComplexityRoot.Destination.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.CreatedAt(childComplexity), true
+	case "Destination.id":
+		if e.ComplexityRoot.Destination.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.ID(childComplexity), true
+	case "Destination.name":
+		if e.ComplexityRoot.Destination.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.Name(childComplexity), true
+	case "Destination.noDelete":
+		if e.ComplexityRoot.Destination.NoDelete == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.NoDelete(childComplexity), true
+	case "Destination.notReadyReason":
+		if e.ComplexityRoot.Destination.NotReadyReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.NotReadyReason(childComplexity), true
+	case "Destination.objectLockMode":
+		if e.ComplexityRoot.Destination.ObjectLockMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.ObjectLockMode(childComplexity), true
+	case "Destination.objectLockRetentionDays":
+		if e.ComplexityRoot.Destination.ObjectLockRetentionDays == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.ObjectLockRetentionDays(childComplexity), true
+	case "Destination.ready":
+		if e.ComplexityRoot.Destination.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.Ready(childComplexity), true
+	case "Destination.settings":
+		if e.ComplexityRoot.Destination.Settings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.Settings(childComplexity), true
+	case "Destination.type":
+		if e.ComplexityRoot.Destination.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.Type(childComplexity), true
+	case "Destination.updatedAt":
+		if e.ComplexityRoot.Destination.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.UpdatedAt(childComplexity), true
+
+	case "DestinationSettings.disk":
+		if e.ComplexityRoot.DestinationSettings.Disk == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSettings.Disk(childComplexity), true
+	case "DestinationSettings.s3":
+		if e.ComplexityRoot.DestinationSettings.S3 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSettings.S3(childComplexity), true
+	case "DestinationSettings.sftp":
+		if e.ComplexityRoot.DestinationSettings.Sftp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSettings.Sftp(childComplexity), true
+
+	case "DestinationSshKeypair.destination":
+		if e.ComplexityRoot.DestinationSshKeypair.Destination == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSshKeypair.Destination(childComplexity), true
+	case "DestinationSshKeypair.fingerprintSha256":
+		if e.ComplexityRoot.DestinationSshKeypair.FingerprintSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSshKeypair.FingerprintSha256(childComplexity), true
+	case "DestinationSshKeypair.publicKey":
+		if e.ComplexityRoot.DestinationSshKeypair.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSshKeypair.PublicKey(childComplexity), true
+
+	case "DestinationTestResult.note":
+		if e.ComplexityRoot.DestinationTestResult.Note == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.Note(childComplexity), true
+	case "DestinationTestResult.ok":
+		if e.ComplexityRoot.DestinationTestResult.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.Ok(childComplexity), true
+	case "DestinationTestResult.probeKey":
+		if e.ComplexityRoot.DestinationTestResult.ProbeKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.ProbeKey(childComplexity), true
+	case "DestinationTestResult.probeRemains":
+		if e.ComplexityRoot.DestinationTestResult.ProbeRemains == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.ProbeRemains(childComplexity), true
+	case "DestinationTestResult.steps":
+		if e.ComplexityRoot.DestinationTestResult.Steps == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.Steps(childComplexity), true
+
+	case "DestinationTestStep.code":
+		if e.ComplexityRoot.DestinationTestStep.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestStep.Code(childComplexity), true
+	case "DestinationTestStep.message":
+		if e.ComplexityRoot.DestinationTestStep.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestStep.Message(childComplexity), true
+	case "DestinationTestStep.name":
+		if e.ComplexityRoot.DestinationTestStep.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestStep.Name(childComplexity), true
+	case "DestinationTestStep.ok":
+		if e.ComplexityRoot.DestinationTestStep.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestStep.Ok(childComplexity), true
+
+	case "DiskDestinationSettings.path":
+		if e.ComplexityRoot.DiskDestinationSettings.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiskDestinationSettings.Path(childComplexity), true
+
+	case "EngineVersion.clientVersion":
+		if e.ComplexityRoot.EngineVersion.ClientVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EngineVersion.ClientVersion(childComplexity), true
+	case "EngineVersion.engine":
+		if e.ComplexityRoot.EngineVersion.Engine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EngineVersion.Engine(childComplexity), true
+	case "EngineVersion.key":
+		if e.ComplexityRoot.EngineVersion.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EngineVersion.Key(childComplexity), true
+	case "EngineVersion.legacy":
+		if e.ComplexityRoot.EngineVersion.Legacy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EngineVersion.Legacy(childComplexity), true
+
+	case "ImagePrePullResult.alreadyPresent":
+		if e.ComplexityRoot.ImagePrePullResult.AlreadyPresent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImagePrePullResult.AlreadyPresent(childComplexity), true
+	case "ImagePrePullResult.imageRef":
+		if e.ComplexityRoot.ImagePrePullResult.ImageRef == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImagePrePullResult.ImageRef(childComplexity), true
 
 	case "LoginResult.availableFactors":
 		if e.ComplexityRoot.LoginResult.AvailableFactors == nil {
@@ -512,6 +1424,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CompleteStepUp(childComplexity, args["method"].(model.StepUpMethod), args["code"].(*string), args["password"].(*string), args["assertion"].(model.JSON)), true
+	case "Mutation.confirmCertificatePin":
+		if e.ComplexityRoot.Mutation.ConfirmCertificatePin == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_confirmCertificatePin_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConfirmCertificatePin(childComplexity, args["id"].(uuid.UUID), args["input"].(model.CertificatePinInput)), true
+	case "Mutation.confirmDestinationHostKey":
+		if e.ComplexityRoot.Mutation.ConfirmDestinationHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_confirmDestinationHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConfirmDestinationHostKey(childComplexity, args["id"].(uuid.UUID), args["authorizedKey"].(string), args["expectedHost"].(string), args["expectedPort"].(int)), true
+	case "Mutation.confirmSshHostKey":
+		if e.ComplexityRoot.Mutation.ConfirmSSHHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_confirmSshHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ConfirmSSHHostKey(childComplexity, args["id"].(uuid.UUID), args["authorizedKey"].(string), args["expectedHost"].(string), args["expectedPort"].(int)), true
 	case "Mutation.confirmTotpEnrollment":
 		if e.ComplexityRoot.Mutation.ConfirmTotpEnrollment == nil {
 			break
@@ -523,6 +1468,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ConfirmTotpEnrollment(childComplexity, args["code"].(string)), true
+	case "Mutation.createConnection":
+		if e.ComplexityRoot.Mutation.CreateConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateConnection(childComplexity, args["input"].(model.CreateConnectionInput)), true
+	case "Mutation.createDestination":
+		if e.ComplexityRoot.Mutation.CreateDestination == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createDestination_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateDestination(childComplexity, args["input"].(model.CreateDestinationInput)), true
 	case "Mutation.createUser":
 		if e.ComplexityRoot.Mutation.CreateUser == nil {
 			break
@@ -534,6 +1501,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateUser(childComplexity, args["input"].(model.CreateUserInput)), true
+	case "Mutation.deleteConnection":
+		if e.ComplexityRoot.Mutation.DeleteConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteConnection(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.deleteDestination":
+		if e.ComplexityRoot.Mutation.DeleteDestination == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteDestination_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteDestination(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.deletePasskey":
 		if e.ComplexityRoot.Mutation.DeletePasskey == nil {
 			break
@@ -556,6 +1545,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteUser(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.detectVersion":
+		if e.ComplexityRoot.Mutation.DetectVersion == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_detectVersion_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DetectVersion(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.disableTotp":
 		if e.ComplexityRoot.Mutation.DisableTotp == nil {
 			break
@@ -584,6 +1584,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.EnableUser(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.fetchCertificate":
+		if e.ComplexityRoot.Mutation.FetchCertificate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_fetchCertificate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.FetchCertificate(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.fetchDestinationHostKey":
+		if e.ComplexityRoot.Mutation.FetchDestinationHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_fetchDestinationHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.FetchDestinationHostKey(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.fetchSshHostKey":
+		if e.ComplexityRoot.Mutation.FetchSSHHostKey == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_fetchSshHostKey_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.FetchSSHHostKey(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.finishPasskeyRegistration":
 		if e.ComplexityRoot.Mutation.FinishPasskeyRegistration == nil {
 			break
@@ -595,6 +1628,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.FinishPasskeyRegistration(childComplexity, args["name"].(string), args["response"].(model.JSON)), true
+	case "Mutation.generateConnectionSshKeypair":
+		if e.ComplexityRoot.Mutation.GenerateConnectionSSHKeypair == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_generateConnectionSshKeypair_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.GenerateConnectionSSHKeypair(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.generateDestinationSshKeypair":
+		if e.ComplexityRoot.Mutation.GenerateDestinationSSHKeypair == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_generateDestinationSshKeypair_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.GenerateDestinationSSHKeypair(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.listDatabases":
+		if e.ComplexityRoot.Mutation.ListDatabases == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_listDatabases_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ListDatabases(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.login":
 		if e.ComplexityRoot.Mutation.Login == nil {
 			break
@@ -612,6 +1678,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.Logout(childComplexity), true
+	case "Mutation.prePullImage":
+		if e.ComplexityRoot.Mutation.PrePullImage == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_prePullImage_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PrePullImage(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.regenerateRecoveryCodes":
 		if e.ComplexityRoot.Mutation.RegenerateRecoveryCodes == nil {
 			break
@@ -673,6 +1750,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeUserSessions(childComplexity, args["userId"].(uuid.UUID)), true
+	case "Mutation.setTlsMode":
+		if e.ComplexityRoot.Mutation.SetTLSMode == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setTlsMode_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetTLSMode(childComplexity, args["id"].(uuid.UUID), args["mode"].(model.ConnectionTLSMode)), true
+	case "Mutation.stageBackupPin":
+		if e.ComplexityRoot.Mutation.StageBackupPin == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_stageBackupPin_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.StageBackupPin(childComplexity, args["id"].(uuid.UUID), args["input"].(model.CertificatePinInput)), true
+	case "Mutation.testConnection":
+		if e.ComplexityRoot.Mutation.TestConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_testConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.TestConnection(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.testDestination":
+		if e.ComplexityRoot.Mutation.TestDestination == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_testDestination_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.TestDestination(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.unlockUser":
 		if e.ComplexityRoot.Mutation.UnlockUser == nil {
 			break
@@ -684,6 +1805,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UnlockUser(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.updateConnection":
+		if e.ComplexityRoot.Mutation.UpdateConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateConnection(childComplexity, args["id"].(uuid.UUID), args["input"].(model.UpdateConnectionInput)), true
+	case "Mutation.updateDestination":
+		if e.ComplexityRoot.Mutation.UpdateDestination == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateDestination_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateDestination(childComplexity, args["id"].(uuid.UUID), args["input"].(model.UpdateDestinationInput)), true
 	case "Mutation.updateTwoFactorPolicy":
 		if e.ComplexityRoot.Mutation.UpdateTwoFactorPolicy == nil {
 			break
@@ -804,6 +1947,51 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.AuditLog(childComplexity, args["filter"].(*model.AuditLogFilter), args["first"].(*int), args["after"].(*string)), true
+	case "Query.connection":
+		if e.ComplexityRoot.Query.Connection == nil {
+			break
+		}
+
+		args, err := ec.field_Query_connection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Connection(childComplexity, args["id"].(uuid.UUID)), true
+	case "Query.connections":
+		if e.ComplexityRoot.Query.Connections == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Connections(childComplexity), true
+	case "Query.destination":
+		if e.ComplexityRoot.Query.Destination == nil {
+			break
+		}
+
+		args, err := ec.field_Query_destination_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Destination(childComplexity, args["id"].(uuid.UUID)), true
+	case "Query.destinations":
+		if e.ComplexityRoot.Query.Destinations == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Destinations(childComplexity), true
+	case "Query.engineVersions":
+		if e.ComplexityRoot.Query.EngineVersions == nil {
+			break
+		}
+
+		args, err := ec.field_Query_engineVersions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.EngineVersions(childComplexity, args["engine"].(*model.DatabaseEngine)), true
 
 	case "Query.me":
 		if e.ComplexityRoot.Query.Me == nil {
@@ -887,6 +2075,85 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RecoveryCodes.Codes(childComplexity), true
+
+	case "S3DestinationSettings.accessKeyId":
+		if e.ComplexityRoot.S3DestinationSettings.AccessKeyID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.AccessKeyID(childComplexity), true
+	case "S3DestinationSettings.bucket":
+		if e.ComplexityRoot.S3DestinationSettings.Bucket == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.Bucket(childComplexity), true
+	case "S3DestinationSettings.caBundlePem":
+		if e.ComplexityRoot.S3DestinationSettings.CaBundlePem == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.CaBundlePem(childComplexity), true
+	case "S3DestinationSettings.checksumMode":
+		if e.ComplexityRoot.S3DestinationSettings.ChecksumMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.ChecksumMode(childComplexity), true
+	case "S3DestinationSettings.conditionalWrites":
+		if e.ComplexityRoot.S3DestinationSettings.ConditionalWrites == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.ConditionalWrites(childComplexity), true
+	case "S3DestinationSettings.encryption":
+		if e.ComplexityRoot.S3DestinationSettings.Encryption == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.Encryption(childComplexity), true
+	case "S3DestinationSettings.endpoint":
+		if e.ComplexityRoot.S3DestinationSettings.Endpoint == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.Endpoint(childComplexity), true
+	case "S3DestinationSettings.hasSecretAccessKey":
+		if e.ComplexityRoot.S3DestinationSettings.HasSecretAccessKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.HasSecretAccessKey(childComplexity), true
+	case "S3DestinationSettings.kmsKeyId":
+		if e.ComplexityRoot.S3DestinationSettings.KmsKeyID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.KmsKeyID(childComplexity), true
+	case "S3DestinationSettings.pathStyle":
+		if e.ComplexityRoot.S3DestinationSettings.PathStyle == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.PathStyle(childComplexity), true
+	case "S3DestinationSettings.prefix":
+		if e.ComplexityRoot.S3DestinationSettings.Prefix == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.Prefix(childComplexity), true
+	case "S3DestinationSettings.region":
+		if e.ComplexityRoot.S3DestinationSettings.Region == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.Region(childComplexity), true
+	case "S3DestinationSettings.storageClass":
+		if e.ComplexityRoot.S3DestinationSettings.StorageClass == nil {
+			break
+		}
+
+		return e.ComplexityRoot.S3DestinationSettings.StorageClass(childComplexity), true
 
 	case "SecondFactorReset.removedPasskeys":
 		if e.ComplexityRoot.SecondFactorReset.RemovedPasskeys == nil {
@@ -1011,6 +2278,110 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionEvent.SessionID(childComplexity), true
+
+	case "SftpDestinationSettings.authMethod":
+		if e.ComplexityRoot.SftpDestinationSettings.AuthMethod == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.AuthMethod(childComplexity), true
+	case "SftpDestinationSettings.basePath":
+		if e.ComplexityRoot.SftpDestinationSettings.BasePath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.BasePath(childComplexity), true
+	case "SftpDestinationSettings.dir":
+		if e.ComplexityRoot.SftpDestinationSettings.Dir == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.Dir(childComplexity), true
+	case "SftpDestinationSettings.hasPassphrase":
+		if e.ComplexityRoot.SftpDestinationSettings.HasPassphrase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.HasPassphrase(childComplexity), true
+	case "SftpDestinationSettings.hasPassword":
+		if e.ComplexityRoot.SftpDestinationSettings.HasPassword == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.HasPassword(childComplexity), true
+	case "SftpDestinationSettings.hasPrivateKey":
+		if e.ComplexityRoot.SftpDestinationSettings.HasPrivateKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.HasPrivateKey(childComplexity), true
+	case "SftpDestinationSettings.host":
+		if e.ComplexityRoot.SftpDestinationSettings.Host == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.Host(childComplexity), true
+	case "SftpDestinationSettings.hostKey":
+		if e.ComplexityRoot.SftpDestinationSettings.HostKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.HostKey(childComplexity), true
+	case "SftpDestinationSettings.port":
+		if e.ComplexityRoot.SftpDestinationSettings.Port == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.Port(childComplexity), true
+	case "SftpDestinationSettings.publicKey":
+		if e.ComplexityRoot.SftpDestinationSettings.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.PublicKey(childComplexity), true
+	case "SftpDestinationSettings.user":
+		if e.ComplexityRoot.SftpDestinationSettings.User == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SftpDestinationSettings.User(childComplexity), true
+
+	case "SshHostKey.authorizedKey":
+		if e.ComplexityRoot.SshHostKey.AuthorizedKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.AuthorizedKey(childComplexity), true
+	case "SshHostKey.confirmedAt":
+		if e.ComplexityRoot.SshHostKey.ConfirmedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.ConfirmedAt(childComplexity), true
+	case "SshHostKey.fingerprintSha256":
+		if e.ComplexityRoot.SshHostKey.FingerprintSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.FingerprintSha256(childComplexity), true
+	case "SshHostKey.host":
+		if e.ComplexityRoot.SshHostKey.Host == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.Host(childComplexity), true
+	case "SshHostKey.port":
+		if e.ComplexityRoot.SshHostKey.Port == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.Port(childComplexity), true
+	case "SshHostKey.type":
+		if e.ComplexityRoot.SshHostKey.Type == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SshHostKey.Type(childComplexity), true
 
 	case "StepUpChallenge.methods":
 		if e.ComplexityRoot.StepUpChallenge.Methods == nil {
@@ -1279,8 +2650,17 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalers := func() *graphql.InputUnmarshalerIndex {
 		return graphql.NewInputUnmarshalerIndex(
 			graphql.NewInputUnmarshaler("AuditLogFilter", ec.unmarshalInputAuditLogFilter),
+			graphql.NewInputUnmarshaler("CertificatePinInput", ec.unmarshalInputCertificatePinInput),
+			graphql.NewInputUnmarshaler("ConnectionSshInput", ec.unmarshalInputConnectionSshInput),
+			graphql.NewInputUnmarshaler("CreateConnectionInput", ec.unmarshalInputCreateConnectionInput),
+			graphql.NewInputUnmarshaler("CreateDestinationInput", ec.unmarshalInputCreateDestinationInput),
 			graphql.NewInputUnmarshaler("CreateUserInput", ec.unmarshalInputCreateUserInput),
+			graphql.NewInputUnmarshaler("DiskDestinationInput", ec.unmarshalInputDiskDestinationInput),
+			graphql.NewInputUnmarshaler("S3DestinationInput", ec.unmarshalInputS3DestinationInput),
+			graphql.NewInputUnmarshaler("SftpDestinationInput", ec.unmarshalInputSftpDestinationInput),
 			graphql.NewInputUnmarshaler("TwoFactorPolicyInput", ec.unmarshalInputTwoFactorPolicyInput),
+			graphql.NewInputUnmarshaler("UpdateConnectionInput", ec.unmarshalInputUpdateConnectionInput),
+			graphql.NewInputUnmarshaler("UpdateDestinationInput", ec.unmarshalInputUpdateDestinationInput),
 			graphql.NewInputUnmarshaler("UpdateUserInput", ec.unmarshalInputUpdateUserInput),
 			graphql.NewInputUnmarshaler("UserFilter", ec.unmarshalInputUserFilter),
 		)
@@ -1534,6 +2914,662 @@ type Session {
   current: Boolean!
 }
 `, BuiltIn: false},
+	{Name: "../schema/connections.graphqls", Input: `# Database connections (task 2.11; D-106, D-132, D-133, D-135). Admins
+# manage them; every change needs a fresh step-up and is audited.
+# Maintainers see metadata only (name, engine, version, host, port, TLS mode,
+# pin status and expiry, SSH enabled; ` + "`" + `settings` + "`" + ` is null for them) and may
+# test connections and list their databases. Credentials are write-only:
+# inputs accept new values, outputs only tell whether one is stored.
+#
+# serve never connects to a database: tests, version detection, database
+# listing, image pre-pulls, certificate and host-key captures all run on the
+# runner. Certificate pins and SSH host keys are never trusted
+# automatically: fetch, compare out of band, confirm (step-up). A target
+# whose certificate no longer matches the pin answers TLS_PIN_MISMATCH, a
+# bastion with another host key SSH_HOST_KEY_MISMATCH (both audited and
+# alerted). Other target failures answer CONNECTION_FAILED with a fixed
+# message (testConnection reports them in its result instead).
+
+"Database engines. MySQL and MariaDB are separate engines."
+enum DatabaseEngine {
+  POSTGRES
+  MYSQL
+  MARIADB
+}
+
+"Transport security towards the database server."
+enum ConnectionTlsMode {
+  "TLS verified against the pinned certificate only (the default)."
+  PINNED
+  "TLS without verification (insecure: audited opt-out)."
+  UNVERIFIED
+  "No TLS (insecure: audited opt-out)."
+  DISABLED
+}
+
+"State of a connection's certificate pin."
+enum TlsPinStatus {
+  "The TLS mode is not PINNED."
+  NOT_REQUIRED
+  "PINNED without a confirmed pin: the connection cannot be used."
+  MISSING
+  VALID
+  EXPIRES_WITHIN_30_DAYS
+  EXPIRES_WITHIN_7_DAYS
+  EXPIRED
+}
+
+"The credential the SSH tunnel authenticates with."
+enum ConnectionSshAuthMethod {
+  NONE
+  PASSWORD
+  PRIVATE_KEY
+}
+
+"A database connection."
+type Connection {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  "Image catalog key of the server's release series (e.g. 17, 8.4, 11.8)."
+  versionKey: String!
+  "The version or client image is an end-of-life series."
+  legacyVersion: Boolean!
+  host: String!
+  port: Int!
+  tlsMode: ConnectionTlsMode!
+  "Badge: TLS is not pinned (UNVERIFIED or DISABLED)."
+  insecureTransport: Boolean!
+  pinStatus: TlsPinStatus!
+  "Expiry of the current pin (the earliest of the confirmed certificates)."
+  pinExpiresAt: Time
+  sshEnabled: Boolean!
+  "True when the connection can be used (pin and, with SSH, host key and credential present)."
+  ready: Boolean!
+  "What is missing when not ready."
+  notReadyReason: String
+  createdAt: Time!
+  updatedAt: Time!
+  "The full non-secret configuration. Admins only: null for maintainers."
+  settings: ConnectionSettings
+}
+
+type ConnectionSettings {
+  "Image catalog key of the client image the runner uses."
+  imageKey: String!
+  username: String!
+  hasPassword: Boolean!
+  "Public TLS client certificate (its key is stored encrypted); null when none."
+  clientCertificatePem: String
+  "The current certificate pin; null until confirmCertificatePin."
+  tlsPin: CertificatePin
+  "A staged backup pin for a planned certificate rotation."
+  backupPin: CertificatePin
+  "The SSH tunnel; null when the database is reached directly."
+  ssh: ConnectionSshSettings
+}
+
+"A confirmed certificate pin (public data)."
+type CertificatePin {
+  "The anchor: a self-signed server certificate or the root CA."
+  certificatePem: String!
+  subject: String!
+  issuer: String!
+  isCa: Boolean!
+  "Expected leaf SPKI SHA-256 (base64); null for a CA pin that allows leaf rotation."
+  leafSpkiSha256: String
+  notAfter: Time!
+  pinnedAt: Time!
+}
+
+type ConnectionSshSettings {
+  host: String!
+  port: Int!
+  user: String!
+  authMethod: ConnectionSshAuthMethod!
+  hasPassword: Boolean!
+  hasPrivateKey: Boolean!
+  hasPassphrase: Boolean!
+  "The authorized_keys line of the stored private key (install it on the bastion)."
+  publicKey: String
+  "The pinned host key; null until confirmSshHostKey."
+  hostKey: SshHostKey
+}
+
+"An allowlisted engine version of the image catalog."
+type EngineVersion {
+  engine: DatabaseEngine!
+  key: String!
+  "The client version of the pinned image."
+  clientVersion: String!
+  legacy: Boolean!
+}
+
+"The result of testConnection: normalized codes and fixed messages only."
+type ConnectionTestResult {
+  ok: Boolean!
+  "Failure code (e.g. TARGET_UNREACHABLE, TARGET_AUTH_FAILED, INCOMPATIBLE_CLIENT)."
+  code: String
+  message: String
+  serverVersion: String
+  "Catalog key matching the server; null when no allowlisted client fits."
+  detectedVersionKey: String
+  "The connection's client image can back up this server."
+  compatible: Boolean!
+  legacy: Boolean!
+  "Stable warning codes (compatibility, certificate expiry, staged pin in use)."
+  warnings: [String!]!
+  databaseCount: Int!
+}
+
+type ConnectionVersionInfo {
+  serverVersion: String!
+  "The catalog key to use as versionKey and imageKey; null when none fits."
+  suggestedVersionKey: String
+  legacy: Boolean!
+  "The connection's current client image fits the server."
+  currentCompatible: Boolean!
+  warnings: [String!]!
+}
+
+type ConnectionDatabases {
+  "Databases reported by the server, without the engine's system databases."
+  databases: [String!]!
+  warnings: [String!]!
+}
+
+type ImagePrePullResult {
+  "The digest-pinned image reference."
+  imageRef: String!
+  alreadyPresent: Boolean!
+}
+
+"A captured certificate chain. Nothing is trusted: compare it out of band."
+type CertificateChain {
+  "Leaf first, as presented by the server."
+  certificates: [ChainCertificate!]!
+  "The certificate to pin (self-signed leaf or root CA); null when the server presented none (supply the root CA as PEM)."
+  suggestedAnchorIndex: Int
+  "The leaf's SPKI SHA-256 (base64): pass it to confirmCertificatePin."
+  leafSpkiSha256: String!
+}
+
+type ChainCertificate {
+  pem: String!
+  subject: String!
+  issuer: String!
+  dnsNames: [String!]!
+  ipAddresses: [String!]!
+  notBefore: Time!
+  notAfter: Time!
+  isCa: Boolean!
+  selfSigned: Boolean!
+  "SPKI SHA-256 as base64 and hex."
+  spkiSha256: String!
+  spkiSha256Hex: String!
+  "SHA-256 of the certificate (DER, hex)."
+  fingerprintSha256: String!
+}
+
+"The public half of a generated SSH keypair; the private key is stored encrypted and never returned."
+type ConnectionSshKeypair {
+  connection: Connection!
+  "The authorized_keys line to install on the bastion."
+  publicKey: String!
+  fingerprintSha256: String!
+}
+
+extend type Query {
+  "Connections that are not deleted, ordered by name."
+  connections: [Connection!]! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "One connection; null when it does not exist or was deleted."
+  connection(id: UUID!): Connection @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "The allowlisted engine versions (image catalog) for versionKey and imageKey."
+  engineVersions(engine: DatabaseEngine): [EngineVersion!]! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Creates a connection (TLS mode PINNED unless set otherwise; any other
+  mode is an audited opt-out). Pinned TLS to an IP address or localhost
+  needs an SSH tunnel (D-132). A name already in use answers CONFLICT.
+  """
+  createConnection(input: CreateConnectionInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes a connection. Credential fields left out keep the stored value.
+  Changing the host or port removes the certificate pins; changing the
+  bastion's host or port (or disableSsh) removes its host-key pin.
+  """
+  updateConnection(id: UUID!, input: UpdateConnectionInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Soft deletes a connection (its name can be reused)."
+  deleteConnection(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Connects with the stored credentials through the runner. Target failures
+  are reported in the result; a certificate or host-key mismatch is an
+  error. Rate limited; must be the only field of its operation.
+  """
+  testConnection(id: UUID!): ConnectionTestResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Asks the server for its version and suggests the catalog key. Rate limited; must be the only field of its operation."
+  detectVersion(id: UUID!): ConnectionVersionInfo! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Lists the server's databases. Rate limited; must be the only field of its operation."
+  listDatabases(id: UUID!): ConnectionDatabases! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Pulls the connection's client image on the runner (by digest). Must be the only field of its operation."
+  prePullImage(id: UUID!): ImagePrePullResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Captures the server's TLS certificate chain through the runner without
+  sending credentials. Stores and trusts nothing. Rate limited; must be
+  the only field of its operation.
+  """
+  fetchCertificate(id: UUID!): CertificateChain! @hasRole(roles: [ADMIN])
+
+  """
+  Pins the certificate: certIndex into a fresh capture (bound to the leaf
+  SPKI you compared) or a PEM supplied out of band. Confirming the staged
+  backup pin promotes it. Must be the only field of its operation.
+  """
+  confirmCertificatePin(id: UUID!, input: CertificatePinInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Stages a backup pin for a planned certificate rotation (needs a current pin). Must be the only field of its operation."
+  stageBackupPin(id: UUID!, input: CertificatePinInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Trust on first use: the runner connects to the SSH bastion and returns
+  the host key it presents, without authenticating. Compare the
+  fingerprint out of band before confirming it. Rate limited; must be the
+  only field of its operation.
+  """
+  fetchSshHostKey(id: UUID!): SshHostKey! @hasRole(roles: [ADMIN])
+
+  """
+  Pins the SSH bastion's host key (an authorized_keys line).
+  expectedHost/expectedPort are the bastion the key was fetched from
+  (SshHostKey.host/port); CONFLICT if the bastion changed since.
+  """
+  confirmSshHostKey(id: UUID!, authorizedKey: String!, expectedHost: String!, expectedPort: Int!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes the TLS mode. Leaving PINNED (or weakening further) is an
+  audited security opt-out that raises a security alert and sets the
+  insecureTransport badge.
+  """
+  setTlsMode(id: UUID!, mode: ConnectionTlsMode!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Generates an ed25519 keypair for the SSH tunnel, stores the private key
+  encrypted (replacing a stored SSH password or key) and returns only the
+  public key.
+  """
+  generateConnectionSshKeypair(id: UUID!): ConnectionSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+}
+
+input CreateConnectionInput {
+  name: String!
+  engine: DatabaseEngine!
+  versionKey: String!
+  "Default: versionKey."
+  imageKey: String
+  host: String!
+  "Default: 5432 (PostgreSQL) or 3306."
+  port: Int
+  username: String!
+  "Write-only."
+  password: String
+  "Default PINNED; anything else is an audited opt-out."
+  tlsMode: ConnectionTlsMode
+  clientCertificatePem: String
+  "Write-only; required together with clientCertificatePem."
+  clientKeyPem: String
+  ssh: ConnectionSshInput
+}
+
+"Fields to change; unset fields stay unchanged. The engine and TLS mode cannot change here."
+input UpdateConnectionInput {
+  name: String
+  versionKey: String
+  imageKey: String
+  host: String
+  port: Int
+  username: String
+  """
+  Write-only; omit to keep the stored password. When host or port (or the
+  tunnel route) changes, a stored password must be entered again or
+  cleared in the same update (VALIDATION otherwise): bekup never sends a
+  stored password to a new endpoint.
+  """
+  password: String
+  clearPassword: Boolean
+  clientCertificatePem: String
+  "Write-only; required together with clientCertificatePem."
+  clientKeyPem: String
+  clearClientCertificate: Boolean
+  "Sets (and enables) the SSH tunnel."
+  ssh: ConnectionSshInput
+  "Removes the SSH tunnel with its credentials and host-key pin."
+  disableSsh: Boolean
+}
+
+input ConnectionSshInput {
+  host: String!
+  "Default 22."
+  port: Int
+  user: String!
+  """
+  Write-only; replaces a stored private key. Omit to keep the stored
+  credential, except when host, port or user changes: a stored SSH
+  password must then be entered again (or replaced by a key).
+  """
+  password: String
+  "Write-only PEM private key; replaces a stored password. Prefer generateConnectionSshKeypair."
+  privateKey: String
+  "Write-only; only together with privateKey."
+  privateKeyPassphrase: String
+}
+
+input CertificatePinInput {
+  "Index into the chain fetchCertificate returned (re-captured and checked against leafSpkiSha256)."
+  certIndex: Int
+  "The anchor as PEM, supplied out of band (e.g. a root CA the server does not send)."
+  certificatePem: String
+  "The leaf's SPKI SHA-256 (base64 or hex) you compared; required unless allowLeafRotation."
+  leafSpkiSha256: String
+  "CA pins only: accept any leaf the CA issues for the host (no leaf binding)."
+  allowLeafRotation: Boolean
+}
+`, BuiltIn: false},
+	{Name: "../schema/destinations.graphqls", Input: `# Backup destinations (task 2.12; D-106, D-131). Admins manage them; every
+# change needs a fresh step-up and is audited. Maintainers see metadata only
+# (name, type, mode flags, readiness; ` + "`" + `settings` + "`" + ` is null for them) and may
+# test destinations. Credentials are write-only: inputs accept new values,
+# outputs only tell whether one is stored (hasSecretAccessKey, hasPassword,
+# hasPrivateKey). Destinations are soft deleted.
+
+"Destination types."
+enum DestinationType {
+  DISK
+  S3
+  SFTP
+}
+
+"S3 Object Lock retention modes."
+enum ObjectLockMode {
+  GOVERNANCE
+  COMPLIANCE
+}
+
+"S3 server-side encryption."
+enum S3Encryption {
+  NONE
+  "SSE-S3 (provider-managed keys, AES256)."
+  SSE_S3
+  "SSE-KMS (kmsKeyId optional: the account's default key)."
+  SSE_KMS
+}
+
+"How integrity checksums are sent to S3."
+enum S3ChecksumMode {
+  "A SHA-256 checksum with every upload (AWS S3 and compatible stores)."
+  WHEN_SUPPORTED
+  "Only where the protocol requires one (stores without flexible checksums)."
+  WHEN_REQUIRED
+}
+
+"The credential an SFTP destination authenticates with."
+enum SftpAuthMethod {
+  NONE
+  PASSWORD
+  PRIVATE_KEY
+}
+
+"A backup destination."
+type Destination {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  "True when bekup never deletes from this destination (retention is left to lifecycle rules)."
+  noDelete: Boolean!
+  "The S3 default Object Lock retention applied to every upload (null when off)."
+  objectLockMode: ObjectLockMode
+  objectLockRetentionDays: Int
+  "True when the destination can be used (credentials and, for SFTP, a confirmed host key are present)."
+  ready: Boolean!
+  "What is missing when not ready."
+  notReadyReason: String
+  createdAt: Time!
+  updatedAt: Time!
+  "The full non-secret configuration. Admins only: null for maintainers."
+  settings: DestinationSettings
+}
+
+"Per-type settings; exactly the field of the destination's type is set."
+type DestinationSettings {
+  disk: DiskDestinationSettings
+  s3: S3DestinationSettings
+  sftp: SftpDestinationSettings
+}
+
+type DiskDestinationSettings {
+  "Directory below storage.disk_root."
+  path: String!
+}
+
+type S3DestinationSettings {
+  "The endpoint URL of an S3-compatible service; null means AWS S3."
+  endpoint: String
+  region: String!
+  bucket: String!
+  "Key prefix inside the bucket (empty: the bucket root)."
+  prefix: String!
+  pathStyle: Boolean!
+  encryption: S3Encryption!
+  kmsKeyId: String
+  storageClass: String
+  checksumMode: S3ChecksumMode!
+  "Atomic never-overwrite with If-None-Match (disable only for stores that reject it)."
+  conditionalWrites: Boolean!
+  accessKeyId: String!
+  hasSecretAccessKey: Boolean!
+  "A custom CA bundle (PEM) that replaces the system roots for the endpoint."
+  caBundlePem: String
+}
+
+type SftpDestinationSettings {
+  host: String!
+  port: Int!
+  user: String!
+  "Absolute base directory on the server."
+  basePath: String!
+  "Subdirectory below basePath (empty: basePath itself)."
+  dir: String!
+  authMethod: SftpAuthMethod!
+  hasPassword: Boolean!
+  hasPrivateKey: Boolean!
+  hasPassphrase: Boolean!
+  "The authorized_keys line of the stored private key (install it on the server)."
+  publicKey: String
+  "The pinned host key; null until confirmDestinationHostKey."
+  hostKey: SshHostKey
+}
+
+"An SSH host key (public data)."
+type SshHostKey {
+  "Key type, e.g. ssh-ed25519."
+  type: String!
+  "OpenSSH SHA-256 fingerprint (SHA256:...)."
+  fingerprintSha256: String!
+  "The key as an authorized_keys line (type and base64, no comment)."
+  authorizedKey: String!
+  "When an admin pinned it; null for a fetched, unconfirmed key."
+  confirmedAt: Time
+  """
+  The server the key was fetched from (fetch results only; null for a
+  pinned key). Pass host and port back as expectedHost/expectedPort when
+  confirming: the pin is refused (CONFLICT) if the record changed since.
+  """
+  host: String
+  port: Int
+}
+
+"The result of testDestination: normalized codes and fixed messages only."
+type DestinationTestResult {
+  ok: Boolean!
+  "Steps in order: connect, write, read, delete."
+  steps: [DestinationTestStep!]!
+  "The probe object's key (below the destination's prefix)."
+  probeKey: String
+  "True when the probe object was left behind (no-delete mode, Object Lock or a failed delete)."
+  probeRemains: Boolean!
+  note: String
+}
+
+type DestinationTestStep {
+  name: String!
+  ok: Boolean!
+  "A normalized error class (ok, permission_denied, network, timeout, ...)."
+  code: String!
+  message: String!
+}
+
+"The public half of a generated SSH keypair; the private key is stored encrypted and never returned."
+type DestinationSshKeypair {
+  destination: Destination!
+  "The authorized_keys line to install on the SFTP server."
+  publicKey: String!
+  fingerprintSha256: String!
+}
+
+extend type Query {
+  "Destinations that are not deleted, ordered by name."
+  destinations: [Destination!]! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "One destination; null when it does not exist or was deleted."
+  destination(id: UUID!): Destination @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Creates a destination. Exactly the settings input of ` + "`" + `type` + "`" + ` must be
+  set. A name already in use answers CONFLICT. SFTP destinations become
+  ready once their host key is confirmed and a password or key is set.
+  """
+  createDestination(input: CreateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes a destination. A settings input replaces the whole non-secret
+  configuration of its type (credential fields left out keep the stored
+  value). Changing an SFTP destination's host or port removes its pinned
+  host key.
+  """
+  updateDestination(id: UUID!, input: UpdateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Soft deletes a destination (its name can be reused)."
+  deleteDestination(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Writes, reads back and deletes a small probe object below the
+  destination's prefix (no delete in no-delete mode). Rate limited; must be
+  the only field of its operation.
+  """
+  testDestination(id: UUID!): DestinationTestResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Trust on first use: connects to the stored host and port of an SFTP
+  destination through the SSRF guard and returns the host key it presents,
+  without authenticating. Compare the fingerprint out of band before
+  confirming it. Failures are normalized (unreachable, refused address,
+  unsupported key type). Rate limited; must be the only field of its
+  operation.
+  """
+  fetchDestinationHostKey(id: UUID!): SshHostKey! @hasRole(roles: [ADMIN])
+
+  """
+  Pins the host key of an SFTP destination (an authorized_keys line).
+  expectedHost/expectedPort are the host and port the key was fetched from
+  (SshHostKey.host/port); CONFLICT if the destination changed since.
+  """
+  confirmDestinationHostKey(id: UUID!, authorizedKey: String!, expectedHost: String!, expectedPort: Int!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Generates an ed25519 keypair for an SFTP destination, stores the private
+  key encrypted (replacing a stored password or key) and returns only the
+  public key.
+  """
+  generateDestinationSshKeypair(id: UUID!): DestinationSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+}
+
+input CreateDestinationInput {
+  name: String!
+  type: DestinationType!
+  "Never delete from this destination (default false)."
+  noDelete: Boolean
+  disk: DiskDestinationInput
+  s3: S3DestinationInput
+  sftp: SftpDestinationInput
+}
+
+"Fields to change; unset fields stay unchanged."
+input UpdateDestinationInput {
+  name: String
+  noDelete: Boolean
+  disk: DiskDestinationInput
+  s3: S3DestinationInput
+  sftp: SftpDestinationInput
+}
+
+input DiskDestinationInput {
+  "Directory below storage.disk_root (relative; no '..')."
+  path: String!
+}
+
+input S3DestinationInput {
+  "https URL of an S3-compatible service (http only in dev mode); omit for AWS S3."
+  endpoint: String
+  region: String!
+  bucket: String!
+  prefix: String
+  pathStyle: Boolean
+  encryption: S3Encryption
+  kmsKeyId: String
+  storageClass: String
+  checksumMode: S3ChecksumMode
+  "Default true."
+  conditionalWrites: Boolean
+  "Default Object Lock retention (requires a bucket with Object Lock)."
+  objectLockMode: ObjectLockMode
+  objectLockRetentionDays: Int
+  accessKeyId: String!
+  "Write-only. Required when creating; omit to keep the stored key."
+  secretAccessKey: String
+  caBundlePem: String
+}
+
+input SftpDestinationInput {
+  host: String!
+  "Default 22."
+  port: Int
+  user: String!
+  basePath: String!
+  dir: String
+  """
+  Write-only; replaces a stored private key. Omit to keep the stored
+  credential, except when host, port, user or basePath changes: a stored
+  password must then be entered again (or replaced by a key).
+  """
+  password: String
+  "Write-only PEM private key; replaces a stored password. Prefer generateDestinationSshKeypair."
+  privateKey: String
+  "Write-only; only together with privateKey."
+  privateKeyPassphrase: String
+}
+`, BuiltIn: false},
 	{Name: "../schema/schema.graphqls", Input: `# bekup GraphQL schema: shared scalars, directives and types (task 1.2).
 # Feature tasks add their own *.graphqls files next to this one and extend
 # Query/Mutation/Subscription with ` + "`" + `extend type` + "`" + `.
@@ -1599,18 +3635,22 @@ type ServerInfo {
   devMode: Boolean!
 }
 `, BuiltIn: false},
-	{Name: "../schema/subscriptions.graphqls", Input: `# WebSocket subscriptions (task 1.10, D-050, D-105). Subscriptions run only
-# over a WebSocket on /graphql with the graphql-transport-ws protocol; the
-# caller is the session of the cookie sent with the upgrade (connection_init
-# payloads are not accepted). The socket closes with 4401 when the session
-# ends, 4403 when its access changes and 4001 when it was rotated (reconnect).
-# Every event is re-authorized when it is delivered.
+	{Name: "../schema/subscriptions.graphqls", Input: `# Subscriptions (tasks 1.10 and 2.13, D-050, D-105). Subscriptions run only
+# as Server-Sent Events: POST /graphql with Content-Type application/json and
+# Accept: text/event-stream, one subscription per request (graphql-sse,
+# distinct connections mode); the caller is the session of the cookie sent
+# with that request. When the server ends a stream it sends a final error
+# event whose extensions.code is UNAUTHENTICATED (the session ended),
+# FORBIDDEN (its access changed), SESSION_ROTATED (it was rotated: open the
+# stream again) or UNAVAILABLE (shutdown or a failed session check: retry
+# later), then the complete event. Every event is re-authorized when it is
+# delivered.
 
 type Subscription {
   """
   Changes to your own sessions (one revoked or rotated, or all of them
   revoked), e.g. to refresh the session list. When the change ends the
-  session of this connection, the socket closes (see the close codes
+  session of this stream, the stream ends with its final error event (see
   above) and the notice may not arrive first.
   """
   sessionEvents: SessionEvent! @authenticated
@@ -1631,7 +3671,7 @@ type SessionEvent {
   kind: SessionEventKind!
   "The session that changed; null when all sessions were revoked."
   sessionId: UUID
-  "True when the change concerns the session of this connection."
+  "True when the change concerns the session of this stream."
   current: Boolean!
 }
 `, BuiltIn: false},
@@ -2141,6 +4181,214 @@ func (ec *executionContext) childFields_AuditLogEntry(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type AuditLogEntry", field.Name)
 }
 
+func (ec *executionContext) childFields_CertificateChain(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "certificates":
+		return ec.fieldContext_CertificateChain_certificates(ctx, field)
+	case "suggestedAnchorIndex":
+		return ec.fieldContext_CertificateChain_suggestedAnchorIndex(ctx, field)
+	case "leafSpkiSha256":
+		return ec.fieldContext_CertificateChain_leafSpkiSha256(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CertificateChain", field.Name)
+}
+
+func (ec *executionContext) childFields_CertificatePin(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "certificatePem":
+		return ec.fieldContext_CertificatePin_certificatePem(ctx, field)
+	case "subject":
+		return ec.fieldContext_CertificatePin_subject(ctx, field)
+	case "issuer":
+		return ec.fieldContext_CertificatePin_issuer(ctx, field)
+	case "isCa":
+		return ec.fieldContext_CertificatePin_isCa(ctx, field)
+	case "leafSpkiSha256":
+		return ec.fieldContext_CertificatePin_leafSpkiSha256(ctx, field)
+	case "notAfter":
+		return ec.fieldContext_CertificatePin_notAfter(ctx, field)
+	case "pinnedAt":
+		return ec.fieldContext_CertificatePin_pinnedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CertificatePin", field.Name)
+}
+
+func (ec *executionContext) childFields_ChainCertificate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "pem":
+		return ec.fieldContext_ChainCertificate_pem(ctx, field)
+	case "subject":
+		return ec.fieldContext_ChainCertificate_subject(ctx, field)
+	case "issuer":
+		return ec.fieldContext_ChainCertificate_issuer(ctx, field)
+	case "dnsNames":
+		return ec.fieldContext_ChainCertificate_dnsNames(ctx, field)
+	case "ipAddresses":
+		return ec.fieldContext_ChainCertificate_ipAddresses(ctx, field)
+	case "notBefore":
+		return ec.fieldContext_ChainCertificate_notBefore(ctx, field)
+	case "notAfter":
+		return ec.fieldContext_ChainCertificate_notAfter(ctx, field)
+	case "isCa":
+		return ec.fieldContext_ChainCertificate_isCa(ctx, field)
+	case "selfSigned":
+		return ec.fieldContext_ChainCertificate_selfSigned(ctx, field)
+	case "spkiSha256":
+		return ec.fieldContext_ChainCertificate_spkiSha256(ctx, field)
+	case "spkiSha256Hex":
+		return ec.fieldContext_ChainCertificate_spkiSha256Hex(ctx, field)
+	case "fingerprintSha256":
+		return ec.fieldContext_ChainCertificate_fingerprintSha256(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ChainCertificate", field.Name)
+}
+
+func (ec *executionContext) childFields_Connection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_Connection_id(ctx, field)
+	case "name":
+		return ec.fieldContext_Connection_name(ctx, field)
+	case "engine":
+		return ec.fieldContext_Connection_engine(ctx, field)
+	case "versionKey":
+		return ec.fieldContext_Connection_versionKey(ctx, field)
+	case "legacyVersion":
+		return ec.fieldContext_Connection_legacyVersion(ctx, field)
+	case "host":
+		return ec.fieldContext_Connection_host(ctx, field)
+	case "port":
+		return ec.fieldContext_Connection_port(ctx, field)
+	case "tlsMode":
+		return ec.fieldContext_Connection_tlsMode(ctx, field)
+	case "insecureTransport":
+		return ec.fieldContext_Connection_insecureTransport(ctx, field)
+	case "pinStatus":
+		return ec.fieldContext_Connection_pinStatus(ctx, field)
+	case "pinExpiresAt":
+		return ec.fieldContext_Connection_pinExpiresAt(ctx, field)
+	case "sshEnabled":
+		return ec.fieldContext_Connection_sshEnabled(ctx, field)
+	case "ready":
+		return ec.fieldContext_Connection_ready(ctx, field)
+	case "notReadyReason":
+		return ec.fieldContext_Connection_notReadyReason(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_Connection_createdAt(ctx, field)
+	case "updatedAt":
+		return ec.fieldContext_Connection_updatedAt(ctx, field)
+	case "settings":
+		return ec.fieldContext_Connection_settings(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Connection", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionDatabases(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "databases":
+		return ec.fieldContext_ConnectionDatabases_databases(ctx, field)
+	case "warnings":
+		return ec.fieldContext_ConnectionDatabases_warnings(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionDatabases", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "imageKey":
+		return ec.fieldContext_ConnectionSettings_imageKey(ctx, field)
+	case "username":
+		return ec.fieldContext_ConnectionSettings_username(ctx, field)
+	case "hasPassword":
+		return ec.fieldContext_ConnectionSettings_hasPassword(ctx, field)
+	case "clientCertificatePem":
+		return ec.fieldContext_ConnectionSettings_clientCertificatePem(ctx, field)
+	case "tlsPin":
+		return ec.fieldContext_ConnectionSettings_tlsPin(ctx, field)
+	case "backupPin":
+		return ec.fieldContext_ConnectionSettings_backupPin(ctx, field)
+	case "ssh":
+		return ec.fieldContext_ConnectionSettings_ssh(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionSshKeypair(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "connection":
+		return ec.fieldContext_ConnectionSshKeypair_connection(ctx, field)
+	case "publicKey":
+		return ec.fieldContext_ConnectionSshKeypair_publicKey(ctx, field)
+	case "fingerprintSha256":
+		return ec.fieldContext_ConnectionSshKeypair_fingerprintSha256(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionSshKeypair", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionSshSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "host":
+		return ec.fieldContext_ConnectionSshSettings_host(ctx, field)
+	case "port":
+		return ec.fieldContext_ConnectionSshSettings_port(ctx, field)
+	case "user":
+		return ec.fieldContext_ConnectionSshSettings_user(ctx, field)
+	case "authMethod":
+		return ec.fieldContext_ConnectionSshSettings_authMethod(ctx, field)
+	case "hasPassword":
+		return ec.fieldContext_ConnectionSshSettings_hasPassword(ctx, field)
+	case "hasPrivateKey":
+		return ec.fieldContext_ConnectionSshSettings_hasPrivateKey(ctx, field)
+	case "hasPassphrase":
+		return ec.fieldContext_ConnectionSshSettings_hasPassphrase(ctx, field)
+	case "publicKey":
+		return ec.fieldContext_ConnectionSshSettings_publicKey(ctx, field)
+	case "hostKey":
+		return ec.fieldContext_ConnectionSshSettings_hostKey(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionSshSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionTestResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "ok":
+		return ec.fieldContext_ConnectionTestResult_ok(ctx, field)
+	case "code":
+		return ec.fieldContext_ConnectionTestResult_code(ctx, field)
+	case "message":
+		return ec.fieldContext_ConnectionTestResult_message(ctx, field)
+	case "serverVersion":
+		return ec.fieldContext_ConnectionTestResult_serverVersion(ctx, field)
+	case "detectedVersionKey":
+		return ec.fieldContext_ConnectionTestResult_detectedVersionKey(ctx, field)
+	case "compatible":
+		return ec.fieldContext_ConnectionTestResult_compatible(ctx, field)
+	case "legacy":
+		return ec.fieldContext_ConnectionTestResult_legacy(ctx, field)
+	case "warnings":
+		return ec.fieldContext_ConnectionTestResult_warnings(ctx, field)
+	case "databaseCount":
+		return ec.fieldContext_ConnectionTestResult_databaseCount(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionTestResult", field.Name)
+}
+
+func (ec *executionContext) childFields_ConnectionVersionInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "serverVersion":
+		return ec.fieldContext_ConnectionVersionInfo_serverVersion(ctx, field)
+	case "suggestedVersionKey":
+		return ec.fieldContext_ConnectionVersionInfo_suggestedVersionKey(ctx, field)
+	case "legacy":
+		return ec.fieldContext_ConnectionVersionInfo_legacy(ctx, field)
+	case "currentCompatible":
+		return ec.fieldContext_ConnectionVersionInfo_currentCompatible(ctx, field)
+	case "warnings":
+		return ec.fieldContext_ConnectionVersionInfo_warnings(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ConnectionVersionInfo", field.Name)
+}
+
 func (ec *executionContext) childFields_CreatedUser(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "user":
@@ -2149,6 +4397,120 @@ func (ec *executionContext) childFields_CreatedUser(ctx context.Context, field g
 		return ec.fieldContext_CreatedUser_temporaryPassword(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type CreatedUser", field.Name)
+}
+
+func (ec *executionContext) childFields_Destination(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_Destination_id(ctx, field)
+	case "name":
+		return ec.fieldContext_Destination_name(ctx, field)
+	case "type":
+		return ec.fieldContext_Destination_type(ctx, field)
+	case "noDelete":
+		return ec.fieldContext_Destination_noDelete(ctx, field)
+	case "objectLockMode":
+		return ec.fieldContext_Destination_objectLockMode(ctx, field)
+	case "objectLockRetentionDays":
+		return ec.fieldContext_Destination_objectLockRetentionDays(ctx, field)
+	case "ready":
+		return ec.fieldContext_Destination_ready(ctx, field)
+	case "notReadyReason":
+		return ec.fieldContext_Destination_notReadyReason(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_Destination_createdAt(ctx, field)
+	case "updatedAt":
+		return ec.fieldContext_Destination_updatedAt(ctx, field)
+	case "settings":
+		return ec.fieldContext_Destination_settings(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Destination", field.Name)
+}
+
+func (ec *executionContext) childFields_DestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "disk":
+		return ec.fieldContext_DestinationSettings_disk(ctx, field)
+	case "s3":
+		return ec.fieldContext_DestinationSettings_s3(ctx, field)
+	case "sftp":
+		return ec.fieldContext_DestinationSettings_sftp(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DestinationSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_DestinationSshKeypair(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "destination":
+		return ec.fieldContext_DestinationSshKeypair_destination(ctx, field)
+	case "publicKey":
+		return ec.fieldContext_DestinationSshKeypair_publicKey(ctx, field)
+	case "fingerprintSha256":
+		return ec.fieldContext_DestinationSshKeypair_fingerprintSha256(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DestinationSshKeypair", field.Name)
+}
+
+func (ec *executionContext) childFields_DestinationTestResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "ok":
+		return ec.fieldContext_DestinationTestResult_ok(ctx, field)
+	case "steps":
+		return ec.fieldContext_DestinationTestResult_steps(ctx, field)
+	case "probeKey":
+		return ec.fieldContext_DestinationTestResult_probeKey(ctx, field)
+	case "probeRemains":
+		return ec.fieldContext_DestinationTestResult_probeRemains(ctx, field)
+	case "note":
+		return ec.fieldContext_DestinationTestResult_note(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DestinationTestResult", field.Name)
+}
+
+func (ec *executionContext) childFields_DestinationTestStep(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "name":
+		return ec.fieldContext_DestinationTestStep_name(ctx, field)
+	case "ok":
+		return ec.fieldContext_DestinationTestStep_ok(ctx, field)
+	case "code":
+		return ec.fieldContext_DestinationTestStep_code(ctx, field)
+	case "message":
+		return ec.fieldContext_DestinationTestStep_message(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DestinationTestStep", field.Name)
+}
+
+func (ec *executionContext) childFields_DiskDestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "path":
+		return ec.fieldContext_DiskDestinationSettings_path(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DiskDestinationSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_EngineVersion(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "engine":
+		return ec.fieldContext_EngineVersion_engine(ctx, field)
+	case "key":
+		return ec.fieldContext_EngineVersion_key(ctx, field)
+	case "clientVersion":
+		return ec.fieldContext_EngineVersion_clientVersion(ctx, field)
+	case "legacy":
+		return ec.fieldContext_EngineVersion_legacy(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type EngineVersion", field.Name)
+}
+
+func (ec *executionContext) childFields_ImagePrePullResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "imageRef":
+		return ec.fieldContext_ImagePrePullResult_imageRef(ctx, field)
+	case "alreadyPresent":
+		return ec.fieldContext_ImagePrePullResult_alreadyPresent(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ImagePrePullResult", field.Name)
 }
 
 func (ec *executionContext) childFields_LoginResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -2215,6 +4577,38 @@ func (ec *executionContext) childFields_RecoveryCodes(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type RecoveryCodes", field.Name)
 }
 
+func (ec *executionContext) childFields_S3DestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "endpoint":
+		return ec.fieldContext_S3DestinationSettings_endpoint(ctx, field)
+	case "region":
+		return ec.fieldContext_S3DestinationSettings_region(ctx, field)
+	case "bucket":
+		return ec.fieldContext_S3DestinationSettings_bucket(ctx, field)
+	case "prefix":
+		return ec.fieldContext_S3DestinationSettings_prefix(ctx, field)
+	case "pathStyle":
+		return ec.fieldContext_S3DestinationSettings_pathStyle(ctx, field)
+	case "encryption":
+		return ec.fieldContext_S3DestinationSettings_encryption(ctx, field)
+	case "kmsKeyId":
+		return ec.fieldContext_S3DestinationSettings_kmsKeyId(ctx, field)
+	case "storageClass":
+		return ec.fieldContext_S3DestinationSettings_storageClass(ctx, field)
+	case "checksumMode":
+		return ec.fieldContext_S3DestinationSettings_checksumMode(ctx, field)
+	case "conditionalWrites":
+		return ec.fieldContext_S3DestinationSettings_conditionalWrites(ctx, field)
+	case "accessKeyId":
+		return ec.fieldContext_S3DestinationSettings_accessKeyId(ctx, field)
+	case "hasSecretAccessKey":
+		return ec.fieldContext_S3DestinationSettings_hasSecretAccessKey(ctx, field)
+	case "caBundlePem":
+		return ec.fieldContext_S3DestinationSettings_caBundlePem(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type S3DestinationSettings", field.Name)
+}
+
 func (ec *executionContext) childFields_SecondFactorReset(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "user":
@@ -2277,6 +4671,52 @@ func (ec *executionContext) childFields_SessionEvent(ctx context.Context, field 
 		return ec.fieldContext_SessionEvent_current(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SessionEvent", field.Name)
+}
+
+func (ec *executionContext) childFields_SftpDestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "host":
+		return ec.fieldContext_SftpDestinationSettings_host(ctx, field)
+	case "port":
+		return ec.fieldContext_SftpDestinationSettings_port(ctx, field)
+	case "user":
+		return ec.fieldContext_SftpDestinationSettings_user(ctx, field)
+	case "basePath":
+		return ec.fieldContext_SftpDestinationSettings_basePath(ctx, field)
+	case "dir":
+		return ec.fieldContext_SftpDestinationSettings_dir(ctx, field)
+	case "authMethod":
+		return ec.fieldContext_SftpDestinationSettings_authMethod(ctx, field)
+	case "hasPassword":
+		return ec.fieldContext_SftpDestinationSettings_hasPassword(ctx, field)
+	case "hasPrivateKey":
+		return ec.fieldContext_SftpDestinationSettings_hasPrivateKey(ctx, field)
+	case "hasPassphrase":
+		return ec.fieldContext_SftpDestinationSettings_hasPassphrase(ctx, field)
+	case "publicKey":
+		return ec.fieldContext_SftpDestinationSettings_publicKey(ctx, field)
+	case "hostKey":
+		return ec.fieldContext_SftpDestinationSettings_hostKey(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SftpDestinationSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_SshHostKey(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "type":
+		return ec.fieldContext_SshHostKey_type(ctx, field)
+	case "fingerprintSha256":
+		return ec.fieldContext_SshHostKey_fingerprintSha256(ctx, field)
+	case "authorizedKey":
+		return ec.fieldContext_SshHostKey_authorizedKey(ctx, field)
+	case "confirmedAt":
+		return ec.fieldContext_SshHostKey_confirmedAt(ctx, field)
+	case "host":
+		return ec.fieldContext_SshHostKey_host(ctx, field)
+	case "port":
+		return ec.fieldContext_SshHostKey_port(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SshHostKey", field.Name)
 }
 
 func (ec *executionContext) childFields_StepUpChallenge(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -2639,6 +5079,104 @@ func (ec *executionContext) field_Mutation_completeStepUp_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_confirmCertificatePin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CertificatePinInput, error) {
+			return ec.unmarshalNCertificatePinInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePinInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_confirmDestinationHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "authorizedKey",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["authorizedKey"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "expectedHost",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expectedHost"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "expectedPort",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expectedPort"] = arg3
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_confirmSshHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "authorizedKey",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["authorizedKey"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "expectedHost",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expectedHost"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "expectedPort",
+		func(ctx context.Context, v any) (int, error) {
+			return ec.unmarshalNInt2int(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expectedPort"] = arg3
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_confirmTotpEnrollment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2653,6 +5191,34 @@ func (ec *executionContext) field_Mutation_confirmTotpEnrollment_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateConnectionInput, error) {
+			return ec.unmarshalNCreateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateConnectionInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createDestination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateDestinationInput, error) {
+			return ec.unmarshalNCreateDestinationInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateDestinationInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2664,6 +5230,34 @@ func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteDestination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -2682,6 +5276,20 @@ func (ec *executionContext) field_Mutation_deletePasskey_args(ctx context.Contex
 }
 
 func (ec *executionContext) field_Mutation_deleteUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_detectVersion_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
@@ -2723,6 +5331,48 @@ func (ec *executionContext) field_Mutation_enableUser_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_fetchCertificate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_fetchDestinationHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_fetchSshHostKey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_finishPasskeyRegistration_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2745,6 +5395,48 @@ func (ec *executionContext) field_Mutation_finishPasskeyRegistration_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_generateConnectionSshKeypair_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_generateDestinationSshKeypair_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_listDatabases_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_login_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2764,6 +5456,20 @@ func (ec *executionContext) field_Mutation_login_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["password"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_prePullImage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -2845,6 +5551,78 @@ func (ec *executionContext) field_Mutation_revokeUserSessions_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_setTlsMode_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "mode",
+		func(ctx context.Context, v any) (model.ConnectionTLSMode, error) {
+			return ec.unmarshalNConnectionTlsMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["mode"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_stageBackupPin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CertificatePinInput, error) {
+			return ec.unmarshalNCertificatePinInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePinInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_testConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_testDestination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_unlockUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2856,6 +5634,50 @@ func (ec *executionContext) field_Mutation_unlockUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.UpdateConnectionInput, error) {
+			return ec.unmarshalNUpdateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateConnectionInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateDestination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.UpdateDestinationInput, error) {
+			return ec.unmarshalNUpdateDestinationInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateDestinationInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -2936,6 +5758,48 @@ func (ec *executionContext) field_Query_auditLog_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["after"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_connection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_destination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_engineVersions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "engine",
+		func(ctx context.Context, v any) (*model.DatabaseEngine, error) {
+			return ec.unmarshalODatabaseEngine2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["engine"] = arg0
 	return args, nil
 }
 
@@ -3420,6 +6284,1771 @@ func (ec *executionContext) fieldContext_AuditLogEntry_hash(_ context.Context, f
 	return graphql.NewScalarFieldContext("AuditLogEntry", field, false, false, "String")
 }
 
+func (ec *executionContext) _CertificateChain_certificates(ctx context.Context, field graphql.CollectedField, obj *model.CertificateChain) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificateChain_certificates(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Certificates, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.ChainCertificate) graphql.Marshaler {
+			return ec.marshalNChainCertificate2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐChainCertificateᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificateChain_certificates(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CertificateChain",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ChainCertificate(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CertificateChain_suggestedAnchorIndex(ctx context.Context, field graphql.CollectedField, obj *model.CertificateChain) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificateChain_suggestedAnchorIndex(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SuggestedAnchorIndex, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_CertificateChain_suggestedAnchorIndex(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificateChain", field, false, false, "Int")
+}
+
+func (ec *executionContext) _CertificateChain_leafSpkiSha256(ctx context.Context, field graphql.CollectedField, obj *model.CertificateChain) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificateChain_leafSpkiSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LeafSpkiSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificateChain_leafSpkiSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificateChain", field, false, false, "String")
+}
+
+func (ec *executionContext) _CertificatePin_certificatePem(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_certificatePem(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CertificatePem, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_certificatePem(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "String")
+}
+
+func (ec *executionContext) _CertificatePin_subject(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_subject(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Subject, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "String")
+}
+
+func (ec *executionContext) _CertificatePin_issuer(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_issuer(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Issuer, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_issuer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "String")
+}
+
+func (ec *executionContext) _CertificatePin_isCa(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_isCa(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsCa, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_isCa(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _CertificatePin_leafSpkiSha256(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_leafSpkiSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LeafSpkiSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_leafSpkiSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "String")
+}
+
+func (ec *executionContext) _CertificatePin_notAfter(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_notAfter(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotAfter, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_notAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "Time")
+}
+
+func (ec *executionContext) _CertificatePin_pinnedAt(ctx context.Context, field graphql.CollectedField, obj *model.CertificatePin) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CertificatePin_pinnedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinnedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CertificatePin_pinnedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CertificatePin", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ChainCertificate_pem(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_pem(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Pem, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_pem(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_subject(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_subject(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Subject, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_issuer(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_issuer(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Issuer, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_issuer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_dnsNames(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_dnsNames(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DNSNames, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_dnsNames(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_ipAddresses(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_ipAddresses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IPAddresses, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_ipAddresses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_notBefore(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_notBefore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotBefore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_notBefore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ChainCertificate_notAfter(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_notAfter(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotAfter, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_notAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ChainCertificate_isCa(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_isCa(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.IsCa, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_isCa(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ChainCertificate_selfSigned(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_selfSigned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SelfSigned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_selfSigned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ChainCertificate_spkiSha256(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_spkiSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SpkiSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_spkiSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_spkiSha256Hex(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_spkiSha256Hex(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SpkiSha256Hex, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_spkiSha256Hex(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _ChainCertificate_fingerprintSha256(ctx context.Context, field graphql.CollectedField, obj *model.ChainCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ChainCertificate_fingerprintSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FingerprintSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ChainCertificate_fingerprintSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ChainCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _Connection_id(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _Connection_name(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "String")
+}
+
+func (ec *executionContext) _Connection_engine(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_engine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_engine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "DatabaseEngine")
+}
+
+func (ec *executionContext) _Connection_versionKey(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_versionKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.VersionKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_versionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "String")
+}
+
+func (ec *executionContext) _Connection_legacyVersion(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_legacyVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LegacyVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_legacyVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Connection_host(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_host(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Host, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_host(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "String")
+}
+
+func (ec *executionContext) _Connection_port(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_port(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Port, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_port(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Int")
+}
+
+func (ec *executionContext) _Connection_tlsMode(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_tlsMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.ConnectionTLSMode) graphql.Marshaler {
+			return ec.marshalNConnectionTlsMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_tlsMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "ConnectionTlsMode")
+}
+
+func (ec *executionContext) _Connection_insecureTransport(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_insecureTransport(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.InsecureTransport, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_insecureTransport(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Connection_pinStatus(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_pinStatus(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinStatus, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.TLSPinStatus) graphql.Marshaler {
+			return ec.marshalNTlsPinStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTLSPinStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_pinStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "TlsPinStatus")
+}
+
+func (ec *executionContext) _Connection_pinExpiresAt(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_pinExpiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_pinExpiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Connection_sshEnabled(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_sshEnabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SSHEnabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_sshEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Connection_ready(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_ready(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ready, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Connection_notReadyReason(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_notReadyReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotReadyReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_notReadyReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "String")
+}
+
+func (ec *executionContext) _Connection_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Connection_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_updatedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Connection_settings(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_settings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Settings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionSettings) graphql.Marshaler {
+			return ec.marshalOConnectionSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_settings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Connection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionDatabases_databases(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionDatabases_databases(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Databases, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionDatabases_databases(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionDatabases", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionDatabases_warnings(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionDatabases_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionDatabases_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionDatabases", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSettings_imageKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_imageKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ImageKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_imageKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSettings_username(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_username(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSettings_hasPassword(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_hasPassword(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassword, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_hasPassword(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionSettings_clientCertificatePem(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_clientCertificatePem(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ClientCertificatePem, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_clientCertificatePem(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSettings_tlsPin(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_tlsPin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSPin, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CertificatePin) graphql.Marshaler {
+			return ec.marshalOCertificatePin2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePin(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_tlsPin(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CertificatePin(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionSettings_backupPin(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_backupPin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BackupPin, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CertificatePin) graphql.Marshaler {
+			return ec.marshalOCertificatePin2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePin(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_backupPin(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CertificatePin(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionSettings_ssh(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSettings_ssh(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SSH, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionSSHSettings) graphql.Marshaler {
+			return ec.marshalOConnectionSshSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSettings_ssh(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionSshSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionSshKeypair_connection(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshKeypair_connection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Connection, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshKeypair_connection(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionSshKeypair",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionSshKeypair_publicKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshKeypair_publicKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshKeypair_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshKeypair", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSshKeypair_fingerprintSha256(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshKeypair_fingerprintSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FingerprintSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshKeypair_fingerprintSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshKeypair", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_host(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_host(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Host, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_host(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_port(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_port(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Port, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_port(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "Int")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_user(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_user(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.User, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_authMethod(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_authMethod(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AuthMethod, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.ConnectionSSHAuthMethod) graphql.Marshaler {
+			return ec.marshalNConnectionSshAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHAuthMethod(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_authMethod(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "ConnectionSshAuthMethod")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_hasPassword(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_hasPassword(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassword, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_hasPassword(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_hasPrivateKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_hasPrivateKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPrivateKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_hasPrivateKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_hasPassphrase(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_hasPassphrase(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassphrase, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_hasPassphrase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_publicKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_publicKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionSshSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionSshSettings_hostKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionSSHSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionSshSettings_hostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HostKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+			return ec.marshalOSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionSshSettings_hostKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionSshSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SshHostKey(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ConnectionTestResult_ok(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_ok(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionTestResult_code(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionTestResult_message(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionTestResult_serverVersion(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_serverVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ServerVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_serverVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionTestResult_detectedVersionKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_detectedVersionKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DetectedVersionKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_detectedVersionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionTestResult_compatible(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_compatible(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Compatible, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_compatible(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionTestResult_legacy(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_legacy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Legacy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_legacy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionTestResult_warnings(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionTestResult_databaseCount(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_databaseCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DatabaseCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_databaseCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "Int")
+}
+
+func (ec *executionContext) _ConnectionVersionInfo_serverVersion(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionVersionInfo_serverVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ServerVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionVersionInfo_serverVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionVersionInfo", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionVersionInfo_suggestedVersionKey(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionVersionInfo_suggestedVersionKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SuggestedVersionKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionVersionInfo_suggestedVersionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionVersionInfo", field, false, false, "String")
+}
+
+func (ec *executionContext) _ConnectionVersionInfo_legacy(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionVersionInfo_legacy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Legacy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionVersionInfo_legacy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionVersionInfo", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionVersionInfo_currentCompatible(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionVersionInfo_currentCompatible(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentCompatible, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionVersionInfo_currentCompatible(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionVersionInfo", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ConnectionVersionInfo_warnings(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionVersionInfo_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionVersionInfo_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ConnectionVersionInfo", field, false, false, "String")
+}
+
 func (ec *executionContext) _CreatedUser_user(ctx context.Context, field graphql.CollectedField, obj *model.CreatedUser) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3482,6 +8111,819 @@ func (ec *executionContext) fieldContext_CreatedUser_temporaryPassword(_ context
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _Destination_id(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _Destination_name(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "String")
+}
+
+func (ec *executionContext) _Destination_type(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DestinationType) graphql.Marshaler {
+			return ec.marshalNDestinationType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationType(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "DestinationType")
+}
+
+func (ec *executionContext) _Destination_noDelete(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_noDelete(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NoDelete, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_noDelete(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Destination_objectLockMode(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_objectLockMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ObjectLockMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ObjectLockMode) graphql.Marshaler {
+			return ec.marshalOObjectLockMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐObjectLockMode(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_objectLockMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "ObjectLockMode")
+}
+
+func (ec *executionContext) _Destination_objectLockRetentionDays(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_objectLockRetentionDays(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ObjectLockRetentionDays, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_objectLockRetentionDays(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "Int")
+}
+
+func (ec *executionContext) _Destination_ready(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_ready(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ready, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Destination_notReadyReason(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_notReadyReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotReadyReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_notReadyReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "String")
+}
+
+func (ec *executionContext) _Destination_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Destination_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_updatedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Destination", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Destination_settings(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_settings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Settings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DestinationSettings) graphql.Marshaler {
+			return ec.marshalODestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_settings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Destination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DestinationSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationSettings_disk(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSettings_disk(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Disk, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DiskDestinationSettings) graphql.Marshaler {
+			return ec.marshalODiskDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSettings_disk(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DiskDestinationSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationSettings_s3(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSettings_s3(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.S3, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.S3DestinationSettings) graphql.Marshaler {
+			return ec.marshalOS3DestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3DestinationSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSettings_s3(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_S3DestinationSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationSettings_sftp(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSettings_sftp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Sftp, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SftpDestinationSettings) graphql.Marshaler {
+			return ec.marshalOSftpDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpDestinationSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSettings_sftp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SftpDestinationSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationSshKeypair_destination(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSshKeypair_destination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Destination, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSshKeypair_destination(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationSshKeypair",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationSshKeypair_publicKey(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSshKeypair_publicKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSshKeypair_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationSshKeypair", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationSshKeypair_fingerprintSha256(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSSHKeypair) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSshKeypair_fingerprintSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FingerprintSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSshKeypair_fingerprintSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationSshKeypair", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestResult_ok(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_ok(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _DestinationTestResult_steps(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_steps(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Steps, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.DestinationTestStep) graphql.Marshaler {
+			return ec.marshalNDestinationTestStep2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestStepᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_steps(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationTestResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DestinationTestStep(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DestinationTestResult_probeKey(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_probeKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ProbeKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_probeKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestResult_probeRemains(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_probeRemains(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ProbeRemains, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_probeRemains(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _DestinationTestResult_note(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_note(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Note, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestStep_name(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestStep) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestStep_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestStep_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestStep", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestStep_ok(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestStep) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestStep_ok(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestStep_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestStep", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _DestinationTestStep_code(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestStep) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestStep_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestStep_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestStep", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestStep_message(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestStep) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestStep_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestStep_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationTestStep", field, false, false, "String")
+}
+
+func (ec *executionContext) _DiskDestinationSettings_path(ctx context.Context, field graphql.CollectedField, obj *model.DiskDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DiskDestinationSettings_path(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DiskDestinationSettings_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DiskDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _EngineVersion_engine(ctx context.Context, field graphql.CollectedField, obj *model.EngineVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_EngineVersion_engine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_EngineVersion_engine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("EngineVersion", field, false, false, "DatabaseEngine")
+}
+
+func (ec *executionContext) _EngineVersion_key(ctx context.Context, field graphql.CollectedField, obj *model.EngineVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_EngineVersion_key(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_EngineVersion_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("EngineVersion", field, false, false, "String")
+}
+
+func (ec *executionContext) _EngineVersion_clientVersion(ctx context.Context, field graphql.CollectedField, obj *model.EngineVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_EngineVersion_clientVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ClientVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_EngineVersion_clientVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("EngineVersion", field, false, false, "String")
+}
+
+func (ec *executionContext) _EngineVersion_legacy(ctx context.Context, field graphql.CollectedField, obj *model.EngineVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_EngineVersion_legacy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Legacy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_EngineVersion_legacy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("EngineVersion", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ImagePrePullResult_imageRef(ctx context.Context, field graphql.CollectedField, obj *model.ImagePrePullResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ImagePrePullResult_imageRef(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ImageRef, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ImagePrePullResult_imageRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ImagePrePullResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _ImagePrePullResult_alreadyPresent(ctx context.Context, field graphql.CollectedField, obj *model.ImagePrePullResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ImagePrePullResult_alreadyPresent(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AlreadyPresent, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ImagePrePullResult_alreadyPresent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ImagePrePullResult", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _LoginResult_user(ctx context.Context, field graphql.CollectedField, obj *model.LoginResult) (ret graphql.Marshaler) {
@@ -3796,6 +9238,1399 @@ func (ec *executionContext) fieldContext_Mutation_changePassword(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_changePassword_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateConnection(ctx, fc.Args["input"].(model.CreateConnectionInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateConnection(ctx, fc.Args["id"].(uuid.UUID), fc.Args["input"].(model.UpdateConnectionInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteConnection(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_testConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_testConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().TestConnection(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.ConnectionTestResult
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.ConnectionTestResult
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionTestResult) graphql.Marshaler {
+			return ec.marshalNConnectionTestResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTestResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_testConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionTestResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_testConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_detectVersion(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_detectVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DetectVersion(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.ConnectionVersionInfo
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.ConnectionVersionInfo
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionVersionInfo) graphql.Marshaler {
+			return ec.marshalNConnectionVersionInfo2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionVersionInfo(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_detectVersion(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionVersionInfo(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_detectVersion_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_listDatabases(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_listDatabases(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ListDatabases(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.ConnectionDatabases
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.ConnectionDatabases
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionDatabases) graphql.Marshaler {
+			return ec.marshalNConnectionDatabases2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionDatabases(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_listDatabases(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionDatabases(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_listDatabases_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_prePullImage(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_prePullImage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PrePullImage(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.ImagePrePullResult
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.ImagePrePullResult
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ImagePrePullResult) graphql.Marshaler {
+			return ec.marshalNImagePrePullResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐImagePrePullResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_prePullImage(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ImagePrePullResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_prePullImage_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_fetchCertificate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_fetchCertificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().FetchCertificate(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.CertificateChain
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.CertificateChain
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CertificateChain) graphql.Marshaler {
+			return ec.marshalNCertificateChain2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificateChain(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_fetchCertificate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CertificateChain(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_fetchCertificate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_confirmCertificatePin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_confirmCertificatePin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConfirmCertificatePin(ctx, fc.Args["id"].(uuid.UUID), fc.Args["input"].(model.CertificatePinInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_confirmCertificatePin(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_confirmCertificatePin_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_stageBackupPin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_stageBackupPin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().StageBackupPin(ctx, fc.Args["id"].(uuid.UUID), fc.Args["input"].(model.CertificatePinInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_stageBackupPin(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_stageBackupPin_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_fetchSshHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_fetchSshHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().FetchSSHHostKey(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.SSHHostKey
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.SSHHostKey
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+			return ec.marshalNSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_fetchSshHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SshHostKey(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_fetchSshHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_confirmSshHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_confirmSshHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConfirmSSHHostKey(ctx, fc.Args["id"].(uuid.UUID), fc.Args["authorizedKey"].(string), fc.Args["expectedHost"].(string), fc.Args["expectedPort"].(int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_confirmSshHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_confirmSshHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setTlsMode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setTlsMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetTLSMode(ctx, fc.Args["id"].(uuid.UUID), fc.Args["mode"].(model.ConnectionTLSMode))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setTlsMode(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setTlsMode_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_generateConnectionSshKeypair(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_generateConnectionSshKeypair(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().GenerateConnectionSSHKeypair(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.ConnectionSSHKeypair
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.ConnectionSSHKeypair
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.ConnectionSSHKeypair
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ConnectionSSHKeypair) graphql.Marshaler {
+			return ec.marshalNConnectionSshKeypair2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHKeypair(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_generateConnectionSshKeypair(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ConnectionSshKeypair(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_generateConnectionSshKeypair_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createDestination(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createDestination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateDestination(ctx, fc.Args["input"].(model.CreateDestinationInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createDestination(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createDestination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateDestination(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateDestination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateDestination(ctx, fc.Args["id"].(uuid.UUID), fc.Args["input"].(model.UpdateDestinationInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateDestination(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateDestination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteDestination(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteDestination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteDestination(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteDestination(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteDestination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_testDestination(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_testDestination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().TestDestination(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.DestinationTestResult
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.DestinationTestResult
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DestinationTestResult) graphql.Marshaler {
+			return ec.marshalNDestinationTestResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_testDestination(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DestinationTestResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_testDestination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_fetchDestinationHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_fetchDestinationHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().FetchDestinationHostKey(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.SSHHostKey
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.SSHHostKey
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+			return ec.marshalNSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_fetchDestinationHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SshHostKey(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_fetchDestinationHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_confirmDestinationHostKey(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_confirmDestinationHostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ConfirmDestinationHostKey(ctx, fc.Args["id"].(uuid.UUID), fc.Args["authorizedKey"].(string), fc.Args["expectedHost"].(string), fc.Args["expectedPort"].(int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_confirmDestinationHostKey(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_confirmDestinationHostKey_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_generateDestinationSshKeypair(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_generateDestinationSshKeypair(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().GenerateDestinationSSHKeypair(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.DestinationSSHKeypair
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.DestinationSSHKeypair
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.DestinationSSHKeypair
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DestinationSSHKeypair) graphql.Marshaler {
+			return ec.marshalNDestinationSshKeypair2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSSHKeypair(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_generateDestinationSshKeypair(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DestinationSshKeypair(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_generateDestinationSshKeypair_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5583,6 +12418,292 @@ func (ec *executionContext) fieldContext_Query_mySessions(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_connections(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_connections(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Connections(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal []model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_connections(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_connection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_connection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Connection(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalOConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_connection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_connection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_engineVersions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_engineVersions(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().EngineVersions(ctx, fc.Args["engine"].(*model.DatabaseEngine))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal []model.EngineVersion
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.EngineVersion
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.EngineVersion) graphql.Marshaler {
+			return ec.marshalNEngineVersion2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐEngineVersionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_engineVersions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_EngineVersion(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_engineVersions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_destinations(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_destinations(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Destinations(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal []model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_destinations(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_destination(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_destination(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Destination(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalODestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_destination(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_destination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_myTwoFactorStatus(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6053,6 +13174,305 @@ func (ec *executionContext) fieldContext_RecoveryCodes_codes(_ context.Context, 
 	return graphql.NewScalarFieldContext("RecoveryCodes", field, false, false, "String")
 }
 
+func (ec *executionContext) _S3DestinationSettings_endpoint(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_endpoint(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Endpoint, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_endpoint(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_region(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_region(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Region, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_region(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_bucket(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_bucket(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Bucket, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_bucket(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_prefix(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_prefix(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Prefix, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_prefix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_pathStyle(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_pathStyle(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PathStyle, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_pathStyle(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _S3DestinationSettings_encryption(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_encryption(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Encryption, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.S3Encryption) graphql.Marshaler {
+			return ec.marshalNS3Encryption2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_encryption(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "S3Encryption")
+}
+
+func (ec *executionContext) _S3DestinationSettings_kmsKeyId(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_kmsKeyId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.KmsKeyID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_kmsKeyId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_storageClass(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_storageClass(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StorageClass, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_storageClass(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_checksumMode(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_checksumMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ChecksumMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.S3ChecksumMode) graphql.Marshaler {
+			return ec.marshalNS3ChecksumMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_checksumMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "S3ChecksumMode")
+}
+
+func (ec *executionContext) _S3DestinationSettings_conditionalWrites(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_conditionalWrites(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConditionalWrites, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_conditionalWrites(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _S3DestinationSettings_accessKeyId(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_accessKeyId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AccessKeyID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_accessKeyId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _S3DestinationSettings_hasSecretAccessKey(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_hasSecretAccessKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasSecretAccessKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_hasSecretAccessKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _S3DestinationSettings_caBundlePem(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_S3DestinationSettings_caBundlePem(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CaBundlePem, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_S3DestinationSettings_caBundlePem(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("S3DestinationSettings", field, false, false, "String")
+}
+
 func (ec *executionContext) _SecondFactorReset_user(ctx context.Context, field graphql.CollectedField, obj *model.SecondFactorReset) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6520,6 +13940,406 @@ func (ec *executionContext) _SessionEvent_current(ctx context.Context, field gra
 }
 func (ec *executionContext) fieldContext_SessionEvent_current(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SessionEvent", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_host(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_host(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Host, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_host(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_port(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_port(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Port, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_port(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "Int")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_user(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_user(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.User, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_basePath(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_basePath(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BasePath, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_basePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_dir(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_dir(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Dir, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_dir(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_authMethod(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_authMethod(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AuthMethod, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.SftpAuthMethod) graphql.Marshaler {
+			return ec.marshalNSftpAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpAuthMethod(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_authMethod(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "SftpAuthMethod")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_hasPassword(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_hasPassword(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassword, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_hasPassword(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_hasPrivateKey(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_hasPrivateKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPrivateKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_hasPrivateKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_hasPassphrase(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_hasPassphrase(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassphrase, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_hasPassphrase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_publicKey(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_publicKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SftpDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _SftpDestinationSettings_hostKey(ctx context.Context, field graphql.CollectedField, obj *model.SftpDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SftpDestinationSettings_hostKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HostKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+			return ec.marshalOSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SftpDestinationSettings_hostKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SftpDestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SshHostKey(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SshHostKey_type(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_type(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Type, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "String")
+}
+
+func (ec *executionContext) _SshHostKey_fingerprintSha256(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_fingerprintSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FingerprintSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_fingerprintSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "String")
+}
+
+func (ec *executionContext) _SshHostKey_authorizedKey(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_authorizedKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorizedKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_authorizedKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "String")
+}
+
+func (ec *executionContext) _SshHostKey_confirmedAt(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_confirmedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConfirmedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_confirmedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "Time")
+}
+
+func (ec *executionContext) _SshHostKey_host(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_host(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Host, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_host(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "String")
+}
+
+func (ec *executionContext) _SshHostKey_port(ctx context.Context, field graphql.CollectedField, obj *model.SSHHostKey) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SshHostKey_port(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Port, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SshHostKey_port(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SshHostKey", field, false, false, "Int")
 }
 
 func (ec *executionContext) _StepUpChallenge_methods(ctx context.Context, field graphql.CollectedField, obj *model.StepUpChallenge) (ret graphql.Marshaler) {
@@ -8678,6 +16498,342 @@ func UnmarshalAuditLogFilter(ctx context.Context, raw any) (model.AuditLogFilter
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputCertificatePinInput(ctx context.Context, obj any) (model.CertificatePinInput, error) {
+	var it model.CertificatePinInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"certIndex", "certificatePem", "leafSpkiSha256", "allowLeafRotation"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "certIndex":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("certIndex"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CertIndex = data
+		case "certificatePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("certificatePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CertificatePem = data
+		case "leafSpkiSha256":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("leafSpkiSha256"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LeafSpkiSha256 = data
+		case "allowLeafRotation":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowLeafRotation"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowLeafRotation = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalCertificatePinInput unmarshals raw into the CertificatePinInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalCertificatePinInput(ctx context.Context, raw any) (model.CertificatePinInput, error) {
+	var out model.CertificatePinInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "CertificatePinInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputConnectionSshInput(ctx context.Context, obj any) (model.ConnectionSSHInput, error) {
+	var it model.ConnectionSSHInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"host", "port", "user", "password", "privateKey", "privateKeyPassphrase"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "host":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("host"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Host = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
+		case "user":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("user"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.User = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "privateKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("privateKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PrivateKey = data
+		case "privateKeyPassphrase":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("privateKeyPassphrase"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PrivateKeyPassphrase = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalConnectionSshInput unmarshals raw into the ConnectionSshInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalConnectionSshInput(ctx context.Context, raw any) (model.ConnectionSSHInput, error) {
+	var out model.ConnectionSSHInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "ConnectionSshInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputCreateConnectionInput(ctx context.Context, obj any) (model.CreateConnectionInput, error) {
+	var it model.CreateConnectionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "engine", "versionKey", "imageKey", "host", "port", "username", "password", "tlsMode", "clientCertificatePem", "clientKeyPem", "ssh"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "engine":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("engine"))
+			data, err := ec.unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Engine = data
+		case "versionKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("versionKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VersionKey = data
+		case "imageKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("imageKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ImageKey = data
+		case "host":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("host"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Host = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "tlsMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tlsMode"))
+			data, err := ec.unmarshalOConnectionTlsMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TLSMode = data
+		case "clientCertificatePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientCertificatePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientCertificatePem = data
+		case "clientKeyPem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientKeyPem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientKeyPem = data
+		case "ssh":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ssh"))
+			data, err := ec.unmarshalOConnectionSshInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SSH = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalCreateConnectionInput unmarshals raw into the CreateConnectionInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalCreateConnectionInput(ctx context.Context, raw any) (model.CreateConnectionInput, error) {
+	var out model.CreateConnectionInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "CreateConnectionInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputCreateDestinationInput(ctx context.Context, obj any) (model.CreateDestinationInput, error) {
+	var it model.CreateDestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "type", "noDelete", "disk", "s3", "sftp"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "type":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("type"))
+			data, err := ec.unmarshalNDestinationType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Type = data
+		case "noDelete":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noDelete"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NoDelete = data
+		case "disk":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("disk"))
+			data, err := ec.unmarshalODiskDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Disk = data
+		case "s3":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("s3"))
+			data, err := ec.unmarshalOS3DestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3DestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.S3 = data
+		case "sftp":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sftp"))
+			data, err := ec.unmarshalOSftpDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Sftp = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalCreateDestinationInput unmarshals raw into the CreateDestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalCreateDestinationInput(ctx context.Context, raw any) (model.CreateDestinationInput, error) {
+	var out model.CreateDestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "CreateDestinationInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, obj any) (model.CreateUserInput, error) {
 	var it model.CreateUserInput
 	if obj == nil {
@@ -8734,6 +16890,279 @@ func UnmarshalCreateUserInput(ctx context.Context, raw any) (model.CreateUserInp
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputDiskDestinationInput(ctx context.Context, obj any) (model.DiskDestinationInput, error) {
+	var it model.DiskDestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"path"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "path":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("path"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Path = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalDiskDestinationInput unmarshals raw into the DiskDestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalDiskDestinationInput(ctx context.Context, raw any) (model.DiskDestinationInput, error) {
+	var out model.DiskDestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "DiskDestinationInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputS3DestinationInput(ctx context.Context, obj any) (model.S3DestinationInput, error) {
+	var it model.S3DestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"endpoint", "region", "bucket", "prefix", "pathStyle", "encryption", "kmsKeyId", "storageClass", "checksumMode", "conditionalWrites", "objectLockMode", "objectLockRetentionDays", "accessKeyId", "secretAccessKey", "caBundlePem"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "endpoint":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("endpoint"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Endpoint = data
+		case "region":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("region"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Region = data
+		case "bucket":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bucket"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Bucket = data
+		case "prefix":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("prefix"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Prefix = data
+		case "pathStyle":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pathStyle"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PathStyle = data
+		case "encryption":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("encryption"))
+			data, err := ec.unmarshalOS3Encryption2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Encryption = data
+		case "kmsKeyId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kmsKeyId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KmsKeyID = data
+		case "storageClass":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("storageClass"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StorageClass = data
+		case "checksumMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("checksumMode"))
+			data, err := ec.unmarshalOS3ChecksumMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ChecksumMode = data
+		case "conditionalWrites":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("conditionalWrites"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConditionalWrites = data
+		case "objectLockMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("objectLockMode"))
+			data, err := ec.unmarshalOObjectLockMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐObjectLockMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ObjectLockMode = data
+		case "objectLockRetentionDays":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("objectLockRetentionDays"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ObjectLockRetentionDays = data
+		case "accessKeyId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("accessKeyId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AccessKeyID = data
+		case "secretAccessKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("secretAccessKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SecretAccessKey = data
+		case "caBundlePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("caBundlePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CaBundlePem = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalS3DestinationInput unmarshals raw into the S3DestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalS3DestinationInput(ctx context.Context, raw any) (model.S3DestinationInput, error) {
+	var out model.S3DestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "S3DestinationInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputSftpDestinationInput(ctx context.Context, obj any) (model.SftpDestinationInput, error) {
+	var it model.SftpDestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"host", "port", "user", "basePath", "dir", "password", "privateKey", "privateKeyPassphrase"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "host":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("host"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Host = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
+		case "user":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("user"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.User = data
+		case "basePath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("basePath"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BasePath = data
+		case "dir":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("dir"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Dir = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "privateKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("privateKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PrivateKey = data
+		case "privateKeyPassphrase":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("privateKeyPassphrase"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PrivateKeyPassphrase = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalSftpDestinationInput unmarshals raw into the SftpDestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalSftpDestinationInput(ctx context.Context, raw any) (model.SftpDestinationInput, error) {
+	var out model.SftpDestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "SftpDestinationInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputTwoFactorPolicyInput(ctx context.Context, obj any) (model.TwoFactorPolicyInput, error) {
 	var it model.TwoFactorPolicyInput
 	if obj == nil {
@@ -8787,6 +17216,202 @@ func (ec *executionContext) unmarshalInputTwoFactorPolicyInput(ctx context.Conte
 func UnmarshalTwoFactorPolicyInput(ctx context.Context, raw any) (model.TwoFactorPolicyInput, error) {
 	var out model.TwoFactorPolicyInput
 	err := graphql.UnmarshalNamedInputFromContext(ctx, "TwoFactorPolicyInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputUpdateConnectionInput(ctx context.Context, obj any) (model.UpdateConnectionInput, error) {
+	var it model.UpdateConnectionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "versionKey", "imageKey", "host", "port", "username", "password", "clearPassword", "clientCertificatePem", "clientKeyPem", "clearClientCertificate", "ssh", "disableSsh"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "versionKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("versionKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VersionKey = data
+		case "imageKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("imageKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ImageKey = data
+		case "host":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("host"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Host = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "clearPassword":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearPassword"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClearPassword = data
+		case "clientCertificatePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientCertificatePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientCertificatePem = data
+		case "clientKeyPem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientKeyPem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientKeyPem = data
+		case "clearClientCertificate":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clearClientCertificate"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClearClientCertificate = data
+		case "ssh":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ssh"))
+			data, err := ec.unmarshalOConnectionSshInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SSH = data
+		case "disableSsh":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("disableSsh"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DisableSSH = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalUpdateConnectionInput unmarshals raw into the UpdateConnectionInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalUpdateConnectionInput(ctx context.Context, raw any) (model.UpdateConnectionInput, error) {
+	var out model.UpdateConnectionInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "UpdateConnectionInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputUpdateDestinationInput(ctx context.Context, obj any) (model.UpdateDestinationInput, error) {
+	var it model.UpdateDestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "noDelete", "disk", "s3", "sftp"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "noDelete":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noDelete"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NoDelete = data
+		case "disk":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("disk"))
+			data, err := ec.unmarshalODiskDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Disk = data
+		case "s3":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("s3"))
+			data, err := ec.unmarshalOS3DestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3DestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.S3 = data
+		case "sftp":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sftp"))
+			data, err := ec.unmarshalOSftpDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Sftp = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalUpdateDestinationInput unmarshals raw into the UpdateDestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalUpdateDestinationInput(ctx context.Context, raw any) (model.UpdateDestinationInput, error) {
+	var out model.UpdateDestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "UpdateDestinationInput", raw, &out)
 	return out, err
 }
 
@@ -9071,6 +17696,656 @@ func (ec *executionContext) _AuditLogEntry(ctx context.Context, sel ast.Selectio
 	return out
 }
 
+var certificateChainImplementors = []string{"CertificateChain"}
+
+func (ec *executionContext) _CertificateChain(ctx context.Context, sel ast.SelectionSet, obj *model.CertificateChain) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, certificateChainImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CertificateChain")
+		case "certificates":
+			out.Values[i] = ec._CertificateChain_certificates(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "suggestedAnchorIndex":
+			out.Values[i] = ec._CertificateChain_suggestedAnchorIndex(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "leafSpkiSha256":
+			out.Values[i] = ec._CertificateChain_leafSpkiSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var certificatePinImplementors = []string{"CertificatePin"}
+
+func (ec *executionContext) _CertificatePin(ctx context.Context, sel ast.SelectionSet, obj *model.CertificatePin) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, certificatePinImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CertificatePin")
+		case "certificatePem":
+			out.Values[i] = ec._CertificatePin_certificatePem(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subject":
+			out.Values[i] = ec._CertificatePin_subject(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "issuer":
+			out.Values[i] = ec._CertificatePin_issuer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isCa":
+			out.Values[i] = ec._CertificatePin_isCa(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "leafSpkiSha256":
+			out.Values[i] = ec._CertificatePin_leafSpkiSha256(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "notAfter":
+			out.Values[i] = ec._CertificatePin_notAfter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinnedAt":
+			out.Values[i] = ec._CertificatePin_pinnedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var chainCertificateImplementors = []string{"ChainCertificate"}
+
+func (ec *executionContext) _ChainCertificate(ctx context.Context, sel ast.SelectionSet, obj *model.ChainCertificate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, chainCertificateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ChainCertificate")
+		case "pem":
+			out.Values[i] = ec._ChainCertificate_pem(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subject":
+			out.Values[i] = ec._ChainCertificate_subject(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "issuer":
+			out.Values[i] = ec._ChainCertificate_issuer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dnsNames":
+			out.Values[i] = ec._ChainCertificate_dnsNames(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ipAddresses":
+			out.Values[i] = ec._ChainCertificate_ipAddresses(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notBefore":
+			out.Values[i] = ec._ChainCertificate_notBefore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notAfter":
+			out.Values[i] = ec._ChainCertificate_notAfter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isCa":
+			out.Values[i] = ec._ChainCertificate_isCa(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "selfSigned":
+			out.Values[i] = ec._ChainCertificate_selfSigned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "spkiSha256":
+			out.Values[i] = ec._ChainCertificate_spkiSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "spkiSha256Hex":
+			out.Values[i] = ec._ChainCertificate_spkiSha256Hex(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprintSha256":
+			out.Values[i] = ec._ChainCertificate_fingerprintSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionImplementors = []string{"Connection"}
+
+func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSet, obj *model.Connection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Connection")
+		case "id":
+			out.Values[i] = ec._Connection_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._Connection_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "engine":
+			out.Values[i] = ec._Connection_engine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "versionKey":
+			out.Values[i] = ec._Connection_versionKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "legacyVersion":
+			out.Values[i] = ec._Connection_legacyVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "host":
+			out.Values[i] = ec._Connection_host(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "port":
+			out.Values[i] = ec._Connection_port(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tlsMode":
+			out.Values[i] = ec._Connection_tlsMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "insecureTransport":
+			out.Values[i] = ec._Connection_insecureTransport(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinStatus":
+			out.Values[i] = ec._Connection_pinStatus(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinExpiresAt":
+			out.Values[i] = ec._Connection_pinExpiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "sshEnabled":
+			out.Values[i] = ec._Connection_sshEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ready":
+			out.Values[i] = ec._Connection_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notReadyReason":
+			out.Values[i] = ec._Connection_notReadyReason(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._Connection_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._Connection_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "settings":
+			out.Values[i] = ec._Connection_settings(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionDatabasesImplementors = []string{"ConnectionDatabases"}
+
+func (ec *executionContext) _ConnectionDatabases(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionDatabases) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionDatabasesImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionDatabases")
+		case "databases":
+			out.Values[i] = ec._ConnectionDatabases_databases(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._ConnectionDatabases_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionSettingsImplementors = []string{"ConnectionSettings"}
+
+func (ec *executionContext) _ConnectionSettings(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionSettings")
+		case "imageKey":
+			out.Values[i] = ec._ConnectionSettings_imageKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._ConnectionSettings_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPassword":
+			out.Values[i] = ec._ConnectionSettings_hasPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientCertificatePem":
+			out.Values[i] = ec._ConnectionSettings_clientCertificatePem(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "tlsPin":
+			out.Values[i] = ec._ConnectionSettings_tlsPin(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "backupPin":
+			out.Values[i] = ec._ConnectionSettings_backupPin(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "ssh":
+			out.Values[i] = ec._ConnectionSettings_ssh(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionSshKeypairImplementors = []string{"ConnectionSshKeypair"}
+
+func (ec *executionContext) _ConnectionSshKeypair(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionSSHKeypair) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionSshKeypairImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionSshKeypair")
+		case "connection":
+			out.Values[i] = ec._ConnectionSshKeypair_connection(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._ConnectionSshKeypair_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprintSha256":
+			out.Values[i] = ec._ConnectionSshKeypair_fingerprintSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionSshSettingsImplementors = []string{"ConnectionSshSettings"}
+
+func (ec *executionContext) _ConnectionSshSettings(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionSSHSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionSshSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionSshSettings")
+		case "host":
+			out.Values[i] = ec._ConnectionSshSettings_host(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "port":
+			out.Values[i] = ec._ConnectionSshSettings_port(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "user":
+			out.Values[i] = ec._ConnectionSshSettings_user(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authMethod":
+			out.Values[i] = ec._ConnectionSshSettings_authMethod(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPassword":
+			out.Values[i] = ec._ConnectionSshSettings_hasPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPrivateKey":
+			out.Values[i] = ec._ConnectionSshSettings_hasPrivateKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPassphrase":
+			out.Values[i] = ec._ConnectionSshSettings_hasPassphrase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._ConnectionSshSettings_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "hostKey":
+			out.Values[i] = ec._ConnectionSshSettings_hostKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionTestResultImplementors = []string{"ConnectionTestResult"}
+
+func (ec *executionContext) _ConnectionTestResult(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionTestResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionTestResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionTestResult")
+		case "ok":
+			out.Values[i] = ec._ConnectionTestResult_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "code":
+			out.Values[i] = ec._ConnectionTestResult_code(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._ConnectionTestResult_message(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "serverVersion":
+			out.Values[i] = ec._ConnectionTestResult_serverVersion(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "detectedVersionKey":
+			out.Values[i] = ec._ConnectionTestResult_detectedVersionKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "compatible":
+			out.Values[i] = ec._ConnectionTestResult_compatible(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "legacy":
+			out.Values[i] = ec._ConnectionTestResult_legacy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._ConnectionTestResult_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "databaseCount":
+			out.Values[i] = ec._ConnectionTestResult_databaseCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var connectionVersionInfoImplementors = []string{"ConnectionVersionInfo"}
+
+func (ec *executionContext) _ConnectionVersionInfo(ctx context.Context, sel ast.SelectionSet, obj *model.ConnectionVersionInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, connectionVersionInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ConnectionVersionInfo")
+		case "serverVersion":
+			out.Values[i] = ec._ConnectionVersionInfo_serverVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "suggestedVersionKey":
+			out.Values[i] = ec._ConnectionVersionInfo_suggestedVersionKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "legacy":
+			out.Values[i] = ec._ConnectionVersionInfo_legacy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentCompatible":
+			out.Values[i] = ec._ConnectionVersionInfo_currentCompatible(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._ConnectionVersionInfo_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var createdUserImplementors = []string{"CreatedUser"}
 
 func (ec *executionContext) _CreatedUser(ctx context.Context, sel ast.SelectionSet, obj *model.CreatedUser) graphql.Marshaler {
@@ -9089,6 +18364,395 @@ func (ec *executionContext) _CreatedUser(ctx context.Context, sel ast.SelectionS
 			}
 		case "temporaryPassword":
 			out.Values[i] = ec._CreatedUser_temporaryPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var destinationImplementors = []string{"Destination"}
+
+func (ec *executionContext) _Destination(ctx context.Context, sel ast.SelectionSet, obj *model.Destination) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, destinationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Destination")
+		case "id":
+			out.Values[i] = ec._Destination_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._Destination_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "type":
+			out.Values[i] = ec._Destination_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "noDelete":
+			out.Values[i] = ec._Destination_noDelete(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "objectLockMode":
+			out.Values[i] = ec._Destination_objectLockMode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "objectLockRetentionDays":
+			out.Values[i] = ec._Destination_objectLockRetentionDays(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "ready":
+			out.Values[i] = ec._Destination_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notReadyReason":
+			out.Values[i] = ec._Destination_notReadyReason(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._Destination_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._Destination_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "settings":
+			out.Values[i] = ec._Destination_settings(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var destinationSettingsImplementors = []string{"DestinationSettings"}
+
+func (ec *executionContext) _DestinationSettings(ctx context.Context, sel ast.SelectionSet, obj *model.DestinationSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, destinationSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DestinationSettings")
+		case "disk":
+			out.Values[i] = ec._DestinationSettings_disk(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "s3":
+			out.Values[i] = ec._DestinationSettings_s3(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "sftp":
+			out.Values[i] = ec._DestinationSettings_sftp(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var destinationSshKeypairImplementors = []string{"DestinationSshKeypair"}
+
+func (ec *executionContext) _DestinationSshKeypair(ctx context.Context, sel ast.SelectionSet, obj *model.DestinationSSHKeypair) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, destinationSshKeypairImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DestinationSshKeypair")
+		case "destination":
+			out.Values[i] = ec._DestinationSshKeypair_destination(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._DestinationSshKeypair_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprintSha256":
+			out.Values[i] = ec._DestinationSshKeypair_fingerprintSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var destinationTestResultImplementors = []string{"DestinationTestResult"}
+
+func (ec *executionContext) _DestinationTestResult(ctx context.Context, sel ast.SelectionSet, obj *model.DestinationTestResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, destinationTestResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DestinationTestResult")
+		case "ok":
+			out.Values[i] = ec._DestinationTestResult_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "steps":
+			out.Values[i] = ec._DestinationTestResult_steps(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "probeKey":
+			out.Values[i] = ec._DestinationTestResult_probeKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "probeRemains":
+			out.Values[i] = ec._DestinationTestResult_probeRemains(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "note":
+			out.Values[i] = ec._DestinationTestResult_note(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var destinationTestStepImplementors = []string{"DestinationTestStep"}
+
+func (ec *executionContext) _DestinationTestStep(ctx context.Context, sel ast.SelectionSet, obj *model.DestinationTestStep) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, destinationTestStepImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DestinationTestStep")
+		case "name":
+			out.Values[i] = ec._DestinationTestStep_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ok":
+			out.Values[i] = ec._DestinationTestStep_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "code":
+			out.Values[i] = ec._DestinationTestStep_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._DestinationTestStep_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var diskDestinationSettingsImplementors = []string{"DiskDestinationSettings"}
+
+func (ec *executionContext) _DiskDestinationSettings(ctx context.Context, sel ast.SelectionSet, obj *model.DiskDestinationSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, diskDestinationSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DiskDestinationSettings")
+		case "path":
+			out.Values[i] = ec._DiskDestinationSettings_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var engineVersionImplementors = []string{"EngineVersion"}
+
+func (ec *executionContext) _EngineVersion(ctx context.Context, sel ast.SelectionSet, obj *model.EngineVersion) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, engineVersionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("EngineVersion")
+		case "engine":
+			out.Values[i] = ec._EngineVersion_engine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "key":
+			out.Values[i] = ec._EngineVersion_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clientVersion":
+			out.Values[i] = ec._EngineVersion_clientVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "legacy":
+			out.Values[i] = ec._EngineVersion_legacy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var imagePrePullResultImplementors = []string{"ImagePrePullResult"}
+
+func (ec *executionContext) _ImagePrePullResult(ctx context.Context, sel ast.SelectionSet, obj *model.ImagePrePullResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, imagePrePullResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ImagePrePullResult")
+		case "imageRef":
+			out.Values[i] = ec._ImagePrePullResult_imageRef(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "alreadyPresent":
+			out.Values[i] = ec._ImagePrePullResult_alreadyPresent(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -9205,6 +18869,153 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "changePassword":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_changePassword(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "testConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_testConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detectVersion":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_detectVersion(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "listDatabases":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_listDatabases(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prePullImage":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_prePullImage(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fetchCertificate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_fetchCertificate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirmCertificatePin":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_confirmCertificatePin(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "stageBackupPin":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_stageBackupPin(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fetchSshHostKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_fetchSshHostKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirmSshHostKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_confirmSshHostKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setTlsMode":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setTlsMode(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "generateConnectionSshKeypair":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_generateConnectionSshKeypair(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createDestination":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createDestination(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateDestination":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateDestination(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteDestination":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteDestination(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "testDestination":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_testDestination(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fetchDestinationHostKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_fetchDestinationHostKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirmDestinationHostKey":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_confirmDestinationHostKey(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "generateDestinationSshKeypair":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_generateDestinationSshKeypair(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -9549,6 +19360,36 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_mySessions(ctx, field)
 				})
+		case "connections":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_connections(ctx, field)
+				})
+		case "connection":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_connection(ctx, field)
+				})
+		case "engineVersions":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_engineVersions(ctx, field)
+				})
+		case "destinations":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_destinations(ctx, field)
+				})
+		case "destination":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_destination(ctx, field)
+				})
 		case "myTwoFactorStatus":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -9636,6 +19477,99 @@ func (ec *executionContext) _RecoveryCodes(ctx context.Context, sel ast.Selectio
 		case "codes":
 			out.Values[i] = ec._RecoveryCodes_codes(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var s3DestinationSettingsImplementors = []string{"S3DestinationSettings"}
+
+func (ec *executionContext) _S3DestinationSettings(ctx context.Context, sel ast.SelectionSet, obj *model.S3DestinationSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, s3DestinationSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("S3DestinationSettings")
+		case "endpoint":
+			out.Values[i] = ec._S3DestinationSettings_endpoint(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "region":
+			out.Values[i] = ec._S3DestinationSettings_region(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bucket":
+			out.Values[i] = ec._S3DestinationSettings_bucket(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prefix":
+			out.Values[i] = ec._S3DestinationSettings_prefix(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pathStyle":
+			out.Values[i] = ec._S3DestinationSettings_pathStyle(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "encryption":
+			out.Values[i] = ec._S3DestinationSettings_encryption(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kmsKeyId":
+			out.Values[i] = ec._S3DestinationSettings_kmsKeyId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "storageClass":
+			out.Values[i] = ec._S3DestinationSettings_storageClass(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "checksumMode":
+			out.Values[i] = ec._S3DestinationSettings_checksumMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "conditionalWrites":
+			out.Values[i] = ec._S3DestinationSettings_conditionalWrites(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "accessKeyId":
+			out.Values[i] = ec._S3DestinationSettings_accessKeyId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasSecretAccessKey":
+			out.Values[i] = ec._S3DestinationSettings_hasSecretAccessKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "caBundlePem":
+			out.Values[i] = ec._S3DestinationSettings_caBundlePem(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -9848,6 +19782,147 @@ func (ec *executionContext) _SessionEvent(ctx context.Context, sel ast.Selection
 		case "current":
 			out.Values[i] = ec._SessionEvent_current(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var sftpDestinationSettingsImplementors = []string{"SftpDestinationSettings"}
+
+func (ec *executionContext) _SftpDestinationSettings(ctx context.Context, sel ast.SelectionSet, obj *model.SftpDestinationSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sftpDestinationSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SftpDestinationSettings")
+		case "host":
+			out.Values[i] = ec._SftpDestinationSettings_host(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "port":
+			out.Values[i] = ec._SftpDestinationSettings_port(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "user":
+			out.Values[i] = ec._SftpDestinationSettings_user(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "basePath":
+			out.Values[i] = ec._SftpDestinationSettings_basePath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dir":
+			out.Values[i] = ec._SftpDestinationSettings_dir(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authMethod":
+			out.Values[i] = ec._SftpDestinationSettings_authMethod(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPassword":
+			out.Values[i] = ec._SftpDestinationSettings_hasPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPrivateKey":
+			out.Values[i] = ec._SftpDestinationSettings_hasPrivateKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hasPassphrase":
+			out.Values[i] = ec._SftpDestinationSettings_hasPassphrase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._SftpDestinationSettings_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "hostKey":
+			out.Values[i] = ec._SftpDestinationSettings_hostKey(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var sshHostKeyImplementors = []string{"SshHostKey"}
+
+func (ec *executionContext) _SshHostKey(ctx context.Context, sel ast.SelectionSet, obj *model.SSHHostKey) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sshHostKeyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SshHostKey")
+		case "type":
+			out.Values[i] = ec._SshHostKey_type(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprintSha256":
+			out.Values[i] = ec._SshHostKey_fingerprintSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authorizedKey":
+			out.Values[i] = ec._SshHostKey_authorizedKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirmedAt":
+			out.Values[i] = ec._SshHostKey_confirmedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "host":
+			out.Values[i] = ec._SshHostKey_host(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "port":
+			out.Values[i] = ec._SshHostKey_port(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -10791,6 +20866,129 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) marshalNCertificateChain2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificateChain(ctx context.Context, sel ast.SelectionSet, v *model.CertificateChain) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "CertificateChain!")
+		return graphql.Null
+	}
+	return ec._CertificateChain(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNCertificatePinInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePinInput(ctx context.Context, v any) (model.CertificatePinInput, error) {
+	res, err := ec.unmarshalInputCertificatePinInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNChainCertificate2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐChainCertificate(ctx context.Context, sel ast.SelectionSet, v model.ChainCertificate) graphql.Marshaler {
+	return ec._ChainCertificate(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNChainCertificate2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐChainCertificateᚄ(ctx context.Context, sel ast.SelectionSet, v []model.ChainCertificate) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNChainCertificate2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐChainCertificate(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNConnection2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx context.Context, sel ast.SelectionSet, v model.Connection) graphql.Marshaler {
+	return ec._Connection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNConnection2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Connection) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNConnection2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx context.Context, sel ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "Connection!")
+		return graphql.Null
+	}
+	return ec._Connection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNConnectionDatabases2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionDatabases(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionDatabases) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ConnectionDatabases!")
+		return graphql.Null
+	}
+	return ec._ConnectionDatabases(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNConnectionSshAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHAuthMethod(ctx context.Context, v any) (model.ConnectionSSHAuthMethod, error) {
+	var res model.ConnectionSSHAuthMethod
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNConnectionSshAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHAuthMethod(ctx context.Context, sel ast.SelectionSet, v model.ConnectionSSHAuthMethod) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNConnectionSshKeypair2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHKeypair(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionSSHKeypair) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ConnectionSshKeypair!")
+		return graphql.Null
+	}
+	return ec._ConnectionSshKeypair(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNConnectionTestResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTestResult(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionTestResult) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ConnectionTestResult!")
+		return graphql.Null
+	}
+	return ec._ConnectionTestResult(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNConnectionTlsMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx context.Context, v any) (model.ConnectionTLSMode, error) {
+	var res model.ConnectionTLSMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNConnectionTlsMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx context.Context, sel ast.SelectionSet, v model.ConnectionTLSMode) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNConnectionVersionInfo2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionVersionInfo(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionVersionInfo) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ConnectionVersionInfo!")
+		return graphql.Null
+	}
+	return ec._ConnectionVersionInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNCreateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateConnectionInput(ctx context.Context, v any) (model.CreateConnectionInput, error) {
+	res, err := ec.unmarshalInputCreateConnectionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateDestinationInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateDestinationInput(ctx context.Context, v any) (model.CreateDestinationInput, error) {
+	res, err := ec.unmarshalInputCreateDestinationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateUserInput(ctx context.Context, v any) (model.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -10802,6 +21000,110 @@ func (ec *executionContext) marshalNCreatedUser2ᚖgithubᚗcomᚋjlentinkᚋbek
 		return graphql.Null
 	}
 	return ec._CreatedUser(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, v any) (model.DatabaseEngine, error) {
+	var res model.DatabaseEngine
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, sel ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNDestination2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx context.Context, sel ast.SelectionSet, v model.Destination) graphql.Marshaler {
+	return ec._Destination(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDestination2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationᚄ(ctx context.Context, sel ast.SelectionSet, v []model.Destination) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDestination2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx context.Context, sel ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "Destination!")
+		return graphql.Null
+	}
+	return ec._Destination(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDestinationSshKeypair2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSSHKeypair(ctx context.Context, sel ast.SelectionSet, v *model.DestinationSSHKeypair) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "DestinationSshKeypair!")
+		return graphql.Null
+	}
+	return ec._DestinationSshKeypair(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDestinationTestResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestResult(ctx context.Context, sel ast.SelectionSet, v *model.DestinationTestResult) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "DestinationTestResult!")
+		return graphql.Null
+	}
+	return ec._DestinationTestResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNDestinationTestStep2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestStep(ctx context.Context, sel ast.SelectionSet, v model.DestinationTestStep) graphql.Marshaler {
+	return ec._DestinationTestStep(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNDestinationTestStep2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestStepᚄ(ctx context.Context, sel ast.SelectionSet, v []model.DestinationTestStep) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDestinationTestStep2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationTestStep(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNDestinationType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationType(ctx context.Context, v any) (model.DestinationType, error) {
+	var res model.DestinationType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDestinationType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationType(ctx context.Context, sel ast.SelectionSet, v model.DestinationType) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNEngineVersion2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐEngineVersion(ctx context.Context, sel ast.SelectionSet, v model.EngineVersion) graphql.Marshaler {
+	return ec._EngineVersion(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNEngineVersion2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐEngineVersionᚄ(ctx context.Context, sel ast.SelectionSet, v []model.EngineVersion) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNEngineVersion2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐEngineVersion(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
@@ -10816,6 +21118,14 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 		graphql.AddInvalidNullFromMarshaler(ctx, "ID!")
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNImagePrePullResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐImagePrePullResult(ctx context.Context, sel ast.SelectionSet, v *model.ImagePrePullResult) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ImagePrePullResult!")
+		return graphql.Null
+	}
+	return ec._ImagePrePullResult(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
@@ -10938,6 +21248,26 @@ func (ec *executionContext) marshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋin
 	return ret
 }
 
+func (ec *executionContext) unmarshalNS3ChecksumMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx context.Context, v any) (model.S3ChecksumMode, error) {
+	var res model.S3ChecksumMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNS3ChecksumMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx context.Context, sel ast.SelectionSet, v model.S3ChecksumMode) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNS3Encryption2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx context.Context, v any) (model.S3Encryption, error) {
+	var res model.S3Encryption
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNS3Encryption2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx context.Context, sel ast.SelectionSet, v model.S3Encryption) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNSecondFactorKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecondFactorKind(ctx context.Context, v any) (model.SecondFactorKind, error) {
 	var res model.SecondFactorKind
 	err := res.UnmarshalGQL(v)
@@ -11030,6 +21360,24 @@ func (ec *executionContext) unmarshalNSessionEventKind2githubᚗcomᚋjlentink�
 
 func (ec *executionContext) marshalNSessionEventKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSessionEventKind(ctx context.Context, sel ast.SelectionSet, v model.SessionEventKind) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNSftpAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpAuthMethod(ctx context.Context, v any) (model.SftpAuthMethod, error) {
+	var res model.SftpAuthMethod
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSftpAuthMethod2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpAuthMethod(ctx context.Context, sel ast.SelectionSet, v model.SftpAuthMethod) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx context.Context, sel ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "SshHostKey!")
+		return graphql.Null
+	}
+	return ec._SshHostKey(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNStepUpChallenge2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐStepUpChallenge(ctx context.Context, sel ast.SelectionSet, v *model.StepUpChallenge) graphql.Marshaler {
@@ -11153,6 +21501,16 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
+func (ec *executionContext) unmarshalNTlsPinStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTLSPinStatus(ctx context.Context, v any) (model.TLSPinStatus, error) {
+	var res model.TLSPinStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTlsPinStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTLSPinStatus(ctx context.Context, sel ast.SelectionSet, v model.TLSPinStatus) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNTotpEnrollment2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTotpEnrollment(ctx context.Context, sel ast.SelectionSet, v *model.TotpEnrollment) graphql.Marshaler {
 	if v == nil {
 		graphql.AddInvalidNullError(ctx, "TotpEnrollment!")
@@ -11194,6 +21552,16 @@ func (ec *executionContext) marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx
 		graphql.AddInvalidNullFromMarshaler(ctx, "UUID!")
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNUpdateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateConnectionInput(ctx context.Context, v any) (model.UpdateConnectionInput, error) {
+	res, err := ec.unmarshalInputUpdateConnectionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateDestinationInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateDestinationInput(ctx context.Context, v any) (model.UpdateDestinationInput, error) {
+	res, err := ec.unmarshalInputUpdateDestinationInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNUpdateUserInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateUserInput(ctx context.Context, v any) (model.UpdateUserInput, error) {
@@ -11441,6 +21809,103 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
+func (ec *executionContext) marshalOCertificatePin2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCertificatePin(ctx context.Context, sel ast.SelectionSet, v *model.CertificatePin) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._CertificatePin(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx context.Context, sel ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Connection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOConnectionSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSettings(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ConnectionSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOConnectionSshInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHInput(ctx context.Context, v any) (*model.ConnectionSSHInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputConnectionSshInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOConnectionSshSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHSettings(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionSSHSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ConnectionSshSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOConnectionTlsMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx context.Context, v any) (*model.ConnectionTLSMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.ConnectionTLSMode)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOConnectionTlsMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx context.Context, sel ast.SelectionSet, v *model.ConnectionTLSMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalODatabaseEngine2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, v any) (*model.DatabaseEngine, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.DatabaseEngine)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODatabaseEngine2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, sel ast.SelectionSet, v *model.DatabaseEngine) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) marshalODestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx context.Context, sel ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Destination(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalODestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSettings(ctx context.Context, sel ast.SelectionSet, v *model.DestinationSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DestinationSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalODiskDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationInput(ctx context.Context, v any) (*model.DiskDestinationInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputDiskDestinationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalODiskDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationSettings(ctx context.Context, sel ast.SelectionSet, v *model.DiskDestinationSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DiskDestinationSettings(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -11475,6 +21940,22 @@ func (ec *executionContext) marshalOJSON2githubᚗcomᚋjlentinkᚋbekupᚋinter
 	return v
 }
 
+func (ec *executionContext) unmarshalOObjectLockMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐObjectLockMode(ctx context.Context, v any) (*model.ObjectLockMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.ObjectLockMode)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOObjectLockMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐObjectLockMode(ctx context.Context, sel ast.SelectionSet, v *model.ObjectLockMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) unmarshalORole2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (*model.Role, error) {
 	if v == nil {
 		return nil, nil
@@ -11489,6 +21970,75 @@ func (ec *executionContext) marshalORole2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋin
 		return graphql.Null
 	}
 	return v
+}
+
+func (ec *executionContext) unmarshalOS3ChecksumMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx context.Context, v any) (*model.S3ChecksumMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.S3ChecksumMode)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOS3ChecksumMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx context.Context, sel ast.SelectionSet, v *model.S3ChecksumMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOS3DestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3DestinationInput(ctx context.Context, v any) (*model.S3DestinationInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputS3DestinationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOS3DestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3DestinationSettings(ctx context.Context, sel ast.SelectionSet, v *model.S3DestinationSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._S3DestinationSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOS3Encryption2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx context.Context, v any) (*model.S3Encryption, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.S3Encryption)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOS3Encryption2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3Encryption(ctx context.Context, sel ast.SelectionSet, v *model.S3Encryption) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOSftpDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpDestinationInput(ctx context.Context, v any) (*model.SftpDestinationInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputSftpDestinationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOSftpDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSftpDestinationSettings(ctx context.Context, sel ast.SelectionSet, v *model.SftpDestinationSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SftpDestinationSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOSshHostKey2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSSHHostKey(ctx context.Context, sel ast.SelectionSet, v *model.SSHHostKey) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SshHostKey(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

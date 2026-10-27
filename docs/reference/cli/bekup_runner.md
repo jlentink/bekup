@@ -1,6 +1,15 @@
 ## bekup runner
 
-Run the Docker runner (mTLS gRPC, reads runner.toml) (not implemented yet)
+Run the Docker runner (mTLS gRPC, reads runner.toml)
+
+### Synopsis
+
+Run the runner sidecar: the only component with Docker access. It serves the typed
+runner.v1 gRPC API over mTLS (TLS 1.3, private CA, allowed client SANs from runner.toml)
+and the standard gRPC health service on listen.health_socket for `bekup healthcheck runner`.
+It runs dump/restore containers on per-run internal networks through the Docker socket
+(docker.host) and removes leftovers of earlier runs at startup and every 5 minutes.
+SIGINT/SIGTERM drain in-flight calls for up to 45s.
 
 ```
 bekup runner [flags]

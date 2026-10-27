@@ -123,6 +123,31 @@ func TestBaseURLRules(t *testing.T) {
 	}
 }
 
+func TestRunSubnetPool(t *testing.T) {
+	for _, tc := range []struct {
+		pool string
+		ok   bool
+	}{
+		{"10.214.0.0/16", true},
+		{"172.16.0.0/12", true},
+		{"192.168.200.0/24", true},
+		{"10.0.0.0/8", true},
+		{"10.214.0.1/16", false}, // not canonical
+		{"10.214.0.0/25", false}, // too small
+		{"8.8.0.0/16", false},    // public
+		{"172.0.0.0/8", false},   // wider than the private range
+		{"fd00::/64", false},     // IPv6
+		{"", false},
+		{"nope", false},
+	} {
+		var v validator
+		validateRunSubnetPool(&v, "docker.run_subnet_pool", tc.pool)
+		if ok := len(v.errs) == 0; ok != tc.ok {
+			t.Errorf("%q: ok=%t, want %t (%v)", tc.pool, ok, tc.ok, v.errs)
+		}
+	}
+}
+
 func TestRunnerValidation(t *testing.T) {
 	r := DefaultRunner()
 	r.Listen.Address = "nope"
@@ -132,6 +157,7 @@ func TestRunnerValidation(t *testing.T) {
 	r.Docker.GID = -1
 	r.Docker.SelfContainer = "-bad name"
 	r.Docker.CPUs = 0
+	r.Docker.RunSubnetPool = "8.8.0.0/16"
 	r.Targets.AllowCIDRs = []string{"127.0.0.1/32", "169.254.169.254/32", "::/0", "10.0.0.0/8"}
 	r.Targets.DenyCIDRs = []string{"bad"}
 	r.Images.ExtraFile = "images.toml"
@@ -146,6 +172,7 @@ func TestRunnerValidation(t *testing.T) {
 		"docker.gid: must be at least 0",
 		`docker.self_container: must be a container ID or name (got "-bad name")`,
 		"docker.cpus: must be greater than 0",
+		"docker.run_subnet_pool: must lie inside 10.0.0.0/8",
 		"targets.allow_cidrs: 127.0.0.1/32 overlaps the always-denied range 127.0.0.0/8",
 		"targets.allow_cidrs: 169.254.169.254/32 overlaps the always-denied range 169.254.0.0/16",
 		`targets.allow_cidrs: "::/0" matches every address`,
@@ -165,6 +192,41 @@ func TestRunnerValidation(t *testing.T) {
 	}
 	if t.Failed() {
 		t.Logf("errors:\n%s", joined)
+	}
+}
+
+// TestRunnerTargetHostLists: IP literals in the runner's host lists are
+// rejected at config validation (they would fail only at runner start),
+// and bastion_targets entries are checked.
+func TestRunnerTargetHostLists(t *testing.T) {
+	r := DefaultRunner()
+	r.Targets.AllowHosts = []string{"10.0.0.5", "db.example.com", "[2001:db8::1]", "1234", "bad host"}
+	r.Targets.DenyHosts = []string{"192.0.2.1."}
+	r.Targets.BastionTargets = []string{
+		"bastion.example.com=10.30.0.0/24", "bastion.example.com=db.internal", "203.0.113.7=127.0.0.1/32",
+		"nobastion", "b.example.com=10.0.0.1", "b.example.com=0.0.0.0/0", "bad host=db", "b.example.com=x/y",
+	}
+	joined := joinErrs(validateRunner(&r, false))
+	for _, w := range []string{
+		`targets.allow_hosts: "10.0.0.5" is an IP address; list it in a CIDR list such as 10.0.0.5/32`,
+		`targets.allow_hosts: "[2001:db8::1]" is an IP address`,
+		`targets.allow_hosts: "1234" is an IP address`,
+		`targets.allow_hosts: invalid host name "bad host"`,
+		`targets.deny_hosts: "192.0.2.1." is an IP address`,
+		`targets.bastion_targets: invalid entry "nobastion"`,
+		`targets.bastion_targets: target "10.0.0.1" in "b.example.com=10.0.0.1" is an IP address`,
+		`targets.bastion_targets: "0.0.0.0/0" in "b.example.com=0.0.0.0/0" matches every address`,
+		`targets.bastion_targets: invalid bastion "bad host"`,
+		`targets.bastion_targets: invalid CIDR "x/y"`,
+	} {
+		if !strings.Contains(joined, w) {
+			t.Errorf("missing %q in:\n%s", w, joined)
+		}
+	}
+	for _, ok := range []string{"db.example.com", "bastion.example.com=10.30.0.0/24", "db.internal", "203.0.113.7"} {
+		if strings.Contains(joined, `"`+ok+`"`) {
+			t.Errorf("%q rejected:\n%s", ok, joined)
+		}
 	}
 }
 
@@ -251,6 +313,32 @@ func TestAuthKeyBounds(t *testing.T) {
 	} {
 		if !strings.Contains(joined, w) {
 			t.Errorf("missing %q in:\n%s", w, joined)
+		}
+	}
+}
+
+func TestHostPatterns(t *testing.T) {
+	tests := []struct {
+		host string
+		ok   bool
+	}{
+		{"minio.internal", true},
+		{"nas", true},
+		{"*.corp.example", true},
+		{"*.example", false},
+		{"*", false},
+		{"a.*.example.com", false},
+		{"*.*.example.com", false},
+		{"https://evil", false},
+		{"host:9000", false},
+		{"10.0.0.1", false},
+		{"*.10.0.0.1", false},
+	}
+	for _, tc := range tests {
+		var v validator
+		v.hostPatterns("netguard.allow_hosts", []string{tc.host})
+		if (len(v.errs) == 0) != tc.ok {
+			t.Errorf("hostPatterns(%q) errors = %v, want ok=%v", tc.host, v.errs, tc.ok)
 		}
 	}
 }

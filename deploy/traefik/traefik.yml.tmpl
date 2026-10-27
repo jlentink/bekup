@@ -73,6 +73,12 @@ entryPoints:
     transport:
       respondingTimeouts:
         # Reading the whole request (bodies are capped at 2 MiB anyway).
+        # This is the slowloris guard (Traefik has no separate header
+        # timeout): a client trickling its headers is cut off after 60s.
+        # It does NOT end responses that are still streaming: event streams
+        # (POST /graphql, text/event-stream) outlive it over HTTP/1.1 and
+        # HTTP/2, including streams quiet for longer than 60s (verified with
+        # this image and configuration, M2 review L19). Do not set it to 0.
         readTimeout: 60s
         # 0 = no limit on writing the response: streamed backup downloads
         # (GET /api/download/{ticket}) can take hours.

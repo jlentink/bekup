@@ -63,7 +63,7 @@ type SessionOptions struct {
 	// Now replaces time.Now (tests).
 	Now func() time.Time
 	// Events receives revocations and rotations inside their transaction
-	// (task 1.10: open WebSocket subscriptions of the session close at
+	// (task 1.10/2.13: open event streams of the session end at
 	// once); nil: none are published.
 	Events SessionEventPublisher
 }

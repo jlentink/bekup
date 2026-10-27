@@ -228,7 +228,7 @@ Generated from the config structs; regenerate with
 | `trusted_proxies` | `BEKUP_SERVER_TRUSTED_PROXIES` | list of strings | `[]` | CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy). |
 | `read_header_timeout` | `BEKUP_SERVER_READ_HEADER_TIMEOUT` | duration | `'10s'` | Maximum time to read request headers. |
 | `read_timeout` | `BEKUP_SERVER_READ_TIMEOUT` | duration | `'30s'` | Maximum time to read a whole request, body included (at least read_header_timeout). |
-| `write_timeout` | `BEKUP_SERVER_WRITE_TIMEOUT` | duration | `'1m0s'` | Maximum time to write a response. Long-lived routes (WebSocket subscriptions, artifact downloads) override it per route. |
+| `write_timeout` | `BEKUP_SERVER_WRITE_TIMEOUT` | duration | `'1m0s'` | Maximum time to write a response. Long-lived routes (event streams of GraphQL subscriptions, artifact downloads) lift it per request. |
 | `idle_timeout` | `BEKUP_SERVER_IDLE_TIMEOUT` | duration | `'2m0s'` | Maximum keep-alive idle time between requests. |
 | `shutdown_timeout` | `BEKUP_SERVER_SHUTDOWN_TIMEOUT` | duration | `'30s'` | Grace period for in-flight requests on shutdown. |
 | `max_header_bytes` | `BEKUP_SERVER_MAX_HEADER_BYTES` | int | `32768` | Maximum size of the request headers in bytes (4 KiB to 1 MiB). |
@@ -236,7 +236,6 @@ Generated from the config structs; regenerate with
 | `rate_limit_per_second` | `BEKUP_SERVER_RATE_LIMIT_PER_SECOND` | float | `20.0` | Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After. |
 | `rate_limit_burst` | `BEKUP_SERVER_RATE_LIMIT_BURST` | int | `100` | Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load. |
 | `rate_limit_max_clients` | `BEKUP_SERVER_RATE_LIMIT_MAX_CLIENTS` | int | `10000` | Maximum number of client IPs tracked by the rate limiter; the least recently seen entries are evicted beyond it (memory bound). |
-| `max_ws_connections_per_user` | `BEKUP_SERVER_MAX_WS_CONNECTIONS_PER_USER` | int | `5` | Maximum concurrent WebSocket connections (GraphQL subscriptions) per user on one instance (1 to 100); further upgrades get 429. |
 | `user_rate_limit_per_second` | `BEKUP_SERVER_USER_RATE_LIMIT_PER_SECOND` | float | `20.0` | Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After. |
 | `user_rate_limit_burst` | `BEKUP_SERVER_USER_RATE_LIMIT_BURST` | int | `100` | Per-user burst size (bucket capacity) for authenticated requests. |
 
@@ -247,13 +246,12 @@ Generated from the config structs; regenerate with
 | `max_complexity` | `BEKUP_GRAPHQL_MAX_COMPLEXITY` | int | `1000` | Maximum complexity of one GraphQL operation (1 per selected field, more for list fields that declare it); larger operations are rejected before execution (50 to 100000). |
 | `max_depth` | `BEKUP_GRAPHQL_MAX_DEPTH` | int | `12` | Maximum field nesting depth of one GraphQL operation (3 to 50). |
 | `max_body_bytes` | `BEKUP_GRAPHQL_MAX_BODY_BYTES` | int | `262144` | Maximum size of a GraphQL request body in bytes (1024 up to server.max_body_bytes); larger requests get 413. |
-| `ws_max_connections` | `BEKUP_GRAPHQL_WS_MAX_CONNECTIONS` | int | `1000` | Maximum concurrent WebSocket connections on one instance, all users together (1 to 100000); further upgrades get 503. |
-| `ws_max_subscriptions_per_connection` | `BEKUP_GRAPHQL_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION` | int | `20` | Maximum active subscriptions on one WebSocket connection (1 to 200); further subscribe messages fail with RATE_LIMITED. |
-| `ws_max_message_bytes` | `BEKUP_GRAPHQL_WS_MAX_MESSAGE_BYTES` | int | `65536` | Maximum size of one message a client sends over the WebSocket, in bytes (1024 up to graphql.max_body_bytes); a larger message closes the connection. |
-| `ws_init_timeout` | `BEKUP_GRAPHQL_WS_INIT_TIMEOUT` | duration | `'10s'` | Time a client has after the upgrade to send connection_init (1s to 1m). |
-| `ws_ping_interval` | `BEKUP_GRAPHQL_WS_PING_INTERVAL` | duration | `'25s'` | Interval of server pings on WebSocket connections; a client that does not answer within twice the interval is disconnected (5s to 5m). |
-| `ws_revalidate_interval` | `BEKUP_GRAPHQL_WS_REVALIDATE_INTERVAL` | duration | `'30s'` | Interval at which every WebSocket connection re-checks its session in the database (5s to 5m). Revocations normally close sockets at once through session events; this is the fallback bound. |
-| `ws_session_check_ttl` | `BEKUP_GRAPHQL_WS_SESSION_CHECK_TTL` | duration | `'5s'` | Maximum age of a session check before a subscription event is delivered without a new one (1s up to ws_revalidate_interval). |
+| `stream_max_per_session` | `BEKUP_GRAPHQL_STREAM_MAX_PER_SESSION` | int | `4` | Maximum concurrent event streams (GraphQL subscriptions over SSE) of one session on one instance (1 to 20, at most stream_max_per_user); further streams get 429. Browsers open at most 6 connections per origin over HTTP/1.1, so keep this well below 6 when serving without an HTTP/2 proxy. |
+| `stream_max_per_user` | `BEKUP_GRAPHQL_STREAM_MAX_PER_USER` | int | `10` | Maximum concurrent event streams of one user on one instance, all sessions together (1 to 100); further streams get 429. |
+| `stream_max_total` | `BEKUP_GRAPHQL_STREAM_MAX_TOTAL` | int | `1000` | Maximum concurrent event streams on one instance, all users together (1 to 100000); further streams get 503. |
+| `stream_keepalive_interval` | `BEKUP_GRAPHQL_STREAM_KEEPALIVE_INTERVAL` | duration | `'25s'` | Interval of keepalive comments on idle event streams (5s to 1m). A reverse proxy must allow at least three intervals without data (nginx proxy_read_timeout). |
+| `stream_revalidate_interval` | `BEKUP_GRAPHQL_STREAM_REVALIDATE_INTERVAL` | duration | `'30s'` | Interval at which every event stream re-checks its session in the database (5s to 5m). Revocations normally end streams at once through session events; this is the fallback bound. |
+| `stream_session_check_ttl` | `BEKUP_GRAPHQL_STREAM_SESSION_CHECK_TTL` | duration | `'5s'` | Maximum age of a session check before a subscription event is delivered without a new one (1s up to stream_revalidate_interval). |
 
 #### `[database]`
 
@@ -346,7 +344,7 @@ Generated from the config structs; regenerate with
 | Key | Env override | Type | Default | Description |
 |---|---|---|---|---|
 | `allow_cidrs` | `BEKUP_NETGUARD_ALLOW_CIDRS` | list of strings | `[]` | Private CIDRs that outbound connections (S3, SMTP, SFTP, webhooks) may reach. Empty denies all private ranges. |
-| `allow_hosts` | `BEKUP_NETGUARD_ALLOW_HOSTS` | list of strings | `[]` | Host names that may resolve to private addresses. |
+| `allow_hosts` | `BEKUP_NETGUARD_ALLOW_HOSTS` | list of strings | `[]` | Host names (exact, or *.example.com for any subdomain) that may resolve to private addresses. Never re-allows loopback (outside dev mode), link-local, metadata or other always-denied ranges. |
 
 #### `[metrics]`
 
@@ -376,6 +374,7 @@ Generated from the config structs; regenerate with
 |---|---|---|---|---|
 | `address` | `BEKUP_LISTEN_ADDRESS` | string | `':7443'` | host:port of the mTLS gRPC listener. Only reachable on the internal runner network. Outside dev mode a wildcard address (:port, 0.0.0.0, [::]) is refused unless allow_wildcard is set; bind the internal network address instead. |
 | `allow_wildcard` | `BEKUP_LISTEN_ALLOW_WILDCARD` | bool | `false` | Allow a wildcard/unspecified listen.address outside dev mode (logs a startup warning). Prefer binding the internal network address. |
+| `health_socket` | `BEKUP_LISTEN_HEALTH_SOCKET` | string | `'/tmp/bekup-runner/health.sock'` | Absolute path of the container-local unix socket that serves only the standard gRPC health service (no TLS) for bekup healthcheck runner. Its directory is created 0700 and must belong to the runner user; the socket is 0600. Keep it on the container's private tmpfs, never on a shared volume. Empty disables it. |
 
 #### `[tls]`
 
@@ -392,11 +391,12 @@ Generated from the config structs; regenerate with
 |---|---|---|---|---|
 | `host` | `BEKUP_DOCKER_HOST` | string | `'unix:///var/run/docker.sock'` | Docker daemon address. Only unix:// sockets are accepted. |
 | `gid` | `BEKUP_DOCKER_GID` | int | `0` | Group ID that owns the Docker socket (0 = do not add a group). |
-| `self_container` | `BEKUP_DOCKER_SELF_CONTAINER` | string | `(empty)` | ID or name of the runner's own container, used to join the per-run networks. Empty = auto-detect from the container hostname; set it when detection fails (e.g. a custom hostname). |
+| `self_container` | `BEKUP_DOCKER_SELF_CONTAINER` | string | `(empty)` | ID or name of the runner's own container, used to join the per-run networks. Empty = auto-detect from /proc/self/mountinfo, then the container hostname; the container must carry one of the runner's own addresses. Set it when detection fails (e.g. a custom hostname). |
 | `memory_mib` | `BEKUP_DOCKER_MEMORY_MIB` | int | `1024` | Memory limit per dump container in MiB. |
 | `cpus` | `BEKUP_DOCKER_CPUS` | float | `1.0` | CPU limit per dump container (fractional CPUs). |
 | `pids_limit` | `BEKUP_DOCKER_PIDS_LIMIT` | int | `256` | Process limit per dump container. |
 | `pull_timeout` | `BEKUP_DOCKER_PULL_TIMEOUT` | duration | `'10m0s'` | Timeout for pulling an allowlisted image. |
+| `run_subnet_pool` | `BEKUP_DOCKER_RUN_SUBNET_POOL` | string | `'10.214.0.0/16'` | Private IPv4 CIDR (inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16, prefix /8 to /24) from which every run gets its own /28 internal network. The runner treats the whole pool as its own network: targets inside it are always denied and no gRPC connection is accepted from it. Subnets already used by other Docker networks are skipped; an overlap with targets.allow_cidrs is allowed (the pool is denied first). |
 
 #### `[images]`
 
@@ -409,9 +409,10 @@ Generated from the config structs; regenerate with
 | Key | Env override | Type | Default | Description |
 |---|---|---|---|---|
 | `allow_cidrs` | `BEKUP_TARGETS_ALLOW_CIDRS` | list of strings | `[]` | CIDRs that dump containers may connect to. Empty = no CIDR is allowed. |
-| `allow_hosts` | `BEKUP_TARGETS_ALLOW_HOSTS` | list of strings | `[]` | Host names that dump containers may connect to. |
+| `allow_hosts` | `BEKUP_TARGETS_ALLOW_HOSTS` | list of strings | `[]` | Host names that dump containers may connect to. IP addresses are refused here; list them in allow_cidrs (e.g. 192.0.2.10/32). |
 | `deny_cidrs` | `BEKUP_TARGETS_DENY_CIDRS` | list of strings | `[]` | CIDRs that are always denied (evaluated before the allow lists). |
 | `deny_hosts` | `BEKUP_TARGETS_DENY_HOSTS` | list of strings | `[]` | Host names that are always denied (evaluated before the allow lists). |
+| `bastion_targets` | `BEKUP_TARGETS_BASTION_TARGETS` | list of strings | `[]` | Per-bastion target allowlist: entries <bastion>=<CIDR or host name> (e.g. bastion.example.com=10.20.0.0/16, bastion.example.com=db.internal, 203.0.113.7=127.0.0.1/32). A bastion (matched by its name or any of its addresses) that appears here may only forward to its listed targets: IP-literal targets must lie in one of its CIDRs, host names must be listed exactly. Bastions not listed may forward to any host (only deny_cidrs/deny_hosts apply; a startup warning says so). |
 
 #### `[limits]`
 

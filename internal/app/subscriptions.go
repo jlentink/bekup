@@ -6,7 +6,7 @@ import (
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/graph"
-	"github.com/jlentink/bekup/internal/graph/wsconn"
+	"github.com/jlentink/bekup/internal/graph/streams"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/pubsub"
 )
@@ -14,15 +14,15 @@ import (
 // ListenerApplicationName is reported to Postgres by the LISTEN connection.
 const ListenerApplicationName = "bekup-serve-listen"
 
-// subscriptions is the WebSocket subscription machinery (task 1.10): the
+// subscriptions is the subscription machinery (tasks 1.10, 2.13): the
 // in-process bus that the session store publishes to, the LISTEN/NOTIFY
 // bridge that carries events from other instances into it, and the hub
-// that watches the sessions of open sockets.
+// that watches the sessions of open event streams.
 type subscriptions struct {
 	bus      *pubsub.Bus
 	listener *pubsub.Listener
-	hub      *wsconn.Hub
-	ws       *graph.WebSocketOptions
+	hub      *streams.Hub
+	streams  *graph.StreamOptions
 }
 
 // newSubscriptions builds the listener and the hub (after newAuth and the
@@ -53,14 +53,14 @@ func (a *App) newSubscriptions() error {
 		return err
 	}
 	g := cfg.GraphQL
-	a.subs.hub, err = wsconn.NewHub(wsconn.Options{
+	a.subs.hub, err = streams.NewHub(streams.Options{
 		Validator:          httpserver.SessionsResolver{Sessions: a.auth.Sessions(), Enrollment: a.twoFactorPolicy},
 		Bus:                a.subs.bus,
-		RevalidateInterval: g.WSRevalidateInterval.D(),
-		CheckTTL:           g.WSSessionCheckTTL.D(),
-		MaxPerUser:         cfg.Server.MaxWSConnectionsPerUser,
-		MaxTotal:           g.WSMaxConnections,
-		MaxSubscriptions:   g.WSMaxSubscriptionsPerConnection,
+		RevalidateInterval: g.StreamRevalidateInterval.D(),
+		CheckTTL:           g.StreamSessionCheckTTL.D(),
+		MaxPerSession:      g.StreamMaxPerSession,
+		MaxPerUser:         g.StreamMaxPerUser,
+		MaxTotal:           g.StreamMaxTotal,
 		Logger:             a.opts.Logger,
 	})
 	if err != nil {
@@ -70,12 +70,10 @@ func (a *App) newSubscriptions() error {
 	if err != nil {
 		return err
 	}
-	a.subs.ws = &graph.WebSocketOptions{
-		Hub:             a.subs.hub,
-		AllowedOrigins:  origins,
-		InitTimeout:     g.WSInitTimeout.D(),
-		PingInterval:    g.WSPingInterval.D(),
-		MaxMessageBytes: g.WSMaxMessageBytes,
+	a.subs.streams = &graph.StreamOptions{
+		Hub:               a.subs.hub,
+		AllowedOrigins:    origins,
+		KeepaliveInterval: g.StreamKeepaliveInterval.D(),
 	}
 	a.components = append(a.components, a.subs.listener, a.subs.hub)
 	return nil

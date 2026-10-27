@@ -9,30 +9,30 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/model"
-	"github.com/jlentink/bekup/internal/graph/wsconn"
+	"github.com/jlentink/bekup/internal/graph/streams"
 )
 
-// errNotWebSocket answers a subscription outside a WebSocket connection
-// (the transport layer already refuses them; defense in depth).
-var errNotWebSocket = apierror.New(apierror.Forbidden, "subscriptions are only available over WebSocket")
+// errNotStream answers a subscription outside an event stream (the
+// transport layer already refuses them; defense in depth).
+var errNotStream = apierror.New(apierror.Forbidden, "subscriptions are only available as event streams")
 
 // sessionEvents streams notices about the caller's own sessions. Each
 // notice is re-authorized at delivery (account.sessions_view) after the
-// connection's session check.
+// stream's session check.
 func (r *Resolver) sessionEvents(ctx context.Context) (<-chan *model.SessionEvent, error) {
-	c := wsconn.FromContext(ctx)
+	c := streams.FromContext(ctx)
 	if c == nil {
-		return nil, errNotWebSocket
+		return nil, errNotStream
 	}
 	self := c.Principal().SessionID
 	src := c.WatchSessions(ctx)
-	check := wsconn.Authorize[wsconn.SessionNotice](r.Authz, authz.OpAccountSessionsView, nil)
-	return wsconn.Deliver(ctx, src, check, func(_ context.Context, n wsconn.SessionNotice) (*model.SessionEvent, bool) {
+	check := streams.Authorize[streams.SessionNotice](r.Authz, authz.OpAccountSessionsView, nil)
+	return streams.Deliver(ctx, src, check, func(_ context.Context, n streams.SessionNotice) (*model.SessionEvent, bool) {
 		return sessionEventOf(n, self)
 	}), nil
 }
 
-func sessionEventOf(n wsconn.SessionNotice, self uuid.UUID) (*model.SessionEvent, bool) {
+func sessionEventOf(n streams.SessionNotice, self uuid.UUID) (*model.SessionEvent, bool) {
 	ev := &model.SessionEvent{Current: n.SessionID == self || n.Kind == auth.SessionsRevokedAll}
 	switch n.Kind {
 	case auth.SessionRevoked:

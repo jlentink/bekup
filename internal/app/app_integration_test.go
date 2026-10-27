@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/app"
 	"github.com/jlentink/bekup/internal/audit"
+	"github.com/jlentink/bekup/internal/certs"
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
@@ -86,6 +88,14 @@ func options(t *testing.T, url string, logs *syncBuffer) app.Options {
 	cfg.Database.TLSMode = config.DBTLSVerifyFull
 	cfg.Database.TLSCAFile = dbtest.CAFile()
 	cfg.Security.MasterKey = keyringFor(t, url)
+	// serve builds its runner client at startup (task 2.11); the runner
+	// itself is not needed (the client connects lazily).
+	pkiDir := filepath.Join(t.TempDir(), "pki")
+	if _, err := certs.Init(certs.InitOptions{Dir: pkiDir, Components: []string{certs.ComponentServe}, AllowUnencrypted: true}); err != nil {
+		t.Fatal(err)
+	}
+	l := certs.Layout{Dir: pkiDir}
+	cfg.Runner.CertFile, cfg.Runner.KeyFile, cfg.Runner.CAFile = l.CertFile(certs.ComponentServe), l.KeyFile(certs.ComponentServe), l.CACert()
 	return app.Options{
 		Config:  &cfg,
 		Dev:     true,

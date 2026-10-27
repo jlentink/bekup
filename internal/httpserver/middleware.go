@@ -195,7 +195,7 @@ func lastListValue(values []string) string {
 // --- 3. access log ---------------------------------------------------------
 
 // statusWriter records the status and size of a response. It supports
-// Unwrap (http.ResponseController), Flush and Hijack (WebSockets).
+// Unwrap (http.ResponseController), Flush (event streams) and Hijack.
 type statusWriter struct {
 	http.ResponseWriter
 	status int
@@ -366,7 +366,7 @@ func headerHasToken(h http.Header, name, token string) bool {
 	return false
 }
 
-// originAllowed decides a state-changing request or WebSocket upgrade. A
+// originAllowed decides a state-changing request or upgrade request. A
 // present Sec-Fetch-Site must be "same-origin"; a present Origin must be one
 // of the allowed origins exactly; with neither header the request is
 // refused (every current browser sends Origin on such requests, so this only

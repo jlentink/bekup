@@ -27,7 +27,7 @@ encrypts them and writes them to disk, S3 and SFTP.
 * [bekup healthcheck](bekup_healthcheck.md)	 - Probe a local bekup component (container healthchecks; exit 0 healthy, 1 unhealthy)
 * [bekup keys](bekup_keys.md)	 - Generate and rotate the master keyring
 * [bekup migrate](bekup_migrate.md)	 - Apply database migrations (as bekup_owner); default action: up
-* [bekup runner](bekup_runner.md)	 - Run the Docker runner (mTLS gRPC, reads runner.toml) (not implemented yet)
+* [bekup runner](bekup_runner.md)	 - Run the Docker runner (mTLS gRPC, reads runner.toml)
 * [bekup serve](bekup_serve.md)	 - Run the web UI, GraphQL API and scheduler
 * [bekup verify](bekup_verify.md)	 - Verify a backup artifact offline (not implemented yet)
 * [bekup version](bekup_version.md)	 - Print the bekup version

@@ -1,6 +1,6 @@
 ## bekup healthcheck runner
 
-Check the local runner gRPC listener (not implemented yet)
+Query the runner's local health socket (listen.health_socket; no client certificate needed)
 
 ```
 bekup healthcheck runner [flags]

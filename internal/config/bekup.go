@@ -27,24 +27,23 @@ type Bekup struct {
 
 // Server configures the HTTP listener behind the reverse proxy.
 type Server struct {
-	Listen                  string   `toml:"listen" doc:"Address the plain-HTTP server listens on (host:port). Only reachable on the internal proxy network; never publish it. Outside dev mode a wildcard address (:port, 0.0.0.0, [::]) is refused unless allow_wildcard_listen is set; bind the internal network address instead."`
-	AllowWildcardListen     bool     `toml:"allow_wildcard_listen" doc:"Allow a wildcard/unspecified server.listen address outside dev mode (logs a startup warning). Prefer binding the internal network address."`
-	BaseURL                 string   `toml:"base_url" doc:"Public URL of the UI as served by the reverse proxy; all links are built from it. Must be https unless dev mode is on or allow_insecure_http is set."`
-	AllowInsecureHTTP       bool     `toml:"allow_insecure_http" doc:"Accept a plain http base_url outside dev mode (D-095). Traffic, sessions and credentials are then NOT encrypted; bekup logs a warning at every startup and shows a permanent UI banner."`
-	TrustedProxies          []string `toml:"trusted_proxies" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy)."`
-	ReadHeaderTimeout       Duration `toml:"read_header_timeout" doc:"Maximum time to read request headers."`
-	ReadTimeout             Duration `toml:"read_timeout" doc:"Maximum time to read a whole request, body included (at least read_header_timeout)."`
-	WriteTimeout            Duration `toml:"write_timeout" doc:"Maximum time to write a response. Long-lived routes (WebSocket subscriptions, artifact downloads) override it per route."`
-	IdleTimeout             Duration `toml:"idle_timeout" doc:"Maximum keep-alive idle time between requests."`
-	ShutdownTimeout         Duration `toml:"shutdown_timeout" doc:"Grace period for in-flight requests on shutdown."`
-	MaxHeaderBytes          int      `toml:"max_header_bytes" doc:"Maximum size of the request headers in bytes (4 KiB to 1 MiB)."`
-	MaxBodyBytes            int64    `toml:"max_body_bytes" doc:"Maximum request body size in bytes."`
-	RateLimitPerSecond      float64  `toml:"rate_limit_per_second" doc:"Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After."`
-	RateLimitBurst          int      `toml:"rate_limit_burst" doc:"Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load."`
-	RateLimitMaxClients     int      `toml:"rate_limit_max_clients" doc:"Maximum number of client IPs tracked by the rate limiter; the least recently seen entries are evicted beyond it (memory bound)."`
-	MaxWSConnectionsPerUser int      `toml:"max_ws_connections_per_user" doc:"Maximum concurrent WebSocket connections (GraphQL subscriptions) per user on one instance (1 to 100); further upgrades get 429."`
-	UserRateLimitPerSecond  float64  `toml:"user_rate_limit_per_second" doc:"Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After."`
-	UserRateLimitBurst      int      `toml:"user_rate_limit_burst" doc:"Per-user burst size (bucket capacity) for authenticated requests."`
+	Listen                 string   `toml:"listen" doc:"Address the plain-HTTP server listens on (host:port). Only reachable on the internal proxy network; never publish it. Outside dev mode a wildcard address (:port, 0.0.0.0, [::]) is refused unless allow_wildcard_listen is set; bind the internal network address instead."`
+	AllowWildcardListen    bool     `toml:"allow_wildcard_listen" doc:"Allow a wildcard/unspecified server.listen address outside dev mode (logs a startup warning). Prefer binding the internal network address."`
+	BaseURL                string   `toml:"base_url" doc:"Public URL of the UI as served by the reverse proxy; all links are built from it. Must be https unless dev mode is on or allow_insecure_http is set."`
+	AllowInsecureHTTP      bool     `toml:"allow_insecure_http" doc:"Accept a plain http base_url outside dev mode (D-095). Traffic, sessions and credentials are then NOT encrypted; bekup logs a warning at every startup and shows a permanent UI banner."`
+	TrustedProxies         []string `toml:"trusted_proxies" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy)."`
+	ReadHeaderTimeout      Duration `toml:"read_header_timeout" doc:"Maximum time to read request headers."`
+	ReadTimeout            Duration `toml:"read_timeout" doc:"Maximum time to read a whole request, body included (at least read_header_timeout)."`
+	WriteTimeout           Duration `toml:"write_timeout" doc:"Maximum time to write a response. Long-lived routes (event streams of GraphQL subscriptions, artifact downloads) lift it per request."`
+	IdleTimeout            Duration `toml:"idle_timeout" doc:"Maximum keep-alive idle time between requests."`
+	ShutdownTimeout        Duration `toml:"shutdown_timeout" doc:"Grace period for in-flight requests on shutdown."`
+	MaxHeaderBytes         int      `toml:"max_header_bytes" doc:"Maximum size of the request headers in bytes (4 KiB to 1 MiB)."`
+	MaxBodyBytes           int64    `toml:"max_body_bytes" doc:"Maximum request body size in bytes."`
+	RateLimitPerSecond     float64  `toml:"rate_limit_per_second" doc:"Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After."`
+	RateLimitBurst         int      `toml:"rate_limit_burst" doc:"Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load."`
+	RateLimitMaxClients    int      `toml:"rate_limit_max_clients" doc:"Maximum number of client IPs tracked by the rate limiter; the least recently seen entries are evicted beyond it (memory bound)."`
+	UserRateLimitPerSecond float64  `toml:"user_rate_limit_per_second" doc:"Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After."`
+	UserRateLimitBurst     int      `toml:"user_rate_limit_burst" doc:"Per-user burst size (bucket capacity) for authenticated requests."`
 }
 
 // GraphQL configures the limits of the /graphql endpoint (D-050, D-105).
@@ -52,15 +51,14 @@ type GraphQL struct {
 	MaxComplexity int   `toml:"max_complexity" doc:"Maximum complexity of one GraphQL operation (1 per selected field, more for list fields that declare it); larger operations are rejected before execution (50 to 100000)."`
 	MaxDepth      int   `toml:"max_depth" doc:"Maximum field nesting depth of one GraphQL operation (3 to 50)."`
 	MaxBodyBytes  int64 `toml:"max_body_bytes" doc:"Maximum size of a GraphQL request body in bytes (1024 up to server.max_body_bytes); larger requests get 413."`
-	// WebSocket subscriptions (task 1.10). The per-user cap is
-	// server.max_ws_connections_per_user.
-	WSMaxConnections                int      `toml:"ws_max_connections" doc:"Maximum concurrent WebSocket connections on one instance, all users together (1 to 100000); further upgrades get 503."`
-	WSMaxSubscriptionsPerConnection int      `toml:"ws_max_subscriptions_per_connection" doc:"Maximum active subscriptions on one WebSocket connection (1 to 200); further subscribe messages fail with RATE_LIMITED."`
-	WSMaxMessageBytes               int64    `toml:"ws_max_message_bytes" doc:"Maximum size of one message a client sends over the WebSocket, in bytes (1024 up to graphql.max_body_bytes); a larger message closes the connection."`
-	WSInitTimeout                   Duration `toml:"ws_init_timeout" doc:"Time a client has after the upgrade to send connection_init (1s to 1m)."`
-	WSPingInterval                  Duration `toml:"ws_ping_interval" doc:"Interval of server pings on WebSocket connections; a client that does not answer within twice the interval is disconnected (5s to 5m)."`
-	WSRevalidateInterval            Duration `toml:"ws_revalidate_interval" doc:"Interval at which every WebSocket connection re-checks its session in the database (5s to 5m). Revocations normally close sockets at once through session events; this is the fallback bound."`
-	WSSessionCheckTTL               Duration `toml:"ws_session_check_ttl" doc:"Maximum age of a session check before a subscription event is delivered without a new one (1s up to ws_revalidate_interval)."`
+	// Live event streams: GraphQL subscriptions over Server-Sent Events
+	// (task 2.13).
+	StreamMaxPerSession      int      `toml:"stream_max_per_session" doc:"Maximum concurrent event streams (GraphQL subscriptions over SSE) of one session on one instance (1 to 20, at most stream_max_per_user); further streams get 429. Browsers open at most 6 connections per origin over HTTP/1.1, so keep this well below 6 when serving without an HTTP/2 proxy."`
+	StreamMaxPerUser         int      `toml:"stream_max_per_user" doc:"Maximum concurrent event streams of one user on one instance, all sessions together (1 to 100); further streams get 429."`
+	StreamMaxTotal           int      `toml:"stream_max_total" doc:"Maximum concurrent event streams on one instance, all users together (1 to 100000); further streams get 503."`
+	StreamKeepaliveInterval  Duration `toml:"stream_keepalive_interval" doc:"Interval of keepalive comments on idle event streams (5s to 1m). A reverse proxy must allow at least three intervals without data (nginx proxy_read_timeout)."`
+	StreamRevalidateInterval Duration `toml:"stream_revalidate_interval" doc:"Interval at which every event stream re-checks its session in the database (5s to 5m). Revocations normally end streams at once through session events; this is the fallback bound."`
+	StreamSessionCheckTTL    Duration `toml:"stream_session_check_ttl" doc:"Maximum age of a session check before a subscription event is delivered without a new one (1s up to stream_revalidate_interval)."`
 }
 
 // Database configures the connection to bekup's own Postgres app DB.
@@ -157,7 +155,7 @@ type Notifications struct {
 // the DB settings table).
 type Netguard struct {
 	AllowCIDRs []string `toml:"allow_cidrs" doc:"Private CIDRs that outbound connections (S3, SMTP, SFTP, webhooks) may reach. Empty denies all private ranges."`
-	AllowHosts []string `toml:"allow_hosts" doc:"Host names that may resolve to private addresses."`
+	AllowHosts []string `toml:"allow_hosts" doc:"Host names (exact, or *.example.com for any subdomain) that may resolve to private addresses. Never re-allows loopback (outside dev mode), link-local, metadata or other always-denied ranges."`
 }
 
 // Metrics configures the internal Prometheus endpoint.
@@ -185,34 +183,32 @@ const DevBaseURL = "http://localhost:8080"
 func DefaultBekup() Bekup {
 	return Bekup{
 		Server: Server{
-			Listen:                  ":8080",
-			TrustedProxies:          []string{},
-			ReadHeaderTimeout:       Duration(10 * time.Second),
-			ReadTimeout:             Duration(30 * time.Second),
-			WriteTimeout:            Duration(60 * time.Second),
-			IdleTimeout:             Duration(120 * time.Second),
-			ShutdownTimeout:         Duration(30 * time.Second),
-			MaxHeaderBytes:          32 << 10,
-			MaxBodyBytes:            1 << 20,
-			RateLimitPerSecond:      20,
-			RateLimitBurst:          100,
-			RateLimitMaxClients:     10000,
-			MaxWSConnectionsPerUser: 5,
-			UserRateLimitPerSecond:  20,
-			UserRateLimitBurst:      100,
+			Listen:                 ":8080",
+			TrustedProxies:         []string{},
+			ReadHeaderTimeout:      Duration(10 * time.Second),
+			ReadTimeout:            Duration(30 * time.Second),
+			WriteTimeout:           Duration(60 * time.Second),
+			IdleTimeout:            Duration(120 * time.Second),
+			ShutdownTimeout:        Duration(30 * time.Second),
+			MaxHeaderBytes:         32 << 10,
+			MaxBodyBytes:           1 << 20,
+			RateLimitPerSecond:     20,
+			RateLimitBurst:         100,
+			RateLimitMaxClients:    10000,
+			UserRateLimitPerSecond: 20,
+			UserRateLimitBurst:     100,
 		},
 		GraphQL: GraphQL{
 			MaxComplexity: 1000,
 			MaxDepth:      12,
 			MaxBodyBytes:  256 << 10,
 
-			WSMaxConnections:                1000,
-			WSMaxSubscriptionsPerConnection: 20,
-			WSMaxMessageBytes:               64 << 10,
-			WSInitTimeout:                   Duration(10 * time.Second),
-			WSPingInterval:                  Duration(25 * time.Second),
-			WSRevalidateInterval:            Duration(30 * time.Second),
-			WSSessionCheckTTL:               Duration(5 * time.Second),
+			StreamMaxPerSession:      4,
+			StreamMaxPerUser:         10,
+			StreamMaxTotal:           1000,
+			StreamKeepaliveInterval:  Duration(25 * time.Second),
+			StreamRevalidateInterval: Duration(30 * time.Second),
+			StreamSessionCheckTTL:    Duration(5 * time.Second),
 		},
 		Database: Database{
 			URLFile:          "/run/secrets/bekup_database_url",

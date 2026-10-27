@@ -105,7 +105,7 @@ func (s *Sessions) emit(ctx context.Context, q *sqlc.Queries, ev SessionEvent) e
 }
 
 // Check re-validates the session id without touching it (long-lived
-// connections: an open WebSocket is not user activity, so the idle expiry
+// connections: an open event stream is not user activity, so the idle expiry
 // keeps running) and rebuilds its principal from the current session and
 // user rows (role, AAL, step-up and second-factor times, pending second
 // factor, temporary password; the caller applies the 2FA enrollment

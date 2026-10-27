@@ -36,11 +36,16 @@ func TestIsSecretKey(t *testing.T) {
 		"key", "private_key", "authorization", "Authorization", "cookie", "set_cookie",
 		"dsn", "database_url", "db_url", "connection_string", "credentials", "totp",
 		"x-api-key", "sessionToken", "userpassword",
+		// Near misses of the non-secret identifiers stay secret.
+		"version_private_key", "image_key_pem", "my_version_key", "key_version_key_secret",
+		"ssh_key", "host_key", "signing_key", "host_key_cleared_value_key", "private_key_cleared",
 	}
 	notSecret := []string{
 		"user", "job_id", "run_id", "master_key_file", "key_id", "token_ttl",
 		"password_min_length", "level", "url", "base_url", "config_file", "duration",
 		"bytes", "keyring_version", "status", "error", "",
+		"version_key", "source_version_key", "versionKey", "image_key", "catalog_key", "VersionKey",
+		"host_key_cleared", "hostKeyCleared", "host_key_changed",
 	}
 	for _, k := range secret {
 		if !IsSecretKey(k) {

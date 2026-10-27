@@ -122,7 +122,7 @@ dev-down:
     need_cmd docker "https://docs.docker.com/get-docker/"
     {{ compose_dev }} --profile full --profile web --profile traefik --profile nginx down --remove-orphans
 
-[doc('Run all code generators (sqlc, gqlgen, graphql-codegen, config reference)')]
+[doc('Run all code generators (sqlc, buf, gqlgen, graphql-codegen, config reference)')]
 [group('dev')]
 [script]
 gen:
@@ -140,6 +140,13 @@ gen:
         ran=1
     else
         note "sqlc: not available yet (task 0.4)"
+    fi
+    if [[ -f buf.gen.yaml ]]; then
+        info "buf generate (proto/ -> internal/runnerpb)"
+        go tool buf generate
+        ran=1
+    else
+        note "buf: not available yet (task 2.4)"
     fi
     if [[ -f gqlgen.yml ]]; then
         info "gqlgen generate"
@@ -162,7 +169,7 @@ gen:
 # quality
 # ---------------------------------------------------------------------------
 
-[doc('Lint Go (golangci-lint incl. gosec) and, if present, web (eslint + tsc)')]
+[doc('Lint Go (golangci-lint incl. gosec), proto (buf lint/format/breaking) and, if present, web (eslint + tsc)')]
 [group('quality')]
 [script]
 lint:
@@ -178,6 +185,20 @@ lint:
         $sqlc diff || die "internal/db/sqlc is out of date: run 'just gen' and commit the result"
     else
         note "sqlc vet/diff: not available yet (task 0.4)"
+    fi
+    if [[ -f buf.yaml ]]; then
+        info "buf lint + format"
+        go tool buf lint
+        go tool buf format --diff --exit-code || die "proto files are not formatted: run 'go tool buf format -w'"
+        # Wire compatibility against main, once the API exists there.
+        if git cat-file -e main:proto/runner/v1/runner.proto 2>/dev/null; then
+            info "buf breaking (against main)"
+            go tool buf breaking --against '.git#branch=main'
+        else
+            note "buf breaking: skipped until proto/ is on main"
+        fi
+    else
+        note "buf lint: not available yet (task 2.4)"
     fi
     if has_web; then
         web_deps

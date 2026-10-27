@@ -1,6 +1,6 @@
--- Session re-validation for long-lived connections (WebSocket
--- subscriptions, task 1.10). Looks the session up by id, never by token,
--- and does not touch it: an open socket is not user activity, so the idle
+-- Session re-validation for long-lived connections (event
+-- streams of subscriptions, tasks 1.10/2.13). Looks the session up by id, never by token,
+-- and does not touch it: an open stream is not user activity, so the idle
 -- expiry keeps running.
 
 -- CheckActiveSession returns the active session id with its user, so the

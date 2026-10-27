@@ -195,15 +195,40 @@ var safeSuffixes = map[string]bool{
 	"at": true, "configured": true, "set": true, "present": true,
 }
 
+// nonSecretKeys are exact attribute names (as snake_case words) whose
+// "key" is an identifier or a flag, not key material: catalog release
+// series and image keys of the engine catalog, and the booleans that
+// record a public SSH host-key pin being cleared or changed (audit
+// details). Matching is on the complete name, so "version_key" is plain
+// while "version_private_key", "key", "host_key" or "image_key_pem" stay
+// redacted; add a name here only for values that are never secret. Used by
+// the log handler and the audit redactor (both call IsSecretKey).
+var nonSecretKeys = map[string]bool{
+	"version_key":        true,
+	"source_version_key": true,
+	"target_version_key": true,
+	"client_version_key": true,
+	"image_key":          true,
+	"catalog_key":        true,
+	"host_key_cleared":   true,
+	"host_key_changed":   true,
+	"host_key_confirmed": true,
+}
+
 // IsSecretKey reports whether an attribute key names a secret value. Keys
 // are split into words on separators and camelCase boundaries; a key is
 // secret when any word is a secret word (password, secret, token, key, ...)
 // or contains one, unless the last word only describes the secret (for
-// example master_key_file, key_id or token_ttl). Keys naming connection
-// strings (dsn, database_url, connection_string) are secret as well.
+// example master_key_file, key_id or token_ttl) or the whole name is a
+// known identifier (nonSecretKeys: version_key, image_key). Keys naming
+// connection strings (dsn, database_url, connection_string) are secret as
+// well.
 func IsSecretKey(key string) bool {
 	words := splitWords(key)
 	if len(words) == 0 {
+		return false
+	}
+	if nonSecretKeys[strings.Join(words, "_")] {
 		return false
 	}
 	joined := strings.Join(words, "")

@@ -26,7 +26,7 @@ func (a *App) newAuth() (*auth.Service, error) {
 		AbsoluteTimeout: sec.SessionAbsoluteTimeout.D(),
 		TouchInterval:   sec.SessionTouchInterval.D(),
 		Logger:          a.opts.Logger,
-		// Revocations and rotations reach open WebSockets (task 1.10).
+		// Revocations and rotations reach open event streams (tasks 1.10, 2.13).
 		Events: auth.PubSubSessionEvents{Publisher: &pubsub.Publisher{Bus: a.subs.bus}},
 	})
 	limiter, err := httpserver.NewRateLimiter[netip.Prefix](httpserver.RateLimitOptions{

@@ -10,11 +10,17 @@
 // 400 for anything but one JSON request object). There is no GET,
 // multipart, form-encoded or persisted-query support. internal/httpserver
 // applies the Origin/Sec-Fetch-Site check, rate limit and body limit before
-// this handler. Subscriptions use a WebSocket on GET /graphql (task 1.10,
-// D-108, ws.go): graphql-transport-ws only, the cookie session and an exact
-// Origin at the upgrade, connection caps, only subscriptions over the
-// socket; internal/graph/wsconn watches the session and provides the
-// delivery-time authorization helpers for subscription resolvers.
+// this handler. Subscriptions are Server-Sent Events (task 2.13, D-124,
+// stream.go): a POST that accepts text/event-stream carries exactly one
+// subscription (graphql-sse, distinct connections mode), admitted with the
+// cookie session, an exact Origin and the stream caps; only subscriptions
+// as streams and subscriptions only as streams. internal/graph/streams
+// watches the session, ends a stream with a final error event
+// (UNAUTHENTICATED, FORBIDDEN, SESSION_ROTATED, UNAVAILABLE) and provides
+// the delivery-time authorization helpers for subscription resolvers. The
+// transports are this package's own on gqlgen's executor; gqlgen's
+// handler and transport packages (and with them any WebSocket library)
+// are not used.
 //
 // # Limits
 //
@@ -50,7 +56,9 @@
 // Resolvers return *apierror.Error for user-facing errors; the code is in
 // extensions.code (UNAUTHENTICATED, FORBIDDEN, STEP_UP_REQUIRED,
 // REQUIRES_2FA_ENROLLMENT, VALIDATION, NOT_FOUND, RATE_LIMITED, CONFLICT,
-// PASSWORD_CHANGE_REQUIRED).
+// PASSWORD_CHANGE_REQUIRED, SECOND_FACTOR_REQUIRED, CONNECTION_FAILED,
+// TLS_PIN_MISMATCH, SSH_HOST_KEY_MISMATCH; event streams also end
+// with SESSION_ROTATED or UNAVAILABLE).
 // Every other error and every panic is masked as "internal error" with code
 // INTERNAL and extensions.requestId; the real error is logged with the same
 // request ID. Resolvers must not build gqlerror values themselves.

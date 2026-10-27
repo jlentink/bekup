@@ -1,0 +1,12 @@
+# buf configuration for the runner gRPC API (task 2.4, D-121).
+# `just lint` runs `buf lint` and `buf format`; `buf breaking` against main
+# once proto/ is on main. Code generation: buf.gen.yaml (`just gen`).
+version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

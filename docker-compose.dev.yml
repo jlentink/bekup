@@ -98,13 +98,15 @@ services:
       # password, the unencrypted dev CA key, dev TLS keys), certs/, local
       # bekup.toml/runner.toml and .env files, none of which the dev serve
       # may read. Its own secrets arrive as Docker secrets like in
-      # production. Add new top-level Go source dirs here (task 2.4:
-      # ./proto). The container can never modify the working tree.
+      # production. Add new top-level Go source dirs here. ./proto is the
+      # runner API source; the generated Go code lives in
+      # internal/runnerpb. The container can never modify the working tree.
       - ./go.mod:/src/go.mod:ro
       - ./go.sum:/src/go.sum:ro
       - ./.air.toml:/src/.air.toml:ro
       - ./cmd:/src/cmd:ro
       - ./internal:/src/internal:ro
+      - ./proto:/src/proto:ro
       - ./web/embed.go:/src/web/embed.go:ro
       - ./web/dist:/src/web/dist:ro
       - go-mod:/go/pkg/mod

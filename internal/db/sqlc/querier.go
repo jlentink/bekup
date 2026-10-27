@@ -23,9 +23,9 @@ type Querier interface {
 	// ActiveAdminExists reports whether an active (not disabled, not deleted)
 	// admin account exists; serve warns at startup when none does (D-113).
 	ActiveAdminExists(ctx context.Context) (bool, error)
-	// Session re-validation for long-lived connections (WebSocket
-	// subscriptions, task 1.10). Looks the session up by id, never by token,
-	// and does not touch it: an open socket is not user activity, so the idle
+	// Session re-validation for long-lived connections (event
+	// streams of subscriptions, tasks 1.10/2.13). Looks the session up by id, never by token,
+	// and does not touch it: an open stream is not user activity, so the idle
 	// expiry keeps running.
 	// CheckActiveSession returns the active session id with its user, so the
 	// caller can rebuild the full principal (role, AAL, step-up and
@@ -66,6 +66,17 @@ type Querier interface {
 	// GetAuditLogChainAnchor returns the hash of the last row before @before_id
 	// (the starting point of a partial verification).
 	GetAuditLogChainAnchor(ctx context.Context, beforeID int64) (GetAuditLogChainAnchorRow, error)
+	GetConnection(ctx context.Context, id uuid.UUID) (Connection, error)
+	// GetConnectionForUpdate locks a connection that is not deleted.
+	GetConnectionForUpdate(ctx context.Context, id uuid.UUID) (Connection, error)
+	GetDestination(ctx context.Context, id uuid.UUID) (Destination, error)
+	// GetDestinationForUpdate locks a destination that is not deleted.
+	GetDestinationForUpdate(ctx context.Context, id uuid.UUID) (Destination, error)
+	// GetDestinationIncludingDeleted is for the workers only (backup,
+	// retention, restore: destinations.Service.Open). A soft-deleted
+	// destination must still open, because artifacts keep referencing it; the
+	// API never shows deleted rows.
+	GetDestinationIncludingDeleted(ctx context.Context, id uuid.UUID) (Destination, error)
 	GetInstanceKey(ctx context.Context, id string) (InstanceKey, error)
 	GetLatestAuditChainHead(ctx context.Context) (AuditChainHead, error)
 	GetLatestAuditLog(ctx context.Context) (AuditLog, error)
@@ -91,6 +102,12 @@ type Querier interface {
 	// InsertAuditLog appends an audit row. id, ts, prev_hash and hash are always
 	// assigned by the audit_log_chain trigger.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (AuditLog, error)
+	// InsertConnection creates the row with an id chosen by the application,
+	// so that secret_enc can be sealed under the row's AAD before the insert.
+	InsertConnection(ctx context.Context, arg InsertConnectionParams) (Connection, error)
+	// InsertDestination creates the row with an id chosen by the application,
+	// so that secret_enc can be sealed under the row's AAD before the insert.
+	InsertDestination(ctx context.Context, arg InsertDestinationParams) (Destination, error)
 	// InsertInstanceKey adds a new active key; it inserts nothing when another
 	// active key already exists (instance_keys_one_active_idx).
 	InsertInstanceKey(ctx context.Context, arg InsertInstanceKeyParams) (int64, error)
@@ -111,6 +128,14 @@ type Querier interface {
 	// ListAuditLogCanonical returns audit rows in chain order with ip and details
 	// in the exact text form the hash covers (auditchain.Row).
 	ListAuditLogCanonical(ctx context.Context, arg ListAuditLogCanonicalParams) ([]ListAuditLogCanonicalRow, error)
+	// Database connections (task 2.11, D-135). Only internal/connections uses
+	// these queries; secret_enc is sealed under AAD connections:<id>:secret.
+	// Temporary restore connections (task 4.4) are excluded until that task
+	// adds its own queries.
+	ListConnections(ctx context.Context) ([]Connection, error)
+	// Backup destinations (task 2.12, D-131). Only internal/destinations uses
+	// these queries; secret_enc is sealed under AAD destinations:<id>:secret.
+	ListDestinations(ctx context.Context) ([]Destination, error)
 	ListInstancePublicKeys(ctx context.Context) ([]ListInstancePublicKeysRow, error)
 	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]ListUnusedRecoveryCodesRow, error)
 	// ListUsers pages users ordered by e-mail, then id. after_email/after_id is
@@ -198,6 +223,15 @@ type Querier interface {
 	// bekup_app cannot read goose_db_version. Used by `bekup serve` at startup and
 	// by /readyz (task 1.1, D-078).
 	SchemaVersion(ctx context.Context) (int64, error)
+	SetConnectionBackupPin(ctx context.Context, arg SetConnectionBackupPinParams) (Connection, error)
+	SetConnectionHostKey(ctx context.Context, arg SetConnectionHostKeyParams) (Connection, error)
+	// SetConnectionPin replaces the current pin; clear_backup also removes the
+	// staged backup pin (it was promoted to the current one).
+	SetConnectionPin(ctx context.Context, arg SetConnectionPinParams) (Connection, error)
+	SetConnectionSSHAuth(ctx context.Context, arg SetConnectionSSHAuthParams) (Connection, error)
+	SetConnectionTLSMode(ctx context.Context, arg SetConnectionTLSModeParams) (Connection, error)
+	SetDestinationAuth(ctx context.Context, arg SetDestinationAuthParams) (Destination, error)
+	SetDestinationHostKey(ctx context.Context, arg SetDestinationHostKeyParams) (Destination, error)
 	// SetTOTPPending stores a new pending secret, replacing an older pending
 	// one; refused (0 rows) once TOTP is enabled.
 	SetTOTPPending(ctx context.Context, arg SetTOTPPendingParams) (int64, error)
@@ -205,6 +239,8 @@ type Querier interface {
 	// SetUserPassword sets a password (temporary until the given time, or
 	// permanent when NULL) and clears the lockout state.
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error)
+	SoftDeleteConnection(ctx context.Context, id uuid.UUID) (int64, error)
+	SoftDeleteDestination(ctx context.Context, id uuid.UUID) (int64, error)
 	// SoftDeleteUser marks the account deleted and disabled and drops its
 	// password. The row stays for audit integrity.
 	SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
@@ -216,6 +252,14 @@ type Querier interface {
 	// expiry, never beyond the absolute expiry.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	UnlockUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// UpdateConnection replaces the mutable fields (not the TLS mode, which
+	// only SetConnectionTLSMode changes). clear_pins removes both certificate
+	// pins (engine, host or port changed); clear_host_key removes the SSH
+	// host-key pin (bastion host or port changed, or the tunnel was removed).
+	UpdateConnection(ctx context.Context, arg UpdateConnectionParams) (Connection, error)
+	// UpdateDestination replaces the mutable fields. The host-key pin is
+	// cleared when clear_host_key is true (host or port changed).
+	UpdateDestination(ctx context.Context, arg UpdateDestinationParams) (Destination, error)
 	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
 	// UpdateUserPassword sets a new (permanent) password hash and clears the
 	// lockout state and a temporary-password mark (task 1.6).

@@ -59,40 +59,54 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
 
-    location / {
+    # Proxy settings shared by both locations below (inherited: neither
+    # location sets its own proxy_set_header).
+    proxy_http_version 1.1;
+    proxy_redirect off;
+
+    # Forwarded headers are SET, never appended: whatever the client sent
+    # is discarded. bekup trusts them only from this proxy's address
+    # ([server] trusted_proxies).
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host  $host;
+    proxy_set_header X-Forwarded-Port  ${HTTPS_PUBLIC_PORT};
+    proxy_set_header Forwarded         "";
+    # No protocol upgrades: bekup serves no WebSocket (live events are
+    # Server-Sent Events, D-052 superseded in part). Clear the hop-by-hop
+    # headers instead of forwarding them.
+    proxy_set_header Upgrade           "";
+    proxy_set_header Connection        "";
+
+    # Stream responses (event streams, downloads) instead of buffering them
+    # in memory or temp files. Request bodies are small (2 MiB max) and
+    # are still buffered, so slow clients cannot tie up serve.
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_request_buffering on;
+    proxy_max_temp_file_size 0;
+    proxy_connect_timeout 5s;
+    proxy_send_timeout    300s;
+
+    # GraphQL, including subscriptions as Server-Sent Events (POST with
+    # Accept: text/event-stream, task 2.13). serve sends a keepalive comment
+    # every graphql.stream_keepalive_interval (at most 1m), so 3 minutes
+    # without data mean the stream is dead.
+    location = /graphql {
         # Resolved per request through Docker DNS on the internal `frontend`
         # network. Plain HTTP never leaves that network.
         set $bekup_upstream serve:8080;
         proxy_pass http://$bekup_upstream;
-        proxy_http_version 1.1;
-        proxy_redirect off;
+        proxy_read_timeout 180s;
+    }
 
-        # Forwarded headers are SET, never appended: whatever the client sent
-        # is discarded. bekup trusts them only from this proxy's address
-        # ([server] trusted_proxies).
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $remote_addr;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header X-Forwarded-Host  $host;
-        proxy_set_header X-Forwarded-Port  ${HTTPS_PUBLIC_PORT};
-        proxy_set_header Forwarded         "";
-
-        # WebSocket passthrough (GraphQL subscriptions on /graphql).
-        proxy_set_header Upgrade    $http_upgrade;
-        proxy_set_header Connection $bekup_connection_upgrade;
-
-        # Stream responses (downloads, WebSockets) instead of buffering them
-        # in memory or temp files. Request bodies are small (2 MiB max) and
-        # are still buffered, so slow clients cannot tie up serve.
-        proxy_buffering off;
-        proxy_request_buffering on;
-        proxy_max_temp_file_size 0;
-
-        proxy_connect_timeout 5s;
-        proxy_send_timeout    300s;
-        # Between two reads from serve: long enough for idle WebSockets
-        # (graphql-ws keep-alives) and pauses in large streamed downloads.
-        proxy_read_timeout    3600s;
+    location / {
+        set $bekup_upstream serve:8080;
+        proxy_pass http://$bekup_upstream;
+        # Between two reads from serve: long enough for pauses in large
+        # streamed downloads.
+        proxy_read_timeout 3600s;
     }
 }

@@ -29,7 +29,7 @@
 //  6. rateLimit: per-client-IP token bucket (IPv6 keyed by /64), bounded
 //     LRU map; 429 with Retry-After.
 //  7. originCheck: state-changing methods (anything but GET/HEAD/OPTIONS) and
-//     WebSocket upgrades must come from the base_url origin (plus the Vite
+//     upgrade requests (none is served) must come from the base_url origin (plus the Vite
 //     dev server origins in dev mode), judged by Origin and Sec-Fetch-Site;
 //     403 otherwise.
 //  8. bodyLimit: Content-Length above the limit is a 413 up front; the body
@@ -51,11 +51,13 @@
 //
 // NewHTTPServer sets ReadHeaderTimeout, ReadTimeout, WriteTimeout,
 // IdleTimeout and MaxHeaderBytes from [server]. WriteTimeout is a deadline
-// for the whole response, so long-lived routes added later (WebSocket
-// subscriptions, task 1.10; artifact downloads, task 3.9) must extend or clear
-// it per request with http.NewResponseController(w).SetWriteDeadline (and
-// SetReadDeadline for WebSockets). The response writer wrappers here support
-// Unwrap, Flush and Hijack for that.
+// for the whole response, so long-lived routes (event streams of GraphQL
+// subscriptions, task 2.13: LiftDeadlines; artifact downloads, task 3.9)
+// must extend or clear it per request with
+// http.NewResponseController(w).SetWriteDeadline (event streams also clear
+// the read deadline, whose expiry would cancel an HTTP/1.1 request
+// context). The response writer wrappers here support Unwrap and Flush for
+// that.
 //
 // # Routes
 //

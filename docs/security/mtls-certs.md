@@ -52,6 +52,43 @@ D-100; see [App DB TLS](app-db-tls.md)).
 - The EKUs keep roles apart: the runner's certificate can't be used as a
   client certificate, and client certificates can't serve TLS.
 
+## The runner's gRPC transport (task 2.4)
+
+How `bekup runner` and its clients use these certificates (D-126, D-127):
+
+- **Server:** TLS 1.3 only, a verified client certificate from the private
+  CA is required on every connection (no session resumption), the client's
+  identity must be in `allowed_client_sans` (checked in the handshake and
+  again for every call). Messages are capped at 1 MiB + 64 KiB (stream
+  chunks ≤ 1 MiB), at most 64 streams per connection, 16 KiB of metadata,
+  10 s for the handshake. Every call must carry a deadline (clamped to
+  `limits.max_run_duration`); unknown methods are denied. Backup/restore
+  calls share `limits.max_concurrent_runs` slots and control calls 8
+  slots; a full class fails at once with `RESOURCE_EXHAUSTED`, `Health` is
+  never limited. Connections are recycled after 30 min (idle after
+  15 min); a running dump keeps its connection for up to
+  `max_run_duration` + 1 min, so an expired or removed client cannot keep
+  an old connection open forever. Logs carry method, caller, status code
+  and duration only, never payloads.
+- **Client (`serve`, `worker`):** TLS 1.3 with the CA bundle as the only
+  root and the runner's DNS name from `[runner] server_name`; HTTP proxies
+  from the environment are ignored; no transparent retries (only `Health`
+  is retried, on `UNAVAILABLE`); keepalive pings every 60 s.
+- **Certificate rotation** needs a restart of the runner (it loads its
+  certificate and allowlist at startup). The runner refuses to start with a
+  certificate that is not valid at that moment and warns 30 days before
+  expiry.
+- **Container healthcheck without a client certificate** (D-125): the
+  runner also serves the standard gRPC health service, and only that, on a
+  container-local unix socket (`[listen] health_socket`, default
+  `/tmp/bekup-runner/health.sock` on the container's private `/tmp`
+  tmpfs). The directory is `0700` and the socket `0600`, both owned by the
+  runner user; the runner refuses a directory that is a symlink, belongs to
+  someone else or grants group/other access. It reports `SERVING` only while
+  the mTLS listener is up, the certificate is valid and no shutdown has
+  started. `bekup healthcheck runner` queries it. No certificate, key or
+  allowlist entry exists for the healthcheck.
+
 ## Creating the PKI
 
 ```sh

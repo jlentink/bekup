@@ -1,0 +1,449 @@
+// The bekup runner API (D-003, D-030): a small, typed gRPC service over mTLS
+// (TLS 1.3, private CA, client identity = URI SAN spiffe://bekup/<component>).
+//
+// Design rules (D-126):
+// - No free-form command, argument, environment, image or path field exists
+//   anywhere. The runner builds every container spec itself from the
+//   engine, the allowlisted version key and validated names.
+// - Every field that carries credential material is annotated with
+//   [(runner.v1.secret) = true]. Such fields are never logged, and both
+//   sides zero them after use (internal/runnerpb.ZeroSecrets).
+// - Stream chunks carry at most 1 MiB of data (runnerpb.MaxChunkBytes);
+//   backpressure comes from gRPC flow control.
+// - Every call must carry a deadline; the runner clamps it to
+//   limits.max_run_duration.
+// - Zero (UNSPECIFIED) enum values are always rejected by the runner.
+//
+// Changes must stay wire compatible (buf breaking, FILE rules) once the file
+// is on main.
+
+syntax = "proto3";
+
+package runner.v1;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/jlentink/bekup/internal/runnerpb;runnerpb";
+
+extend google.protobuf.FieldOptions {
+  // secret marks a field that carries credential material (passwords,
+  // private keys, passphrases). Such fields must never be logged or echoed
+  // and are zeroed after use. A test fails if a credential-looking field
+  // lacks the annotation.
+  bool secret = 51001;
+}
+
+// RunnerService is the only API of `bekup runner`.
+service RunnerService {
+  // Health reports the runner's status and the caller's verified identity.
+  rpc Health(HealthRequest) returns (HealthResponse);
+  // Probe connects to a target with the native Go driver (inside the
+  // runner) to test the credentials, detect the server version and list the
+  // databases. Errors are normalized so it cannot be used as a port scanner.
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+  // FetchServerCertificate captures the target's TLS certificate chain
+  // (PostgreSQL SSLRequest, MySQL/MariaDB in-protocol TLS upgrade) so an
+  // admin can confirm a pin. No database credentials are sent.
+  rpc FetchServerCertificate(FetchServerCertificateRequest) returns (FetchServerCertificateResponse);
+  // FetchHostKey captures an SSH bastion's host key for TOFU confirmation.
+  rpc FetchHostKey(FetchHostKeyRequest) returns (FetchHostKeyResponse);
+  // Dump streams a single-database dump (data chunks interleaved with log
+  // lines) and ends with exactly one result.
+  rpc Dump(DumpRequest) returns (stream DumpResponse);
+  // DumpGlobals streams the cluster globals (roles, tablespaces; PostgreSQL
+  // only) and ends with exactly one result.
+  rpc DumpGlobals(DumpGlobalsRequest) returns (stream DumpGlobalsResponse);
+  // VerifyDump checks a dump with the engine's native tool. The first
+  // message is the header, every further message a chunk.
+  rpc VerifyDump(stream VerifyDumpRequest) returns (VerifyDumpResponse);
+  // Restore feeds a dump into a target. The first message is the header,
+  // every further message a chunk; the runner streams log lines and ends
+  // with exactly one result.
+  rpc Restore(stream RestoreRequest) returns (stream RestoreResponse);
+  // CreateDatabase creates an empty database (restore into a new database or
+  // a PostgreSQL staging database).
+  rpc CreateDatabase(CreateDatabaseRequest) returns (CreateDatabaseResponse);
+  // RenameSwapDatabase replaces a PostgreSQL database with its restored
+  // bekup temporary database in one transaction, keeping the old one under
+  // a bekup temporary name.
+  rpc RenameSwapDatabase(RenameSwapDatabaseRequest) returns (RenameSwapDatabaseResponse);
+  // PrePull pulls the allowlisted image of an engine version ahead of a run.
+  rpc PrePull(PrePullRequest) returns (PrePullResponse);
+  // ListImages returns the runner's merged image allowlist (the embedded
+  // catalog plus runner.toml images.extra_file), so serve can offer every
+  // client version the runner accepts.
+  rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+}
+
+// Engine is a database engine. MySQL and MariaDB are separate engines.
+enum Engine {
+  ENGINE_UNSPECIFIED = 0;
+  ENGINE_POSTGRES = 1;
+  ENGINE_MYSQL = 2;
+  ENGINE_MARIADB = 3;
+}
+
+// TlsMode is the transport security towards a target database
+// (internal/engine TLSMode, D-034).
+enum TlsMode {
+  TLS_MODE_UNSPECIFIED = 0;
+  // TLS with full verification against the pinned certificate as the only
+  // trust anchor, plus the runner's leaf SPKI pre-flight check. The default.
+  TLS_MODE_PINNED = 1;
+  // TLS without verification. Audited admin downgrade ("insecure transport").
+  TLS_MODE_UNVERIFIED = 2;
+  // No TLS. Audited admin downgrade ("insecure transport").
+  TLS_MODE_DISABLED = 3;
+}
+
+// DumpKind distinguishes a database dump from a globals dump.
+enum DumpKind {
+  DUMP_KIND_UNSPECIFIED = 0;
+  DUMP_KIND_DATABASE = 1;
+  DUMP_KIND_GLOBALS = 2;
+}
+
+// DockerStatus is the runner's view of the Docker daemon.
+enum DockerStatus {
+  DOCKER_STATUS_UNSPECIFIED = 0;
+  // Not checked (yet).
+  DOCKER_STATUS_UNKNOWN = 1;
+  DOCKER_STATUS_OK = 2;
+  DOCKER_STATUS_UNREACHABLE = 3;
+}
+
+// LogStream is the origin of a log line.
+enum LogStream {
+  LOG_STREAM_UNSPECIFIED = 0;
+  LOG_STREAM_STDOUT = 1;
+  LOG_STREAM_STDERR = 2;
+  // A message of the runner itself (not of the dump tool).
+  LOG_STREAM_RUNNER = 3;
+}
+
+// RunContext correlates a call with a bekup run.
+message RunContext {
+  // UUID of the backup/restore run; becomes the bekup.run_id label of every
+  // container and network of the call.
+  string run_id = 1;
+}
+
+// CertificatePin pins a target's TLS certificate. A target carries the
+// current pin and optionally one staged backup pin (planned rotation).
+message CertificatePin {
+  // DER of the pinned certificate (self-signed leaf or issuing CA). It is the
+  // native client's only trust anchor.
+  bytes anchor_der = 1;
+  // SHA-256 of the expected leaf's SubjectPublicKeyInfo, checked by the
+  // runner before every run. Empty only when the anchor is a CA whose leaves
+  // may rotate.
+  bytes leaf_spki_sha256 = 2;
+}
+
+// ClientCertificate is an optional TLS client certificate for the target.
+message ClientCertificate {
+  bytes cert_pem = 1;
+  bytes key_pem = 2 [(secret) = true];
+}
+
+// HostKeyPin pins an SSH host key (internal/tunnel HostKeyPin, D-035):
+// the key type plus the fingerprint, an authorized_keys line, or both (they
+// must agree). There is no insecure mode.
+message HostKeyPin {
+  // Key type, e.g. "ssh-ed25519".
+  string type = 1;
+  // OpenSSH "SHA256:<base64>" fingerprint as confirmed by an admin.
+  string fingerprint_sha256 = 2;
+  // The key as an authorized_keys line (no comment).
+  string authorized_key = 3;
+}
+
+// SshTunnel reaches a target through an SSH bastion. Exactly one of
+// password or private_key_pem is set.
+message SshTunnel {
+  string host = 1;
+  uint32 port = 2;
+  string user = 3;
+  bytes password = 4 [(secret) = true];
+  bytes private_key_pem = 5 [(secret) = true];
+  bytes passphrase = 6 [(secret) = true];
+  HostKeyPin host_key_pin = 7;
+}
+
+// Target is a database server and the credentials to reach it.
+message Target {
+  Engine engine = 1;
+  // Allowlisted catalog key of the client image version (e.g. "pg17").
+  string version_key = 2;
+  string host = 3;
+  uint32 port = 4;
+  string user = 5;
+  bytes password = 6 [(secret) = true];
+  TlsMode tls_mode = 7;
+  // At most two pins: the current one and an optional staged backup pin.
+  repeated CertificatePin pins = 8;
+  ClientCertificate client_certificate = 9;
+  SshTunnel ssh_tunnel = 10;
+}
+
+// DataChunk is a piece of a dump stream (at most 1 MiB).
+message DataChunk {
+  bytes data = 1;
+}
+
+// LogLine is one line of tool or runner output. Known secret values are
+// redacted and the line is capped at limits.max_log_line_bytes.
+message LogLine {
+  google.protobuf.Timestamp time = 1;
+  LogStream stream = 2;
+  string text = 3;
+  // The line was longer than the cap and has been cut.
+  bool truncated = 4;
+}
+
+// PeerCertificate is one certificate of a captured TLS chain.
+message PeerCertificate {
+  bytes der = 1;
+  string subject = 2;
+  string issuer = 3;
+  repeated string dns_names = 4;
+  repeated string ip_addresses = 5;
+  google.protobuf.Timestamp not_before = 6;
+  google.protobuf.Timestamp not_after = 7;
+  bytes spki_sha256 = 8;
+  bool is_ca = 9;
+  bool self_signed = 10;
+  // The certificate as a PEM block.
+  string pem = 11;
+  // spki_sha256 as standard base64 and as lowercase hex.
+  string spki_sha256_base64 = 12;
+  string spki_sha256_hex = 13;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  // Runner build version.
+  string version = 1;
+  // API version ("v1").
+  string api_version = 2;
+  // The caller's verified mTLS identity (spiffe://bekup/<component>).
+  string caller_identity = 3;
+  DockerStatus docker_status = 4;
+  uint32 active_runs = 5;
+  uint32 max_concurrent_runs = 6;
+  // Expiry of the runner's own server certificate.
+  google.protobuf.Timestamp certificate_not_after = 7;
+}
+
+message ProbeRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+}
+
+message ProbeResponse {
+  // Version string as reported by the server.
+  string server_version = 1;
+  // Catalog key matching the server (empty when none is allowlisted).
+  string detected_version_key = 2;
+  // Databases as reported by the server, without the engine's system
+  // databases.
+  repeated string databases = 3;
+  // The request's version_key can dump this server (PostgreSQL: client
+  // major >= server major, enforced; MySQL/MariaDB: an older client only
+  // warns).
+  bool version_key_compatible = 4;
+  // Stable warning codes (compatibility, certificate pin).
+  repeated string warnings = 5;
+}
+
+message FetchServerCertificateRequest {
+  RunContext ctx = 1;
+  Engine engine = 2;
+  string host = 3;
+  uint32 port = 4;
+  SshTunnel ssh_tunnel = 5;
+}
+
+message FetchServerCertificateResponse {
+  // Leaf first, as presented by the server (at most 8 certificates).
+  repeated PeerCertificate chain = 1;
+  // Index into chain of the certificate to pin as CertificatePin.anchor_der:
+  // the leaf when it is self-signed, else the self-signed root CA the leaf
+  // chains up to. -1 when the server did not present a usable anchor (the
+  // issuing root CA must then be supplied out of band).
+  int32 suggested_anchor_index = 2;
+  // SHA-256 of the leaf's SubjectPublicKeyInfo for
+  // CertificatePin.leaf_spki_sha256 (the runner's pre-flight check).
+  bytes leaf_spki_sha256 = 3;
+}
+
+message FetchHostKeyRequest {
+  RunContext ctx = 1;
+  string host = 2;
+  uint32 port = 3;
+}
+
+message FetchHostKeyResponse {
+  // Key type, e.g. "ssh-ed25519".
+  string type = 1;
+  // OpenSSH "SHA256:<base64>" fingerprint.
+  string fingerprint_sha256 = 2;
+  // The key as an authorized_keys line (no comment).
+  string authorized_key = 3;
+}
+
+message DumpRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  string database = 3;
+}
+
+// DumpResult ends a Dump or DumpGlobals stream.
+message DumpResult {
+  // Bytes of dump data streamed.
+  uint64 bytes = 1;
+  int32 exit_code = 2;
+  // The post-dump check passed (pg_restore --list, MySQL trailer).
+  bool verified = 3;
+  repeated string warnings = 4;
+  // Log lines dropped because of limits.max_log_lines.
+  uint64 dropped_log_lines = 5;
+  // DumpGlobals only: the dump fell back to --no-role-passwords.
+  bool roles_without_passwords = 6;
+}
+
+message DumpResponse {
+  oneof msg {
+    DataChunk chunk = 1;
+    LogLine log = 2;
+    DumpResult result = 3;
+  }
+}
+
+message DumpGlobalsRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+}
+
+message DumpGlobalsResponse {
+  oneof msg {
+    DataChunk chunk = 1;
+    LogLine log = 2;
+    DumpResult result = 3;
+  }
+}
+
+message VerifyDumpHeader {
+  RunContext ctx = 1;
+  Engine engine = 2;
+  string version_key = 3;
+  DumpKind kind = 4;
+  // Exact size of the dump that follows.
+  uint64 total_bytes = 5;
+}
+
+message VerifyDumpRequest {
+  oneof msg {
+    VerifyDumpHeader header = 1;
+    DataChunk chunk = 2;
+  }
+}
+
+message VerifyDumpResponse {
+  bool verified = 1;
+  int32 exit_code = 2;
+  repeated string warnings = 3;
+  // Bounded tool output.
+  repeated LogLine logs = 4;
+  uint64 dropped_log_lines = 5;
+}
+
+message RestoreHeader {
+  RunContext ctx = 1;
+  Target target = 2;
+  string database = 3;
+  // Catalog key of the version the dump was taken with.
+  string source_version_key = 4;
+  DumpKind kind = 5;
+  // PostgreSQL: pg_restore --no-owner.
+  bool no_owner = 6;
+  // Exact size of the dump that follows.
+  uint64 total_bytes = 7;
+}
+
+message RestoreRequest {
+  oneof msg {
+    RestoreHeader header = 1;
+    DataChunk chunk = 2;
+  }
+}
+
+message RestoreResult {
+  uint64 bytes_received = 1;
+  int32 exit_code = 2;
+  repeated string warnings = 3;
+  uint64 dropped_log_lines = 4;
+}
+
+message RestoreResponse {
+  oneof msg {
+    LogLine log = 1;
+    RestoreResult result = 2;
+  }
+}
+
+message CreateDatabaseRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  string database = 3;
+}
+
+message CreateDatabaseResponse {}
+
+message RenameSwapDatabaseRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  // The database to replace.
+  string database = 3;
+  // Identifier of the restore ([a-z0-9]{1,26}). The runner derives the
+  // names itself: the restored <database>__bekup_restore_<temp_id> takes
+  // the database's name, which is kept as <database>__bekup_old_<temp_id>.
+  string temp_id = 4;
+}
+
+message RenameSwapDatabaseResponse {}
+
+message PrePullRequest {
+  Engine engine = 1;
+  string version_key = 2;
+}
+
+message PrePullResponse {
+  // The digest-pinned image reference.
+  string image_ref = 1;
+  bool already_present = 2;
+}
+
+message ListImagesRequest {}
+
+message ListImagesResponse {
+  // Every allowlisted image, ordered by engine and release series.
+  repeated AllowlistedImage images = 1;
+}
+
+// AllowlistedImage is one entry of the runner's image allowlist.
+message AllowlistedImage {
+  Engine engine = 1;
+  // The release series key ("17", "8.4") used as version_key in requests.
+  string version_key = 2;
+  // The digest-pinned image reference (repository@sha256:...).
+  string image_ref = 3;
+  // The client version from the image tag ("17.6.0").
+  string client_version = 4;
+  // End-of-life series (shown as legacy in the UI).
+  bool legacy = 5;
+  // The entry comes from the runner's images.extra_file.
+  bool extra = 6;
+}

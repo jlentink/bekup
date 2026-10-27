@@ -1,0 +1,284 @@
+# Backup destinations (task 2.12; D-106, D-131). Admins manage them; every
+# change needs a fresh step-up and is audited. Maintainers see metadata only
+# (name, type, mode flags, readiness; `settings` is null for them) and may
+# test destinations. Credentials are write-only: inputs accept new values,
+# outputs only tell whether one is stored (hasSecretAccessKey, hasPassword,
+# hasPrivateKey). Destinations are soft deleted.
+
+"Destination types."
+enum DestinationType {
+  DISK
+  S3
+  SFTP
+}
+
+"S3 Object Lock retention modes."
+enum ObjectLockMode {
+  GOVERNANCE
+  COMPLIANCE
+}
+
+"S3 server-side encryption."
+enum S3Encryption {
+  NONE
+  "SSE-S3 (provider-managed keys, AES256)."
+  SSE_S3
+  "SSE-KMS (kmsKeyId optional: the account's default key)."
+  SSE_KMS
+}
+
+"How integrity checksums are sent to S3."
+enum S3ChecksumMode {
+  "A SHA-256 checksum with every upload (AWS S3 and compatible stores)."
+  WHEN_SUPPORTED
+  "Only where the protocol requires one (stores without flexible checksums)."
+  WHEN_REQUIRED
+}
+
+"The credential an SFTP destination authenticates with."
+enum SftpAuthMethod {
+  NONE
+  PASSWORD
+  PRIVATE_KEY
+}
+
+"A backup destination."
+type Destination {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  "True when bekup never deletes from this destination (retention is left to lifecycle rules)."
+  noDelete: Boolean!
+  "The S3 default Object Lock retention applied to every upload (null when off)."
+  objectLockMode: ObjectLockMode
+  objectLockRetentionDays: Int
+  "True when the destination can be used (credentials and, for SFTP, a confirmed host key are present)."
+  ready: Boolean!
+  "What is missing when not ready."
+  notReadyReason: String
+  createdAt: Time!
+  updatedAt: Time!
+  "The full non-secret configuration. Admins only: null for maintainers."
+  settings: DestinationSettings
+}
+
+"Per-type settings; exactly the field of the destination's type is set."
+type DestinationSettings {
+  disk: DiskDestinationSettings
+  s3: S3DestinationSettings
+  sftp: SftpDestinationSettings
+}
+
+type DiskDestinationSettings {
+  "Directory below storage.disk_root."
+  path: String!
+}
+
+type S3DestinationSettings {
+  "The endpoint URL of an S3-compatible service; null means AWS S3."
+  endpoint: String
+  region: String!
+  bucket: String!
+  "Key prefix inside the bucket (empty: the bucket root)."
+  prefix: String!
+  pathStyle: Boolean!
+  encryption: S3Encryption!
+  kmsKeyId: String
+  storageClass: String
+  checksumMode: S3ChecksumMode!
+  "Atomic never-overwrite with If-None-Match (disable only for stores that reject it)."
+  conditionalWrites: Boolean!
+  accessKeyId: String!
+  hasSecretAccessKey: Boolean!
+  "A custom CA bundle (PEM) that replaces the system roots for the endpoint."
+  caBundlePem: String
+}
+
+type SftpDestinationSettings {
+  host: String!
+  port: Int!
+  user: String!
+  "Absolute base directory on the server."
+  basePath: String!
+  "Subdirectory below basePath (empty: basePath itself)."
+  dir: String!
+  authMethod: SftpAuthMethod!
+  hasPassword: Boolean!
+  hasPrivateKey: Boolean!
+  hasPassphrase: Boolean!
+  "The authorized_keys line of the stored private key (install it on the server)."
+  publicKey: String
+  "The pinned host key; null until confirmDestinationHostKey."
+  hostKey: SshHostKey
+}
+
+"An SSH host key (public data)."
+type SshHostKey {
+  "Key type, e.g. ssh-ed25519."
+  type: String!
+  "OpenSSH SHA-256 fingerprint (SHA256:...)."
+  fingerprintSha256: String!
+  "The key as an authorized_keys line (type and base64, no comment)."
+  authorizedKey: String!
+  "When an admin pinned it; null for a fetched, unconfirmed key."
+  confirmedAt: Time
+  """
+  The server the key was fetched from (fetch results only; null for a
+  pinned key). Pass host and port back as expectedHost/expectedPort when
+  confirming: the pin is refused (CONFLICT) if the record changed since.
+  """
+  host: String
+  port: Int
+}
+
+"The result of testDestination: normalized codes and fixed messages only."
+type DestinationTestResult {
+  ok: Boolean!
+  "Steps in order: connect, write, read, delete."
+  steps: [DestinationTestStep!]!
+  "The probe object's key (below the destination's prefix)."
+  probeKey: String
+  "True when the probe object was left behind (no-delete mode, Object Lock or a failed delete)."
+  probeRemains: Boolean!
+  note: String
+}
+
+type DestinationTestStep {
+  name: String!
+  ok: Boolean!
+  "A normalized error class (ok, permission_denied, network, timeout, ...)."
+  code: String!
+  message: String!
+}
+
+"The public half of a generated SSH keypair; the private key is stored encrypted and never returned."
+type DestinationSshKeypair {
+  destination: Destination!
+  "The authorized_keys line to install on the SFTP server."
+  publicKey: String!
+  fingerprintSha256: String!
+}
+
+extend type Query {
+  "Destinations that are not deleted, ordered by name."
+  destinations: [Destination!]! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "One destination; null when it does not exist or was deleted."
+  destination(id: UUID!): Destination @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Creates a destination. Exactly the settings input of `type` must be
+  set. A name already in use answers CONFLICT. SFTP destinations become
+  ready once their host key is confirmed and a password or key is set.
+  """
+  createDestination(input: CreateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes a destination. A settings input replaces the whole non-secret
+  configuration of its type (credential fields left out keep the stored
+  value). Changing an SFTP destination's host or port removes its pinned
+  host key.
+  """
+  updateDestination(id: UUID!, input: UpdateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Soft deletes a destination (its name can be reused)."
+  deleteDestination(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Writes, reads back and deletes a small probe object below the
+  destination's prefix (no delete in no-delete mode). Rate limited; must be
+  the only field of its operation.
+  """
+  testDestination(id: UUID!): DestinationTestResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Trust on first use: connects to the stored host and port of an SFTP
+  destination through the SSRF guard and returns the host key it presents,
+  without authenticating. Compare the fingerprint out of band before
+  confirming it. Failures are normalized (unreachable, refused address,
+  unsupported key type). Rate limited; must be the only field of its
+  operation.
+  """
+  fetchDestinationHostKey(id: UUID!): SshHostKey! @hasRole(roles: [ADMIN])
+
+  """
+  Pins the host key of an SFTP destination (an authorized_keys line).
+  expectedHost/expectedPort are the host and port the key was fetched from
+  (SshHostKey.host/port); CONFLICT if the destination changed since.
+  """
+  confirmDestinationHostKey(id: UUID!, authorizedKey: String!, expectedHost: String!, expectedPort: Int!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Generates an ed25519 keypair for an SFTP destination, stores the private
+  key encrypted (replacing a stored password or key) and returns only the
+  public key.
+  """
+  generateDestinationSshKeypair(id: UUID!): DestinationSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+}
+
+input CreateDestinationInput {
+  name: String!
+  type: DestinationType!
+  "Never delete from this destination (default false)."
+  noDelete: Boolean
+  disk: DiskDestinationInput
+  s3: S3DestinationInput
+  sftp: SftpDestinationInput
+}
+
+"Fields to change; unset fields stay unchanged."
+input UpdateDestinationInput {
+  name: String
+  noDelete: Boolean
+  disk: DiskDestinationInput
+  s3: S3DestinationInput
+  sftp: SftpDestinationInput
+}
+
+input DiskDestinationInput {
+  "Directory below storage.disk_root (relative; no '..')."
+  path: String!
+}
+
+input S3DestinationInput {
+  "https URL of an S3-compatible service (http only in dev mode); omit for AWS S3."
+  endpoint: String
+  region: String!
+  bucket: String!
+  prefix: String
+  pathStyle: Boolean
+  encryption: S3Encryption
+  kmsKeyId: String
+  storageClass: String
+  checksumMode: S3ChecksumMode
+  "Default true."
+  conditionalWrites: Boolean
+  "Default Object Lock retention (requires a bucket with Object Lock)."
+  objectLockMode: ObjectLockMode
+  objectLockRetentionDays: Int
+  accessKeyId: String!
+  "Write-only. Required when creating; omit to keep the stored key."
+  secretAccessKey: String
+  caBundlePem: String
+}
+
+input SftpDestinationInput {
+  host: String!
+  "Default 22."
+  port: Int
+  user: String!
+  basePath: String!
+  dir: String
+  """
+  Write-only; replaces a stored private key. Omit to keep the stored
+  credential, except when host, port, user or basePath changes: a stored
+  password must then be entered again (or replaced by a key).
+  """
+  password: String
+  "Write-only PEM private key; replaces a stored password. Prefer generateDestinationSshKeypair."
+  privateKey: String
+  "Write-only; only together with privateKey."
+  privateKeyPassphrase: String
+}

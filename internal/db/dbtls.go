@@ -207,7 +207,9 @@ func (o TLSOptions) clientConfig(host string) *tls.Config {
 		// require + CA: verify the chain, not the host name (verify-ca).
 		roots := o.RootCAs
 		// Chain verified in VerifyConnection; the host name deliberately not
-		// (tls_mode = require, warned at startup).
+		// (tls_mode = require, warned at startup; D-100, D-103). One of the
+		// three InsecureSkipVerify uses in bekup (with the runner's pin
+		// capture and its TLS mode UNVERIFIED).
 		c.InsecureSkipVerify = true
 		c.VerifyConnection = func(cs tls.ConnectionState) error {
 			if len(cs.PeerCertificates) == 0 {

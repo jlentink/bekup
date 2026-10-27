@@ -161,10 +161,68 @@ var clientNameRE = regexp.MustCompile(`^[a-z0-9-]{1,63}$`)
 
 var hostnameRE = regexp.MustCompile(`^[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?(\.[A-Za-z0-9_]([A-Za-z0-9_-]*[A-Za-z0-9_])?)*$`)
 
-func (v *validator) hosts(path string, values []string) {
+// targetHosts validates the runner's host lists: exact host names only.
+// IP literals (and all-numeric names, ambiguous with them) are refused
+// here so the runner does not fail only at startup; IPs belong in a CIDR
+// list.
+func (v *validator) targetHosts(path string, values []string) {
 	for _, h := range values {
-		if len(h) > 253 || !hostnameRE.MatchString(h) {
+		name := strings.TrimSuffix(h, ".")
+		if _, err := netip.ParseAddr(strings.Trim(name, "[]")); err == nil || strings.Trim(name, "0123456789.") == "" {
+			v.addf(path, "%q is an IP address; list it in a CIDR list such as %s/32", h, strings.Trim(name, "[]"))
+			continue
+		}
+		if len(h) > 253 || !hostnameRE.MatchString(name) {
 			v.addf(path, "invalid host name %q (no scheme, port or wildcard)", h)
+		}
+	}
+}
+
+// bastionTargets validates "<bastion>=<CIDR or host name>" entries.
+func (v *validator) bastionTargets(path string, values []string) {
+	for _, e := range values {
+		b, t, ok := strings.Cut(e, "=")
+		b, t = strings.TrimSpace(b), strings.TrimSpace(t)
+		if !ok || b == "" || t == "" {
+			v.addf(path, "invalid entry %q (want <bastion>=<CIDR or host name>, e.g. bastion.example.com=10.20.0.0/16)", e)
+			continue
+		}
+		if _, err := netip.ParseAddr(strings.Trim(b, "[]")); err != nil && (len(b) > 253 || !hostnameRE.MatchString(strings.TrimSuffix(b, ".")) || strings.Trim(b, "0123456789.") == "") {
+			v.addf(path, "invalid bastion %q in %q (a host name or an IP address)", b, e)
+			continue
+		}
+		if strings.Contains(t, "/") {
+			p, err := netip.ParsePrefix(t)
+			if err != nil {
+				v.addf(path, "invalid CIDR %q in %q", t, e)
+			} else if p.Bits() == 0 {
+				v.addf(path, "%q in %q matches every address; list specific networks instead", t, e)
+			}
+			continue
+		}
+		name := strings.TrimSuffix(t, ".")
+		if _, err := netip.ParseAddr(strings.Trim(name, "[]")); err == nil || strings.Trim(name, "0123456789.") == "" {
+			v.addf(path, "target %q in %q is an IP address; use a CIDR such as %s/32", t, e, strings.Trim(name, "[]"))
+			continue
+		}
+		if len(t) > 253 || !hostnameRE.MatchString(name) {
+			v.addf(path, "invalid target host name %q in %q", t, e)
+		}
+	}
+}
+
+// hostPatterns validates host allowlist entries that may also be
+// "*.suffix" wildcards with at least two labels after "*.".
+// IP literals belong in a CIDR list.
+func (v *validator) hostPatterns(path string, values []string) {
+	for _, h := range values {
+		name, wild := strings.CutPrefix(h, "*.")
+		if len(name) > 253 || !hostnameRE.MatchString(name) || (wild && !strings.Contains(name, ".")) {
+			v.addf(path, "invalid host name %q (exact name or *.example.com; no scheme or port)", h)
+			continue
+		}
+		if _, err := netip.ParseAddr(name); err == nil {
+			v.addf(path, "%q is an IP address; use a CIDR such as %s/32", h, name)
 		}
 	}
 }
@@ -214,9 +272,6 @@ func validateBekup(c *Bekup, dev bool) []error {
 	if c.Server.RateLimitMaxClients < 100 || c.Server.RateLimitMaxClients > 10000000 {
 		v.addf("server.rate_limit_max_clients", "must be between 100 and 10000000 (got %d)", c.Server.RateLimitMaxClients)
 	}
-	if c.Server.MaxWSConnectionsPerUser < 1 || c.Server.MaxWSConnectionsPerUser > 100 {
-		v.addf("server.max_ws_connections_per_user", "must be between 1 and 100 (got %d)", c.Server.MaxWSConnectionsPerUser)
-	}
 	if r := c.Server.UserRateLimitPerSecond; math.IsNaN(r) || r <= 0 || r > 10000 {
 		v.addf("server.user_rate_limit_per_second", "must be > 0 and <= 10000 (got %v)", c.Server.UserRateLimitPerSecond)
 	}
@@ -234,19 +289,18 @@ func validateBekup(c *Bekup, dev bool) []error {
 	if c.GraphQL.MaxBodyBytes < 1024 || c.GraphQL.MaxBodyBytes > c.Server.MaxBodyBytes {
 		v.addf("graphql.max_body_bytes", "must be between 1024 and server.max_body_bytes (got %d)", c.GraphQL.MaxBodyBytes)
 	}
-	if c.GraphQL.WSMaxConnections < 1 || c.GraphQL.WSMaxConnections > 100000 {
-		v.addf("graphql.ws_max_connections", "must be between 1 and 100000 (got %d)", c.GraphQL.WSMaxConnections)
+	if c.GraphQL.StreamMaxPerUser < 1 || c.GraphQL.StreamMaxPerUser > 100 {
+		v.addf("graphql.stream_max_per_user", "must be between 1 and 100 (got %d)", c.GraphQL.StreamMaxPerUser)
 	}
-	if c.GraphQL.WSMaxSubscriptionsPerConnection < 1 || c.GraphQL.WSMaxSubscriptionsPerConnection > 200 {
-		v.addf("graphql.ws_max_subscriptions_per_connection", "must be between 1 and 200 (got %d)", c.GraphQL.WSMaxSubscriptionsPerConnection)
+	if c.GraphQL.StreamMaxPerSession < 1 || c.GraphQL.StreamMaxPerSession > 20 || c.GraphQL.StreamMaxPerSession > max(c.GraphQL.StreamMaxPerUser, 1) {
+		v.addf("graphql.stream_max_per_session", "must be between 1 and 20 and at most graphql.stream_max_per_user (got %d)", c.GraphQL.StreamMaxPerSession)
 	}
-	if c.GraphQL.WSMaxMessageBytes < 1024 || c.GraphQL.WSMaxMessageBytes > c.GraphQL.MaxBodyBytes {
-		v.addf("graphql.ws_max_message_bytes", "must be between 1024 and graphql.max_body_bytes (got %d)", c.GraphQL.WSMaxMessageBytes)
+	if c.GraphQL.StreamMaxTotal < 1 || c.GraphQL.StreamMaxTotal > 100000 {
+		v.addf("graphql.stream_max_total", "must be between 1 and 100000 (got %d)", c.GraphQL.StreamMaxTotal)
 	}
-	v.duration("graphql.ws_init_timeout", c.GraphQL.WSInitTimeout, time.Second, time.Minute)
-	v.duration("graphql.ws_ping_interval", c.GraphQL.WSPingInterval, 5*time.Second, 5*time.Minute)
-	v.duration("graphql.ws_revalidate_interval", c.GraphQL.WSRevalidateInterval, 5*time.Second, 5*time.Minute)
-	v.duration("graphql.ws_session_check_ttl", c.GraphQL.WSSessionCheckTTL, time.Second, max(c.GraphQL.WSRevalidateInterval.D(), time.Second))
+	v.duration("graphql.stream_keepalive_interval", c.GraphQL.StreamKeepaliveInterval, 5*time.Second, time.Minute)
+	v.duration("graphql.stream_revalidate_interval", c.GraphQL.StreamRevalidateInterval, 5*time.Second, 5*time.Minute)
+	v.duration("graphql.stream_session_check_ttl", c.GraphQL.StreamSessionCheckTTL, time.Second, max(c.GraphQL.StreamRevalidateInterval.D(), time.Second))
 
 	// [database]
 	v.absPath("database.url_file", c.Database.URLFile, !dev || c.Database.URL == "")
@@ -348,7 +402,7 @@ func validateBekup(c *Bekup, dev bool) []error {
 
 	// [netguard]
 	v.cidrs("netguard.allow_cidrs", c.Netguard.AllowCIDRs)
-	v.hosts("netguard.allow_hosts", c.Netguard.AllowHosts)
+	v.hostPatterns("netguard.allow_hosts", c.Netguard.AllowHosts)
 
 	// [metrics]
 	if c.Metrics.Enabled {
@@ -449,12 +503,41 @@ func checkTargetAllow(v *validator, path string, p netip.Prefix) {
 	}
 }
 
+// privateIPv4 are the ranges docker.run_subnet_pool must lie in.
+var privateIPv4 = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),
+	netip.MustParsePrefix("172.16.0.0/12"),
+	netip.MustParsePrefix("192.168.0.0/16"),
+}
+
+// validateRunSubnetPool checks docker.run_subnet_pool: a canonical private
+// IPv4 CIDR with room for at least sixteen /28 per-run networks. Overlaps
+// with targets.allow_cidrs are allowed: the pool is always denied first.
+func validateRunSubnetPool(v *validator, path, value string) {
+	p, err := netip.ParsePrefix(value)
+	if err != nil || !p.Addr().Is4() || p.Masked() != p {
+		v.addf(path, "must be a canonical IPv4 CIDR such as %s (got %q)", DefaultRunSubnetPool, value)
+		return
+	}
+	if p.Bits() < 8 || p.Bits() > 24 {
+		v.addf(path, "prefix length must be between /8 and /24 (got /%d)", p.Bits())
+		return
+	}
+	for _, r := range privateIPv4 {
+		if r.Bits() <= p.Bits() && r.Contains(p.Addr()) {
+			return
+		}
+	}
+	v.addf(path, "must lie inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16 (got %s)", p)
+}
+
 func validateRunner(c *Runner, dev bool) []error {
 	var v validator
 
 	v.listen("listen.address", c.Listen.Address)
 	v.listenNoWildcard("listen.address", c.Listen.Address, dev, c.Listen.AllowWildcard,
 		"listen.allow_wildcard", "10.213.251.10:7443")
+	validateHealthSocket(&v, "listen.health_socket", c.Listen.HealthSocket)
 
 	v.absPath("tls.cert_file", c.TLS.CertFile, true)
 	v.absPath("tls.key_file", c.TLS.KeyFile, true)
@@ -483,15 +566,17 @@ func validateRunner(c *Runner, dev bool) []error {
 	}
 	v.positive("docker.pids_limit", int64(c.Docker.PidsLimit))
 	v.duration("docker.pull_timeout", c.Docker.PullTimeout, time.Second, 0)
+	validateRunSubnetPool(&v, "docker.run_subnet_pool", c.Docker.RunSubnetPool)
 
 	v.absPath("images.extra_file", c.Images.ExtraFile, false)
 
 	for _, p := range v.cidrs("targets.allow_cidrs", c.Targets.AllowCIDRs) {
 		checkTargetAllow(&v, "targets.allow_cidrs", p)
 	}
-	v.hosts("targets.allow_hosts", c.Targets.AllowHosts)
+	v.targetHosts("targets.allow_hosts", c.Targets.AllowHosts)
 	v.cidrs("targets.deny_cidrs", c.Targets.DenyCIDRs)
-	v.hosts("targets.deny_hosts", c.Targets.DenyHosts)
+	v.targetHosts("targets.deny_hosts", c.Targets.DenyHosts)
+	v.bastionTargets("targets.bastion_targets", c.Targets.BastionTargets)
 
 	v.positive("limits.max_concurrent_runs", int64(c.Limits.MaxConcurrentRuns))
 	v.duration("limits.max_run_duration", c.Limits.MaxRunDuration, time.Minute, 0)

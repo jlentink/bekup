@@ -1,0 +1,126 @@
+# Engine image catalog: the runner's embedded image allowlist (D-031).
+#
+# Every image is the official Docker Hub image pinned by its multi-arch OCI
+# image index digest (resolved with `docker buildx imagetools inspect`).
+# The client version is taken from the tag; `key` must equal its release
+# series (PostgreSQL: major, MySQL/MariaDB: major.minor). Renovate updates
+# the `image = "..."` lines (see renovate.json); a tag whose series no longer
+# matches its key, or a client below the per-series minimum
+# (internal/engine/floors.go), fails validation at startup and in tests.
+#
+# PostgreSQL: only clients with the psql \restrict fix (CVE-2025-8714:
+# 13.22, 14.19, 15.14, 16.10, 17.6, 18.0) are pinned.
+# MySQL: LTS series only (8.4, 9.7) plus legacy 8.0; no innovation releases.
+# MariaDB: LTS series only; 10.6 is legacy.
+# `legacy = true` marks end-of-life series (shown in the UI).
+# `uid` (optional, never 0) is the non-root user the tools run as; omitted =
+# the official image's database user (postgres alpine 70, mysql/mariadb 999).
+#
+# Operators can add images with the runner's [images] extra_file (same
+# schema; it cannot replace an entry below).
+
+schema_version = 1
+
+# --- postgres ---
+
+[[images]]
+engine = "postgres"
+key = "13"  # EOL 2025-11
+image = "postgres:13.23-alpine@sha256:fb9065b6e3e213bdc07edd372a5b2a26245840b7fb65d1fd8b6700106d51805c"
+legacy = true
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+[[images]]
+engine = "postgres"
+key = "14"
+image = "postgres:14.24-alpine@sha256:862ffc2556a2db763f0439c8323490000cd01975d2798a845e4a8dd3a905862f"
+legacy = false
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+[[images]]
+engine = "postgres"
+key = "15"
+image = "postgres:15.19-alpine@sha256:54e0dd8e8cddcdbb9156c2486eed5a43eccb7214d7c6828097d41ce049fb3984"
+legacy = false
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+[[images]]
+engine = "postgres"
+key = "16"
+image = "postgres:16.15-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab"
+legacy = false
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+[[images]]
+engine = "postgres"
+key = "17"
+image = "postgres:17.11-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b"
+legacy = false
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+[[images]]
+engine = "postgres"
+key = "18"
+image = "postgres:18.6-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
+legacy = false
+binaries = { dump = "pg_dump", dump_globals = "pg_dumpall", restore = "pg_restore", client = "psql" }
+
+# --- mysql ---
+
+[[images]]
+engine = "mysql"
+key = "8.0"  # EOL 2026-04
+image = "mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
+legacy = true
+binaries = { dump = "mysqldump", client = "mysql" }
+
+[[images]]
+engine = "mysql"
+key = "8.4"  # LTS
+image = "mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69"
+legacy = false
+binaries = { dump = "mysqldump", client = "mysql" }
+
+[[images]]
+engine = "mysql"
+key = "9.7"  # LTS
+image = "mysql:9.7.4@sha256:8fb11c38b3551e22d50adbb688f027f8ff4ea2d2445aa277c1cc97b4af85ec54"
+legacy = false
+binaries = { dump = "mysqldump", client = "mysql" }
+
+# --- mariadb ---
+
+[[images]]
+engine = "mariadb"
+key = "10.6"  # community EOL 2026-07
+image = "mariadb:10.6.28@sha256:aa188ef940b4e660483f2a128825baaa627b00f86a572606e1a9d294880ebbe9"
+legacy = true
+binaries = { dump = "mariadb-dump", client = "mariadb" }
+
+[[images]]
+engine = "mariadb"
+key = "10.11"  # LTS
+image = "mariadb:10.11.19@sha256:be23f119c5a7fa9f8a1142efc172d58de3680e7411f383a86f625ad6508af2b1"
+legacy = false
+binaries = { dump = "mariadb-dump", client = "mariadb" }
+
+[[images]]
+engine = "mariadb"
+key = "11.4"  # LTS
+image = "mariadb:11.4.13@sha256:836c767286098eb2bb18642d2fecaf72a80e6c391fa82c103ef1216aeda8c38a"
+legacy = false
+binaries = { dump = "mariadb-dump", client = "mariadb" }
+
+[[images]]
+engine = "mariadb"
+key = "11.8"  # LTS
+image = "mariadb:11.8.9@sha256:6a4b3c20cffebc8b2d9248924f6a63285176c15a532b8e4840b8804e1c2c0443"
+legacy = false
+binaries = { dump = "mariadb-dump", client = "mariadb" }
+
+[[images]]
+engine = "mariadb"
+key = "12.3"  # LTS
+image = "mariadb:12.3.3@sha256:58919b5d041049f509624364148d8881e045679dc6bc520e5705bfdd47cba49d"
+legacy = false
+binaries = { dump = "mariadb-dump", client = "mariadb" }

@@ -13,16 +13,17 @@ import (
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/executor"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/lru"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
+	"github.com/jlentink/bekup/internal/connections"
+	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/generated"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/graph/resolvers"
@@ -63,9 +64,10 @@ type Options struct {
 	// Auth backs login, logout, me, sessions and password changes (nil:
 	// those fields fail with an internal error).
 	Auth *auth.Service
-	// WebSocket enables subscriptions over WebSocket on GET /graphql
-	// (task 1.10); nil: no WebSocket transport (GET answers 405).
-	WebSocket *WebSocketOptions
+	// Streams enables subscriptions as Server-Sent Events on POST
+	// /graphql with Accept: text/event-stream (task 2.13); nil: no
+	// streams (such requests get 406).
+	Streams *StreamOptions
 	// Users backs user administration (task 1.6; nil: those fields fail).
 	Users *auth.UserAdmin
 	// TOTP backs TOTP enrollment, recovery codes and myTwoFactorStatus
@@ -80,12 +82,22 @@ type Options struct {
 	// (task 1.9; nil: the policy fields fail, standing reads as not
 	// required).
 	TwoFactorPolicy *auth.TwoFactorPolicies
+	// Destinations backs the destination fields (task 2.12; nil: those
+	// fields fail).
+	Destinations *destinations.Service
+	// Connections backs the connection fields (task 2.11; nil: those
+	// fields fail).
+	Connections *connections.Service
 }
 
 // Handler is the /graphql endpoint.
 type Handler struct {
 	opts Options
-	srv  *handler.Server
+	// srv is gqlgen's executor. The transports are this package's own
+	// (serveJSON, serveStream): gqlgen's handler and transport packages
+	// are not used, which also keeps their WebSocket library out of the
+	// build (task 2.13).
+	srv *executor.Executor
 }
 
 // New builds the GraphQL handler: POST + application/json only, the limits,
@@ -116,6 +128,8 @@ func New(opts Options) (*Handler, error) {
 
 			SecondFactor:    opts.SecondFactor,
 			TwoFactorPolicy: opts.TwoFactorPolicy,
+			Destinations:    opts.Destinations,
+			Connections:     opts.Connections,
 		},
 		Directives: directives(opts.Access),
 	})
@@ -126,20 +140,17 @@ func New(opts Options) (*Handler, error) {
 		return nil, err
 	}
 
-	srv := handler.New(es)
-	// POST + JSON for queries and mutations. GET (CSRF via links,
-	// cacheable), multipart and form posts (CSRF without preflight) are
-	// never added; persisted queries (APQ) are not used. The only other
-	// transport is the WebSocket for subscriptions (task 1.10): a GET
-	// upgrade with graphql-transport-ws, admitted by serveWebSocket
-	// (exact Origin, cookie session, connection caps).
-	srv.AddTransport(transport.POST{})
-	if opts.WebSocket != nil {
-		if err := opts.WebSocket.validate(); err != nil {
+	if opts.Streams != nil {
+		if err := opts.Streams.validate(); err != nil {
 			return nil, err
 		}
-		srv.AddTransport(websocketTransport(*opts.WebSocket, opts.Logger))
 	}
+	// Transports (ServeHTTP): POST + JSON for queries and mutations, and
+	// POST + JSON with Accept: text/event-stream for subscriptions (task
+	// 2.13). GET (CSRF via links, cacheable), multipart and form posts
+	// (CSRF without preflight), WebSockets and persisted queries (APQ)
+	// are never supported.
+	srv := executor.New(es)
 	srv.SetQueryCache(lru.New[*ast.QueryDocument](QueryCacheSize))
 	srv.SetParserTokenLimit(ParserTokenLimit)
 	// "Did you mean ...?" suggestions would reveal the schema to callers
@@ -155,8 +166,7 @@ func New(opts Options) (*Handler, error) {
 	}})
 	srv.Use(depthLimit{Max: opts.MaxDepth})
 	srv.Use(rootFieldGate{schema: es.Schema(), single: pubSet(SingleRootFields)})
-	srv.Use(wsOperationGate{public: pubSet(PublicRootFields), ops: RootFieldOperations, access: access})
-	srv.Use(subscriptionSlots{})
+	srv.Use(transportGate{public: pubSet(PublicRootFields), ops: RootFieldOperations, access: access})
 	srv.Use(extension.FixedComplexityLimit(opts.MaxComplexity))
 	srv.AroundRootFields(rootFieldGuard(PublicRootFields, RootFieldOperations, access))
 	return &Handler{opts: opts, srv: srv}, nil
@@ -174,20 +184,18 @@ type request struct {
 // ServeHTTP enforces the transport rules before gqlgen sees the request:
 // 405 for any method but POST, 415 for any content type but
 // application/json (charset utf-8 at most), 413 above MaxBodyBytes and 400
-// for anything that is not exactly one JSON request object.
+// for anything that is not exactly one JSON request object. A request
+// that accepts text/event-stream becomes an event stream (serveStream,
+// subscriptions only); every other one gets one JSON response (serveJSON,
+// queries and mutations only).
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.opts.WebSocket != nil && isWebSocketRequest(r) {
-		h.serveWebSocket(w, r)
-		return
-	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
 		writeTransportError(w, http.StatusMethodNotAllowed, "only POST is supported")
 		return
 	}
 	if len(r.Header.Values("Upgrade")) > 0 {
-		// gqlgen would hand any request with an Upgrade header to the
-		// WebSocket transport.
+		// No protocol switches (WebSocket, h2c) on /graphql.
 		writeTransportError(w, http.StatusBadRequest, "unexpected Upgrade header")
 		return
 	}
@@ -212,9 +220,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeTransportError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	r.ContentLength = int64(len(body))
-	h.srv.ServeHTTP(w, r)
+	if acceptsEventStream(r) {
+		if h.opts.Streams == nil {
+			writeTransportError(w, http.StatusNotAcceptable, "event streams are not enabled")
+			return
+		}
+		h.serveStream(w, r, body)
+		return
+	}
+	h.serveJSON(w, r, body)
 }
 
 // isJSONContentType accepts exactly one Content-Type of application/json

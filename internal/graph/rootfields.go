@@ -49,6 +49,21 @@ var SingleRootFields = []string{
 	"Mutation.createUser",
 	"Mutation.resetUserPassword",
 	"Mutation.resetUserSecondFactors",
+	// Outbound connections with stored credentials or to an arbitrary
+	// SSH server (task 2.12): one per request, so a single request cannot
+	// fan out many probes past the per-user limiter.
+	"Mutation.testDestination",
+	"Mutation.fetchDestinationHostKey",
+	// Runner calls with a connection's stored credentials or towards its
+	// server or bastion (task 2.11, D-135): one per request.
+	"Mutation.testConnection",
+	"Mutation.detectVersion",
+	"Mutation.listDatabases",
+	"Mutation.prePullImage",
+	"Mutation.fetchCertificate",
+	"Mutation.confirmCertificatePin",
+	"Mutation.stageBackupPin",
+	"Mutation.fetchSshHostKey",
 }
 
 // CredentialOperations are the authz operations whose root fields verify,
@@ -62,6 +77,14 @@ var CredentialOperations = []authz.Operation{
 	authz.OpUserCreate,
 	authz.OpUserPasswordReset,
 	authz.OpUserSecondFactorEdit,
+	// Connection operations that log in to a database or bastion with
+	// stored credentials or open an outbound runner connection (D-135).
+	authz.OpConnectionTest,
+	authz.OpConnectionListDatabases,
+	authz.OpConnectionPrePull,
+	authz.OpConnectionCertFetch,
+	authz.OpConnectionPinConfirm,
+	authz.OpConnectionHostKeyFetch,
 }
 
 // CheckSingleRootFields verifies that every entry of single is a root

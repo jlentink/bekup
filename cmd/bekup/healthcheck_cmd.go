@@ -11,8 +11,12 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
 // healthcheckTimeout bounds the whole probe (compose allows 5s).
@@ -47,10 +51,24 @@ func newHealthcheckCmd(g *globalFlags) *cobra.Command {
 		},
 	}, &cobra.Command{
 		Use:   "runner",
-		Short: "Check the local runner gRPC listener (not implemented yet)",
+		Short: "Query the runner's local health socket (listen.health_socket; no client certificate needed)",
 		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return errors.New("healthcheck runner: not implemented yet (task 2.4)")
+		RunE: func(c *cobra.Command, _ []string) error {
+			res, err := config.LoadRunner(config.Options{ConfigPath: g.configPath, Dev: g.dev})
+			if err != nil {
+				return fmt.Errorf("invalid runner configuration:\n%w", err)
+			}
+			path := res.Config.Listen.HealthSocket
+			if path == "" {
+				return errors.New("unhealthy: listen.health_socket is disabled in runner.toml")
+			}
+			ctx, cancel := context.WithTimeout(c.Context(), healthcheckTimeout)
+			defer cancel()
+			if err := probeRunner(ctx, path); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(c.OutOrStdout(), "ok")
+			return err
 		},
 	})
 	return cmd
@@ -100,6 +118,30 @@ func probe(ctx context.Context, u string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("unhealthy: read response: %w", err)
+	}
+	return nil
+}
+
+// probeRunner asks the standard gRPC health service on the runner's
+// container-local unix socket (D-125) for runner.v1.RunnerService. The
+// socket is plaintext: it is reachable only inside the runner container and
+// serves nothing but the health status.
+func probeRunner(ctx context.Context, socketPath string) (retErr error) {
+	conn, err := grpc.NewClient("unix://"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithNoProxy(),
+		grpc.WithDisableRetry(),
+		grpc.WithDisableServiceConfig())
+	if err != nil {
+		return fmt.Errorf("unhealthy: %w", err)
+	}
+	defer func() { retErr = errors.Join(retErr, conn.Close()) }()
+	resp, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{Service: runnerpb.ServiceName})
+	if err != nil {
+		return fmt.Errorf("unhealthy: %w", err)
+	}
+	if st := resp.GetStatus(); st != healthpb.HealthCheckResponse_SERVING {
+		return fmt.Errorf("unhealthy: runner status %s", st)
 	}
 	return nil
 }
