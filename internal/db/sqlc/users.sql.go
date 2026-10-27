@@ -7,12 +7,13 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE email = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -32,12 +33,20 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TotpPendingEnc,
+		&i.TotpPendingExpiresAt,
+		&i.TotpEnabledAt,
+		&i.MfaFailedCount,
+		&i.MfaLockedUntil,
+		&i.DeletedAt,
+		&i.PasswordTemporaryUntil,
+		&i.MfaResetAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -57,6 +66,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TotpPendingEnc,
+		&i.TotpPendingExpiresAt,
+		&i.TotpEnabledAt,
+		&i.MfaFailedCount,
+		&i.MfaLockedUntil,
+		&i.DeletedAt,
+		&i.PasswordTemporaryUntil,
+		&i.MfaResetAt,
 	)
 	return i, err
 }
@@ -64,7 +81,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 const insertUser = `-- name: InsertUser :one
 INSERT INTO users (email, display_name, password_hash, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at
+RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at
 `
 
 type InsertUserParams struct {
@@ -96,6 +113,122 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.EmailVerifiedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TotpPendingEnc,
+		&i.TotpPendingExpiresAt,
+		&i.TotpEnabledAt,
+		&i.MfaFailedCount,
+		&i.MfaLockedUntil,
+		&i.DeletedAt,
+		&i.PasswordTemporaryUntil,
+		&i.MfaResetAt,
 	)
 	return i, err
+}
+
+const rehashUserPassword = `-- name: RehashUserPassword :execrows
+UPDATE users
+SET password_hash = $1
+WHERE id = $2
+  AND password_hash = $3
+`
+
+type RehashUserPasswordParams struct {
+	NewHash *string   `json:"newHash"`
+	ID      uuid.UUID `json:"id"`
+	OldHash *string   `json:"oldHash"`
+}
+
+// RehashUserPassword replaces the hash only if it is still the one that was
+// verified (a concurrent password change wins).
+func (q *Queries) RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rehashUserPassword, arg.NewHash, arg.ID, arg.OldHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const reserveLoginAttempt = `-- name: ReserveLoginAttempt :one
+UPDATE users
+SET failed_login_count = failed_login_count + 1,
+    locked_until = CASE
+        WHEN failed_login_count + 1 >= $1::int THEN
+            $2::timestamptz + make_interval(secs => LEAST(
+                $3::float8,
+                $4::float8
+                    * power(2::float8, LEAST(failed_login_count + 1 - $1::int, 62)::float8)))
+        ELSE NULL
+    END
+WHERE id = $5
+  AND (locked_until IS NULL OR locked_until <= $2::timestamptz)
+RETURNING failed_login_count, locked_until
+`
+
+type ReserveLoginAttemptParams struct {
+	Threshold   int32     `json:"threshold"`
+	AtTime      time.Time `json:"atTime"`
+	MaxSeconds  float64   `json:"maxSeconds"`
+	BaseSeconds float64   `json:"baseSeconds"`
+	ID          uuid.UUID `json:"id"`
+}
+
+type ReserveLoginAttemptRow struct {
+	FailedLoginCount int32      `json:"failedLoginCount"`
+	LockedUntil      *time.Time `json:"lockedUntil"`
+}
+
+// ReserveLoginAttempt reserves one password verification before argon2id
+// runs (task 1.5 lockout; M1 review: no check-then-count race). It counts
+// the attempt only while the account is not locked at at_time and, when
+// the new count reaches the threshold, applies the backoff lock in the
+// same statement (see ReserveMFAAttempt). No row: locked (or no such
+// user). A verified password clears the count (ResetLoginFailures,
+// UpdateUserPassword).
+func (q *Queries) ReserveLoginAttempt(ctx context.Context, arg ReserveLoginAttemptParams) (ReserveLoginAttemptRow, error) {
+	row := q.db.QueryRow(ctx, reserveLoginAttempt,
+		arg.Threshold,
+		arg.AtTime,
+		arg.MaxSeconds,
+		arg.BaseSeconds,
+		arg.ID,
+	)
+	var i ReserveLoginAttemptRow
+	err := row.Scan(&i.FailedLoginCount, &i.LockedUntil)
+	return i, err
+}
+
+const resetLoginFailures = `-- name: ResetLoginFailures :exec
+UPDATE users
+SET failed_login_count = 0, locked_until = NULL
+WHERE id = $1
+  AND (failed_login_count <> 0 OR locked_until IS NOT NULL)
+`
+
+// ResetLoginFailures clears the lockout state after a successful login
+// (no write when there is nothing to clear).
+func (q *Queries) ResetLoginFailures(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, resetLoginFailures, id)
+	return err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :execrows
+UPDATE users
+SET password_hash = $1, password_temporary_until = NULL,
+    failed_login_count = 0, locked_until = NULL
+WHERE id = $2
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash *string   `json:"passwordHash"`
+	ID           uuid.UUID `json:"id"`
+}
+
+// UpdateUserPassword sets a new (permanent) password hash and clears the
+// lockout state and a temporary-password mark (task 1.6).
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserPassword, arg.PasswordHash, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

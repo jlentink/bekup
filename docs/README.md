@@ -7,7 +7,7 @@ in by the task named on the page (see the
 ## Start here
 
 - [Getting started](getting-started.md): quick start with Docker Compose,
-  first-run setup, first job.
+  first admin (CLI), first job.
 - [Architecture](architecture.md): components, trust boundaries, runner
   design, data flows.
 - [Decision log](DECISIONS.md): every design decision (D-001 ...).
@@ -30,6 +30,7 @@ in by the task named on the page (see the
 - [Hardening guide](security/hardening.md)
 - [Key management and escrow](security/key-management.md)
 - [Runner mTLS certificates](security/mtls-certs.md)
+- [App DB TLS](security/app-db-tls.md)
 - [Runner target allowlist](security/target-allowlist.md)
 - [Backup and restore database roles](security/db-roles.md)
 - [Immutable backups](security/immutable-backups.md)

@@ -1,0 +1,166 @@
+package audit
+
+import (
+	"regexp"
+	"slices"
+)
+
+// Action is an audit action name: dot-separated lowercase words, the first
+// word naming the area (auth, user, session, ...). Only actions in the
+// catalog below can be recorded; add new ones here (extensible, typo-safe).
+type Action string
+
+// Action catalog. Keep it sorted by area; docs/security/audit.md lists it.
+const (
+	// Authentication (tasks 1.5-1.8).
+	ActionAuthLoginSucceeded  Action = "auth.login.succeeded"
+	ActionAuthLoginFailed     Action = "auth.login.failed"
+	ActionAuthLogout          Action = "auth.logout"
+	ActionAuthLockout         Action = "auth.lockout"
+	ActionAuthStepUpSucceeded Action = "auth.stepup.succeeded"
+	ActionAuthStepUpFailed    Action = "auth.stepup.failed"
+	ActionAuthPasswordChanged Action = "auth.password.changed"
+	// ActionAuthPasswordChangeFailed: a password change with a wrong
+	// current password (counts towards the lockout).
+	ActionAuthPasswordChangeFailed Action = "auth.password.change_failed"
+	ActionAuthMFAEnrolled          Action = "auth.mfa.enrolled"
+	ActionAuthMFARemoved           Action = "auth.mfa.removed"
+	ActionAuthRecoveryCodeUsed     Action = "auth.recovery_code.used"
+
+	// TOTP and recovery codes (task 1.7). Enrollment and removal use
+	// auth.mfa.enrolled / auth.mfa.removed with details.factor = "totp".
+	ActionAuthMFAEnrollmentStarted Action = "auth.mfa.enrollment_started"
+	// ActionAuthMFAVerified: a TOTP code was accepted.
+	ActionAuthMFAVerified Action = "auth.mfa.verified"
+	// ActionAuthMFAFailed: a TOTP or recovery code was rejected (wrong,
+	// replayed, locked); details.factor and details.reason say which.
+	ActionAuthMFAFailed Action = "auth.mfa.failed"
+	// ActionAuthMFALockout: second-factor checks locked after repeated
+	// failures (separate from the password lockout).
+	ActionAuthMFALockout               Action = "auth.mfa.lockout"
+	ActionAuthRecoveryCodesRegenerated Action = "auth.recovery_code.regenerated"
+
+	// Two-step login and the 2FA policy (task 1.9).
+	// ActionAuthLoginSecondFactor: a login's second step succeeded (details:
+	// method, never the code); the session became AAL2.
+	ActionAuthLoginSecondFactor Action = "auth.login.second_factor"
+	// ActionAuthMFARemovalRefused: removing the last second factor was
+	// refused because the 2FA policy requires one.
+	ActionAuthMFARemovalRefused Action = "auth.mfa.removal_refused"
+	// ActionMFAPolicyUpdated: an admin changed the 2FA policy.
+	ActionMFAPolicyUpdated Action = "mfa_policy.updated"
+
+	// Users and sessions.
+	ActionUserCreated     Action = "user.created"
+	ActionUserUpdated     Action = "user.updated"
+	ActionUserDisabled    Action = "user.disabled"
+	ActionUserEnabled     Action = "user.enabled"
+	ActionUserRoleChanged Action = "user.role_changed"
+	ActionUserDeleted     Action = "user.deleted"
+	// ActionUserPasswordReset: an admin set a temporary password (task 1.6).
+	ActionUserPasswordReset Action = "user.password_reset"
+	ActionUserUnlocked      Action = "user.unlocked"
+	// ActionUserSecondFactorsReset: an admin removed every second factor
+	// of an account (lost-factor recovery, task 1.9).
+	ActionUserSecondFactorsReset Action = "user.second_factors_reset"
+	ActionSessionRevoked         Action = "session.revoked"
+	ActionSessionsRevoked        Action = "session.revoked_all"
+
+	// Settings and stored credentials (the value is never recorded).
+	// Reserved: recorded from tasks 2.11/2.12 (connection and destination
+	// secrets) and 5.1 (SMTP).
+	ActionSecretChanged Action = "secret.changed"
+	// Reserved: recorded from tasks 2.3 (SSRF allowlist) and 5.1/6.9
+	// (admin settings).
+	ActionSettingChanged Action = "setting.changed"
+
+	// Security posture changes (D-001: weakened settings are audited).
+	// Reserved: recorded from tasks 2.11/2.12 (per-connection and
+	// per-destination opt-outs, step-up + badge), alerted in task 5.5.
+	ActionSecurityOptOut Action = "security.opt_out"
+	// Reserved: a runtime switch to plain HTTP (task 5.5 alerting); the
+	// startup posture is system.insecure_transport_started (D-095).
+	ActionSecurityInsecureHTTP Action = "security.insecure_http"
+	// ActionSecurityInsecureDBTLS: serve started outside dev mode with a
+	// weakened database.tls_mode (require or disable; D-100).
+	ActionSecurityInsecureDBTLS Action = "security.insecure_db_tls"
+
+	// bekup itself (startup posture, D-095).
+	ActionSystemInsecureTransportStarted Action = "system.insecure_transport_started"
+
+	// Break-glass CLI (D-069; task 1.6).
+	ActionCLIAdminCreated       Action = "cli.admin.created"
+	ActionCLIAdminPasswordReset Action = "cli.admin.password_reset" //nolint:gosec // G101: an action name, not a credential
+	ActionCLIAdminMFAReset      Action = "cli.admin.mfa_reset"
+	ActionCLIAdminUnlocked      Action = "cli.admin.unlocked"
+	ActionCLIAdminDisabled      Action = "cli.admin.disabled"
+
+	// Keys, certificates and the audit chain itself.
+	// ActionKeysRotated: serve found master keys without a stored
+	// key-check value (after `bekup keys rotate`) and recorded them
+	// (D-119).
+	ActionKeysRotated Action = "keys.rotated"
+	// ActionKeysCheckValueStored: the first start stored the key-check
+	// values of the master keyring (D-086, D-119).
+	ActionKeysCheckValueStored Action = "keys.check_value_stored"
+	ActionInstanceKeyCreated   Action = "keys.instance_key.created"
+	// ActionCertsRotated: `bekup certs rotate` (or `certs init --force`)
+	// replaced certificate material (CLI event).
+	ActionCertsRotated Action = "certs.rotated"
+	// Reserved: recorded by the periodic chain verification (task 5.6),
+	// alerted in task 5.5.
+	ActionAuditVerifyFailed     Action = "audit.verify.failed"
+	ActionAuditHeadExportFailed Action = "audit.head_export.failed"
+	// Reserved: recorded from task 3.9 (download tickets).
+	ActionDownloadTicketCreated Action = "download.ticket_created"
+	// Reserved: recorded from tasks 2.7a/2.11 (DB certificate pinning).
+	ActionConnectionPinConfirmed Action = "connection.pin_confirmed"
+)
+
+// Passkey actions (task 1.8). Enrollment and removal use auth.mfa.enrolled
+// / auth.mfa.removed with details.factor = "passkey".
+//
+//nolint:gosec // G101: action names that contain "passkey", not credentials
+const (
+	ActionAuthPasskeyRegistrationBegun  Action = "auth.passkey.registration_begun"
+	ActionAuthPasskeyRegistrationFailed Action = "auth.passkey.registration_failed"
+	ActionAuthPasskeyRenamed            Action = "auth.passkey.renamed"
+	ActionAuthPasskeyAssertionSucceeded Action = "auth.passkey.assertion_succeeded"
+	ActionAuthPasskeyAssertionFailed    Action = "auth.passkey.assertion_failed"
+	// ActionAuthPasskeySignCountAnomaly: an assertion with a regressed
+	// signature counter was refused (possible cloned authenticator).
+	ActionAuthPasskeySignCountAnomaly Action = "auth.passkey.sign_count_anomaly"
+)
+
+var catalog = []Action{
+	ActionAuthLoginSucceeded, ActionAuthLoginFailed, ActionAuthLogout, ActionAuthLockout,
+	ActionAuthStepUpSucceeded, ActionAuthStepUpFailed, ActionAuthPasswordChanged, ActionAuthPasswordChangeFailed,
+	ActionAuthMFAEnrolled, ActionAuthMFARemoved, ActionAuthRecoveryCodeUsed,
+	ActionAuthPasskeyRegistrationBegun, ActionAuthPasskeyRegistrationFailed, ActionAuthPasskeyRenamed,
+	ActionAuthPasskeyAssertionSucceeded, ActionAuthPasskeyAssertionFailed, ActionAuthPasskeySignCountAnomaly,
+	ActionAuthMFAEnrollmentStarted, ActionAuthMFAVerified, ActionAuthMFAFailed, ActionAuthMFALockout,
+	ActionAuthRecoveryCodesRegenerated, ActionAuthLoginSecondFactor, ActionAuthMFARemovalRefused,
+	ActionMFAPolicyUpdated,
+	ActionUserCreated, ActionUserUpdated, ActionUserDisabled, ActionUserEnabled,
+	ActionUserRoleChanged, ActionUserDeleted, ActionUserPasswordReset, ActionUserUnlocked,
+	ActionUserSecondFactorsReset,
+	ActionSessionRevoked, ActionSessionsRevoked,
+	ActionSecretChanged, ActionSettingChanged,
+	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS,
+	ActionSystemInsecureTransportStarted,
+	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
+	ActionCLIAdminDisabled,
+	ActionKeysRotated, ActionKeysCheckValueStored, ActionInstanceKeyCreated, ActionCertsRotated,
+	ActionAuditVerifyFailed, ActionAuditHeadExportFailed,
+	ActionDownloadTicketCreated, ActionConnectionPinConfirmed,
+}
+
+// actionRe is the syntax of an action: at least two dot-separated words,
+// at most 128 characters (the audit_log CHECK).
+var actionRe = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
+
+// Valid reports whether a is in the catalog.
+func (a Action) Valid() bool { return slices.Contains(catalog, a) }
+
+// Actions returns the catalog.
+func Actions() []Action { return slices.Clone(catalog) }

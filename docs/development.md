@@ -1,8 +1,8 @@
 # Development
 
 > **Status:** the task runner, release, database (task 0.4), web UI (task
-> 0.8) and CI (task 0.9) sections are complete for M0. The GraphQL workflow
-> (gqlgen, task 1.2) and E2E tests (task 7.2) are added by their tasks.
+> 0.8), CI (task 0.9) and GraphQL (task 1.2) sections are complete. E2E
+> tests (task 7.2) are added by their task.
 
 How to work on bekup: prerequisites, `just` recipes, code generation (sqlc,
 gqlgen, graphql-codegen), testing (unit, integration with testcontainers, E2E),
@@ -34,8 +34,14 @@ Recipes whose tooling arrives in a later task fail with
 | Group | Recipe | What it does |
 |---|---|---|
 | dev | `just` / `just help` | Styled help screen |
-| dev | `just dev` | Starts the dev stack (`docker-compose.yml` + `docker-compose.dev.yml`) |
-| dev | `just gen` | Runs sqlc, gqlgen (task 1.2), graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
+| dev | `just dev` | Starts the dev infrastructure (app Postgres with TLS, mailpit, adminer; all on `127.0.0.1`), generating missing dev keys first, and applies the migrations natively (see [Local development](#local-development)) |
+| dev | `just run` | Builds `bin/bekup-dev`, migrates and runs `bekup serve` natively in dev mode on `http://localhost:8080` |
+| dev | `just dev-migrate` | Applies the migrations natively as `bekup_owner` |
+| dev | `just admin-create <email> <name>` | Creates an admin account on the dev DB (`bekup admin create`; password prompted on the terminal) |
+| dev | `just web-dev` | Vite dev server with hot reload on `http://localhost:5173`, proxying the API to `:8080` |
+| dev | `just dev-full` | The full containerised stack (profile `full`: air serve, runner, sample DBs, MinIO, SFTP, bastion) |
+| dev | `just dev-down` | Stops every dev container of every profile; volumes are kept |
+| dev | `just gen` | Runs sqlc, gqlgen, graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
 | quality | `just lint` | `golangci-lint` (incl. gosec, also `integration`-tagged files), `sqlc vet` + `sqlc diff`; with `web/`: eslint + `tsc --noEmit` |
 | quality | `just test` | Script tests, `go test -race ./...`; with `web/`: vitest |
 | quality | `just test-scripts` | Tests for the release scripts (semver math, bump refusals, happy path) |
@@ -44,7 +50,7 @@ Recipes whose tooling arrives in a later task fail with
 | security | `just sec` | `govulncheck` + `osv-scanner`; fails if a scanner is missing |
 | build | `just build` | Web build (if present), then a static, trimmed `bin/bekup` with the version from `VERSION` |
 | build | `just docker` | Builds the image `bekup:<version>` and `bekup:dev` |
-| db | `just db-reset` | Asks for confirmation, wipes the dev stack volumes, starts Postgres and migrates |
+| db | `just db-reset` | Asks for confirmation, wipes the dev stack volumes, starts the dev infrastructure and migrates natively |
 | db | `just db-schema` | Regenerates `internal/db/schema.sql` (pg_dump of all migrations in a test container) |
 | db | `just migrate-new <name>` | Creates `internal/db/migrations/NNNNN_<name>.sql` (name: `^[a-z][a-z0-9_]*$`) |
 | keys | `just keygen [out]` | `bekup keys generate --out` into `secrets/bekup_master_key` (keyring format, 0600; never overwrites; prints escrow guidance) |
@@ -57,6 +63,61 @@ Recipe arguments are passed to the shell as positional parameters, never
 pasted into the script text, and are validated by the recipe (D-071). Longer
 logic lives in `scripts/` (POSIX `sh`, plus `scripts/lib.bash` for the shared
 recipe helpers).
+
+## Local development
+
+`just dev` starts **only the infrastructure** in containers; bekup itself
+runs natively on your machine (D-114):
+
+```sh
+just doctor                                  # once: required tools, Docker daemon
+just dev                                     # dev keys if missing, postgres + mailpit + adminer, migrate
+just admin-create you@example.com "Your Name"  # first admin (the password is prompted)
+just run                                     # bekup serve on http://localhost:8080 (dev mode)
+just web-dev                                 # optional: UI with hot reload on http://localhost:5173
+just dev-down                                # stop the containers (data is kept)
+```
+
+| Service | Address (loopback only) | Notes |
+|---|---|---|
+| app Postgres | `127.0.0.1:5432` | TLS only for `bekup_owner` / `bekup_app` (hostssl, SCRAM with channel binding); the superuser is socket-only, as in production |
+| mailpit | SMTP `127.0.0.1:1025`, UI <http://127.0.0.1:8025> | `deploy/dev/bekup.local.toml` allows `127.0.0.1/32` in the SSRF guard |
+| adminer | <http://127.0.0.1:8081> | System **PostgreSQL**, server `postgres`, database **`bekup`**, user `bekup_app` (password in `secrets/bekup_app_password`) or `bekup_owner` (`secrets/bekup_owner_password`) |
+
+- **Dev keys.** `just dev` runs `deploy/dev/gen-dev-keys.sh` when something
+  is missing (it never overwrites existing files without `--force`). Besides
+  the container files in `secrets/` it writes `secrets/local/` for native
+  processes: both role URLs pointing at `127.0.0.1:<port>`, and copies of
+  the master keyring and the DB CA bundle. The dev postgres certificate
+  names `postgres`, `localhost` and `127.0.0.1`, so the host connects with
+  `verify-full` against the dev CA, exactly like production. A dev PKI from
+  before D-114 is re-issued automatically (and the postgres container
+  re-created).
+- **Native config.** `just run`, `just dev-migrate` and `just admin-create`
+  use `deploy/dev/bekup.local.toml` (dev mode, `listen =
+  "127.0.0.1:8080"`, `base_url = "http://localhost:8080"`); the justfile
+  sets the absolute `*_file` paths into `secrets/local/` through
+  `BEKUP_DATABASE_URL_FILE`, `BEKUP_DATABASE_TLS_CA_FILE` and
+  `BEKUP_SECURITY_MASTER_KEY_FILE`. Only the migration step gets
+  `BEKUP_DATABASE_OWNER_URL_FILE`; `serve` never sees the owner URL.
+- **Plain HTTP.** `serve` logs the D-095 warning at every start and the UI
+  shows the red "not encrypted" banner; both are expected in dev. Passkeys
+  work, because browsers treat `localhost` as a secure context. `serve`
+  embeds `web/dist`; without `pnpm build` in `web/` use `just web-dev`.
+- **Ports in use?** Move them with `BEKUP_DEV_PG_PORT`,
+  `BEKUP_DEV_ADMINER_PORT`, `BEKUP_DEV_MAILPIT_PORT` and
+  `BEKUP_DEV_SMTP_PORT` (e.g. `BEKUP_DEV_PG_PORT=15432 just dev`); set them
+  for `just run` and friends too. `BEKUP_DEV_KEYS_DIR` moves `./secrets`.
+- **psql from the host:**
+  `psql "host=127.0.0.1 port=5432 dbname=bekup user=bekup_app sslmode=verify-full sslrootcert=secrets/local/postgres_ca.crt channel_binding=require"`.
+- **Linux.** Run `sudo deploy/dev/gen-dev-keys.sh --chown` once so the
+  containers can read their files; `secrets/local/` stays owned by you.
+- **Full stack.** `just dev-full` (compose profile `full`) starts the
+  containerised `serve` with air hot reload after `migrate`, the runner,
+  the sample targets, MinIO, SFTP and the SSH bastion (D-081); on Docker
+  Desktop run it as `DOCKER_GID=0 just dev-full`. The reverse-proxy and
+  `web` profiles need `--profile full` as well. See
+  [installation/compose.md](installation/compose.md#development-stack).
 
 ## Database: migrations, sqlc and roles
 
@@ -171,7 +232,7 @@ release age, and no dependency install scripts.
 cd web
 pnpm install
 pnpm dev          # http://localhost:5173; proxies /graphql (incl. WebSocket) and /api to :8080
-pnpm gen          # graphql-codegen -> src/graphql/gen (placeholder schema until task 1.2)
+pnpm gen          # graphql-codegen -> src/graphql/gen (from internal/graph/schema)
 pnpm lint         # eslint: typescript-eslint strict-type-checked, react-hooks, jsx-a11y strict
 pnpm typecheck    # tsc -b --noEmit
 pnpm test         # vitest + Testing Library (jsdom), including the WCAG contrast gate
@@ -182,14 +243,14 @@ pnpm format       # prettier (with the Tailwind class sorter)
 
 Set `BEKUP_DEV_BACKEND` to proxy to a different backend.
 
-**Vite dev server and the Origin checks (note for task 1.1).** The Vite
+**Vite dev server and the Origin checks.** The Vite
 proxy keeps `changeOrigin: false`, so requests reach `serve` with the
 browser's real `Origin: http://localhost:5173` while `server.base_url` is
-`http://localhost:8080`. The Origin/`Sec-Fetch-Site` checks of task 1.1
-(D-050) must therefore accept the Vite origin **in dev mode only** (for
-example `http://localhost:5173` and `http://127.0.0.1:5173`), for both
-GraphQL POSTs and the WebSocket upgrade. Outside dev mode, only the
-`base_url` origin is accepted. Don't "fix" this with `changeOrigin: true`:
+`http://localhost:8080`. The Origin/`Sec-Fetch-Site` checks of
+`internal/httpserver` (D-050, D-102) therefore accept
+`http://localhost:5173` and `http://127.0.0.1:5173` **in dev mode only**,
+for state-changing requests (GraphQL POSTs) and the WebSocket upgrade.
+Outside dev mode, only the `base_url` origin is accepted. Don't "fix" this with `changeOrigin: true`:
 that rewrites only the `Host` header, not `Origin`, and would hide
 host-header mistakes.
 `web/embed.go` (`package web`) embeds `web/dist` with `//go:embed all:dist`
@@ -199,9 +260,22 @@ recreates it, so `go build ./...` works before the first web build.
 **GraphQL client.** `src/lib/apollo.ts` sends queries and mutations as POST +
 JSON to `/graphql` with `credentials: "same-origin"`. Subscriptions use
 `graphql-ws` on the same path, with `ws:`/`wss:` derived from the page
-location. Until `internal/graph/schema/*.graphqls` exists (task 1.2),
-`codegen.ts` uses `web/graphql/placeholder.graphqls`. Delete that file once the
-real schema lands.
+location. `codegen.ts` generates the typed `graphql()` helper in
+`src/graphql/gen/` from the server schema `internal/graph/schema/*.graphqls`
+(`just gen` runs gqlgen first, then graphql-codegen). The scalars `Time` and
+`UUID` are strings on the client.
+
+**GraphQL server (`internal/graph`, D-105).** Add or change types in
+`internal/graph/schema/<area>.graphqls` (extend `Query`/`Mutation` with
+`extend type`), run `just gen` (gqlgen updates `generated/`,
+`model/models_gen.go` and the resolver stubs in
+`resolvers/<area>.resolvers.go`, keeping existing bodies; then the web
+types), and implement the resolvers. Every new root field needs an access
+directive (`@authenticated`, `@hasRole(roles: [ADMIN])`, `@stepUp`) or an
+entry in `graph.PublicRootFields`, otherwise `serve` and the graph tests
+fail. Return `apierror.New(code, msg)` for errors the user should see.
+In dev mode introspection and field suggestions are on. CI fails if
+`just gen` changes anything.
 
 **Content Security Policy (D-082).** The UI runs under `style-src 'self'`
 without `'unsafe-inline'` or a nonce, and with Trusted Types. Third-party

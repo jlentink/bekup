@@ -39,14 +39,22 @@ type PoolOptions struct {
 	StatementTimeout time.Duration
 	// ApplicationName is reported as application_name (e.g. "bekup-serve").
 	ApplicationName string
+	// TLS is the required TLS policy (D-100); the zero value is rejected.
+	TLS TLSOptions
 	// Registry receives the URL and password so they are scrubbed from logs
 	// (nil: logging.DefaultRegistry). They stay registered for the lifetime
 	// of the process, like the pool.
 	Registry *logging.Registry
 }
 
-// PoolOptionsFromConfig maps the [database] config section to PoolOptions.
-func PoolOptionsFromConfig(c *config.Database, applicationName string) PoolOptions {
+// PoolOptionsFromConfig maps the [database] config section to PoolOptions,
+// reading the database.tls_* files (LoadTLSOptions).
+func PoolOptionsFromConfig(cfg *config.Bekup, applicationName string) (PoolOptions, error) {
+	tlsOpts, err := LoadTLSOptions(cfg)
+	if err != nil {
+		return PoolOptions{}, err
+	}
+	c := &cfg.Database
 	return PoolOptions{
 		MaxConns:         clampInt32(c.MaxConns),
 		MinConns:         clampInt32(c.MinConns),
@@ -55,7 +63,8 @@ func PoolOptionsFromConfig(c *config.Database, applicationName string) PoolOptio
 		ConnectTimeout:   c.ConnectTimeout.D(),
 		StatementTimeout: c.StatementTimeout.D(),
 		ApplicationName:  applicationName,
-	}
+		TLS:              tlsOpts,
+	}, nil
 }
 
 func clampInt32(n int) int32 {
@@ -101,6 +110,9 @@ func poolConfig(url []byte, opts PoolOptions) (*pgxpool.Config, error) {
 		return nil, ErrInvalidURL
 	}
 	registerPassword(reg, cfg.ConnConfig)
+	if err := applyTLS(&cfg.ConnConfig.Config, url, opts.TLS); err != nil {
+		return nil, err
+	}
 
 	def := config.DefaultBekup().Database
 	cfg.MaxConns = pick(opts.MaxConns, clampInt32(def.MaxConns))

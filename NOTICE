@@ -12,3 +12,49 @@ EFF Large Wordlist for Passphrases
            https://creativecommons.org/licenses/by/3.0/us/
   Changes: the dice-roll column was removed, leaving one word per line;
            the words and their order are unchanged.
+
+Common password list (xato.net 10-million-password corpus, top 100,000)
+  File:    internal/auth/common_passwords.txt (embedded in the bekup binary)
+  Source:  SecLists, https://github.com/danielmiessler/SecLists
+           Passwords/Common-Credentials/xato-net-10-million-passwords-100000.txt
+           (sha256 1472aafa2561df5e3293aee252aee3ca660c12b399a283cf808bb01b39be388b)
+  Author:  Daniel Miessler and SecLists contributors (list compiled from the
+           xato.net 10 million password release by Mark Burnett)
+  License: MIT License, Copyright (c) 2018 Daniel Miessler
+           https://github.com/danielmiessler/SecLists/blob/master/LICENSE
+  Changes: none; the file is embedded unchanged.
+  License text (SecLists):
+
+    MIT License
+
+    Copyright (c) 2018 Daniel Miessler
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+github.com/pquerna/otp (TOTP/HOTP; compiled into the bekup binary)
+  Source:  https://github.com/pquerna/otp
+  License: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+  NOTICE file of the project (reproduced as required by the license):
+
+    otp
+    Copyright (c) 2014, Paul Querna
+
+    This product includes software developed by
+    Paul Querna (http://paul.querna.org/).

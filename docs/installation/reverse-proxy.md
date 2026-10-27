@@ -77,6 +77,33 @@ The entrypoint scripts validate every value against a strict pattern (DNS
 name, e-mail, https URL) before they write it into the configuration, and
 refuse to start otherwise.
 
+### Own certificate (static mode)
+
+`PROXY_TLS_MODE=static` needs the certificate chain and key at
+`/certs/tls.crt` and `/certs/tls.key` inside the proxy container (readable
+by UID 65532; key `0600`). `docker-compose.yml` does not mount `/certs`
+itself, so add it in a `docker-compose.override.yml` next to it (compose
+reads that file automatically):
+
+```yaml
+services:
+  traefik:            # or nginx (then also disable certbot, see below)
+    environment:
+      PROXY_TLS_MODE: static
+    volumes:
+      - type: bind
+        source: /etc/bekup/proxy-tls     # tls.crt + tls.key
+        target: /certs
+        read_only: true
+  certbot:            # nginx profile only: no ACME in static mode
+    profiles: !override [disabled]
+```
+
+To publish the proxy on other host ports or addresses (for example
+`127.0.0.1:8443`), override `ports` with `!override` the same way and set
+`PROXY_HTTPS_PUBLIC_PORT` in the proxy's `environment` to the public HTTPS
+port, so the HTTP→HTTPS redirect points at it.
+
 ## Trusted proxies
 
 bekup uses `X-Forwarded-For` / `X-Forwarded-Proto` only from the addresses in
@@ -167,8 +194,8 @@ until certbot has obtained the certificate (usually within a minute).
 
 The proxy profiles are **opt-in**. Without one, `serve` speaks plain HTTP:
 
-- **Dev (the default `just dev` stack):** `docker-compose.dev.yml`
-  publishes `serve` on `127.0.0.1:8080` (loopback only) with
+- **Dev:** `just run` (native, D-114) and the `full` compose profile
+  serve on `127.0.0.1:8080` (loopback only) with
   `base_url = "http://localhost:8080"`. Dev mode accepts the http
   `base_url` and an empty `trusted_proxies`. Nothing else is needed.
 - **Production without a proxy:** only with an explicit
@@ -198,7 +225,7 @@ work with the dev override; certbot is disabled there.
 deploy/dev/gen-dev-tls.sh              # mkcert if installed, else self-signed
 mkcert -install                        # once, so browsers trust mkcert's CA
 BEKUP_DEV_BASE_URL=https://bekup.localhost:8443 \
-  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile traefik up
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile full --profile traefik up
 # https://bekup.localhost:8443  (http://bekup.localhost:8000 redirects)
 ```
 

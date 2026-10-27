@@ -95,7 +95,7 @@ func TestMigratorRejectsWrongRole(t *testing.T) {
 		"app":       d.appURL,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := db.NewMigrator(ctx, []byte(url), logging.NewRegistry())
+			_, err := db.NewMigrator(ctx, []byte(url), tlsVerify, logging.NewRegistry())
 			if err == nil || !strings.Contains(err.Error(), "bekup_owner") {
 				t.Fatalf("got %v", err)
 			}
@@ -110,7 +110,7 @@ func TestMigratorConcurrent(t *testing.T) {
 	errs := make([]error, 4)
 	for i := range errs {
 		wg.Go(func() {
-			m, err := db.NewMigrator(ctx, []byte(d.ownerURL), logging.NewRegistry())
+			m, err := db.NewMigrator(ctx, []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
 			if err != nil {
 				errs[i] = err
 				return
@@ -130,7 +130,7 @@ func TestMigratorConcurrent(t *testing.T) {
 func TestNewPoolRuntimeParams(t *testing.T) {
 	ctx := withTimeout(t, time.Minute)
 	d := migratedDB(t)
-	p, err := db.NewPool(ctx, []byte(d.appURL), db.PoolOptions{StatementTimeout: 1500 * time.Millisecond, ApplicationName: "bekup-x", Registry: logging.NewRegistry()})
+	p, err := db.NewPool(ctx, []byte(d.appURL), db.PoolOptions{StatementTimeout: 1500 * time.Millisecond, ApplicationName: "bekup-x", Registry: logging.NewRegistry(), TLS: tlsVerify})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -4,9 +4,10 @@ Create, rotate and inspect the private CA and component mTLS certificates
 
 ### Synopsis
 
-Manage the runner mTLS PKI: a private ed25519 CA plus one certificate per
-component (runner = server, serve and worker = clients identified by the URI
-SAN spiffe://bekup/<component>). See docs/security/mtls-certs.md.
+Manage the private PKI: a private ed25519 CA plus one certificate per
+component (runner = mTLS server, serve and worker = clients identified by the
+URI SAN spiffe://bekup/<component>, postgres = TLS server certificate of the
+app DB). See docs/security/mtls-certs.md and docs/security/app-db-tls.md.
 
 ### Options
 

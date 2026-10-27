@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -45,15 +46,15 @@ func TestCertsInitInspectRotateUnencrypted(t *testing.T) {
 		t.Errorf("inspect file: %v", err)
 	}
 
-	if _, _, err := run(t, "certs", "rotate", "--dir", dir, "--component", "serve"); err != nil {
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--component", "serve"); err != nil {
 		t.Errorf("rotate serve: %v", err)
 	}
 	for _, phase := range []string{"stage", "promote", "finish"} {
-		if _, _, err := run(t, "certs", "rotate", "--dir", dir, "--ca", phase, "--unencrypted-ca-key"); err != nil {
+		if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--ca", phase, "--unencrypted-ca-key"); err != nil {
 			t.Fatalf("rotate --ca %s: %v", phase, err)
 		}
 	}
-	if _, _, err := run(t, "certs", "rotate", "--dir", dir, "--all"); err != nil {
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--all"); err != nil {
 		t.Errorf("rotate --all: %v", err)
 	}
 	out, _, err = run(t, "certs", "inspect", "--dir", dir)
@@ -91,11 +92,11 @@ func TestCertsPassphrase(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(key), "-----BEGIN AGE ENCRYPTED FILE-----") {
 		t.Fatalf("CA key not age-encrypted (%v)", err)
 	}
-	if _, _, err := run(t, "certs", "rotate", "--dir", dir, "--all"); err == nil ||
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--all"); err == nil ||
 		!strings.Contains(err.Error(), "--ca-passphrase-file") {
 		t.Errorf("rotate without passphrase: %v", err)
 	}
-	if _, _, err := run(t, "certs", "rotate", "--dir", dir, "--all", "--ca-passphrase-file", pf); err != nil {
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--all", "--ca-passphrase-file", pf); err != nil {
 		t.Errorf("rotate with passphrase: %v", err)
 	}
 
@@ -119,14 +120,66 @@ func TestCertsFlagValidation(t *testing.T) {
 		{"certs", "init", "--dir", dir, "--unencrypted-ca-key", "--component", "db"},
 		{"certs", "init", "--dir", dir, "--unencrypted-ca-key", "--runner-san", "*.evil"},
 		{"certs", "init", "--dir", dir, "--unencrypted-ca-key", "--ca-days", "5000"},
-		{"certs", "rotate", "--dir", dir},
-		{"certs", "rotate", "--dir", dir, "--all", "--ca", "stage"},
-		{"certs", "rotate", "--dir", dir, "--ca", "bogus"},
+		{"certs", "rotate", "--no-audit", "--dir", dir},
+		{"certs", "rotate", "--no-audit", "--dir", dir, "--all", "--ca", "stage"},
+		{"certs", "rotate", "--no-audit", "--dir", dir, "--ca", "bogus"},
 		{"certs", "inspect"},
 		{"certs", "inspect", "--dir", dir, "--warn-days", "-1"},
 	} {
 		if _, _, err := run(t, args...); err == nil {
 			t.Errorf("%v: accepted", args)
 		}
+	}
+}
+
+func TestCertsPostgresComponent(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "certs")
+	if _, _, err := run(t, "certs", "init", "--dir", dir, "--unencrypted-ca-key",
+		"--component", "postgres", "--postgres-san", "pg.lan"); err != nil {
+		t.Fatal(err)
+	}
+	out, _, err := run(t, "certs", "inspect", filepath.Join(dir, "postgres", "postgres.crt"))
+	if err != nil || !strings.Contains(out, "DNS:postgres, DNS:pg.lan") {
+		t.Fatalf("inspect postgres: %v\n%s", err, out)
+	}
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--component", "postgres"); err != nil {
+		t.Fatalf("rotate postgres: %v", err)
+	}
+	if _, _, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--ca", "promote", "--postgres-san", "x"); err == nil ||
+		!strings.Contains(err.Error(), "only applies to the stage phase") {
+		t.Fatalf("--postgres-san with promote: %v", err)
+	}
+}
+
+// certs rotate records certs.rotated in the app database (M1 code review
+// L3); without one it refuses before changing any file, unless --no-audit.
+func TestCertsRotateNeedsAuditDB(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "certs")
+	if _, _, err := run(t, "certs", "init", "--dir", dir, "--unencrypted-ca-key"); err != nil {
+		t.Fatal(err)
+	}
+	crt := filepath.Join(dir, "serve", "serve.crt")
+	before, err := os.ReadFile(crt) // #nosec G304 -- test file
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing.toml")
+	_, _, err = run(t, "--config", missing, "certs", "rotate", "--dir", dir, "--component", "serve")
+	if err == nil || !strings.Contains(err.Error(), "--no-audit") {
+		t.Fatalf("rotate without an audit database: %v", err)
+	}
+	if _, _, err := run(t, "--config", missing, "certs", "init", "--dir", dir, "--unencrypted-ca-key", "--force"); err == nil {
+		t.Fatal("init --force without an audit database accepted")
+	}
+	after, err := os.ReadFile(crt) // #nosec G304 -- test file
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("a refused rotation changed the certificate")
+	}
+	_, stderr, err := run(t, "certs", "rotate", "--no-audit", "--dir", dir, "--component", "serve")
+	if err != nil || !strings.Contains(stderr, "NOT recorded in the audit log") {
+		t.Fatalf("rotate --no-audit: %v %q", err, stderr)
 	}
 }

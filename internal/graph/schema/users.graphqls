@@ -1,0 +1,158 @@
+# User administration (task 1.6; D-047, D-069, D-106, D-110). Admin only;
+# every change needs a fresh step-up and is audited. Role changes,
+# disabling, password resets and deletion revoke all sessions of the
+# account. The last active admin cannot be demoted, disabled or deleted
+# (CONFLICT). Accounts are soft deleted (audit entries reference them).
+
+extend type User {
+  "True when the account is disabled (it cannot sign in)."
+  disabled: Boolean!
+  "Set while new password logins are locked after failed attempts."
+  lockedUntil: Time
+  """
+  True while the account's password is a temporary one issued by an admin:
+  after signing in with it, only changePassword (and viewing the own
+  account) is allowed (PASSWORD_CHANGE_REQUIRED).
+  """
+  passwordChangeRequired: Boolean!
+  "When the temporary password stops working, if one is set."
+  temporaryPasswordExpiresAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+  "Set when the account was deleted (only visible to admins listing deleted accounts)."
+  deletedAt: Time
+}
+
+extend type LoginResult {
+  """
+  True when the user signed in with a temporary password and must change
+  it (changePassword) before doing anything else.
+  """
+  passwordChangeRequired: Boolean!
+}
+
+extend type Query {
+  """
+  Accounts ordered by e-mail address. `first` is 1..200 (default 50);
+  `after` is the `endCursor` of the previous page.
+  """
+  users(filter: UserFilter, first: Int, after: String): UserConnection! @hasRole(roles: [ADMIN])
+
+  "One account (also a deleted one); null when it does not exist."
+  user(id: UUID!): User @hasRole(roles: [ADMIN])
+
+  "The active sessions of an account, most recently used first."
+  userSessions(userId: UUID!): [Session!]! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Creates an account with a generated temporary password (returned once;
+  valid for 72 hours) that must be changed at the first login. Admins never
+  choose another user's password. A taken e-mail address answers CONFLICT.
+  """
+  createUser(input: CreateUserInput!): CreatedUser! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes the display name, role and/or disabled flag. A role change or
+  disabling revokes all sessions of the account.
+  """
+  updateUser(id: UUID!, input: UpdateUserInput!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Replaces the account's password with a generated temporary password
+  (returned once), clears the lockout and revokes all its sessions. Use
+  changePassword for your own account.
+  """
+  resetUserPassword(id: UUID!): TemporaryPassword! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Disables the account and revokes all its sessions."
+  disableUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Enables a disabled account."
+  enableUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Clears the login lockout of the account."
+  unlockUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Deletes the account (soft delete: it is disabled, its password removed
+  and its sessions revoked; the record stays for the audit log and its
+  e-mail address can be reused). You cannot delete your own account.
+  """
+  deleteUser(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Revokes every session of the account; returns how many were active."
+  revokeUserSessions(userId: UUID!): Int! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Lost-factor recovery (task 1.9, D-112): removes every second factor of
+  the account (TOTP, passkeys, recovery codes), clears its second-factor
+  lockout and revokes all its sessions. When the 2FA policy requires a
+  factor for the account's role, a new enrollment grace period starts now.
+  Not allowed on your own account (FORBIDDEN).
+  """
+  resetUserSecondFactors(userId: UUID!): SecondFactorReset! @hasRole(roles: [ADMIN]) @stepUp
+}
+
+"The result of resetUserSecondFactors."
+type SecondFactorReset {
+  user: User!
+  "True when the account had TOTP enabled."
+  removedTotp: Boolean!
+  "The number of passkeys removed."
+  removedPasskeys: Int!
+  "The number of recovery codes removed (used or not)."
+  removedRecoveryCodes: Int!
+  "The number of sessions revoked."
+  revokedSessions: Int!
+}
+
+"Filters for users; unset fields do not filter."
+input UserFilter {
+  "Case-insensitive substring of the e-mail address or display name."
+  search: String
+  role: Role
+  disabled: Boolean
+  "Also list deleted accounts (default false)."
+  includeDeleted: Boolean
+}
+
+input CreateUserInput {
+  email: String!
+  displayName: String!
+  role: Role!
+}
+
+"Fields to change; unset fields stay unchanged."
+input UpdateUserInput {
+  displayName: String
+  role: Role
+  disabled: Boolean
+}
+
+"A page of accounts."
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserEdge {
+  cursor: String!
+  node: User!
+}
+
+"A newly created account and its one-time temporary password."
+type CreatedUser {
+  user: User!
+  temporaryPassword: TemporaryPassword!
+}
+
+"""
+A generated temporary password. Shown once: it is not stored in plain text
+and cannot be retrieved again. The user must change it at the first login.
+"""
+type TemporaryPassword {
+  password: String!
+  expiresAt: Time!
+}

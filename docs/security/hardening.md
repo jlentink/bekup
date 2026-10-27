@@ -1,11 +1,13 @@
 # Hardening guide
 
-> **Status:** partial (end of M0). The controls below exist in the shipped
-> compose files and the implemented CLI/config code. Application-level
-> controls are added by their tasks: HTTP headers, Origin checks and the
-> plain-HTTP warning (1.1), sessions and 2FA policy (1.5–1.9), runner
-> isolation (2.4–2.7a), SSRF guard (2.3), immutable storage (2.9, 3.8),
-> monitoring (5.6), signed release images (7.4). Completed in task 7.5.
+> **Status:** partial (end of M1). The controls below exist in the shipped
+> compose files, the implemented CLI/config code and `serve`: HTTP headers,
+> Origin checks and the plain-HTTP warning (1.1), app-DB TLS with channel
+> binding (1.0), passwords and sessions (1.5), second factors, the 2FA
+> policy and step-up (1.7–1.9) and the audit log with signed heads (1.3).
+> Still to come with their tasks: runner isolation (2.4–2.7a), SSRF guard
+> (2.3), immutable storage (2.9, 3.8), monitoring (5.6), signed release
+> images (7.4). Completed in task 7.5.
 
 A checklist for running bekup securely. The threat model behind it is
 [`SECURITY.md`](../../SECURITY.md); deployment details are in
@@ -106,10 +108,54 @@ production over plain HTTP unless the network path is fully trusted. See
 - [ ] Never commit `secrets/`, keys, certificates, local TOML files or
       `.env` files; `.gitignore` and `.dockerignore` block them (D-066).
 
-## Accounts, storage and monitoring (later tasks)
+## Passwords and sessions (task 1.5)
 
-- 2FA policy and step-up (tasks 1.7–1.9): require passkeys or TOTP for
-  admins and maintainers; keep the number of admins small.
+The defaults are the secure baseline; `bekup serve` refuses weaker
+values (D-073, D-107).
+
+- [ ] Keep `server.base_url` https: only then is the session cookie
+      `__Host-bekup_session` with `Secure`. In the opted-in plain-HTTP mode
+      (D-095) it is `bekup_session` without `Secure`, and sessions travel
+      in clear text.
+- [ ] Keep `security.session_idle_timeout` (30m) and
+      `session_absolute_timeout` (12h) short; users can list and revoke
+      their sessions, and a password change revokes all of them.
+- [ ] Raise `security.argon2_memory_kib`/`argon2_iterations` if the host
+      allows (existing hashes are upgraded at the next login), and size
+      `argon2_max_concurrent` × `argon2_memory_kib` well below the `serve`
+      memory limit; excess logins get `RATE_LIMITED` instead of queueing.
+- [ ] Optionally raise `security.password_min_length` (≥ 12) and
+      `password_min_score` (3 or 4). Common passwords and passwords
+      containing the e-mail address or name are always refused.
+- [ ] Loosen `security.login_rate_limit_*` and `security.lockout_*` only
+      with care. The lockout is per account and temporary (1m, doubling up
+      to 1h by default); watch the `auth.lockout` and `auth.login.failed`
+      audit entries.
+
+## Accounts, storage and monitoring
+
+- 2FA policy and step-up (tasks 1.7–1.9, D-112): 2FA is **off by
+  default**. Turn it on right after creating the first admin: require it
+  for admins and maintainers (ideally everyone) under **Users → 2FA
+  policy** (`updateTwoFactorPolicy`), with a short grace period (default 7
+  days, counted from when you turn it on); keep the number of admins
+  small. Accounts without a factor after the grace period can only enroll
+  one (TOTP always works, also over plain http). Treat `mfa_policy.updated`
+  entries with `weakened: true`, `auth.recovery_code.used`,
+  `user.second_factors_reset` and `cli.admin.mfa_reset` as security
+  events; reset someone's factors only after verifying their identity out
+  of band. Restores always need a fresh passkey/TOTP check, whatever the
+  policy.
+- First admin (D-113): created only with `bekup admin create` on the host;
+  there is no web setup page an attacker could race to. Run it right after
+  the first start.
+- Passkeys (task 1.8, D-109) are phishing-resistant and preferred over
+  TOTP. They need an https `server.base_url` (or `localhost`) with a host
+  name, not an IP address, and they are bound to that host name: changing
+  the host of `base_url` invalidates every registered passkey, so make sure
+  users keep a second factor or recovery codes before you move. Treat an
+  `auth.passkey.sign_count_anomaly` audit entry (possible cloned
+  authenticator) as an incident: ask the user to delete that passkey.
 - Immutable destinations (tasks 2.9, 3.8): S3 Object Lock or no-delete
   credentials, more than one destination
   ([immutable-backups.md](immutable-backups.md)).

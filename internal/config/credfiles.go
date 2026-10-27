@@ -63,3 +63,13 @@ func (c *Bekup) DatabaseURL() ([]byte, error) {
 func (c *Bekup) MasterKey() ([]byte, error) {
 	return resolveSecret(c.Security.MasterKey, c.Security.MasterKeyFile)
 }
+
+// DatabaseTLSClientKey returns the app DB TLS client private key from
+// database.tls_client_key_file, or nil when none is configured. Zero the
+// result after use.
+func (c *Bekup) DatabaseTLSClientKey() ([]byte, error) {
+	if c.Database.TLSClientKeyFile == "" {
+		return nil, nil
+	}
+	return ReadSecretFile(c.Database.TLSClientKeyFile)
+}

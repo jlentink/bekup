@@ -1,10 +1,13 @@
 # Key management and escrow
 
 > **Status:** the master keyring, credential encryption, key-check value,
-> instance signing keys and key generators are implemented (task 0.5).
-> Wiring into the database (startup check, re-encryption on rotation, the
-> `instance_keys` table) follows in later tasks; job encryption keys are
-> task 3.2 and offline recovery is task 4.7.
+> instance signing keys and key generators are implemented (task 0.5). The
+> `instance_keys` table exists (migration 00005), the audit chain-head
+> signer uses it (task 1.3, D-101), and `bekup serve` refuses to start when
+> the keyring cannot open the active instance signing key or does not match
+> the key-check values stored in `settings` (D-119). Not wired yet:
+> re-encryption of stored credentials on rotation. Job encryption keys are task 3.2 and
+> offline recovery is task 4.7.
 
 bekup has three kinds of keys:
 
@@ -77,6 +80,10 @@ After rotating:
    primary key (`Keyring.Rotate` / `RotateAll` in `internal/crypto`) is wired
    to the database in a later task; until it reports that no ciphertext uses
    an old key, removing it destroys data.
+   Recovery codes are stored only as keyed hashes under the key that was
+   primary when they were issued (D-111); they cannot be re-encrypted, so
+   removing that key invalidates them and users must regenerate their
+   codes.
 
 Rotate when an escrow copy may have been exposed, when staff with access
 leave, or on a schedule you choose. If the key itself is known to be
@@ -125,10 +132,19 @@ Implemented in `internal/crypto` (D-046, D-086):
 - No per-record data keys: credentials are tiny and rotation re-encrypts the
   record either way (rationale in D-086).
 - **Key-check value:** `kcv1:<key id>:<base64url HMAC-SHA256>` of a fixed
-  string under the KCV subkey. It is stored in the `settings` table and
-  verified at startup (constant-time), so a wrong, truncated or outdated
-  keyring is detected before anything is decrypted. It reveals nothing about
-  the encryption key.
+  string under the KCV subkey. It reveals nothing about the encryption
+  key. `bekup serve` keeps one KCV per master key ID in the `settings` row
+  `security.key_check_values` and checks the keyring against them at every
+  start, before anything is decrypted (constant-time, D-119):
+  - first start: the KCVs of every key in the ring are stored (audited as
+    `keys.check_value_stored`);
+  - every stored KCV whose key is in the ring must verify, and at least
+    one must; otherwise serve refuses to start with "the master key does
+    not match this database" (a wrong, truncated or foreign keyring);
+  - a stored key that is no longer in the ring only logs a warning (it
+    was retired after re-encryption);
+  - keys in the ring without a stored KCV, i.e. the new primary after
+    `bekup keys rotate`, are added and recorded as `keys.rotated`.
 
 ### Secrets in memory
 

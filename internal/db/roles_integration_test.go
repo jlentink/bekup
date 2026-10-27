@@ -143,7 +143,7 @@ func TestMigratorChecksRolesOnEveryRun(t *testing.T) {
 	for _, w := range weakenings {
 		t.Run(w.name, func(t *testing.T) {
 			weaken(ctx, t, w.apply, w.revert)
-			m, err := db.NewMigrator(ctx, []byte(d.ownerURL), logging.NewRegistry())
+			m, err := db.NewMigrator(ctx, []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
 			if err == nil {
 				t.Fatal(errors.Join(errors.New("migrator accepted a weakened role"), m.Close(ctx)))
 			}
@@ -153,7 +153,7 @@ func TestMigratorChecksRolesOnEveryRun(t *testing.T) {
 		})
 	}
 	// After every revert, migrating works again.
-	m, err := db.NewMigrator(ctx, []byte(d.ownerURL), logging.NewRegistry())
+	m, err := db.NewMigrator(ctx, []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}

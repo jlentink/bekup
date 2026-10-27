@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router";
 
 import { PLACEHOLDER_USER } from "@/lib/session";
 
+import { InsecureTransportBanner } from "./insecure-transport-banner";
 import { allNavItems } from "./nav";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -26,6 +27,7 @@ export function AppShell() {
       </a>
       <Sidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
+        <InsecureTransportBanner />
         <TopBar user={user} title={titleFor(pathname)} />
         <main id="main" tabIndex={-1} className="flex-1 outline-none">
           <div className="mx-auto w-full max-w-(--content-max-width) px-4 py-8 sm:px-8">

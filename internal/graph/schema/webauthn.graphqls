@@ -1,0 +1,84 @@
+# WebAuthn passkeys as a second factor (task 1.8; D-095, D-109). The
+# assertion half (second step of the login, step-up) is exposed by task
+# 1.9. Passkeys need a secure context: with an http base_url on a host
+# other than localhost they are unavailable and enrollment is refused.
+
+"""
+A JSON value passed through unchanged: WebAuthn options returned to the
+browser and the browser's responses. Input must be a JSON object of at
+most 32 KiB.
+"""
+scalar JSON
+
+"Whether passkeys can be used with this server."
+type WebAuthnStatus {
+  "False when server.base_url is not a secure context (https or localhost) or uses an IP address."
+  webauthnAvailable: Boolean!
+  "Why passkeys are unavailable (null when available)."
+  reason: String
+  "The relying party ID (the base URL's host name; null when unavailable)."
+  rpId: String
+}
+
+"""
+One of your passkeys. The credential id and public key are never
+exposed.
+"""
+type Passkey {
+  id: UUID!
+  name: String!
+  createdAt: Time!
+  lastUsedAt: Time
+  "Transports reported by the authenticator (usb, nfc, ble, internal, hybrid)."
+  transports: [String!]!
+  "The authenticator model's AAGUID, if reported."
+  aaguid: UUID
+  "True for passkeys that can be synced or backed up (BE flag)."
+  backupEligible: Boolean!
+  "True when the passkey is currently backed up or synced (BS flag)."
+  backedUp: Boolean!
+  "True when the authenticator verified the user (PIN or biometrics)."
+  userVerified: Boolean!
+  """
+  When an assertion with a signature counter that went backwards was
+  refused: the passkey may have been cloned. Consider deleting it.
+  """
+  signCountAnomalyAt: Time
+}
+
+extend type Query {
+  "Whether passkeys can be used with this server, and why not."
+  webauthnStatus: WebAuthnStatus! @authenticated
+
+  "Your passkeys, oldest first."
+  myPasskeys: [Passkey!]! @authenticated
+}
+
+extend type Mutation {
+  """
+  Starts registering a passkey (needs a fresh step-up). Returns the
+  PublicKeyCredentialCreationOptions as JSON (`{"publicKey": {...}}`) for
+  `navigator.credentials.create()`. The challenge is bound to this
+  session and valid for 3 minutes. Fails with FORBIDDEN when passkeys are
+  unavailable and CONFLICT when you already have 20 passkeys.
+  """
+  beginPasskeyRegistration: JSON! @stepUp
+
+  """
+  Completes the registration with the browser's response
+  (`PublicKeyCredential.toJSON()`) and stores the passkey under `name`
+  (1-64 characters). Needs a fresh step-up. A response that does not
+  verify (or no pending registration) answers VALIDATION on `response`;
+  start again with beginPasskeyRegistration.
+  """
+  finishPasskeyRegistration(name: String!, response: JSON!): Passkey! @stepUp
+
+  "Renames one of your passkeys (needs a fresh step-up)."
+  renamePasskey(id: UUID!, name: String!): Passkey! @stepUp
+
+  """
+  Deletes one of your passkeys (needs a fresh step-up). The 2FA policy
+  may refuse to remove your last second factor (CONFLICT).
+  """
+  deletePasskey(id: UUID!): Boolean! @stepUp
+}

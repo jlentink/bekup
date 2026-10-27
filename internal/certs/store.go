@@ -22,9 +22,14 @@ import (
 //	<dir>/ca/ca.key            CA private key (0600; age-encrypted by default) -- move offline
 //	<dir>/ca/ca.next.{crt,key} next CA during a CA rotation (stage .. promote)
 //	<dir>/ca/ca.prev.crt       previous CA during a CA rotation (promote .. finish)
-//	<dir>/<component>/<component>.crt  leaf certificate (0644)
+//	<dir>/<component>/<component>.crt  leaf certificate (0644); for postgres
+//	                                   the chain leaf + one-time ECDSA issuer
 //	<dir>/<component>/<component>.key  leaf private key (0600)
 //	<dir>/<component>/ca.crt           trust bundle: the CA(s) to trust (0644)
+//
+// Components: runner (server), serve and worker (clients), postgres (the app
+// DB's TLS server certificate, D-100; postgres/ca.crt is also the bundle
+// serve/worker/migrate use as database.tls_ca_file).
 //
 // A component directory never contains a CA key.
 const (
@@ -100,10 +105,14 @@ type InitOptions struct {
 	// RunnerNames are extra DNS names / IPs for the runner certificate;
 	// DefaultRunnerDNSName is always included. They also become the CA's
 	// name constraints.
-	RunnerNames  []string
-	CAValidity   time.Duration
-	LeafValidity time.Duration
-	Passphrase   []byte
+	RunnerNames []string
+	// PostgresNames are extra DNS names / IPs for the postgres certificate;
+	// DefaultPostgresDNSName is always included. They also become part of
+	// the CA's name constraints.
+	PostgresNames []string
+	CAValidity    time.Duration
+	LeafValidity  time.Duration
+	Passphrase    []byte
 	// AllowUnencrypted permits an unencrypted CA key (not recommended).
 	AllowUnencrypted bool
 	// Force overwrites existing material.
@@ -155,7 +164,7 @@ func Init(opts InitOptions) (*Result, error) {
 
 	ca, err := NewCA(CAOptions{
 		Validity:    opts.CAValidity,
-		ServerNames: append([]string{DefaultRunnerDNSName}, opts.RunnerNames...),
+		ServerNames: caServerNames(opts.RunnerNames, opts.PostgresNames),
 		Now:         opts.Now,
 	})
 	if err != nil {
@@ -185,7 +194,8 @@ func Init(opts InitOptions) (*Result, error) {
 		return nil, err
 	}
 	for _, c := range comps {
-		if err := issueTo(l, ca, c, LeafOptions{Validity: opts.LeafValidity, ServerNames: opts.RunnerNames, Now: opts.Now}, ca.CertPEM, res); err != nil {
+		lo := LeafOptions{Validity: opts.LeafValidity, ServerNames: serverNamesFor(c, opts.RunnerNames, opts.PostgresNames), Now: opts.Now}
+		if err := issueTo(l, ca, c, lo, ca.CertPEM, res); err != nil {
 			return nil, err
 		}
 	}
@@ -200,8 +210,11 @@ type RotateOptions struct {
 	All        bool
 	// RunnerNames overrides the runner's extra names; nil keeps the names
 	// in the current runner certificate.
-	RunnerNames  []string
-	LeafValidity time.Duration
+	RunnerNames []string
+	// PostgresNames overrides the postgres certificate's extra names; nil
+	// keeps the names in the current postgres certificate.
+	PostgresNames []string
+	LeafValidity  time.Duration
 	// Passphrase decrypts the CA key when it is encrypted.
 	Passphrase []byte
 	Now        func() time.Time
@@ -228,9 +241,11 @@ func Rotate(opts RotateOptions) (*Result, error) {
 	}
 	res := &Result{}
 	for _, c := range comps {
-		lo := LeafOptions{Validity: opts.LeafValidity, ServerNames: opts.RunnerNames, Now: opts.Now}
-		if IsServer(c) && opts.RunnerNames == nil {
-			lo.ServerNames = existingServerNames(l.CertFile(c))
+		lo := LeafOptions{Validity: opts.LeafValidity, Now: opts.Now}
+		if names := serverNamesFor(c, opts.RunnerNames, opts.PostgresNames); names != nil {
+			lo.ServerNames = names
+		} else if IsServer(c) {
+			lo.ServerNames = existingServerNames(l.CertFile(c), DefaultDNSName(c))
 		}
 		if err := issueTo(l, ca, c, lo, bundle, res); err != nil {
 			return nil, err
@@ -259,9 +274,13 @@ type RotateCAOptions struct {
 	Phase        CAPhase
 	CAValidity   time.Duration
 	LeafValidity time.Duration
-	// RunnerNames overrides the next CA's name constraints / runner names
-	// (stage); nil keeps those of the current CA.
-	RunnerNames []string
+	// RunnerNames and PostgresNames override the extra runner / postgres
+	// names in the next CA's name constraints (stage); when both are nil the
+	// current CA's constraints are kept. "runner" and "postgres" are always
+	// included, so staging a CA created before the postgres component
+	// existed adds "postgres" (D-100).
+	RunnerNames   []string
+	PostgresNames []string
 	// Passphrase decrypts the current/next CA key and seals the next one.
 	Passphrase       []byte
 	AllowUnencrypted bool
@@ -302,11 +321,18 @@ func stageCA(l Layout, comps []string, opts RotateCAOptions) (*Result, error) {
 	}
 	clear(cur.Key) // loaded only to prove possession and check the passphrase
 	ko := keyOptions{Passphrase: opts.Passphrase, AllowUnencrypted: opts.AllowUnencrypted, workFactor: opts.workFactor}
-	names := opts.RunnerNames
-	if names == nil {
-		names = cur.ServerNames()
+	var names []string
+	if opts.RunnerNames == nil && opts.PostgresNames == nil {
+		names = append(cur.ServerNames(), DefaultRunnerDNSName, DefaultPostgresDNSName)
 	} else {
-		names = append([]string{DefaultRunnerDNSName}, names...)
+		runner, pg := opts.RunnerNames, opts.PostgresNames
+		if runner == nil {
+			runner = existingServerNames(l.CertFile(ComponentRunner), DefaultRunnerDNSName)
+		}
+		if pg == nil {
+			pg = existingServerNames(l.CertFile(ComponentPostgres), DefaultPostgresDNSName)
+		}
+		names = caServerNames(runner, pg)
 	}
 	next, err := NewCA(CAOptions{Validity: opts.CAValidity, ServerNames: names, Now: opts.Now})
 	if err != nil {
@@ -357,7 +383,7 @@ func promoteCA(l Layout, comps []string, opts RotateCAOptions) (*Result, error) 
 	for _, c := range comps {
 		lo := LeafOptions{Validity: opts.LeafValidity, Now: opts.Now}
 		if IsServer(c) {
-			lo.ServerNames = existingServerNames(l.CertFile(c))
+			lo.ServerNames = existingServerNames(l.CertFile(c), DefaultDNSName(c))
 		}
 		if err := issueTo(l, next, c, lo, bundle, res); err != nil {
 			return nil, err
@@ -391,7 +417,7 @@ func finishCA(l Layout, comps []string, now func() time.Time) (*Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", l.CertFile(c), err)
 		}
-		if err := verifyLeafAt(leaves[0], cas[0], clock(now)); err != nil {
+		if err := verifyLeafAt(leaves[0], leaves[1:], cas[0], clock(now)); err != nil {
 			return nil, fmt.Errorf("%s is not issued by the current CA (%w); run promote or rotate it first", l.CertFile(c), err)
 		}
 	}
@@ -408,10 +434,14 @@ func finishCA(l Layout, comps []string, now func() time.Time) (*Result, error) {
 	return res, nil
 }
 
-func verifyLeafAt(leaf, ca *x509.Certificate, now time.Time) error {
+func verifyLeafAt(leaf *x509.Certificate, intermediates []*x509.Certificate, ca *x509.Certificate, now time.Time) error {
 	roots := x509.NewCertPool()
 	roots.AddCert(ca)
-	_, err := leaf.Verify(x509.VerifyOptions{Roots: roots, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
+	inter := x509.NewCertPool()
+	for _, c := range intermediates {
+		inter.AddCert(c)
+	}
+	_, err := leaf.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inter, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
 	return err
 }
 
@@ -515,9 +545,28 @@ func writeCAKey(path string, key ed25519.PrivateKey, ko keyOptions, res *Result)
 	return writeFile(path, data, keyPerm, res)
 }
 
-// existingServerNames returns the extra names (beyond the default) of an
-// existing runner certificate, or nil.
-func existingServerNames(certFile string) []string {
+// caServerNames is the name-constraint list of a CA: both server
+// components' default names plus their extra names.
+func caServerNames(runner, postgres []string) []string {
+	return slices.Concat([]string{DefaultRunnerDNSName}, runner, []string{DefaultPostgresDNSName}, postgres)
+}
+
+// serverNamesFor returns the extra names override for component c, or nil
+// (keep / none).
+func serverNamesFor(c string, runner, postgres []string) []string {
+	switch c {
+	case ComponentRunner:
+		return runner
+	case ComponentPostgres:
+		return postgres
+	default:
+		return nil
+	}
+}
+
+// existingServerNames returns the extra names (beyond defaultName) of an
+// existing server certificate, or nil.
+func existingServerNames(certFile, defaultName string) []string {
 	data, err := config.ReadPublicFile(certFile)
 	if err != nil {
 		return nil
@@ -528,7 +577,7 @@ func existingServerNames(certFile string) []string {
 	}
 	var names []string
 	for _, n := range certs[0].DNSNames {
-		if n != DefaultRunnerDNSName {
+		if n != defaultName {
 			names = append(names, n)
 		}
 	}

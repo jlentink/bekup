@@ -1,0 +1,64 @@
+# Audit log (task 1.4; D-101, D-106). Admin only.
+
+extend type Query {
+  """
+  The audit log, newest first. `first` is 1..200 (default 50); `after` is
+  the `endCursor` of the previous page.
+  """
+  auditLog(filter: AuditLogFilter, first: Int, after: String): AuditLogConnection!
+    @hasRole(roles: [ADMIN])
+}
+
+"Who performed an audited action."
+enum AuditActorKind {
+  "A signed-in user."
+  USER
+  "bekup itself (scheduler, workers, startup checks)."
+  SYSTEM
+  "A host operator running a bekup subcommand."
+  CLI
+}
+
+"Filters for auditLog; unset fields do not filter."
+input AuditLogFilter {
+  "Exact action name, e.g. `user.created`."
+  action: String
+  "Action prefix, e.g. `auth.` or `cli.admin.`."
+  actionPrefix: String
+  actorUserId: UUID
+  actorKind: AuditActorKind
+  targetType: String
+  targetId: String
+  "Entries at or after this time."
+  from: Time
+  "Entries before this time."
+  to: Time
+}
+
+"A page of audit entries."
+type AuditLogConnection {
+  edges: [AuditLogEdge!]!
+  pageInfo: PageInfo!
+}
+
+type AuditLogEdge {
+  cursor: String!
+  node: AuditLogEntry!
+}
+
+"One audit log entry. Details are redacted when recorded and never hold secrets."
+type AuditLogEntry {
+  id: ID!
+  ts: Time!
+  actorKind: AuditActorKind!
+  actorUserId: UUID
+  action: String!
+  targetType: String
+  targetId: String
+  "Client IP address, if known."
+  ip: String
+  "Details as a JSON object."
+  details: String!
+  "The entry's chain hash (hex)."
+  hash: String!
+}

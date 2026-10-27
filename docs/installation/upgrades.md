@@ -1,10 +1,12 @@
 # Upgrades
 
-> **Status:** partial (end of M0). The migration mechanics are implemented
-> (task 0.4) and the compose `migrate` service exists (task 0.7). Image
-> catalog deprecations (task 2.1), key and certificate rotation during
-> upgrades (tasks 0.5, 0.6 wiring in M1/M2) and the release/verification
-> steps (task 7.4) are added later; completed in task 7.5.
+> **Status:** partial (end of M1). The migration mechanics are implemented
+> (task 0.4), the compose `migrate` service exists (task 0.7), `serve`
+> refuses to start on an outdated schema (task 1.1) and the postgres
+> certificate rotation is described below (task 1.0, D-104). Image catalog
+> deprecations (task 2.1), runner certificate rotation (M2), re-encryption
+> after a keyring rotation and the release/verification steps (task 7.4)
+> are added later; completed in task 7.5.
 
 ## Before you upgrade
 
@@ -80,6 +82,42 @@ the previous image.
   docker compose exec postgres sh -c \
     'PGPASSWORD="$(cat /run/secrets/postgres_password)" psql --host=/var/run/postgresql -U postgres -c "SELECT pg_reload_conf()"'
   ```
+- **App DB TLS (D-100).** The stack now runs the app database with TLS and
+  `serve`/`migrate` verify it (`tls_mode = "verify-full"`). For an existing
+  installation:
+  1. Issue the `postgres` certificate. A CA created before this release
+     only permits the runner names and has path length 0 (no room for the
+     postgres certificate's ECDSA issuer, D-104), so first rotate the CA (with
+     `secrets/certs/ca/` restored; restart the stack after each phase):
+     ```sh
+     docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --ca stage    # adds "postgres"
+     docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --ca promote
+     docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --component postgres
+     docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --ca finish
+     sudo chown -R 70:70 secrets/certs/postgres     # Linux
+     ```
+     (With a CA that already permits `postgres`, the `--component postgres`
+     step alone is enough.)
+  2. Take the new `docker-compose.yml` (entrypoint wrapper, TLS tmpfs and
+     the `postgres_crt`, `postgres_key`, `bekup_db_ca_crt` secrets).
+  3. Remove `sslmode=...` from `secrets/bekup_database_url` and
+     `secrets/bekup_database_owner_url` (a weaker value is ignored, a
+     stricter one such as `verify-full` is fine but redundant).
+  4. Existing data volumes keep accepting the bekup roles without TLS
+     until you add the rule from `deploy/postgres/init/10-bekup-roles.sh`
+     directly **below** the superuser block at the top of `pg_hba.conf`,
+     then reload as shown above:
+     ```sh
+     docker compose exec postgres sh -c 'f="$PGDATA/pg_hba.conf"; { head -n 5 "$f";
+       printf "%s\n" "# bekup: bekup roles only over TLS (D-100)" "hostnossl  all  bekup_owner,bekup_app  all  reject" "";
+       tail -n +6 "$f"; } > "$f.new" && chmod 0600 "$f.new" && mv "$f.new" "$f"'
+     docker compose exec postgres sh -c 'head -n 10 "$PGDATA/pg_hba.conf"'   # check the result
+     ```
+     (`head -n 5` assumes the four-line superuser block plus its blank
+     line; check before reloading.)
+  Dev setups: re-run `deploy/dev/gen-dev-keys.sh` (it issues the postgres
+  certificate, regenerating the throwaway dev PKI if its CA is too old, and
+  rewrites the URLs) and reset the dev volumes with `docker compose ... down -v`.
 - **Postgres major versions** of the app database (for example 17 → 18)
   need a dump and restore or `pg_upgrade`; changing the image tag alone does
   not upgrade a data directory.

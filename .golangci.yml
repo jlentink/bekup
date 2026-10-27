@@ -125,6 +125,13 @@ linters:
       - proto/.*\.pb\.go$
       - web/node_modules
     rules:
+      # gqlgen regenerates the method signatures and layout of
+      # *.resolvers.go (the bodies are ours and stay linted).
+      - path: internal/graph/resolvers/.*\.resolvers\.go
+        linters:
+          - revive
+          - gocritic
+        text: "unused-parameter|exported: exported method Resolver\\.|typeDefFirst|paramTypeCombine"
       # Tests may use unchecked type assertions and weaker crypto fixtures,
       # but never disable security linters for production code.
       - path: _test\.go
@@ -148,6 +155,9 @@ formatters:
     paths:
       - internal/db/sqlc
       - internal/graph/generated
+      # gqlgen writes the imports of *.resolvers.go in one group (it does
+      # not know the local prefix); it runs gofmt on them itself.
+      - internal/graph/resolvers/.*\.resolvers\.go
       - proto/.*\.pb\.go$
 
 issues:

@@ -46,10 +46,17 @@ func readFile(t *testing.T, path string) []byte {
 func readCert(t *testing.T, path string) *x509.Certificate {
 	t.Helper()
 	certs := readCerts(t, path)
-	if len(certs) != 1 {
-		t.Fatalf("%s: %d certificates, want 1", path, len(certs))
+	// postgres.crt is the chain leaf + its one-time issuer (D-104).
+	if len(certs) != 1 && (len(certs) != 2 || !certs[1].IsCA || certs[0].IsCA) {
+		t.Fatalf("%s: %d certificates, want 1 (or leaf + issuer)", path, len(certs))
 	}
 	return certs[0]
+}
+
+// interOf returns the intermediates that follow the leaf in a certificate file.
+func interOf(t *testing.T, path string) *x509.CertPool {
+	t.Helper()
+	return pool(readCerts(t, path)[1:]...)
 }
 
 func readCerts(t *testing.T, path string) []*x509.Certificate {
@@ -74,17 +81,20 @@ func TestInitLayoutAndPermissions(t *testing.T) {
 	l := Layout{Dir: dir}
 
 	want := map[string]os.FileMode{
-		"ca/ca.crt":         0o644,
-		"ca/ca.key":         0o600,
-		"runner/runner.crt": 0o644,
-		"runner/runner.key": 0o600,
-		"runner/ca.crt":     0o644,
-		"serve/serve.crt":   0o644,
-		"serve/serve.key":   0o600,
-		"serve/ca.crt":      0o644,
-		"worker/worker.crt": 0o644,
-		"worker/worker.key": 0o600,
-		"worker/ca.crt":     0o644,
+		"ca/ca.crt":             0o644,
+		"ca/ca.key":             0o600,
+		"runner/runner.crt":     0o644,
+		"runner/runner.key":     0o600,
+		"runner/ca.crt":         0o644,
+		"serve/serve.crt":       0o644,
+		"serve/serve.key":       0o600,
+		"serve/ca.crt":          0o644,
+		"worker/worker.crt":     0o644,
+		"worker/worker.key":     0o600,
+		"worker/ca.crt":         0o644,
+		"postgres/postgres.crt": 0o644,
+		"postgres/postgres.key": 0o600,
+		"postgres/ca.crt":       0o644,
 	}
 	var got []string
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
@@ -146,17 +156,20 @@ func TestInitLayoutAndPermissions(t *testing.T) {
 }
 
 func TestInitCertificates(t *testing.T) {
-	dir := initDir(t, func(o *InitOptions) { o.RunnerNames = []string{"bekup-runner", "10.0.0.5"} })
+	dir := initDir(t, func(o *InitOptions) {
+		o.RunnerNames = []string{"bekup-runner", "10.0.0.5"}
+		o.PostgresNames = []string{"db.internal"}
+	})
 	l := Layout{Dir: dir}
 	ca := readCert(t, l.CACert())
 
 	if _, ok := ca.PublicKey.(ed25519.PublicKey); !ok {
 		t.Fatal("CA key is not ed25519")
 	}
-	if !ca.IsCA || ca.MaxPathLen != 0 || !ca.MaxPathLenZero || ca.KeyUsage&x509.KeyUsageCertSign == 0 {
+	if !ca.IsCA || ca.MaxPathLen != 1 || ca.KeyUsage&x509.KeyUsageCertSign == 0 {
 		t.Errorf("CA constraints wrong: isCA=%v maxPathLen=%d", ca.IsCA, ca.MaxPathLen)
 	}
-	if !slices.Equal(ca.PermittedDNSDomains, []string{"runner", "bekup-runner"}) ||
+	if !slices.Equal(ca.PermittedDNSDomains, []string{"runner", "bekup-runner", "postgres", "db.internal"}) ||
 		!slices.Equal(ca.PermittedURIDomains, []string{TrustDomain}) || len(ca.PermittedIPRanges) != 1 {
 		t.Errorf("name constraints: dns=%v uri=%v ip=%v", ca.PermittedDNSDomains, ca.PermittedURIDomains, ca.PermittedIPRanges)
 	}
@@ -166,7 +179,7 @@ func TestInitCertificates(t *testing.T) {
 
 	for _, c := range Components() {
 		leaf := readCert(t, l.CertFile(c))
-		if _, ok := leaf.PublicKey.(ed25519.PublicKey); !ok {
+		if _, ok := leaf.PublicKey.(ed25519.PublicKey); !ok && c != ComponentPostgres {
 			t.Errorf("%s: not ed25519", c)
 		}
 		if leaf.IsCA {
@@ -179,7 +192,7 @@ func TestInitCertificates(t *testing.T) {
 		if !slices.Equal(leaf.ExtKeyUsage, []x509.ExtKeyUsage{eku}) {
 			t.Errorf("%s: EKU %v", c, leaf.ExtKeyUsage)
 		}
-		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(ca), KeyUsages: []x509.ExtKeyUsage{eku}}); err != nil {
+		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(ca), Intermediates: interOf(t, l.CertFile(c)), KeyUsages: []x509.ExtKeyUsage{eku}}); err != nil {
 			t.Errorf("%s: chain does not verify: %v", c, err)
 		}
 		bundle := readCerts(t, l.BundleFile(c))
@@ -195,6 +208,10 @@ func TestInitCertificates(t *testing.T) {
 	if !slices.Equal(runner.DNSNames, []string{"runner", "bekup-runner"}) || len(runner.IPAddresses) != 1 ||
 		runner.IPAddresses[0].String() != "10.0.0.5" || len(runner.URIs) != 0 {
 		t.Errorf("runner SANs: dns=%v ip=%v uri=%v", runner.DNSNames, runner.IPAddresses, runner.URIs)
+	}
+	pg := readCert(t, l.CertFile(ComponentPostgres))
+	if !slices.Equal(pg.DNSNames, []string{"postgres", "db.internal"}) || len(pg.IPAddresses) != 0 || len(pg.URIs) != 0 {
+		t.Errorf("postgres SANs: dns=%v ip=%v uri=%v", pg.DNSNames, pg.IPAddresses, pg.URIs)
 	}
 	if err := runner.VerifyHostname("runner"); err != nil {
 		t.Error(err)
@@ -370,7 +387,7 @@ func TestRotateLeaves(t *testing.T) {
 		if bytes.Equal(key, oldKeys[c]) {
 			t.Errorf("%s: key not replaced", c)
 		}
-		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(ca), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
+		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(ca), Intermediates: interOf(t, l.CertFile(c)), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
 			t.Errorf("%s: %v", c, err)
 		}
 		if v := leaf.NotAfter.Sub(leaf.NotBefore); v > 49*time.Hour {
@@ -446,7 +463,7 @@ func TestRotateCA(t *testing.T) {
 	}
 	for _, c := range Components() {
 		leaf := readCert(t, l.CertFile(c))
-		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(nextCA), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
+		if _, err := leaf.Verify(x509.VerifyOptions{Roots: pool(nextCA), Intermediates: interOf(t, l.CertFile(c)), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}}); err != nil {
 			t.Errorf("%s: not issued by the new CA: %v", c, err)
 		}
 		b := readCerts(t, l.BundleFile(c))
@@ -525,9 +542,9 @@ func TestInspectExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// ca/ca.crt + 3 x (leaf + bundle) = 7 certificates.
-	if len(infos) != 7 {
-		t.Fatalf("%d infos, want 7", len(infos))
+	// ca/ca.crt + 4 x (leaf + bundle) + the postgres issuer = 10.
+	if len(infos) != 10 {
+		t.Fatalf("%d infos, want 10", len(infos))
 	}
 	for _, e := range infos {
 		if strings.HasSuffix(e.Path, ".key") {
@@ -538,11 +555,11 @@ func TestInspectExpiry(t *testing.T) {
 		}
 	}
 	exp := Expiring(infos, now, 30*24*time.Hour)
-	if len(exp) != 3 {
-		t.Errorf("Expiring(30d) = %d, want the 3 leaves", len(exp))
+	if len(exp) != 5 {
+		t.Errorf("Expiring(30d) = %d, want the 4 leaves + the postgres issuer", len(exp))
 	}
 	for _, e := range exp {
-		if e.IsCA {
+		if e.IsCA && !strings.HasSuffix(e.Path, "postgres.crt") {
 			t.Errorf("CA %s reported as expiring", e.Path)
 		}
 		if d := e.DaysLeft(now); d != 9 && d != 10 {
@@ -552,8 +569,8 @@ func TestInspectExpiry(t *testing.T) {
 	if got := Expiring(infos, now, 5*24*time.Hour); len(got) != 0 {
 		t.Errorf("Expiring(5d) = %d, want 0", len(got))
 	}
-	if got := Expiring(infos, now.Add(401*24*time.Hour), 0); len(got) != 7 {
-		t.Errorf("after CA expiry: %d expired, want 7", len(got))
+	if got := Expiring(infos, now.Add(401*24*time.Hour), 0); len(got) != 10 {
+		t.Errorf("after CA expiry: %d expired, want 10", len(got))
 	}
 
 	e := ExpiryInfo{NotBefore: now.Add(-time.Hour), NotAfter: now.Add(-36 * time.Hour)}

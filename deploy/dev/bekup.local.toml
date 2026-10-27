@@ -1,0 +1,37 @@
+# DEV ONLY configuration for `bekup serve` / `bekup migrate` running
+# natively on the host against the `just dev` infrastructure (D-114).
+# Used by `just run`, `just dev-migrate` and `just admin-create`. Never use
+# it in production.
+#
+# Contains no secrets and no absolute paths: the justfile points the *_file
+# keys at secrets/local/ (written by deploy/dev/gen-dev-keys.sh) through
+# environment overrides, because bekup only accepts absolute paths there:
+#   BEKUP_DATABASE_URL_FILE         secrets/local/bekup_database_url
+#   BEKUP_DATABASE_OWNER_URL_FILE   secrets/local/bekup_database_owner_url
+#                                   (only for `bekup migrate`)
+#   BEKUP_DATABASE_TLS_CA_FILE      secrets/local/postgres_ca.crt
+#   BEKUP_SECURITY_MASTER_KEY_FILE  secrets/local/bekup_master_key
+
+[server]
+# Loopback only: plain HTTP without a proxy, so bekup logs the D-095 warning
+# at every start and the UI shows the red "not encrypted" banner. Browsers
+# treat http://localhost as a secure context, so passkeys work.
+listen = "127.0.0.1:8080"
+base_url = "http://localhost:8080"
+trusted_proxies = []
+
+[database]
+# Same as production (D-100): TLS verify-full against the dev CA. The URLs
+# use 127.0.0.1, which the dev postgres certificate names (D-114).
+tls_mode = "verify-full"
+
+[netguard]
+# mailpit's SMTP port is published on 127.0.0.1:1025.
+allow_cidrs = ["127.0.0.1/32"]
+
+[log]
+level = "debug"
+format = "text"
+
+[dev]
+enabled = true

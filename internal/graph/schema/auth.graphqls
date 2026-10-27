@@ -1,0 +1,92 @@
+# Authentication: login, logout, the current user, own sessions and
+# password changes (task 1.5; D-047, D-095, D-107). Second factors (tasks
+# 1.7-1.9) extend LoginResult's flow.
+
+type Mutation {
+  """
+  Signs in with e-mail and password and sets the session cookie (HttpOnly,
+  SameSite=Strict; `__Host-` and Secure over https). Any failure answers
+  UNAUTHENTICATED "invalid email or password", whatever the cause; too
+  many attempts answer RATE_LIMITED. A session cookie the browser already
+  had is revoked (the session is always rotated). For an account with a
+  second factor the result has `secondFactorRequired: true` and the
+  session can only complete it (completeSecondFactor) within 5 minutes.
+  """
+  login(email: String!, password: String!): LoginResult!
+
+  "Ends the current session and clears the session cookie."
+  logout: Boolean! @authenticated
+
+  """
+  Revokes one of your own sessions. Revoking the current session also
+  clears the cookie. Unknown ids and other users' sessions answer
+  NOT_FOUND.
+  """
+  revokeSession(id: UUID!): Boolean! @authenticated
+
+  """
+  Changes your password. Needs the current password (a wrong one answers
+  VALIDATION on `currentPassword` and counts towards the lockout) and a
+  fresh step-up (completeStepUp; a login without a second factor or the
+  completed second factor of a login also count). Every
+  session of your account is revoked; this browser gets a new session
+  cookie.
+  """
+  changePassword(currentPassword: String!, newPassword: String!): Boolean! @stepUp
+}
+
+extend type Query {
+  "The signed-in user."
+  me: User @authenticated
+
+  "Your active sessions, most recently used first."
+  mySessions: [Session!]! @authenticated
+}
+
+"A bekup user as seen by themselves."
+type User {
+  id: UUID!
+  email: String!
+  displayName: String!
+  role: Role!
+}
+
+"Kinds of second factors (tasks 1.7-1.9)."
+enum SecondFactorKind {
+  TOTP
+  PASSKEY
+  RECOVERY_CODE
+}
+
+"The result of login."
+type LoginResult {
+  """
+  The signed-in user; null while secondFactorRequired is true (a login
+  waiting for its second factor learns nothing about the account).
+  """
+  user: User
+  """
+  True when a second factor must be completed (completeSecondFactor)
+  before the session can do anything but log out.
+  """
+  secondFactorRequired: Boolean!
+  "The second factors the user can complete the login with."
+  availableFactors: [SecondFactorKind!]!
+}
+
+"One of your sessions. The session token itself is never exposed."
+type Session {
+  id: UUID!
+  createdAt: Time!
+  lastSeenAt: Time!
+  idleExpiresAt: Time!
+  absoluteExpiresAt: Time!
+  "Client IP address when the session was last used, if known."
+  ip: String
+  "Client User-Agent (truncated), if known."
+  userAgent: String
+  "Authentication assurance level: 1 password, 2 password + second factor."
+  aal: Int!
+  "True for the session of this request."
+  current: Boolean!
+}

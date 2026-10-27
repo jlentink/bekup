@@ -22,8 +22,10 @@
 # pg_hba.conf: the bootstrap superuser ($POSTGRES_USER) is rejected on every
 # TCP connection, so it can only log in over the local Unix socket inside the
 # container (the healthcheck and `docker compose exec` use the socket). The
-# bekup roles keep SCRAM-SHA-256 over TCP. Like the rest of this script, this
-# only runs when the data volume is initialised; see
+# bekup roles authenticate with SCRAM-SHA-256 over TCP **only over TLS**
+# (D-100): every non-TLS TCP connection for them is rejected (`hostnossl ...
+# reject`); TLS itself is switched on by ../entrypoint.sh. Like the rest of
+# this script, this only runs when the data volume is initialised; see
 # docs/installation/upgrades.md for existing volumes.
 #
 # Interface (kept stable; also exercised by the internal/db integration
@@ -73,7 +75,7 @@ ALTER SCHEMA public OWNER TO bekup_owner;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 SQL
 
-# --- pg_hba.conf: superuser on the local socket only ---------------------------
+# --- pg_hba.conf: superuser on the local socket only, bekup roles TLS only -----
 # Prepended, because pg_hba.conf is evaluated top-down and the image's
 # entrypoint has already appended a generic `host all all all scram-sha-256`.
 case "$POSTGRES_USER" in
@@ -83,20 +85,28 @@ case "$POSTGRES_USER" in
         ;;
 esac
 hba="${PGDATA:?PGDATA is not set}/pg_hba.conf"
-marker="# bekup: superuser only via the local socket"
-if ! grep -qxF "$marker" "$hba"; then
+# prepend_hba <marker> <line>...: prepends a marked block once.
+prepend_hba() {
+    marker="$1"
+    shift
+    if grep -qxF "$marker" "$hba"; then
+        return 0
+    fi
     tmp="$hba.bekup-tmp"
     {
-        printf '%s\n' "$marker" \
-            "host     all          $POSTGRES_USER  all  reject" \
-            "hostssl  all          $POSTGRES_USER  all  reject" \
-            "host     replication  $POSTGRES_USER  all  reject" \
-            ""
+        printf '%s\n' "$marker" "$@" ""
         cat "$hba"
     } >"$tmp"
     chmod 0600 "$tmp"
     mv -f "$tmp" "$hba"
-fi
+}
+# Prepended in reverse order of evaluation: the superuser block ends up first.
+prepend_hba "# bekup: bekup roles only over TLS (D-100)" \
+    "hostnossl  all  bekup_owner,bekup_app  all  reject"
+prepend_hba "# bekup: superuser only via the local socket" \
+    "host     all          $POSTGRES_USER  all  reject" \
+    "hostssl  all          $POSTGRES_USER  all  reject" \
+    "host     replication  $POSTGRES_USER  all  reject"
 # No pg_reload_conf() here: the init scripts run against a temporary server
 # that listens on the socket only (listen_addresses=''), and the entrypoint
 # restarts PostgreSQL afterwards, so the rules above are active before the

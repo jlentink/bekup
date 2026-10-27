@@ -56,9 +56,9 @@ type Migrator struct {
 
 // NewMigrator connects with the owner URL (from config.Bekup.DatabaseOwnerURL;
 // the caller zeroes it), registers the URL and password for log redaction and
-// runs the full role check (checkOwnerRole) on every run. Close the Migrator
-// when done.
-func NewMigrator(ctx context.Context, ownerURL []byte, reg *logging.Registry) (*Migrator, error) {
+// runs the full role check (checkOwnerRole) on every run. Every connection
+// uses the TLS policy tlsOpts (D-100). Close the Migrator when done.
+func NewMigrator(ctx context.Context, ownerURL []byte, tlsOpts TLSOptions, reg *logging.Registry) (*Migrator, error) {
 	if reg == nil {
 		reg = logging.DefaultRegistry
 	}
@@ -68,6 +68,9 @@ func NewMigrator(ctx context.Context, ownerURL []byte, reg *logging.Registry) (*
 		return nil, ErrInvalidURL
 	}
 	registerPassword(reg, cc)
+	if err := applyTLS(&cc.Config, ownerURL, tlsOpts); err != nil {
+		return nil, err
+	}
 	cc.RuntimeParams["application_name"] = "bekup-migrate"
 
 	lockConn, err := pgx.ConnectConfig(ctx, cc.Copy())

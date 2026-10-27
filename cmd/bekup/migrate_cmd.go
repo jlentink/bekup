@@ -63,8 +63,13 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	if err != nil {
 		return fmt.Errorf("read database owner URL: %w", err)
 	}
+	tlsOpts, err := db.LoadTLSOptions(res.Config)
+	if err != nil {
+		config.Zero(url)
+		return fmt.Errorf("database TLS: %w", err)
+	}
 	connectCtx, cancel := context.WithTimeout(ctx, res.Config.Database.ConnectTimeout.D())
-	m, err := db.NewMigrator(connectCtx, url, nil)
+	m, err := db.NewMigrator(connectCtx, url, tlsOpts, nil)
 	cancel()
 	config.Zero(url)
 	if err != nil {

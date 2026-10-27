@@ -1,0 +1,704 @@
+# Audit log (task 1.4; D-101, D-106). Admin only.
+
+extend type Query {
+  """
+  The audit log, newest first. `first` is 1..200 (default 50); `after` is
+  the `endCursor` of the previous page.
+  """
+  auditLog(filter: AuditLogFilter, first: Int, after: String): AuditLogConnection!
+    @hasRole(roles: [ADMIN])
+}
+
+"Who performed an audited action."
+enum AuditActorKind {
+  "A signed-in user."
+  USER
+  "bekup itself (scheduler, workers, startup checks)."
+  SYSTEM
+  "A host operator running a bekup subcommand."
+  CLI
+}
+
+"Filters for auditLog; unset fields do not filter."
+input AuditLogFilter {
+  "Exact action name, e.g. `user.created`."
+  action: String
+  "Action prefix, e.g. `auth.` or `cli.admin.`."
+  actionPrefix: String
+  actorUserId: UUID
+  actorKind: AuditActorKind
+  targetType: String
+  targetId: String
+  "Entries at or after this time."
+  from: Time
+  "Entries before this time."
+  to: Time
+}
+
+"A page of audit entries."
+type AuditLogConnection {
+  edges: [AuditLogEdge!]!
+  pageInfo: PageInfo!
+}
+
+type AuditLogEdge {
+  cursor: String!
+  node: AuditLogEntry!
+}
+
+"One audit log entry. Details are redacted when recorded and never hold secrets."
+type AuditLogEntry {
+  id: ID!
+  ts: Time!
+  actorKind: AuditActorKind!
+  actorUserId: UUID
+  action: String!
+  targetType: String
+  targetId: String
+  "Client IP address, if known."
+  ip: String
+  "Details as a JSON object."
+  details: String!
+  "The entry's chain hash (hex)."
+  hash: String!
+}
+# Authentication: login, logout, the current user, own sessions and
+# password changes (task 1.5; D-047, D-095, D-107). Second factors (tasks
+# 1.7-1.9) extend LoginResult's flow.
+
+type Mutation {
+  """
+  Signs in with e-mail and password and sets the session cookie (HttpOnly,
+  SameSite=Strict; `__Host-` and Secure over https). Any failure answers
+  UNAUTHENTICATED "invalid email or password", whatever the cause; too
+  many attempts answer RATE_LIMITED. A session cookie the browser already
+  had is revoked (the session is always rotated). For an account with a
+  second factor the result has `secondFactorRequired: true` and the
+  session can only complete it (completeSecondFactor) within 5 minutes.
+  """
+  login(email: String!, password: String!): LoginResult!
+
+  "Ends the current session and clears the session cookie."
+  logout: Boolean! @authenticated
+
+  """
+  Revokes one of your own sessions. Revoking the current session also
+  clears the cookie. Unknown ids and other users' sessions answer
+  NOT_FOUND.
+  """
+  revokeSession(id: UUID!): Boolean! @authenticated
+
+  """
+  Changes your password. Needs the current password (a wrong one answers
+  VALIDATION on `currentPassword` and counts towards the lockout) and a
+  fresh step-up (completeStepUp; a login without a second factor or the
+  completed second factor of a login also count). Every
+  session of your account is revoked; this browser gets a new session
+  cookie.
+  """
+  changePassword(currentPassword: String!, newPassword: String!): Boolean! @stepUp
+}
+
+extend type Query {
+  "The signed-in user."
+  me: User @authenticated
+
+  "Your active sessions, most recently used first."
+  mySessions: [Session!]! @authenticated
+}
+
+"A bekup user as seen by themselves."
+type User {
+  id: UUID!
+  email: String!
+  displayName: String!
+  role: Role!
+}
+
+"Kinds of second factors (tasks 1.7-1.9)."
+enum SecondFactorKind {
+  TOTP
+  PASSKEY
+  RECOVERY_CODE
+}
+
+"The result of login."
+type LoginResult {
+  """
+  The signed-in user; null while secondFactorRequired is true (a login
+  waiting for its second factor learns nothing about the account).
+  """
+  user: User
+  """
+  True when a second factor must be completed (completeSecondFactor)
+  before the session can do anything but log out.
+  """
+  secondFactorRequired: Boolean!
+  "The second factors the user can complete the login with."
+  availableFactors: [SecondFactorKind!]!
+}
+
+"One of your sessions. The session token itself is never exposed."
+type Session {
+  id: UUID!
+  createdAt: Time!
+  lastSeenAt: Time!
+  idleExpiresAt: Time!
+  absoluteExpiresAt: Time!
+  "Client IP address when the session was last used, if known."
+  ip: String
+  "Client User-Agent (truncated), if known."
+  userAgent: String
+  "Authentication assurance level: 1 password, 2 password + second factor."
+  aal: Int!
+  "True for the session of this request."
+  current: Boolean!
+}
+# bekup GraphQL schema: shared scalars, directives and types (task 1.2).
+# Feature tasks add their own *.graphqls files next to this one and extend
+# Query/Mutation/Subscription with `extend type`.
+#
+# Access convention (D-105): every root field (Query/Mutation/Subscription)
+# carries @authenticated, @hasRole or @stepUp, or is listed in the public
+# allowlist in internal/graph/access.go, and every guarded root field maps to
+# an authz operation in graph.RootFieldOperations (D-106). Anything else is
+# denied at runtime and fails the policy test.
+
+"An RFC 3339 timestamp with time zone, e.g. `2026-10-26T12:00:00Z`."
+scalar Time
+
+"A UUID in its canonical textual form."
+scalar UUID
+
+"Roles of bekup users (D-011)."
+enum Role {
+  ADMIN
+  MAINTAINER
+  USER
+}
+
+"""
+The field requires an authenticated session. Implied by @hasRole and
+@stepUp.
+"""
+directive @authenticated on FIELD_DEFINITION
+
+"The field requires an authenticated session with one of the given roles."
+directive @hasRole(roles: [Role!]!) on FIELD_DEFINITION
+
+"""
+The field requires a fresh step-up within security.stepup_max_age
+(completeStepUp: a second factor for accounts with one, the password
+otherwise).
+"""
+directive @stepUp on FIELD_DEFINITION
+
+"Relay-style pagination info of a connection."
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type Query {
+  "Public, non-secret facts about this server (needed before login)."
+  serverInfo: ServerInfo!
+}
+
+"Public information about the running server. Never contains secrets."
+type ServerInfo {
+  "The bekup version."
+  version: String!
+  """
+  True when server.base_url is not https: traffic, sessions and credentials
+  are not encrypted (D-095). The UI shows a permanent warning banner.
+  """
+  insecureTransport: Boolean!
+  "True when dev mode is on (never in production)."
+  devMode: Boolean!
+}
+# WebSocket subscriptions (task 1.10, D-050, D-105). Subscriptions run only
+# over a WebSocket on /graphql with the graphql-transport-ws protocol; the
+# caller is the session of the cookie sent with the upgrade (connection_init
+# payloads are not accepted). The socket closes with 4401 when the session
+# ends, 4403 when its access changes and 4001 when it was rotated (reconnect).
+# Every event is re-authorized when it is delivered.
+
+type Subscription {
+  """
+  Changes to your own sessions (one revoked or rotated, or all of them
+  revoked), e.g. to refresh the session list. When the change ends the
+  session of this connection, the socket closes (see the close codes
+  above) and the notice may not arrive first.
+  """
+  sessionEvents: SessionEvent! @authenticated
+}
+
+"What happened to a session."
+enum SessionEventKind {
+  "The session ended (logout, revoked, replaced by a new login)."
+  REVOKED
+  "The session was replaced by a new one (privilege change)."
+  ROTATED
+  "All of your sessions ended (password, role or status change)."
+  ALL_REVOKED
+}
+
+"A change to one or all of your sessions. Carries identifiers only."
+type SessionEvent {
+  kind: SessionEventKind!
+  "The session that changed; null when all sessions were revoked."
+  sessionId: UUID
+  "True when the change concerns the session of this connection."
+  current: Boolean!
+}
+# TOTP and recovery codes (task 1.7; D-111). Changing second factors needs
+# a fresh step-up (D-047, D-106). Verifying a TOTP or recovery code during
+# login or step-up is part of task 1.9's two-step login.
+
+extend type Mutation {
+  """
+  Starts (or restarts) TOTP enrollment for your account. Returns the key
+  as an otpauth URI, an inline SVG QR code and a base32 key for manual
+  entry; this is the only time the key is shown. Confirm it with
+  confirmTotpEnrollment before `expiresAt`. CONFLICT when TOTP is already
+  enabled (disable it first). Needs a fresh step-up.
+  """
+  beginTotpEnrollment: TotpEnrollment! @stepUp
+
+  """
+  Completes the pending TOTP enrollment with a current code from the
+  authenticator app and returns a new set of recovery codes, shown only
+  this once (any older codes stop working). A wrong code answers
+  VALIDATION on `code`; no pending enrollment answers CONFLICT. Needs a
+  fresh step-up.
+  """
+  confirmTotpEnrollment(code: String!): RecoveryCodes! @stepUp
+
+  """
+  Turns TOTP off for your account. Refused with CONFLICT when it is your
+  last second factor and the 2FA policy requires one. When no second
+  factor remains, the recovery codes are deleted too. Needs a fresh
+  step-up.
+  """
+  disableTotp: Boolean! @stepUp
+
+  """
+  Replaces your recovery codes with a new set, shown only this once. Needs
+  an enrolled second factor (CONFLICT otherwise) and a fresh step-up.
+  """
+  regenerateRecoveryCodes: RecoveryCodes! @stepUp
+}
+
+extend type Query {
+  "Your second-factor state. Never contains a secret or a code."
+  myTwoFactorStatus: TwoFactorStatus! @authenticated
+}
+
+"A begun TOTP enrollment. Every field but expiresAt carries the TOTP key."
+type TotpEnrollment {
+  "The otpauth:// key URI (for authenticator apps on this device)."
+  otpauthUri: String!
+  """
+  The key URI as a QR code: a self-contained SVG document (no scripts,
+  styles or data: URIs) to render inline.
+  """
+  qrCodeSvg: String!
+  "The key in base32 for manual entry (SHA-1, 6 digits, 30 seconds)."
+  manualEntryKey: String!
+  "Confirm before this time or start again."
+  expiresAt: Time!
+}
+
+"A new set of single-use recovery codes. They are never shown again."
+type RecoveryCodes {
+  codes: [String!]!
+}
+
+"Your second factors."
+type TwoFactorStatus {
+  totpEnabled: Boolean!
+  totpEnabledAt: Time
+  "True while a begun TOTP enrollment can still be confirmed."
+  totpEnrollmentPending: Boolean!
+  "Unused recovery codes left."
+  recoveryCodesRemaining: Int!
+}
+# Two-step login, step-up and the 2FA policy (task 1.9; D-047, D-057,
+# D-095, D-112).
+#
+# A login of an account with a second factor answers
+# `secondFactorRequired: true`: the session cookie then belongs to a
+# session waiting for the second factor (5 minutes) that can do nothing
+# but completeSecondFactor, beginPasskeyLogin and logout (everything else:
+# SECOND_FACTOR_REQUIRED). Step-up uses a second factor for accounts with
+# one and the password only for accounts without.
+
+"How a step-up is performed."
+enum StepUpMethod {
+  "Re-enter the password (only for accounts without a second factor)."
+  PASSWORD
+  TOTP
+  PASSKEY
+  "A recovery code: sets the step-up time only (not enough for restores) and raises an alert."
+  RECOVERY_CODE
+}
+
+"How the caller can step up (beginStepUp)."
+type StepUpChallenge {
+  "The usable methods, in order of preference."
+  methods: [StepUpMethod!]!
+  """
+  PublicKeyCredentialRequestOptions (`{"publicKey": {...}}`) when a passkey
+  can be used; the challenge is bound to this session for 3 minutes.
+  """
+  passkeyOptions: JSON
+}
+
+"A successful step-up."
+type StepUpResult {
+  stepUpAt: Time!
+  "Set when a passkey or TOTP was used (restores need this within the step-up window)."
+  aal2At: Time
+  "The session's assurance level afterwards."
+  aal: Int!
+}
+
+"The 2FA policy (admin)."
+type TwoFactorPolicy {
+  "A second factor is required for every role."
+  requireForAll: Boolean!
+  "Roles that require a second factor (in addition to requireForAll)."
+  requiredRoles: [Role!]!
+  """
+  Days a user without a second factor keeps full access after the
+  requirement starts for their role (or their account was created, if
+  later); 0 means immediately. Afterwards they can only enroll a factor.
+  """
+  gracePeriodDays: Int!
+  "When the policy was last changed (null: the built-in default)."
+  updatedAt: Time
+  """
+  False when passkeys cannot be used with this server (plain http on a
+  host other than localhost, D-095): users enroll TOTP instead, so the
+  policy can always be met.
+  """
+  passkeysAvailable: Boolean!
+}
+
+input TwoFactorPolicyInput {
+  requireForAll: Boolean!
+  requiredRoles: [Role!]!
+  "0 to 90."
+  gracePeriodDays: Int!
+}
+
+extend type User {
+  "True when the 2FA policy requires a second factor for this account's role."
+  twoFactorRequired: Boolean!
+  """
+  When 2FA is required and the account has no second factor: the end of
+  its enrollment grace period (in the past: only enrolling a factor is
+  allowed, REQUIRES_2FA_ENROLLMENT). Null otherwise.
+  """
+  twoFactorEnrollmentDeadline: Time
+}
+
+extend type LoginResult {
+  """
+  True when the 2FA policy requires a second factor, the account has none
+  and the grace period is over: the session may only enroll a factor.
+  """
+  twoFactorEnrollmentRequired: Boolean!
+}
+
+extend type Query {
+  "The 2FA policy."
+  twoFactorPolicy: TwoFactorPolicy! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Starts the passkey check of a login waiting for its second factor and
+  returns the PublicKeyCredentialRequestOptions JSON. CONFLICT when the
+  session is not waiting for a second factor; FORBIDDEN when passkeys are
+  unavailable.
+  """
+  beginPasskeyLogin: JSON! @authenticated
+
+  """
+  Completes a login waiting for its second factor with a TOTP code
+  (`code`), a recovery code (`code`) or the browser's passkey response
+  (`assertion`, after beginPasskeyLogin). On success the session is
+  replaced by a fully signed-in one (new cookie, AAL 2, fresh step-up). A
+  wrong code or response answers VALIDATION and counts towards the
+  second-factor lockout (RATE_LIMITED while locked).
+  """
+  completeSecondFactor(method: SecondFactorKind!, code: String, assertion: JSON): LoginResult! @authenticated
+
+  """
+  Lists the step-up methods of your account and, when a passkey can be
+  used, starts its check.
+  """
+  beginStepUp: StepUpChallenge! @authenticated
+
+  """
+  Confirms your identity again (step-up, valid for
+  security.stepup_max_age): with a second factor when your account has one
+  (`code` for TOTP and recovery codes, `assertion` for a passkey after
+  beginStepUp), with your password (`password`) otherwise. A wrong
+  password counts towards the login lockout, a wrong code towards the
+  second-factor lockout.
+  """
+  completeStepUp(method: StepUpMethod!, code: String, password: String, assertion: JSON): StepUpResult! @authenticated
+
+  """
+  Changes the 2FA policy. Turning the requirement on for a role starts its
+  grace period now. Needs a fresh step-up; audited; weakening the policy
+  raises a security alert.
+  """
+  updateTwoFactorPolicy(input: TwoFactorPolicyInput!): TwoFactorPolicy! @hasRole(roles: [ADMIN]) @stepUp
+}
+# User administration (task 1.6; D-047, D-069, D-106, D-110). Admin only;
+# every change needs a fresh step-up and is audited. Role changes,
+# disabling, password resets and deletion revoke all sessions of the
+# account. The last active admin cannot be demoted, disabled or deleted
+# (CONFLICT). Accounts are soft deleted (audit entries reference them).
+
+extend type User {
+  "True when the account is disabled (it cannot sign in)."
+  disabled: Boolean!
+  "Set while new password logins are locked after failed attempts."
+  lockedUntil: Time
+  """
+  True while the account's password is a temporary one issued by an admin:
+  after signing in with it, only changePassword (and viewing the own
+  account) is allowed (PASSWORD_CHANGE_REQUIRED).
+  """
+  passwordChangeRequired: Boolean!
+  "When the temporary password stops working, if one is set."
+  temporaryPasswordExpiresAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+  "Set when the account was deleted (only visible to admins listing deleted accounts)."
+  deletedAt: Time
+}
+
+extend type LoginResult {
+  """
+  True when the user signed in with a temporary password and must change
+  it (changePassword) before doing anything else.
+  """
+  passwordChangeRequired: Boolean!
+}
+
+extend type Query {
+  """
+  Accounts ordered by e-mail address. `first` is 1..200 (default 50);
+  `after` is the `endCursor` of the previous page.
+  """
+  users(filter: UserFilter, first: Int, after: String): UserConnection! @hasRole(roles: [ADMIN])
+
+  "One account (also a deleted one); null when it does not exist."
+  user(id: UUID!): User @hasRole(roles: [ADMIN])
+
+  "The active sessions of an account, most recently used first."
+  userSessions(userId: UUID!): [Session!]! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Creates an account with a generated temporary password (returned once;
+  valid for 72 hours) that must be changed at the first login. Admins never
+  choose another user's password. A taken e-mail address answers CONFLICT.
+  """
+  createUser(input: CreateUserInput!): CreatedUser! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Changes the display name, role and/or disabled flag. A role change or
+  disabling revokes all sessions of the account.
+  """
+  updateUser(id: UUID!, input: UpdateUserInput!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Replaces the account's password with a generated temporary password
+  (returned once), clears the lockout and revokes all its sessions. Use
+  changePassword for your own account.
+  """
+  resetUserPassword(id: UUID!): TemporaryPassword! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Disables the account and revokes all its sessions."
+  disableUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Enables a disabled account."
+  enableUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Clears the login lockout of the account."
+  unlockUser(id: UUID!): User! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Deletes the account (soft delete: it is disabled, its password removed
+  and its sessions revoked; the record stays for the audit log and its
+  e-mail address can be reused). You cannot delete your own account.
+  """
+  deleteUser(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Revokes every session of the account; returns how many were active."
+  revokeUserSessions(userId: UUID!): Int! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Lost-factor recovery (task 1.9, D-112): removes every second factor of
+  the account (TOTP, passkeys, recovery codes), clears its second-factor
+  lockout and revokes all its sessions. When the 2FA policy requires a
+  factor for the account's role, a new enrollment grace period starts now.
+  Not allowed on your own account (FORBIDDEN).
+  """
+  resetUserSecondFactors(userId: UUID!): SecondFactorReset! @hasRole(roles: [ADMIN]) @stepUp
+}
+
+"The result of resetUserSecondFactors."
+type SecondFactorReset {
+  user: User!
+  "True when the account had TOTP enabled."
+  removedTotp: Boolean!
+  "The number of passkeys removed."
+  removedPasskeys: Int!
+  "The number of recovery codes removed (used or not)."
+  removedRecoveryCodes: Int!
+  "The number of sessions revoked."
+  revokedSessions: Int!
+}
+
+"Filters for users; unset fields do not filter."
+input UserFilter {
+  "Case-insensitive substring of the e-mail address or display name."
+  search: String
+  role: Role
+  disabled: Boolean
+  "Also list deleted accounts (default false)."
+  includeDeleted: Boolean
+}
+
+input CreateUserInput {
+  email: String!
+  displayName: String!
+  role: Role!
+}
+
+"Fields to change; unset fields stay unchanged."
+input UpdateUserInput {
+  displayName: String
+  role: Role
+  disabled: Boolean
+}
+
+"A page of accounts."
+type UserConnection {
+  edges: [UserEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserEdge {
+  cursor: String!
+  node: User!
+}
+
+"A newly created account and its one-time temporary password."
+type CreatedUser {
+  user: User!
+  temporaryPassword: TemporaryPassword!
+}
+
+"""
+A generated temporary password. Shown once: it is not stored in plain text
+and cannot be retrieved again. The user must change it at the first login.
+"""
+type TemporaryPassword {
+  password: String!
+  expiresAt: Time!
+}
+# WebAuthn passkeys as a second factor (task 1.8; D-095, D-109). The
+# assertion half (second step of the login, step-up) is exposed by task
+# 1.9. Passkeys need a secure context: with an http base_url on a host
+# other than localhost they are unavailable and enrollment is refused.
+
+"""
+A JSON value passed through unchanged: WebAuthn options returned to the
+browser and the browser's responses. Input must be a JSON object of at
+most 32 KiB.
+"""
+scalar JSON
+
+"Whether passkeys can be used with this server."
+type WebAuthnStatus {
+  "False when server.base_url is not a secure context (https or localhost) or uses an IP address."
+  webauthnAvailable: Boolean!
+  "Why passkeys are unavailable (null when available)."
+  reason: String
+  "The relying party ID (the base URL's host name; null when unavailable)."
+  rpId: String
+}
+
+"""
+One of your passkeys. The credential id and public key are never
+exposed.
+"""
+type Passkey {
+  id: UUID!
+  name: String!
+  createdAt: Time!
+  lastUsedAt: Time
+  "Transports reported by the authenticator (usb, nfc, ble, internal, hybrid)."
+  transports: [String!]!
+  "The authenticator model's AAGUID, if reported."
+  aaguid: UUID
+  "True for passkeys that can be synced or backed up (BE flag)."
+  backupEligible: Boolean!
+  "True when the passkey is currently backed up or synced (BS flag)."
+  backedUp: Boolean!
+  "True when the authenticator verified the user (PIN or biometrics)."
+  userVerified: Boolean!
+  """
+  When an assertion with a signature counter that went backwards was
+  refused: the passkey may have been cloned. Consider deleting it.
+  """
+  signCountAnomalyAt: Time
+}
+
+extend type Query {
+  "Whether passkeys can be used with this server, and why not."
+  webauthnStatus: WebAuthnStatus! @authenticated
+
+  "Your passkeys, oldest first."
+  myPasskeys: [Passkey!]! @authenticated
+}
+
+extend type Mutation {
+  """
+  Starts registering a passkey (needs a fresh step-up). Returns the
+  PublicKeyCredentialCreationOptions as JSON (`{"publicKey": {...}}`) for
+  `navigator.credentials.create()`. The challenge is bound to this
+  session and valid for 3 minutes. Fails with FORBIDDEN when passkeys are
+  unavailable and CONFLICT when you already have 20 passkeys.
+  """
+  beginPasskeyRegistration: JSON! @stepUp
+
+  """
+  Completes the registration with the browser's response
+  (`PublicKeyCredential.toJSON()`) and stores the passkey under `name`
+  (1-64 characters). Needs a fresh step-up. A response that does not
+  verify (or no pending registration) answers VALIDATION on `response`;
+  start again with beginPasskeyRegistration.
+  """
+  finishPasskeyRegistration(name: String!, response: JSON!): Passkey! @stepUp
+
+  "Renames one of your passkeys (needs a fresh step-up)."
+  renamePasskey(id: UUID!, name: String!): Passkey! @stepUp
+
+  """
+  Deletes one of your passkeys (needs a fresh step-up). The 2FA policy
+  may refuse to remove your last second factor (CONFLICT).
+  """
+  deletePasskey(id: UUID!): Boolean! @stepUp
+}

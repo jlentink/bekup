@@ -1,6 +1,11 @@
 ## bekup audit
 
-Verify the audit log hash chain (not implemented yet)
+Verify the audit log hash chain and sign its head
+
+### Synopsis
+
+Verify the tamper-evident audit log and manage signed chain heads.
+Details: docs/security/audit.md.
 
 ```
 bekup audit [flags]
@@ -23,4 +28,6 @@ bekup audit [flags]
 ### SEE ALSO
 
 * [bekup](bekup.md)	 - bekup: secure, self-hosted database backup manager
+* [bekup audit sign-head](bekup_audit_sign-head.md)	 - Sign the current audit chain head with the instance key and store it
+* [bekup audit verify](bekup_audit_verify.md)	 - Recompute the audit hash chain and check the signed chain head (non-zero exit on tampering)
 

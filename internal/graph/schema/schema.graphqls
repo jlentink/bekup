@@ -1,0 +1,64 @@
+# bekup GraphQL schema: shared scalars, directives and types (task 1.2).
+# Feature tasks add their own *.graphqls files next to this one and extend
+# Query/Mutation/Subscription with `extend type`.
+#
+# Access convention (D-105): every root field (Query/Mutation/Subscription)
+# carries @authenticated, @hasRole or @stepUp, or is listed in the public
+# allowlist in internal/graph/access.go, and every guarded root field maps to
+# an authz operation in graph.RootFieldOperations (D-106). Anything else is
+# denied at runtime and fails the policy test.
+
+"An RFC 3339 timestamp with time zone, e.g. `2026-10-26T12:00:00Z`."
+scalar Time
+
+"A UUID in its canonical textual form."
+scalar UUID
+
+"Roles of bekup users (D-011)."
+enum Role {
+  ADMIN
+  MAINTAINER
+  USER
+}
+
+"""
+The field requires an authenticated session. Implied by @hasRole and
+@stepUp.
+"""
+directive @authenticated on FIELD_DEFINITION
+
+"The field requires an authenticated session with one of the given roles."
+directive @hasRole(roles: [Role!]!) on FIELD_DEFINITION
+
+"""
+The field requires a fresh step-up within security.stepup_max_age
+(completeStepUp: a second factor for accounts with one, the password
+otherwise).
+"""
+directive @stepUp on FIELD_DEFINITION
+
+"Relay-style pagination info of a connection."
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+type Query {
+  "Public, non-secret facts about this server (needed before login)."
+  serverInfo: ServerInfo!
+}
+
+"Public information about the running server. Never contains secrets."
+type ServerInfo {
+  "The bekup version."
+  version: String!
+  """
+  True when server.base_url is not https: traffic, sessions and credentials
+  are not encrypted (D-095). The UI shows a permanent warning banner.
+  """
+  insecureTransport: Boolean!
+  "True when dev mode is on (never in production)."
+  devMode: Boolean!
+}

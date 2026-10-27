@@ -1,7 +1,9 @@
 package certs
 
 import (
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -20,7 +22,8 @@ import (
 // Identity scheme (D-089): clients are identified by exactly one URI SAN of
 // the form spiffe://bekup/<component>; the runner's server certificate
 // carries DNS SANs (default "runner", the compose service name) and is
-// verified by host name. Client certificates carry no DNS/IP SANs and only
+// verified by host name. The app DB's Postgres server certificate carries
+// DNS SANs (default "postgres") as well (D-100). Client certificates carry no DNS/IP SANs and only
 // the clientAuth EKU; the server certificate only the serverAuth EKU.
 const (
 	// TrustDomain is the host part of every client identity URI.
@@ -32,9 +35,14 @@ const (
 	ComponentServe = "serve"
 	// ComponentWorker is `bekup worker` (gRPC client).
 	ComponentWorker = "worker"
+	// ComponentPostgres is the app DB's Postgres server (TLS server, D-100).
+	ComponentPostgres = "postgres"
 
 	// DefaultRunnerDNSName is always present in the runner certificate.
 	DefaultRunnerDNSName = "runner"
+	// DefaultPostgresDNSName is always present in the postgres certificate
+	// (the compose service name).
+	DefaultPostgresDNSName = "postgres"
 
 	// DefaultCAValidity and DefaultLeafValidity are the default lifetimes.
 	DefaultCAValidity   = 5 * 365 * 24 * time.Hour
@@ -51,11 +59,26 @@ const (
 
 // Components returns the known component names in a stable order.
 func Components() []string {
-	return []string{ComponentRunner, ComponentServe, ComponentWorker}
+	return []string{ComponentRunner, ComponentServe, ComponentWorker, ComponentPostgres}
 }
 
 // IsServer reports whether the component gets a server certificate.
-func IsServer(component string) bool { return component == ComponentRunner }
+func IsServer(component string) bool {
+	return component == ComponentRunner || component == ComponentPostgres
+}
+
+// DefaultDNSName returns the DNS SAN that is always present in a server
+// component's certificate ("" for client components).
+func DefaultDNSName(component string) string {
+	switch component {
+	case ComponentRunner:
+		return DefaultRunnerDNSName
+	case ComponentPostgres:
+		return DefaultPostgresDNSName
+	default:
+		return ""
+	}
+}
 
 // ValidComponent reports whether name is a known component.
 func ValidComponent(name string) bool { return slices.Contains(Components(), name) }
@@ -103,14 +126,15 @@ type CA struct {
 type CAOptions struct {
 	// Validity of the CA certificate (default DefaultCAValidity).
 	Validity time.Duration
-	// ServerNames are the DNS names and IP addresses that the runner
-	// certificate may carry. They become the CA's name constraints.
+	// ServerNames are the DNS names and IP addresses that the server
+	// certificates (runner, postgres) may carry. They become the CA's name
+	// constraints.
 	ServerNames []string
 	// Now overrides the clock (tests).
 	Now func() time.Time
 }
 
-// NewCA creates a self-signed ed25519 CA with path length 0 and name
+// NewCA creates a self-signed ed25519 CA with path length 1 and name
 // constraints: DNS names and IPs limited to ServerNames and URIs limited to
 // the bekup trust domain.
 func NewCA(opts CAOptions) (*CA, error) {
@@ -148,26 +172,16 @@ func NewCA(opts CAOptions) (*CA, error) {
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		MaxPathLen:            0,
-		MaxPathLenZero:        true,
+		// Path length 1: room for the one-time postgres issuer (D-104).
+		// The runner mTLS configs still only accept leaves issued
+		// directly by the root (requireDirectChain).
+		MaxPathLen: 1,
 
 		PermittedDNSDomainsCritical: true,
 		PermittedDNSDomains:         dns,
 		PermittedURIDomains:         []string{TrustDomain},
 	}
-	if len(ips) == 0 {
-		tmpl.ExcludedIPRanges = []*net.IPNet{
-			{IP: net.IPv4zero.To4(), Mask: net.CIDRMask(0, 32)},
-			{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
-		}
-	}
-	for _, ip := range ips {
-		bits := 128
-		if ip.To4() != nil {
-			ip, bits = ip.To4(), 32
-		}
-		tmpl.PermittedIPRanges = append(tmpl.PermittedIPRanges, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
-	}
+	setIPConstraints(tmpl, ips)
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pub, priv)
 	if err != nil {
 		return nil, fmt.Errorf("creating CA certificate: %w", err)
@@ -194,8 +208,8 @@ type LeafOptions struct {
 	// Validity of the leaf (default DefaultLeafValidity); capped at the CA's
 	// NotAfter.
 	Validity time.Duration
-	// ServerNames are the runner's DNS names / IPs (server certs only;
-	// DefaultRunnerDNSName is always included).
+	// ServerNames are the server's extra DNS names / IPs (server certs
+	// only; DefaultDNSName of the component is always included).
 	ServerNames []string
 	// Now overrides the clock (tests).
 	Now func() time.Time
@@ -242,7 +256,7 @@ func (ca *CA) Issue(component string, opts LeafOptions) (*Leaf, error) {
 		IsCA:                  false,
 	}
 	if IsServer(component) {
-		names := append([]string{DefaultRunnerDNSName}, opts.ServerNames...)
+		names := append([]string{DefaultDNSName(component)}, opts.ServerNames...)
 		dns, ips, err := splitNames(names)
 		if err != nil {
 			return nil, err
@@ -256,6 +270,9 @@ func (ca *CA) Issue(component string, opts LeafOptions) (*Leaf, error) {
 		}
 		tmpl.URIs = []*url.URL{u}
 		tmpl.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	}
+	if component == ComponentPostgres {
+		return ca.issuePostgres(tmpl)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -272,8 +289,8 @@ func (ca *CA) Issue(component string, opts LeafOptions) (*Leaf, error) {
 	}
 	// Self-check: the leaf must verify against its CA, including the name
 	// constraints (a server name outside them fails here, not at runtime).
-	if err := verifyLeaf(cert, ca.Cert); err != nil {
-		return nil, fmt.Errorf("issued %s certificate does not verify: %w", component, err)
+	if err := ca.checkIssued(component, cert, nil); err != nil {
+		return nil, err
 	}
 	keyPEM, err := encodeKey(priv)
 	if err != nil {
@@ -282,13 +299,148 @@ func (ca *CA) Issue(component string, opts LeafOptions) (*Leaf, error) {
 	return &Leaf{Cert: cert, CertPEM: encodeCert(der), KeyPEM: keyPEM}, nil
 }
 
-func verifyLeaf(leaf, ca *x509.Certificate) error {
+// issuePostgres issues the app DB's server certificate (D-104). PostgreSQL
+// and its clients use SCRAM channel binding (tls-server-end-point, RFC
+// 5929), whose hash comes from the leaf's signatureAlgorithm, i.e. from the
+// issuer's key type; RFC 5929 defines none for Ed25519. The leaf is
+// therefore an ECDSA P-256 key signed with ecdsa-with-SHA256 by a one-time
+// ECDSA P-256 issuer: an intermediate CA signed by the Ed25519 root,
+// pathlen 0, serverAuth only, name-constrained to exactly the leaf's names
+// and valid exactly as long as the leaf. The issuer key is discarded right
+// after signing (it never leaves this function's memory; Go offers no
+// supported way to wipe an *ecdsa.PrivateKey, unlike the ed25519 byte
+// slices cleared elsewhere), so there is no intermediate key to store or
+// protect;
+// rotating the postgres certificate always creates a new issuer. CertPEM is
+// the chain leaf + issuer (what PostgreSQL serves); clients trust only the
+// root.
+func (ca *CA) issuePostgres(tmpl *x509.Certificate) (*Leaf, error) {
+	const component = ComponentPostgres
+	issuerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generating %s issuer key: %w", component, err)
+	}
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, err
+	}
+	issuerTmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			Organization: []string{"bekup"},
+			CommonName:   "bekup postgres issuer " + hex.EncodeToString(serial.Bytes()[:4]),
+		},
+		NotBefore:             tmpl.NotBefore,
+		NotAfter:              tmpl.NotAfter,
+		KeyUsage:              x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
+
+		PermittedDNSDomainsCritical: true,
+		PermittedDNSDomains:         tmpl.DNSNames,
+		// No URI SANs at all below this issuer (client identities are URIs).
+		PermittedURIDomains: []string{"invalid"},
+	}
+	setIPConstraints(issuerTmpl, tmpl.IPAddresses)
+	issuerDER, err := x509.CreateCertificate(rand.Reader, issuerTmpl, ca.Cert, &issuerKey.PublicKey, ca.Key)
+	if err != nil {
+		return nil, fmt.Errorf("creating %s issuer certificate: %w", component, err)
+	}
+	issuer, err := x509.ParseCertificate(issuerDER)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s issuer certificate: %w", component, err)
+	}
+
+	leafKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("generating %s key: %w", component, err)
+	}
+	tmpl.SignatureAlgorithm = x509.ECDSAWithSHA256
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, issuer, &leafKey.PublicKey, issuerKey)
+	if err != nil {
+		return nil, fmt.Errorf("creating %s certificate: %w", component, err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s certificate: %w", component, err)
+	}
+	if cert.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+		return nil, fmt.Errorf("%s certificate has signature algorithm %v, want ECDSA-SHA256", component, cert.SignatureAlgorithm)
+	}
+	if err := ca.checkIssued(component, cert, issuer); err != nil {
+		return nil, err
+	}
+	keyPEM, err := encodeKey(leafKey)
+	if err != nil {
+		return nil, err
+	}
+	return &Leaf{Cert: cert, CertPEM: slices.Concat(encodeCert(der), encodeCert(issuerDER)), KeyPEM: keyPEM}, nil
+}
+
+// checkIssued verifies a freshly issued leaf (with an optional
+// intermediate) against the CA and turns constraint failures into
+// actionable errors.
+func (ca *CA) checkIssued(component string, cert, intermediate *x509.Certificate) error {
+	err := verifyLeaf(cert, intermediate, ca.Cert)
+	if err == nil {
+		return nil
+	}
+	var cie x509.CertificateInvalidError
+	if errors.As(err, &cie) {
+		switch cie.Reason {
+		case x509.CANotAuthorizedForThisName:
+			return fmt.Errorf("the CA's name constraints (%s) do not permit the %s names %s: "+
+				"stage a new CA that includes them (bekup certs rotate --ca stage, then promote and finish; see docs/security/mtls-certs.md): %w",
+				strings.Join(ca.ServerNames(), ", "), component, strings.Join(certNames(cert), ", "), err)
+		case x509.TooManyIntermediates:
+			return fmt.Errorf("the CA (path length 0) cannot sign the %s issuer: it predates the postgres component; "+
+				"stage a new CA (bekup certs rotate --ca stage, then promote and finish; see docs/security/app-db-tls.md): %w", component, err)
+		default:
+		}
+	}
+	return fmt.Errorf("issued %s certificate does not verify: %w", component, err)
+}
+
+// setIPConstraints permits exactly ips, or excludes every IP when empty.
+func setIPConstraints(tmpl *x509.Certificate, ips []net.IP) {
+	if len(ips) == 0 {
+		tmpl.ExcludedIPRanges = []*net.IPNet{
+			{IP: net.IPv4zero.To4(), Mask: net.CIDRMask(0, 32)},
+			{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
+		}
+	}
+	for _, ip := range ips {
+		bits := 128
+		if ip.To4() != nil {
+			ip, bits = ip.To4(), 32
+		}
+		tmpl.PermittedIPRanges = append(tmpl.PermittedIPRanges, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+	}
+}
+
+func certNames(c *x509.Certificate) []string {
+	names := slices.Clone(c.DNSNames)
+	for _, ip := range c.IPAddresses {
+		names = append(names, ip.String())
+	}
+	return names
+}
+
+func verifyLeaf(leaf, intermediate, ca *x509.Certificate) error {
 	roots := x509.NewCertPool()
 	roots.AddCert(ca)
+	inter := x509.NewCertPool()
+	if intermediate != nil {
+		inter.AddCert(intermediate)
+	}
 	_, err := leaf.Verify(x509.VerifyOptions{
-		Roots:       roots,
-		CurrentTime: leaf.NotBefore.Add(clockSkew),
-		KeyUsages:   leaf.ExtKeyUsage,
+		Roots:         roots,
+		Intermediates: inter,
+		CurrentTime:   leaf.NotBefore.Add(clockSkew),
+		KeyUsages:     leaf.ExtKeyUsage,
 	})
 	return err
 }
@@ -355,7 +507,7 @@ func encodeCert(der []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func encodeKey(priv ed25519.PrivateKey) ([]byte, error) {
+func encodeKey(priv any) ([]byte, error) {
 	der, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
 		return nil, fmt.Errorf("encoding private key: %w", err)

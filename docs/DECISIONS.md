@@ -106,7 +106,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-078](#d-078-separate-migrate-service-serve-never-holds-owner-credentials) | Separate migrate service; serve never holds owner credentials | accepted |
 | [D-079](#d-079-mtls-certificate-distribution-in-compose) | mTLS certificate distribution in compose | accepted |
 | [D-080](#d-080-bekup-healthcheck-subcommand-for-distroless-healthchecks) | `bekup healthcheck` subcommand for distroless healthchecks | accepted |
-| [D-081](#d-081-development-compose-stack) | Development compose stack | accepted |
+| [D-081](#d-081-development-compose-stack) | Development compose stack | accepted (default dev workflow superseded by D-114) |
 | [D-082](#d-082-csp-for-the-web-ui-style-src-self-without-nonce) | CSP for the web UI: style-src 'self' without nonce | accepted |
 | [D-083](#d-083-visual-direction-and-design-system-vault-ledger) | Visual direction and design system (Vault Ledger) | accepted |
 | [D-084](#d-084-web-toolchain-pins-and-pnpm-supply-chain-settings) | Web toolchain pins and pnpm supply-chain settings | accepted |
@@ -126,6 +126,25 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-098](#d-098-wildcard-listeners-refused-target-allowlist-overlap-checks-extended-log-redaction-m0-review) | Wildcard listeners refused, target allowlist overlap checks, extended log redaction (M0 review) | accepted |
 | [D-099](#d-099-db-role-checks-on-every-migrate-run-and-at-serve-startup-faithful-00001-down) | DB role checks on every migrate run and at serve startup; faithful 00001 down | accepted |
 | [D-100](#d-100-tls-for-the-app-database-connection-configurable-verified-by-default) | TLS for the app database connection: configurable, verified by default | accepted |
+| [D-101](#d-101-audit-api-fail-closed-policy-signed-chain-heads-and-instance_keys-task-13) | Audit API fail-closed policy, signed chain heads and `instance_keys` (task 1.3) | accepted |
+| [D-102](#d-102-http-layer-details-middleware-trusted-proxies-origin-policy-rate-limits-health-and-schema-checks-task-11) | HTTP layer details: middleware, trusted proxies, Origin policy, rate limits, health and schema checks (task 1.1) | accepted |
+| [D-103](#d-103-app-db-tls-details-url-handling-require--ca-channel-binding-postgres-certificate-and-wrapper-task-10) | App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0) | proposed (item 3 superseded by D-104) |
+| [D-104](#d-104-app-db-tls-ecdsa-postgres-issuer-and-required-scram-channel-binding) | App DB TLS: ECDSA postgres issuer and required SCRAM channel binding | accepted |
+| [D-105](#d-105-graphql-server-details-transport-limits-access-convention-error-codes-task-12) | GraphQL server details: transport, limits, access convention, error codes (task 1.2) | accepted |
+| [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted |
+| [D-107](#d-107-passwords-sessions-lockout-and-the-login-api-task-15) | Passwords, sessions, lockout and the login API (task 1.5) | proposed ("Login = step-up" superseded by D-112; lockout counting superseded by D-117) |
+| [D-108](#d-108-websocket-subscription-transport-session-watcher-and-session-event-bus-task-110) | WebSocket subscription transport, session watcher and session event bus (task 1.10) | proposed (re-validation details superseded by D-118) |
+| [D-109](#d-109-webauthn-passkeys-as-a-second-factor-task-18) | WebAuthn passkeys as a second factor (task 1.8) | proposed (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116) |
+| [D-110](#d-110-first-run-setup-code-user-administration-and-break-glass-cli-task-16) | First-run setup code, user administration and break-glass CLI (task 1.6) | proposed (setup-code part superseded by D-113) |
+| [D-111](#d-111-totp-recovery-codes-and-second-factor-failures-task-17) | TOTP, recovery codes and second-factor failures (task 1.7) | proposed (last-factor error code superseded by D-112) |
+| [D-112](#d-112-2fa-policy-two-step-login-forced-enrollment-and-step-up-task-19) | 2FA policy, two-step login, forced enrollment and step-up (task 1.9) | accepted |
+| [D-113](#d-113-first-admin-created-via-cli-only-web-setup-flow-removed) | First admin created via CLI only; web setup flow removed | accepted (migration 00011 detail superseded by D-118) |
+| [D-114](#d-114-just-dev-runs-infra-only-postgres-mailpit-adminer-app-runs-natively) | `just dev` runs infra only (postgres, mailpit, adminer); app runs natively | accepted |
+| [D-115](#d-115-compose-one-shot-admin-service-and-bekup_keys_dir-task-111) | Compose: one-shot `admin` service and `BEKUP_KEYS_DIR` (task 1.11) | accepted |
+| [D-116](#d-116-passkey-aal2-requires-user-verification) | Passkey AAL2 requires user verification | accepted |
+| [D-117](#d-117-credential-verification-hardening-single-root-operations-limiters-atomic-lockouts) | Credential-verification hardening: single-root operations, limiters, atomic lockouts | accepted |
+| [D-118](#d-118-m1-review-fixes-websocket-principal-rebuild-shutdown-posture-audits-and-smaller-items) | M1 review fixes: WebSocket principal rebuild, shutdown, posture audits and smaller items | accepted |
+| [D-119](#d-119-key-check-values-stored-per-key-id-and-verified-at-startup) | Key-check values stored per key ID and verified at startup | accepted |
 
 ---
 
@@ -1623,7 +1642,9 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-081: Development compose stack
 
 - **Date:** 2026-10-26
-- **Status:** accepted (2026-10-26, user accepted all M0 proposals)
+- **Status:** accepted (2026-10-26, user accepted all M0 proposals); partly
+  superseded by D-114 (the full stack is no longer the default `just dev`;
+  it is the `full` profile)
 - **Decided by:** agent with user approval (task 0.7)
 - **Context:** The dev override needs sample targets, destinations, an SSH
   bastion and hot reload without weakening the production baseline.
@@ -2392,3 +2413,1605 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   visible and alerted.
 - **Related:** task 1.0; D-001, D-054, D-089, D-092, D-095.
 
+## D-101: Audit API fail-closed policy, signed chain heads and `instance_keys` (task 1.3)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (task 1.3)
+- **Context:** D-054/D-092 fix the chain format and D-087 the signing keys,
+  but not the write API semantics, the redaction of details, the signed-head
+  format and storage, the `instance_keys` schema or what `audit verify`
+  treats as tampering.
+- **Decision:**
+  - **Fail closed:** `audit.Auditor.Record`/`RecordTx` return an error
+    wrapping `ErrRecordFailed` whenever the entry is not stored, and callers
+    must fail the audited operation. `RecordTx` writes inside the caller's
+    transaction so the action and its entry commit or roll back together.
+  - **Action catalog:** actions are typed constants (`internal/audit/actions.go`);
+    unknown actions are rejected. Adding an action means adding a constant.
+  - **Details redaction:** details are normalized through JSON, every value
+    under a key matching `logging.IsSecretKey` becomes `[REDACTED]`, every
+    string is scrubbed with `logging.RedactCredentials` and the secret
+    registry (`logging.DefaultRegistry` by default), NUL becomes U+FFFD,
+    nesting is capped at 16 levels and the result at 64 KiB (an error, not
+    truncation). Target type/id are scrubbed and length-checked as well.
+  - **instance_keys:** `id` (16 hex, CHECKed to equal the D-087 ID of
+    `public_key`), `public_key` (32 bytes, unique), `sealed_private_key`
+    (keyring-sealed seed, AAD `instance_keys:<id>:private`), `created_at`,
+    `retired_at`. A unique partial index allows one active key, so
+    concurrent creators converge. `bekup_app` may INSERT/SELECT and UPDATE
+    only `retired_at`; no DELETE (old public keys must stay). The key is
+    created lazily on the first head signature and that creation is audited
+    (`keys.instance_key.created`). Package `internal/instancekeys`;
+    rotation and re-sealing are left to later tasks.
+  - **Signed heads:** `audit_chain_heads` (id, chain_id, chain_hash,
+    signed_at, key_id → instance_keys, signature), append-only for
+    `bekup_app`. The signed message is the text
+    `bekup-audit-head-v1\nchain_id=<n>\nchain_hash=<hex>\nsigned_at=<unix µs>\n`
+    under D-087 purpose `audit-head`. The export format is JSON with the
+    same fields plus the public key (hex). `HeadExporter` is the hook for
+    destinations/webhooks (tasks 3.x/5.x); `NopExporter` and an atomic
+    `FileExporter` ship now. `HeadSigner.Run` signs periodically when the
+    chain tip moved; export failures are logged and audited
+    (`audit.head_export.failed`) but the stored head is kept.
+  - **Verification:** `bekup audit verify` streams in batches of 500 rows,
+    checks each row's hash, then its link; the first row must start from
+    the 32-zero genesis hash. Id gaps alone are **not** tampering (rolled-back
+    inserts consume ids); a deleted row is reported as a `link_mismatch` at
+    the following id. The newest stored head and an optional `--head-file`
+    are checked: valid signature, key id matching the key, the signed row
+    still present with the signed hash. For a file head, the embedded public
+    key must also equal the stored key with that id. Any failure exits
+    non-zero; the absence of a stored head is a warning only.
+- **Alternatives considered:** best-effort (fail open) auditing (rejected:
+  an attacker who can break audit writes could act unrecorded); hashing
+  details client-side (rejected: D-092 keeps the hash in the database);
+  a binary length-prefixed head message (rejected: the text form is just as
+  unambiguous for numeric/hex fields and easier for third-party verifiers);
+  treating id gaps as tampering (rejected: false positives on every
+  rollback).
+- **Consequences:** An audit-log outage blocks audited operations. A DB
+  superuser rewrite is detected only against heads exported before it;
+  rows after the last exported head can be lost undetected (SECURITY.md
+  §8). The first head signature needs the master keyring.
+- **Related:** task 1.3; D-038, D-054, D-069, D-075, D-087, D-092;
+  `internal/audit`, `internal/instancekeys`,
+  `internal/db/migrations/00005_audit_signing.sql`, `cmd/bekup/audit_cmd.go`,
+  `docs/security/audit.md`.
+
+## D-102: HTTP layer details: middleware, trusted proxies, Origin policy, rate limits, health and schema checks (task 1.1)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (task 1.1)
+- **Context:** D-048, D-050, D-078, D-080, D-082, D-095 and D-099 set the
+  goals for `bekup serve`'s HTTP layer and startup checks but leave the
+  mechanics open: how forwarded headers are evaluated, how Origin checks
+  treat requests without an Origin, the rate-limit algorithm and bounds,
+  timeouts, caching, what the health endpoints check, and how serve reads
+  the schema version without access to `goose_db_version`.
+- **Decision:**
+  - **Middleware order** (`internal/httpserver`, documented in its package
+    comment): request ID → client IP → access log → panic recovery →
+    security headers → rate limit → Origin check → body limit → router.
+  - **Request IDs** are 128-bit `crypto/rand` hex values generated for every
+    request (`X-Request-ID` response header); a client-supplied ID is
+    ignored.
+  - **Trusted proxies:** forwarding headers count only when the TCP peer is
+    in `server.trusted_proxies`. `X-Forwarded-For` is walked from the right;
+    trusted hops are skipped and the first untrusted address is the client;
+    an unparsable entry stops the walk at the last trusted hop.
+    `X-Forwarded-Proto` (http/https only) is informational. `X-Forwarded-Host`
+    is never used. All forwarding headers (`X-Forwarded-*`, `Forwarded`,
+    `X-Real-IP`, ...) are deleted from the request afterwards so no later
+    code can read spoofed values. HSTS and every link depend on
+    `server.base_url` only.
+  - **Origin policy** for every method except GET/HEAD/OPTIONS and for every
+    WebSocket upgrade: a present `Sec-Fetch-Site` must be `same-origin`; a
+    present `Origin` must equal the `base_url` origin exactly (scheme, host,
+    port; default port omitted), plus `http://localhost:5173` and
+    `http://127.0.0.1:5173` in dev mode only; a request with neither header
+    is refused. All refusals are 403.
+  - **Rate limit:** in-memory token bucket per client IP (IPv6 grouped per
+    /64) over all routes, including static files and health endpoints; new
+    keys `server.rate_limit_per_second` (default 20), `rate_limit_burst`
+    (100) and `rate_limit_max_clients` (10000, least recently seen evicted).
+    Over the limit: 429 with `Retry-After` in whole seconds. Per-user limits
+    follow with sessions (task 1.5).
+  - **Limits and timeouts:** `server.max_body_bytes` applies to every route
+    (Content-Length checked up front, then `http.MaxBytesReader`; 413). New
+    keys `read_timeout` (30s), `write_timeout` (60s), `idle_timeout` (120s)
+    and `max_header_bytes` (32 KiB). Long-lived routes (WebSockets, task
+    1.10; downloads, task 3.9) must lift the write deadline per request with
+    `http.ResponseController`.
+  - **Headers:** exactly the D-082 CSP on every response; `nosniff`,
+    `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, COOP and CORP
+    `same-origin`, `Permissions-Policy` disabling accelerometer, camera,
+    display-capture, geolocation, gyroscope, magnetometer, microphone, midi,
+    payment and usb (WebAuthn keeps its `'self'` default). HSTS
+    `max-age=63072000; includeSubDomains` only when `base_url` is https; the
+    `preload` token stays a proxy-level choice. `Cache-Control: no-store` is
+    the default for every response; content-hashed files under `/assets/`
+    get `public, max-age=31536000, immutable`, all other UI files `no-cache`
+    with an ETag.
+  - **Access log:** method, path, status, bytes, duration, client IP and
+    request ID. The query string is never logged; paths under
+    `/api/download/`, `/api/downloads/`, `/setup/`, `/verify-email/` and
+    `/reset-password/` are logged as the prefix only; paths are capped at
+    256 characters. Panics are logged with the stack; the client gets a
+    generic 500.
+  - **SPA fallback:** index.html only for GET/HEAD requests that accept
+    `text/html` and are not under `/api`, `/graphql`, `/healthz`, `/readyz`
+    or `/assets/`. `/graphql` and `/api` are 404 placeholders until their
+    tasks mount handlers.
+  - **Health:** `/healthz` is liveness without I/O; `/readyz` pings the DB
+    and re-checks the schema version (3s timeout) and returns only
+    "ok"/"not ready", logging the reason. **`bekup healthcheck serve` probes
+    `/healthz`, not `/readyz` as D-080 stated:** the container healthcheck
+    then reports whether the process serves HTTP, without DB load every 30s
+    and without flapping on a DB blip; `/readyz` stays available to
+    monitoring. The probe derives the address from `server.listen` (wildcard
+    hosts → loopback), ignores `HTTP(S)_PROXY`, follows no redirects and
+    times out after 3s. If accepted, D-080's status should note this.
+  - **Schema version:** migration 00006 adds `public.bekup_schema_version()`
+    (`SECURITY DEFINER`, owner `bekup_owner`, `search_path = pg_catalog,
+    pg_temp`, returns the highest applied goose version), with EXECUTE
+    revoked from PUBLIC and granted to `bekup_app` only. `serve` refuses to
+    start when the database is behind the newest embedded migration ("run
+    `bekup migrate up`") or ahead of it ("newer bekup migrated this
+    database; downgrades are not supported"). A database without the
+    function counts as version 0 (behind).
+  - **Startup order and composition:** `internal/app.New` opens the
+    `bekup_app` pool, runs `db.CheckAppRole` and the schema check, then
+    binds `server.listen`; only then does `Run` start the components
+    (`Component` interface, errgroup). The first failing component or
+    SIGINT/SIGTERM stops all of them; the HTTP server drains within
+    `server.shutdown_timeout` and then closes remaining connections.
+    GraphQL (1.2), River workers (3.4) and the scheduler (3.3) plug in there.
+  - **Audit chain-head signing in serve:** `serve` loads the master keyring
+    at startup and refuses to start without it (fail closed); when an active
+    instance key exists it must open with that keyring (a wrong keyring is a
+    startup error, not a silent signing failure later). The D-101
+    `HeadSigner` runs as a component every `security.audit_head_sign_interval`
+    (new key, default 1h, 1m to 24h) with the no-op exporter until exporters
+    are configurable.
+- **Alternatives considered:** allowing state-changing requests without an
+  Origin header (rejected: no legitimate non-browser client exists yet, and
+  refusing is the safe default); trusting the leftmost X-Forwarded-For entry
+  (rejected: client-controlled); `golang.org/x/time/rate` per IP (equivalent;
+  a 60-line bucket with explicit LRU bounds avoids a dependency); probing
+  `/readyz` in the container healthcheck (see above); letting `serve` run
+  with a newer schema (rejected: old code against a newer schema can
+  misbehave silently).
+- **Consequences:** CSRF via cross-site POSTs and WebSocket hijacking is
+  blocked at the HTTP layer before any handler runs; spoofed forwarding
+  headers from anyone but the configured proxy have no effect on rate
+  limits or logs. Clients behind one NAT IPv4 address or one IPv6 /64 share
+  a bucket; the defaults leave room for normal use. Operators must run
+  `bekup migrate` before starting a new `serve` version; during a rolling
+  upgrade older instances report not ready once the schema moves ahead.
+- **Related:** task 1.1; D-048, D-050, D-078, D-080, D-082, D-095, D-098,
+  D-099; `internal/httpserver`, `internal/app`, `internal/db/schemaversion.go`,
+  `internal/db/migrations/00006_schema_version_function.sql`,
+  `cmd/bekup/serve_cmd.go`, `cmd/bekup/healthcheck_cmd.go`,
+  `docs/architecture.md`, `docs/operations.md`.
+
+## D-103: App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals); item 3
+  (channel binding), the key type in item 4 and the Unix-socket rule in item 1
+  superseded by D-104
+- **Decided by:** agent with user approval (task 1.0)
+- **Context:** D-100 fixes the modes and the compose setup but leaves
+  several implementation choices open.
+- **Decision:**
+  1. **Config wins over the URL.** `database.url_file` / `owner_url_file`
+     must be `postgres://` / `postgresql://` URLs (keyword/value DSNs are
+     rejected as invalid). pgx's own TLS settings (from `sslmode`, PG*
+     environment variables) are always replaced by the configured policy,
+     including for fallback hosts; pgx's plaintext fallback of
+     `sslmode=prefer/allow` is dropped. A URL `sslmode` weaker than
+     `tls_mode` is ignored; a **stricter** one is an error (ambiguous
+     intent). `sslrootcert`, `sslcert`, `sslkey`, `sslpassword`,
+     `sslcertmode`, `sslcrl`, `sslcrldir` in the URL are rejected. Unix
+     socket hosts never use TLS.
+  2. **`require` with `tls_ca_file` verifies the chain** (libpq
+     `verify-ca` behaviour) but not the host name; without a CA it only
+     encrypts. Both log distinct startup warnings. `tls_ca_file` defaults to
+     `/run/secrets/bekup_db_ca.crt` and is required for `verify-full` in
+     every mode, dev included (there is no system-roots fallback).
+  3. *(Superseded by D-104: channel binding is now required with an ECDSA
+     postgres certificate.)* **SCRAM channel binding is off unless the URL sets
+     `channel_binding`.** The private CA is ed25519 (D-089); RFC 5929 defines
+     no `tls-server-end-point` hash for ed25519 signatures, so neither pgx
+     nor libpq can compute the binding, and PostgreSQL (which advertises
+     SCRAM-SHA-256-PLUS on every TLS connection) rejects the downgrade
+     signal pgx would send. With `verify-full` the server is authenticated
+     by its certificate. Operators of an external Postgres with RSA/ECDSA
+     certificates can set `channel_binding=require` in the URL.
+  4. **postgres certificate.** New server component `postgres` (DNS
+     `postgres` + `--postgres-san`), ed25519, serverAuth, from the same CA.
+     Every new CA's name constraints include `runner` and `postgres` (plus
+     extra names), even when the postgres component is not issued. `certs
+     rotate --ca stage` without SAN flags keeps the current constraints and
+     adds `postgres`, which is the upgrade path for older CAs; issuing a name
+     outside the constraints fails with a hint to stage a CA rotation.
+     `postgres/ca.crt` (the bundle, both CAs during a rotation) is what
+     serve/migrate mount as `tls_ca_file`.
+  5. **Server side.** `deploy/postgres/entrypoint.sh` copies cert/key/CA
+     from `/run/secrets` into a 0700 tmpfs (`/var/lib/postgresql/tls`)
+     owned by UID 70 with mode 0600 and appends `ssl=on`,
+     `ssl_min_protocol_version=TLSv1.2`, `ssl_cert_file`, `ssl_key_file`,
+     `ssl_ca_file`; missing files are fatal. The init script prepends
+     `hostnossl all bekup_owner,bekup_app all reject` below the superuser
+     block (new volumes; existing volumes: manual step in upgrades.md).
+     Compose does not set `BEKUP_DATABASE_TLS_MODE`; `verify-full` is the
+     default, so `bekup.toml` stays the single place to change it.
+  6. `PoolOptions.TLS` / `NewMigrator(..., TLSOptions, ...)` are mandatory:
+     the zero value is rejected, so no code path can connect without an
+     explicit policy. `PoolOptionsFromConfig` now takes the whole config and
+     returns an error (it reads the TLS files).
+- **Alternatives considered:** keyword/value DSN support (more parsing
+  surface for no benefit); erroring on any URL `sslmode` (breaks every
+  existing URL file for no security gain); an ECDSA CA or a second CA for
+  postgres to keep channel binding (more PKI to operate; certificate
+  verification already prevents MITM); fixing `pg_hba.conf` of existing
+  volumes automatically in the wrapper (silent config rewrites).
+- **Consequences:** a compromised container on `backend` can neither read
+  nor tamper with app-DB traffic in the default setup. Without channel
+  binding, `require` without a CA is open to an active MITM; it is warned.
+  Upgrading needs a CA rotation for CAs from before this release.
+- **Related:** task 1.0; D-089, D-090, D-095, D-099, D-100.
+
+## D-104: App DB TLS: ECDSA postgres issuer and required SCRAM channel binding
+
+- **Date:** 2026-10-26
+- **Status:** accepted
+- **Decided by:** user (ECDSA postgres certificate + required channel
+  binding), implementation details by agent (task 1.0)
+- **Context:** D-103 item 3 turned SCRAM channel binding off because the
+  Ed25519 PKI (D-089) has no RFC 5929 `tls-server-end-point` hash. The user
+  chose to keep the binding and change the postgres certificate instead.
+- **Decision:**
+  1. The binding hash comes from the leaf's *signatureAlgorithm*, i.e. from
+     the issuer's key, so an ECDSA leaf signed by the Ed25519 root would
+     still fail. `bekup certs` therefore issues the postgres certificate as
+     an **ECDSA P-256 leaf signed with ecdsa-with-SHA256 by a one-time ECDSA
+     P-256 issuer**: an intermediate CA signed by the Ed25519 root,
+     `pathlen 0`, EKU serverAuth only, name-constrained to exactly the
+     leaf's DNS names/IPs (all IPs excluded when none, no URI SANs), valid
+     exactly as long as the leaf. The issuer key is generated, used once and
+     dropped (never written anywhere), so there is no intermediate key to
+     protect, and rotating the postgres certificate (`certs rotate
+     --component postgres`, CA promote) always creates a new issuer. This
+     is simpler and safer than a stored intermediate key or a second root.
+  2. `postgres/postgres.crt` holds the chain leaf + issuer (served by
+     PostgreSQL); clients still trust only the Ed25519 root
+     (`postgres/ca.crt`). The rest of the PKI stays Ed25519.
+  3. New CAs have **path length 1** (was 0) to allow the issuer. Runner mTLS
+     keeps D-089's direct-issuance rule explicitly: both runner TLS configs
+     reject any verified chain longer than leaf + root. CAs with path length 0
+     cannot issue the postgres certificate; `certs rotate --ca stage`
+     creates a path-length-1 CA (upgrade path, with D-103 item 4).
+  4. bekup's pool and migrator connections set pgx `channel_binding =
+     require` whenever TLS is on (verify-full, require). A URL
+     `channel_binding` other than `require` is an error (the config wins,
+     like `sslmode`); `channel_binding=require` with `tls_mode = disable` is
+     an error; TLS modes refuse Unix-socket hosts (use `disable` there).
+     Manual `psql` sessions work with libpq's defaults.
+- **Alternatives considered:** keep binding off (D-103 item 3; rejected by
+  the user); ECDSA leaf directly under the Ed25519 root (does not work, see
+  1); a persistent ECDSA intermediate with a stored key (more key material
+  to protect and rotate); a separate ECDSA root for postgres (second trust
+  anchor and offline key); switching the whole PKI to ECDSA.
+- **Consequences:** the SCRAM exchange is bound to the certificate the
+  client saw, so even `tls_mode = require` without a CA cannot be relayed by
+  an active MITM who lacks the password, and a stolen session cannot be
+  moved to another TLS channel. The root's path length grows by one; the
+  root key stays offline and the runner refuses intermediate chains.
+  Existing CAs need a CA rotation before the postgres certificate can be
+  issued.
+- **Related:** task 1.0; D-089, D-090, D-100, D-103.
+
+## D-105: GraphQL server details: transport, limits, access convention, error codes (task 1.2)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (task 1.2)
+- **Context:** D-050 fixes the goals for the GraphQL endpoint (POST + JSON
+  only, depth/complexity/size limits, masked errors, introspection only for
+  authenticated users) and D-095 needs a `serverInfo.insecureTransport`
+  field and a startup audit entry. Mechanics, defaults and the conventions
+  that tasks 1.4, 1.5, 1.9 and 1.10 build on were open.
+- **Decision:**
+  - **Layout:** gqlgen pinned as a `go tool` dependency; schema-first in
+    `internal/graph/schema/*.graphqls`, generated code in
+    `internal/graph/generated` and `internal/graph/model/models_gen.go`,
+    resolvers in `internal/graph/resolvers` (follow-schema layout),
+    `gqlgen.yml` at the root; `just gen` runs gqlgen, then graphql-codegen
+    against the same schema (the web placeholder schema is gone). `Time`
+    (RFC 3339) and `UUID` (canonical form only; google/uuid) are custom
+    scalars whose bad input is a `VALIDATION` error; both are strings in
+    the web client.
+  - **Transport:** a wrapper in front of gqlgen accepts only `POST` (405
+    with `Allow: POST`) with exactly one `Content-Type: application/json`
+    (optional `charset=utf-8`; anything else 415), reads at most
+    `graphql.max_body_bytes` (new key, default 256 KiB, at most
+    `server.max_body_bytes`; 413) and requires exactly one JSON object with
+    only `query`, `operationName`, `variables`, `extensions` and a non-empty
+    query (400 with a generic message: gqlgen's own decode error echoes the
+    body). Only gqlgen's POST transport is registered; no GET, multipart,
+    form, SSE or APQ. `/graphql/*` is 404. The WebSocket transport is added
+    in task 1.10 in `graph.New`.
+  - **Limits:** `graphql.max_depth` (default 12; field nesting, fragments
+    expanded with memoization; introspection meta fields not counted),
+    `graphql.max_complexity` (default 1000; gqlgen `FixedComplexityLimit`,
+    1 per field), a parser token limit of 10 000 and an LRU query cache of
+    1000 documents. Limit violations are protocol errors (HTTP 422) with
+    codes `QUERY_TOO_DEEP` / `COMPLEXITY_LIMIT_EXCEEDED`.
+  - **Introspection:** allowed in dev mode or when the hook
+    `Access.IntrospectionAllowed(ctx)` returns true (task 1.5: authenticated
+    sessions); otherwise an operation selecting `__schema`/`__type` fails
+    as a whole with `INTROSPECTION_DISABLED` (gqlgen's flag stays set as a
+    backstop); `__typename` always works. Field suggestions ("Did you mean")
+    are disabled outside dev mode because they leak the schema.
+  - **Access convention (deny by default):** directives
+    `@authenticated`, `@hasRole(roles: [Role!]!)` and `@stepUp` on
+    `FIELD_DEFINITION`, `enum Role { ADMIN MAINTAINER USER }`. Every root
+    field carries one of them or is listed in `graph.PublicRootFields`
+    (today only `Query.serverInfo`). `graph.New` (hence `serve`) refuses to
+    start when a root field is unmapped, a public field also carries a
+    directive, or an allowlist entry is stale; a root-field middleware also
+    denies unmapped fields at runtime (`FORBIDDEN`). Directives delegate to
+    the `graph.Access` interface; until task 1.5 it is `DenyAll`, which
+    denies every directive with `UNAUTHENTICATED`. Nested fields inherit
+    their root field's access; ownership checks happen in resolvers via
+    `internal/authz` (1.4). `@hasRole([])` always denies.
+  - **Errors:** user-facing errors are `apierror.Error` with
+    `extensions.code` in `UNAUTHENTICATED`, `FORBIDDEN`, `STEP_UP_REQUIRED`,
+    `REQUIRES_2FA_ENROLLMENT`, `VALIDATION` (+ `extensions.field`),
+    `NOT_FOUND`, `RATE_LIMITED`, `CONFLICT`. Protocol errors (parse,
+    validation, limits) pass unchanged. Everything else, including panics
+    and gqlgen runtime errors during field execution, becomes
+    `"internal error"` with code `INTERNAL` and `extensions.requestId` (the
+    response's `X-Request-ID`); the real error (and a panic's stack) is
+    logged with the same request ID. Transport rejections use
+    `BAD_REQUEST`. Resolvers never build `gqlerror` values themselves.
+  - **D-095 audit:** at every `serve` startup outside dev mode with a non-https
+    `base_url`, the new catalog action `system.insecure_transport_started`
+    (actor `system`, target `server`, details `base_url`,
+    `allow_insecure_http`) is recorded before listening; if it cannot be
+    recorded, `serve` refuses to start (fail closed, D-101). The admin
+    alert is task 5.5.
+  - **Web banner:** `Query.serverInfo { version insecureTransport devMode }`
+    is public; the app shell and the login page show a permanent,
+    non-dismissable red banner "Connection is not encrypted (no HTTPS)"
+    when `insecureTransport` is true or the page itself is not https (so it
+    also shows when the API is unreachable).
+- **Alternatives considered:** gqlgen's own Content-Type check only (lets
+  its decode errors echo the body and turns oversize bodies into 200
+  errors); counting introspection in the depth limit (blocks standard
+  introspection queries for authenticated tooling); enforcing access only
+  through directives (a forgotten directive would expose the field);
+  logging-only for the insecure start (D-095 requires an audit entry).
+- **Consequences:** no CSRF-able GraphQL transport; bounded parse and
+  execution cost per request; no schema leakage to anonymous callers
+  through introspection or suggestions; internal errors never reach the
+  client but stay traceable through the request ID. Every new root field
+  must declare its access or `serve` will not start. A database outage at
+  startup with plain HTTP outside dev mode prevents `serve` from starting
+  (it would not start without the DB anyway).
+- **Related:** task 1.2; D-011, D-050, D-082, D-095, D-101, D-102; tasks
+  1.4, 1.5, 1.9, 1.10, 5.5.
+
+## D-106: Authorization model: operation catalog, policy matrix and owner scope (task 1.4)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (task 1.4)
+- **Context:** D-011 to D-015, D-047, D-053, D-057 and D-067 fix who may do
+  what in broad terms. The plan leaves open how the policy is expressed,
+  the exact rule for operations the decisions do not name (run cancel,
+  owner assignment, personal channels, connection tests by maintainers,
+  ...), how the GraphQL layer is tied to the policy and the order of the
+  checks.
+- **Decision:**
+  - **Typed catalog:** `authz.Operation` constants (`internal/authz/operations.go`)
+    cover every Phase 1 operation; each has exactly one `Rule` (roles,
+    owner grant, freshness, restore-target requirement). Unknown operations
+    are denied, even for admins. `Policy.Authorize(ctx, op, resources...)`
+    checks authentication → role/ownership → restore target → freshness
+    and returns UNAUTHENTICATED / FORBIDDEN / STEP_UP_REQUIRED /
+    REQUIRES_2FA_ENROLLMENT; failing ownership/factor lookups are internal
+    errors (masked, still a denial). Denial messages are generic.
+  - **Principal:** `auth.Principal{UserID, Role, SessionID, AAL, StepUpAt,
+    AAL2At}` in the request context (task 1.5 attaches it); an incomplete
+    principal counts as anonymous. A step-up/AAL2 timestamp more than 5 s
+    in the future is not fresh. FreshAAL2 also requires `AAL >= 2`.
+  - **Owner grant:** applies to role `user` only (admins need none;
+    maintainers never gain anything from `job_owners`, D-067). `OwnerJob`
+    requires at least one `authz.Job` resource and ownership of every one
+    (resolvers pass the job loaded from the DB for runs/artifacts/restores);
+    `OwnerList` allows the call and the resolver filters by
+    `Policy.JobScope`. Object facts come from the `Ownership` interface
+    (`IsJobOwner`, `BacksUpDatabase`, `UsesConnection`; DB-backed in task
+    3.5) and enrolled factors from `SecondFactors` (tasks 1.7/1.8); until
+    then `NoOwnership`/`NoSecondFactors` deny.
+  - **Restore targets:** `OpRestoreArtifact` needs exactly one
+    `RestoreTarget`. Temporary connections and connections with a
+    privileged restore role are admin only (D-015, D-068); an owner may
+    overwrite only a database one of their jobs backs up or create a new
+    database on a connection one of their jobs uses (D-013). Same-engine
+    and type-to-confirm checks stay in task 4.5. Restores and the globals
+    restore need a passkey/TOTP check within the step-up window
+    (REQUIRES_2FA_ENROLLMENT without a factor, D-057).
+  - **Rules not spelled out by earlier decisions (most restrictive
+    sensible choice):** owners may view, run now, download and restore
+    their jobs but **not cancel runs** (not in D-011); job owner assignment
+    needs **step-up** (it grants data access) and a maintainer may not add
+    themselves (`AuthorizeOwnerAssignment`, D-067); maintainers may test
+    connections/destinations, list databases and pre-pull images (needed
+    to build jobs) but not fetch/confirm certificate pins or host keys;
+    maintainers may manage job encryption keys (step-up) but opt-outs and
+    passphrase export are admin only; adding personal notification
+    channels and changing one's own password or second factors need
+    step-up; revoking other users' sessions needs step-up; security alerts,
+    the audit log, chain status, key fingerprints, shared channels, SMTP,
+    SSRF allowlist and settings are admin only; maintainers may read a
+    minimal user directory for the owner picker.
+  - **Step-up window:** `security.stepup_max_age` (≤5 min), clamped to
+    5 min in the policy as well; the same window bounds the AAL2 check.
+  - **GraphQL binding:** `graph.RootFieldOperations` maps every guarded
+    root field to an operation. `graph.New` refuses to start when a guarded
+    field is unmapped, a mapping is stale or unknown, a public field is
+    mapped, or a field's `@hasRole` names a role the operation's rule never
+    allows. The root-field middleware runs `Access.CheckOperation`
+    (`Policy.Precheck`: authentication, role eligibility, freshness when
+    the role alone grants) before the directives and the resolver.
+    `graph.PolicyAccess` implements the directives (@authenticated,
+    @hasRole, @stepUp) and allows introspection to any authenticated
+    principal; it replaces `DenyAll` in `serve`.
+  - **Matrix:** `internal/authz/matrix_test.go` lists the expected outcome
+    of every operation for admin, maintainer, maintainer-owner, owner,
+    non-owner and anonymous plus the freshness, written independently of
+    the policy table; the test parses `operations.go` and fails when a
+    constant lacks a rule or a row. `graph` tests fail when a root field is
+    neither public nor mapped.
+  - **auditLog:** `Query.auditLog(filter, first, after)` is
+    `@hasRole(roles: [ADMIN])` → `audit.log_view`, over `Auditor.List`:
+    opaque base64url cursors (`audit:<id>`), `first` 1..200 (default 50),
+    filters validated against the column limits, details as a JSON string,
+    hash as hex.
+- **Alternatives considered:** directives only (a missing or too-lax
+  directive would expose a field; the precheck and the startup cross-check
+  catch it); a YAML/TOML matrix fixture (Go keeps the matrix type-checked
+  against the constants); implicit admin bypass in code (an explicit admin
+  entry per rule plus the matrix invariant keeps the table auditable);
+  letting owners cancel their runs (not granted by D-011; can be added).
+- **Consequences:** Every new operation needs a constant, a rule, a matrix
+  row and, for GraphQL, a root-field mapping, or tests/`serve` fail. Until
+  task 1.5 attaches principals, every guarded field answers
+  UNAUTHENTICATED. Owner access depends on the correctness of the task 3.5
+  ownership queries, which the matrix exercises only through the fake.
+- **Related:** task 1.4; D-011, D-012, D-013, D-014, D-015, D-047, D-053,
+  D-057, D-067, D-068, D-101, D-105; tasks 1.5, 1.9, 2.11, 3.5, 3.9, 4.5,
+  5.3; `internal/auth/principal.go`, `internal/authz`,
+  `internal/graph/policy_access.go`, `internal/graph/schema/audit.graphqls`.
+
+## D-107: Passwords, sessions, lockout and the login API (task 1.5)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) ("Login = step-up" superseded by D-112; lockout counting superseded by D-117)
+- **Decided by:** agent with user approval (task 1.5)
+- **Context:** D-010, D-047, D-050, D-095 and D-102 fix the goals for
+  authentication (argon2id with rehash, ≥12-character policy with a
+  strength check and a common-password list, a `__Host-` cookie with the
+  token stored as sha256, AAL and step-up, rotation, idle and absolute
+  expiry, revoke-all on password change, lockout with backoff, generic and
+  timing-safe errors, per-user rate limits). The mechanics, the libraries,
+  the bounds, the cookie lifetime, how a login relates to step-up and how
+  failures are audited were open.
+- **Decision:**
+  - **Hashing:** `golang.org/x/crypto/argon2` (argon2id), PHC string
+    `$argon2id$v=19$m=…,t=…,p=…$salt$hash` (unpadded standard base64),
+    16-byte salt, 32-byte key. Stored hashes are parsed strictly (field
+    order, no leading zeros, m ≤ 4 GiB, t ≤ 64, salt 8–64 and key 16–64
+    bytes) so a planted hash cannot make a verification arbitrarily
+    expensive. A successful login with other parameters or sizes rehashes
+    (conditional update; skipped, not failed, when the semaphore is full).
+    `security.argon2_iterations` gets an upper bound of 64 and
+    `argon2_max_concurrent` 1–64. The semaphore waits at most 2 s with at
+    most 4 × the bound waiting; beyond that `RATE_LIMITED`. Inputs above
+    4096 bytes are never hashed in full; in verification they are hashed
+    truncated and then rejected, so timing does not depend on the account.
+  - **Policy:** 12 (`password_min_length`, now at most 128) to 1024
+    characters (Unicode code points), no control characters or invalid
+    UTF-8; the **SecLists xato-net top-100k list** (MIT, embedded verbatim,
+    attributed in NOTICE) checked case-insensitively (only entries that
+    could pass the length check are loaded); the e-mail address, its local
+    part and the words of the display name (≥ 3 characters) must not occur
+    in the password; strength via **`github.com/ccojocar/zxcvbn-go`** (MIT,
+    the maintained fork of the zxcvbn port used by gosec) on the first 100
+    characters with the account strings as user inputs, minimum score 3
+    (new key `security.password_min_score`, 3 or 4). zxcvbn adds
+    dictionary, keyboard-pattern, sequence, repeat, date and l33t
+    detection that a hand-written entropy estimate would miss.
+  - **Sessions:** 32 random bytes from `crypto/rand`, unpadded base64url in
+    the cookie; `sessions.token_hash` = sha256 of the raw bytes. Cookie
+    `__Host-bekup_session` with `Secure; HttpOnly; SameSite=Strict;
+    Path=/`, no `Domain` and **no Expires/Max-Age** (a browser-session
+    cookie; the server enforces expiry) for an https `base_url`;
+    `bekup_session` without `Secure` only for a plain-http one (D-095); the
+    other name is ignored. Idle expiry slides and is written at most every
+    `security.session_touch_interval` (new key, default 1m, 10s–10m and
+    below the idle timeout) together with last-seen IP and User-Agent
+    (control characters dropped, 256 characters); it never passes the
+    absolute expiry. The lookup query itself filters revoked and expired
+    sessions; disabled users get no principal and the cookie is cleared.
+    A lockout only blocks new password logins: sessions established before
+    it stay valid (they were authenticated before the guessing started),
+    so failing logins with someone's e-mail cannot log them out.
+  - **Rotation:** a login always creates a new session and revokes the one
+    the browser presented. `Sessions.RotateTx` and
+    `ElevateAAL(ctx, sessionID, AAL2)` (task 1.9) issue a new token,
+    revoke the old row and keep the absolute expiry, so rotation never
+    extends a session. A password change revokes all sessions of the user
+    and issues the caller a new one with the same AAL, step-up time and
+    absolute expiry. Role changes and disabling (task 1.6) revoke all
+    sessions of the target user (`RevokeAllTx`); the role is read from
+    `users` on every request anyway.
+  - **Login = step-up:** a successful login sets `stepup_at` (a login is a
+    fresh authentication), so `changePassword`, whose operation requires
+    step-up (D-106), works for `security.stepup_max_age` after a login and
+    additionally requires the current password. Task 1.9 may make AAL2
+    users complete the second factor before `stepup_at` is set.
+  - **Middleware** (`internal/httpserver`, `/graphql` and `/api` only, after
+    the D-102 chain): no cookie → anonymous without a lookup; more than one
+    session cookie → anonymous and cleared; `auth.ErrNoSession` →
+    anonymous and cleared; any other lookup error → 503 (never anonymous by
+    accident). Authenticated requests pass a **per-user token bucket**
+    (new keys `server.user_rate_limit_per_second` 20 and
+    `user_rate_limit_burst` 100). The limiter of D-102 is generalized
+    (`httpserver.RateLimiter[K]`) and reused.
+  - **Login protection:** a stricter per-IP login limiter (new keys
+    `security.login_rate_limit_per_minute` 10 and `login_rate_limit_burst`
+    5; every `login` field of a document counts). Lockout per account:
+    new keys `security.lockout_threshold` (5, 3–20),
+    `lockout_base_duration` (1m, 10s–1h) and `lockout_max_duration` (1h, up
+    to 24h): from the threshold on, the lock lasts base × 2^(failures −
+    threshold), capped. While locked, the password is not checked (dummy
+    verification instead), the attempt is refused generically and does not
+    extend the lock; a success resets the counter. A wrong current
+    password in `changePassword` counts too. A `LockoutNotifier` hook is
+    called after commit (task 5.5).
+  - **Generic, timing-safe failures:** every login failure answers
+    `UNAUTHENTICATED` "invalid email or password"; a dummy argon2id
+    verification (a hash of a random password with the current
+    parameters) runs for unknown, disabled, locked and password-less
+    accounts and invalid input; tests count dummy verifications instead of
+    measuring time.
+  - **Audit:** success (`auth.login.succeeded`, actor = user) in the
+    session's transaction; failures (`auth.login.failed`) with actor kind
+    `system` (the caller is not authenticated; `audit_log` has no anonymous
+    kind), target = the account if known, details `{reason, failed_count}`
+    with reason in `unknown_user`, `bad_password`, `disabled`, `locked`,
+    `no_password`, `invalid_input` — never the password and never the
+    e-mail of an unknown account (users type passwords into that field);
+    `auth.lockout`, `auth.logout`, `session.revoked`,
+    `auth.password.changed` (with the number of revoked sessions) and the
+    new `auth.password.change_failed`, each in the transaction of the
+    change it records. Rate-limited attempts are logged, not audited
+    (they would let anyone flood the audit chain).
+  - **GraphQL:** `login(email, password): LoginResult { user
+    secondFactorRequired availableFactors }` (public, `PublicRootFields`),
+    `logout`, `revokeSession(id)`, `changePassword(currentPassword,
+    newPassword)` (`@stepUp`), `me`, `mySessions` mapped to the existing
+    `account.*` operations. Policy violations are `VALIDATION` on
+    `newPassword`, a wrong current password `VALIDATION` on
+    `currentPassword`, a foreign or unknown session `NOT_FOUND`.
+  - **Housekeeping:** `serve` deletes sessions expired or revoked more than
+    7 days ago, hourly.
+  - **Tests:** `HasherOptions.WeakForTests` allows cheap argon2 parameters,
+    honored only when `testing.Testing()` is true.
+- **Alternatives considered:** `github.com/trustelem/zxcvbn` (older, less
+  maintained) or a home-made entropy estimate (misses dictionary and
+  keyboard patterns); the full 100k list in memory (≈ 100k strings; only
+  ~500 entries can ever match a ≥ 12-character password); persistent
+  cookies with Expires = absolute expiry (survive browser restarts for no
+  benefit); failing a request when the session touch fails (a DB hiccup
+  would log users out; the idle window is only shortened); counting
+  attempts while locked (lets an attacker extend a lock indefinitely);
+  suspending the sessions of locked users (turns the lockout into a cheap
+  targeted logout of anyone whose e-mail is known); auditing rate-limited
+  attempts.
+- **Consequences:** Account takeover by guessing is bounded by the per-IP
+  limiter and the per-account backoff. Anyone who knows an e-mail address
+  can keep new password logins of that account temporarily blocked from
+  many IPs (existing sessions keep working); locks are capped, cannot be
+  extended by attempts while locked, are audited and reported to the
+  notifier hook (alert in 5.5), and `bekup admin` can unlock (1.6). Over plain HTTP the session cookie is
+  not `Secure` (D-095). A login grants step-up for up to 5 minutes.
+  Sessions survive a browser restart only if the browser restores session
+  cookies.
+- **Related:** task 1.5; D-010, D-047, D-050, D-073, D-095, D-101, D-102,
+  D-105, D-106; tasks 1.6, 1.9, 1.10, 5.5; `internal/auth`,
+  `internal/httpserver/session.go`, `internal/httpserver/ratelimit.go`,
+  `internal/graph/schema/auth.graphqls`, `internal/graph/resolvers/auth.go`,
+  `internal/app/auth.go`, `internal/db/queries/{users,sessions}.sql`,
+  `NOTICE`.
+
+## D-108: WebSocket subscription transport, session watcher and session event bus (task 1.10)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (re-validation details superseded by D-118)
+- **Decided by:** agent with user approval (task 1.10)
+- **Context:** D-052 fixes the goals for subscriptions (cookie auth on the
+  upgrade, periodic and per-event session re-validation, authz at delivery
+  time, close on logout/revoke/role change, NOTIFY with IDs only) and D-050
+  the Origin check of the upgrade. The protocol, the limits, the close
+  codes, how revocations reach open sockets (in one instance and across
+  instances), which operations may use the socket and how CSP treats it
+  were open.
+- **Decision:**
+  - **Protocol:** only `graphql-transport-ws` (the graphql-ws library) on
+    `GET /graphql` with an upgrade; the legacy `subscriptions-transport-ws`
+    (`graphql-ws` subprotocol) and upgrades without a subprotocol get 400.
+    gqlgen's transport runs on github.com/coder/websocket with compression
+    disabled. Non-upgrade GETs stay 405 and a POST carrying an `Upgrade`
+    header gets 400 (gqlgen would route it to the WebSocket transport).
+  - **Admission (in this order):** the HTTP Origin middleware (D-102), then
+    the GraphQL handler again requires an `Origin` header equal to an
+    allowed origin (`base_url`, plus the Vite origins in dev mode; the
+    library re-checks against their hosts), the subprotocol, a principal
+    resolved by the session middleware **from the cookie** (401 otherwise)
+    and a free slot: `server.max_ws_connections_per_user` (default 5, 1 to
+    100; 429) and the new `graphql.ws_max_connections` (default 1000 per
+    instance; 503). `connection_init` must come within
+    `graphql.ws_init_timeout` (10s) and must not carry a payload: a
+    non-empty payload closes the socket with 4400 instead of being
+    interpreted, so credentials can never come from the socket. Server
+    pings every `graphql.ws_ping_interval` (25s; no pong within twice the
+    interval drops the peer); client messages are capped at
+    `graphql.ws_max_message_bytes` (64 KiB; 1009 above); the server's read
+    and write deadlines are lifted for the socket only.
+  - **Operations:** only subscriptions over the socket (queries and
+    mutations there would bypass the per-user HTTP rate limit and could
+    not set or clear the session cookie: FORBIDDEN), and subscriptions only
+    over the socket (POST would hold a request open: FORBIDDEN). gqlgen
+    does not run root-field middleware for subscriptions, so an operation
+    context check applies the same deny-by-default gate (directive +
+    `RootFieldOperations` + `Access.CheckOperation`). Per connection at
+    most `graphql.ws_max_subscriptions_per_connection` (20) active
+    subscriptions and a subscribe-rate bucket (5/s, burst 20); excess
+    subscribe messages fail with RATE_LIMITED.
+  - **Session watcher (`internal/graph/wsconn`):** every connection keeps
+    the principal of the upgrade and re-checks its session by id
+    (`Sessions.Check`, which never touches the session: an open socket is
+    not user activity, so the idle expiry keeps running) every
+    `graphql.ws_revalidate_interval` (30s), on every session event of its
+    session or user (plus follow-ups after 0.2s, 1s and 3s, because a local
+    event can precede the commit of the revoking transaction), after lost
+    events (bus overflow, LISTEN reconnect; spread over up to 5s) and
+    before delivering an event when the last good check is older than
+    `graphql.ws_session_check_ttl` (5s; a cheap cached check). Close codes:
+    **4401** session ended (logout, revoked, expired, user disabled),
+    **4403** user, role or AAL differs from the upgrade, **4001** session
+    rotated (closed on the event itself; the browser holds the new cookie
+    and reconnects), **1013** the check failed (fail closed; retryable),
+    **1001** server shutdown (hijacked sockets are not covered by
+    `http.Server.Shutdown`, so the hub closes them).
+  - **Session event bus:** `auth.Sessions` publishes `revoked`, `rotated`
+    and `user_revoked` events inside the transaction of `RevokeTx`,
+    `RevokeAllTx`, `RotateTx`/`ElevateAAL` and the login that replaces a
+    browser's session (`SessionOptions.Events`). A publish failure fails
+    the transaction (a revocation never commits without its event). The
+    reusable `internal/pubsub` delivers them: `Publisher.PublishTx` calls
+    `pg_notify` in the transaction (delivered to every instance on commit,
+    dropped on rollback) and publishes on the in-process `Bus` at once; a
+    `Listener` on a dedicated connection (`db.NewConnector`, same TLS and
+    redaction as the pool) LISTENs on `bekup_session_events` with
+    exponential backoff and jitter (0.5s to 30s) and signals a resync after
+    every (re)connect. Payloads are `kind:user_id:session_id`, validated to
+    identifier characters and at most 256 bytes; receivers treat them as
+    hints and re-check the database. Channel names and their LISTEN
+    statements are fixed sqlc queries (no SQL built from strings). Tasks
+    3.7 and 5.3b add their channels to the same catalog.
+  - **Delivery-time authz:** subscription resolvers send through
+    `wsconn.Deliver` with `wsconn.Authorize(policy, op, resources)`: before
+    each event the session check above, then `Policy.Authorize` with the
+    connection's principal and the resources loaded by ID; failing events
+    are dropped silently. Demo field: `Subscription.sessionEvents` (own
+    sessions revoked/rotated/all revoked, `account.sessions_view`, no new
+    operation).
+  - **Web client:** Apollo's `GraphQLWsLink` without `connectionParams`;
+    4401/4403 navigate to `/login` and stop retrying, 4400 stops retrying,
+    everything else retries.
+  - **CSP:** D-082 is unchanged. CSP Level 3 lets `connect-src 'self'`
+    match `ws:`/`wss:` on the page's own host; `pnpm csp-check` now proves
+    in Chrome that a same-origin WebSocket opens without a violation and a
+    cross-origin one is blocked (Firefox and Safari were not run; current
+    versions document the same CSP3 rule). Old browsers with CSP 2
+    semantics (`'self'` without ws/wss, notably older Safari releases)
+    would block subscriptions; adding `ws:`/`wss:` scheme sources would
+    allow any host and is rejected.
+- **Alternatives considered:** authenticating with a token in the
+  `connection_init` payload (needs a script-readable credential; rejected
+  by D-047/D-052); keeping the legacy protocol (unmaintained, no
+  ping/pong); queries and mutations over the socket (bypass the cookie and
+  rate-limit handling); in-process events only (other instances would rely
+  on the 30s fallback) or NOTIFY only (closure would depend on the LISTEN
+  connection even with one instance); an after-commit hook in `db.Tx`
+  (touches every transaction; the follow-up checks cover the gap);
+  touching the session on re-checks (an idle tab would never time out);
+  continuing on check errors (fail open).
+- **Consequences:** A revoked, expired or downgraded session loses its
+  socket within milliseconds in the common case, at the latest after
+  `ws_revalidate_interval`, and receives no event after its access is gone
+  (at most `ws_session_check_ttl` of cached validity before an event).
+  A database outage closes all sockets with 1013 (clients retry and get
+  503 until it is back). An open socket does not keep a session alive.
+  Each instance holds one more database connection for LISTEN. Anyone who
+  can NOTIFY on the app database can only trigger re-checks, not grant
+  access.
+- **Related:** task 1.10; D-047, D-050, D-052, D-082, D-102, D-105, D-106,
+  D-107; tasks 3.7, 5.3b, 6.x; `internal/pubsub`, `internal/graph/ws.go`,
+  `internal/graph/wsconn`, `internal/graph/schema/subscriptions.graphqls`,
+  `internal/auth/session_events.go`, `internal/db/queries/{pubsub,session_watch}.sql`,
+  `internal/db/listen.go`, `internal/httpserver/websocket.go`,
+  `internal/app/subscriptions.go`, `web/src/lib/apollo.ts`,
+  `web/scripts/csp-check.mjs`.
+
+## D-109: WebAuthn passkeys as a second factor (task 1.8)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116)
+- **Decided by:** agent with user approval (task 1.8)
+- **Context:** D-010 makes passkeys (WebAuthn) and TOTP the second factors;
+  the plan fixes `go-webauthn/webauthn`, "RP ID from base_url", step-up for
+  2FA changes and, per D-095, that passkeys need a secure context. Open
+  were the relying-party derivation, the ceremony parameters, where the
+  challenge lives, the user handle, sign-counter handling, limits, how
+  other code learns about enrolled factors and the API shape.
+- **Decision:**
+  - **Library:** `github.com/go-webauthn/webauthn` v0.18.2 (pinned in
+    go.mod). It checks challenge, origin, RP ID hash, user presence,
+    signature, user handle, the allowed-credential list, backup-flag
+    consistency and the server-side ceremony expiry.
+  - **Relying party** (`passkey.RelyingPartyFor`): RP ID = the host name of
+    `server.base_url` (lowercase, no port); the only accepted origin is the
+    base URL's origin, plus `http://localhost:5173` (Vite) in dev mode when
+    the RP ID is `localhost`. Cross-origin (iframe) use is off. Passkeys are
+    **unavailable** when the base URL is `http` on a host other than
+    `localhost`/`*.localhost` (no secure context, D-095) or when the host is
+    an IP address (not a valid RP ID). `webauthnStatus` reports
+    `webauthnAvailable: false` with the reason; every ceremony then fails
+    (FORBIDDEN); listing and deleting keep working. `serve` logs a WARN line
+    at startup.
+  - **Ceremony parameters:** attestation `"none"` (no attestation
+    verification against metadata, no AAGUID allowlist), `residentKey:
+    "preferred"`, **`userVerification: "preferred"`** for registration and
+    assertion (the passkey is the possession factor next to the password;
+    PIN-less security keys stay usable; the UV flag is stored per passkey
+    and recorded in the assertion audit entry so a later policy can require
+    it), `excludeCredentials` = the user's passkeys, timeout **3 minutes**,
+    also enforced server-side.
+  - **Challenge storage:** the library's `SessionData` (challenge, RP ID,
+    user handle, allowed credentials, UV requirement, expiry) is stored in
+    the new table `webauthn_ceremonies`, bound to the **session id** and the
+    user, one pending ceremony per session and kind (a new begin replaces
+    the old one), `expires_at` = begin + 3 minutes. The finish step deletes
+    the row first in its own statement (**single use**, also when the
+    verification then fails), so a challenge cannot be replayed, used from
+    another session or for another user, or after expiry. Expired rows are
+    purged on every begin and cascade with their session.
+  - **User handle:** the user's UUID (16 random bytes from
+    `gen_random_uuid()`), no personal data. `user.name` = e-mail,
+    `user.displayName` = display name (or e-mail).
+  - **Storage** (`webauthn_credentials`, migration 00008): credential id
+    (unique across users, 16-1023 bytes), COSE public key, attestation type
+    and format, AAGUID, sign count, transports, attachment, UP/UV/BE/BS
+    flags, name (1-64 characters, no control characters), `created_at`,
+    `last_used_at`, `sign_count_anomaly_at`. At most **20 passkeys** per
+    user (checked under a `users` row lock). Browser responses are limited
+    to 32 KiB of JSON.
+  - **Sign counter:** an assertion whose counter is not greater than the
+    stored one is **refused** (`ErrSignCountRegression`) unless both are 0
+    (authenticators without a counter, e.g. synced passkeys). The refusal
+    sets `sign_count_anomaly_at` (shown in `myPasskeys`), is audited
+    (`auth.passkey.sign_count_anomaly` with both counters), logged at WARN
+    and reported to the `passkey.Notifier` hook (security alert, task 5.5).
+    The stored counter is not changed, so the genuine authenticator keeps
+    working; the passkey is not disabled automatically (that would turn a
+    stale clone into a lockout of the real user). Counter updates are
+    conditional (`sign_count < new`), so two concurrent assertions with the
+    same counter cannot both succeed.
+  - **Step-up:** `beginPasskeyRegistration`, `finishPasskeyRegistration`,
+    `renamePasskey` and `deletePasskey` carry `@stepUp` and map to
+    `account.second_factor_edit` (FreshStepUp); the service checks the
+    step-up again. `webauthnStatus` and `myPasskeys` map to `account.view`
+    (own account data; no new operation was needed).
+  - **Assertion API for task 1.9:** `Service.BeginAssertion(ctx, sessionID,
+    userID)` and `FinishAssertion(ctx, sessionID, userID, responseJSON)`;
+    the session id is explicit (instead of only the user id) because the
+    challenge is bound to the session. `FinishAssertion` does not elevate
+    the session; 1.9 calls `Sessions.ElevateAAL` and decides about failure
+    counting.
+  - **Factor registry:** `internal/auth/factors.go`: each factor service
+    implements `auth.FactorChecker` (Kind, HasFactor) and registers with
+    `auth.SecondFactors`, which implements `authz.SecondFactors` (so
+    `REQUIRES_2FA_ENROLLMENT` sees passkeys and TOTP) and lists enrolled
+    kinds. `auth.FactorRemovalGuard` (default `AllowFactorRemoval`) is the
+    last-factor hook for 1.9's policy: it gets the factor kinds the user
+    would keep and can refuse with `auth.ErrLastFactor`.
+  - **Audit:** `auth.passkey.registration_begun`,
+    `auth.passkey.registration_failed` (reason), `auth.mfa.enrolled` /
+    `auth.mfa.removed` with `factor: "passkey"`, `auth.passkey.renamed`,
+    `auth.passkey.assertion_succeeded`, `auth.passkey.assertion_failed`
+    (reason: `no_ceremony`, `invalid_response`, `verification_failed`,
+    `unknown_passkey`), `auth.passkey.sign_count_anomaly`. Library error
+    details are logged at INFO, never returned to the client. Assertion
+    begins are not audited (no state change).
+  - **GraphQL:** `scalar JSON` (an object in, raw JSON out; inputs at most
+    32 KiB); options are returned as `{"publicKey": {...}}` for
+    `PublicKeyCredential.parseCreationOptionsFromJSON`, responses are
+    `PublicKeyCredential.toJSON()`. Errors: FORBIDDEN (unavailable, last
+    factor), STEP_UP_REQUIRED, VALIDATION on `name`/`response` (any
+    verification failure, generic message), CONFLICT (limit), NOT_FOUND.
+- **Alternatives considered:** `userVerification: "required"` (stronger,
+    but excludes PIN-less keys; can be added as a policy later);
+    attestation `"direct"` with an MDS allowlist (privacy cost, operational
+    burden, little value for self-hosted use); storing the challenge in a
+    signed cookie (client-held state, replay needs extra bookkeeping) or in
+    memory (lost on restart, not shared between instances); disabling a
+    passkey on a counter regression (locks out the genuine user); a new
+    `account.second_factor_view` operation (the existing `account.view`
+    already covers own account data); a random 64-byte user handle column
+    (the random UUID already carries no personal data).
+- **Consequences:** Passkeys work on https deployments and on
+  `http://localhost` only; elsewhere users fall back to TOTP and the UI
+  explains why. Phishing resistance comes from the origin and RP ID checks;
+  a cloned authenticator that is behind the original is refused and raises
+  an alert; one that is ahead is only detected when the original is used
+  again. Changing `server.base_url` to another host invalidates every
+  registered passkey (the RP ID changes); users then need another factor or
+  a reset.
+- **Related:** task 1.8; D-010, D-047, D-095, D-105, D-106, D-107, tasks
+  1.7, 1.9, 5.5, 6.1; `internal/auth/passkey`, `internal/auth/factors.go`,
+  `internal/db/migrations/00008_webauthn_passkeys.sql`,
+  `internal/db/queries/webauthn.sql`,
+  `internal/graph/schema/webauthn.graphqls`,
+  `internal/graph/resolvers/webauthn.go`, `internal/graph/model/json.go`,
+  `internal/app/passkey.go`.
+
+## D-110: First-run setup code, user administration and break-glass CLI (task 1.6)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (setup-code part superseded by D-113: the setup code, `setupStatus`/`completeSetup`, `setup_state` and the `setup.*` audit actions are removed)
+- **Decided by:** agent with user approval (task 1.6)
+- **Context:** The plan fixes a one-time setup token with a 1h TTL printed
+  to the log, `bekup admin create|reset-password` (D-069: audited with actor
+  `cli`), admin user CRUD with step-up for user and role changes (D-047,
+  D-106) and session list/revoke. Open were the code format and storage,
+  what "permanently disabled" means, how an admin gives a new user a
+  password, hard vs. soft delete, the last-admin rule and the CLI's
+  password input.
+- **Decision:**
+  - **Setup code:** 160 random bits (`crypto/rand`), shown as base32 in 8
+    groups of 4 (`ABCD-EFGH-...`; input is case-, space- and
+    dash-insensitive). Only `sha256("bekup-setup-code-v1\0" || code)` is
+    stored, in the single-row table `setup_state` with `code_expires_at` =
+    issue time + 1h. `serve` issues a new code at **every startup** while
+    setup is open (the previous code's plain text is gone), records
+    `setup.code_issued` and logs the code once at WARN under the key
+    `setup_code` with instructions. Expired codes are not renewed while
+    running: restart `serve` (or use `bekup admin create`).
+  - **Setup flow:** `Query.setupStatus { required }` and
+    `Mutation.completeSetup(code, email, displayName, password)` are public.
+    completeSetup is limited to 5 attempts/min per client IP (each attempt
+    may cost an argon2id hash), checks the code with a constant-time
+    comparison of the hashes, applies the password policy, then in one
+    transaction holding `SELECT ... FOR UPDATE` on the setup row re-checks
+    everything, creates the admin, sets `completed_at` and drops the hash,
+    so exactly one concurrent caller wins. It records `setup.completed`
+    (wrong/expired codes: `setup.failed`, actor system, reason only) and
+    signs the admin in (AAL1, fresh step-up). Setup is required only while
+    `completed_at` is NULL **and** no (non-deleted) admin exists;
+    completion is final: a trigger refuses to reset `completed_at` and
+    `bekup_app` has no INSERT/DELETE on `setup_state`. Creating an admin
+    with the CLI also closes setup, and the migration closes it for
+    databases that already have an admin. Afterwards completeSetup answers
+    FORBIDDEN.
+  - **New users get a temporary password, not an admin-chosen one:**
+    `createUser` and `resetUserPassword` generate a 160-bit temporary
+    password (same alphabet), returned **once** in the mutation result,
+    stored only as an argon2id hash, valid for **72 hours**
+    (`users.password_temporary_until`). A login with it works only before
+    that time and yields a session whose principal has
+    `PasswordChangeRequired`; the policy then denies every operation except
+    `account.view`, `account.logout`, `account.password_change` and the own
+    sessions with the new code `PASSWORD_CHANGE_REQUIRED`
+    (`LoginResult.passwordChangeRequired`, `User.passwordChangeRequired`).
+    changePassword clears the mark. Admins never learn a user's lasting
+    password.
+  - **Soft delete:** `deleteUser` sets `deleted_at`, `disabled`, drops the
+    password hash and revokes all sessions; the row stays because audit
+    entries reference user ids. E-mail uniqueness moves to a partial unique
+    index over non-deleted accounts (the address can be reused). Deleted
+    accounts cannot sign in, are hidden from `users` unless
+    `includeDeleted`, and every mutation on them answers NOT_FOUND.
+    Second-factor rows stay (unusable).
+  - **Last active admin:** demoting, disabling or deleting the last admin
+    that is neither disabled nor deleted fails with CONFLICT (CLI: an
+    error). The check locks all active admin rows (`FOR UPDATE`) before
+    the target row, so two admins demoting each other concurrently cannot
+    both succeed. Admins cannot delete themselves or reset their own
+    password through the admin path (`changePassword` instead).
+  - **Privilege changes:** role changes, disabling, password resets and
+    deletion revoke every session of the account (`session.revoked_all`);
+    a display-name change does not. If an admin's own sessions are revoked,
+    the response clears their cookie.
+  - **Authz:** all user-admin mutations need step-up (already in D-106,
+    including create, delete and display-name changes); new operation
+    `user.enable` (admin, step-up); `unlockUser` maps to `user.update`.
+  - **Audit actions:** new `user.password_reset`, `user.unlocked`,
+    `cli.admin.disabled`, `setup.code_issued`, `setup.failed`,
+    `setup.completed`. Details never contain passwords or codes.
+  - **CLI (D-069):** `bekup admin create --email --display-name [--role
+    admin]`, `reset-password --email`, `unlock --email`, `disable --email`.
+    The password comes from a hidden terminal prompt (twice, compared in
+    constant time) or `--password-file` (secret-file permission rules,
+    surrounding whitespace trimmed); with no terminal and no file the
+    command refuses; there is no password flag. CLI-set passwords are
+    permanent and must pass the policy. The commands connect as
+    `bekup_app` with the normal config and record `audit.CLIEvent` entries
+    (`cli.admin.*`, actor `cli`, OS user, hostname). The admin alert of
+    D-069 is a TODO for task 5.5.
+- **Alternatives considered:** admin-chosen initial passwords (the admin
+  would know the user's password and weak ones would be tempting);
+  invitation links by e-mail (needs SMTP, task 5.x; can be added later);
+  hard delete (breaks the link from audit entries to accounts, cascades
+  sessions and factors silently); renewing the setup code in the
+  background every hour (a new secret in the logs every hour for an
+  unattended instance); keeping the plain code in the DB to re-print it
+  on restart (a DB reader could take over the instance); an argon2id hash
+  for the setup code (unnecessary for a 160-bit random value).
+- **Consequences:** Anyone who can read `serve`'s log during the first hour
+  after a start (while no admin exists) can create the first admin; the
+  log should be treated as sensitive until setup completes. Temporary
+  passwords travel through the admin's screen once and expire after 72h.
+  Two `serve` instances starting at the same time each issue a code and
+  only the later one works. A host operator with the config can still
+  create admins and reset passwords; every such action is audited (and
+  alerted from task 5.5). Deleted accounts' e-mail addresses remain in the
+  audit log and the `users` row.
+- **Related:** task 1.6; D-047, D-069, D-101, D-105, D-106, D-107; task
+  5.5, 6.8; `internal/auth/setup_code.go`, `internal/auth/user_admin.go`,
+  `internal/auth/user_input.go`, `internal/authz/policy.go`,
+  `internal/db/migrations/00009_user_admin_setup.sql`,
+  `internal/db/queries/{setup,user_admin}.sql`,
+  `internal/graph/schema/{setup,users}.graphqls`,
+  `internal/graph/resolvers/users.go`, `internal/app/users.go`,
+  `cmd/bekup/admin_cmd.go`.
+
+## D-111: TOTP, recovery codes and second-factor failures (task 1.7)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals) (last-factor error code superseded by D-112)
+- **Decided by:** agent with user approval (task 1.7)
+- **Context:** The plan asks for TOTP with replay protection via the last
+  used step plus recovery codes (D-010), stored secrets sealed with the
+  keyring (D-085, D-086), step-up for 2FA changes (D-047, D-106) and a CSP
+  without `data:` images (D-082). Parameters, the QR code rendering, the
+  enrollment flow, how recovery codes are stored and how second-factor
+  failures are throttled were open.
+- **Decision:**
+  - **Library and parameters:** `github.com/pquerna/otp` (Apache-2.0,
+    NOTICE carried in ours) with **SHA-1, 6 digits, 30 s** — the RFC 6238
+    profile every authenticator app implements (SHA-256/8 digits are
+    ignored or mis-handled by many apps). Secrets are **160 bits** from
+    `crypto/rand` (RFC 4226's size for HMAC-SHA1). Verification accepts
+    **±1 step** (90 s window); the three candidate codes are all computed
+    and compared in constant time.
+  - **Replay protection:** a code is accepted only for a step **greater
+    than `users.totp_last_step`**, recorded with a conditional `UPDATE …
+    WHERE totp_last_step < $step AND totp_secret_enc = $verified_secret`;
+    of concurrent checks of one code exactly one wins, and a code whose
+    secret was replaced meanwhile fails. The confirmation code's step is
+    recorded too.
+  - **Two-phase enrollment** (`beginTotpEnrollment`, step-up): the secret
+    is sealed into `users.totp_pending_enc` (AAD `users:<id>:totp_pending`,
+    10-minute `totp_pending_expires_at`) and returned once as otpauth URI,
+    **inline SVG QR code** and base32 manual key. `confirmTotpEnrollment`
+    (step-up) checks a code against it, **re-seals** it as
+    `users.totp_secret_enc` (AAD `users:<id>:totp_secret`) in a conditional
+    update that requires the same pending ciphertext, and issues recovery
+    codes. The separate AAD means a pending ciphertext can never act as an
+    active secret. The secret is never returned again. Starting while TOTP
+    is on is refused (disable first); a wrong confirmation code is audited
+    but not counted (the caller is signed in and chose the secret).
+  - **QR code:** encoded with `github.com/boombuler/barcode/qr` (MIT,
+    already a dependency of pquerna/otp; level M) and rendered by bekup as
+    a self-contained SVG: one background `rect` and one `path` of
+    horizontal runs, no scripts, styles, links or `data:` URIs, so the UI
+    can inline it under the D-082 CSP.
+  - **Recovery codes:** 10 codes of 12 Crockford-base32 characters
+    (**60 bits**), shown as `xxxx-xxxx-xxxx`; input is case-insensitive,
+    ignores spaces/dashes and maps i/l→1, o→0. Generated on TOTP
+    confirmation and by `regenerateRecoveryCodes` (step-up, requires an
+    enrolled factor); each set replaces all older codes and is shown once.
+    Stored as **HMAC-SHA256** under an HKDF subkey of a master key
+    (`crypto.Keyring.MAC`, purpose `recovery-code`) over
+    `bekup-recovery-code-v1 ∥ user id ∥ code`, with the key ID per row
+    (`recovery_codes.key_id`), so codes survive a key rotation while the
+    old key stays in the keyring. A code is compared in constant time
+    against every unused row and spent with `UPDATE … SET used_at = now()
+    WHERE used_at IS NULL` (single use under concurrency). The remaining
+    count is in `myTwoFactorStatus`. Recovery codes are not a factor of
+    their own: disabling the last factor deletes them.
+  - **Failures:** every failed TOTP or recovery-code check (wrong,
+    malformed, replayed, no factor) answers the same `ErrInvalidCode`,
+    increments **`users.mfa_failed_count`** (separate from the password
+    counter, so second-factor guessing cannot lock out password logins and
+    vice versa) and uses the same backoff settings
+    (`security.lockout_*`): from the threshold on, second-factor checks
+    are refused without looking at the code (`RATE_LIMITED` with a retry
+    time) until `mfa_locked_until`; refused attempts are audited but
+    neither counted nor extend the lock; a success resets the counter.
+  - **Disable:** `disableTotp` (step-up) asks a `FactorRemovalGuard` with
+    the remaining factor kinds (task 1.9 refuses the last factor when 2FA
+    is required: `FORBIDDEN`); removes active and pending secret.
+  - **Audit and alerts:** `auth.mfa.enrollment_started`,
+    `auth.mfa.enrolled` / `auth.mfa.removed` (details.factor `totp`),
+    `auth.mfa.verified`, `auth.mfa.failed` (factor, reason, count),
+    `auth.mfa.lockout`, `auth.recovery_code.used` (remaining count),
+    `auth.recovery_code.regenerated`, each in the transaction of its
+    change; never a code or secret. `SecondFactorNotifier` hooks
+    (`RecoveryCodeUsed`, `SecondFactorRemoved`, `SecondFactorLocked`) fire
+    after commit for task 5.5.
+  - **API for task 1.9:** `(*auth.TOTP).VerifyTOTP(ctx, userID, code)` and
+    `UseRecoveryCode(ctx, userID, code)` (both replay-safe; the caller
+    elevates the session), `HasFactor`/`Kind` (registered in
+    `auth.SecondFactors`, which implements `authz.SecondFactors`), `Status`.
+  - **GraphQL** (`internal/graph/schema/totp.graphqls`): the four
+    mutations `@stepUp` → `account.second_factor_edit`; `myTwoFactorStatus`
+    `@authenticated` → `account.view`. The service re-checks the step-up
+    (defense in depth).
+- **Alternatives considered:** SHA-256/8-digit TOTP (poor app support);
+  a wider skew window (more guessing surface and replay window); returning
+  a PNG QR code as a `data:` URI (blocked by the CSP) or serving it from a
+  URL (the secret would sit in a cacheable response); `rsc.io/qr` (an
+  extra dependency for the same encoder); argon2id for recovery codes
+  (60-bit random codes need no stretching; a keyed hash already makes a
+  leaked table useless without the master key, and argon2id would cost
+  ~10 hashes of 64 MiB per attempt); plain SHA-256 (offline-testable from
+  a DB leak); counting second-factor failures in the password counter
+  (lets a password holder lock the account's logins, mixes two attack
+  surfaces); revoking other sessions on TOTP changes (left to task 1.9's
+  policy).
+- **Consequences:** TOTP secrets and pending secrets are only readable
+  with the master key and only under their own AAD; a database leak gives
+  neither TOTP secrets nor usable recovery codes. Removing a master key
+  from the keyring invalidates recovery codes hashed with it (users
+  regenerate them). Codes are accepted for up to 90 s and each step once.
+  An attacker with a password gets at most `lockout_threshold` guesses per
+  backoff window against three valid codes in 10^6.
+- **Related:** task 1.7; D-010, D-047, D-082, D-085, D-086, D-106, D-107;
+  tasks 1.8, 1.9, 5.5, 6.1; `internal/auth/{totp,recovery_codes,qrsvg}.go`,
+  `internal/crypto/mac.go`, `internal/db/migrations/00007_totp_recovery_codes.sql`,
+  `internal/db/queries/totp.sql`, `internal/graph/schema/totp.graphqls`,
+  `internal/graph/resolvers/totp.go`, `internal/app/totp.go`, `NOTICE`.
+
+## D-112: 2FA policy, two-step login, forced enrollment and step-up (task 1.9)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (task 1.9); the default policy ("admin-configurable,
+  off by default") is the user's decision
+- **Context:** The plan asks for an admin-configurable 2FA policy (global
+  and per role, with an enrollment grace period), a two-step login, forced
+  enrollment, step-up (≤ 5 min) for sensitive operations and the "Restore
+  2FA" rule (every restore needs a fresh passkey/TOTP check, whatever the
+  policy). D-107 made a password login count as step-up because no second
+  factor existed yet and left the revisit to this task; D-109/D-111 left
+  the last-factor guard (`FactorRemovalGuard`) and failure counting of
+  passkey assertions to it. D-095: passkeys are unavailable on plain http.
+- **Decision:**
+  - **Policy storage:** `settings` key `security.two_factor_policy`, JSON
+    `{version: 1, require_all, roles, grace_period_days, since}`; `since`
+    records per role when the requirement started (turning it on sets now,
+    keeping it keeps the start, turning it off drops it). The grace period
+    (0-90 days) runs from `max(since[role], users.created_at,
+    users.mfa_reset_at)`. **Default (no row): no role requires 2FA; the
+    grace period is 7 days** and applies once an admin requires 2FA for a
+    role (existing accounts then count from that moment). This default is
+    the user's decision ("admin-configurable, off by default"); the
+    hardening guide tells admins to enable it right after the first
+    admin exists. TOTP always works, so an enabled policy is always
+    satisfiable. GraphQL
+    `twoFactorPolicy` (admin, `mfa_policy.view`) and
+    `updateTwoFactorPolicy` (admin + `@stepUp`, `mfa_policy.update`),
+    audited as `mfa_policy.updated` with old/new values and `weakened`; a
+    weakening change (a role no longer required, longer grace) is logged
+    at WARN and reported to `TwoFactorPolicyNotifier` (alert in task 5.5).
+    Policy reads for the per-request check are cached for 5 s per
+    instance (an update invalidates the local cache at once).
+  - **Two-step login:** `login` of an account with at least one factor
+    creates a session with the new column `sessions.mfa_pending` (AAL1,
+    no `stepup_at`, absolute expiry 5 min; a CHECK constraint forbids
+    pending sessions with AAL2 or step-up/second-factor times) and answers
+    `secondFactorRequired` with the factor kinds (recovery codes while
+    unused ones are left; passkeys only when available). Such a principal
+    (`Principal.MFAPending`) may only run `account.second_factor_login`
+    (`beginPasskeyLogin`, `completeSecondFactor`) and `logout`; everything
+    else answers the new code **`SECOND_FACTOR_REQUIRED`**, and the
+    WebSocket upgrade answers 401. `completeSecondFactor(method, code |
+    assertion)` verifies TOTP / a recovery code / a passkey assertion
+    (bound to the pending session) and rotates the session
+    (`CompleteSecondFactorTx`: old row revoked with a `rotated` event →
+    WebSockets close 4001; new token, AAL2, `stepup_at` = now, a full
+    absolute lifetime). Every rejected factor, including passkey
+    assertions (wrapped as `auth.ErrAssertionRejected`), counts towards
+    the second-factor lockout of D-111; a successful passkey resets it.
+    Audit: `auth.login.succeeded` (with `second_factor_pending`) for the
+    password step, `auth.login.second_factor` (method, session ids; never
+    the code) for the second.
+  - **Recovery codes are a fallback, not a full factor:** completing a
+    login or a step-up with one gives AAL2 / a fresh step-up but **no
+    `aal2_at`**, so it never satisfies the restore check; it is audited
+    (`auth.recovery_code.used`) and raises the existing
+    `RecoveryCodeUsed` alert hook.
+  - **Step-up** (`beginStepUp`, `completeStepUp(method, code | password |
+    assertion)`, `account.step_up`): accounts with a factor must use one
+    (TOTP or passkey: `stepup_at` and `aal2_at` = now; an AAL1 session is
+    elevated with rotation, an AAL2 one updated in place; recovery code:
+    `stepup_at` only); the password alone is refused. Accounts without a
+    factor step up by re-entering the password (a wrong one counts
+    towards the login lockout, audited `auth.stepup.failed`). Successes are
+    audited `auth.stepup.succeeded` with the method.
+  - **Supersedes D-107 "Login = step-up"** for accounts with a factor: the
+    password step sets no step-up; only the completed second factor does.
+    For accounts without a factor a login still counts as a fresh step-up
+    (the password was just entered and is their only credential;
+    requiring it again within seconds adds nothing). The `@stepUp`
+    directive and `FreshStepUp` work unchanged with the configurable
+    window (≤ 5 min).
+  - **Restore rule (checked):** `FreshAAL2` needs AAL ≥ 2 **and** an
+    `aal2_at` within the step-up window (not in the future); password and
+    recovery-code step-ups never set `aal2_at`; without a factor the
+    answer is `REQUIRES_2FA_ENROLLMENT`, independent of the policy.
+  - **Forced enrollment:** the session middleware applies the policy to
+    every principal (`TwoFactorPolicies.ApplyEnrollment` via
+    `httpserver.SessionsResolver.Enrollment`; a lookup error answers 503).
+    After the grace period an account of a required role without a factor
+    gets `Principal.EnrollmentRequired`: only `account.view`,
+    `account.logout`, `account.step_up` (password) and
+    `account.second_factor_edit` (enroll TOTP or a passkey) are allowed;
+    everything else answers `REQUIRES_2FA_ENROLLMENT`. Within the grace
+    period access is full and `User.twoFactorEnrollmentDeadline` /
+    `twoFactorRequired` report the standing; `LoginResult` has
+    `twoFactorEnrollmentRequired`. The temporary-password restriction of
+    D-110 uses the same mechanism (`account.step_up` added to its allowed
+    set); when both apply, the password change comes first.
+  - **Last-factor guard:** `TwoFactorPolicies.CheckFactorRemoval` refuses
+    removing the last factor while the policy requires 2FA for the user's
+    role (also during the grace period) with **CONFLICT** (instead of the
+    FORBIDDEN of D-109/D-111) and records `auth.mfa.removal_refused`;
+    otherwise removal works as before (step-up, `auth.mfa.removed`,
+    `SecondFactorRemoved` / passkey `EventRemoved` alert hooks).
+  - **Lost-factor recovery:** `UserAdmin.ResetSecondFactors` removes every
+    second factor of an account in one transaction under the user row
+    lock: TOTP (also a pending enrollment), passkeys and open WebAuthn
+    ceremonies, all recovery codes; it clears the second-factor lockout,
+    sets `users.mfa_reset_at = now()` (a new enrollment grace period
+    starts then, so a reset account of a required role is not locked out
+    at once unless the grace period is 0) and revokes every session
+    (`RevokeAllTx`, WebSockets close). API:
+    `resetUserSecondFactors(userId)` (admin, `@stepUp`, existing
+    operation `user.second_factor_reset`; the own account answers
+    FORBIDDEN: an admin removes their own factors one by one with step-up
+    or asks another admin; unknown or deleted accounts NOT_FOUND),
+    audited as `user.second_factors_reset` with counts only. Break-glass:
+    `bekup admin reset-2fa --email` (warning on stderr, audited as
+    `cli.admin.mfa_reset` with actor `cli`). Every reset is logged at WARN
+    and reported to `FactorResetNotifier` (alert in task 5.5).
+  - **Migration 00010** adds `mfa_pending` and `users.mfa_reset_at` and
+    revokes active AAL1 sessions of accounts that already have a factor
+    (they were signed in by the password alone before this change).
+- **Alternatives considered:** keeping "login = step-up" for everyone
+  (a stolen password would grant step-up for accounts with a factor);
+  requiring a password re-entry for step-up of accounts without a factor
+  right after login (no security gain); computing the enrollment
+  restriction at login and storing it on the session (an admin's policy
+  change or the deadline passing would not apply to running sessions);
+  default policy "admins required" (the agent's original proposal; the
+  user chose off by default so that the operator decides when to require
+  it); restarting the grace period with a new flag instead of a
+  timestamp (a timestamp reuses the existing deadline logic and is
+  auditable); letting an admin reset their own factors (a stolen admin
+  session with a fresh password step-up could strip the factors);
+  letting recovery codes satisfy restores (a printed code would
+  replace the authenticator for the most dangerous operation); a
+  separate pre-auth cookie for the pending state (a second cookie
+  lifecycle; a flagged session row reuses rotation, revocation and the
+  WebSocket events); not counting passkey assertion failures (unbounded
+  guessing is impossible anyway, but counting keeps one lockout for all
+  second factors).
+- **Consequences:** Accounts with a factor need it at every login and for
+  every step-up; a stolen password alone yields a 5-minute session that
+  can do nothing. Out of the box no account is forced to enroll (the
+  user's decision; weaker than requiring it for admins, mitigated by the
+  hardening guide and by restores always needing a passkey/TOTP check);
+  once an admin requires 2FA for a role, its accounts without a factor
+  get the grace period from that moment. A user who lost every factor
+  signs in with a recovery code (but cannot restore) or gets the factors
+  reset by another admin or the CLI; a reset account signs in with its
+  password alone until it enrolls again, so resets are audited, logged
+  and alerted and should follow an out-of-band identity check. Policy changes reach other
+  instances within 5 s. An open WebSocket keeps the principal of its
+  upgrade, so an enrollment deadline passing during a socket only affects
+  it at the next reconnect (it only carries the user's own session
+  events).
+- **Related:** task 1.9; D-010, D-047, D-057, D-095, D-106, D-107, D-108,
+  D-109, D-110, D-111; tasks 5.5, 6.1, 6.8;
+  `internal/auth/{two_factor_policy,second_factor_flow,session_store,service,user_admin}.go`,
+  `cmd/bekup/admin_cmd.go`, `internal/db/queries/user_admin.sql`,
+  `internal/graph/schema/users.graphqls`,
+  `internal/authz/policy.go`, `internal/db/migrations/00010_two_factor_policy.sql`,
+  `internal/graph/schema/twofactor.graphqls`,
+  `internal/graph/resolvers/twofactor.go`, `internal/httpserver/session.go`,
+  `internal/app/two_factor.go`.
+
+## D-113: First admin created via CLI only; web setup flow removed
+
+- **Date:** 2026-10-26
+- **Status:** accepted (migration 00011 detail superseded by D-118)
+- **Decided by:** user
+- **Context:** D-110 (task 1.6) created the first admin through a public
+  web flow: `serve` logged a one-time setup code at every start while no
+  admin existed, and the public `completeSetup` mutation exchanged it for
+  the first admin. Its weak points: anyone who can read the `serve` log
+  during that hour can take over the instance, two public root fields
+  exist only for a one-time event, and the flow needs its own state
+  table, rate limiter, audit actions and UI page. `bekup admin create`
+  (D-069, D-110) already creates admins on the host.
+- **Decision:** supersedes the setup-code part of D-110 (the rest of
+  D-110 stays):
+  - The first admin is created **only** with `bekup admin create --email
+    ... --display-name ...` on the host (password from a hidden terminal
+    prompt or `--password-file`, never a flag), audited as
+    `cli.admin.created` with actor `cli`, OS user and hostname. The
+    command itself is unchanged.
+  - Removed: `Query.setupStatus` and `Mutation.completeSetup` (schema,
+    `graph.PublicRootFields`), `auth.Setup` and the setup-code generation
+    at serve startup, its per-IP limiter, the audit actions
+    `setup.code_issued` / `setup.failed` / `setup.completed`, and the
+    config key `security.setup_token_ttl` (unreleased, so no deprecation
+    period; a config that still sets it fails strict parsing with an
+    unknown-key error).
+  - **`setup_state` is dropped** by the new migration 00011 (00009 is
+    not edited): no code reads it, and an unused table on which
+    `bekup_app` keeps UPDATE is surface without purpose. Dropping it is
+    safe: it only held a code hash and a completion mark, the first
+    admin's creation is in the audit log, and the down migration
+    recreates the 00009 objects.
+  - When `serve` starts and no **active** admin (not disabled, not
+    deleted) exists, it logs one WARN `NO ADMIN ACCOUNT ...` with the
+    exact command (`bekup admin create --email <address> --display-name
+    <name> [--password-file <path>]`, plus the compose form) and keeps
+    running: nobody can sign in until an admin exists, the UI shows only
+    the login page.
+- **Alternatives considered:** keeping the web setup code (log readers
+  can take over the instance; public attack surface); an
+  environment-variable or config bootstrap password (a secret outside
+  `*_file` handling, easy to leave behind); refusing to start `serve`
+  without an admin (breaks health checks and compose ordering, and the
+  CLI works against the database anyway); keeping `setup_state` unused
+  (dead, writable table).
+- **Consequences:** First-run takeover through the web is no longer
+  possible (SV-3); creating the first admin needs host access with the
+  config and DB credentials (the same trust as the existing break-glass
+  CLI, T10). Installation needs one extra documented CLI step. The web UI
+  (task 6.1) has no setup page. Security impact: smaller public surface,
+  no secret in logs.
+- **Related:** D-069, D-110, D-112; tasks 1.6, 1.12, 6.1;
+  `internal/app/users.go`, `internal/auth/user_admin.go`,
+  `internal/db/migrations/00011_drop_setup_state.sql`,
+  `internal/db/queries/user_admin.sql`, `internal/graph/access.go`,
+  `cmd/bekup/admin_cmd.go`, `docs/getting-started.md`,
+  `docs/operations.md`, `SECURITY.md`.
+
+## D-114: just dev runs infra only (postgres, mailpit, adminer); app runs natively
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-26, user decision)
+- **Decided by:** user
+- **Context:** Under D-081 `just dev` started the whole containerised stack
+  (air serve, runner, sample targets, MinIO, SFTP, bastion, mailpit). For
+  the current milestones that is slow to start and to rebuild, and it hides
+  the app behind a container build. The first admin is now created with the
+  CLI only (`bekup admin create`), which needs a native process that can
+  reach the app DB.
+- **Decision:** This supersedes the part of D-081 that makes the full stack
+  the default dev workflow; the hardening rules of D-081 stay.
+  1. `docker-compose.dev.yml` uses compose profiles. The default (no
+     profile) starts only the app Postgres (TLS, hostssl-only for the bekup
+     roles, SCRAM with channel binding, superuser socket-only, unchanged),
+     mailpit and adminer, all published on `127.0.0.1` only: Postgres on
+     `127.0.0.1:5432` (DEV ONLY; production never publishes it), mailpit
+     SMTP `1025` and UI `8025`, adminer `8081`. Ports can be moved with
+     `BEKUP_DEV_PG_PORT`, `BEKUP_DEV_SMTP_PORT`, `BEKUP_DEV_MAILPIT_PORT`,
+     `BEKUP_DEV_ADMINER_PORT`. Published ports need a non-internal network,
+     so Postgres and adminer also join a dev-only `dev-host` network.
+  2. Profile `full` (`just dev-full`) holds air serve, migrate, the runner,
+     the sample targets, MinIO, SFTP and the bastion, unchanged.
+  3. The app runs natively: `just dev` generates missing dev keys, starts
+     the default profile, waits for health and migrates natively;
+     `just run` builds `bin/bekup-dev`, migrates and runs `bekup serve` in
+     dev mode on `http://localhost:8080` (D-095 warning);
+     `just dev-migrate`, `just admin-create <email> <name>` (password
+     prompted on the terminal), `just web-dev` (Vite against :8080),
+     `just dev-down`. The native config is `deploy/dev/bekup.local.toml`;
+     the absolute `*_file` paths come from environment overrides set by the
+     justfile, and only the migration step receives the owner URL file.
+  4. Native processes verify the DB with `verify-full` against the dev CA:
+     `gen-dev-keys.sh` issues the dev postgres certificate with the extra
+     SANs `localhost` and `127.0.0.1` (`--postgres-san`; an older dev PKI
+     is rotated or regenerated) and writes `secrets/local/` (role URLs with
+     `127.0.0.1:<port>`, copies of the master keyring and DB CA, owned by
+     the developer so `--chown` cannot break native use). `BEKUP_DEV_KEYS_DIR`
+     moves `./secrets` for the script and the compose dev override.
+  5. Adminer (official image, pinned by digest) runs read-only with all
+     capabilities dropped and `no-new-privileges`; its login form offers
+     only the app DB (`login-servers` plugin); libpq (PG 18) connects with
+     `PGSSLMODE=verify-full`, the dev CA and `PGCHANNELBINDING=require`.
+     Logins: `bekup_app` or `bekup_owner` with the dev passwords, database
+     `bekup`; the superuser cannot log in over TCP by design (D-096).
+  6. `deploy/postgres/entrypoint.sh` checks TLS files by reading them
+     instead of `test -r` (Docker Desktop shows bind mounts as root-owned
+     0600 yet lets UID 70 read them).
+- **Alternatives considered:** keep the full stack as the default (slow,
+  container rebuilds for every Go change); a one-shot `migrate` container in
+  the default profile (the native `bekup migrate` already covers it and
+  tests the same TLS path as `serve`); publishing Postgres without TLS for
+  dev (rejected: dev would no longer exercise D-100/D-104); `sslmode=require`
+  from the host (rejected: no server authentication); adminer with a free
+  server field (rejected: a generic proxy into the dev networks).
+- **Consequences:** Fast edit/run cycles with the real TLS and role setup.
+  Security impact: in dev only, the app DB listens on host loopback; it
+  still accepts the bekup roles only over TLS with SCRAM and never the
+  superuser over TCP, so a local process needs a role password. Dev key
+  files for native use live in `secrets/local/` (0600, 0700 directory).
+  The dev postgres certificate (and the dev CA's name constraints) include
+  `localhost`/`127.0.0.1`. Proxy profiles in dev need `--profile full`.
+  Production files and behaviour are unchanged.
+- **Related:** D-081 (partly superseded), D-095, D-096, D-100, D-104, D-110;
+  task 1.13; `docker-compose.dev.yml`, `deploy/dev/{gen-dev-keys.sh,bekup.local.toml,adminer/}`,
+  `deploy/postgres/entrypoint.sh`, `justfile`, `scripts/lib.bash`,
+  `docs/development.md`, `docs/getting-started.md`.
+
+## D-115: Compose: one-shot admin service and BEKUP_KEYS_DIR (task 1.11)
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval
+- **Context:** The end-to-end verification of the compose stack (task 1.11)
+  found two gaps. (1) The documented way to create the first admin with
+  compose (D-113), `docker compose run --rm -it serve admin create ...`,
+  fails while `serve` runs: the run container inherits `serve`'s fixed
+  `frontend` address (`SERVE_FRONTEND_IP`, needed for `[server] listen`)
+  and Docker refuses with "Address already in use". The same hint was in
+  serve's NO ADMIN ACCOUNT warning. (2) `docker-compose.yml` could only
+  read its secret files from `./secrets`, so the key material always had to
+  live inside the project directory, and the stack could not be tested with
+  throwaway keys elsewhere.
+- **Decision:**
+  1. `docker-compose.yml` gets a one-shot service `admin` (profile `admin`,
+     so `up` never starts it; `docker compose run --rm admin <subcommand>`
+     enables it) with entrypoint `bekup admin`. It has the bekup hardening
+     baseline, only the `backend` network, `bekup.toml`, the app DB URL and
+     the DB CA; no master key, no mTLS client certificate, no ports, no
+     fixed address. It waits for `migrate`. `--password-file` works by
+     mounting the file with `-v`. serve's warning and the docs
+     (getting-started, operations, compose) now name this command; the dev
+     override builds the same service.
+  2. Every secret path in `docker-compose.yml` (and the `certs-init` bind
+     mount) is `${BEKUP_KEYS_DIR:-./secrets}/...`. The default is
+     unchanged.
+  3. Static proxy certificates in production are mounted through a
+     `docker-compose.override.yml` (documented in reverse-proxy.md); the
+     shipped file does not mount `/certs`.
+- **Alternatives considered:** `docker compose exec serve bekup admin ...`
+  (works only while serve runs and cannot read a `--password-file` from the
+  host); dropping serve's fixed address (it is what lets `listen` bind to
+  the `frontend` interface only, D-098); `run --no-deps` with a different
+  network (compose `run` cannot change networks); reusing `migrate` (it
+  holds the owner credentials, which account administration must not get).
+- **Consequences:** The D-113 flow works as documented with compose. The
+  `admin` container holds the same `bekup_app` credentials as `serve`
+  (D-054 unchanged) and less of everything else; it exists only while a
+  command runs. `BEKUP_KEYS_DIR` lets operators keep key material outside
+  the project directory (e.g. an encrypted volume); file ownership/mode
+  rules (D-041) apply unchanged. No trust boundary changes.
+- **Related:** D-041, D-054, D-069, D-098, D-110, D-113, D-114; task 1.11;
+  `docker-compose.yml`, `docker-compose.dev.yml`, `internal/app/users.go`,
+  `docs/installation/compose.md`, `docs/installation/reverse-proxy.md`,
+  `docs/getting-started.md`, `docs/operations.md`.
+
+## D-116: Passkey AAL2 requires user verification
+
+- **Date:** 2026-10-26
+- **Status:** accepted
+- **Decided by:** user (M1 review, finding L3)
+- **Context:** D-109/D-112 let every verified passkey assertion set the
+  session's second-factor time (`aal2_at`), which restores require
+  (`FreshAAL2`, D-057). Ceremonies ask for `userVerification: preferred`,
+  so an authenticator may answer with user presence only (a touch, no PIN
+  or biometrics): whoever holds the unlocked key could then satisfy the
+  restore gate.
+- **Decision:** Only TOTP or a passkey assertion whose signed
+  authenticator data carries the User Verified (UV) flag sets `aal2_at`.
+  A user-presence-only assertion still completes the two-step login (the
+  session becomes AAL2 with a fresh step-up, like a recovery code) and a
+  step-up (step-up time only; an AAL1 session is not raised). Ceremonies
+  keep `userVerification: preferred`. `passkey.Service.VerifyAssertion`
+  returns `auth.AssertionResult{UserVerified}`; the audit entries of the
+  login and step-up record `second_factor_time`.
+- **Alternatives considered:** requiring UV for every passkey use
+  (locks out authenticators without PIN/biometrics); keeping the D-109
+  behavior (a touch would be enough for restores).
+- **Consequences:** Restores need TOTP or a UV passkey within the step-up
+  window; users with UP-only keys are asked to step up with TOTP or a
+  PIN-protected key. No trust boundary changes. Supersedes the AAL2 part
+  of D-109.
+- **Related:** D-057, D-109, D-112; `internal/auth/second_factor_flow.go`,
+  `internal/auth/passkey/service.go`.
+
+## D-117: Credential-verification hardening: single-root operations, limiters, atomic lockouts
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (M1 review findings H1, M1, M2)
+- **Context:** The M1 security review found that (H1) one GraphQL request
+  could alias `login`/`completeStepUp`/`changePassword` many times and run
+  argon2id once per alias, bypassing the per-request limits; (M1) the
+  password and second-factor lockouts checked the lock, verified, and only
+  then counted the failure, so concurrent guesses could all be verified
+  before the lock applied; (M2) every attempt refused while locked wrote
+  an audit entry, so an attacker could flood the hash-chained log.
+- **Decision:**
+  1. **Single-root credential operations.** `graph.SingleRootFields`
+     lists every root field that verifies, sets or resets credentials or
+     runs argon2id (login, changePassword, the two-step login and step-up
+     fields, TOTP/passkey enrollment and management, createUser,
+     resetUserPassword, resetUserSecondFactors). An operation selecting one
+     of them must select exactly one root field (aliases, repeats and
+     fragments counted; `__typename` ignored), else VALIDATION before any
+     resolver runs. Startup fails unless every public mutation and every
+     root field of a credential operation (`graph.CredentialOperations`)
+     is listed. Every root field beyond the first of any operation is
+     charged to the caller's per-user rate limit
+     (`httpserver.ChargeUser`).
+  2. **Per-account password limiter.** Before every argon2id verification
+     (login, password step-up, password change) `auth.Service` takes a
+     token from a per-account limiter keyed `user:<id>` (logins for
+     unknown or malformed addresses: `email:<lowercased>` / a shared key,
+     so the limiter is no enumeration oracle), using the
+     `security.login_rate_limit_*` rate; separate from the per-IP login
+     limiter and the HTTP limiters. Over the limit: RATE_LIMITED.
+  3. **Atomic lockouts.** Each password or second-factor check is
+     reserved before it runs by one conditional UPDATE that counts it only
+     while the account (or its second factors) is not locked and applies
+     the backoff lock in the same statement when the threshold is reached
+     (`ReserveLoginAttempt`, `ReserveMFAAttempt`; the DB computes
+     `LockFor`). No row: refused without verifying. A success clears the
+     count (also after a password step-up, which previously did not
+     reset it). Concurrent guesses can never exceed the threshold.
+  4. **Authenticated checks skip argon2id while locked.** A password
+     step-up or password change of a locked account answers RATE_LIMITED
+     with the remaining lock time without any (dummy) verification: the
+     caller owns the account, so there is nothing to hide. Logins keep the
+     dummy verification and the generic error.
+  5. **Aggregated refusal audit.** Attempts refused while locked are
+     recorded at most once per user and lock window (`aggregated: true`);
+     further refusals are counted in memory and reported as
+     `refused_while_locked` in the account's next failure, lockout or
+     first-refusal entry. The count is lost on restart (the next refusal
+     is then recorded again); the memory is bounded (10 000 entries,
+     recording instead of dropping when full).
+- **Alternatives considered:** a depth/complexity cost per credential
+  field (still allows several per request); `SELECT ... FOR UPDATE`
+  around verification (holds a row lock during argon2id); per-attempt
+  audit rows with a DB-side rate limit (more schema, same effect).
+- **Consequences:** Clients must send credential mutations alone (the
+  web UI does). An attacker can exhaust a known account's limiter or lock
+  it (as before with the lockout; sessions stay valid, D-107). Audit
+  volume under attack is bounded. No trust boundary changes; the GraphQL
+  and auth rules in SECURITY.md and AGENTS.md are extended.
+- **Related:** D-050, D-105, D-107, D-111, D-112; `internal/graph/rootfields.go`,
+  `internal/auth/service.go`, `internal/auth/recovery_codes.go`,
+  `internal/auth/locked_refusals.go`, `internal/db/queries/users.sql`,
+  `internal/db/queries/totp.sql`, `internal/httpserver/session.go`.
+
+## D-118: M1 review fixes: WebSocket principal rebuild, shutdown, posture audits and smaller items
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (M1 review findings L1, L2, L4 and code review M1, L3, L4)
+- **Context:** Several smaller findings of the M1 reviews.
+- **Decision:**
+  1. **WebSocket re-validation rebuilds the principal** (supersedes the
+     D-108 comparison of role and AAL only): the hub's validator
+     (`httpserver.SessionsResolver.Check`) loads session and user by id
+     and applies the 2FA enrollment check exactly like the session
+     middleware. A change of user, role, AAL, pending second factor,
+     temporary password or required enrollment closes the socket with
+     4403; new step-up/second-factor times only refresh the connection's
+     principal, which `wsconn.Deliver` puts into the context of every
+     delivery-time check. An upgrade by a principal that must enroll a
+     second factor is refused (403).
+  2. **Hub after shutdown:** `closeAll` sets a closed flag under the hub
+     lock; `Acquire` then answers `ErrHubClosed` (503), so no socket can
+     slip in after the shutdown closed the others.
+  3. **Login result and introspection:** `LoginResult.user` is null while
+     `secondFactorRequired` is true; introspection outside dev mode is
+     allowed only to unrestricted principals (not pending second factor,
+     temporary password or required enrollment; refines D-050).
+  4. **Trusted proxy without X-Forwarded-For:** logged as WARN at most
+     every 5 minutes (health checks exempt): the proxy address is then
+     every client's address.
+  5. **Posture and key audits:** serve records
+     `security.insecure_db_tls` at every startup outside dev mode with
+     `database.tls_mode` require/disable (fail closed, like D-095);
+     `bekup certs rotate` (and `certs init --force`) records
+     `certs.rotated` as a CLI event, opening the app DB before touching
+     any file (fail closed; `--no-audit` skips it with a warning, e.g.
+     for the postgres certificate of a stopped database). The remaining
+     unused catalog actions are marked reserved with their task.
+  6. **Migration fold:** M1 is unreleased, so the `setup_state` objects
+     are removed from migration 00009 (now `00009_user_admin.sql`) and
+     00011 is deleted (supersedes the 00011 detail of D-113); the final
+     schema is unchanged. Development databases from before must be
+     recreated (`just db-reset`).
+- **Alternatives considered:** closing sockets on every step-up (needless
+  reconnects); recording `certs.rotated` best-effort (silently missing
+  entries); keeping 00011 (an unreleased migration pair that only adds and
+  drops a table).
+- **Consequences:** Open sockets follow the same restrictions as HTTP
+  requests. Operators rotating certificates need DB access or must pass
+  `--no-audit` consciously. No trust boundary changes.
+- **Related:** D-050, D-095, D-100, D-108, D-112, D-113; `internal/graph/wsconn`,
+  `internal/graph/ws.go`, `internal/httpserver/middleware.go`,
+  `internal/app/audit.go`, `cmd/bekup/certs_cmd.go`, `internal/audit/actions.go`.
+
+## D-119: Key-check values stored per key ID and verified at startup
+
+- **Date:** 2026-10-26
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Decided by:** agent with user approval (M1 review; implements D-086)
+- **Context:** D-086 and the plan require the master keyring's key-check
+  value (KCV) to be stored in `settings` and verified at startup; it was
+  computed by `internal/crypto` but never stored or checked. After
+  `bekup keys rotate` the keyring has a new primary key, so a single
+  stored KCV of the old primary would no longer describe the ring.
+- **Decision:** `settings` key `security.key_check_values` holds
+  `{"kcvs": [...]}`, one KCV per master key ID the database has seen.
+  serve checks it at startup before anything is decrypted, inside one
+  transaction (row lock):
+  - none stored: the KCVs of every key in the ring are stored
+    (insert-if-absent; a concurrent first start re-checks), audited as
+    `keys.check_value_stored`;
+  - stored: every stored KCV whose key is in the ring must verify and at
+    least one must; otherwise serve refuses to start ("the master key does
+    not match this database"). A stored key missing from the ring is
+    tolerated with a warning (retired after re-encryption);
+  - ring keys without a stored KCV (after `bekup keys rotate`) are added
+    and recorded as `keys.rotated`.
+- **Alternatives considered:** one KCV of the primary only (breaks after
+  rotation or needs a CLI update with DB access); verifying against any key
+  without storing new ones (rotations would go unrecorded).
+- **Consequences:** A wrong, truncated or foreign keyring stops serve with
+  a clear error instead of failing later at decryption. KCVs reveal
+  nothing about the encryption subkeys (D-086). No trust boundary changes.
+- **Related:** D-046, D-085, D-086, D-101; `internal/app/keycheck.go`,
+  `internal/crypto/kcv.go`, `docs/security/key-management.md`.

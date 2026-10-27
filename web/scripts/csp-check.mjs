@@ -6,10 +6,14 @@
 // 2. Serves it with the production Content-Security-Policy.
 // 3. Drives headless Chrome through every page and overlay component and
 //    fails if the browser reports any CSP violation.
+// 4. Opens a same-origin WebSocket to /graphql (the subscription transport,
+//    task 1.10): `connect-src 'self'` must allow it (CSP3 matches ws:/wss:
+//    of the page's host), while a cross-origin WebSocket must be blocked.
 //
 // Usage: pnpm csp-check            (uses the installed Google Chrome)
 //        CHROME_PATH=/path/to/chrome pnpm csp-check
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
@@ -85,6 +89,34 @@ function serve() {
     });
     res.end(readFileSync(file));
   });
+  // Minimal WebSocket handshake on /graphql so the browser can open the
+  // socket (no frames are exchanged).
+  server.on("upgrade", (req, socket) => {
+    const key = req.headers["sec-websocket-key"];
+    if (
+      new URL(req.url ?? "/", "http://localhost").pathname !== "/graphql" ||
+      typeof key !== "string"
+    ) {
+      socket.destroy();
+      return;
+    }
+    const accept = createHash("sha1")
+      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest("base64");
+    const offered = String(req.headers["sec-websocket-protocol"] ?? "")
+      .split(",")
+      .map((p) => p.trim());
+    const lines = [
+      "HTTP/1.1 101 Switching Protocols",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Accept: ${accept}`,
+    ];
+    if (offered.includes("graphql-transport-ws"))
+      lines.push("Sec-WebSocket-Protocol: graphql-transport-ws");
+    socket.write(`${lines.join("\r\n")}\r\n\r\n`);
+    setTimeout(() => socket.destroy(), 2000);
+  });
   return new Promise((ok) => {
     server.listen(0, "127.0.0.1", () => {
       ok(server);
@@ -102,7 +134,7 @@ async function exercise(page, base, colorScheme) {
 
   await page.goto(`${base}/login`);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByText("Enter your username.").waitFor();
+  await page.getByText("Enter your e-mail address.").waitFor();
   await page.getByRole("button", { name: /passkey/ }).click();
   await page.locator("[data-sonner-toast]").first().waitFor();
 
@@ -142,6 +174,32 @@ async function exercise(page, base, colorScheme) {
   await page.waitForTimeout(300);
 }
 
+/** Opens a WebSocket from the page; reports whether it opened and whether a connect-src violation fired. */
+function openWebSocket(page, url) {
+  return page.evaluate(
+    (target) =>
+      new Promise((ok) => {
+        let violated = false;
+        document.addEventListener("securitypolicyviolation", (e) => {
+          if (e.effectiveDirective === "connect-src") violated = true;
+        });
+        const done = (open) => setTimeout(() => ok({ open, violated }), 200);
+        try {
+          const ws = new WebSocket(target, "graphql-transport-ws");
+          ws.onopen = () => {
+            ws.close();
+            done(true);
+          };
+          ws.onerror = () => done(false);
+        } catch {
+          done(false);
+        }
+        setTimeout(() => ok({ open: false, violated }), 3000);
+      }),
+    url,
+  );
+}
+
 async function main() {
   build();
   const problems = assertNoInlineCode();
@@ -177,6 +235,12 @@ async function main() {
           `[${scheme}] UI walk-through failed at ${page.url()}: ${err.message.split("\n")[0]}`,
         );
       }
+      // Same-origin WebSocket (subscriptions): must open without a violation.
+      const sameOrigin = await openWebSocket(page, `ws://127.0.0.1:${port}/graphql`);
+      if (!sameOrigin.open || sameOrigin.violated)
+        problems.push(
+          `[${scheme}] same-origin WebSocket: open=${sameOrigin.open} violation=${sameOrigin.violated}`,
+        );
       const seen = await page.evaluate(() => window.__csp);
       violations.push(...seen.map((v) => `[${scheme}] ${v}`));
 
@@ -194,6 +258,12 @@ async function main() {
       );
       if (!control)
         problems.push(`[${scheme}] positive control: injected <style> was NOT reported`);
+      // Positive control: a cross-origin WebSocket (other host name) is blocked.
+      const crossOrigin = await openWebSocket(page, `ws://localhost:${port}/graphql`);
+      if (crossOrigin.open || !crossOrigin.violated)
+        problems.push(
+          `[${scheme}] cross-origin WebSocket was NOT blocked by connect-src (open=${crossOrigin.open})`,
+        );
       await page.close();
     }
   } finally {
@@ -208,7 +278,9 @@ async function main() {
     console.error(`\ncsp-check FAILED (${problems.length + unique.length} problem(s)).`);
     process.exit(1);
   }
-  console.log("csp-check passed: no CSP or Trusted Types violations in light and dark mode.");
+  console.log(
+    "csp-check passed: no CSP or Trusted Types violations in light and dark mode; same-origin WebSocket allowed, cross-origin blocked.",
+  );
 }
 
 main().catch((err) => {

@@ -14,6 +14,7 @@ never in a public issue.
 - [Hardening guide](hardening.md)
 - [Key management and escrow](key-management.md)
 - [Runner mTLS certificates](mtls-certs.md)
+- [App DB TLS](app-db-tls.md)
 - [Runner target allowlist](target-allowlist.md)
 - [Backup and restore database roles](db-roles.md)
 - [Immutable backups](immutable-backups.md)

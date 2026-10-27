@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"net/netip"
 	"net/url"
@@ -193,9 +194,59 @@ func validateBekup(c *Bekup, dev bool) []error {
 		v.addf("server.trusted_proxies", "is required outside dev mode (CIDRs of the reverse proxy)")
 	}
 	v.duration("server.read_header_timeout", c.Server.ReadHeaderTimeout, time.Second, 0)
+	v.duration("server.read_timeout", c.Server.ReadTimeout, time.Second, 0)
+	if c.Server.ReadTimeout < c.Server.ReadHeaderTimeout {
+		v.addf("server.read_timeout", "must be >= server.read_header_timeout")
+	}
+	v.duration("server.write_timeout", c.Server.WriteTimeout, time.Second, 0)
+	v.duration("server.idle_timeout", c.Server.IdleTimeout, time.Second, 0)
 	v.duration("server.shutdown_timeout", c.Server.ShutdownTimeout, time.Second, 0)
+	if c.Server.MaxHeaderBytes < 4<<10 || c.Server.MaxHeaderBytes > 1<<20 {
+		v.addf("server.max_header_bytes", "must be between 4096 and 1048576 (got %d)", c.Server.MaxHeaderBytes)
+	}
 	v.positive("server.max_body_bytes", c.Server.MaxBodyBytes)
-	v.positive("server.max_ws_connections_per_user", int64(c.Server.MaxWSConnectionsPerUser))
+	if r := c.Server.RateLimitPerSecond; math.IsNaN(r) || r <= 0 || r > 10000 {
+		v.addf("server.rate_limit_per_second", "must be > 0 and <= 10000 (got %v)", c.Server.RateLimitPerSecond)
+	}
+	if c.Server.RateLimitBurst < 1 || c.Server.RateLimitBurst > 100000 {
+		v.addf("server.rate_limit_burst", "must be between 1 and 100000 (got %d)", c.Server.RateLimitBurst)
+	}
+	if c.Server.RateLimitMaxClients < 100 || c.Server.RateLimitMaxClients > 10000000 {
+		v.addf("server.rate_limit_max_clients", "must be between 100 and 10000000 (got %d)", c.Server.RateLimitMaxClients)
+	}
+	if c.Server.MaxWSConnectionsPerUser < 1 || c.Server.MaxWSConnectionsPerUser > 100 {
+		v.addf("server.max_ws_connections_per_user", "must be between 1 and 100 (got %d)", c.Server.MaxWSConnectionsPerUser)
+	}
+	if r := c.Server.UserRateLimitPerSecond; math.IsNaN(r) || r <= 0 || r > 10000 {
+		v.addf("server.user_rate_limit_per_second", "must be > 0 and <= 10000 (got %v)", c.Server.UserRateLimitPerSecond)
+	}
+	if c.Server.UserRateLimitBurst < 1 || c.Server.UserRateLimitBurst > 100000 {
+		v.addf("server.user_rate_limit_burst", "must be between 1 and 100000 (got %d)", c.Server.UserRateLimitBurst)
+	}
+
+	// [graphql]
+	if c.GraphQL.MaxComplexity < 50 || c.GraphQL.MaxComplexity > 100000 {
+		v.addf("graphql.max_complexity", "must be between 50 and 100000 (got %d)", c.GraphQL.MaxComplexity)
+	}
+	if c.GraphQL.MaxDepth < 3 || c.GraphQL.MaxDepth > 50 {
+		v.addf("graphql.max_depth", "must be between 3 and 50 (got %d)", c.GraphQL.MaxDepth)
+	}
+	if c.GraphQL.MaxBodyBytes < 1024 || c.GraphQL.MaxBodyBytes > c.Server.MaxBodyBytes {
+		v.addf("graphql.max_body_bytes", "must be between 1024 and server.max_body_bytes (got %d)", c.GraphQL.MaxBodyBytes)
+	}
+	if c.GraphQL.WSMaxConnections < 1 || c.GraphQL.WSMaxConnections > 100000 {
+		v.addf("graphql.ws_max_connections", "must be between 1 and 100000 (got %d)", c.GraphQL.WSMaxConnections)
+	}
+	if c.GraphQL.WSMaxSubscriptionsPerConnection < 1 || c.GraphQL.WSMaxSubscriptionsPerConnection > 200 {
+		v.addf("graphql.ws_max_subscriptions_per_connection", "must be between 1 and 200 (got %d)", c.GraphQL.WSMaxSubscriptionsPerConnection)
+	}
+	if c.GraphQL.WSMaxMessageBytes < 1024 || c.GraphQL.WSMaxMessageBytes > c.GraphQL.MaxBodyBytes {
+		v.addf("graphql.ws_max_message_bytes", "must be between 1024 and graphql.max_body_bytes (got %d)", c.GraphQL.WSMaxMessageBytes)
+	}
+	v.duration("graphql.ws_init_timeout", c.GraphQL.WSInitTimeout, time.Second, time.Minute)
+	v.duration("graphql.ws_ping_interval", c.GraphQL.WSPingInterval, 5*time.Second, 5*time.Minute)
+	v.duration("graphql.ws_revalidate_interval", c.GraphQL.WSRevalidateInterval, 5*time.Second, 5*time.Minute)
+	v.duration("graphql.ws_session_check_ttl", c.GraphQL.WSSessionCheckTTL, time.Second, max(c.GraphQL.WSRevalidateInterval.D(), time.Second))
 
 	// [database]
 	v.absPath("database.url_file", c.Database.URLFile, !dev || c.Database.URL == "")
@@ -208,6 +259,7 @@ func validateBekup(c *Bekup, dev bool) []error {
 	v.duration("database.conn_max_idle_time", c.Database.ConnMaxIdleTime, time.Second, 0)
 	v.duration("database.connect_timeout", c.Database.ConnectTimeout, time.Second, 0)
 	v.duration("database.statement_timeout", c.Database.StatementTimeout, time.Second, time.Hour)
+	validateDatabaseTLS(&v, &c.Database)
 
 	// [security]
 	v.absPath("security.master_key_file", c.Security.MasterKeyFile, !dev || c.Security.MasterKey == "")
@@ -222,12 +274,41 @@ func validateBekup(c *Bekup, dev bool) []error {
 		v.addf("security.argon2_memory_kib", "must be at most 4194304 (4 GiB)")
 	}
 	v.atLeast("security.argon2_iterations", int64(c.Security.Argon2Iterations), 3)
+	if c.Security.Argon2Iterations > 64 {
+		v.addf("security.argon2_iterations", "must be at most 64 (got %d)", c.Security.Argon2Iterations)
+	}
 	if c.Security.Argon2Parallelism < 1 || c.Security.Argon2Parallelism > 255 {
 		v.addf("security.argon2_parallelism", "must be between 1 and 255 (got %d)", c.Security.Argon2Parallelism)
 	}
-	v.positive("security.argon2_max_concurrent", int64(c.Security.Argon2MaxConcurrent))
+	if c.Security.Argon2MaxConcurrent < 1 || c.Security.Argon2MaxConcurrent > 64 {
+		v.addf("security.argon2_max_concurrent", "must be between 1 and 64 (got %d)", c.Security.Argon2MaxConcurrent)
+	}
 	v.atLeast("security.password_min_length", int64(c.Security.PasswordMinLength), 12)
-	v.duration("security.setup_token_ttl", c.Security.SetupTokenTTL, time.Minute, time.Hour)
+	if c.Security.PasswordMinLength > 128 {
+		v.addf("security.password_min_length", "must be at most 128 (got %d)", c.Security.PasswordMinLength)
+	}
+	if c.Security.PasswordMinScore < 3 || c.Security.PasswordMinScore > 4 {
+		v.addf("security.password_min_score", "can only be raised: must be 3 or 4 (got %d)", c.Security.PasswordMinScore)
+	}
+	v.duration("security.session_touch_interval", c.Security.SessionTouchInterval, 10*time.Second, 10*time.Minute)
+	if c.Security.SessionTouchInterval >= c.Security.SessionIdleTimeout {
+		v.addf("security.session_touch_interval", "must be less than security.session_idle_timeout")
+	}
+	if c.Security.LoginRateLimitPerMinute < 1 || c.Security.LoginRateLimitPerMinute > 600 {
+		v.addf("security.login_rate_limit_per_minute", "must be between 1 and 600 (got %d)", c.Security.LoginRateLimitPerMinute)
+	}
+	if c.Security.LoginRateLimitBurst < 1 || c.Security.LoginRateLimitBurst > 100 {
+		v.addf("security.login_rate_limit_burst", "must be between 1 and 100 (got %d)", c.Security.LoginRateLimitBurst)
+	}
+	if c.Security.LockoutThreshold < 3 || c.Security.LockoutThreshold > 20 {
+		v.addf("security.lockout_threshold", "must be between 3 and 20 (got %d)", c.Security.LockoutThreshold)
+	}
+	v.duration("security.lockout_base_duration", c.Security.LockoutBaseDuration, 10*time.Second, time.Hour)
+	v.duration("security.lockout_max_duration", c.Security.LockoutMaxDuration, 10*time.Second, 24*time.Hour)
+	if c.Security.LockoutMaxDuration < c.Security.LockoutBaseDuration {
+		v.addf("security.lockout_max_duration", "must be >= security.lockout_base_duration")
+	}
+	v.duration("security.audit_head_sign_interval", c.Security.AuditHeadSignInterval, time.Minute, 24*time.Hour)
 
 	// [runner]
 	v.listen("runner.address", c.Runner.Address)
@@ -282,6 +363,23 @@ func validateBekup(c *Bekup, dev bool) []error {
 	v.oneOf("log.format", c.Log.Format, "json", "text")
 
 	return v.errs
+}
+
+// validateDatabaseTLS checks the database.tls_* keys (D-100).
+func validateDatabaseTLS(v *validator, d *Database) {
+	v.oneOf("database.tls_mode", d.TLSMode, DBTLSVerifyFull, DBTLSRequire, DBTLSDisable)
+	if d.TLSMode == DBTLSVerifyFull && d.TLSCAFile == "" {
+		v.addf("database.tls_ca_file", `is required with tls_mode = "verify-full" (the CA that signs the Postgres server certificate; system roots are never used)`)
+	}
+	v.absPath("database.tls_ca_file", d.TLSCAFile, false)
+	v.absPath("database.tls_client_cert_file", d.TLSClientCertFile, false)
+	v.absPath("database.tls_client_key_file", d.TLSClientKeyFile, false)
+	if (d.TLSClientCertFile == "") != (d.TLSClientKeyFile == "") {
+		v.addf("database.tls_client_cert_file", "must be set together with database.tls_client_key_file")
+	}
+	if d.TLSMode == DBTLSDisable && d.TLSClientCertFile != "" {
+		v.addf("database.tls_client_cert_file", `has no effect with tls_mode = "disable"`)
+	}
 }
 
 // validateBaseURL checks server.base_url; httpAllowed is true in dev mode or

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db/migrations"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/logging"
@@ -21,6 +23,7 @@ func TestPoolConfig(t *testing.T) {
 	reg := logging.NewRegistry()
 	cfg, err := poolConfig([]byte("postgres://bekup_app:s3cret-pass@db:5432/bekup?sslmode=verify-full"), PoolOptions{
 		MaxConns: 7, MinConns: 9, StatementTimeout: 2 * time.Second, ApplicationName: "bekup-serve", Registry: reg,
+		TLS: TLSOptions{Mode: config.DBTLSVerifyFull, RootCAs: x509.NewCertPool()},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +57,7 @@ func TestPoolConfigInvalidURLDoesNotLeak(t *testing.T) {
 		"postgres://user:hunter2-secret@[::1/db",
 		"host=x password=hunter2-secret port=abc",
 	} {
-		_, err := poolConfig([]byte(u), PoolOptions{Registry: logging.NewRegistry()})
+		_, err := poolConfig([]byte(u), PoolOptions{Registry: logging.NewRegistry(), TLS: TLSOptions{Mode: config.DBTLSDisable}})
 		if !errors.Is(err, ErrInvalidURL) || strings.Contains(err.Error(), "hunter2") {
 			t.Errorf("%q: %v", u, err)
 		}

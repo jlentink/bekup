@@ -1,0 +1,51 @@
+# gqlgen configuration (task 1.2, D-105). Run `just gen` to regenerate;
+# CI fails when the generated code is out of date.
+schema:
+  - internal/graph/schema/*.graphqls
+
+exec:
+  package: generated
+  layout: single-file
+  filename: internal/graph/generated/generated.go
+
+model:
+  filename: internal/graph/model/models_gen.go
+  package: model
+
+resolver:
+  package: resolvers
+  layout: follow-schema
+  dir: internal/graph/resolvers
+  filename_template: "{name}.resolvers.go"
+  omit_template_comment: true
+
+# No reflection-based field binding surprises: resolvers are explicit.
+omit_slice_element_pointers: true
+omit_getters: true
+skip_mod_tidy: true
+
+models:
+  ID:
+    model:
+      - github.com/99designs/gqlgen/graphql.ID
+  Int:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int
+  # Custom scalars with typed VALIDATION errors on bad input.
+  UUID:
+    model:
+      - github.com/jlentink/bekup/internal/graph/model.UUID
+  Time:
+    model:
+      - github.com/jlentink/bekup/internal/graph/model.Time
+  # Raw JSON objects (WebAuthn options and responses; task 1.8).
+  JSON:
+    model:
+      - github.com/jlentink/bekup/internal/graph/model.JSON
+  # 2FA standing is computed per user from the policy (task 1.9).
+  User:
+    fields:
+      twoFactorRequired:
+        resolver: true
+      twoFactorEnrollmentDeadline:
+        resolver: true

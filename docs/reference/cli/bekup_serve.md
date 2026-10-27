@@ -1,6 +1,13 @@
 ## bekup serve
 
-Run the web UI, GraphQL API and scheduler (not implemented yet)
+Run the web UI, GraphQL API and scheduler
+
+### Synopsis
+
+Run the HTTP server (embedded web UI, GraphQL API, health endpoints; workers and the
+scheduler follow in later releases) as bekup_app. Refuses to start when the database role is
+privileged or the schema version differs from this binary (run `bekup migrate` first).
+SIGINT/SIGTERM drain in-flight requests within server.shutdown_timeout.
 
 ```
 bekup serve [flags]

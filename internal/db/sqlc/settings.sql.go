@@ -29,6 +29,45 @@ func (q *Queries) GetSetting(ctx context.Context, key string) (Setting, error) {
 	return i, err
 }
 
+const getSettingForUpdate = `-- name: GetSettingForUpdate :one
+SELECT key, value, secret_enc, updated_at, updated_by FROM settings WHERE key = $1 FOR UPDATE
+`
+
+// GetSettingForUpdate locks a setting row (read-modify-write updates).
+func (q *Queries) GetSettingForUpdate(ctx context.Context, key string) (Setting, error) {
+	row := q.db.QueryRow(ctx, getSettingForUpdate, key)
+	var i Setting
+	err := row.Scan(
+		&i.Key,
+		&i.Value,
+		&i.SecretEnc,
+		&i.UpdatedAt,
+		&i.UpdatedBy,
+	)
+	return i, err
+}
+
+const insertSettingIfAbsent = `-- name: InsertSettingIfAbsent :execrows
+INSERT INTO settings (key, value)
+VALUES ($1, $2)
+ON CONFLICT (key) DO NOTHING
+`
+
+type InsertSettingIfAbsentParams struct {
+	Key   string          `json:"key"`
+	Value json.RawMessage `json:"value"`
+}
+
+// InsertSettingIfAbsent stores a setting only while the key is unset (0
+// rows: someone else stored it first).
+func (q *Queries) InsertSettingIfAbsent(ctx context.Context, arg InsertSettingIfAbsentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSettingIfAbsent, arg.Key, arg.Value)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const putSetting = `-- name: PutSetting :one
 INSERT INTO settings (key, value, secret_enc, updated_by)
 VALUES ($1, $2, $3, $4)

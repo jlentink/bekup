@@ -205,3 +205,52 @@ func TestRunnerAllowedClientSANsScheme(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthKeyBounds(t *testing.T) {
+	c := DefaultBekup()
+	c.Server.UserRateLimitPerSecond = 0
+	c.Server.UserRateLimitBurst = 0
+	c.Security.PasswordMinLength = 129
+	c.Security.PasswordMinScore = 2
+	c.Security.Argon2Iterations = 65
+	c.Security.Argon2MaxConcurrent = 65
+	c.Security.SessionTouchInterval = Duration(time.Second)
+	c.Security.LoginRateLimitPerMinute = 0
+	c.Security.LoginRateLimitBurst = 101
+	c.Security.LockoutThreshold = 2
+	c.Security.LockoutBaseDuration = Duration(time.Hour)
+	c.Security.LockoutMaxDuration = Duration(time.Minute)
+	want := []string{
+		"server.user_rate_limit_per_second: must be > 0",
+		"server.user_rate_limit_burst: must be between 1 and 100000",
+		"security.password_min_length: must be at most 128",
+		"security.password_min_score: can only be raised",
+		"security.argon2_iterations: must be at most 64",
+		"security.argon2_max_concurrent: must be between 1 and 64",
+		"security.session_touch_interval: must be at least 10s",
+		"security.login_rate_limit_per_minute: must be between 1 and 600",
+		"security.login_rate_limit_burst: must be between 1 and 100",
+		"security.lockout_threshold: must be between 3 and 20",
+		"security.lockout_max_duration: must be at least 10s",
+	}
+	c.Security.LockoutMaxDuration = Duration(5 * time.Second)
+	joined := joinErrs(validateBekup(&c, true))
+	for _, w := range want {
+		if !strings.Contains(joined, w) {
+			t.Errorf("missing %q", w)
+		}
+	}
+	c = DefaultBekup()
+	c.Security.SessionTouchInterval = c.Security.SessionIdleTimeout
+	c.Security.LockoutBaseDuration = Duration(time.Hour)
+	c.Security.LockoutMaxDuration = Duration(30 * time.Minute)
+	joined = joinErrs(validateBekup(&c, true))
+	for _, w := range []string{
+		"security.session_touch_interval: must be at most 10m0s",
+		"security.lockout_max_duration: must be >= security.lockout_base_duration",
+	} {
+		if !strings.Contains(joined, w) {
+			t.Errorf("missing %q in:\n%s", w, joined)
+		}
+	}
+}

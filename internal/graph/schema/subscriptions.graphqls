@@ -1,0 +1,35 @@
+# WebSocket subscriptions (task 1.10, D-050, D-105). Subscriptions run only
+# over a WebSocket on /graphql with the graphql-transport-ws protocol; the
+# caller is the session of the cookie sent with the upgrade (connection_init
+# payloads are not accepted). The socket closes with 4401 when the session
+# ends, 4403 when its access changes and 4001 when it was rotated (reconnect).
+# Every event is re-authorized when it is delivered.
+
+type Subscription {
+  """
+  Changes to your own sessions (one revoked or rotated, or all of them
+  revoked), e.g. to refresh the session list. When the change ends the
+  session of this connection, the socket closes (see the close codes
+  above) and the notice may not arrive first.
+  """
+  sessionEvents: SessionEvent! @authenticated
+}
+
+"What happened to a session."
+enum SessionEventKind {
+  "The session ended (logout, revoked, replaced by a new login)."
+  REVOKED
+  "The session was replaced by a new one (privilege change)."
+  ROTATED
+  "All of your sessions ended (password, role or status change)."
+  ALL_REVOKED
+}
+
+"A change to one or all of your sessions. Carries identifiers only."
+type SessionEvent {
+  kind: SessionEventKind!
+  "The session that changed; null when all sessions were revoked."
+  sessionId: UUID
+  "True when the change concerns the session of this connection."
+  current: Boolean!
+}

@@ -150,7 +150,7 @@ internal/{config,db,crypto,certs,auth,authz,audit,graph,engine,runner,runnerclie
 web/  plans/  .github/workflows/
 docs/                     # user & operator documentation (Markdown, rendered on GitHub; static-site-ready)
   DECISIONS.md            # decision log (D-001…): append-only, index on top, see Working rules
-  getting-started.md      # quick start with docker compose, first-run setup, first job
+  getting-started.md      # quick start with docker compose, first admin via `just admin-create`, first job
   installation/           # compose, reverse proxy + TLS, rootless Docker, upgrades
   configuration.md        # bekup.toml + runner.toml reference (every key, default, env override, *_file secrets), dev-mode guardrails
   architecture.md         # components, trust boundaries, runner design, data flow diagrams
@@ -186,19 +186,23 @@ docs/                     # user & operator documentation (Markdown, rendered on
 - [x] **0.9** CI baseline: GitHub Actions (SHA-pinned) for lint, gosec, govulncheck, osv-scanner, Go unit tests, vitest, tsc. *deps: 0.1, 0.8*
 
 ### M1 HTTP, GraphQL, audit, authz, auth
-- [ ] **1.0** App-DB TLS (D-100): `database.tls_mode` (verify-full default | require | disable) + CA/client-cert files wired into the pgx pool and the migrator; `bekup certs` gains a `postgres` server component; compose (prod + dev) runs postgres with `ssl=on`, TLS ≥1.2, `hostssl`-only rules for bekup roles; weakened modes → startup warning (alerts/badge wired in 5.5/6.x). *deps: 0.4, 0.6* · AC: integration test proves verify-full rejects a cert from another CA and a wrong host name; compose stack connects over TLS
+- [x] **1.0** App-DB TLS (D-100): `database.tls_mode` (verify-full default | require | disable) + CA/client-cert files wired into the pgx pool and the migrator; `bekup certs` gains a `postgres` server component; compose (prod + dev) runs postgres with `ssl=on`, TLS ≥1.2, `hostssl`-only rules for bekup roles; weakened modes → startup warning (alerts/badge wired in 5.5/6.x). *deps: 0.4, 0.6* · AC: integration test proves verify-full rejects a cert from another CA and a wrong host name; compose stack connects over TLS
 - [x] **0.3a** Config: `server.allow_insecure_http` (default false); validation allows http base_url in dev or with the flag, empty trusted_proxies allowed then; `InsecureTransport()` helper + startup warning list (D-095). Also: hidden `bekup docs cli --dir` (cobra/doc) used by `just docs` for docs/reference/cli/. *deps: 0.3*
-- [ ] **1.1** HTTP layer: chi, security headers/CSP, Origin/Sec-Fetch checks, request IDs, size limits, rate limiting, **trusted-proxy handling (forwarded headers only from `BEKUP_TRUSTED_PROXIES`)**, SPA fallback, `/healthz` `/readyz`, no HSTS over http, a startup WARN when insecure (D-095), and the `bekup healthcheck serve` subcommand (used by the compose healthcheck, D-080). Startup checks: `db.CheckAppRole` and **refuse to start on an outdated schema** (D-078; `bekup_app` can't read `goose_db_version`, so expose the version via a SECURITY DEFINER function `bekup_schema_version()` added in a migration). *deps: 0.3* · AC: spoofed `X-Forwarded-For/Proto` from an untrusted IP is ignored
-- [ ] **1.2** gqlgen server: POST+JSON only, depth/complexity limits, masked errors, authenticated-only introspection. *deps: 1.1, 0.4*
-- [ ] **1.3** `internal/audit`: append API, `bekup audit verify`, periodic chain-head signing/export hook. *deps: 0.4, 0.5*
-- [ ] **1.4** `internal/authz`: deny-by-default policy, `@hasRole`, ownership helpers, matrix-test harness that fails on unmapped operations. *deps: 1.2*
-- [ ] **1.5** Passwords & sessions: argon2id + semaphore, policy, sessions (AAL, stepup_at, rotation, expiry, revoke-all), login/logout/me, lockout. Cookie drops `__Host-`/`Secure` only when the base URL is http (D-095). *deps: 1.3, 1.4*
-- [ ] **1.6** First-run setup token (1h TTL), `bekup admin create|reset-password`, user CRUD (admin) + session list/revoke. *deps: 1.5*
-- [ ] **1.7** ∥ TOTP (replay protection) + recovery codes. *deps: 1.5*
-- [ ] **1.8** ∥ WebAuthn passkeys (register, login, manage). Passkeys need a secure context; over plain http (non-localhost), enrollment is hidden with an explanation (D-095). *deps: 1.5*
-- [ ] **1.9** 2FA policy (global/per role), two-step login, forced enrollment, **step-up middleware/directive**. *deps: 1.7, 1.8*
-- [ ] **1.10** WS subscription transport: cookie auth + Origin, periodic/per-event re-validation, delivery-time authz, close on logout/revoke/role change, per-user caps. *deps: 1.5*
-- [ ] **1.11** Re-verify the compose stack + both proxy profiles end to end now that `serve` exists (deferred AC of 0.7/0.7b: UI over HTTPS via traefik and nginx, healthchecks green, testssl clean, `serve` unreachable from the host in prod mode; proxy-less dev on 127.0.0.1:8080 shows the HTTP warning). Runner healthcheck is re-verified in 2.4. *deps: 1.1, 0.7b*
+- [x] **1.1** HTTP layer: chi, security headers/CSP, Origin/Sec-Fetch checks, request IDs, size limits, rate limiting, **trusted-proxy handling (forwarded headers only from `BEKUP_TRUSTED_PROXIES`)**, SPA fallback, `/healthz` `/readyz`, no HSTS over http, a startup WARN when insecure (D-095), and the `bekup healthcheck serve` subcommand (used by the compose healthcheck, D-080). Startup checks: `db.CheckAppRole` and **refuse to start on an outdated schema** (D-078; `bekup_app` can't read `goose_db_version`, so expose the version via a SECURITY DEFINER function `bekup_schema_version()` added in a migration). *deps: 0.3* · AC: spoofed `X-Forwarded-For/Proto` from an untrusted IP is ignored
+- [x] **1.2** gqlgen server: POST+JSON only, depth/complexity limits, masked errors, authenticated-only introspection. *deps: 1.1, 0.4*
+- [x] **1.3** `internal/audit`: append API, `bekup audit verify`, periodic chain-head signing/export hook. *deps: 0.4, 0.5*
+- [x] **1.4** `internal/authz`: deny-by-default policy, `@hasRole`, ownership helpers, matrix-test harness that fails on unmapped operations. Also wire the GraphQL `auditLog` query (admin) onto `audit.Auditor.List` (from 1.3). *deps: 1.2*
+- [x] **1.5** Passwords & sessions: argon2id + semaphore, policy, sessions (AAL, stepup_at, rotation, expiry, revoke-all), login/logout/me, lockout. Cookie drops `__Host-`/`Secure` only when the base URL is http (D-095). *deps: 1.3, 1.4*
+- [x] **1.6** First-run setup token (1h TTL; later removed by 1.12 / D-113), `bekup admin create|reset-password`, user CRUD (admin) + session list/revoke. CLI actions recorded via `audit.CLIEvent` (D-069). *deps: 1.5*
+- [x] **1.7** ∥ TOTP (replay protection) + recovery codes. *deps: 1.5*
+- [x] **1.8** ∥ WebAuthn passkeys (register, login, manage). Passkeys need a secure context; over plain http (non-localhost), enrollment is hidden with an explanation (D-095). *deps: 1.5*
+- [x] **1.9** 2FA policy (global/per role), two-step login, forced enrollment, **step-up middleware/directive**. *deps: 1.7, 1.8*
+  - Follow-ups done: default policy off for all roles (user decision); lost-factor recovery via `resetUserSecondFactors` + `bekup admin reset-2fa` (grace restarts at `mfa_reset_at`).
+- [x] **1.10** WS subscription transport: cookie auth + Origin, periodic/per-event re-validation, delivery-time authz, close on logout/revoke/role change, per-user caps. *deps: 1.5*
+- [x] **1.11** Re-verify the compose stack + both proxy profiles end to end now that `serve` exists (deferred AC of 0.7/0.7b: UI over HTTPS via traefik and nginx, healthchecks green, testssl clean, `serve` unreachable from the host in prod mode; proxy-less dev on 127.0.0.1:8080 shows the HTTP warning). Runner healthcheck is re-verified in 2.4. *deps: 1.1, 0.7b*
+- [x] **1.12** First admin via the CLI only (D-113, user decision): web setup-code flow removed (`setupStatus`/`completeSetup`; `setup_state` folded out of migration 00009 before release); serve logs the `bekup admin create` command when no admin exists. *deps: 1.6*
+- [x] **1.13** Local dev (D-114, user decision): `just dev` = app Postgres (TLS, 127.0.0.1) + mailpit + adminer; app runs natively (`just run`, `just web-dev`, `just admin-create`); the rest under `just dev-full`. *deps: 0.7, 1.0*
+- [x] **1.14** M1 closeout: dual review (security + code) → fix findings → re-verify → hand to the user for committing (decisions D-101…D-115 for acceptance).
 
 ### M2 Runner, engines, storage, connections, destinations
 - [ ] **2.1** ∥ `internal/engine`: catalog.toml (multi-arch digests, legacy flags, binary names), version-compat rules, pure argv builders for PG/MySQL/MariaDB (dump, globals + fallback, verify, restore, createdb, swap). *deps: 0.3* · AC: table tests per engine/version
@@ -279,6 +283,6 @@ docs/                     # user & operator documentation (Markdown, rendered on
 ## Verification
 - Every task: `just lint` (golangci+gosec, eslint, tsc), `just sec` (govulncheck, osv-scanner), `just test` (Go unit + vitest) green, plus the task's AC.
 - `just test-int`: testcontainers suites (engine round trips, destinations incl. Object Lock, tunnel, runner isolation/allowlist/hardening, scheduler, retention, key rotation, DB grants, audit immutability).
-- `just dev` manual smoke test: setup token → admin + passkey → pg15/mysql/mariadb connections (one via the SSH bastion, host key confirmed) → disk + minio (locked) + sftp destinations → encrypted hourly job → run now → live logs → signed manifest present → step-up download → staged restore to a new DB → rows verified → mailpit email + webhook. Then check: `docker inspect` of a dump container shows no secrets; `serve` can't reach target DBs; the dump container can't reach the runner's gRPC port; `bekup decrypt` works offline; `bekup audit verify` passes.
+- `just dev` + `just run` (and `just dev-full` for the targets) manual smoke test: `just admin-create` → admin + passkey → pg15/mysql/mariadb connections (one via the SSH bastion, host key confirmed) → disk + minio (locked) + sftp destinations → encrypted hourly job → run now → live logs → signed manifest present → step-up download → staged restore to a new DB → rows verified → mailpit email + webhook. Then check: `docker inspect` of a dump container shows no secrets; `serve` can't reach target DBs; the dump container can't reach the runner's gRPC port; `bekup decrypt` works offline; `bekup audit verify` passes.
 - `just test-e2e`: Playwright including role restrictions, step-up and 2FA.
 - On tag: signed multi-arch image; `cosign verify` passes; `docker compose up` from the README works on a clean machine.

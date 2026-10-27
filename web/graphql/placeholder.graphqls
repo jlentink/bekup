@@ -1,7 +1,0 @@
-# PLACEHOLDER SCHEMA (task 0.8). Used by `pnpm gen` ONLY while the real schema
-# in ../internal/graph/schema/*.graphqls does not exist yet (it arrives in
-# task 1.2). Delete this file once the real schema lands.
-type Query {
-  "Placeholder field; not served by any backend."
-  _placeholder: Boolean
-}

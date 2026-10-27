@@ -31,15 +31,96 @@ help:
 doctor:
     @scripts/doctor.sh
 
-[doc('Start the dev stack (compose + air, sample DBs, minio, sftp, mailpit)')]
+[doc('Start the dev infra on 127.0.0.1 (app Postgres with TLS, mailpit, adminer) and migrate')]
 [group('dev')]
 [script]
 dev:
     {{ lib }}
-    need_file docker-compose.yml 0.7 "the compose stack"
-    need_file docker-compose.dev.yml 0.7 "the dev compose stack"
     need_cmd docker "https://docs.docker.com/get-docker/"
-    {{ compose_dev }} up --build --remove-orphans
+    need_cmd openssl "brew install openssl (or apt install openssl)"
+    dev_keys
+    recreate=()
+    if (( DEV_PG_CERT_CHANGED )); then
+        recreate=(--force-recreate)
+    fi
+    info "starting postgres, mailpit and adminer"
+    {{ compose_dev }} up --detach --wait ${recreate[@]+"${recreate[@]}"} postgres mailpit adminer
+    dev_native_env
+    dev_build
+    dev_migrate
+    keys=$(dev_keys_dir)
+    keys=${keys#"$PWD"/}
+    cat <<EOF
+
+    Dev infrastructure is running (all on 127.0.0.1):
+      app Postgres  127.0.0.1:${BEKUP_DEV_PG_PORT:-5432}  TLS only (verify-full with $keys/local/postgres_ca.crt)
+      adminer       http://127.0.0.1:${BEKUP_DEV_ADMINER_PORT:-8081}  System PostgreSQL, server postgres, database bekup,
+                    user bekup_app (password: $keys/bekup_app_password) or
+                    bekup_owner ($keys/bekup_owner_password); the superuser is socket-only
+      mailpit       http://127.0.0.1:${BEKUP_DEV_MAILPIT_PORT:-8025}  (SMTP 127.0.0.1:${BEKUP_DEV_SMTP_PORT:-1025})
+
+    Next steps:
+      just admin-create you@example.com "Your Name"   # first admin (password prompted)
+      just run                                         # bekup serve on http://localhost:8080
+      just web-dev                                     # optional: Vite hot reload on http://localhost:5173
+      just dev-down                                    # stop (data is kept; just db-reset wipes it)
+    EOF
+
+[doc('Run bekup serve natively in dev mode against the dev infra (migrates first)')]
+[group('dev')]
+[script]
+run:
+    {{ lib }}
+    dev_native_env
+    dev_build
+    dev_migrate
+    info "bekup serve on http://localhost:8080 (dev mode; the plain-HTTP warning is expected, D-095)"
+    exec bin/bekup-dev serve
+
+[doc('Apply the migrations natively as bekup_owner against the dev infra')]
+[group('dev')]
+[script]
+dev-migrate:
+    {{ lib }}
+    dev_native_env
+    dev_build
+    dev_migrate
+
+[doc('Create an admin account on the dev infra (password prompted on the terminal)')]
+[group('dev')]
+[script]
+admin-create email display_name:
+    {{ lib }}
+    dev_native_env
+    dev_build
+    exec bin/bekup-dev admin create --email="$1" --display-name="$2"
+
+[doc('Start the Vite dev server (hot reload) against bekup serve on :8080')]
+[group('dev')]
+[script]
+web-dev:
+    {{ lib }}
+    has_web || not_yet "the web UI" "0.8"
+    web_deps
+    BEKUP_DEV_BACKEND="${BEKUP_DEV_BACKEND:-http://localhost:8080}" web_run dev
+
+[doc('Start the full containerised dev stack (air serve, runner, sample DBs, minio, sftp)')]
+[group('dev')]
+[script]
+dev-full:
+    {{ lib }}
+    need_cmd docker "https://docs.docker.com/get-docker/"
+    need_cmd openssl "brew install openssl (or apt install openssl)"
+    dev_keys
+    {{ compose_dev }} --profile full up --build --remove-orphans
+
+[doc('Stop every dev container (all profiles); volumes are kept')]
+[group('dev')]
+[script]
+dev-down:
+    {{ lib }}
+    need_cmd docker "https://docs.docker.com/get-docker/"
+    {{ compose_dev }} --profile full --profile web --profile traefik --profile nginx down --remove-orphans
 
 [doc('Run all code generators (sqlc, gqlgen, graphql-codegen, config reference)')]
 [group('dev')]
@@ -225,14 +306,14 @@ docker:
 [script]
 db-reset:
     {{ lib }}
-    need_file docker-compose.dev.yml 0.7 "the dev compose stack"
-    need_file internal/db/migrations 0.4 "migrations"
-    bekup_has migrate || not_yet "bekup migrate" "0.4"
-    {{ compose_dev }} down --volumes --remove-orphans
-    {{ compose_dev }} up --detach --wait postgres
-    # The app DB is not published to the host: migrate runs in its compose
-    # service, which alone receives the bekup_owner URL secret.
-    {{ compose_dev }} run --rm --build migrate
+    need_cmd docker "https://docs.docker.com/get-docker/"
+    {{ compose_dev }} --profile full --profile web --profile traefik --profile nginx down --volumes --remove-orphans
+    dev_keys
+    {{ compose_dev }} up --detach --wait postgres mailpit adminer
+    # Natively, through the published loopback port (D-114).
+    dev_native_env
+    dev_build
+    dev_migrate
 
 [doc('Regenerate internal/db/schema.sql (pg_dump of all migrations in a test container)')]
 [group('db')]

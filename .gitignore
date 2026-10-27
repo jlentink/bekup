@@ -76,3 +76,4 @@ secrets/
 /certs/
 /scratch/
 /data/
+/.mcp.json

@@ -3,7 +3,7 @@
 # Components and trust boundaries (plan "Components & trust boundaries"):
 #
 #   reverse proxy (profiles traefik | nginx) ──frontend──> serve
-#   serve ──backend──> postgres            (role bekup_app; migrations as bekup_owner)
+#   serve ──backend (TLS, verify-full)──> postgres  (role bekup_app; migrations as bekup_owner)
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
@@ -11,12 +11,15 @@
 # Before the first `docker compose up -d`:
 #   1. Create ./bekup.toml and ./runner.toml from the *.example.toml files.
 #   2. Create the secret files in ./secrets/ (see the docs; `just keygen`).
+#      BEKUP_KEYS_DIR (compose variable) moves that directory elsewhere.
 #   3. Generate the mTLS certificates once:
 #        docker compose --profile setup run --rm certs-init
 #   4. Start with ONE reverse-proxy profile for HTTPS (traefik | nginx):
 #        BEKUP_DOMAIN=backup.example.com ACME_EMAIL=ops@example.com \
 #          docker compose --profile traefik up -d
 #      and set bekup.toml [server] trusted_proxies = ["10.213.250.5/32"].
+#   5. Create the first admin (D-113):
+#        docker compose run --rm admin create --email you@example.com --display-name "You"
 #
 # Every image is pinned by tag AND digest; Renovate keeps the digests current
 # (renovate.json, D-061). Set BEKUP_IMAGE to a released, digest-pinned
@@ -55,13 +58,18 @@ services:
   # certificates (task 0.6, `bekup certs init`). Run it explicitly:
   #   docker compose --profile setup run --rm certs-init
   # It prompts (no echo) for a CA key passphrase (min 16 characters) and
-  # writes below ./secrets/certs (docs/security/mtls-certs.md):
+  # writes below ${BEKUP_KEYS_DIR:-./secrets}/certs (docs/security/mtls-certs.md):
   #   ca/ca.crt, ca/ca.key (age-encrypted)  -> move ca/ OFFLINE afterwards
   #   runner/{runner.crt,runner.key,ca.crt}, serve/{serve.crt,serve.key,ca.crt}
-  # It is the ONLY container that ever sees the CA private key. serve and
-  # runner each receive only their own directory's files as Docker secrets
-  # (see `secrets:`). Rotation (with ca/ temporarily restored):
-  #   docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --all
+  #   postgres/{postgres.crt,postgres.key,ca.crt}  (app DB TLS, D-100)
+  # It is the ONLY container that ever sees the CA private key. serve,
+  # runner and postgres each receive only their own directory's files as
+  # Docker secrets (see `secrets:`); serve and migrate also get
+  # postgres/ca.crt to verify the database. Rotation (with ca/ temporarily restored):
+  #   docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --all --no-audit
+  # certs-init has no database access, so rotations here need --no-audit
+  # (D-118): record the rotation afterwards, or run `bekup certs rotate` from a
+  # host/container that can reach the app DB so it lands in the audit log.
   # -------------------------------------------------------------------------
   certs-init:
     <<: *bekup-hardening
@@ -72,9 +80,10 @@ services:
       - --dir=/certs
       - --component=runner
       - --component=serve
+      - --component=postgres
     volumes:
       - type: bind
-        source: ./secrets/certs
+        source: ${BEKUP_KEYS_DIR:-./secrets}/certs
         target: /certs
         bind:
           create_host_path: false
@@ -104,6 +113,10 @@ services:
         target: /etc/bekup/bekup.toml
     secrets:
       - bekup_database_owner_url
+      # CA bundle that signs the postgres certificate: [database]
+      # tls_ca_file (default path), verified with tls_mode = "verify-full".
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
     networks: [backend]
     depends_on:
       postgres:
@@ -112,6 +125,40 @@ services:
     deploy:
       resources:
         limits: { cpus: "0.50", memory: 256M, pids: 64 }
+
+  # -------------------------------------------------------------------------
+  # admin: one-shot break-glass account administration (`bekup admin`,
+  # D-069, D-113), e.g. the first admin:
+  #   docker compose run --rm admin create --email you@example.com --display-name "You"
+  # (the password is prompted twice on the terminal; for --password-file
+  # mount the file: `run --rm -v "$PWD/pw:/run/pw:ro" admin create ...
+  # --password-file /run/pw`). A separate service because `docker compose
+  # run serve ...` cannot start next to the running serve: both would claim
+  # serve's fixed `frontend` address. Same role as serve (bekup_app, D-054),
+  # but only the `backend` network and only the DB URL + DB CA: no master
+  # key, no mTLS client certificate, no ports.
+  # -------------------------------------------------------------------------
+  admin:
+    <<: *bekup-hardening
+    profiles: [admin]
+    entrypoint: ["/usr/local/bin/bekup", "admin"]
+    command: ["--help"]
+    configs:
+      - source: bekup_toml
+        target: /etc/bekup/bekup.toml
+    secrets:
+      - bekup_database_url
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
+    networks: [backend]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    deploy:
+      resources:
+        # argon2id hashing (64 MiB per hash).
+        limits: { cpus: "1.00", memory: 256M, pids: 64 }
 
   # -------------------------------------------------------------------------
   # serve: GraphQL API, UI, scheduler and River workers.
@@ -127,6 +174,9 @@ services:
     secrets:
       - bekup_master_key
       - bekup_database_url
+      # App DB TLS (D-100): [database] tls_ca_file default path.
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
       - source: serve_ca_crt
         target: bekup_ca.crt
       - source: bekup_client_crt
@@ -149,8 +199,8 @@ services:
       egress: {}
     # NO `ports:`. Never publish serve; only the reverse proxy reaches it.
     healthcheck:
-      # Exec form: distroless has no shell. Planned subcommand (proposed
-      # decision) that probes /readyz on the configured listen address.
+      # Exec form: distroless has no shell. `bekup healthcheck serve` GETs
+      # /healthz (liveness) on the server.listen address (D-080, D-102).
       test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "serve"]
       interval: 30s
       timeout: 5s
@@ -229,6 +279,11 @@ services:
 
   # -------------------------------------------------------------------------
   # postgres: bekup's own app database (not a backup target).
+  # TLS only for the bekup roles (D-100): deploy/postgres/entrypoint.sh copies
+  # the certificate/key into a private tmpfs (PostgreSQL insists on owning a
+  # 0600 key) and starts the server with ssl=on and TLS >= 1.2; the init
+  # script's pg_hba.conf rejects every non-TLS TCP login of bekup_owner and
+  # bekup_app. The superuser stays socket-only.
   # -------------------------------------------------------------------------
   postgres:
     image: postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b
@@ -236,10 +291,13 @@ services:
     # entrypoint then needs no root, no chown and no gosu, so every
     # capability can be dropped.
     user: "70:70"
+    entrypoint: ["/bin/sh", "/usr/local/bin/bekup-entrypoint.sh"]
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m
       - /var/run/postgresql:rw,noexec,nosuid,nodev,size=1m,uid=70,gid=70,mode=0700
+      # Runtime copies of the TLS certificate/key (deploy/postgres/entrypoint.sh).
+      - /var/lib/postgresql/tls:rw,noexec,nosuid,nodev,size=1m,uid=70,gid=70,mode=0700
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -255,6 +313,12 @@ services:
       # keys): the role passwords as Docker secret files.
       POSTGRES_BEKUP_OWNER_PASSWORD_FILE: /run/secrets/bekup_owner_password
       POSTGRES_BEKUP_APP_PASSWORD_FILE: /run/secrets/bekup_app_password
+      # Read only by deploy/postgres/entrypoint.sh (these are the defaults).
+      POSTGRES_BEKUP_TLS_CERT_FILE: /run/secrets/postgres.crt
+      POSTGRES_BEKUP_TLS_KEY_FILE: /run/secrets/postgres.key
+      POSTGRES_BEKUP_TLS_CA_FILE: /run/secrets/postgres_ca.crt
+    # entrypoint.sh appends -c ssl=on, ssl_min_protocol_version=TLSv1.2 and
+    # the ssl_{cert,key,ca}_file settings.
     command:
       - postgres
       - -c
@@ -267,10 +331,18 @@ services:
       - postgres_password
       - bekup_owner_password
       - bekup_app_password
+      - source: postgres_crt
+        target: postgres.crt
+      - source: postgres_key
+        target: postgres.key
+      - source: bekup_db_ca_crt
+        target: postgres_ca.crt
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # Creates bekup_owner / bekup_app and the bekup database on first start.
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+      # TLS wrapper around the image's docker-entrypoint.sh.
+      - ./deploy/postgres/entrypoint.sh:/usr/local/bin/bekup-entrypoint.sh:ro
     networks: [backend]
     # NO `ports:`: only serve and migrate reach the database.
     healthcheck:
@@ -542,39 +614,50 @@ configs:
 
 # ---------------------------------------------------------------------------
 # Secrets: file-based Docker secrets from ./secrets/ (gitignored), mounted at
-# /run/secrets/<name>. Secrets are never put in environment variables, argv or
+# /run/secrets/<name>. Set the compose variable BEKUP_KEYS_DIR (shell or
+# .env; absolute, or relative to this file) to keep them elsewhere, e.g. on
+# an encrypted volume outside the project directory. Secrets are never put in environment variables, argv or
 # the TOML files (D-019). Each service receives only the secrets it needs.
 # The file must be readable by the consuming container's UID (65532 for
 # bekup, 70 for postgres) with mode 0400/0600; see the docs.
 # ---------------------------------------------------------------------------
 secrets:
   bekup_master_key:
-    file: ./secrets/bekup_master_key
-  # postgres://bekup_app:...@postgres:5432/bekup?sslmode=...
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_master_key
+  # postgres://bekup_app:...@postgres:5432/bekup  (TLS comes from bekup.toml
+  # [database] tls_mode; an sslmode in the URL may not be stricter)
   bekup_database_url:
-    file: ./secrets/bekup_database_url
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_url
   # postgres://bekup_owner:...@postgres:5432/bekup (migrate only)
   bekup_database_owner_url:
-    file: ./secrets/bekup_database_owner_url
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_owner_url
   postgres_password:
-    file: ./secrets/postgres_password
+    file: ${BEKUP_KEYS_DIR:-./secrets}/postgres_password
   bekup_owner_password:
-    file: ./secrets/bekup_owner_password
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_owner_password
   bekup_app_password:
-    file: ./secrets/bekup_app_password
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_app_password
   # Written by certs-init. The CA *key* (./secrets/certs/ca/ca.key) is never
   # given to any long-running service. Each component gets the CA trust
   # bundle from its own directory (it holds both CAs during a CA rotation),
   # so ./secrets/certs/ca/ can be kept offline.
   serve_ca_crt:
-    file: ./secrets/certs/serve/ca.crt
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/serve/ca.crt
   bekup_client_crt:
-    file: ./secrets/certs/serve/serve.crt
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/serve/serve.crt
   bekup_client_key:
-    file: ./secrets/certs/serve/serve.key
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/serve/serve.key
   runner_ca_crt:
-    file: ./secrets/certs/runner/ca.crt
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/runner/ca.crt
   runner_crt:
-    file: ./secrets/certs/runner/runner.crt
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/runner/runner.crt
   runner_key:
-    file: ./secrets/certs/runner/runner.key
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/runner/runner.key
+  # App DB TLS (D-100): postgres server certificate + key (postgres only,
+  # readable by UID 70) and the CA bundle (postgres, serve, migrate).
+  postgres_crt:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/postgres/postgres.crt
+  postgres_key:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/postgres/postgres.key
+  bekup_db_ca_crt:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/certs/postgres/ca.crt

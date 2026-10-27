@@ -1,11 +1,13 @@
 # Installation with Docker Compose
 
-> **Status:** foundation from tasks 0.7/0.7b. The files and the hardening
-> described here exist, and `migrate`, `certs init` and `keys generate`
-> work. `serve` (task 1.1), `runner` (task 2.4) and `healthcheck` (D-080,
-> tasks 1.1/2.4) are still stubs, so the stack does not run end to end yet
-> (re-verified in task 1.11). TLS for the UI comes from the opt-in
-> reverse-proxy profiles `traefik` / `nginx`
+> **Status:** verified end to end in task 1.11: `migrate` (as
+> `bekup_owner`, TLS 1.3 + SCRAM channel binding), `serve` (healthy,
+> unpublished, bound to its `frontend` address only), the `admin` one-shot,
+> and both reverse-proxy profiles `traefik` / `nginx` (HTTPS, redirect,
+> HSTS, CSP, WebSocket upgrades, TLS 1.2/1.3 AEAD only). The `runner`
+> subcommand is still a stub until task 2.4, so the `runner` container
+> restarts in a loop for now; `serve` does not depend on it being healthy.
+> TLS for the UI comes from the opt-in reverse-proxy profiles
 > ([reverse-proxy.md](reverse-proxy.md)); the dev stack works without a
 > proxy over plain HTTP on `127.0.0.1:8080`.
 
@@ -15,7 +17,7 @@ bekup ships three files at the repository root:
 |---|---|
 | `Dockerfile` | One image for every component: web build → static Go build → distroless `nonroot`. Plus a `dev` target (air hot reload) used only by the dev override. |
 | `docker-compose.yml` | Production example: `certs-init`, `migrate`, `serve`, `runner`, `postgres`, plus the reverse-proxy profiles `traefik` and `nginx`. |
-| `docker-compose.dev.yml` | Development override: hot reload, sample databases, destinations, SSH bastion, mailpit. |
+| `docker-compose.dev.yml` | Development override: by default only the app Postgres (published on loopback), mailpit and adminer for a natively running bekup; profile `full` adds hot reload, the runner, sample databases, destinations and an SSH bastion (D-114). |
 
 ## Architecture in compose
 
@@ -60,7 +62,7 @@ Every bekup service gets the same baseline:
 | resource limits (`cpus`, `memory`, `pids`) | a runaway process cannot starve the host |
 | bounded `json-file` logs | logs cannot fill the disk |
 | `restart: unless-stopped` | long-running services come back after a crash or reboot |
-| exec-form healthchecks (`bekup healthcheck serve|runner`) | work without a shell (subcommand planned, see D-080) |
+| exec-form healthchecks (`bekup healthcheck serve|runner`) | work without a shell; `serve` probes `/healthz` (task 1.1, D-080, D-102), `runner` arrives in task 2.4 |
 
 The app database (`postgres:17-alpine`) runs as UID 70 directly, with a
 read-only root filesystem, no capabilities, SCRAM-SHA-256 for both local and
@@ -70,8 +72,16 @@ by `bekup_owner` and the runtime role `bekup_app` (CONNECT only; table grants
 come from the migrations, task 0.4). Passwords are read from secret files and
 never appear in argv, the environment or the logs. The script also puts
 `pg_hba.conf` rules first that reject the bootstrap superuser on every TCP
-connection, so it can only log in over the container-local socket (only on
-a new data volume; see [upgrades.md](upgrades.md#notes-for-existing-installations)).
+connection, so it can only log in over the container-local socket, and
+rules that reject every non-TLS TCP login of `bekup_owner` / `bekup_app`
+(only on a new data volume; see [upgrades.md](upgrades.md#notes-for-existing-installations)).
+
+The app database speaks **TLS only** to bekup (D-100): `postgres` starts
+through `deploy/postgres/entrypoint.sh`, which enables `ssl=on` with TLS ≥ 1.2
+and the `postgres` certificate from `certs-init`; `serve` and `migrate`
+verify it with `[database] tls_mode = "verify-full"` against
+`secrets/certs/postgres/ca.crt`. Details, weakened modes and rotation:
+[App DB TLS](../security/app-db-tls.md).
 
 ### Migrations
 
@@ -80,6 +90,38 @@ a new data volume; see [upgrades.md](upgrades.md#notes-for-existing-installation
 receives the owner credentials, so the long-running `serve` (role
 `bekup_app`) can never alter the schema or the audit-log protections (D-054,
 D-078).
+
+### Account administration (`admin`)
+
+`bekup admin` (first admin, password resets, 2FA resets, unlock, disable;
+D-069, D-113) runs in the one-shot service `admin` (profile `admin`,
+started on demand by `docker compose run`):
+
+```sh
+docker compose run --rm admin create --email you@example.com --display-name "Your Name"
+docker compose run --rm admin reset-password --email you@example.com
+```
+
+The password is prompted twice on the terminal. To use `--password-file`
+instead, mount the file (owner-only permissions) into the container:
+
+```sh
+docker compose run --rm -v "$PWD/admin-pw:/run/admin-pw:ro" admin \
+  create --email you@example.com --display-name "Your Name" --password-file /run/admin-pw
+```
+
+`admin` connects as `bekup_app` like `serve` but gets only the `backend`
+network, the database URL and the DB CA (no master key, no mTLS
+certificate, no ports). It exists because `docker compose run serve ...`
+cannot start while `serve` runs: the new container would claim `serve`'s
+fixed `frontend` address ("Address already in use").
+
+In the development stack use `just admin-create <email> <name>` instead
+(the native binary against the dev Postgres). The containerised service
+also works there (`docker compose -f docker-compose.yml -f
+docker-compose.dev.yml --profile admin run --rm admin create ...`): the dev
+override makes it wait only for a healthy `postgres`, because `migrate` is
+in the `full` profile and `just dev` applies the migrations natively.
 
 ### The runner and the Docker socket
 
@@ -142,7 +184,11 @@ same rules to the dev secrets and the dev TOML files.
 ## Secrets
 
 Secrets are file-based Docker secrets from `./secrets/` (gitignored), mounted
-at `/run/secrets/<name>`. They never appear in environment variables, argv or
+at `/run/secrets/<name>`. To keep them elsewhere (for example on an
+encrypted volume outside the project directory), set the compose variable
+`BEKUP_KEYS_DIR` (shell or `.env`; absolute, or relative to the compose
+file); the paths below are then relative to it, including the `certs/`
+directory that `certs-init` writes. They never appear in environment variables, argv or
 the TOML files (D-019). Each service only receives what it needs:
 
 | Secret file | Used by | Content |
@@ -154,6 +200,8 @@ the TOML files (D-019). Each service only receives what it needs:
 | `secrets/bekup_owner_password`, `secrets/bekup_app_password` | postgres (init only) | role passwords (must match the URLs) |
 | `secrets/certs/serve/{serve.crt,serve.key,ca.crt}` | serve | client certificate + CA bundle (as `bekup_client.{crt,key}`, `bekup_ca.crt`) |
 | `secrets/certs/runner/{runner.crt,runner.key,ca.crt}` | runner | server certificate + CA bundle (as `runner.{crt,key}`, `bekup_ca.crt`) |
+| `secrets/certs/postgres/{postgres.crt,postgres.key}` | postgres | app DB TLS server certificate + key (as `postgres.{crt,key}`) |
+| `secrets/certs/postgres/ca.crt` | postgres, serve, migrate | CA bundle (as `postgres_ca.crt` / `bekup_db_ca.crt`, the `tls_ca_file` default) |
 
 The CA private key (`secrets/certs/ca/ca.key`, age-encrypted) is only ever
 mounted into the one-shot `certs-init` container; no long-running service sees
@@ -168,6 +216,7 @@ world-readable (bekup rejects world-readable secret files):
 sudo chown 65532:65532 secrets/bekup_*
 sudo chown -R 65532:65532 secrets/certs/serve secrets/certs/runner
 sudo chown 70:70 secrets/postgres_password secrets/bekup_owner_password secrets/bekup_app_password
+sudo chown -R 70:70 secrets/certs/postgres   # key 0600; ca.crt stays 0644 for serve/migrate
 sudo chmod 0400 secrets/bekup_* secrets/postgres_password
 sudo chmod 0711 secrets secrets/certs
 ```
@@ -175,9 +224,10 @@ sudo chmod 0711 secrets secrets/certs
 Docker Desktop maps ownership itself; `0600` files owned by your user work
 there.
 
-The URLs in `bekup_database_url` / `bekup_database_owner_url` currently use the
-internal `backend` network without TLS. See the open question in D-078 about
-TLS for the app database.
+The URLs in `bekup_database_url` / `bekup_database_owner_url` need no
+`sslmode`: TLS comes from `[database] tls_mode` (default `verify-full`), and
+an `sslmode` stricter than it is rejected (see
+[App DB TLS](../security/app-db-tls.md)).
 
 ## First start (target flow)
 
@@ -203,6 +253,9 @@ TLS for the app database.
    BEKUP_DOMAIN=backup.example.com ACME_EMAIL=ops@example.com \
      docker compose --profile traefik up -d      # or --profile nginx
    ```
+
+6. Create the first admin (D-113) with the one-shot `admin` service (see
+   [Account administration](#account-administration-admin)), then sign in.
 
 Pin `BEKUP_IMAGE` (a compose variable) to a released, digest-pinned
 `ghcr.io/jlentink/bekup` reference; the default `bekup:dev` is a locally
@@ -252,11 +305,26 @@ image always builds. The version comes from `--build-arg VERSION` or the
 ## Development stack
 
 ```sh
-deploy/dev/gen-dev-keys.sh          # once; add `sudo … --chown` on Linux
-DOCKER_GID=0 just dev               # Docker Desktop; on Linux use the socket GID
+just dev                            # infra only; bekup runs natively (`just run`)
+DOCKER_GID=0 just dev-full          # everything in containers; on Linux use the socket GID
 ```
 
-**No proxy needed.** The dev override publishes `serve` directly on
+On Linux run `sudo deploy/dev/gen-dev-keys.sh --chown` once first.
+
+**Default profile (D-114).** Without a profile the dev override starts only
+`postgres`, `mailpit` and `adminer`, for a bekup that runs natively on the
+host ([development.md](../development.md#local-development)):
+
+| Service | Purpose | Host access |
+|---|---|---|
+| `postgres` | the app DB, unchanged from production (TLS-only bekup roles, SCRAM with channel binding, socket-only superuser); DEV ONLY published on loopback through the extra non-internal `dev-host` network. The dev certificate also names `localhost` and `127.0.0.1` for `verify-full` from the host | `127.0.0.1:5432` (`BEKUP_DEV_PG_PORT`) |
+| `mailpit` | SMTP sink | SMTP `127.0.0.1:1025`, UI http://127.0.0.1:8025 |
+| `adminer` | DB browser, digest-pinned, read-only rootfs, no capabilities, `no-new-privileges`; login form restricted to the app DB (`deploy/dev/adminer/login-servers.php`); libpq with `verify-full` against the dev CA and required channel binding. Log in as `bekup_app` or `bekup_owner`, database `bekup` | http://127.0.0.1:8081 |
+
+**Profile `full`.** The containerised stack below (`just dev-full`, or
+`--profile full`). The proxy and `web` profiles build on it.
+
+**No proxy needed.** The `full` profile publishes `serve` directly on
 `http://127.0.0.1:8080` (loopback only, `base_url =
 "http://localhost:8080"`). Plain HTTP is accepted in dev mode, with a WARN
 log line at every startup and a permanent red "Connection is not encrypted
@@ -266,7 +334,7 @@ test HTTPS with a local certificate on `https://bekup.localhost:8443`
 ([reverse-proxy.md](reverse-proxy.md#development-local-tls)).
 
 `docker-compose.dev.yml` keeps the production hardening of the bekup services
-and adds:
+and adds in the `full` profile:
 
 | Service | Purpose | Host access |
 |---|---|---|
@@ -277,19 +345,22 @@ and adds:
 | `bastion` | OpenSSH, user `tunnel`, key-only, port 2222, TCP forwarding enabled by a pinned init script (no runtime `DOCKER_MODS` download) | none |
 | `minio` + `minio-init` | S3 with buckets `bekup-dev` (versioned) and `bekup-dev-locked` (Object Lock, GOVERNANCE 1 day) | console http://127.0.0.1:9001 |
 | `sftp` | SFTP destination, user `bekup`, key-only, writable `upload/`, stable host key | none |
-| `mailpit` | SMTP sink | http://127.0.0.1:8025 |
 | `traefik` / `nginx` (profile) | HTTPS with a local certificate (`deploy/dev/gen-dev-tls.sh`), no ACME | https://bekup.localhost:8443 |
 
 `deploy/dev/gen-dev-keys.sh` writes every dev password, the master key
 placeholder, a dev PKI from `bekup certs init` (runner + serve, unencrypted
 dev CA key, 90-day leaves), the SSH client key
 (`secrets/dev/bekup_ssh_ed25519`, accepted by the bastion and the SFTP server)
-and the SFTP host key. Files are `0600`, directories `0700`, and existing files
-are kept unless you pass `--force`. The dev configs are
+and the SFTP host key, plus `secrets/local/` for native bekup processes (role
+URLs via `127.0.0.1`, copies of the master keyring and DB CA). Files are
+`0600`, directories `0700`, and existing files are kept unless you pass
+`--force`. `BEKUP_DEV_KEYS_DIR` moves `./secrets` (also for the compose dev
+override). The dev configs are
 `deploy/dev/bekup.dev.toml` and `deploy/dev/runner.dev.toml`. On Linux,
 `sudo deploy/dev/gen-dev-keys.sh --chown` gives every file the owner its
 container needs (65532 bekup/minio, 70 postgres, 999 mysql/mariadb) and
-makes the dev TOML files `root:root 0644`.
+makes the dev TOML files `root:root 0644`; `secrets/local/` stays owned by
+the user who ran `sudo`.
 
 `minio-init` passes the MinIO credentials to `mc` only through the
 `MC_HOST_dev` environment variable of its short-lived shell, read from the
@@ -300,8 +371,9 @@ the dev stack uses Chainguard's source-built `cgr.dev/chainguard/minio`
 (D-081). The sample targets don't use TLS yet; certificate-pinning tests get
 TLS-enabled targets in task 2.7a.
 
-Stop and wipe the dev stack with:
+Stop the dev stack with `just dev-down`; wipe it with `just db-reset` or:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v --remove-orphans
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+  --profile full --profile web --profile traefik --profile nginx down -v --remove-orphans
 ```

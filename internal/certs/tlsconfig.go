@@ -50,6 +50,9 @@ func ServerTLSConfig(certFile, keyFile, clientCAFile string, allowedClientIDs []
 		// certificate against the current allowlist.
 		SessionTicketsDisabled: true,
 		VerifyConnection: func(cs tls.ConnectionState) error {
+			if err := requireDirectChain(cs); err != nil {
+				return err
+			}
 			id, err := PeerIdentity(cs)
 			if err != nil {
 				return err
@@ -84,7 +87,22 @@ func ClientTLSConfig(certFile, keyFile, caFile, serverName string) (*tls.Config,
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      pool,
 		ServerName:   serverName,
+		// VerifyConnection runs after the standard chain and host name
+		// verification.
+		VerifyConnection: requireDirectChain,
 	}, nil
+}
+
+// requireDirectChain accepts only certificates issued directly by the root
+// (leaf + root). The CA has path length 1 for the postgres issuer (D-104);
+// runner mTLS keeps the D-089 rule that no intermediate is ever involved.
+func requireDirectChain(cs tls.ConnectionState) error {
+	for _, chain := range cs.VerifiedChains {
+		if len(chain) == 2 {
+			return nil
+		}
+	}
+	return errors.New("mtls: the peer certificate must be issued directly by the private CA")
 }
 
 // PeerIdentity returns the identity (spiffe://bekup/<name>) of the verified

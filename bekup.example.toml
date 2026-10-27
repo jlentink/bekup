@@ -39,27 +39,85 @@ allow_insecure_http = false
 # `frontend` address (PROXY_FRONTEND_IP), not the whole subnet.
 trusted_proxies = ["10.213.250.5/32"]
 read_header_timeout = "10s"
+# Whole-request read limit (headers + body).
+read_timeout = "30s"
+# Response write limit. WebSocket subscriptions and artifact downloads
+# override it per route.
+write_timeout = "60s"
+# Keep-alive idle limit.
+idle_timeout = "120s"
 shutdown_timeout = "30s"
+# Maximum size of the request headers in bytes (32 KiB).
+max_header_bytes = 32768
 # Maximum request body size in bytes (1 MiB).
 max_body_bytes = 1048576
+# Per-client-IP rate limit (token bucket): sustained requests per second and
+# burst. The client IP is the peer address, or X-Forwarded-For when the peer
+# is in trusted_proxies. Exceeding it returns 429 with Retry-After.
+rate_limit_per_second = 20.0
+rate_limit_burst = 100
+# Maximum client IPs tracked (least recently seen are evicted).
+rate_limit_max_clients = 10000
+# Per-user limit for authenticated /graphql and /api requests (on top of the
+# per-IP limit).
+user_rate_limit_per_second = 20.0
+user_rate_limit_burst = 100
 max_ws_connections_per_user = 5
+
+[graphql]
+# Limits of one GraphQL operation (D-105); larger operations are rejected
+# before execution. Complexity counts 1 per selected field.
+max_complexity = 1000
+max_depth = 12
+# Maximum GraphQL request body in bytes (256 KiB; at most server.max_body_bytes).
+max_body_bytes = 262144
+# WebSocket subscriptions (task 1.10): GET /graphql upgrades with the
+# graphql-transport-ws protocol, authenticated by the session cookie. The
+# per-user connection cap is server.max_ws_connections_per_user.
+# Connections per instance, all users together (beyond: 503).
+ws_max_connections = 1000
+# Active subscriptions per connection.
+ws_max_subscriptions_per_connection = 20
+# Largest client message in bytes (at most max_body_bytes).
+ws_max_message_bytes = 65536
+# Time to send connection_init after the upgrade.
+ws_init_timeout = "10s"
+# Server ping interval; no pong within twice the interval disconnects.
+ws_ping_interval = "25s"
+# Periodic session re-check of every connection (revocations normally close
+# sockets at once through session events; this is the fallback bound).
+ws_revalidate_interval = "30s"
+# Maximum age of a session check before an event is delivered.
+ws_session_check_ttl = "5s"
 
 [database]
 # File with the Postgres URL of the bekup app DB (postgres://bekup_app:...).
 url_file = "/run/secrets/bekup_database_url"
 # Dev mode only, rejected otherwise:
-# url = "postgres://bekup:bekup@localhost:5432/bekup?sslmode=disable"
+# url = "postgres://bekup_app:bekup@localhost:5432/bekup"
 # File with the Postgres URL of the bekup_owner role (postgres://bekup_owner:...).
 # Only `bekup migrate` reads it; mount it only where migrations run.
 owner_url_file = "/run/secrets/bekup_database_owner_url"
 # Dev mode only, rejected otherwise:
-# owner_url = "postgres://bekup_owner:bekup_owner@localhost:5432/bekup?sslmode=disable"
+# owner_url = "postgres://bekup_owner:bekup_owner@localhost:5432/bekup"
 max_conns = 10
 min_conns = 0
 conn_max_lifetime = "1h"
 conn_max_idle_time = "30m"
 connect_timeout = "10s"
 statement_timeout = "30s"
+# TLS to the app DB (D-100). verify-full (default) verifies the Postgres
+# server certificate against tls_ca_file (never the system roots) and the
+# URL's host name. require / disable are weaker and logged as a warning at
+# every startup. An sslmode in the URL may not be stricter than tls_mode.
+tls_mode = "verify-full"
+# CA bundle from `bekup certs init --component postgres`
+# (<dir>/postgres/ca.crt), mounted as a Docker secret.
+tls_ca_file = "/run/secrets/bekup_db_ca.crt"
+# Optional client certificate + key for Postgres `clientcert` setups (both
+# or neither), e.g. "/run/secrets/bekup_db_client.crt" / ".key".
+tls_client_cert_file = ""
+tls_client_key_file = ""
 
 [security]
 # Master keyring created by `bekup keys generate`. Back it up (escrow):
@@ -69,6 +127,8 @@ master_key_file = "/run/secrets/bekup_master_key"
 # master_key = "..."
 session_idle_timeout = "30m"
 session_absolute_timeout = "12h"
+# Sliding idle refresh: last-seen/idle expiry are written at most this often.
+session_touch_interval = "1m"
 # Fresh second factor validity for sensitive actions (at most 5m).
 stepup_max_age = "5m"
 # argon2id parameters can only be raised above these defaults.
@@ -77,9 +137,24 @@ argon2_iterations = 3
 argon2_parallelism = 1
 # Concurrent hash operations (each uses argon2_memory_kib of memory).
 argon2_max_concurrent = 4
+# Password policy: minimum length (characters) and zxcvbn score (0-4); both
+# can only be raised. Common passwords and passwords containing the e-mail
+# address are always refused.
 password_min_length = 12
-# First-run setup token lifetime (at most 1h).
-setup_token_ttl = "1h"
+password_min_score = 3
+# Login attempts per client IP (stricter than the server-wide limit); the
+# same rate also limits password verifications per account.
+login_rate_limit_per_minute = 10
+login_rate_limit_burst = 5
+# Account lockout: after lockout_threshold consecutive failures the account
+# is locked for lockout_base_duration, doubling per further failure up to
+# lockout_max_duration.
+lockout_threshold = 5
+lockout_base_duration = "1m"
+lockout_max_duration = "1h"
+# serve signs the audit chain head (instance key) this often when new audit
+# entries exist (1m to 24h).
+audit_head_sign_interval = "1h"
 
 [runner]
 # mTLS gRPC endpoint of `bekup runner` (certificates from `bekup certs init`).

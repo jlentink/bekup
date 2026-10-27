@@ -14,6 +14,104 @@ import (
 	"github.com/google/uuid"
 )
 
+const getAuditChainTip = `-- name: GetAuditChainTip :one
+SELECT id, hash FROM audit_log ORDER BY id DESC LIMIT 1
+`
+
+type GetAuditChainTipRow struct {
+	ID   int64  `json:"id"`
+	Hash []byte `json:"hash"`
+}
+
+// GetAuditChainTip returns the id and hash of the newest audit row.
+func (q *Queries) GetAuditChainTip(ctx context.Context) (GetAuditChainTipRow, error) {
+	row := q.db.QueryRow(ctx, getAuditChainTip)
+	var i GetAuditChainTipRow
+	err := row.Scan(&i.ID, &i.Hash)
+	return i, err
+}
+
+const getAuditLogCanonical = `-- name: GetAuditLogCanonical :one
+SELECT id, ts, actor_user_id, actor_kind, action, target_type, target_id,
+       (ip IS NOT NULL)::boolean AS has_ip, coalesce(host(ip), '')::text AS ip_text,
+       details::text AS details_text, prev_hash, hash
+FROM audit_log
+WHERE id = $1
+`
+
+type GetAuditLogCanonicalRow struct {
+	ID          int64      `json:"id"`
+	Ts          time.Time  `json:"ts"`
+	ActorUserID *uuid.UUID `json:"actorUserId"`
+	ActorKind   string     `json:"actorKind"`
+	Action      string     `json:"action"`
+	TargetType  *string    `json:"targetType"`
+	TargetID    *string    `json:"targetId"`
+	HasIp       bool       `json:"hasIp"`
+	IpText      string     `json:"ipText"`
+	DetailsText string     `json:"detailsText"`
+	PrevHash    []byte     `json:"prevHash"`
+	Hash        []byte     `json:"hash"`
+}
+
+// GetAuditLogCanonical returns one audit row in the hashed text form (see
+// ListAuditLogCanonical); used to check a signed chain head.
+func (q *Queries) GetAuditLogCanonical(ctx context.Context, id int64) (GetAuditLogCanonicalRow, error) {
+	row := q.db.QueryRow(ctx, getAuditLogCanonical, id)
+	var i GetAuditLogCanonicalRow
+	err := row.Scan(
+		&i.ID,
+		&i.Ts,
+		&i.ActorUserID,
+		&i.ActorKind,
+		&i.Action,
+		&i.TargetType,
+		&i.TargetID,
+		&i.HasIp,
+		&i.IpText,
+		&i.DetailsText,
+		&i.PrevHash,
+		&i.Hash,
+	)
+	return i, err
+}
+
+const getAuditLogChainAnchor = `-- name: GetAuditLogChainAnchor :one
+SELECT id, hash FROM audit_log WHERE id < $1 ORDER BY id DESC LIMIT 1
+`
+
+type GetAuditLogChainAnchorRow struct {
+	ID   int64  `json:"id"`
+	Hash []byte `json:"hash"`
+}
+
+// GetAuditLogChainAnchor returns the hash of the last row before @before_id
+// (the starting point of a partial verification).
+func (q *Queries) GetAuditLogChainAnchor(ctx context.Context, beforeID int64) (GetAuditLogChainAnchorRow, error) {
+	row := q.db.QueryRow(ctx, getAuditLogChainAnchor, beforeID)
+	var i GetAuditLogChainAnchorRow
+	err := row.Scan(&i.ID, &i.Hash)
+	return i, err
+}
+
+const getLatestAuditChainHead = `-- name: GetLatestAuditChainHead :one
+SELECT id, chain_id, chain_hash, signed_at, key_id, signature FROM audit_chain_heads ORDER BY id DESC LIMIT 1
+`
+
+func (q *Queries) GetLatestAuditChainHead(ctx context.Context) (AuditChainHead, error) {
+	row := q.db.QueryRow(ctx, getLatestAuditChainHead)
+	var i AuditChainHead
+	err := row.Scan(
+		&i.ID,
+		&i.ChainID,
+		&i.ChainHash,
+		&i.SignedAt,
+		&i.KeyID,
+		&i.Signature,
+	)
+	return i, err
+}
+
 const getLatestAuditLog = `-- name: GetLatestAuditLog :one
 SELECT id, ts, actor_user_id, actor_kind, action, target_type, target_id, ip, details, prev_hash, hash FROM audit_log ORDER BY id DESC LIMIT 1
 `
@@ -33,6 +131,40 @@ func (q *Queries) GetLatestAuditLog(ctx context.Context) (AuditLog, error) {
 		&i.Details,
 		&i.PrevHash,
 		&i.Hash,
+	)
+	return i, err
+}
+
+const insertAuditChainHead = `-- name: InsertAuditChainHead :one
+INSERT INTO audit_chain_heads (chain_id, chain_hash, signed_at, key_id, signature)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, chain_id, chain_hash, signed_at, key_id, signature
+`
+
+type InsertAuditChainHeadParams struct {
+	ChainID   int64     `json:"chainId"`
+	ChainHash []byte    `json:"chainHash"`
+	SignedAt  time.Time `json:"signedAt"`
+	KeyID     string    `json:"keyId"`
+	Signature []byte    `json:"signature"`
+}
+
+func (q *Queries) InsertAuditChainHead(ctx context.Context, arg InsertAuditChainHeadParams) (AuditChainHead, error) {
+	row := q.db.QueryRow(ctx, insertAuditChainHead,
+		arg.ChainID,
+		arg.ChainHash,
+		arg.SignedAt,
+		arg.KeyID,
+		arg.Signature,
+	)
+	var i AuditChainHead
+	err := row.Scan(
+		&i.ID,
+		&i.ChainID,
+		&i.ChainHash,
+		&i.SignedAt,
+		&i.KeyID,
+		&i.Signature,
 	)
 	return i, err
 }
@@ -83,6 +215,94 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 		&i.Hash,
 	)
 	return i, err
+}
+
+const listAuditLog = `-- name: ListAuditLog :many
+SELECT id, ts, actor_user_id, actor_kind, action, target_type, target_id,
+       ip, details, hash
+FROM audit_log
+WHERE ($1::bigint IS NULL OR id < $1::bigint)
+  AND ($2::text IS NULL OR action = $2::text)
+  AND ($3::text IS NULL OR starts_with(action, $3::text))
+  AND ($4::uuid IS NULL OR actor_user_id = $4::uuid)
+  AND ($5::text IS NULL OR actor_kind = $5::text)
+  AND ($6::text IS NULL OR target_type = $6::text)
+  AND ($7::text IS NULL OR target_id = $7::text)
+  AND ($8::timestamptz IS NULL OR ts >= $8::timestamptz)
+  AND ($9::timestamptz IS NULL OR ts < $9::timestamptz)
+ORDER BY id DESC
+LIMIT $10
+`
+
+type ListAuditLogParams struct {
+	BeforeID     *int64     `json:"beforeId"`
+	Action       *string    `json:"action"`
+	ActionPrefix *string    `json:"actionPrefix"`
+	ActorUserID  *uuid.UUID `json:"actorUserId"`
+	ActorKind    *string    `json:"actorKind"`
+	TargetType   *string    `json:"targetType"`
+	TargetID     *string    `json:"targetId"`
+	TsFrom       *time.Time `json:"tsFrom"`
+	TsTo         *time.Time `json:"tsTo"`
+	MaxRows      int32      `json:"maxRows"`
+}
+
+type ListAuditLogRow struct {
+	ID          int64           `json:"id"`
+	Ts          time.Time       `json:"ts"`
+	ActorUserID *uuid.UUID      `json:"actorUserId"`
+	ActorKind   string          `json:"actorKind"`
+	Action      string          `json:"action"`
+	TargetType  *string         `json:"targetType"`
+	TargetID    *string         `json:"targetId"`
+	Ip          *netip.Addr     `json:"ip"`
+	Details     json.RawMessage `json:"details"`
+	Hash        []byte          `json:"hash"`
+}
+
+// ListAuditLog pages through the audit log newest first. @before_id is the
+// cursor (the id of the last row of the previous page); every filter is
+// optional (NULL: no filter). @action_prefix matches "<prefix>." prefixes.
+func (q *Queries) ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]ListAuditLogRow, error) {
+	rows, err := q.db.Query(ctx, listAuditLog,
+		arg.BeforeID,
+		arg.Action,
+		arg.ActionPrefix,
+		arg.ActorUserID,
+		arg.ActorKind,
+		arg.TargetType,
+		arg.TargetID,
+		arg.TsFrom,
+		arg.TsTo,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuditLogRow
+	for rows.Next() {
+		var i ListAuditLogRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ts,
+			&i.ActorUserID,
+			&i.ActorKind,
+			&i.Action,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Ip,
+			&i.Details,
+			&i.Hash,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAuditLogCanonical = `-- name: ListAuditLogCanonical :many

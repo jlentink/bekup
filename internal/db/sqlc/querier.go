@@ -6,35 +6,186 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 type Querier interface {
+	// AcceptTOTPStep records a verified time step (replay protection): it
+	// succeeds only for a step after the last accepted one and only while the
+	// secret is still the one the code was checked against. A success also
+	// clears the second-factor failure counter.
+	AcceptTOTPStep(ctx context.Context, arg AcceptTOTPStepParams) (int64, error)
 	// Migration lock: 'bekupMIG' as a big-endian int64. Session-level, but only
 	// ever taken on the migrator's own dedicated (unpooled) connection.
 	AcquireMigrationLock(ctx context.Context) error
+	// ActiveAdminExists reports whether an active (not disabled, not deleted)
+	// admin account exists; serve warns at startup when none does (D-113).
+	ActiveAdminExists(ctx context.Context) (bool, error)
+	// Session re-validation for long-lived connections (WebSocket
+	// subscriptions, task 1.10). Looks the session up by id, never by token,
+	// and does not touch it: an open socket is not user activity, so the idle
+	// expiry keeps running.
+	// CheckActiveSession returns the active session id with its user, so the
+	// caller can rebuild the full principal (role, AAL, step-up and
+	// second-factor times, restrictions; M1 review L2).
+	CheckActiveSession(ctx context.Context, id uuid.UUID) (CheckActiveSessionRow, error)
+	// ConfirmTOTP turns the pending secret into the active one, only if the
+	// pending secret is still the one that was verified and not expired.
+	ConfirmTOTP(ctx context.Context, arg ConfirmTOTPParams) (int64, error)
+	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountWebAuthnCredentials(ctx context.Context, userID uuid.UUID) (int64, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	// Queries used by the migrator on its dedicated owner connection.
 	// CurrentRoleName returns the role of the current session.
 	CurrentRoleName(ctx context.Context) (string, error)
+	DeleteExpiredWebAuthnCeremonies(ctx context.Context) (int64, error)
+	DeleteRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	// DeleteStaleSessions removes sessions that expired or were revoked before
+	// the cutoff (housekeeping; revoked rows are kept a while for the session
+	// list and investigations).
+	DeleteStaleSessions(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteUserWebAuthnCeremonies(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteUserWebAuthnCredentials(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteWebAuthnCredential(ctx context.Context, arg DeleteWebAuthnCredentialParams) (WebauthnCredential, error)
+	// DisableTOTP removes the active and any pending secret.
+	DisableTOTP(ctx context.Context, id uuid.UUID) (int64, error)
+	// Instance signing keys (D-087; internal/audit instance key loader).
+	GetActiveInstanceKey(ctx context.Context) (InstanceKey, error)
+	// GetActiveSessionForUpdate locks an active session (rotation, AAL changes).
+	GetActiveSessionForUpdate(ctx context.Context, id uuid.UUID) (Session, error)
+	// User administration (task 1.6, D-110): admin CRUD in the API and the
+	// break-glass `bekup admin` CLI. Deleted accounts are soft deleted.
+	GetActiveUserByEmail(ctx context.Context, email string) (User, error)
+	// GetAuditChainTip returns the id and hash of the newest audit row.
+	GetAuditChainTip(ctx context.Context) (GetAuditChainTipRow, error)
+	// GetAuditLogCanonical returns one audit row in the hashed text form (see
+	// ListAuditLogCanonical); used to check a signed chain head.
+	GetAuditLogCanonical(ctx context.Context, id int64) (GetAuditLogCanonicalRow, error)
+	// GetAuditLogChainAnchor returns the hash of the last row before @before_id
+	// (the starting point of a partial verification).
+	GetAuditLogChainAnchor(ctx context.Context, beforeID int64) (GetAuditLogChainAnchorRow, error)
+	GetInstanceKey(ctx context.Context, id string) (InstanceKey, error)
+	GetLatestAuditChainHead(ctx context.Context) (AuditChainHead, error)
 	GetLatestAuditLog(ctx context.Context) (AuditLog, error)
 	// GetSessionByTokenHash returns only sessions that are not revoked and not
 	// expired (idle or absolute) at the database's current time.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	// GetSessionWithUserByTokenHash is GetSessionByTokenHash joined with the
+	// session's user (the session middleware, task 1.5).
+	GetSessionWithUserByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionWithUserByTokenHashRow, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
+	// GetSettingForUpdate locks a setting row (read-modify-write updates).
+	GetSettingForUpdate(ctx context.Context, key string) (Setting, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// GetUserForUpdate locks a user row that is not deleted.
+	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	// TOTP and recovery codes (task 1.7). Every state change is a conditional
+	// UPDATE so concurrent requests cannot both succeed.
+	GetUserTOTPState(ctx context.Context, id uuid.UUID) (GetUserTOTPStateRow, error)
+	// HasTOTP reports whether the user has a confirmed TOTP secret.
+	HasTOTP(ctx context.Context, id uuid.UUID) (bool, error)
+	InsertAuditChainHead(ctx context.Context, arg InsertAuditChainHeadParams) (AuditChainHead, error)
 	// InsertAuditLog appends an audit row. id, ts, prev_hash and hash are always
 	// assigned by the audit_log_chain trigger.
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) (AuditLog, error)
+	// InsertInstanceKey adds a new active key; it inserts nothing when another
+	// active key already exists (instance_keys_one_active_idx).
+	InsertInstanceKey(ctx context.Context, arg InsertInstanceKeyParams) (int64, error)
+	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
 	InsertSession(ctx context.Context, arg InsertSessionParams) (Session, error)
+	// InsertSettingIfAbsent stores a setting only while the key is unset (0
+	// rows: someone else stored it first).
+	InsertSettingIfAbsent(ctx context.Context, arg InsertSettingIfAbsentParams) (int64, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
+	InsertWebAuthnCredential(ctx context.Context, arg InsertWebAuthnCredentialParams) (WebauthnCredential, error)
+	// ListActiveUserSessions returns the user's sessions that are neither
+	// revoked nor expired, most recently used first.
+	ListActiveUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
+	// ListAuditLog pages through the audit log newest first. @before_id is the
+	// cursor (the id of the last row of the previous page); every filter is
+	// optional (NULL: no filter). @action_prefix matches "<prefix>." prefixes.
+	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]ListAuditLogRow, error)
 	// ListAuditLogCanonical returns audit rows in chain order with ip and details
 	// in the exact text form the hash covers (auditchain.Row).
 	ListAuditLogCanonical(ctx context.Context, arg ListAuditLogCanonicalParams) ([]ListAuditLogCanonicalRow, error)
+	ListInstancePublicKeys(ctx context.Context) ([]ListInstancePublicKeysRow, error)
+	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]ListUnusedRecoveryCodesRow, error)
+	// ListUsers pages users ordered by e-mail, then id. after_email/after_id is
+	// the last row of the previous page (both NULL: first page).
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	// WebAuthn passkeys (task 1.8): registered passkeys and pending ceremonies.
+	ListWebAuthnCredentials(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	ListenSessionEvents(ctx context.Context) error
+	// LockActiveAdmins locks every active (not disabled, not deleted) admin row
+	// and returns their ids. Callers that remove an admin hold these locks until
+	// commit, so two concurrent demotions cannot both see another admin left.
+	LockActiveAdmins(ctx context.Context) ([]uuid.UUID, error)
+	// LockUserForFactorChange serializes second-factor changes of one user
+	// (enrollment limits, last-factor protection).
+	LockUserForFactorChange(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// MarkSessionSecondFactor records a step-up with a second factor on an
+	// AAL2 session (task 1.9): step-up and second-factor times become now.
+	MarkSessionSecondFactor(ctx context.Context, id uuid.UUID) (int64, error)
+	// MarkSessionStepUp records a step-up; never on a session that is still
+	// waiting for its second factor (task 1.9).
+	MarkSessionStepUp(ctx context.Context, id uuid.UUID) (int64, error)
+	MarkWebAuthnSignCountAnomaly(ctx context.Context, arg MarkWebAuthnSignCountAnomalyParams) (int64, error)
+	// LISTEN/NOTIFY bridge (internal/pubsub, task 1.10). Payloads carry
+	// IDs only; the channel names are fixed here, one LISTEN query per
+	// channel, so no SQL is ever built from strings.
+	// Notify sends a notification on channel. Inside a transaction Postgres
+	// delivers it only on commit (and drops it on rollback).
+	Notify(ctx context.Context, arg NotifyParams) error
 	PutSetting(ctx context.Context, arg PutSettingParams) (Setting, error)
+	// PutWebAuthnCeremony stores the pending ceremony of a session, replacing
+	// an earlier one of the same kind (only the newest challenge is valid).
+	PutWebAuthnCeremony(ctx context.Context, arg PutWebAuthnCeremonyParams) error
+	// RecordWebAuthnAssertion stores the state after a successful assertion.
+	// The counter only moves forward (or stays 0 for authenticators without
+	// one); no row means a concurrent assertion already advanced it, which is
+	// treated as a regression.
+	RecordWebAuthnAssertion(ctx context.Context, arg RecordWebAuthnAssertionParams) (WebauthnCredential, error)
+	// RehashUserPassword replaces the hash only if it is still the one that was
+	// verified (a concurrent password change wins).
+	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	ReleaseMigrationLock(ctx context.Context) (bool, error)
+	RenameWebAuthnCredential(ctx context.Context, arg RenameWebAuthnCredentialParams) (WebauthnCredential, error)
+	// ReserveLoginAttempt reserves one password verification before argon2id
+	// runs (task 1.5 lockout; M1 review: no check-then-count race). It counts
+	// the attempt only while the account is not locked at at_time and, when
+	// the new count reaches the threshold, applies the backoff lock in the
+	// same statement (see ReserveMFAAttempt). No row: locked (or no such
+	// user). A verified password clears the count (ResetLoginFailures,
+	// UpdateUserPassword).
+	ReserveLoginAttempt(ctx context.Context, arg ReserveLoginAttemptParams) (ReserveLoginAttemptRow, error)
+	// ReserveMFAAttempt reserves one second-factor check before it runs
+	// (M1 review: no check-then-count race). It counts the attempt only while
+	// the second factors are not locked at at_time and, when the new count
+	// reaches the threshold, applies the backoff lock in the same statement:
+	// base_seconds doubled for every failure beyond the threshold, capped at
+	// max_seconds (auth.LockoutPolicy.LockFor). No row: locked (or no such
+	// user); the check must be refused without looking at the code. A
+	// successful check clears the count and the lock (AcceptTOTPStep,
+	// ResetMFAFailures).
+	ReserveMFAAttempt(ctx context.Context, arg ReserveMFAAttemptParams) (ReserveMFAAttemptRow, error)
+	// ResetLoginFailures clears the lockout state after a successful login
+	// (no write when there is nothing to clear).
+	ResetLoginFailures(ctx context.Context, id uuid.UUID) error
+	ResetMFAFailures(ctx context.Context, id uuid.UUID) error
+	// ResetUserSecondFactorState removes the TOTP secret (active and pending),
+	// clears the second-factor lockout and records the reset time (task 1.9:
+	// an admin or the CLI removes every second factor; a new 2FA enrollment
+	// grace period starts at mfa_reset_at). The caller holds the row lock.
+	ResetUserSecondFactorState(ctx context.Context, id uuid.UUID) (int64, error)
+	RevokeOtherUserSessions(ctx context.Context, arg RevokeOtherUserSessionsParams) (int64, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) (int64, error)
+	// RevokeUserSession revokes one session of a user (a session of another
+	// user is never touched).
+	RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error)
+	RevokeUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
 	// RoleSecurityCheck reports the attributes of a role that would weaken the
 	// least-privilege model, and every role it is a member of (directly or
 	// transitively) that is dangerous: a role with SUPERUSER, BYPASSRLS,
@@ -42,9 +193,37 @@ type Querier interface {
 	// pg_database_owner, or one of the extra forbidden roles. No row: the role
 	// does not exist.
 	RoleSecurityCheck(ctx context.Context, arg RoleSecurityCheckParams) (RoleSecurityCheckRow, error)
-	// TouchSession records activity and extends the idle expiry, never beyond
-	// the absolute expiry.
+	// SchemaVersion returns the highest applied migration version through the
+	// SECURITY DEFINER function bekup_schema_version() (migration 00006), because
+	// bekup_app cannot read goose_db_version. Used by `bekup serve` at startup and
+	// by /readyz (task 1.1, D-078).
+	SchemaVersion(ctx context.Context) (int64, error)
+	// SetTOTPPending stores a new pending secret, replacing an older pending
+	// one; refused (0 rows) once TOTP is enabled.
+	SetTOTPPending(ctx context.Context, arg SetTOTPPendingParams) (int64, error)
+	SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error
+	// SetUserPassword sets a password (temporary until the given time, or
+	// permanent when NULL) and clears the lockout state.
+	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error)
+	// SoftDeleteUser marks the account deleted and disabled and drops its
+	// password. The row stays for audit integrity.
+	SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// TakeWebAuthnCeremony consumes the pending ceremony of a session and user
+	// (single use): it is deleted whether or not it is still valid; expired
+	// rows are returned to no one.
+	TakeWebAuthnCeremony(ctx context.Context, arg TakeWebAuthnCeremonyParams) (TakeWebAuthnCeremonyRow, error)
+	// TouchSession records activity and client facts and extends the idle
+	// expiry, never beyond the absolute expiry.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
+	UnlockUser(ctx context.Context, id uuid.UUID) (int64, error)
+	UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) error
+	// UpdateUserPassword sets a new (permanent) password hash and clears the
+	// lockout state and a temporary-password mark (task 1.6).
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
+	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) error
+	// UseRecoveryCode marks a code used; 0 rows when it was used concurrently.
+	UseRecoveryCode(ctx context.Context, arg UseRecoveryCodeParams) (int64, error)
+	UserHasWebAuthnCredential(ctx context.Context, userID uuid.UUID) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

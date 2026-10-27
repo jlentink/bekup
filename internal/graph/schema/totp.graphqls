@@ -1,0 +1,72 @@
+# TOTP and recovery codes (task 1.7; D-111). Changing second factors needs
+# a fresh step-up (D-047, D-106). Verifying a TOTP or recovery code during
+# login or step-up is part of task 1.9's two-step login.
+
+extend type Mutation {
+  """
+  Starts (or restarts) TOTP enrollment for your account. Returns the key
+  as an otpauth URI, an inline SVG QR code and a base32 key for manual
+  entry; this is the only time the key is shown. Confirm it with
+  confirmTotpEnrollment before `expiresAt`. CONFLICT when TOTP is already
+  enabled (disable it first). Needs a fresh step-up.
+  """
+  beginTotpEnrollment: TotpEnrollment! @stepUp
+
+  """
+  Completes the pending TOTP enrollment with a current code from the
+  authenticator app and returns a new set of recovery codes, shown only
+  this once (any older codes stop working). A wrong code answers
+  VALIDATION on `code`; no pending enrollment answers CONFLICT. Needs a
+  fresh step-up.
+  """
+  confirmTotpEnrollment(code: String!): RecoveryCodes! @stepUp
+
+  """
+  Turns TOTP off for your account. Refused with CONFLICT when it is your
+  last second factor and the 2FA policy requires one. When no second
+  factor remains, the recovery codes are deleted too. Needs a fresh
+  step-up.
+  """
+  disableTotp: Boolean! @stepUp
+
+  """
+  Replaces your recovery codes with a new set, shown only this once. Needs
+  an enrolled second factor (CONFLICT otherwise) and a fresh step-up.
+  """
+  regenerateRecoveryCodes: RecoveryCodes! @stepUp
+}
+
+extend type Query {
+  "Your second-factor state. Never contains a secret or a code."
+  myTwoFactorStatus: TwoFactorStatus! @authenticated
+}
+
+"A begun TOTP enrollment. Every field but expiresAt carries the TOTP key."
+type TotpEnrollment {
+  "The otpauth:// key URI (for authenticator apps on this device)."
+  otpauthUri: String!
+  """
+  The key URI as a QR code: a self-contained SVG document (no scripts,
+  styles or data: URIs) to render inline.
+  """
+  qrCodeSvg: String!
+  "The key in base32 for manual entry (SHA-1, 6 digits, 30 seconds)."
+  manualEntryKey: String!
+  "Confirm before this time or start again."
+  expiresAt: Time!
+}
+
+"A new set of single-use recovery codes. They are never shown again."
+type RecoveryCodes {
+  codes: [String!]!
+}
+
+"Your second factors."
+type TwoFactorStatus {
+  totpEnabled: Boolean!
+  totpEnabledAt: Time
+  "True while a begun TOTP enrollment can still be confirmed."
+  totpEnrollmentPending: Boolean!
+  "Unused recovery codes left."
+  recoveryCodesRemaining: Int!
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/certs"
 	"github.com/jlentink/bekup/internal/config"
 )
@@ -121,23 +123,26 @@ func readPassphraseFile(path string) ([]byte, error) {
 	return b, nil
 }
 
-func newCertsCmd() *cobra.Command {
+func newCertsCmd(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "certs",
 		Short: "Create, rotate and inspect the private CA and component mTLS certificates",
-		Long: `Manage the runner mTLS PKI: a private ed25519 CA plus one certificate per
-component (runner = server, serve and worker = clients identified by the URI
-SAN spiffe://bekup/<component>). See docs/security/mtls-certs.md.`,
+		Long: `Manage the private PKI: a private ed25519 CA plus one certificate per
+component (runner = mTLS server, serve and worker = clients identified by the
+URI SAN spiffe://bekup/<component>, postgres = TLS server certificate of the
+app DB). See docs/security/mtls-certs.md and docs/security/app-db-tls.md.`,
 	}
-	cmd.AddCommand(newCertsInitCmd(), newCertsRotateCmd(), newCertsInspectCmd())
+	cmd.AddCommand(newCertsInitCmd(g), newCertsRotateCmd(g), newCertsInspectCmd())
 	return cmd
 }
 
-func newCertsInitCmd() *cobra.Command {
+func newCertsInitCmd(g *globalFlags) *cobra.Command {
 	var (
+		noAudit    bool
 		dir        string
 		components []string
 		runnerSANs []string
+		pgSANs     []string
 		caDays     int
 		leafDays   int
 		force      bool
@@ -146,20 +151,34 @@ func newCertsInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Create a new private CA and the component certificates",
-		Long: `Create a private ed25519 CA (name-constrained to the runner names and the
-spiffe://bekup trust domain) and ed25519 leaf certificates. Layout:
+		Long: `Create a private ed25519 CA (name-constrained to the runner and postgres
+server names and the spiffe://bekup trust domain) and ed25519 leaf
+certificates. Layout:
 
   <dir>/ca/ca.crt, ca.key         CA (move ca.key offline!)
   <dir>/runner/runner.{crt,key}, ca.crt
   <dir>/serve/serve.{crt,key}, ca.crt
   <dir>/worker/worker.{crt,key}, ca.crt
+  <dir>/postgres/postgres.{crt,key}, ca.crt   (app DB server, DNS "postgres";
+                                              ECDSA leaf + one-time issuer)
 
 The CA key is encrypted with an age passphrase unless --unencrypted-ca-key.
-Existing material is never overwritten without --force.`,
+Existing material is never overwritten without --force. Replacing it with
+--force is a rotation: it is recorded as certs.rotated in the audit log of
+the app database (loaded from the bekup config; the database must be
+reachable, checked before any file changes) unless --no-audit.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if dir == "" {
 				return errors.New("--dir is required")
+			}
+			var rec *certsAudit
+			if force && !noAudit {
+				var err error
+				if rec, err = openCertsAudit(c, g); err != nil {
+					return err
+				}
+				defer rec.close()
 			}
 			pass, err := pf.newPassphrase(c)
 			if err != nil {
@@ -170,6 +189,7 @@ Existing material is never overwritten without --force.`,
 				Dir:              dir,
 				Components:       components,
 				RunnerNames:      runnerSANs,
+				PostgresNames:    pgSANs,
 				CAValidity:       time.Duration(caDays) * day,
 				LeafValidity:     time.Duration(leafDays) * day,
 				Passphrase:       pass,
@@ -182,27 +202,34 @@ Existing material is never overwritten without --force.`,
 			if err := printResult(c, res); err != nil {
 				return err
 			}
+			if err := rec.record(c, audit.Details{"operation": "init_force", "dir": dir, "components": components}); err != nil {
+				return err
+			}
 			return caKeyWarning(c.ErrOrStderr(), certs.Layout{Dir: dir}.CAKey(), pf.unencrypted)
 		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&dir, "dir", "", "output directory (required)")
-	f.StringSliceVar(&components, "component", nil, "components to issue: runner, serve, worker (repeatable; default all)")
+	f.StringSliceVar(&components, "component", nil, "components to issue: runner, serve, worker, postgres (repeatable; default all)")
 	f.StringSliceVar(&runnerSANs, "runner-san", nil, `extra DNS name or IP for the runner certificate (repeatable; "runner" is always included; also limits the CA's name constraints)`)
+	f.StringSliceVar(&pgSANs, "postgres-san", nil, `extra DNS name or IP for the postgres certificate (repeatable; "postgres" is always included; also limits the CA's name constraints)`)
 	f.IntVar(&caDays, "ca-days", int(certs.DefaultCAValidity/day), "CA validity in days (max 3650)")
 	f.IntVar(&leafDays, "leaf-days", int(certs.DefaultLeafValidity/day), "leaf certificate validity in days (max 825)")
 	f.BoolVar(&force, "force", false, "overwrite existing certificate material (creates a NEW CA: every component must be redeployed)")
+	f.BoolVar(&noAudit, "no-audit", false, "with --force: do not record certs.rotated in the audit log (when the app database is not reachable; prints a warning)")
 	pf.register(cmd, true)
 	return cmd
 }
 
-func newCertsRotateCmd() *cobra.Command {
+func newCertsRotateCmd(g *globalFlags) *cobra.Command {
 	var (
+		noAudit    bool
 		dir        string
 		components []string
 		all        bool
 		caPhase    string
 		runnerSANs []string
+		pgSANs     []string
 		caDays     int
 		leafDays   int
 		pf         passphraseFlags
@@ -213,6 +240,7 @@ func newCertsRotateCmd() *cobra.Command {
 		Long: `Reissue leaf certificates (new keys) from the existing CA:
 
   bekup certs rotate --dir <dir> --component serve [--component worker]
+  bekup certs rotate --dir <dir> --component postgres [--postgres-san db.lan]
   bekup certs rotate --dir <dir> --all
 
 Rotate the CA itself with an overlap period; restart every component after
@@ -222,7 +250,13 @@ each phase:
   --ca promote  the next CA becomes current; reissue all leaves from it
   --ca finish   drop the old CA from every trust bundle
 
-Needs the CA key (bring it back from offline storage temporarily).`,
+Needs the CA key (bring it back from offline storage temporarily).
+
+Every rotation is recorded as certs.rotated in the audit log of the app
+database (loaded from the bekup config; the database must be reachable,
+which is checked before any file changes). Use --no-audit only when it is
+not (e.g. reissuing the postgres certificate of a stopped database); a
+warning is printed then.`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if dir == "" {
@@ -236,6 +270,14 @@ Needs the CA key (bring it back from offline storage temporarily).`,
 			}
 			if caPhase == "" && pf.unencrypted {
 				return errors.New("--unencrypted-ca-key only applies to --ca stage")
+			}
+			var rec *certsAudit
+			if !noAudit {
+				var err error
+				if rec, err = openCertsAudit(c, g); err != nil {
+					return err
+				}
+				defer rec.close()
 			}
 			var (
 				res *certs.Result
@@ -254,9 +296,12 @@ Needs the CA key (bring it back from offline storage temporarily).`,
 				if c.Flags().Changed("runner-san") {
 					opts.RunnerNames = append([]string{}, runnerSANs...)
 				}
+				if c.Flags().Changed("postgres-san") {
+					opts.PostgresNames = append([]string{}, pgSANs...)
+				}
 				res, err = certs.Rotate(opts)
 			} else {
-				res, err = rotateCA(c, dir, certs.CAPhase(caPhase), &pf, runnerSANs, caDays, leafDays)
+				res, err = rotateCA(c, dir, certs.CAPhase(caPhase), &pf, runnerSANs, pgSANs, caDays, leafDays)
 			}
 			if err != nil {
 				return err
@@ -264,24 +309,67 @@ Needs the CA key (bring it back from offline storage temporarily).`,
 			if err := printResult(c, res); err != nil {
 				return err
 			}
+			op := "leaf"
+			if caPhase != "" {
+				op = "ca_" + caPhase
+			}
+			if err := rec.record(c, audit.Details{"operation": op, "dir": dir, "components": components, "all": all}); err != nil {
+				return err
+			}
+			if noAudit {
+				if _, err := fmt.Fprintln(c.ErrOrStderr(), "WARNING: --no-audit: this rotation was NOT recorded in the audit log."); err != nil {
+					return err
+				}
+			}
 			_, err = fmt.Fprintln(c.ErrOrStderr(), "Restart the affected components so they load the new files.")
 			return err
 		},
 	}
 	f := cmd.Flags()
 	f.StringVar(&dir, "dir", "", "certificate directory created by certs init (required)")
-	f.StringSliceVar(&components, "component", nil, "component to reissue: runner, serve, worker (repeatable)")
+	f.StringSliceVar(&components, "component", nil, "component to (re)issue: runner, serve, worker, postgres (repeatable)")
 	f.BoolVar(&all, "all", false, "reissue every component present in --dir")
 	f.StringVar(&caPhase, "ca", "", "rotate the CA: stage, promote or finish")
 	f.StringSliceVar(&runnerSANs, "runner-san", nil, "replace the runner's extra DNS names/IPs (default: keep the current ones)")
+	f.StringSliceVar(&pgSANs, "postgres-san", nil, "replace the postgres certificate's extra DNS names/IPs (default: keep the current ones)")
 	f.IntVar(&caDays, "ca-days", int(certs.DefaultCAValidity/day), "validity of the next CA in days (--ca stage)")
 	f.IntVar(&leafDays, "leaf-days", int(certs.DefaultLeafValidity/day), "leaf certificate validity in days")
+	f.BoolVar(&noAudit, "no-audit", false, "do not record certs.rotated in the audit log (when the app database is not reachable; prints a warning)")
 	pf.register(cmd, true)
 	return cmd
 }
 
+// certsAudit records certs.rotated as a CLI event (D-069) in the app
+// database. It is opened before any file changes, so an unreachable
+// database stops the command before it rotates anything (fail closed).
+type certsAudit struct {
+	auditor *audit.Auditor
+	close   func()
+}
+
+func openCertsAudit(c *cobra.Command, g *globalFlags) (*certsAudit, error) {
+	pool, _, _, closePool, err := openAppDB(c, g, "bekup-certs")
+	if err != nil {
+		return nil, fmt.Errorf("certs.rotated must be recorded in the audit log, but the app database is not available (use --no-audit to rotate without it): %w", err)
+	}
+	return &certsAudit{auditor: audit.New(pool, audit.Options{}), close: closePool}, nil
+}
+
+// record stores the event (nil receiver: auditing was skipped).
+func (a *certsAudit) record(c *cobra.Command, details audit.Details) error {
+	if a == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
+	if _, err := a.auditor.Record(ctx, audit.CLIEvent(audit.ActionCertsRotated, "certs", "", details)); err != nil {
+		return fmt.Errorf("the certificates were rotated but certs.rotated could not be recorded in the audit log: %w", err)
+	}
+	return nil
+}
+
 func rotateCA(c *cobra.Command, dir string, phase certs.CAPhase, pf *passphraseFlags,
-	runnerSANs []string, caDays, leafDays int,
+	runnerSANs, pgSANs []string, caDays, leafDays int,
 ) (*certs.Result, error) {
 	opts := certs.RotateCAOptions{
 		Dir: dir, Phase: phase,
@@ -293,6 +381,12 @@ func rotateCA(c *cobra.Command, dir string, phase certs.CAPhase, pf *passphraseF
 			return nil, errors.New("--runner-san with --ca only applies to the stage phase")
 		}
 		opts.RunnerNames = append([]string{}, runnerSANs...)
+	}
+	if c.Flags().Changed("postgres-san") {
+		if phase != certs.CAStage {
+			return nil, errors.New("--postgres-san with --ca only applies to the stage phase")
+		}
+		opts.PostgresNames = append([]string{}, pgSANs...)
 	}
 	switch phase {
 	case certs.CAStage:
@@ -432,7 +526,7 @@ the runner accepts, and the runner controls Docker. Move it OFFLINE now
 (encrypted USB stick, password manager, HSM) and delete it from this host; it
 is only needed again for "bekup certs rotate". Never mount it into a
 container or put it on a shared volume. Give each component only its own
-directory (runner/, serve/, worker/) via Docker secrets.
+directory (runner/, serve/, worker/, postgres/) via Docker secrets.
 `
 	if unencrypted {
 		msg += `The CA key is NOT ENCRYPTED (--unencrypted-ca-key). Treat it as plaintext key material.

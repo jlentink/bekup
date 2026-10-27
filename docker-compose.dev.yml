@@ -1,13 +1,23 @@
-# bekup DEVELOPMENT override (task 0.7). Never use in production.
+# bekup DEVELOPMENT override (tasks 0.7, D-081, D-114). Never use in production.
 #
-#   deploy/dev/gen-dev-keys.sh                     # once: dev keys/passwords/certs
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
-#   (or `just dev`)
+# Default (no profile; `just dev`): infrastructure only, for running bekup
+# natively on the host (`just run`):
+#   postgres  the app DB, TLS + hostssl-only as in production, published on
+#             127.0.0.1:${BEKUP_DEV_PG_PORT:-5432} (DEV ONLY)
+#   mailpit   SMTP 127.0.0.1:1025, web UI http://127.0.0.1:8025
+#   adminer   http://127.0.0.1:8081, logs in to postgres over TLS (verify-full)
 #
-# Adds: serve with air hot reload (dev mode), sample target DBs (PG 15,
-# MySQL 8.4, MariaDB 11.4) with seed data, a PG target reachable ONLY through
-# an SSH bastion (tunnel tests), minio with Object Lock, an SFTP server,
-# mailpit, and an optional Vite dev server (`--profile web`).
+# Profile `full` (`just dev-full`): additionally serve with air hot reload
+# (dev mode) after `migrate`, the runner, sample target DBs (PG 15, MySQL 8.4,
+# MariaDB 11.4) with seed data, a PG target reachable ONLY through an SSH
+# bastion (tunnel tests), minio with Object Lock and an SFTP server. Profile
+# `web` adds a containerised Vite dev server (needs `full`).
+#
+#   deploy/dev/gen-dev-keys.sh       # once (`just dev` runs it): dev keys/passwords/certs
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile full up --build
+#
+# BEKUP_DEV_KEYS_DIR moves ./secrets (gen-dev-keys.sh reads it too).
 #
 # Host ports are bound to 127.0.0.1 only. The production hardening of the
 # bekup services is kept (read-only rootfs, no capabilities, nonroot); the
@@ -40,12 +50,25 @@ services:
     build: *bekup-build
 
   migrate:
+    profiles: [full]
     build: *bekup-build
 
+  # One-shot `bekup admin` (`docker compose ... --profile admin run --rm
+  # admin create ...`). In dev the migrations are applied natively by
+  # `just dev` (`migrate` is in profile `full`), so admin only waits for
+  # postgres; the usual dev path is `just admin-create` (native binary).
+  admin:
+    build: *bekup-build
+    depends_on: !override
+      postgres:
+        condition: service_healthy
+
   runner:
+    profiles: [full]
     build: *bekup-build
 
   serve:
+    profiles: [full]
     # Go toolchain + air instead of the distroless binary.
     build:
       context: .
@@ -100,8 +123,60 @@ services:
         limits: { cpus: "4.00", memory: 4G, pids: 1024 }
 
   # -------------------------------------------------------------------------
-  # Optional Vite dev server: docker compose ... --profile web up
-  # (or run `pnpm dev` in web/ on the host, which is usually faster).
+  # App DB (default profile). DEV ONLY: published on loopback so `just run`
+  # (bekup on the host) and psql can reach it. It stays TLS-only for the
+  # bekup roles (hostssl, SCRAM with channel binding; the dev postgres
+  # certificate also names localhost and 127.0.0.1 for verify-full) and the
+  # superuser stays socket-only (rejected on every TCP connection).
+  # Published ports need a non-internal network: `dev-host`.
+  # -------------------------------------------------------------------------
+  postgres:
+    networks: [backend, dev-host]
+    ports:
+      - "127.0.0.1:${BEKUP_DEV_PG_PORT:-5432}:5432"
+
+  # -------------------------------------------------------------------------
+  # Adminer (default profile): http://127.0.0.1:8081. The login form offers
+  # only the app DB (deploy/dev/adminer/login-servers.php). Log in with
+  # System PostgreSQL, user bekup_app (or bekup_owner), the password from
+  # secrets/bekup_app_password (secrets/bekup_owner_password) and database
+  # `bekup` (the bekup roles may not connect to `postgres`). libpq (PG 18 in
+  # this image) connects with verify-full against the dev CA and requires
+  # channel binding. The superuser cannot log in here by design (socket-only).
+  # -------------------------------------------------------------------------
+  adminer:
+    <<: *dev-hardening
+    image: adminer:5.5.1@sha256:87f9aeeef91638f5bc150bb6490a4fd85d071f458f38dcc8171a640e1751d29b
+    user: "adminer"
+    read_only: true
+    tmpfs:
+      # PHP sessions (session.save_path defaults to /tmp).
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    cap_drop: [ALL]
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      # libpq settings (Adminer sets no sslmode itself unless configured).
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /run/secrets/postgres_ca.crt
+      PGCHANNELBINDING: require
+    secrets:
+      - source: bekup_db_ca_crt
+        target: postgres_ca.crt
+    volumes:
+      - ./deploy/dev/adminer/login-servers.php:/var/www/html/plugins-enabled/001-login-servers.php:ro
+    networks: [backend, dev-host]
+    ports:
+      - "127.0.0.1:${BEKUP_DEV_ADMINER_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 256M, pids: 64 }
+
+  # -------------------------------------------------------------------------
+  # Optional Vite dev server: docker compose ... --profile full --profile web up
+  # (or `just web-dev` on the host, which is usually faster).
   # -------------------------------------------------------------------------
   web:
     <<: *dev-hardening
@@ -175,6 +250,7 @@ services:
   # -------------------------------------------------------------------------
   pg15:
     <<: *dev-hardening
+    profiles: [full]
     image: postgres:15-alpine@sha256:a8e042598834300dfaa17a54f695b87b7f25d3490433bbbe2ef3bffbb9747f24
     user: "70:70"
     read_only: true
@@ -200,6 +276,7 @@ services:
   # tunnels work and that the runner cannot bypass them.
   pg15-tunneled:
     <<: *dev-hardening
+    profiles: [full]
     image: postgres:15-alpine@sha256:a8e042598834300dfaa17a54f695b87b7f25d3490433bbbe2ef3bffbb9747f24
     user: "70:70"
     read_only: true
@@ -223,6 +300,7 @@ services:
 
   mysql:
     <<: *dev-hardening
+    profiles: [full]
     image: mysql:8.4@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
     environment:
       MYSQL_DATABASE: shop
@@ -242,6 +320,7 @@ services:
 
   mariadb:
     <<: *dev-hardening
+    profiles: [full]
     image: mariadb:11.4@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873
     environment:
       MARIADB_DATABASE: shop
@@ -266,6 +345,7 @@ services:
   # -------------------------------------------------------------------------
   bastion:
     <<: *dev-hardening
+    profiles: [full]
     image: lscr.io/linuxserver/openssh-server:10.3_p1-r1-ls240@sha256:b07414bb329b86a00525c9256711a7855fc3a369e9f62c36f1de8d1923197580
     environment:
       PUID: "1000"
@@ -300,6 +380,7 @@ services:
   # builds MinIO from source (only :latest is free, so the digest is the pin).
   minio:
     <<: *dev-hardening
+    profiles: [full]
     image: cgr.dev/chainguard/minio:latest@sha256:268d68a2a3b6fc65f905a61f84d7eab6345ce6bff14f551e2b028ec31e6a1341
     user: "65532:65532"
     read_only: true
@@ -322,6 +403,7 @@ services:
   # (Object Lock, GOVERNANCE 1 day default retention), then exits.
   minio-init:
     <<: *dev-hardening
+    profiles: [full]
     image: cgr.dev/chainguard/minio-client:latest-dev@sha256:e505a9bf01fe246c1beb7724d9b0b6d25159a027a1d840dade492042b239aad4
     user: "65532:65532"
     read_only: true
@@ -355,16 +437,18 @@ services:
   # SFTP destination: user `bekup` (key only), writable dir /upload.
   sftp:
     <<: *dev-hardening
+    profiles: [full]
     image: atmoz/sftp:alpine@sha256:43dd1c023cf1bae487127d4b54660b0aee6e94c188a6599be36fb89ba115f961
     command: ["bekup::1001:1001:upload"]
     volumes:
-      - ./secrets/dev/bekup_ssh_ed25519.pub:/home/bekup/.ssh/keys/bekup.pub:ro
-      - ./secrets/dev/sftp_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro
+      - ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/bekup_ssh_ed25519.pub:/home/bekup/.ssh/keys/bekup.pub:ro
+      - ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/sftp_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro
     # No volume for /home/bekup/upload: atmoz only chowns directories it
     # creates itself. Uploads are lost when the container is re-created.
     networks: [egress]
 
-  # SMTP sink with a web UI at http://127.0.0.1:8025.
+  # SMTP sink (default profile): SMTP 127.0.0.1:1025 (for `just run`;
+  # serve in `full` uses mailpit:1025), web UI http://127.0.0.1:8025.
   mailpit:
     <<: *dev-hardening
     image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
@@ -377,12 +461,16 @@ services:
       MP_DATABASE: /tmp/mailpit.db
     networks: [egress]
     ports:
-      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:${BEKUP_DEV_SMTP_PORT:-1025}:1025"
+      - "127.0.0.1:${BEKUP_DEV_MAILPIT_PORT:-8025}:8025"
 
 networks:
   # Bastion <-> pg15-tunneled only. Internal: no egress, runner not attached.
   tunnel-only:
     internal: true
+  # DEV ONLY: carries the loopback-published ports of postgres and adminer
+  # (`backend` is internal, so Docker cannot publish ports from it).
+  dev-host: {}
 
 volumes:
   go-mod: {}
@@ -415,19 +503,51 @@ configs:
       echo "bastion: AllowTcpForwarding enabled"
 
 secrets:
+  # The production secrets of docker-compose.yml, re-pointed at
+  # BEKUP_DEV_KEYS_DIR (default ./secrets, as in production).
+  bekup_master_key:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_master_key
+  bekup_database_url:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_database_url
+  bekup_database_owner_url:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_database_owner_url
+  postgres_password:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/postgres_password
+  bekup_owner_password:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_owner_password
+  bekup_app_password:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_app_password
+  serve_ca_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/serve/ca.crt
+  bekup_client_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/serve/serve.crt
+  bekup_client_key:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/serve/serve.key
+  runner_ca_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/runner/ca.crt
+  runner_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/runner/runner.crt
+  runner_key:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/runner/runner.key
+  postgres_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/postgres/postgres.crt
+  postgres_key:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/postgres/postgres.key
+  bekup_db_ca_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/postgres/ca.crt
   dev_pg_password:
-    file: ./secrets/dev/pg_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/pg_password
   dev_mysql_root_password:
-    file: ./secrets/dev/mysql_root_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/mysql_root_password
   dev_mysql_password:
-    file: ./secrets/dev/mysql_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/mysql_password
   dev_mariadb_root_password:
-    file: ./secrets/dev/mariadb_root_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/mariadb_root_password
   dev_mariadb_password:
-    file: ./secrets/dev/mariadb_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/mariadb_password
   dev_minio_root_user:
-    file: ./secrets/dev/minio_root_user
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/minio_root_user
   dev_minio_root_password:
-    file: ./secrets/dev/minio_root_password
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/minio_root_password
   dev_bekup_ssh_pub:
-    file: ./secrets/dev/bekup_ssh_ed25519.pub
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/bekup_ssh_ed25519.pub

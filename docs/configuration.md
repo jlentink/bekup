@@ -161,7 +161,7 @@ enforces:
   `0.0.0.0:9464` collide).
 - Paths must be absolute and clean; `storage.disk_root` must not be `/`.
 - Limits, sizes and timeouts must be greater than zero; `stepup_max_age` is
-  at most 5m and `setup_token_ttl` at most 1h.
+  at most 5m.
 - argon2id parameters and `password_min_length` can only be raised above the
   defaults (64 MiB, 3 iterations, 12 characters).
 - runner: `docker.host` must be a `unix://` socket; `tls.allowed_client_sans`
@@ -227,9 +227,33 @@ Generated from the config structs; regenerate with
 | `allow_insecure_http` | `BEKUP_SERVER_ALLOW_INSECURE_HTTP` | bool | `false` | Accept a plain http base_url outside dev mode (D-095). Traffic, sessions and credentials are then NOT encrypted; bekup logs a warning at every startup and shows a permanent UI banner. |
 | `trusted_proxies` | `BEKUP_SERVER_TRUSTED_PROXIES` | list of strings | `[]` | CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy). |
 | `read_header_timeout` | `BEKUP_SERVER_READ_HEADER_TIMEOUT` | duration | `'10s'` | Maximum time to read request headers. |
+| `read_timeout` | `BEKUP_SERVER_READ_TIMEOUT` | duration | `'30s'` | Maximum time to read a whole request, body included (at least read_header_timeout). |
+| `write_timeout` | `BEKUP_SERVER_WRITE_TIMEOUT` | duration | `'1m0s'` | Maximum time to write a response. Long-lived routes (WebSocket subscriptions, artifact downloads) override it per route. |
+| `idle_timeout` | `BEKUP_SERVER_IDLE_TIMEOUT` | duration | `'2m0s'` | Maximum keep-alive idle time between requests. |
 | `shutdown_timeout` | `BEKUP_SERVER_SHUTDOWN_TIMEOUT` | duration | `'30s'` | Grace period for in-flight requests on shutdown. |
+| `max_header_bytes` | `BEKUP_SERVER_MAX_HEADER_BYTES` | int | `32768` | Maximum size of the request headers in bytes (4 KiB to 1 MiB). |
 | `max_body_bytes` | `BEKUP_SERVER_MAX_BODY_BYTES` | int | `1048576` | Maximum request body size in bytes. |
-| `max_ws_connections_per_user` | `BEKUP_SERVER_MAX_WS_CONNECTIONS_PER_USER` | int | `5` | Maximum concurrent WebSocket subscriptions per user. |
+| `rate_limit_per_second` | `BEKUP_SERVER_RATE_LIMIT_PER_SECOND` | float | `20.0` | Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After. |
+| `rate_limit_burst` | `BEKUP_SERVER_RATE_LIMIT_BURST` | int | `100` | Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load. |
+| `rate_limit_max_clients` | `BEKUP_SERVER_RATE_LIMIT_MAX_CLIENTS` | int | `10000` | Maximum number of client IPs tracked by the rate limiter; the least recently seen entries are evicted beyond it (memory bound). |
+| `max_ws_connections_per_user` | `BEKUP_SERVER_MAX_WS_CONNECTIONS_PER_USER` | int | `5` | Maximum concurrent WebSocket connections (GraphQL subscriptions) per user on one instance (1 to 100); further upgrades get 429. |
+| `user_rate_limit_per_second` | `BEKUP_SERVER_USER_RATE_LIMIT_PER_SECOND` | float | `20.0` | Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After. |
+| `user_rate_limit_burst` | `BEKUP_SERVER_USER_RATE_LIMIT_BURST` | int | `100` | Per-user burst size (bucket capacity) for authenticated requests. |
+
+#### `[graphql]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `max_complexity` | `BEKUP_GRAPHQL_MAX_COMPLEXITY` | int | `1000` | Maximum complexity of one GraphQL operation (1 per selected field, more for list fields that declare it); larger operations are rejected before execution (50 to 100000). |
+| `max_depth` | `BEKUP_GRAPHQL_MAX_DEPTH` | int | `12` | Maximum field nesting depth of one GraphQL operation (3 to 50). |
+| `max_body_bytes` | `BEKUP_GRAPHQL_MAX_BODY_BYTES` | int | `262144` | Maximum size of a GraphQL request body in bytes (1024 up to server.max_body_bytes); larger requests get 413. |
+| `ws_max_connections` | `BEKUP_GRAPHQL_WS_MAX_CONNECTIONS` | int | `1000` | Maximum concurrent WebSocket connections on one instance, all users together (1 to 100000); further upgrades get 503. |
+| `ws_max_subscriptions_per_connection` | `BEKUP_GRAPHQL_WS_MAX_SUBSCRIPTIONS_PER_CONNECTION` | int | `20` | Maximum active subscriptions on one WebSocket connection (1 to 200); further subscribe messages fail with RATE_LIMITED. |
+| `ws_max_message_bytes` | `BEKUP_GRAPHQL_WS_MAX_MESSAGE_BYTES` | int | `65536` | Maximum size of one message a client sends over the WebSocket, in bytes (1024 up to graphql.max_body_bytes); a larger message closes the connection. |
+| `ws_init_timeout` | `BEKUP_GRAPHQL_WS_INIT_TIMEOUT` | duration | `'10s'` | Time a client has after the upgrade to send connection_init (1s to 1m). |
+| `ws_ping_interval` | `BEKUP_GRAPHQL_WS_PING_INTERVAL` | duration | `'25s'` | Interval of server pings on WebSocket connections; a client that does not answer within twice the interval is disconnected (5s to 5m). |
+| `ws_revalidate_interval` | `BEKUP_GRAPHQL_WS_REVALIDATE_INTERVAL` | duration | `'30s'` | Interval at which every WebSocket connection re-checks its session in the database (5s to 5m). Revocations normally close sockets at once through session events; this is the fallback bound. |
+| `ws_session_check_ttl` | `BEKUP_GRAPHQL_WS_SESSION_CHECK_TTL` | duration | `'5s'` | Maximum age of a session check before a subscription event is delivered without a new one (1s up to ws_revalidate_interval). |
 
 #### `[database]`
 
@@ -245,6 +269,10 @@ Generated from the config structs; regenerate with
 | `conn_max_idle_time` | `BEKUP_DATABASE_CONN_MAX_IDLE_TIME` | duration | `'30m0s'` | Maximum idle time of a pooled connection. |
 | `connect_timeout` | `BEKUP_DATABASE_CONNECT_TIMEOUT` | duration | `'10s'` | Timeout for establishing a connection. |
 | `statement_timeout` | `BEKUP_DATABASE_STATEMENT_TIMEOUT` | duration | `'30s'` | Server-side statement_timeout of app connections (1s to 1h). Migrations are not limited by it. |
+| `tls_mode` | `BEKUP_DATABASE_TLS_MODE` | string | `'verify-full'` | TLS for the app DB connection (D-100): verify-full (default; encrypted, server certificate verified against tls_ca_file and the URL's host name), require (encrypted; with tls_ca_file the chain is verified but not the host name, without it nothing is verified) or disable (plain text). require and disable log a warning at every startup. With TLS, SCRAM channel binding is always required. Applies to serve, worker and migrate; an sslmode in the URL may not be stricter than this and is otherwise overridden. |
+| `tls_ca_file` | `BEKUP_DATABASE_TLS_CA_FILE` | string | `'/run/secrets/bekup_db_ca.crt'` | Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only this CA is trusted, never the system roots. Required for verify-full. |
+| `tls_client_cert_file` | `BEKUP_DATABASE_TLS_CLIENT_CERT_FILE` | string | `(empty)` | Optional client certificate (PEM) presented to Postgres. Set together with tls_client_key_file. |
+| `tls_client_key_file` | `BEKUP_DATABASE_TLS_CLIENT_KEY_FILE` | string | `(empty)` | **Secret file.** Optional client private key (PEM) for tls_client_cert_file. Same file rules as url_file. |
 
 #### `[security]`
 
@@ -254,13 +282,20 @@ Generated from the config structs; regenerate with
 | `master_key` | `BEKUP_SECURITY_MASTER_KEY` | string | `(empty)` | **Dev mode only.** Inline master key. Dev mode only; rejected otherwise. Use master_key_file instead. |
 | `session_idle_timeout` | `BEKUP_SECURITY_SESSION_IDLE_TIMEOUT` | duration | `'30m0s'` | Session idle expiry. |
 | `session_absolute_timeout` | `BEKUP_SECURITY_SESSION_ABSOLUTE_TIMEOUT` | duration | `'12h0m0s'` | Session absolute expiry. Must be >= session_idle_timeout. |
+| `session_touch_interval` | `BEKUP_SECURITY_SESSION_TOUCH_INTERVAL` | duration | `'1m0s'` | Minimum time between two writes of a session's last-seen time and idle expiry (sliding idle refresh without a database write on every request); 10s to 10m and less than session_idle_timeout. |
 | `stepup_max_age` | `BEKUP_SECURITY_STEPUP_MAX_AGE` | duration | `'5m0s'` | How long a step-up (fresh second factor) stays valid. At most 5m. |
 | `argon2_memory_kib` | `BEKUP_SECURITY_ARGON2_MEMORY_KIB` | int | `65536` | argon2id memory in KiB. Can only be raised above the default (65536). |
 | `argon2_iterations` | `BEKUP_SECURITY_ARGON2_ITERATIONS` | int | `3` | argon2id iterations. Can only be raised above the default (3). |
 | `argon2_parallelism` | `BEKUP_SECURITY_ARGON2_PARALLELISM` | int | `1` | argon2id parallelism (>= 1). |
-| `argon2_max_concurrent` | `BEKUP_SECURITY_ARGON2_MAX_CONCURRENT` | int | `4` | Maximum concurrent argon2id hash operations (memory bound). |
-| `password_min_length` | `BEKUP_SECURITY_PASSWORD_MIN_LENGTH` | int | `12` | Minimum password length. Can only be raised above the default (12). |
-| `setup_token_ttl` | `BEKUP_SECURITY_SETUP_TOKEN_TTL` | duration | `'1h0m0s'` | Lifetime of the first-run setup token. At most 1h. |
+| `argon2_max_concurrent` | `BEKUP_SECURITY_ARGON2_MAX_CONCURRENT` | int | `4` | Maximum concurrent argon2id hash operations (memory bound, 1 to 64). Requests beyond it wait briefly and are then refused with RATE_LIMITED; they never queue without bound. |
+| `password_min_length` | `BEKUP_SECURITY_PASSWORD_MIN_LENGTH` | int | `12` | Minimum password length in characters. Can only be raised above the default (12); at most 128. |
+| `password_min_score` | `BEKUP_SECURITY_PASSWORD_MIN_SCORE` | int | `3` | Minimum zxcvbn strength score (0-4) of a new password. Can only be raised above the default (3). |
+| `login_rate_limit_per_minute` | `BEKUP_SECURITY_LOGIN_RATE_LIMIT_PER_MINUTE` | int | `10` | Login attempts per client IP per minute (a stricter limiter on top of the server-wide one; 1 to 600); the same rate also limits password verifications per account (logins, password step-ups and changes). Excess attempts get RATE_LIMITED. |
+| `login_rate_limit_burst` | `BEKUP_SECURITY_LOGIN_RATE_LIMIT_BURST` | int | `5` | Burst of login attempts per client IP, and of password verifications per account (1 to 100). |
+| `lockout_threshold` | `BEKUP_SECURITY_LOCKOUT_THRESHOLD` | int | `5` | Consecutive failed logins after which an account is temporarily locked (3 to 20). |
+| `lockout_base_duration` | `BEKUP_SECURITY_LOCKOUT_BASE_DURATION` | duration | `'1m0s'` | Lock duration after lockout_threshold failures; it doubles with every further failure (10s to 1h). |
+| `lockout_max_duration` | `BEKUP_SECURITY_LOCKOUT_MAX_DURATION` | duration | `'1h0m0s'` | Upper bound of the exponential lockout backoff (lockout_base_duration to 24h). |
+| `audit_head_sign_interval` | `BEKUP_SECURITY_AUDIT_HEAD_SIGN_INTERVAL` | duration | `'1h0m0s'` | How often serve signs the audit chain head with the instance key when the chain has grown (1m to 24h). |
 
 #### `[runner]`
 

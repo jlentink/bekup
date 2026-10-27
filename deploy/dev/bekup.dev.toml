@@ -12,6 +12,12 @@ base_url = "http://localhost:8080"
 # dev mode, but set so forwarded headers behave exactly as in production.
 trusted_proxies = ["10.213.250.5/32"]
 
+[database]
+# Same as production (D-100): TLS with the dev CA from gen-dev-keys.sh,
+# mounted as /run/secrets/bekup_db_ca.crt.
+tls_mode = "verify-full"
+tls_ca_file = "/run/secrets/bekup_db_ca.crt"
+
 [netguard]
 # The dev destinations live on the private `egress` network.
 allow_hosts = ["minio", "sftp", "mailpit"]

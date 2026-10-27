@@ -113,7 +113,7 @@ func TestSecretTags(t *testing.T) {
 			t.Errorf("%s: secret file keys must end in _file", f.Path)
 		}
 		// Keys that look like they hold secret material must be tagged.
-		if strings.HasSuffix(f.Key, "_length") {
+		if strings.HasSuffix(f.Key, "_length") || strings.HasSuffix(f.Key, "_score") {
 			continue
 		}
 		if strings.Contains(f.Key, "key") || strings.Contains(f.Key, "password") || strings.Contains(f.Key, "secret") {

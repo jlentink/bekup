@@ -68,5 +68,6 @@ schema, rewrite or delete audit history, or alter migration state.
 In the compose stack, the init script also puts `pg_hba.conf` rules first
 that reject the bootstrap superuser (`postgres`) on every TCP connection, so
 it can only log in over the container-local Unix socket; `bekup_owner` and
-`bekup_app` use SCRAM-SHA-256 over the internal `backend` network. Existing
+`bekup_app` use SCRAM-SHA-256 over the internal `backend` network **only over
+TLS** (`hostnossl ... reject`, D-100; see [App DB TLS](app-db-tls.md)). Existing
 volumes: see [upgrades.md](../installation/upgrades.md#notes-for-existing-installations).

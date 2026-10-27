@@ -4,13 +4,18 @@
 with mutual TLS. The runner is the only component with Docker access, so
 whoever holds a valid client certificate can drive it. This page describes
 the private PKI that `bekup certs` creates, how to distribute it, and how to
-rotate and monitor it. Decisions: D-030, D-089, D-090.
+rotate and monitor it. Decisions: D-030, D-089, D-090. The same CA also
+issues the app database's TLS server certificate (component `postgres`,
+D-100; see [App DB TLS](app-db-tls.md)).
 
 ## Properties
 
-- **Private CA**, ed25519, path length 0, **name-constrained** (critical):
-  DNS names only the runner's names, URIs only the `bekup` trust domain, and
-  no IP addresses unless you list them. Default validity 5 years (max 10).
+- **Private CA**, ed25519, path length 1 (only for the one-time postgres
+  issuer, D-104; runner mTLS accepts only certificates issued directly by
+  the CA), **name-constrained** (critical):
+  DNS names only the server names (`runner`, `postgres` and the extra
+  `--runner-san` / `--postgres-san` names), URIs only the `bekup` trust
+  domain, and no IP addresses unless you list them. Default validity 5 years (max 10).
 - **Leaf certificates**, ed25519, fresh key per issue, 128-bit random serial,
   default validity 1 year (max 825 days, never beyond the CA).
 - **TLS 1.3 only** on both sides. Both sides trust **only** the private CA
@@ -27,6 +32,7 @@ rotate and monitor it. Decisions: D-030, D-089, D-090.
 | `runner` | server | `DNS:runner` (+ `--runner-san` names/IPs) | serverAuth |
 | `serve` | client | `URI:spiffe://bekup/serve` | clientAuth |
 | `worker` | client | `URI:spiffe://bekup/worker` | clientAuth |
+| `postgres` | server (app DB TLS) | `DNS:postgres` (+ `--postgres-san` names/IPs); ECDSA P-256 leaf under a one-time ECDSA issuer, see [App DB TLS](app-db-tls.md) | serverAuth |
 
 - A client is identified by **exactly one** URI SAN `spiffe://bekup/<name>`
   and must carry no DNS, IP or email SANs. The runner accepts a connection
@@ -51,7 +57,7 @@ rotate and monitor it. Decisions: D-030, D-089, D-090.
 ```sh
 bekup certs init --dir secrets/certs            # prompts for a CA key passphrase
 just certs                                       # same, into secrets/certs
-docker compose --profile setup run --rm certs-init   # compose (runner + serve)
+docker compose --profile setup run --rm certs-init   # compose (runner + serve + postgres)
 ```
 
 Flags:
@@ -139,6 +145,12 @@ bekup certs rotate --dir secrets/certs --component serve   # one component
 bekup certs rotate --dir secrets/certs --all               # every component present
 ```
 
+A rotation (and `certs init --force`) is recorded as `certs.rotated` in the
+audit log, so `bekup certs rotate` needs the app database configured and
+reachable; it checks this before changing any file. Where that's impossible
+(e.g. the compose `certs-init` container, which has no DB access), pass
+`--no-audit`: the command prints a warning and the rotation is not audited.
+
 Each rotation creates a new key and certificate from the existing CA; the CA
 and the other components are untouched. The runner's extra names are kept
 unless `--runner-san` is given. `--leaf-days` sets the validity. Rotate
@@ -154,8 +166,10 @@ phase before starting the next.
 1. `bekup certs rotate --dir <dir> --ca stage`
    creates the next CA (`ca/ca.next.{crt,key}`, same passphrase) and writes
    a bundle with **old + next** CA into every component directory. Leaves are
-   unchanged. Use `--runner-san` here to change the runner names (and thus
-   the name constraints), `--ca-days` for the new CA's validity.
+   unchanged. Use `--runner-san` / `--postgres-san` here to change the
+   server names (and thus the name constraints), `--ca-days` for the new
+   CA's validity. Without them the current names are kept and `postgres` is
+   added if missing (CAs from before D-100).
 2. `bekup certs rotate --dir <dir> --ca promote`
    makes the next CA current (the old one is kept as `ca/ca.prev.crt`),
    reissues every leaf from the new CA, and keeps bundles with **new + old**.

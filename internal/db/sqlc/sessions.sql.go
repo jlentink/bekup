@@ -13,8 +13,58 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteStaleSessions = `-- name: DeleteStaleSessions :execrows
+DELETE FROM sessions
+WHERE absolute_expires_at < $1
+   OR idle_expires_at < $1
+   OR revoked_at < $1
+`
+
+// DeleteStaleSessions removes sessions that expired or were revoked before
+// the cutoff (housekeeping; revoked rows are kept a while for the session
+// list and investigations).
+func (q *Queries) DeleteStaleSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleSessions, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getActiveSessionForUpdate = `-- name: GetActiveSessionForUpdate :one
+SELECT id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at, mfa_pending FROM sessions
+WHERE id = $1
+  AND revoked_at IS NULL
+  AND idle_expires_at > now()
+  AND absolute_expires_at > now()
+FOR UPDATE
+`
+
+// GetActiveSessionForUpdate locks an active session (rotation, AAL changes).
+func (q *Queries) GetActiveSessionForUpdate(ctx context.Context, id uuid.UUID) (Session, error) {
+	row := q.db.QueryRow(ctx, getActiveSessionForUpdate, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.TokenHash,
+		&i.UserID,
+		&i.Aal,
+		&i.StepupAt,
+		&i.Aal2At,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.IdleExpiresAt,
+		&i.AbsoluteExpiresAt,
+		&i.Ip,
+		&i.UserAgent,
+		&i.RevokedAt,
+		&i.MfaPending,
+	)
+	return i, err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at FROM sessions
+SELECT id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at, mfa_pending FROM sessions
 WHERE token_hash = $1
   AND revoked_at IS NULL
   AND idle_expires_at > now()
@@ -40,6 +90,67 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.Ip,
 		&i.UserAgent,
 		&i.RevokedAt,
+		&i.MfaPending,
+	)
+	return i, err
+}
+
+const getSessionWithUserByTokenHash = `-- name: GetSessionWithUserByTokenHash :one
+SELECT s.id, s.token_hash, s.user_id, s.aal, s.stepup_at, s.aal2_at, s.created_at, s.last_seen_at, s.idle_expires_at, s.absolute_expires_at, s.ip, s.user_agent, s.revoked_at, s.mfa_pending, u.id, u.email, u.display_name, u.password_hash, u.role, u.disabled, u.locked_until, u.failed_login_count, u.totp_secret_enc, u.totp_last_step, u.email_verified_at, u.created_at, u.updated_at, u.totp_pending_enc, u.totp_pending_expires_at, u.totp_enabled_at, u.mfa_failed_count, u.mfa_locked_until, u.deleted_at, u.password_temporary_until, u.mfa_reset_at
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+WHERE s.token_hash = $1
+  AND s.revoked_at IS NULL
+  AND s.idle_expires_at > now()
+  AND s.absolute_expires_at > now()
+`
+
+type GetSessionWithUserByTokenHashRow struct {
+	Session Session `json:"session"`
+	User    User    `json:"user"`
+}
+
+// GetSessionWithUserByTokenHash is GetSessionByTokenHash joined with the
+// session's user (the session middleware, task 1.5).
+func (q *Queries) GetSessionWithUserByTokenHash(ctx context.Context, tokenHash []byte) (GetSessionWithUserByTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getSessionWithUserByTokenHash, tokenHash)
+	var i GetSessionWithUserByTokenHashRow
+	err := row.Scan(
+		&i.Session.ID,
+		&i.Session.TokenHash,
+		&i.Session.UserID,
+		&i.Session.Aal,
+		&i.Session.StepupAt,
+		&i.Session.Aal2At,
+		&i.Session.CreatedAt,
+		&i.Session.LastSeenAt,
+		&i.Session.IdleExpiresAt,
+		&i.Session.AbsoluteExpiresAt,
+		&i.Session.Ip,
+		&i.Session.UserAgent,
+		&i.Session.RevokedAt,
+		&i.Session.MfaPending,
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.DisplayName,
+		&i.User.PasswordHash,
+		&i.User.Role,
+		&i.User.Disabled,
+		&i.User.LockedUntil,
+		&i.User.FailedLoginCount,
+		&i.User.TotpSecretEnc,
+		&i.User.TotpLastStep,
+		&i.User.EmailVerifiedAt,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.User.TotpPendingEnc,
+		&i.User.TotpPendingExpiresAt,
+		&i.User.TotpEnabledAt,
+		&i.User.MfaFailedCount,
+		&i.User.MfaLockedUntil,
+		&i.User.DeletedAt,
+		&i.User.PasswordTemporaryUntil,
+		&i.User.MfaResetAt,
 	)
 	return i, err
 }
@@ -47,11 +158,11 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 const insertSession = `-- name: InsertSession :one
 INSERT INTO sessions (
     token_hash, user_id, aal, stepup_at, aal2_at,
-    idle_expires_at, absolute_expires_at, ip, user_agent
+    idle_expires_at, absolute_expires_at, ip, user_agent, mfa_pending
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at
+RETURNING id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at, mfa_pending
 `
 
 type InsertSessionParams struct {
@@ -64,6 +175,7 @@ type InsertSessionParams struct {
 	AbsoluteExpiresAt time.Time   `json:"absoluteExpiresAt"`
 	Ip                *netip.Addr `json:"ip"`
 	UserAgent         *string     `json:"userAgent"`
+	MfaPending        bool        `json:"mfaPending"`
 }
 
 func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (Session, error) {
@@ -77,6 +189,7 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (S
 		arg.AbsoluteExpiresAt,
 		arg.Ip,
 		arg.UserAgent,
+		arg.MfaPending,
 	)
 	var i Session
 	err := row.Scan(
@@ -93,8 +206,118 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (S
 		&i.Ip,
 		&i.UserAgent,
 		&i.RevokedAt,
+		&i.MfaPending,
 	)
 	return i, err
+}
+
+const listActiveUserSessions = `-- name: ListActiveUserSessions :many
+SELECT id, token_hash, user_id, aal, stepup_at, aal2_at, created_at, last_seen_at, idle_expires_at, absolute_expires_at, ip, user_agent, revoked_at, mfa_pending FROM sessions
+WHERE user_id = $1
+  AND revoked_at IS NULL
+  AND idle_expires_at > now()
+  AND absolute_expires_at > now()
+ORDER BY last_seen_at DESC, id
+LIMIT 200
+`
+
+// ListActiveUserSessions returns the user's sessions that are neither
+// revoked nor expired, most recently used first.
+func (q *Queries) ListActiveUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error) {
+	rows, err := q.db.Query(ctx, listActiveUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.TokenHash,
+			&i.UserID,
+			&i.Aal,
+			&i.StepupAt,
+			&i.Aal2At,
+			&i.CreatedAt,
+			&i.LastSeenAt,
+			&i.IdleExpiresAt,
+			&i.AbsoluteExpiresAt,
+			&i.Ip,
+			&i.UserAgent,
+			&i.RevokedAt,
+			&i.MfaPending,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markSessionSecondFactor = `-- name: MarkSessionSecondFactor :execrows
+UPDATE sessions
+SET stepup_at = now(), aal2_at = now()
+WHERE id = $1
+  AND aal = 2
+  AND NOT mfa_pending
+  AND revoked_at IS NULL
+  AND idle_expires_at > now()
+  AND absolute_expires_at > now()
+`
+
+// MarkSessionSecondFactor records a step-up with a second factor on an
+// AAL2 session (task 1.9): step-up and second-factor times become now.
+func (q *Queries) MarkSessionSecondFactor(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markSessionSecondFactor, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const markSessionStepUp = `-- name: MarkSessionStepUp :execrows
+UPDATE sessions
+SET stepup_at = now()
+WHERE id = $1
+  AND NOT mfa_pending
+  AND revoked_at IS NULL
+  AND idle_expires_at > now()
+  AND absolute_expires_at > now()
+`
+
+// MarkSessionStepUp records a step-up; never on a session that is still
+// waiting for its second factor (task 1.9).
+func (q *Queries) MarkSessionStepUp(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, markSessionStepUp, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOtherUserSessions = `-- name: RevokeOtherUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE user_id = $1
+  AND id <> $2
+  AND revoked_at IS NULL
+`
+
+type RevokeOtherUserSessionsParams struct {
+	UserID uuid.UUID `json:"userId"`
+	KeepID uuid.UUID `json:"keepId"`
+}
+
+func (q *Queries) RevokeOtherUserSessions(ctx context.Context, arg RevokeOtherUserSessionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOtherUserSessions, arg.UserID, arg.KeepID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeSession = `-- name: RevokeSession :execrows
@@ -112,23 +335,70 @@ func (q *Queries) RevokeSession(ctx context.Context, id uuid.UUID) (int64, error
 	return result.RowsAffected(), nil
 }
 
+const revokeUserSession = `-- name: RevokeUserSession :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE id = $1
+  AND user_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeUserSessionParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"userId"`
+}
+
+// RevokeUserSession revokes one session of a user (a session of another
+// user is never touched).
+func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUserSession, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeUserSessions = `-- name: RevokeUserSessions :execrows
+UPDATE sessions
+SET revoked_at = now()
+WHERE user_id = $1
+  AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeUserSessions(ctx context.Context, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeUserSessions, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const touchSession = `-- name: TouchSession :execrows
 UPDATE sessions
 SET last_seen_at = now(),
-    idle_expires_at = LEAST($1::timestamptz, absolute_expires_at)
-WHERE id = $2
+    idle_expires_at = LEAST($1::timestamptz, absolute_expires_at),
+    ip = $2,
+    user_agent = $3
+WHERE id = $4
   AND revoked_at IS NULL
 `
 
 type TouchSessionParams struct {
-	IdleExpiresAt time.Time `json:"idleExpiresAt"`
-	ID            uuid.UUID `json:"id"`
+	IdleExpiresAt time.Time   `json:"idleExpiresAt"`
+	Ip            *netip.Addr `json:"ip"`
+	UserAgent     *string     `json:"userAgent"`
+	ID            uuid.UUID   `json:"id"`
 }
 
-// TouchSession records activity and extends the idle expiry, never beyond
-// the absolute expiry.
+// TouchSession records activity and client facts and extends the idle
+// expiry, never beyond the absolute expiry.
 func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, touchSession, arg.IdleExpiresAt, arg.ID)
+	result, err := q.db.Exec(ctx, touchSession,
+		arg.IdleExpiresAt,
+		arg.Ip,
+		arg.UserAgent,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}

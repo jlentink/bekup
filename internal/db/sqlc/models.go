@@ -152,6 +152,15 @@ func AllUserRoleValues() []UserRole {
 	}
 }
 
+type AuditChainHead struct {
+	ID        int64     `json:"id"`
+	ChainID   int64     `json:"chainId"`
+	ChainHash []byte    `json:"chainHash"`
+	SignedAt  time.Time `json:"signedAt"`
+	KeyID     string    `json:"keyId"`
+	Signature []byte    `json:"signature"`
+}
+
 type AuditLog struct {
 	ID          int64           `json:"id"`
 	Ts          time.Time       `json:"ts"`
@@ -164,6 +173,23 @@ type AuditLog struct {
 	Details     json.RawMessage `json:"details"`
 	PrevHash    []byte          `json:"prevHash"`
 	Hash        []byte          `json:"hash"`
+}
+
+type InstanceKey struct {
+	ID               string     `json:"id"`
+	PublicKey        []byte     `json:"publicKey"`
+	SealedPrivateKey []byte     `json:"sealedPrivateKey"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	RetiredAt        *time.Time `json:"retiredAt"`
+}
+
+type RecoveryCode struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"userId"`
+	KeyID     string     `json:"keyId"`
+	CodeMac   []byte     `json:"codeMac"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UsedAt    *time.Time `json:"usedAt"`
 }
 
 type RiverJob struct {
@@ -223,6 +249,7 @@ type Session struct {
 	Ip                *netip.Addr `json:"ip"`
 	UserAgent         *string     `json:"userAgent"`
 	RevokedAt         *time.Time  `json:"revokedAt"`
+	MfaPending        bool        `json:"mfaPending"`
 }
 
 type Setting struct {
@@ -234,17 +261,56 @@ type Setting struct {
 }
 
 type User struct {
-	ID               uuid.UUID  `json:"id"`
-	Email            string     `json:"email"`
-	DisplayName      string     `json:"displayName"`
-	PasswordHash     *string    `json:"passwordHash"`
-	Role             UserRole   `json:"role"`
-	Disabled         bool       `json:"disabled"`
-	LockedUntil      *time.Time `json:"lockedUntil"`
-	FailedLoginCount int32      `json:"failedLoginCount"`
-	TotpSecretEnc    []byte     `json:"totpSecretEnc"`
-	TotpLastStep     *int64     `json:"totpLastStep"`
-	EmailVerifiedAt  *time.Time `json:"emailVerifiedAt"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	ID                     uuid.UUID  `json:"id"`
+	Email                  string     `json:"email"`
+	DisplayName            string     `json:"displayName"`
+	PasswordHash           *string    `json:"passwordHash"`
+	Role                   UserRole   `json:"role"`
+	Disabled               bool       `json:"disabled"`
+	LockedUntil            *time.Time `json:"lockedUntil"`
+	FailedLoginCount       int32      `json:"failedLoginCount"`
+	TotpSecretEnc          []byte     `json:"totpSecretEnc"`
+	TotpLastStep           *int64     `json:"totpLastStep"`
+	EmailVerifiedAt        *time.Time `json:"emailVerifiedAt"`
+	CreatedAt              time.Time  `json:"createdAt"`
+	UpdatedAt              time.Time  `json:"updatedAt"`
+	TotpPendingEnc         []byte     `json:"totpPendingEnc"`
+	TotpPendingExpiresAt   *time.Time `json:"totpPendingExpiresAt"`
+	TotpEnabledAt          *time.Time `json:"totpEnabledAt"`
+	MfaFailedCount         int32      `json:"mfaFailedCount"`
+	MfaLockedUntil         *time.Time `json:"mfaLockedUntil"`
+	DeletedAt              *time.Time `json:"deletedAt"`
+	PasswordTemporaryUntil *time.Time `json:"passwordTemporaryUntil"`
+	MfaResetAt             *time.Time `json:"mfaResetAt"`
+}
+
+type WebauthnCeremony struct {
+	ID        uuid.UUID       `json:"id"`
+	SessionID uuid.UUID       `json:"sessionId"`
+	UserID    uuid.UUID       `json:"userId"`
+	Kind      string          `json:"kind"`
+	Data      json.RawMessage `json:"data"`
+	CreatedAt time.Time       `json:"createdAt"`
+	ExpiresAt time.Time       `json:"expiresAt"`
+}
+
+type WebauthnCredential struct {
+	ID                 uuid.UUID  `json:"id"`
+	UserID             uuid.UUID  `json:"userId"`
+	CredentialID       []byte     `json:"credentialId"`
+	PublicKey          []byte     `json:"publicKey"`
+	AttestationType    string     `json:"attestationType"`
+	AttestationFormat  string     `json:"attestationFormat"`
+	Aaguid             *uuid.UUID `json:"aaguid"`
+	SignCount          int64      `json:"signCount"`
+	Transports         []string   `json:"transports"`
+	Attachment         string     `json:"attachment"`
+	UserPresent        bool       `json:"userPresent"`
+	UserVerified       bool       `json:"userVerified"`
+	BackupEligible     bool       `json:"backupEligible"`
+	BackupState        bool       `json:"backupState"`
+	Name               string     `json:"name"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	LastUsedAt         *time.Time `json:"lastUsedAt"`
+	SignCountAnomalyAt *time.Time `json:"signCountAnomalyAt"`
 }

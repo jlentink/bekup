@@ -1,0 +1,135 @@
+# Two-step login, step-up and the 2FA policy (task 1.9; D-047, D-057,
+# D-095, D-112).
+#
+# A login of an account with a second factor answers
+# `secondFactorRequired: true`: the session cookie then belongs to a
+# session waiting for the second factor (5 minutes) that can do nothing
+# but completeSecondFactor, beginPasskeyLogin and logout (everything else:
+# SECOND_FACTOR_REQUIRED). Step-up uses a second factor for accounts with
+# one and the password only for accounts without.
+
+"How a step-up is performed."
+enum StepUpMethod {
+  "Re-enter the password (only for accounts without a second factor)."
+  PASSWORD
+  TOTP
+  PASSKEY
+  "A recovery code: sets the step-up time only (not enough for restores) and raises an alert."
+  RECOVERY_CODE
+}
+
+"How the caller can step up (beginStepUp)."
+type StepUpChallenge {
+  "The usable methods, in order of preference."
+  methods: [StepUpMethod!]!
+  """
+  PublicKeyCredentialRequestOptions (`{"publicKey": {...}}`) when a passkey
+  can be used; the challenge is bound to this session for 3 minutes.
+  """
+  passkeyOptions: JSON
+}
+
+"A successful step-up."
+type StepUpResult {
+  stepUpAt: Time!
+  "Set when a passkey or TOTP was used (restores need this within the step-up window)."
+  aal2At: Time
+  "The session's assurance level afterwards."
+  aal: Int!
+}
+
+"The 2FA policy (admin)."
+type TwoFactorPolicy {
+  "A second factor is required for every role."
+  requireForAll: Boolean!
+  "Roles that require a second factor (in addition to requireForAll)."
+  requiredRoles: [Role!]!
+  """
+  Days a user without a second factor keeps full access after the
+  requirement starts for their role (or their account was created, if
+  later); 0 means immediately. Afterwards they can only enroll a factor.
+  """
+  gracePeriodDays: Int!
+  "When the policy was last changed (null: the built-in default)."
+  updatedAt: Time
+  """
+  False when passkeys cannot be used with this server (plain http on a
+  host other than localhost, D-095): users enroll TOTP instead, so the
+  policy can always be met.
+  """
+  passkeysAvailable: Boolean!
+}
+
+input TwoFactorPolicyInput {
+  requireForAll: Boolean!
+  requiredRoles: [Role!]!
+  "0 to 90."
+  gracePeriodDays: Int!
+}
+
+extend type User {
+  "True when the 2FA policy requires a second factor for this account's role."
+  twoFactorRequired: Boolean!
+  """
+  When 2FA is required and the account has no second factor: the end of
+  its enrollment grace period (in the past: only enrolling a factor is
+  allowed, REQUIRES_2FA_ENROLLMENT). Null otherwise.
+  """
+  twoFactorEnrollmentDeadline: Time
+}
+
+extend type LoginResult {
+  """
+  True when the 2FA policy requires a second factor, the account has none
+  and the grace period is over: the session may only enroll a factor.
+  """
+  twoFactorEnrollmentRequired: Boolean!
+}
+
+extend type Query {
+  "The 2FA policy."
+  twoFactorPolicy: TwoFactorPolicy! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Starts the passkey check of a login waiting for its second factor and
+  returns the PublicKeyCredentialRequestOptions JSON. CONFLICT when the
+  session is not waiting for a second factor; FORBIDDEN when passkeys are
+  unavailable.
+  """
+  beginPasskeyLogin: JSON! @authenticated
+
+  """
+  Completes a login waiting for its second factor with a TOTP code
+  (`code`), a recovery code (`code`) or the browser's passkey response
+  (`assertion`, after beginPasskeyLogin). On success the session is
+  replaced by a fully signed-in one (new cookie, AAL 2, fresh step-up). A
+  wrong code or response answers VALIDATION and counts towards the
+  second-factor lockout (RATE_LIMITED while locked).
+  """
+  completeSecondFactor(method: SecondFactorKind!, code: String, assertion: JSON): LoginResult! @authenticated
+
+  """
+  Lists the step-up methods of your account and, when a passkey can be
+  used, starts its check.
+  """
+  beginStepUp: StepUpChallenge! @authenticated
+
+  """
+  Confirms your identity again (step-up, valid for
+  security.stepup_max_age): with a second factor when your account has one
+  (`code` for TOTP and recovery codes, `assertion` for a passkey after
+  beginStepUp), with your password (`password`) otherwise. A wrong
+  password counts towards the login lockout, a wrong code towards the
+  second-factor lockout.
+  """
+  completeStepUp(method: StepUpMethod!, code: String, password: String, assertion: JSON): StepUpResult! @authenticated
+
+  """
+  Changes the 2FA policy. Turning the requirement on for a role starts its
+  grace period now. Needs a fresh step-up; audited; weakening the policy
+  raises a security alert.
+  """
+  updateTwoFactorPolicy(input: TwoFactorPolicyInput!): TwoFactorPolicy! @hasRole(roles: [ADMIN]) @stepUp
+}

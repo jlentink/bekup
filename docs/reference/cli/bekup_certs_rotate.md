@@ -7,6 +7,7 @@ Reissue component certificates, or rotate the CA in three phases
 Reissue leaf certificates (new keys) from the existing CA:
 
   bekup certs rotate --dir <dir> --component serve [--component worker]
+  bekup certs rotate --dir <dir> --component postgres [--postgres-san db.lan]
   bekup certs rotate --dir <dir> --all
 
 Rotate the CA itself with an overlap period; restart every component after
@@ -17,6 +18,12 @@ each phase:
   --ca finish   drop the old CA from every trust bundle
 
 Needs the CA key (bring it back from offline storage temporarily).
+
+Every rotation is recorded as certs.rotated in the audit log of the app
+database (loaded from the bekup config; the database must be reachable,
+which is checked before any file changes). Use --no-audit only when it is
+not (e.g. reissuing the postgres certificate of a stopped database); a
+warning is printed then.
 
 ```
 bekup certs rotate [flags]
@@ -29,10 +36,12 @@ bekup certs rotate [flags]
       --ca string                   rotate the CA: stage, promote or finish
       --ca-days int                 validity of the next CA in days (--ca stage) (default 1825)
       --ca-passphrase-file string   file with the CA key passphrase (min 16 characters); default: prompt on the terminal
-      --component strings           component to reissue: runner, serve, worker (repeatable)
+      --component strings           component to (re)issue: runner, serve, worker, postgres (repeatable)
       --dir string                  certificate directory created by certs init (required)
   -h, --help                        help for rotate
       --leaf-days int               leaf certificate validity in days (default 365)
+      --no-audit                    do not record certs.rotated in the audit log (when the app database is not reachable; prints a warning)
+      --postgres-san strings        replace the postgres certificate's extra DNS names/IPs (default: keep the current ones)
       --runner-san strings          replace the runner's extra DNS names/IPs (default: keep the current ones)
       --unencrypted-ca-key          write the CA key WITHOUT a passphrase (not recommended; only if the CA directory is moved offline at once)
 ```
