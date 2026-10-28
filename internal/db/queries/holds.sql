@@ -39,3 +39,8 @@ SELECT a.id,
 FROM artifacts a
 WHERE a.id = $1 AND a.state = 'present'
 FOR NO KEY UPDATE OF a;
+
+-- ReleaseArtifactHoldsOfHolder removes the holds of one holder (the stuck
+-- restore sweep, task 4.5).
+-- name: ReleaseArtifactHoldsOfHolder :execrows
+DELETE FROM artifact_holds WHERE kind = @kind::text AND holder_id = @holder_id;

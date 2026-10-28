@@ -337,7 +337,7 @@ func (s *Service) StageBackupPin(ctx context.Context, actor Actor, id uuid.UUID,
 }
 
 func (s *Service) setPin(ctx context.Context, actor Actor, id uuid.UUID, in PinInput, staged bool) (Connection, error) {
-	cur, err := s.load(ctx, sqlc.New(s.o.DB), id, false)
+	cur, err := s.loadFor(ctx, sqlc.New(s.o.DB), id, false, actor)
 	if err != nil {
 		return Connection{}, err
 	}
@@ -365,7 +365,7 @@ func (s *Service) setPin(ctx context.Context, actor Actor, id uuid.UUID, in PinI
 	certPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: pc.anchor.Raw}))
 	var out sqlc.Connection
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
-		locked, err := s.load(ctx, q, id, true)
+		locked, err := s.loadFor(ctx, q, id, true, actor)
 		if err != nil {
 			return err
 		}
@@ -392,6 +392,7 @@ func (s *Service) setPin(ctx context.Context, actor Actor, id uuid.UUID, in PinI
 			}
 			out, err = q.SetConnectionBackupPin(ctx, sqlc.SetConnectionBackupPinParams{
 				ID: id, CertPem: &certPEM, Spki: pc.leafSPKI, NotAfter: &pc.notAfter, PinnedBy: &actor.UserID,
+				AllowTemporary: locked.Temporary,
 			})
 			action = audit.ActionConnectionBackupPinStaged
 		} else {
@@ -402,6 +403,7 @@ func (s *Service) setPin(ctx context.Context, actor Actor, id uuid.UUID, in PinI
 			details["promoted_backup_pin"] = promote
 			out, err = q.SetConnectionPin(ctx, sqlc.SetConnectionPinParams{
 				ID: id, CertPem: &certPEM, Spki: pc.leafSPKI, NotAfter: &pc.notAfter, PinnedBy: &actor.UserID, ClearBackup: promote,
+				AllowTemporary: locked.Temporary,
 			})
 			action = audit.ActionConnectionPinConfirmed
 		}

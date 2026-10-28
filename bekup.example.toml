@@ -166,7 +166,15 @@ dial_timeout = "10s"
 [storage]
 # Disk destinations are confined below this directory.
 disk_root = "/var/lib/bekup/backups"
+# Restore staging: a private subdirectory per restore, encrypted at rest with
+# an in-memory key and removed on every path.
 scratch_dir = "/var/lib/bekup/scratch"
+# Kept free on the scratch file system; a restore that does not fit is
+# refused before downloading.
+scratch_reserve_bytes = 1073741824
+# Staging directories older than this are removed even if their restore is
+# still recorded as running (must exceed workers.restore_timeout).
+scratch_stale_after = "24h"
 
 [workers]
 max_concurrent_runs = 4
@@ -210,6 +218,14 @@ max_deletions_per_sweep = 500
 # Leftover temporary upload files on disk/SFTP destinations older than this
 # are removed by the daily sweep.
 partial_cleanup_age = "24h"
+
+[restore]
+# Temporary restore connections (admin only, created in the restore wizard)
+# expire this long after their creation; their stored credentials are then
+# destroyed. Admins may move the expiry, but never beyond temp_connection_max_ttl
+# after the creation.
+temp_connection_ttl = "24h"
+temp_connection_max_ttl = "168h"
 
 [notifications]
 max_per_user_per_hour = 30

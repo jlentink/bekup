@@ -32,7 +32,7 @@ verification is not handed out as a "backup".
 
 | Mode | File | Use it for |
 |---|---|---|
-| `RAW` | The artifact exactly as stored: `<job>_<database>_<timestamp>.dump.zst.age` (PostgreSQL) or `.sql.zst.age` (MySQL/MariaDB, PostgreSQL globals); without `.age` for jobs whose encryption an admin turned off. | Keeping an encrypted offline copy, or decrypting yourself with `age` and `zstd` (or `bekup decrypt`, task 4.7). |
+| `RAW` | The artifact exactly as stored: `<job>_<database>_<timestamp>.dump.zst.age` (PostgreSQL) or `.sql.zst.age` (MySQL/MariaDB, PostgreSQL globals); without `.age` for jobs whose encryption an admin turned off. | Keeping an encrypted offline copy, or decrypting yourself with `age` and `zstd` (or `bekup decrypt`, see [recovery](../recovery.md)). |
 | `PLAIN` | The decrypted and decompressed dump: `<job>_<database>_<timestamp>.dump` (a PostgreSQL custom archive for `pg_restore`) or `.sql` (a plain SQL script for `mysql`, `mariadb` or `psql`). | Restoring elsewhere right away. |
 
 A `PLAIN` file is your **unencrypted database** on your device; protecting

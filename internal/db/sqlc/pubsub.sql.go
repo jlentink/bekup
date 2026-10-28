@@ -9,6 +9,15 @@ import (
 	"context"
 )
 
+const listenRestoreEvents = `-- name: ListenRestoreEvents :exec
+LISTEN bekup_restore_events
+`
+
+func (q *Queries) ListenRestoreEvents(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenRestoreEvents)
+	return err
+}
+
 const listenRunEvents = `-- name: ListenRunEvents :exec
 LISTEN bekup_run_events
 `

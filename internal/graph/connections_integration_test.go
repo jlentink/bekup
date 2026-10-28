@@ -56,6 +56,7 @@ import (
 	"github.com/jlentink/bekup/internal/runner/spec"
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/runnertest"
 )
 
 const (
@@ -463,6 +464,8 @@ func newConnEnv(t *testing.T, h *crHarness) *destEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { crIgnore(rc.Close()) })
+	// "runner listening" precedes the executor's own-container detection.
+	runnertest.WaitDockerOK(t, rc, 0, nil)
 	conns, err := connections.New(connections.Options{
 		DB: e.pool, Keyring: kr, Auditor: e.auditor, Runner: rc.RPC(), OperationTimeout: crRunnerTO,
 		Limiter: func(string) (bool, time.Duration) { return true, 0 },

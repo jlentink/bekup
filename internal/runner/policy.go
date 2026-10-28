@@ -19,18 +19,22 @@ const (
 // that is missing here is denied (deny by default); a test asserts that the
 // table covers exactly the service's methods.
 var methodClasses = map[string]methodClass{
-	runnerpb.RunnerService_Health_FullMethodName:                 classUnlimited,
-	runnerpb.RunnerService_Probe_FullMethodName:                  classControl,
-	runnerpb.RunnerService_FetchServerCertificate_FullMethodName: classControl,
-	runnerpb.RunnerService_FetchHostKey_FullMethodName:           classControl,
-	runnerpb.RunnerService_PrePull_FullMethodName:                classControl,
-	runnerpb.RunnerService_ListImages_FullMethodName:             classControl,
-	runnerpb.RunnerService_Dump_FullMethodName:                   classRun,
-	runnerpb.RunnerService_DumpGlobals_FullMethodName:            classRun,
-	runnerpb.RunnerService_VerifyDump_FullMethodName:             classRun,
-	runnerpb.RunnerService_Restore_FullMethodName:                classRun,
-	runnerpb.RunnerService_CreateDatabase_FullMethodName:         classRun,
-	runnerpb.RunnerService_RenameSwapDatabase_FullMethodName:     classRun,
+	runnerpb.RunnerService_Health_FullMethodName:                     classUnlimited,
+	runnerpb.RunnerService_Probe_FullMethodName:                      classControl,
+	runnerpb.RunnerService_FetchServerCertificate_FullMethodName:     classControl,
+	runnerpb.RunnerService_FetchHostKey_FullMethodName:               classControl,
+	runnerpb.RunnerService_PrePull_FullMethodName:                    classControl,
+	runnerpb.RunnerService_ListImages_FullMethodName:                 classControl,
+	runnerpb.RunnerService_Dump_FullMethodName:                       classRun,
+	runnerpb.RunnerService_DumpGlobals_FullMethodName:                classRun,
+	runnerpb.RunnerService_VerifyDump_FullMethodName:                 classRun,
+	runnerpb.RunnerService_Restore_FullMethodName:                    classRun,
+	runnerpb.RunnerService_CreateDatabase_FullMethodName:             classRun,
+	runnerpb.RunnerService_RenameSwapDatabase_FullMethodName:         classRun,
+	runnerpb.RunnerService_DropTempDatabase_FullMethodName:           classRun,
+	runnerpb.RunnerService_ScratchStats_FullMethodName:               classRun,
+	runnerpb.RunnerService_DropScratchDatabase_FullMethodName:        classRun,
+	runnerpb.RunnerService_NeutralizeRestoredDatabase_FullMethodName: classRun,
 }
 
 // limiter bounds concurrent calls per class with non-blocking semaphores:

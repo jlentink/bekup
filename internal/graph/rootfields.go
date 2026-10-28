@@ -64,8 +64,19 @@ var SingleRootFields = []string{
 	"Mutation.confirmCertificatePin",
 	"Mutation.stageBackupPin",
 	"Mutation.fetchSshHostKey",
+	// Temporary restore connections carry credentials (task 4.4): one
+	// creation per request.
+	"Mutation.createTemporaryConnection",
 	// Download tickets (task 3.9, D-150): may carry an age identity.
 	"Mutation.createDownloadTicket",
+	// Restores (task 4.5, D-167): restoreArtifact may carry an age
+	// identity; both requests verify a signed manifest on a destination;
+	// restoreTargetDatabases and restorePreview make a runner call
+	// (D-135; the preview reads the target role's privileges, D-068).
+	"Mutation.restoreArtifact",
+	"Mutation.restoreGlobals",
+	"Query.restoreTargetDatabases",
+	"Query.restorePreview",
 }
 
 // CredentialOperations are the authz operations whose root fields verify,
@@ -89,6 +100,9 @@ var CredentialOperations = []authz.Operation{
 	authz.OpConnectionHostKeyFetch,
 	// createDownloadTicket may carry an age identity (D-150).
 	authz.OpArtifactDownload,
+	// restoreArtifact may carry an age identity (D-167).
+	authz.OpRestoreArtifact,
+	authz.OpRestoreGlobals,
 }
 
 // CheckSingleRootFields verifies that every entry of single is a root

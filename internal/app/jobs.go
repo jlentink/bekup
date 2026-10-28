@@ -48,7 +48,9 @@ func (a *App) newJobs() error {
 		Canceler: a.queue, Publisher: a.publisher(),
 		Limits:     scheduler.Limits{MinInterval: cfg.Scheduler.MinInterval.D()},
 		MaxTimeout: cfg.Workers.BackupTimeout.D(),
-		Logger:     a.opts.Logger,
+		// D-170: designating a scratch target probes its role.
+		TestTargets: a.connections,
+		Logger:      a.opts.Logger,
 	})
 	if err != nil {
 		return err
@@ -78,11 +80,18 @@ func (a *App) newBackupWorker() (*jobs.BackupWorker, error) {
 		Destinations: a.destinations,
 		Keys:         a.jobKeys,
 		Signer:       jobs.InstanceKeySigner{DB: a.pool, Keyring: a.keyring, Auditor: a.auditor},
-		Stats:        jobs.RunnerStats{Store: sqlc.New(a.pool), Logger: a.opts.Logger},
+		Stats:        a.runnerStats(),
 		Limits:       runstate.SlotLimits{Global: w.MaxConcurrentRuns, PerConnection: w.MaxRunsPerConnection},
 		QueueTimeout: w.BackupTimeout.D(),
 		LogMaxLines:  w.RunLogMaxLines, LogMaxLineBytes: w.RunLogMaxLineBytes,
 		BekupVersion: a.opts.Version,
 		Logger:       a.opts.Logger,
 	})
+}
+
+// runnerStats is the backup worker's statistics collector (D-151) with the
+// limits shared with the test-restore scratch statistics (statsLimits).
+func (a *App) runnerStats() jobs.RunnerStats {
+	perTable, budget := statsLimits()
+	return jobs.RunnerStats{Store: sqlc.New(a.pool), PerTableTimeout: perTable, Budget: budget, Logger: a.opts.Logger}
 }

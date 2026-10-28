@@ -39,7 +39,7 @@ section 6: STRIDE per component). This page summarizes it. Decisions are in
 | Dump containers | Short-lived official, digest-pinned DB images (`pg_dump`, `mysqldump`, `mariadb-dump`, restore clients). Alone on a per-run `internal` network, reaching exactly one target through the runner's proxy or SSH tunnel; secrets only through a stdin preamble (D-032). | implemented (tasks 2.5, 2.6) |
 | Postgres app DB | bekup's own state: users, jobs, runs, encrypted credentials, the hash-chained audit log, River queue tables. Least-privilege roles `bekup_owner` / `bekup_app` (D-054, D-092). | implemented (task 0.4) |
 | `certs-init` (profile `setup`) | One-shot, no network: creates the private CA and the per-component mTLS certificates (D-079, D-089). | implemented (task 0.6) |
-| Offline CLI | `bekup verify` / `bekup decrypt` for recovery without the bekup DB (D-040). | task 4.7 |
+| Offline CLI | `bekup verify` / `bekup decrypt` / `bekup reindex` (and `keys export-public`) for recovery without the bekup DB (D-040, D-164); `internal/offline`. | task 4.7 (done) |
 
 ## Compose topology and networks
 
@@ -111,9 +111,29 @@ Summaries; the step-by-step flows are in
   proxy/tunnel → dump stream → zstd → age → sha256 → fan-out to destinations,
   while the raw stream is verified (`VerifyDump`) → signed manifest. See
   "Backup runs" below.
-- **Restore (tasks 4.1–4.5):** fresh 2FA check → stage the encrypted
-  artifact → verify hash, signature and DB cross-check → decrypt → runner
-  `Restore` (PG temp DB + swap; MySQL/MariaDB in place after a warning).
+- **Restore (tasks 4.1–4.5):** fresh 2FA check → `restores` row (queued;
+  a recipient identity sealed into `restore_identity_handoff`, 15 min,
+  never in River args) + River job `restore` (restore id only) → worker
+  (task 4.2, D-166) takes a run slot for the target connection, re-checks
+  the target (`LockRestoreTargetTx`), audits `restore.started` →
+  `restore.Stage` (task 4.1, D-162): hold the
+  artifact (D-155), take the handoff once, check scratch free space, stream
+  the stored object into `<scratch_dir>/restore-<id>/` wrapped with an
+  ephemeral in-memory age key while hashing → verify stored SHA-256 =
+  record and the signed run manifest (`artifactverify.VerifyManifest`:
+  signature, job/run binding, signed entries, encryption facts; shared with
+  downloads) → `Staged.Open` (decrypt → decompress, bounded, digests
+  re-checked at the end) → engine re-check against the signed manifest →
+  the `EngineRestorer` of the target's engine through the runner (PG:
+  `CreateDatabase` of `<db>__bekup_restore_<id>`, `Restore` with
+  `pg_restore --exit-on-error --no-owner`, `RenameSwapDatabase`,
+  `DropTempDatabase` of the old or, on failure/cancel, the temporary
+  database; MySQL/MariaDB in place after a warning) → `Cleanup` on every
+  path, plus a scratch sweeper → finish (sanitized code, log counts,
+  warnings), `restore.finished`, notification hook. Status changes and log
+  batches (`restore_logs`) publish IDs on `bekup_restore_events`.
+  Verification failures are audited (`restore.verification_failed`) and
+  alerted.
 - **Download (task 3.9, D-150):** step-up → `createDownloadTicket`
   (single-use, 60 s, session-bound; sha256 only in `download_tickets`; an
   age identity for plain recipient downloads sealed into the row) →
@@ -122,8 +142,11 @@ Summaries; the step-by-step flows are in
   last 64 KiB held back until the digests match (`internal/downloads`).
 - **Notifications (tasks 5.1–5.3):** event → recipient resolver (authz at
   delivery) → inbox / SMTP / HMAC webhooks through the SSRF guard.
-- **Offline recovery (task 4.7):** `bekup verify` / `bekup decrypt` on an
-  operator machine, no bekup DB needed.
+- **Offline recovery (task 4.7, D-164):** `bekup verify` / `bekup decrypt`
+  on an operator machine against escrowed instance public keys, no bekup DB
+  or keyring needed; `bekup reindex` lists and verifies a destination
+  read-only and, with the DB, imports fully verified runs of an existing
+  job (audited). See [recovery.md](recovery.md).
 
 ## HTTP layer (`bekup serve`)
 
@@ -818,7 +841,7 @@ D-126): one service `RunnerService` with `Health`, `Probe`,
 streams: data chunks ≤ 1 MiB interleaved with log lines, ending in one
 result), `VerifyDump` (client stream: header, then chunks), `Restore`
 (bidirectional: header + chunks in, log lines + result out),
-`CreateDatabase`, `RenameSwapDatabase`, `PrePull` and `ListImages`. There is no field for
+`CreateDatabase`, `RenameSwapDatabase`, `DropTempDatabase`, `ScratchStats`, `DropScratchDatabase`, `PrePull` and `ListImages`. There is no field for
 a command, argument, environment variable, image or path; images are chosen
 by engine + allowlisted version key and container specs are built by the
 runner. Credential fields are `bytes` annotated `[(runner.v1.secret) =
@@ -990,6 +1013,9 @@ payloads, server messages or secrets).
 | `Restore` | Pre-check (database exists), client = max(dump client, server), the stream feeds the container's stdin through a pump with backpressure; an invalid or short stream kills the container. Hardened client flags (D-123), never retried, tool stdout never returned. psql (globals) runs under a random `\restrict` key and the dump's own `\restrict` lines are removed (D-138). |
 | `CreateDatabase` | Pre-check (name not taken), `CREATE DATABASE` through psql / mysql in a container. |
 | `RenameSwapDatabase` | PostgreSQL only (MySQL/MariaDB: `FAILED_PRECONDITION`). Names derived from `temp_id`; Prepare, Swap (up to 3 attempts), Rollback when it fails; each step has its own container/network name (`bekup-run-<run id>-<step>`). |
+| `DropTempDatabase` | Drops a restore's derived temporary database (`<db>__bekup_restore_<temp_id>` or `<db>__bekup_old_<temp_id>`, role RESTORE / OLD; the name is never taken from the request) with `DROP DATABASE IF EXISTS` (`WITH (FORCE)` on PostgreSQL 13+); the engine builder refuses any other name. Own container step, so it can follow a canceled `Restore` of the same run at once (D-166). |
+| `ScratchStats` | Test restores (task 4.6, D-169): the completeness statistics of the scratch database `bekup_test_<temp_id>` (`temp_id` `[a-z0-9]{12}`, the name is derived by the runner and must exist), captured exactly like a `Dump`'s stats (D-151/D-152 pinned session; PostgreSQL deep exact counts, MySQL/MariaDB estimates only). |
+| `DropScratchDatabase` | Drops the scratch database `bekup_test_<temp_id>` (derived by the runner) with `DROP DATABASE IF EXISTS` (`WITH (FORCE)` on PostgreSQL 13+); reports `existed`. No other name can be dropped. |
 | `PrePull` | Pulls the allowlisted image by digest only, reports `already_present`. |
 | `ListImages` | The merged image allowlist (embedded catalog + `images.extra_file`): engine, version key, digest reference, client version, legacy, extra. |
 | `FetchServerCertificate` | Captures the chain (no credentials sent) through the same validation, upstream and error normalization as the other target RPCs; audited. |

@@ -93,6 +93,9 @@ var matrix = map[authz.Operation]expect{
 	authz.OpConnectionTLSDowngrade:    {"YFFFFU", "S"},
 	authz.OpConnectionSSHKeyGenerate:  {"YFFFFU", "S"},
 	authz.OpTemporaryConnectionCreate: {"YFFFFU", "S"},
+	authz.OpTemporaryConnectionList:   {"YFFFFU", "-"},
+	authz.OpTemporaryConnectionExtend: {"YFFFFU", "S"},
+	authz.OpTemporaryConnectionDelete: {"YFFFFU", "S"},
 
 	authz.OpDestinationList:           {"YYYFFU", "-"},
 	authz.OpDestinationView:           {"YYYFFU", "-"},
@@ -118,7 +121,7 @@ var matrix = map[authz.Operation]expect{
 	authz.OpJobEncryptionKeysEdit: {"YFFFFU", "S"},
 	authz.OpJobEncryptionOptOut:   {"YFFFFU", "S"},
 	authz.OpJobPassphraseExport:   {"YFFFFU", "S"},
-	authz.OpJobTestRestoreEdit:    {"YYYFFU", "-"},
+	authz.OpJobTestRestoreEdit:    {"YYYFFU", "2"},
 	authz.OpJobSharedChannelsEdit: {"YFFFFU", "-"},
 
 	authz.OpRunList:       {"YYYYYU", "-"},
@@ -141,6 +144,11 @@ var matrix = map[authz.Operation]expect{
 	authz.OpRestoreArtifact:    {"YYYYFU", "2"},
 	authz.OpRestoreGlobals:     {"YFFFFU", "2"},
 	authz.OpRestoreView:        {"YYYYFU", "-"},
+	authz.OpRestorePreview:     {"YYYYFU", "-"},
+	authz.OpRestoreCancel:      {"YYYFFU", "-"},
+
+	authz.OpTestRestoreView: {"YYYYFU", "-"},
+	authz.OpTestRestoreRun:  {"YYYFFU", "-"},
 
 	authz.OpSharedChannelList:     {"YFFFFU", "-"},
 	authz.OpSharedChannelEdit:     {"YFFFFU", "S"},

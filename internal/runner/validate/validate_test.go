@@ -624,6 +624,19 @@ func TestRestoreStream(t *testing.T) {
 	if _, _, err := v.RestoreHeader(t.Context(), globals); err != nil {
 		t.Fatalf("globals: %v", err)
 	}
+	// --no-privileges only into a test-restore scratch database.
+	scratch := restoreHeader(t)
+	scratch.GetHeader().Database, scratch.GetHeader().NoPrivileges = "bekup_test_0123456789ab", true
+	if got, _, err := v.RestoreHeader(t.Context(), scratch); err != nil || !got.NoPrivileges {
+		t.Fatalf("scratch no_privileges: %+v %v", got, err)
+	}
+	for _, db := range []string{"app", "app__bekup_restore_r1", "bekup_test_short"} {
+		h := restoreHeader(t)
+		h.GetHeader().Database, h.GetHeader().NoPrivileges = db, true
+		if _, _, err := v.RestoreHeader(t.Context(), h); code(err) != codes.InvalidArgument {
+			t.Errorf("no_privileges into %q: %v", db, err)
+		}
+	}
 
 	bad := []func(*runnerpb.RestoreHeader){
 		func(h *runnerpb.RestoreHeader) { h.SourceVersionKey = "8.4" },

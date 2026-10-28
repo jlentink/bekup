@@ -1,4 +1,5 @@
--- Download tickets (task 3.9, D-150). Only internal/downloads uses these.
+-- Download tickets (task 3.9, D-150). The artifact and manifest lookups are
+-- shared with restores through internal/artifactverify (task 4.1, D-162).
 
 -- GetDownloadArtifact loads an artifact with what a download needs: the
 -- run's directory timestamp, the job slug, the engine and the item's

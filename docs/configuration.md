@@ -311,7 +311,9 @@ Generated from the config structs; regenerate with
 | Key | Env override | Type | Default | Description |
 |---|---|---|---|---|
 | `disk_root` | `BEKUP_STORAGE_DISK_ROOT` | string | `'/var/lib/bekup/backups'` | Root directory that confines all disk destinations (os.Root). |
-| `scratch_dir` | `BEKUP_STORAGE_SCRATCH_DIR` | string | `'/var/lib/bekup/scratch'` | Directory for temporary files (restore staging). |
+| `scratch_dir` | `BEKUP_STORAGE_SCRATCH_DIR` | string | `'/var/lib/bekup/scratch'` | Directory for temporary files (restore staging). Each restore stages its artifact in a private 0700 subdirectory, encrypted at rest with a key held only in memory, and removes it on every path. |
+| `scratch_reserve_bytes` | `BEKUP_STORAGE_SCRATCH_RESERVE_BYTES` | int | `1073741824` | Bytes that must stay free on the scratch_dir file system after a restore staged its artifact (0 to 1 TiB). A restore whose artifact does not fit with this reserve is refused before anything is downloaded. |
+| `scratch_stale_after` | `BEKUP_STORAGE_SCRATCH_STALE_AFTER` | duration | `'24h0m0s'` | Staging directories older than this are removed by the scratch sweeper even when their restore is still recorded as running (1h to 30 days; must exceed workers.restore_timeout). Directories of restores that are no longer running are removed at startup and every 10 minutes. |
 
 #### `[workers]`
 
@@ -350,6 +352,13 @@ Generated from the config structs; regenerate with
 | `dry_run` | `BEKUP_RETENTION_DRY_RUN` | bool | `false` | Compute and log every retention plan without deleting anything (instance-wide dry run). |
 | `max_deletions_per_sweep` | `BEKUP_RETENTION_MAX_DELETIONS_PER_SWEEP` | int | `500` | Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep. |
 | `partial_cleanup_age` | `BEKUP_RETENTION_PARTIAL_CLEANUP_AGE` | duration | `'24h0m0s'` | The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days). |
+
+#### `[restore]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `temp_connection_ttl` | `BEKUP_RESTORE_TEMP_CONNECTION_TTL` | duration | `'24h0m0s'` | Lifetime of a temporary restore connection after its creation (5m up to temp_connection_max_ttl). Expired temporary connections are deleted and their stored credentials destroyed. |
+| `temp_connection_max_ttl` | `BEKUP_RESTORE_TEMP_CONNECTION_MAX_TTL` | duration | `'168h0m0s'` | Longest lifetime of a temporary restore connection counted from its creation, including extensions (at least temp_connection_ttl, at most 30 days). |
 
 #### `[notifications]`
 

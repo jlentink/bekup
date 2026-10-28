@@ -1,6 +1,6 @@
 // Command bekup is the single binary of the bekup database backup manager.
 // Subcommands: serve, worker, runner, migrate, admin, keys, certs, audit,
-// verify, decrypt, config and version.
+// verify, decrypt, reindex, config and version.
 package main
 
 import (

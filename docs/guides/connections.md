@@ -15,6 +15,7 @@ and host-key capture runs on the runner over its mTLS API.
 | `testConnection`, `detectVersion`, `listDatabases`, `prePullImage` | yes | yes | no |
 | `fetchCertificate`, `fetchSshHostKey` | yes | no | no |
 | Create, update, delete, `setTlsMode`, confirm/stage pins, confirm host key, generate SSH keypair | yes, **with step-up** | no | no |
+| Temporary restore connections (`temporaryConnections`; create, extend, delete with step-up) | yes | no | no |
 
 Every change is audited (`connection.*`; credential changes additionally as
 `secret.changed`, never with values). Credentials are **write-only**: the API
@@ -75,6 +76,20 @@ the update fails with `VALIDATION`. Private keys and the TLS client key
 stay. The audit entry lists the re-entered fields
 (`reentered_for_new_endpoint`). Runner calls are rate limited per user (10 per minute) and
 each must be the only field of its GraphQL operation.
+
+## Temporary restore connections
+
+A temporary restore connection points a restore at a server that bekup does
+not back up (task 4.4, D-163). It is **admin only** and is meant to be
+created from the restore wizard; see
+[Restore: temporary restore connections](restore.md#temporary-restore-connections).
+In short: it is validated like any connection (TLS `PINNED` by default,
+D-132), never appears in `connections` or `connection`, cannot be used by a
+job or edited with `updateConnection`/`setTlsMode`/`deleteConnection`, and
+is deleted with its stored credentials destroyed when it expires
+(`restore.temp_connection_ttl`, default 24 h) or shortly after the restore
+that used it finished. Maintainers never see it. The `Connection` type
+carries `temporary` and `expiresAt`.
 
 ## Concurrent runs per connection
 

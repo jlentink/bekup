@@ -64,6 +64,8 @@ func TestValidationReportsAllErrors(t *testing.T) {
 	c.Scheduler.MinInterval = Duration(30 * time.Second)
 	c.Retention.MaxDeletionsPerSweep = 0
 	c.Retention.PartialCleanupAge = Duration(time.Minute)
+	c.Restore.TempConnectionTTL = Duration(48 * time.Hour)
+	c.Restore.TempConnectionMaxTTL = Duration(24 * time.Hour)
 	c.Netguard.AllowHosts = []string{"https://evil"}
 	c.Metrics.Listen = c.Server.Listen
 	c.Log.Level = "verbose"
@@ -89,6 +91,7 @@ func TestValidationReportsAllErrors(t *testing.T) {
 		"scheduler.min_interval: must be at least 1m0s",
 		"retention.max_deletions_per_sweep: must be 1..100000 (got 0)",
 		"retention.partial_cleanup_age: must be at least 1h0m0s",
+		"restore.temp_connection_ttl: must be <= restore.temp_connection_max_ttl",
 		`netguard.allow_hosts: invalid host name "https://evil"`,
 		"metrics.listen: must be host:port",
 		"log.level: must be one of",

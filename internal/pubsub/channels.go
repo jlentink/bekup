@@ -30,4 +30,12 @@ var (
 		Name:   "bekup_run_events",
 		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenRunEvents(ctx) },
 	}
+
+	// RestoreEvents carries restore changes (internal/restore: event kind
+	// and restore id, "restore:<id>" or "log:<id>"; task 4.2). Live
+	// restore views re-load the restore with the caller's rights.
+	RestoreEvents = Channel{
+		Name:   "bekup_restore_events",
+		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenRestoreEvents(ctx) },
+	}
 )

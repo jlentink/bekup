@@ -196,13 +196,19 @@ func (in *itInner) verify(t *testing.T, kind engine.Kind, key string, dk runnerp
 
 func (in *itInner) restore(t *testing.T, rt *runnerpb.Target, db, src string, dk runnerpb.DumpKind, data []byte) (*runnerpb.RestoreResult, []string, error) {
 	t.Helper()
+	return in.restoreHeader(t, &runnerpb.RestoreHeader{
+		Ctx: in.rc(), Target: rt, Database: db, SourceVersionKey: src, Kind: dk, TotalBytes: uint64(len(data)),
+	}, data)
+}
+
+// restoreHeader runs a Restore with the given header.
+func (in *itInner) restoreHeader(t *testing.T, h *runnerpb.RestoreHeader, data []byte) (*runnerpb.RestoreResult, []string, error) {
+	t.Helper()
 	s, err := in.rpc.Restore(in.ctx(t, 5*time.Minute))
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := s.Send(&runnerpb.RestoreRequest{Msg: &runnerpb.RestoreRequest_Header{Header: &runnerpb.RestoreHeader{
-		Ctx: in.rc(), Target: rt, Database: db, SourceVersionKey: src, Kind: dk, TotalBytes: uint64(len(data)),
-	}}}); err != nil {
+	if err := s.Send(&runnerpb.RestoreRequest{Msg: &runnerpb.RestoreRequest_Header{Header: h}}); err != nil {
 		return nil, nil, err
 	}
 	go func() {
@@ -299,6 +305,7 @@ func TestInnerRunnerRPCs(t *testing.T) {
 
 	in.seed(t)
 	t.Run("probe", in.testProbe)
+	t.Run("privileges", in.testPrivileges)
 	t.Run("compat", in.testCompat)
 	t.Run("errors", in.testErrors)
 	t.Run("roundtrip", in.testRoundTrip)
@@ -308,6 +315,7 @@ func TestInnerRunnerRPCs(t *testing.T) {
 	t.Run("psql_restrict", in.testPSQLRestrict)
 	t.Run("ssh", in.testSSH)
 	t.Run("swap", in.testSwap)
+	t.Run("secdef", in.testSecdef)
 	t.Run("cancel", in.testCancel)
 	t.Run("prepull", in.testPrePull)
 	if !strings.Contains(ts.logs.String(), "runner_rpc_audit") {

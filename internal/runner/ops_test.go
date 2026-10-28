@@ -948,6 +948,51 @@ func TestRenameSwap(t *testing.T) {
 	})
 }
 
+func TestDropTempDatabase(t *testing.T) {
+	req := func(t *testing.T, role runnerpb.TempDatabaseRole) *runnerpb.DropTempDatabaseRequest {
+		return &runnerpb.DropTempDatabaseRequest{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app", TempId: "r1", Role: role}
+	}
+	t.Run("derived names only", func(t *testing.T) {
+		env := newOpsEnv(t)
+		env.conn.dbs = []string{"app", "app__bekup_restore_r1"}
+		resp, err := env.ops.dropTemp(t.Context(), req(t, runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_RESTORE))
+		if err != nil || !resp.GetExisted() {
+			t.Fatalf("restore role: %v %v", resp, err)
+		}
+		resp, err = env.ops.dropTemp(t.Context(), req(t, runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_OLD))
+		if err != nil || resp.GetExisted() {
+			t.Fatalf("old role: %v %v", resp, err)
+		}
+		calls := env.exec.Calls()
+		if len(calls) != 2 {
+			t.Fatalf("calls = %d", len(calls))
+		}
+		if a := strings.Join(calls[0].cmd.Argv, " "); !strings.Contains(a, `DROP DATABASE IF EXISTS "app__bekup_restore_r1"`) {
+			t.Fatalf("argv = %v", calls[0].cmd.Argv)
+		}
+		if a := strings.Join(calls[1].cmd.Argv, " "); !strings.Contains(a, `DROP DATABASE IF EXISTS "app__bekup_old_r1"`) {
+			t.Fatalf("argv = %v", calls[1].cmd.Argv)
+		}
+	})
+	t.Run("rejects", func(t *testing.T) {
+		env := newOpsEnv(t)
+		bad := []*runnerpb.DropTempDatabaseRequest{
+			req(t, runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_UNSPECIFIED),
+			{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app__bekup_restore_r1", TempId: "r1", Role: runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_RESTORE},
+			{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app", TempId: "R1", Role: runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_RESTORE},
+			{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "template1", TempId: "r1", Role: runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_RESTORE},
+		}
+		for i, r := range bad {
+			if _, err := env.ops.dropTemp(t.Context(), r); status.Code(err) != codes.InvalidArgument {
+				t.Errorf("case %d: %v", i, err)
+			}
+		}
+		if len(env.exec.Calls()) != 0 {
+			t.Fatal("container ran")
+		}
+	})
+}
+
 func TestPrePull(t *testing.T) {
 	env := newOpsEnv(t)
 	env.exec.present = true

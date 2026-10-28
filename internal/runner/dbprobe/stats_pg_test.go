@@ -71,6 +71,8 @@ func TestPGQueriesQualified(t *testing.T) {
 		"globals": pgGlobalCountsQuery, "timeouts": pgLiftTimeouts, "snapshot": pgExportSnapshot,
 		"count":   "SELECT " + pgCount + " FROM ONLY " + s + "." + n,
 		"version": eng.VersionQuery(), "databases": eng.ListDatabasesQuery(),
+		"neutralize_owner": pgNeutralizeOwnerQuery, "secdef": pgSecdefQuery, "secdef_count": pgSecdefCountQuery,
+		"public_access": pgPublicAccessQuery, "foreign_sessions": pgForeignSessionsQuery,
 	} {
 		if why := pgUnqualified(q); why != "" {
 			t.Errorf("%s: %s", name, why)

@@ -30,5 +30,5 @@ bekup keys rotate --keyring <path> [flags]
 
 ### SEE ALSO
 
-* [bekup keys](bekup_keys.md)	 - Generate and rotate the master keyring
+* [bekup keys](bekup_keys.md)	 - Generate and rotate the master keyring; export the instance public keys
 

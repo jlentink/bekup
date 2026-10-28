@@ -22,6 +22,24 @@ const (
 	// KindRetentionSweep applies a job's retention (worker: task 3.8,
 	// retention queue); without a job id it is the daily fan-out.
 	KindRetentionSweep = "retention_sweep"
+	// KindTemporaryConnectionCleanup deletes expired temporary restore
+	// connections and those whose restore finished, destroying their
+	// credentials (task 4.4; periodic, maintenance queue).
+	KindTemporaryConnectionCleanup = "temporary_connection_cleanup"
+	// KindRestore runs one restore (worker: internal/restore, task 4.2;
+	// restore queue, never retried).
+	KindRestore = "restore"
+	// KindRestoreStuckSweep fails restores that no worker will finish
+	// (crashed worker, discarded job) and releases what they held (task
+	// 4.5; periodic, maintenance queue).
+	KindRestoreStuckSweep = "restore_stuck_sweep"
+	// KindTestRestore runs one test restore of a job (worker:
+	// internal/restore, task 4.6; restore queue, never retried).
+	KindTestRestore = "test_restore"
+	// KindTestRestoreSchedule enqueues due test restores, fails test
+	// restores no worker will finish and retries dropping leftover scratch
+	// databases (task 4.6; periodic, maintenance queue).
+	KindTestRestoreSchedule = "test_restore_schedule"
 )
 
 // Trigger says why a backup run was enqueued.
@@ -59,6 +77,44 @@ type ScheduleSkipCleanupArgs struct{}
 
 // Kind implements river.JobArgs.
 func (ScheduleSkipCleanupArgs) Kind() string { return KindScheduleSkipCleanup }
+
+// TemporaryConnectionCleanupArgs are the (empty) args of
+// KindTemporaryConnectionCleanup.
+type TemporaryConnectionCleanupArgs struct{}
+
+// Kind implements river.JobArgs.
+func (TemporaryConnectionCleanupArgs) Kind() string { return KindTemporaryConnectionCleanup }
+
+// RestoreArgs are the args of KindRestore: the restore id only (D-145;
+// the restore row holds everything else, an age identity travels only
+// sealed in restore_identity_handoff). Unique by RestoreID.
+type RestoreArgs struct {
+	RestoreID uuid.UUID `json:"restore_id" river:"unique"`
+}
+
+// Kind implements river.JobArgs.
+func (RestoreArgs) Kind() string { return KindRestore }
+
+// RestoreStuckSweepArgs are the (empty) args of KindRestoreStuckSweep.
+type RestoreStuckSweepArgs struct{}
+
+// Kind implements river.JobArgs.
+func (RestoreStuckSweepArgs) Kind() string { return KindRestoreStuckSweep }
+
+// TestRestoreArgs are the args of KindTestRestore: the test restore id
+// only (D-145). Unique by TestRestoreID.
+type TestRestoreArgs struct {
+	TestRestoreID uuid.UUID `json:"test_restore_id" river:"unique"`
+}
+
+// Kind implements river.JobArgs.
+func (TestRestoreArgs) Kind() string { return KindTestRestore }
+
+// TestRestoreScheduleArgs are the (empty) args of KindTestRestoreSchedule.
+type TestRestoreScheduleArgs struct{}
+
+// Kind implements river.JobArgs.
+func (TestRestoreScheduleArgs) Kind() string { return KindTestRestoreSchedule }
 
 // RetentionReason says why a retention sweep was enqueued.
 type RetentionReason string
@@ -106,6 +162,17 @@ var catalog = map[string]KindSpec{
 	KindBackupRun:           {Queue: QueueBackup, Unique: true, Args: BackupRunArgs{}},
 	KindScheduleSkipCleanup: {Queue: QueueMaintenance, Unique: true, Args: ScheduleSkipCleanupArgs{}},
 	KindRetentionSweep:      {Queue: QueueRetention, Unique: true, Args: RetentionSweepArgs{}},
+	KindTemporaryConnectionCleanup: {
+		Queue: QueueMaintenance, Unique: true, Args: TemporaryConnectionCleanupArgs{},
+	},
+	KindRestore: {Queue: QueueRestore, MaxAttempts: MaxAttemptsRestore, Unique: true, Args: RestoreArgs{}},
+	KindRestoreStuckSweep: {
+		Queue: QueueMaintenance, Unique: true, Args: RestoreStuckSweepArgs{},
+	},
+	KindTestRestore: {Queue: QueueRestore, MaxAttempts: MaxAttemptsRestore, Unique: true, Args: TestRestoreArgs{}},
+	KindTestRestoreSchedule: {
+		Queue: QueueMaintenance, Unique: true, Args: TestRestoreScheduleArgs{},
+	},
 }
 
 // Kinds returns the catalog's kinds in sorted order.

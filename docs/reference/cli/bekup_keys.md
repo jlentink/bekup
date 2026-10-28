@@ -1,6 +1,6 @@
 ## bekup keys
 
-Generate and rotate the master keyring
+Generate and rotate the master keyring; export the instance public keys
 
 ### Synopsis
 
@@ -28,6 +28,7 @@ bekup keys [flags]
 ### SEE ALSO
 
 * [bekup](bekup.md)	 - bekup: secure, self-hosted database backup manager
+* [bekup keys export-public](bekup_keys_export-public.md)	 - Export the instance public keys (manifest signatures) for escrow and offline verification
 * [bekup keys generate](bekup_keys_generate.md)	 - Create a new master keyring file (256-bit key, mode 0600, never overwrites)
 * [bekup keys rotate](bekup_keys_rotate.md)	 - Add a new primary key to the keyring file (old keys stay for decryption)
 

@@ -38,18 +38,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RunnerService_Health_FullMethodName                 = "/runner.v1.RunnerService/Health"
-	RunnerService_Probe_FullMethodName                  = "/runner.v1.RunnerService/Probe"
-	RunnerService_FetchServerCertificate_FullMethodName = "/runner.v1.RunnerService/FetchServerCertificate"
-	RunnerService_FetchHostKey_FullMethodName           = "/runner.v1.RunnerService/FetchHostKey"
-	RunnerService_Dump_FullMethodName                   = "/runner.v1.RunnerService/Dump"
-	RunnerService_DumpGlobals_FullMethodName            = "/runner.v1.RunnerService/DumpGlobals"
-	RunnerService_VerifyDump_FullMethodName             = "/runner.v1.RunnerService/VerifyDump"
-	RunnerService_Restore_FullMethodName                = "/runner.v1.RunnerService/Restore"
-	RunnerService_CreateDatabase_FullMethodName         = "/runner.v1.RunnerService/CreateDatabase"
-	RunnerService_RenameSwapDatabase_FullMethodName     = "/runner.v1.RunnerService/RenameSwapDatabase"
-	RunnerService_PrePull_FullMethodName                = "/runner.v1.RunnerService/PrePull"
-	RunnerService_ListImages_FullMethodName             = "/runner.v1.RunnerService/ListImages"
+	RunnerService_Health_FullMethodName                     = "/runner.v1.RunnerService/Health"
+	RunnerService_Probe_FullMethodName                      = "/runner.v1.RunnerService/Probe"
+	RunnerService_FetchServerCertificate_FullMethodName     = "/runner.v1.RunnerService/FetchServerCertificate"
+	RunnerService_FetchHostKey_FullMethodName               = "/runner.v1.RunnerService/FetchHostKey"
+	RunnerService_Dump_FullMethodName                       = "/runner.v1.RunnerService/Dump"
+	RunnerService_DumpGlobals_FullMethodName                = "/runner.v1.RunnerService/DumpGlobals"
+	RunnerService_VerifyDump_FullMethodName                 = "/runner.v1.RunnerService/VerifyDump"
+	RunnerService_Restore_FullMethodName                    = "/runner.v1.RunnerService/Restore"
+	RunnerService_CreateDatabase_FullMethodName             = "/runner.v1.RunnerService/CreateDatabase"
+	RunnerService_RenameSwapDatabase_FullMethodName         = "/runner.v1.RunnerService/RenameSwapDatabase"
+	RunnerService_DropTempDatabase_FullMethodName           = "/runner.v1.RunnerService/DropTempDatabase"
+	RunnerService_PrePull_FullMethodName                    = "/runner.v1.RunnerService/PrePull"
+	RunnerService_ListImages_FullMethodName                 = "/runner.v1.RunnerService/ListImages"
+	RunnerService_ScratchStats_FullMethodName               = "/runner.v1.RunnerService/ScratchStats"
+	RunnerService_DropScratchDatabase_FullMethodName        = "/runner.v1.RunnerService/DropScratchDatabase"
+	RunnerService_NeutralizeRestoredDatabase_FullMethodName = "/runner.v1.RunnerService/NeutralizeRestoredDatabase"
 )
 
 // RunnerServiceClient is the client API for RunnerService service.
@@ -94,12 +98,36 @@ type RunnerServiceClient interface {
 	// bekup temporary database in one transaction, keeping the old one under
 	// a bekup temporary name.
 	RenameSwapDatabase(ctx context.Context, in *RenameSwapDatabaseRequest, opts ...grpc.CallOption) (*RenameSwapDatabaseResponse, error)
+	// DropTempDatabase drops a bekup temporary database of a restore: the
+	// staging database <database>__bekup_restore_<temp_id> (a failed or
+	// canceled restore) or the replaced <database>__bekup_old_<temp_id> (after
+	// a swap). The runner derives the name itself; no other database can be
+	// dropped through the API.
+	DropTempDatabase(ctx context.Context, in *DropTempDatabaseRequest, opts ...grpc.CallOption) (*DropTempDatabaseResponse, error)
 	// PrePull pulls the allowlisted image of an engine version ahead of a run.
 	PrePull(ctx context.Context, in *PrePullRequest, opts ...grpc.CallOption) (*PrePullResponse, error)
 	// ListImages returns the runner's merged image allowlist (the embedded
 	// catalog plus runner.toml images.extra_file), so serve can offer every
 	// client version the runner accepts.
 	ListImages(ctx context.Context, in *ListImagesRequest, opts ...grpc.CallOption) (*ListImagesResponse, error)
+	// ScratchStats captures the completeness statistics of a test-restore
+	// scratch database (task 4.6): the same catalog reads and counts as the
+	// Dump stats, through the same pinned, hostile-safe Go-driver session.
+	// The runner derives the database name bekup_test_<temp_id> itself.
+	ScratchStats(ctx context.Context, in *ScratchStatsRequest, opts ...grpc.CallOption) (*ScratchStatsResponse, error)
+	// DropScratchDatabase drops the test-restore scratch database
+	// bekup_test_<temp_id> (task 4.6). The runner derives the name; no other
+	// database can be dropped through it.
+	DropScratchDatabase(ctx context.Context, in *DropScratchDatabaseRequest, opts ...grpc.CallOption) (*DropScratchDatabaseResponse, error)
+	// NeutralizeRestoredDatabase hardens a freshly restored PostgreSQL
+	// database before it is swapped in or reported as restored (D-171):
+	// every SECURITY DEFINER function and procedure outside pg_catalog and
+	// information_schema becomes SECURITY INVOKER and PUBLIC loses CONNECT
+	// and TEMPORARY on the database. The runner derives or checks the name
+	// (the restore's staging database, a test-restore scratch database, or
+	// a new database owned by the connection's role) and works in its
+	// pinned Go-driver session (D-152).
+	NeutralizeRestoredDatabase(ctx context.Context, in *NeutralizeRestoredDatabaseRequest, opts ...grpc.CallOption) (*NeutralizeRestoredDatabaseResponse, error)
 }
 
 type runnerServiceClient struct {
@@ -234,6 +262,16 @@ func (c *runnerServiceClient) RenameSwapDatabase(ctx context.Context, in *Rename
 	return out, nil
 }
 
+func (c *runnerServiceClient) DropTempDatabase(ctx context.Context, in *DropTempDatabaseRequest, opts ...grpc.CallOption) (*DropTempDatabaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DropTempDatabaseResponse)
+	err := c.cc.Invoke(ctx, RunnerService_DropTempDatabase_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runnerServiceClient) PrePull(ctx context.Context, in *PrePullRequest, opts ...grpc.CallOption) (*PrePullResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PrePullResponse)
@@ -248,6 +286,36 @@ func (c *runnerServiceClient) ListImages(ctx context.Context, in *ListImagesRequ
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListImagesResponse)
 	err := c.cc.Invoke(ctx, RunnerService_ListImages_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runnerServiceClient) ScratchStats(ctx context.Context, in *ScratchStatsRequest, opts ...grpc.CallOption) (*ScratchStatsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScratchStatsResponse)
+	err := c.cc.Invoke(ctx, RunnerService_ScratchStats_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runnerServiceClient) DropScratchDatabase(ctx context.Context, in *DropScratchDatabaseRequest, opts ...grpc.CallOption) (*DropScratchDatabaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DropScratchDatabaseResponse)
+	err := c.cc.Invoke(ctx, RunnerService_DropScratchDatabase_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runnerServiceClient) NeutralizeRestoredDatabase(ctx context.Context, in *NeutralizeRestoredDatabaseRequest, opts ...grpc.CallOption) (*NeutralizeRestoredDatabaseResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(NeutralizeRestoredDatabaseResponse)
+	err := c.cc.Invoke(ctx, RunnerService_NeutralizeRestoredDatabase_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -296,12 +364,36 @@ type RunnerServiceServer interface {
 	// bekup temporary database in one transaction, keeping the old one under
 	// a bekup temporary name.
 	RenameSwapDatabase(context.Context, *RenameSwapDatabaseRequest) (*RenameSwapDatabaseResponse, error)
+	// DropTempDatabase drops a bekup temporary database of a restore: the
+	// staging database <database>__bekup_restore_<temp_id> (a failed or
+	// canceled restore) or the replaced <database>__bekup_old_<temp_id> (after
+	// a swap). The runner derives the name itself; no other database can be
+	// dropped through the API.
+	DropTempDatabase(context.Context, *DropTempDatabaseRequest) (*DropTempDatabaseResponse, error)
 	// PrePull pulls the allowlisted image of an engine version ahead of a run.
 	PrePull(context.Context, *PrePullRequest) (*PrePullResponse, error)
 	// ListImages returns the runner's merged image allowlist (the embedded
 	// catalog plus runner.toml images.extra_file), so serve can offer every
 	// client version the runner accepts.
 	ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error)
+	// ScratchStats captures the completeness statistics of a test-restore
+	// scratch database (task 4.6): the same catalog reads and counts as the
+	// Dump stats, through the same pinned, hostile-safe Go-driver session.
+	// The runner derives the database name bekup_test_<temp_id> itself.
+	ScratchStats(context.Context, *ScratchStatsRequest) (*ScratchStatsResponse, error)
+	// DropScratchDatabase drops the test-restore scratch database
+	// bekup_test_<temp_id> (task 4.6). The runner derives the name; no other
+	// database can be dropped through it.
+	DropScratchDatabase(context.Context, *DropScratchDatabaseRequest) (*DropScratchDatabaseResponse, error)
+	// NeutralizeRestoredDatabase hardens a freshly restored PostgreSQL
+	// database before it is swapped in or reported as restored (D-171):
+	// every SECURITY DEFINER function and procedure outside pg_catalog and
+	// information_schema becomes SECURITY INVOKER and PUBLIC loses CONNECT
+	// and TEMPORARY on the database. The runner derives or checks the name
+	// (the restore's staging database, a test-restore scratch database, or
+	// a new database owned by the connection's role) and works in its
+	// pinned Go-driver session (D-152).
+	NeutralizeRestoredDatabase(context.Context, *NeutralizeRestoredDatabaseRequest) (*NeutralizeRestoredDatabaseResponse, error)
 	mustEmbedUnimplementedRunnerServiceServer()
 }
 
@@ -342,11 +434,23 @@ func (UnimplementedRunnerServiceServer) CreateDatabase(context.Context, *CreateD
 func (UnimplementedRunnerServiceServer) RenameSwapDatabase(context.Context, *RenameSwapDatabaseRequest) (*RenameSwapDatabaseResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RenameSwapDatabase not implemented")
 }
+func (UnimplementedRunnerServiceServer) DropTempDatabase(context.Context, *DropTempDatabaseRequest) (*DropTempDatabaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DropTempDatabase not implemented")
+}
 func (UnimplementedRunnerServiceServer) PrePull(context.Context, *PrePullRequest) (*PrePullResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrePull not implemented")
 }
 func (UnimplementedRunnerServiceServer) ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListImages not implemented")
+}
+func (UnimplementedRunnerServiceServer) ScratchStats(context.Context, *ScratchStatsRequest) (*ScratchStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScratchStats not implemented")
+}
+func (UnimplementedRunnerServiceServer) DropScratchDatabase(context.Context, *DropScratchDatabaseRequest) (*DropScratchDatabaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DropScratchDatabase not implemented")
+}
+func (UnimplementedRunnerServiceServer) NeutralizeRestoredDatabase(context.Context, *NeutralizeRestoredDatabaseRequest) (*NeutralizeRestoredDatabaseResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method NeutralizeRestoredDatabase not implemented")
 }
 func (UnimplementedRunnerServiceServer) mustEmbedUnimplementedRunnerServiceServer() {}
 func (UnimplementedRunnerServiceServer) testEmbeddedByValue()                       {}
@@ -513,6 +617,24 @@ func _RunnerService_RenameSwapDatabase_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RunnerService_DropTempDatabase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DropTempDatabaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RunnerServiceServer).DropTempDatabase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RunnerService_DropTempDatabase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RunnerServiceServer).DropTempDatabase(ctx, req.(*DropTempDatabaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RunnerService_PrePull_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PrePullRequest)
 	if err := dec(in); err != nil {
@@ -549,6 +671,60 @@ func _RunnerService_ListImages_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RunnerService_ScratchStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScratchStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RunnerServiceServer).ScratchStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RunnerService_ScratchStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RunnerServiceServer).ScratchStats(ctx, req.(*ScratchStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RunnerService_DropScratchDatabase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DropScratchDatabaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RunnerServiceServer).DropScratchDatabase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RunnerService_DropScratchDatabase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RunnerServiceServer).DropScratchDatabase(ctx, req.(*DropScratchDatabaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RunnerService_NeutralizeRestoredDatabase_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NeutralizeRestoredDatabaseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RunnerServiceServer).NeutralizeRestoredDatabase(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RunnerService_NeutralizeRestoredDatabase_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RunnerServiceServer).NeutralizeRestoredDatabase(ctx, req.(*NeutralizeRestoredDatabaseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RunnerService_ServiceDesc is the grpc.ServiceDesc for RunnerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -581,12 +757,28 @@ var RunnerService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RunnerService_RenameSwapDatabase_Handler,
 		},
 		{
+			MethodName: "DropTempDatabase",
+			Handler:    _RunnerService_DropTempDatabase_Handler,
+		},
+		{
 			MethodName: "PrePull",
 			Handler:    _RunnerService_PrePull_Handler,
 		},
 		{
 			MethodName: "ListImages",
 			Handler:    _RunnerService_ListImages_Handler,
+		},
+		{
+			MethodName: "ScratchStats",
+			Handler:    _RunnerService_ScratchStats_Handler,
+		},
+		{
+			MethodName: "DropScratchDatabase",
+			Handler:    _RunnerService_DropScratchDatabase_Handler,
+		},
+		{
+			MethodName: "NeutralizeRestoredDatabase",
+			Handler:    _RunnerService_NeutralizeRestoredDatabase_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

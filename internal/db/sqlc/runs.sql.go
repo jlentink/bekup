@@ -178,7 +178,7 @@ func (q *Queries) FinishRunItem(ctx context.Context, arg FinishRunItemParams) (R
 }
 
 const getJobForRun = `-- name: GetJobForRun :one
-SELECT jobs.id, jobs.enabled, jobs.schedule, jobs.next_run_at, jobs.last_scheduled_at, jobs.deleted_at, jobs.created_at, jobs.updated_at, jobs.name, jobs.slug, jobs.description, jobs.connection_id, jobs.db_mode, jobs.databases, jobs.exclude, jobs.include_globals, jobs.retention_keep_last, jobs.retention_keep_days, jobs.timeout_seconds, jobs.verification, jobs.expected_window_seconds, jobs.created_by, jobs.updated_by, c.engine AS connection_engine, c.image_key AS connection_image_key,
+SELECT jobs.id, jobs.enabled, jobs.schedule, jobs.next_run_at, jobs.last_scheduled_at, jobs.deleted_at, jobs.created_at, jobs.updated_at, jobs.name, jobs.slug, jobs.description, jobs.connection_id, jobs.db_mode, jobs.databases, jobs.exclude, jobs.include_globals, jobs.retention_keep_last, jobs.retention_keep_days, jobs.timeout_seconds, jobs.verification, jobs.expected_window_seconds, jobs.created_by, jobs.updated_by, jobs.test_restore_enabled, jobs.test_restore_schedule, jobs.test_restore_connection_id, jobs.test_restore_next_at, jobs.test_restore_target_privileges, jobs.test_restore_privilege_reasons, jobs.test_restore_privileged_ack_by, jobs.test_restore_privileged_ack_at, c.engine AS connection_engine, c.image_key AS connection_image_key,
        c.deleted_at AS connection_deleted_at
 FROM jobs JOIN connections c ON c.id = jobs.connection_id
 WHERE jobs.id = $1
@@ -220,6 +220,14 @@ func (q *Queries) GetJobForRun(ctx context.Context, id uuid.UUID) (GetJobForRunR
 		&i.Job.ExpectedWindowSeconds,
 		&i.Job.CreatedBy,
 		&i.Job.UpdatedBy,
+		&i.Job.TestRestoreEnabled,
+		&i.Job.TestRestoreSchedule,
+		&i.Job.TestRestoreConnectionID,
+		&i.Job.TestRestoreNextAt,
+		&i.Job.TestRestoreTargetPrivileges,
+		&i.Job.TestRestorePrivilegeReasons,
+		&i.Job.TestRestorePrivilegedAckBy,
+		&i.Job.TestRestorePrivilegedAckAt,
 		&i.ConnectionEngine,
 		&i.ConnectionImageKey,
 		&i.ConnectionDeletedAt,

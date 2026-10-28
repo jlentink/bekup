@@ -187,6 +187,17 @@ bare `t.Skipf`. Locally it skips without Docker; with `CI=true` (set in the
 `go-integration` job) it fails, so a missing daemon in CI can't turn the
 integration suite silently green.
 
+Harnesses that run a real `bekup runner` container wait with
+`runnertest.WaitDockerOK` (`internal/testutil/runnertest`) until the
+runner's Health RPC reports `DOCKER_STATUS_OK`: the "runner listening" log
+line comes before the executor has found its own container, and dump or
+restore RPCs sent in between fail. SFTP tests start the `atmoz/sftp`
+server through `sftptest.Start` (`internal/storage/sftp/sftptest`): the
+image is amd64 only, so it is requested as `linux/amd64` (emulated on
+arm64 hosts), 22/tcp is published on 127.0.0.1 only, readiness waits for
+a real SSH banner, and a failed container start is retried with a fresh
+container (up to three times, with the container log in the error).
+
 ## Releases and version bumping
 
 The version lives in [`VERSION`](../VERSION) (plain `MAJOR.MINOR.PATCH`) and is

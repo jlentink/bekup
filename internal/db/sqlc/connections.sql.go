@@ -12,12 +12,283 @@ import (
 	"github.com/google/uuid"
 )
 
+const countActiveTemporaryConnections = `-- name: CountActiveTemporaryConnections :one
+SELECT count(*) FROM connections
+WHERE temporary AND deleted_at IS NULL AND expires_at > $1::timestamptz
+`
+
+func (q *Queries) CountActiveTemporaryConnections(ctx context.Context, now time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveTemporaryConnections, now)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getConnection = `-- name: GetConnection :one
 SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary
 `
 
 func (q *Queries) GetConnection(ctx context.Context, id uuid.UUID) (Connection, error) {
 	row := q.db.QueryRow(ctx, getConnection, id)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const getConnectionAny = `-- name: GetConnectionAny :one
+
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
+WHERE id = $1 AND deleted_at IS NULL AND (NOT temporary OR expires_at > $2::timestamptz)
+`
+
+type GetConnectionAnyParams struct {
+	ID  uuid.UUID `json:"id"`
+	Now time.Time `json:"now"`
+}
+
+// --- Temporary restore connections (task 4.4, D-163) -------------------------
+// Admin only, restore targets only. A temporary connection is usable until
+// expires_at (checked against the caller's clock, @now); the cleanup worker
+// then destroys its credentials and soft deletes it.
+// GetConnectionAny reads a connection that is not deleted, permanent or a
+// temporary one that has not expired.
+func (q *Queries) GetConnectionAny(ctx context.Context, arg GetConnectionAnyParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, getConnectionAny, arg.ID, arg.Now)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const getConnectionAnyForShare = `-- name: GetConnectionAnyForShare :one
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
+WHERE id = $1 AND deleted_at IS NULL AND (NOT temporary OR expires_at > $2::timestamptz)
+FOR SHARE
+`
+
+type GetConnectionAnyForShareParams struct {
+	ID  uuid.UUID `json:"id"`
+	Now time.Time `json:"now"`
+}
+
+func (q *Queries) GetConnectionAnyForShare(ctx context.Context, arg GetConnectionAnyForShareParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, getConnectionAnyForShare, arg.ID, arg.Now)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const getConnectionAnyForUpdate = `-- name: GetConnectionAnyForUpdate :one
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
+WHERE id = $1 AND deleted_at IS NULL AND (NOT temporary OR expires_at > $2::timestamptz)
+FOR UPDATE
+`
+
+type GetConnectionAnyForUpdateParams struct {
+	ID  uuid.UUID `json:"id"`
+	Now time.Time `json:"now"`
+}
+
+func (q *Queries) GetConnectionAnyForUpdate(ctx context.Context, arg GetConnectionAnyForUpdateParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, getConnectionAnyForUpdate, arg.ID, arg.Now)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const getConnectionForSlotHolder = `-- name: GetConnectionForSlotHolder :one
+SELECT c.id, c.name, c.engine, c.version_key, c.image_key, c.host, c.port, c.username, c.has_password, c.client_cert_pem, c.tls_mode, c.tls_pin_cert_pem, c.tls_pin_spki, c.tls_pin_not_after, c.tls_pinned_at, c.tls_pinned_by, c.tls_backup_pin_cert_pem, c.tls_backup_pin_spki, c.tls_backup_pin_not_after, c.tls_backup_pinned_at, c.tls_backup_pinned_by, c.ssh_enabled, c.ssh_host, c.ssh_port, c.ssh_user, c.ssh_auth, c.ssh_has_passphrase, c.ssh_public_key, c.ssh_host_key_type, c.ssh_host_key_fingerprint, c.ssh_host_key_authorized_key, c.ssh_host_key_confirmed_at, c.ssh_host_key_confirmed_by, c.secret_enc, c.temporary, c.expires_at, c.created_for_restore_id, c.created_by, c.created_at, c.updated_at, c.deleted_at, c.max_concurrent_runs FROM connections c
+WHERE c.id = $1 AND c.deleted_at IS NULL
+  AND (NOT c.temporary OR c.expires_at > $2::timestamptz
+       OR EXISTS (SELECT 1 FROM run_slots s WHERE s.connection_id = c.id AND s.holder_id = $3::uuid))
+`
+
+type GetConnectionForSlotHolderParams struct {
+	ID       uuid.UUID `json:"id"`
+	Now      time.Time `json:"now"`
+	HolderID uuid.UUID `json:"holderId"`
+}
+
+// GetConnectionAnyForShare share-locks a usable connection (permanent or
+// an unexpired temporary one) as a restore target (task 4.5): the cleanup
+// worker's row lock waits for the restore's transaction.
+// GetConnectionForSlotHolder loads a restore target for a run that holds
+// a run slot on it (holder): a permanent connection, or a temporary one
+// that is unexpired or whose slot the holder holds (the cleanup never
+// deletes a connection while a slot is held). Deleted rows never load.
+func (q *Queries) GetConnectionForSlotHolder(ctx context.Context, arg GetConnectionForSlotHolderParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, getConnectionForSlotHolder, arg.ID, arg.Now, arg.HolderID)
 	var i Connection
 	err := row.Scan(
 		&i.ID,
@@ -73,6 +344,101 @@ SELECT id, name, engine, version_key, image_key, host, port, username, has_passw
 // GetConnectionForUpdate locks a connection that is not deleted.
 func (q *Queries) GetConnectionForUpdate(ctx context.Context, id uuid.UUID) (Connection, error) {
 	row := q.db.QueryRow(ctx, getConnectionForUpdate, id)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const getTemporaryConnectionCleanupState = `-- name: GetTemporaryConnectionCleanupState :one
+SELECT c.id,
+       c.expires_at,
+       (SELECT count(*) FROM restores r
+         WHERE r.target_connection_id = c.id AND r.finished_at IS NULL)::bigint AS active_restores,
+       (SELECT count(*) FROM restores r
+         WHERE r.target_connection_id = c.id)::bigint AS restores,
+       COALESCE((SELECT max(r.finished_at) FROM restores r
+         WHERE r.target_connection_id = c.id), 'epoch'::timestamptz)::timestamptz AS last_restore_finished_at,
+       EXISTS (SELECT 1 FROM run_slots s WHERE s.connection_id = c.id) AS slot_held
+FROM connections c
+WHERE c.id = $1 AND c.temporary AND c.deleted_at IS NULL
+`
+
+type GetTemporaryConnectionCleanupStateRow struct {
+	ID                    uuid.UUID  `json:"id"`
+	ExpiresAt             *time.Time `json:"expiresAt"`
+	ActiveRestores        int64      `json:"activeRestores"`
+	Restores              int64      `json:"restores"`
+	LastRestoreFinishedAt time.Time  `json:"lastRestoreFinishedAt"`
+	SlotHeld              bool       `json:"slotHeld"`
+}
+
+// GetTemporaryConnectionCleanupState re-reads the state of one candidate
+// of ListTemporaryConnectionCleanup under the connection's row lock.
+func (q *Queries) GetTemporaryConnectionCleanupState(ctx context.Context, id uuid.UUID) (GetTemporaryConnectionCleanupStateRow, error) {
+	row := q.db.QueryRow(ctx, getTemporaryConnectionCleanupState, id)
+	var i GetTemporaryConnectionCleanupStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.ExpiresAt,
+		&i.ActiveRestores,
+		&i.Restores,
+		&i.LastRestoreFinishedAt,
+		&i.SlotHeld,
+	)
+	return i, err
+}
+
+const getTemporaryConnectionForUpdate = `-- name: GetTemporaryConnectionForUpdate :one
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections WHERE id = $1 AND temporary AND deleted_at IS NULL FOR UPDATE
+`
+
+// GetTemporaryConnectionForUpdate locks a temporary connection that is not
+// deleted, expired or not (delete, cleanup).
+func (q *Queries) GetTemporaryConnectionForUpdate(ctx context.Context, id uuid.UUID) (Connection, error) {
+	row := q.db.QueryRow(ctx, getTemporaryConnectionForUpdate, id)
 	var i Connection
 	err := row.Scan(
 		&i.ID,
@@ -229,6 +595,116 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 	return i, err
 }
 
+const insertTemporaryConnection = `-- name: InsertTemporaryConnection :one
+INSERT INTO connections (id, name, engine, version_key, image_key, host, port, username,
+                         has_password, client_cert_pem, tls_mode, ssh_enabled, ssh_host, ssh_port, ssh_user,
+                         ssh_auth, ssh_has_passphrase, ssh_public_key, secret_enc, created_by, max_concurrent_runs,
+                         temporary, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        $9, $10, $11, $12, $13, $14, $15,
+        $16, $17, $18, $19, $20, $21,
+        true, $22)
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
+`
+
+type InsertTemporaryConnectionParams struct {
+	ID                uuid.UUID         `json:"id"`
+	Name              string            `json:"name"`
+	Engine            ConnectionEngine  `json:"engine"`
+	VersionKey        string            `json:"versionKey"`
+	ImageKey          string            `json:"imageKey"`
+	Host              string            `json:"host"`
+	Port              int32             `json:"port"`
+	Username          string            `json:"username"`
+	HasPassword       bool              `json:"hasPassword"`
+	ClientCertPem     *string           `json:"clientCertPem"`
+	TlsMode           ConnectionTlsMode `json:"tlsMode"`
+	SshEnabled        bool              `json:"sshEnabled"`
+	SshHost           *string           `json:"sshHost"`
+	SshPort           *int32            `json:"sshPort"`
+	SshUser           *string           `json:"sshUser"`
+	SshAuth           ConnectionSshAuth `json:"sshAuth"`
+	SshHasPassphrase  bool              `json:"sshHasPassphrase"`
+	SshPublicKey      *string           `json:"sshPublicKey"`
+	SecretEnc         []byte            `json:"secretEnc"`
+	CreatedBy         *uuid.UUID        `json:"createdBy"`
+	MaxConcurrentRuns *int32            `json:"maxConcurrentRuns"`
+	ExpiresAt         *time.Time        `json:"expiresAt"`
+}
+
+func (q *Queries) InsertTemporaryConnection(ctx context.Context, arg InsertTemporaryConnectionParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, insertTemporaryConnection,
+		arg.ID,
+		arg.Name,
+		arg.Engine,
+		arg.VersionKey,
+		arg.ImageKey,
+		arg.Host,
+		arg.Port,
+		arg.Username,
+		arg.HasPassword,
+		arg.ClientCertPem,
+		arg.TlsMode,
+		arg.SshEnabled,
+		arg.SshHost,
+		arg.SshPort,
+		arg.SshUser,
+		arg.SshAuth,
+		arg.SshHasPassphrase,
+		arg.SshPublicKey,
+		arg.SecretEnc,
+		arg.CreatedBy,
+		arg.MaxConcurrentRuns,
+		arg.ExpiresAt,
+	)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
 const listConnections = `-- name: ListConnections :many
 
 SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
@@ -238,10 +714,145 @@ ORDER BY lower(name), id
 
 // Database connections (task 2.11, D-135). Only internal/connections uses
 // these queries; secret_enc is sealed under AAD connections:<id>:secret.
-// Temporary restore connections (task 4.4) are excluded until that task
-// adds its own queries.
+// Temporary restore connections (task 4.4, D-163) are excluded from every
+// query below except the *Any* / *Temporary* ones and the pin, host-key and
+// SSH-key updates with allow_temporary (the service decides).
 func (q *Queries) ListConnections(ctx context.Context) ([]Connection, error) {
 	rows, err := q.db.Query(ctx, listConnections)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Connection
+	for rows.Next() {
+		var i Connection
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Engine,
+			&i.VersionKey,
+			&i.ImageKey,
+			&i.Host,
+			&i.Port,
+			&i.Username,
+			&i.HasPassword,
+			&i.ClientCertPem,
+			&i.TlsMode,
+			&i.TlsPinCertPem,
+			&i.TlsPinSpki,
+			&i.TlsPinNotAfter,
+			&i.TlsPinnedAt,
+			&i.TlsPinnedBy,
+			&i.TlsBackupPinCertPem,
+			&i.TlsBackupPinSpki,
+			&i.TlsBackupPinNotAfter,
+			&i.TlsBackupPinnedAt,
+			&i.TlsBackupPinnedBy,
+			&i.SshEnabled,
+			&i.SshHost,
+			&i.SshPort,
+			&i.SshUser,
+			&i.SshAuth,
+			&i.SshHasPassphrase,
+			&i.SshPublicKey,
+			&i.SshHostKeyType,
+			&i.SshHostKeyFingerprint,
+			&i.SshHostKeyAuthorizedKey,
+			&i.SshHostKeyConfirmedAt,
+			&i.SshHostKeyConfirmedBy,
+			&i.SecretEnc,
+			&i.Temporary,
+			&i.ExpiresAt,
+			&i.CreatedForRestoreID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.MaxConcurrentRuns,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTemporaryConnectionCleanup = `-- name: ListTemporaryConnectionCleanup :many
+SELECT c.id,
+       c.expires_at,
+       (SELECT count(*) FROM restores r
+         WHERE r.target_connection_id = c.id AND r.finished_at IS NULL)::bigint AS active_restores,
+       (SELECT count(*) FROM restores r
+         WHERE r.target_connection_id = c.id)::bigint AS restores,
+       -- epoch when no restore finished (only read when restores > 0 and
+       -- active_restores = 0, i.e. every restore finished).
+       COALESCE((SELECT max(r.finished_at) FROM restores r
+         WHERE r.target_connection_id = c.id), 'epoch'::timestamptz)::timestamptz AS last_restore_finished_at
+FROM connections c
+WHERE c.temporary AND c.deleted_at IS NULL
+  AND (c.expires_at <= $1::timestamptz
+       OR EXISTS (SELECT 1 FROM restores r WHERE r.target_connection_id = c.id))
+  AND NOT EXISTS (SELECT 1 FROM run_slots s WHERE s.connection_id = c.id)
+ORDER BY c.expires_at, c.id
+LIMIT $2
+`
+
+type ListTemporaryConnectionCleanupParams struct {
+	Now     time.Time `json:"now"`
+	MaxRows int32     `json:"maxRows"`
+}
+
+type ListTemporaryConnectionCleanupRow struct {
+	ID                    uuid.UUID  `json:"id"`
+	ExpiresAt             *time.Time `json:"expiresAt"`
+	ActiveRestores        int64      `json:"activeRestores"`
+	Restores              int64      `json:"restores"`
+	LastRestoreFinishedAt time.Time  `json:"lastRestoreFinishedAt"`
+}
+
+// ListTemporaryConnectionCleanup returns the temporary connections the
+// cleanup worker has to look at: expired ones and those a restore
+// (task 4.1, restores.target_connection_id) has used, with the number of
+// unfinished restores and the latest finish time. Connections with a held
+// run slot (a running backup or restore) wait until the run released it.
+func (q *Queries) ListTemporaryConnectionCleanup(ctx context.Context, arg ListTemporaryConnectionCleanupParams) ([]ListTemporaryConnectionCleanupRow, error) {
+	rows, err := q.db.Query(ctx, listTemporaryConnectionCleanup, arg.Now, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTemporaryConnectionCleanupRow
+	for rows.Next() {
+		var i ListTemporaryConnectionCleanupRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ExpiresAt,
+			&i.ActiveRestores,
+			&i.Restores,
+			&i.LastRestoreFinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTemporaryConnections = `-- name: ListTemporaryConnections :many
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
+WHERE temporary AND deleted_at IS NULL AND expires_at > $1::timestamptz
+ORDER BY created_at DESC, id
+LIMIT 200
+`
+
+func (q *Queries) ListTemporaryConnections(ctx context.Context, now time.Time) ([]Connection, error) {
+	rows, err := q.db.Query(ctx, listTemporaryConnections, now)
 	if err != nil {
 		return nil, err
 	}
@@ -310,16 +921,17 @@ SET tls_backup_pin_cert_pem = $1,
     tls_backup_pin_not_after = $3,
     tls_backup_pinned_at = now(),
     tls_backup_pinned_by = $4
-WHERE id = $5 AND deleted_at IS NULL AND NOT temporary
+WHERE id = $5 AND deleted_at IS NULL AND (NOT temporary OR $6::boolean)
 RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionBackupPinParams struct {
-	CertPem  *string    `json:"certPem"`
-	Spki     []byte     `json:"spki"`
-	NotAfter *time.Time `json:"notAfter"`
-	PinnedBy *uuid.UUID `json:"pinnedBy"`
-	ID       uuid.UUID  `json:"id"`
+	CertPem        *string    `json:"certPem"`
+	Spki           []byte     `json:"spki"`
+	NotAfter       *time.Time `json:"notAfter"`
+	PinnedBy       *uuid.UUID `json:"pinnedBy"`
+	ID             uuid.UUID  `json:"id"`
+	AllowTemporary bool       `json:"allowTemporary"`
 }
 
 func (q *Queries) SetConnectionBackupPin(ctx context.Context, arg SetConnectionBackupPinParams) (Connection, error) {
@@ -329,6 +941,7 @@ func (q *Queries) SetConnectionBackupPin(ctx context.Context, arg SetConnectionB
 		arg.NotAfter,
 		arg.PinnedBy,
 		arg.ID,
+		arg.AllowTemporary,
 	)
 	var i Connection
 	err := row.Scan(
@@ -385,7 +998,7 @@ SET ssh_host_key_type = $1,
     ssh_host_key_authorized_key = $3,
     ssh_host_key_confirmed_at = now(),
     ssh_host_key_confirmed_by = $4
-WHERE id = $5 AND deleted_at IS NULL AND NOT temporary AND ssh_enabled
+WHERE id = $5 AND deleted_at IS NULL AND (NOT temporary OR $6::boolean) AND ssh_enabled
 RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
@@ -395,6 +1008,7 @@ type SetConnectionHostKeyParams struct {
 	HostKeyAuthorizedKey *string    `json:"hostKeyAuthorizedKey"`
 	ConfirmedBy          *uuid.UUID `json:"confirmedBy"`
 	ID                   uuid.UUID  `json:"id"`
+	AllowTemporary       bool       `json:"allowTemporary"`
 }
 
 func (q *Queries) SetConnectionHostKey(ctx context.Context, arg SetConnectionHostKeyParams) (Connection, error) {
@@ -404,6 +1018,7 @@ func (q *Queries) SetConnectionHostKey(ctx context.Context, arg SetConnectionHos
 		arg.HostKeyAuthorizedKey,
 		arg.ConfirmedBy,
 		arg.ID,
+		arg.AllowTemporary,
 	)
 	var i Connection
 	err := row.Scan(
@@ -465,17 +1080,18 @@ SET tls_pin_cert_pem = $1,
     tls_backup_pin_not_after = CASE WHEN $5::boolean THEN NULL ELSE tls_backup_pin_not_after END,
     tls_backup_pinned_at = CASE WHEN $5::boolean THEN NULL ELSE tls_backup_pinned_at END,
     tls_backup_pinned_by = CASE WHEN $5::boolean THEN NULL ELSE tls_backup_pinned_by END
-WHERE id = $6 AND deleted_at IS NULL AND NOT temporary
+WHERE id = $6 AND deleted_at IS NULL AND (NOT temporary OR $7::boolean)
 RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionPinParams struct {
-	CertPem     *string    `json:"certPem"`
-	Spki        []byte     `json:"spki"`
-	NotAfter    *time.Time `json:"notAfter"`
-	PinnedBy    *uuid.UUID `json:"pinnedBy"`
-	ClearBackup bool       `json:"clearBackup"`
-	ID          uuid.UUID  `json:"id"`
+	CertPem        *string    `json:"certPem"`
+	Spki           []byte     `json:"spki"`
+	NotAfter       *time.Time `json:"notAfter"`
+	PinnedBy       *uuid.UUID `json:"pinnedBy"`
+	ClearBackup    bool       `json:"clearBackup"`
+	ID             uuid.UUID  `json:"id"`
+	AllowTemporary bool       `json:"allowTemporary"`
 }
 
 // SetConnectionPin replaces the current pin; clear_backup also removes the
@@ -488,6 +1104,7 @@ func (q *Queries) SetConnectionPin(ctx context.Context, arg SetConnectionPinPara
 		arg.PinnedBy,
 		arg.ClearBackup,
 		arg.ID,
+		arg.AllowTemporary,
 	)
 	var i Connection
 	err := row.Scan(
@@ -543,7 +1160,7 @@ SET ssh_auth = $1,
     ssh_has_passphrase = $2,
     ssh_public_key = $3,
     secret_enc = $4
-WHERE id = $5 AND deleted_at IS NULL AND NOT temporary AND ssh_enabled
+WHERE id = $5 AND deleted_at IS NULL AND (NOT temporary OR $6::boolean) AND ssh_enabled
 RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
@@ -553,6 +1170,7 @@ type SetConnectionSSHAuthParams struct {
 	SshPublicKey     *string           `json:"sshPublicKey"`
 	SecretEnc        []byte            `json:"secretEnc"`
 	ID               uuid.UUID         `json:"id"`
+	AllowTemporary   bool              `json:"allowTemporary"`
 }
 
 func (q *Queries) SetConnectionSSHAuth(ctx context.Context, arg SetConnectionSSHAuthParams) (Connection, error) {
@@ -562,6 +1180,7 @@ func (q *Queries) SetConnectionSSHAuth(ctx context.Context, arg SetConnectionSSH
 		arg.SshPublicKey,
 		arg.SecretEnc,
 		arg.ID,
+		arg.AllowTemporary,
 	)
 	var i Connection
 	err := row.Scan(
@@ -670,6 +1289,90 @@ func (q *Queries) SetConnectionTLSMode(ctx context.Context, arg SetConnectionTLS
 		&i.MaxConcurrentRuns,
 	)
 	return i, err
+}
+
+const setTemporaryConnectionExpiry = `-- name: SetTemporaryConnectionExpiry :one
+UPDATE connections SET expires_at = $1
+WHERE id = $2 AND temporary AND deleted_at IS NULL
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
+`
+
+type SetTemporaryConnectionExpiryParams struct {
+	ExpiresAt *time.Time `json:"expiresAt"`
+	ID        uuid.UUID  `json:"id"`
+}
+
+func (q *Queries) SetTemporaryConnectionExpiry(ctx context.Context, arg SetTemporaryConnectionExpiryParams) (Connection, error) {
+	row := q.db.QueryRow(ctx, setTemporaryConnectionExpiry, arg.ExpiresAt, arg.ID)
+	var i Connection
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Engine,
+		&i.VersionKey,
+		&i.ImageKey,
+		&i.Host,
+		&i.Port,
+		&i.Username,
+		&i.HasPassword,
+		&i.ClientCertPem,
+		&i.TlsMode,
+		&i.TlsPinCertPem,
+		&i.TlsPinSpki,
+		&i.TlsPinNotAfter,
+		&i.TlsPinnedAt,
+		&i.TlsPinnedBy,
+		&i.TlsBackupPinCertPem,
+		&i.TlsBackupPinSpki,
+		&i.TlsBackupPinNotAfter,
+		&i.TlsBackupPinnedAt,
+		&i.TlsBackupPinnedBy,
+		&i.SshEnabled,
+		&i.SshHost,
+		&i.SshPort,
+		&i.SshUser,
+		&i.SshAuth,
+		&i.SshHasPassphrase,
+		&i.SshPublicKey,
+		&i.SshHostKeyType,
+		&i.SshHostKeyFingerprint,
+		&i.SshHostKeyAuthorizedKey,
+		&i.SshHostKeyConfirmedAt,
+		&i.SshHostKeyConfirmedBy,
+		&i.SecretEnc,
+		&i.Temporary,
+		&i.ExpiresAt,
+		&i.CreatedForRestoreID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
+	)
+	return i, err
+}
+
+const shredTemporaryConnection = `-- name: ShredTemporaryConnection :execrows
+UPDATE connections
+SET secret_enc = NULL,
+    has_password = false,
+    client_cert_pem = NULL,
+    ssh_auth = 'none',
+    ssh_has_passphrase = false,
+    ssh_public_key = NULL,
+    deleted_at = now()
+WHERE id = $1 AND temporary AND deleted_at IS NULL
+`
+
+// ShredTemporaryConnection destroys the stored credentials (the sealed
+// blob and every flag describing it) and soft deletes the row; the
+// non-secret metadata stays for the restore history and the audit log.
+func (q *Queries) ShredTemporaryConnection(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, shredTemporaryConnection, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const softDeleteConnection = `-- name: SoftDeleteConnection :execrows

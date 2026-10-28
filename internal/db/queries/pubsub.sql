@@ -12,3 +12,6 @@ LISTEN bekup_session_events;
 
 -- name: ListenRunEvents :exec
 LISTEN bekup_run_events;
+
+-- name: ListenRestoreEvents :exec
+LISTEN bekup_restore_events;

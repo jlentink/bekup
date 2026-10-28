@@ -1,9 +1,10 @@
 package downloads
 
 import (
-	"errors"
 	"strings"
 	"time"
+
+	"github.com/jlentink/bekup/internal/artifactverify"
 )
 
 // Limits of the sanitized file name parts.
@@ -95,44 +96,10 @@ func ContentDisposition(name string) string {
 	return `attachment; filename="` + s + `"; filename*=UTF-8''` + s
 }
 
-// errArtifactName reports a stored object name without a known format.
-var errArtifactName = errors.New("downloads: unknown artifact file format")
-
-// storedFormat parses the file name of a stored object
-// ("<db>.dump.zst.age", "globals.globals.sql.zst", ...) into the dump
-// extension ("dump" or "sql") and the stored extension ("dump.zst.age",
-// ...). encrypted says whether the object must end in ".age".
+// storedFormat parses the file name of a stored object into the dump and
+// stored extensions (artifactverify.StoredFormat).
 func storedFormat(objectKey string, encrypted bool) (plainExt, storedExt string, err error) {
-	name := objectKey
-	if i := strings.LastIndexByte(name, '/'); i >= 0 {
-		name = name[i+1:]
-	}
-	rest := name
-	if encrypted {
-		var ok bool
-		if rest, ok = strings.CutSuffix(rest, ".age"); !ok {
-			return "", "", errArtifactName
-		}
-	} else if strings.HasSuffix(rest, ".age") {
-		return "", "", errArtifactName
-	}
-	rest, ok := strings.CutSuffix(rest, ".zst")
-	if !ok {
-		return "", "", errArtifactName
-	}
-	switch {
-	case strings.HasSuffix(rest, ".dump"):
-		plainExt = "dump"
-	case strings.HasSuffix(rest, ".sql"):
-		plainExt = "sql"
-	default:
-		return "", "", errArtifactName
-	}
-	storedExt = plainExt + ".zst"
-	if encrypted {
-		storedExt += ".age"
-	}
-	return plainExt, storedExt, nil
+	return artifactverify.StoredFormat(objectKey, encrypted)
 }
 
 // downloadName builds "<job-slug>_<db>_<YYYYMMDDTHHMMSSZ>.<ext>".

@@ -94,6 +94,9 @@ const (
 	ActionCLIAdminMFAReset      Action = "cli.admin.mfa_reset"
 	ActionCLIAdminUnlocked      Action = "cli.admin.unlocked"
 	ActionCLIAdminDisabled      Action = "cli.admin.disabled"
+	// ActionCLIRunImported: `bekup reindex --import` recorded a run from
+	// a destination's signed manifest (task 4.7; target type run).
+	ActionCLIRunImported Action = "cli.run.imported"
 
 	// Keys, certificates and the audit chain itself.
 	// ActionKeysRotated: serve found master keys without a stored
@@ -140,6 +143,14 @@ const (
 	// ActionConnectionHostKeyMismatch: the SSH bastion presented another
 	// host key than the pinned one (security event, alerted in task 5.5).
 	ActionConnectionHostKeyMismatch Action = "connection.ssh_host_key_mismatch"
+	// Temporary restore connections (task 4.4): created and extended by an
+	// admin; deleted by an admin (temporary_deleted) or by the cleanup
+	// worker (temporary_expired, system actor, reason expired or
+	// restore_finished). Both deletions destroy the stored credentials.
+	ActionConnectionTemporaryCreated  Action = "connection.temporary_created"
+	ActionConnectionTemporaryExtended Action = "connection.temporary_extended"
+	ActionConnectionTemporaryDeleted  Action = "connection.temporary_deleted"
+	ActionConnectionTemporaryExpired  Action = "connection.temporary_expired"
 
 	// Destinations (task 2.12, D-131). Details name the changed fields;
 	// credential fields only ever appear as "changed" (and additionally as
@@ -216,6 +227,63 @@ const (
 	ActionRetentionArtifactMissing Action = "retention.artifact_missing"
 )
 
+// Restore actions (task 4.1, D-162; system actor, target type restore with
+// the restore id). The request itself (restoreArtifact, task 4.5) records
+// its own entry.
+const (
+	// ActionRestoreVerificationFailed: a staged artifact failed the
+	// verification (stored digest, signed manifest, replayed manifest or a
+	// mismatch with the records): a possible tampering, also alerted.
+	ActionRestoreVerificationFailed Action = "restore.verification_failed"
+	// ActionRestoreStarted: the restore worker took a queued restore
+	// (task 4.2): target connection, database, mode, kind, artifact.
+	ActionRestoreStarted Action = "restore.started"
+	// ActionRestoreFinished: a started restore ended (status, sanitized
+	// error code, warning codes, temporary database handling).
+	ActionRestoreFinished Action = "restore.finished"
+	// ActionRestoreRequested: restoreArtifact / restoreGlobals queued a
+	// restore (task 4.5; user actor): artifact, job, kind, target
+	// connection and database, mode, the warnings shown. Never the age
+	// identity.
+	ActionRestoreRequested Action = "restore.requested"
+	// ActionRestoreCancelRequested: cancelRestore (task 4.5; user actor).
+	ActionRestoreCancelRequested Action = "restore.cancel_requested"
+	// ActionRestoreAbandoned: the stuck-restore sweep failed a restore that
+	// no worker will finish (task 4.5; system actor).
+	ActionRestoreAbandoned Action = "restore.abandoned"
+	// ActionRestoreSecdefNeutralized: the restore switched SECURITY
+	// DEFINER functions of the restored PostgreSQL database to SECURITY
+	// INVOKER before the swap (D-171; system actor; details: database,
+	// count, the first function signatures).
+	ActionRestoreSecdefNeutralized Action = "restore.secdef_neutralized"
+	// ActionRestorePrivilegedTarget: the restore worker refused a restore
+	// whose target role became privileged after the request without a
+	// matching admin acknowledgement (D-173; system actor).
+	ActionRestorePrivilegedTarget Action = "restore.privileged_target_refused"
+)
+
+// Test-restore actions (task 4.6). The settings change is a job entry
+// (user actor, target type job); the test restore itself has target type
+// test_restore.
+const (
+	// ActionJobTestRestoreUpdated: setJobTestRestore changed a job's
+	// test-restore settings (enabled, schedule, scratch target).
+	ActionJobTestRestoreUpdated Action = "job.test_restore_updated"
+	// ActionTestRestoreRequested: a test restore was queued (user actor
+	// for runTestRestoreNow, system actor for the schedule).
+	ActionTestRestoreRequested Action = "test_restore.requested"
+	// ActionTestRestoreFinished: a test restore ended (system actor):
+	// verdict, the run tested, per-database verdicts and whether every
+	// scratch database was dropped.
+	ActionTestRestoreFinished Action = "test_restore.finished"
+	// ActionTestRestoreAbandoned: the stuck sweep failed a test restore no
+	// worker will finish (system actor).
+	ActionTestRestoreAbandoned Action = "test_restore.abandoned"
+	// ActionTestRestoreScratchKept: a scratch database could not be
+	// dropped (system actor; retried by the sweep and alerted).
+	ActionTestRestoreScratchKept Action = "test_restore.scratch_kept"
+)
+
 // Passkey actions (task 1.8). Enrollment and removal use auth.mfa.enrolled
 // / auth.mfa.removed with details.factor = "passkey".
 //
@@ -248,7 +316,7 @@ var catalog = []Action{
 	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS,
 	ActionSystemInsecureTransportStarted,
 	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
-	ActionCLIAdminDisabled,
+	ActionCLIAdminDisabled, ActionCLIRunImported,
 	ActionKeysRotated, ActionKeysCheckValueStored, ActionInstanceKeyCreated, ActionCertsRotated,
 	ActionAuditVerifyFailed, ActionAuditHeadExportFailed,
 	ActionDownloadTicketCreated, ActionDownloadTicketRejected, ActionDownloadStarted, ActionDownloadCompleted,
@@ -256,6 +324,8 @@ var catalog = []Action{
 	ActionConnectionCreated, ActionConnectionUpdated, ActionConnectionDeleted, ActionConnectionTLSMode,
 	ActionConnectionPinConfirmed, ActionConnectionBackupPinStaged, ActionConnectionHostKeyConfirmed,
 	ActionConnectionSSHKeyGenerated, ActionConnectionPinMismatch, ActionConnectionHostKeyMismatch,
+	ActionConnectionTemporaryCreated, ActionConnectionTemporaryExtended, ActionConnectionTemporaryDeleted,
+	ActionConnectionTemporaryExpired,
 	ActionDestinationCreated, ActionDestinationUpdated, ActionDestinationDeleted,
 	ActionDestinationHostKeyConfirmed, ActionDestinationSSHKeyGenerated, ActionDestinationHostKeyMismatch,
 	ActionJobEncryptionPassphraseSet, ActionJobEncryptionRecipientSet, ActionJobEncryptionOptedOut,
@@ -264,6 +334,11 @@ var catalog = []Action{
 	ActionJobOwnerAdded, ActionJobOwnerRemoved, ActionJobRunRequested, ActionJobRunStartedEarly,
 	ActionRunCancelRequested,
 	ActionRetentionDeletionPlanned, ActionRetentionSwept, ActionRetentionAborted, ActionRetentionArtifactMissing,
+	ActionRestoreVerificationFailed, ActionRestoreStarted, ActionRestoreFinished,
+	ActionRestoreRequested, ActionRestoreCancelRequested, ActionRestoreAbandoned,
+	ActionRestoreSecdefNeutralized, ActionRestorePrivilegedTarget,
+	ActionJobTestRestoreUpdated, ActionTestRestoreRequested, ActionTestRestoreFinished, ActionTestRestoreAbandoned,
+	ActionTestRestoreScratchKept,
 }
 
 // actionRe is the syntax of an action: at least two dot-separated words,

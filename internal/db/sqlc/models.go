@@ -616,6 +616,137 @@ func AllJobVerificationValues() []JobVerification {
 	}
 }
 
+type RestoreMode string
+
+const (
+	RestoreModeNewDb     RestoreMode = "new_db"
+	RestoreModeOverwrite RestoreMode = "overwrite"
+)
+
+func (e *RestoreMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RestoreMode(s)
+	case string:
+		*e = RestoreMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RestoreMode: %T", src)
+	}
+	return nil
+}
+
+type NullRestoreMode struct {
+	RestoreMode RestoreMode `json:"restoreMode"`
+	Valid       bool        `json:"valid"` // Valid is true if RestoreMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRestoreMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.RestoreMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RestoreMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRestoreMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RestoreMode), nil
+}
+
+func (e RestoreMode) Valid() bool {
+	switch e {
+	case RestoreModeNewDb,
+		RestoreModeOverwrite:
+		return true
+	}
+	return false
+}
+
+func AllRestoreModeValues() []RestoreMode {
+	return []RestoreMode{
+		RestoreModeNewDb,
+		RestoreModeOverwrite,
+	}
+}
+
+type RestoreStatus string
+
+const (
+	RestoreStatusQueued    RestoreStatus = "queued"
+	RestoreStatusStaging   RestoreStatus = "staging"
+	RestoreStatusVerifying RestoreStatus = "verifying"
+	RestoreStatusRestoring RestoreStatus = "restoring"
+	RestoreStatusSucceeded RestoreStatus = "succeeded"
+	RestoreStatusFailed    RestoreStatus = "failed"
+	RestoreStatusCanceled  RestoreStatus = "canceled"
+)
+
+func (e *RestoreStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RestoreStatus(s)
+	case string:
+		*e = RestoreStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RestoreStatus: %T", src)
+	}
+	return nil
+}
+
+type NullRestoreStatus struct {
+	RestoreStatus RestoreStatus `json:"restoreStatus"`
+	Valid         bool          `json:"valid"` // Valid is true if RestoreStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRestoreStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.RestoreStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RestoreStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRestoreStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RestoreStatus), nil
+}
+
+func (e RestoreStatus) Valid() bool {
+	switch e {
+	case RestoreStatusQueued,
+		RestoreStatusStaging,
+		RestoreStatusVerifying,
+		RestoreStatusRestoring,
+		RestoreStatusSucceeded,
+		RestoreStatusFailed,
+		RestoreStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func AllRestoreStatusValues() []RestoreStatus {
+	return []RestoreStatus{
+		RestoreStatusQueued,
+		RestoreStatusStaging,
+		RestoreStatusVerifying,
+		RestoreStatusRestoring,
+		RestoreStatusSucceeded,
+		RestoreStatusFailed,
+		RestoreStatusCanceled,
+	}
+}
+
 type RiverJobState string
 
 const (
@@ -1079,6 +1210,137 @@ func AllRunTriggerValues() []RunTrigger {
 	}
 }
 
+type TestRestoreStatus string
+
+const (
+	TestRestoreStatusQueued   TestRestoreStatus = "queued"
+	TestRestoreStatusRunning  TestRestoreStatus = "running"
+	TestRestoreStatusPassed   TestRestoreStatus = "passed"
+	TestRestoreStatusWarnings TestRestoreStatus = "warnings"
+	TestRestoreStatusFailed   TestRestoreStatus = "failed"
+	TestRestoreStatusError    TestRestoreStatus = "error"
+	TestRestoreStatusCanceled TestRestoreStatus = "canceled"
+)
+
+func (e *TestRestoreStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TestRestoreStatus(s)
+	case string:
+		*e = TestRestoreStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TestRestoreStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTestRestoreStatus struct {
+	TestRestoreStatus TestRestoreStatus `json:"testRestoreStatus"`
+	Valid             bool              `json:"valid"` // Valid is true if TestRestoreStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTestRestoreStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TestRestoreStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TestRestoreStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTestRestoreStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TestRestoreStatus), nil
+}
+
+func (e TestRestoreStatus) Valid() bool {
+	switch e {
+	case TestRestoreStatusQueued,
+		TestRestoreStatusRunning,
+		TestRestoreStatusPassed,
+		TestRestoreStatusWarnings,
+		TestRestoreStatusFailed,
+		TestRestoreStatusError,
+		TestRestoreStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func AllTestRestoreStatusValues() []TestRestoreStatus {
+	return []TestRestoreStatus{
+		TestRestoreStatusQueued,
+		TestRestoreStatusRunning,
+		TestRestoreStatusPassed,
+		TestRestoreStatusWarnings,
+		TestRestoreStatusFailed,
+		TestRestoreStatusError,
+		TestRestoreStatusCanceled,
+	}
+}
+
+type TestRestoreTrigger string
+
+const (
+	TestRestoreTriggerSchedule TestRestoreTrigger = "schedule"
+	TestRestoreTriggerManual   TestRestoreTrigger = "manual"
+)
+
+func (e *TestRestoreTrigger) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TestRestoreTrigger(s)
+	case string:
+		*e = TestRestoreTrigger(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TestRestoreTrigger: %T", src)
+	}
+	return nil
+}
+
+type NullTestRestoreTrigger struct {
+	TestRestoreTrigger TestRestoreTrigger `json:"testRestoreTrigger"`
+	Valid              bool               `json:"valid"` // Valid is true if TestRestoreTrigger is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTestRestoreTrigger) Scan(value interface{}) error {
+	if value == nil {
+		ns.TestRestoreTrigger, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TestRestoreTrigger.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTestRestoreTrigger) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TestRestoreTrigger), nil
+}
+
+func (e TestRestoreTrigger) Valid() bool {
+	switch e {
+	case TestRestoreTriggerSchedule,
+		TestRestoreTriggerManual:
+		return true
+	}
+	return false
+}
+
+func AllTestRestoreTriggerValues() []TestRestoreTrigger {
+	return []TestRestoreTrigger{
+		TestRestoreTriggerSchedule,
+		TestRestoreTriggerManual,
+	}
+}
+
 type UserRole string
 
 const (
@@ -1294,29 +1556,37 @@ type InstanceKey struct {
 }
 
 type Job struct {
-	ID                    uuid.UUID       `json:"id"`
-	Enabled               bool            `json:"enabled"`
-	Schedule              json.RawMessage `json:"schedule"`
-	NextRunAt             *time.Time      `json:"nextRunAt"`
-	LastScheduledAt       *time.Time      `json:"lastScheduledAt"`
-	DeletedAt             *time.Time      `json:"deletedAt"`
-	CreatedAt             time.Time       `json:"createdAt"`
-	UpdatedAt             time.Time       `json:"updatedAt"`
-	Name                  string          `json:"name"`
-	Slug                  string          `json:"slug"`
-	Description           string          `json:"description"`
-	ConnectionID          uuid.UUID       `json:"connectionId"`
-	DbMode                JobDbMode       `json:"dbMode"`
-	Databases             []string        `json:"databases"`
-	Exclude               []string        `json:"exclude"`
-	IncludeGlobals        bool            `json:"includeGlobals"`
-	RetentionKeepLast     *int32          `json:"retentionKeepLast"`
-	RetentionKeepDays     *int32          `json:"retentionKeepDays"`
-	TimeoutSeconds        *int32          `json:"timeoutSeconds"`
-	Verification          JobVerification `json:"verification"`
-	ExpectedWindowSeconds *int32          `json:"expectedWindowSeconds"`
-	CreatedBy             *uuid.UUID      `json:"createdBy"`
-	UpdatedBy             *uuid.UUID      `json:"updatedBy"`
+	ID                          uuid.UUID       `json:"id"`
+	Enabled                     bool            `json:"enabled"`
+	Schedule                    json.RawMessage `json:"schedule"`
+	NextRunAt                   *time.Time      `json:"nextRunAt"`
+	LastScheduledAt             *time.Time      `json:"lastScheduledAt"`
+	DeletedAt                   *time.Time      `json:"deletedAt"`
+	CreatedAt                   time.Time       `json:"createdAt"`
+	UpdatedAt                   time.Time       `json:"updatedAt"`
+	Name                        string          `json:"name"`
+	Slug                        string          `json:"slug"`
+	Description                 string          `json:"description"`
+	ConnectionID                uuid.UUID       `json:"connectionId"`
+	DbMode                      JobDbMode       `json:"dbMode"`
+	Databases                   []string        `json:"databases"`
+	Exclude                     []string        `json:"exclude"`
+	IncludeGlobals              bool            `json:"includeGlobals"`
+	RetentionKeepLast           *int32          `json:"retentionKeepLast"`
+	RetentionKeepDays           *int32          `json:"retentionKeepDays"`
+	TimeoutSeconds              *int32          `json:"timeoutSeconds"`
+	Verification                JobVerification `json:"verification"`
+	ExpectedWindowSeconds       *int32          `json:"expectedWindowSeconds"`
+	CreatedBy                   *uuid.UUID      `json:"createdBy"`
+	UpdatedBy                   *uuid.UUID      `json:"updatedBy"`
+	TestRestoreEnabled          bool            `json:"testRestoreEnabled"`
+	TestRestoreSchedule         json.RawMessage `json:"testRestoreSchedule"`
+	TestRestoreConnectionID     *uuid.UUID      `json:"testRestoreConnectionId"`
+	TestRestoreNextAt           *time.Time      `json:"testRestoreNextAt"`
+	TestRestoreTargetPrivileges *string         `json:"testRestoreTargetPrivileges"`
+	TestRestorePrivilegeReasons []string        `json:"testRestorePrivilegeReasons"`
+	TestRestorePrivilegedAckBy  *uuid.UUID      `json:"testRestorePrivilegedAckBy"`
+	TestRestorePrivilegedAckAt  *time.Time      `json:"testRestorePrivilegedAckAt"`
 }
 
 type JobDestination struct {
@@ -1371,6 +1641,49 @@ type RecoveryCode struct {
 	CodeMac   []byte     `json:"codeMac"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UsedAt    *time.Time `json:"usedAt"`
+}
+
+type Restore struct {
+	ID                           uuid.UUID     `json:"id"`
+	ArtifactID                   uuid.UUID     `json:"artifactId"`
+	RunItemID                    uuid.UUID     `json:"runItemId"`
+	JobID                        uuid.UUID     `json:"jobId"`
+	TargetConnectionID           uuid.UUID     `json:"targetConnectionId"`
+	TargetDbName                 *string       `json:"targetDbName"`
+	Mode                         RestoreMode   `json:"mode"`
+	RequestedBy                  *uuid.UUID    `json:"requestedBy"`
+	Status                       RestoreStatus `json:"status"`
+	RiverJobID                   *int64        `json:"riverJobId"`
+	StagedBytes                  int64         `json:"stagedBytes"`
+	StartedAt                    *time.Time    `json:"startedAt"`
+	FinishedAt                   *time.Time    `json:"finishedAt"`
+	ErrorCode                    *string       `json:"errorCode"`
+	ErrorMessage                 *string       `json:"errorMessage"`
+	CreatedAt                    time.Time     `json:"createdAt"`
+	UpdatedAt                    time.Time     `json:"updatedAt"`
+	NoOwner                      bool          `json:"noOwner"`
+	LogLines                     int32         `json:"logLines"`
+	LogLinesDropped              int32         `json:"logLinesDropped"`
+	Warnings                     []string      `json:"warnings"`
+	TargetPrivileges             *string       `json:"targetPrivileges"`
+	TargetPrivilegeReasons       []string      `json:"targetPrivilegeReasons"`
+	PrivilegedTargetAcknowledged bool          `json:"privilegedTargetAcknowledged"`
+}
+
+type RestoreIdentityHandoff struct {
+	RestoreID      uuid.UUID `json:"restoreId"`
+	SealedIdentity []byte    `json:"sealedIdentity"`
+	CreatedAt      time.Time `json:"createdAt"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+}
+
+type RestoreLog struct {
+	ID        int64        `json:"id"`
+	RestoreID uuid.UUID    `json:"restoreId"`
+	Ts        time.Time    `json:"ts"`
+	Level     RunLogLevel  `json:"level"`
+	Stream    RunLogStream `json:"stream"`
+	Line      string       `json:"line"`
 }
 
 type RiverJob struct {
@@ -1511,6 +1824,43 @@ type Setting struct {
 	SecretEnc []byte          `json:"secretEnc"`
 	UpdatedAt time.Time       `json:"updatedAt"`
 	UpdatedBy *uuid.UUID      `json:"updatedBy"`
+}
+
+type TestRestore struct {
+	ID                 uuid.UUID          `json:"id"`
+	JobID              uuid.UUID          `json:"jobId"`
+	TargetConnectionID uuid.UUID          `json:"targetConnectionId"`
+	Trigger            TestRestoreTrigger `json:"trigger"`
+	RequestedBy        *uuid.UUID         `json:"requestedBy"`
+	ScheduledFor       *time.Time         `json:"scheduledFor"`
+	RunID              *uuid.UUID         `json:"runId"`
+	Status             TestRestoreStatus  `json:"status"`
+	RiverJobID         *int64             `json:"riverJobId"`
+	StartedAt          *time.Time         `json:"startedAt"`
+	FinishedAt         *time.Time         `json:"finishedAt"`
+	ErrorCode          *string            `json:"errorCode"`
+	ErrorMessage       *string            `json:"errorMessage"`
+	Databases          int32              `json:"databases"`
+	Passed             int32              `json:"passed"`
+	Warned             int32              `json:"warned"`
+	Failed             int32              `json:"failed"`
+	CreatedAt          time.Time          `json:"createdAt"`
+	UpdatedAt          time.Time          `json:"updatedAt"`
+}
+
+type TestRestoreItem struct {
+	ID             uuid.UUID         `json:"id"`
+	TestRestoreID  uuid.UUID         `json:"testRestoreId"`
+	RunItemID      uuid.UUID         `json:"runItemId"`
+	RestoreID      *uuid.UUID        `json:"restoreId"`
+	DbName         string            `json:"dbName"`
+	ScratchID      string            `json:"scratchId"`
+	Status         TestRestoreStatus `json:"status"`
+	ScratchDropped bool              `json:"scratchDropped"`
+	ErrorCode      *string           `json:"errorCode"`
+	Diff           json.RawMessage   `json:"diff"`
+	StartedAt      time.Time         `json:"startedAt"`
+	FinishedAt     *time.Time        `json:"finishedAt"`
 }
 
 type User struct {

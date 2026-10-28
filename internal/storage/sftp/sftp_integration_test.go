@@ -8,7 +8,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -20,25 +19,21 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/storage"
+	"github.com/jlentink/bekup/internal/storage/sftp/sftptest"
 	"github.com/jlentink/bekup/internal/storage/storagetest"
 )
 
-// atmozImage is the SFTP image of docker-compose.dev.yml (pinned by digest).
-const atmozImage = "atmoz/sftp:alpine@sha256:43dd1c023cf1bae487127d4b54660b0aee6e94c188a6599be36fb89ba115f961"
-
-const atmozPassword = "integration-password-51d0"
-
 // The chrooted account sees /upload; on the container file system that is
-// /home/bekup/upload.
+// /home/bekup/upload (sftptest).
 const (
-	atmozBase     = "/upload"
-	atmozFSUpload = "/home/bekup/upload"
+	atmozPassword = sftptest.Password
+	atmozBase     = sftptest.BasePath
+	atmozFSUpload = sftptest.FSUpload
 )
 
 type atmoz struct {
@@ -55,73 +50,23 @@ var (
 	errAtmoz  error
 )
 
-// startAtmoz starts one container for the whole test binary.
+// startAtmoz starts one container for the whole test binary
+// (sftptest.Start: explicit platform, loopback-only publish, SSH banner
+// readiness, bounded retries).
 func startAtmoz(t *testing.T) *atmoz {
 	t.Helper()
-	atmozOnce.Do(func() { atmozInst, errAtmoz = runAtmoz() })
+	atmozOnce.Do(func() {
+		s, err := sftptest.Start(context.Background())
+		if err != nil {
+			errAtmoz = err
+			return
+		}
+		atmozInst = &atmoz{c: s.Container, host: s.Host, port: s.Port, hostKey: s.HostKey, clientPEM: s.ClientKeyPEM}
+	})
 	if errAtmoz != nil {
 		t.Fatalf("start atmoz/sftp: %v", errAtmoz)
 	}
 	return atmozInst
-}
-
-func runAtmoz() (*atmoz, error) {
-	ctx := context.Background()
-	_, hostPriv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	block, err := ssh.MarshalPrivateKey(hostPriv, "")
-	if err != nil {
-		return nil, err
-	}
-	hostPEM := pem.EncodeToMemory(block)
-	hostSigner, err := ssh.NewSignerFromKey(hostPriv)
-	if err != nil {
-		return nil, err
-	}
-	kp, err := crypto.GenerateSSHKeypair("bekup-integration")
-	if err != nil {
-		return nil, err
-	}
-	clientPEM := append([]byte(nil), kp.PrivateKeyPEM.Bytes()...)
-	kp.PrivateKeyPEM.Destroy()
-
-	c, err := testcontainers.Run(ctx, atmozImage,
-		testcontainers.WithCmd(testUser+":"+atmozPassword+":1001:1001:upload"),
-		testcontainers.WithFiles(
-			testcontainers.ContainerFile{
-				Reader:            bytes.NewReader(hostPEM),
-				ContainerFilePath: "/etc/ssh/ssh_host_ed25519_key",
-				FileMode:          0o600,
-			},
-			testcontainers.ContainerFile{
-				Reader:            strings.NewReader(kp.AuthorizedKey + "\n"),
-				ContainerFilePath: "/home/" + testUser + "/.ssh/keys/bekup.pub",
-				FileMode:          0o644,
-			},
-		),
-		testcontainers.WithExposedPorts("22/tcp"),
-		testcontainers.WithWaitStrategyAndDeadline(3*time.Minute,
-			wait.ForLog("Server listening on"),
-			wait.ForListeningPort("22/tcp"),
-		),
-	)
-	if err != nil {
-		if c != nil {
-			discard(c.Terminate(ctx))
-		}
-		return nil, err
-	}
-	host, err := c.Host(ctx)
-	if err != nil {
-		return nil, err
-	}
-	mp, err := c.MappedPort(ctx, "22/tcp")
-	if err != nil {
-		return nil, err
-	}
-	return &atmoz{c: c, host: host, port: int(mp.Num()), hostKey: hostSigner.PublicKey(), clientPEM: clientPEM}, nil
 }
 
 func (a *atmoz) config(t *testing.T, dir string) Config {

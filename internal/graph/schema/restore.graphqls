@@ -1,0 +1,349 @@
+# Restores (task 4.5, D-167). Admins and maintainers restore into any
+# connection with the backup's engine (admins also into temporary restore
+# connections); backup owners only into the databases their own jobs back
+# up, or into a new database on the connections their jobs use. Every
+# restore needs a fresh passkey (with user verification) or authenticator
+# code check (≤ 5 minutes, also with a password step-up done); accounts
+# without a second factor get REQUIRES_2FA_ENROLLMENT. Overwrites are
+# confirmed by typing the database name, globals restores by a phrase.
+# Error texts are fixed, sanitized messages chosen by bekup. Restores into
+# a connection whose role is privileged (or unknown) need an admin and an
+# explicit acknowledgement (task 4.8, D-068).
+
+"How a restore writes its target database."
+enum RestoreMode {
+  "Create a new database and restore into it (fails when it exists)."
+  NEW_DB
+  """
+  Replace an existing database. PostgreSQL: restored into a temporary
+  database and swapped in by renaming; MySQL/MariaDB: dropped and restored
+  in place (see the preview warnings).
+  """
+  OVERWRITE
+}
+
+"Status of a restore."
+enum RestoreStatus {
+  "Waiting for a worker or a concurrency slot."
+  QUEUED
+  "Downloading the backup to the scratch volume."
+  STAGING
+  "Checking the staged backup against its record and signed manifest."
+  VERIFYING
+  "Streaming the verified dump into the target."
+  RESTORING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+"The connection a restore writes to (non-secret identity only)."
+type RestoreTargetRef {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  temporary: Boolean!
+  deleted: Boolean!
+}
+
+"A warning recorded by a restore (stable code and fixed text)."
+type RestoreOutcomeWarning {
+  code: String!
+  message: String!
+}
+
+"A restore of a backup artifact."
+type Restore {
+  id: UUID!
+  job: RunJobRef!
+  artifactId: UUID!
+  runId: UUID!
+  "DATABASE or GLOBALS."
+  kind: RunItemKind!
+  "The backed-up database (null for globals)."
+  sourceDatabase: String
+  target: RestoreTargetRef!
+  "The database written (null for globals)."
+  targetDatabase: String
+  "Null for globals restores."
+  mode: RestoreMode
+  "PostgreSQL: object owners restored (pg_restore without --no-owner)."
+  keepOwners: Boolean!
+  status: RestoreStatus!
+  "The user who requested it; admins and maintainers only (null for backup owners)."
+  requestedBy: RunActor
+  createdAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  durationSeconds: Float
+  "Bytes of the verified local copy."
+  stagedBytes: Float!
+  errorCode: String
+  errorMessage: String
+  warnings: [RestoreOutcomeWarning!]!
+  logLines: Int!
+  logLinesDropped: Int!
+  updatedAt: Time!
+}
+
+"A page of restores."
+type RestoreConnection {
+  edges: [RestoreEdge!]!
+  pageInfo: PageInfo!
+}
+
+type RestoreEdge {
+  cursor: String!
+  node: Restore!
+}
+
+"Filters for restores; unset fields do not filter."
+input RestoreFilter {
+  jobId: UUID
+  artifactId: UUID
+  targetConnectionId: UUID
+  status: RestoreStatus
+}
+
+"A page of restore log lines in order (redacted and sanitized when written)."
+type RestoreLogPage {
+  restoreId: UUID!
+  lines: [RunLogLine!]!
+  "The id of the last line (the afterId for the next page); afterId when there are no lines."
+  endId: ID
+  hasMore: Boolean!
+  "Lines dropped because the restore exceeded the log caps."
+  dropped: Int!
+}
+
+"Where an artifact came from (verified against its signed manifest)."
+type RestoreSource {
+  artifactId: UUID!
+  jobId: UUID!
+  runId: UUID!
+  kind: RunItemKind!
+  database: String
+  engine: DatabaseEngine!
+  "Catalog key of the backed-up server's release series."
+  versionKey: String!
+  serverVersion: String!
+  "The restore needs the job's age identity (recipient-encrypted backup)."
+  needsIdentity: Boolean!
+}
+
+"A connection the caller may restore an artifact to."
+type RestoreTarget {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  versionKey: String!
+  "The connection the artifact's job backs up."
+  original: Boolean!
+  "A temporary restore connection (admins only)."
+  temporary: Boolean!
+  expiresAt: Time
+  ready: Boolean!
+  notReadyReason: String
+  insecureTransport: Boolean!
+  "A new database may be created (database backups)."
+  newDatabaseAllowed: Boolean!
+  "Only the databases your own jobs back up may be overwritten (backup owners)."
+  existingRestricted: Boolean!
+}
+
+"The connections an artifact may be restored to."
+type RestoreTargets {
+  source: RestoreSource!
+  targets: [RestoreTarget!]!
+}
+
+"The existing databases of one restore target the caller may overwrite."
+type RestoreTargetDatabases {
+  target: RestoreTarget!
+  """
+  Existing databases (backup owners: only those their jobs back up),
+  without bekup's temporary restore databases.
+  """
+  databases: [String!]!
+  "The runner's warning codes."
+  warnings: [String!]!
+  "The privilege verdict on the target connection's role (read with the list)."
+  targetPrivileges: TargetPrivileges!
+  "When the list was read from the server (it is cached for 30 seconds)."
+  listedAt: Time!
+}
+
+"Something to know before a restore (stable code, fixed text)."
+type RestoreWarning {
+  code: String!
+  message: String!
+}
+
+"The checked restore request: what will happen, the warnings and the confirmation text."
+type RestorePreview {
+  source: RestoreSource!
+  target: RestoreTarget!
+  "Null for globals restores."
+  mode: RestoreMode
+  "Null for globals restores."
+  targetDatabase: String
+  warnings: [RestoreWarning!]!
+  """
+  What must be typed to confirm: the database name for OVERWRITE
+  (confirmTargetName), the phrase for a globals restore (confirmPhrase);
+  null when no confirmation is needed.
+  """
+  confirmText: String
+  """
+  The privilege verdict on the target connection's role (D-068; read
+  through the runner, cached for 30 seconds; the request checks again).
+  When acknowledgementRequired, only admins may restore, with
+  acknowledgePrivilegedTarget.
+  """
+  targetPrivileges: TargetPrivileges!
+  "The target is not the connection the backup was taken from (also recorded in the audit entry)."
+  crossSource: Boolean!
+}
+
+"A database restore request."
+input RestoreArtifactInput {
+  "A DATABASE artifact (present, verified, covered by a signed manifest)."
+  artifactId: UUID!
+  targetConnectionId: UUID!
+  mode: RestoreMode!
+  "The database to create (NEW_DB) or replace (OVERWRITE)."
+  targetDatabase: String!
+  "OVERWRITE: must equal targetDatabase exactly."
+  confirmTargetName: String
+  "PostgreSQL only: restore the object owners (default: objects belong to the target connection's role)."
+  keepOwners: Boolean
+  """
+  The job's age identity (AGE-SECRET-KEY-1...) for recipient-encrypted
+  backups only. It is stored sealed until the restore starts and never
+  logged, audited or returned.
+  """
+  ageIdentity: String
+  """
+  Required (admins only) when the target connection's role is privileged
+  or its privileges are unknown (D-068): SQL in the backup runs with that
+  role's rights. Audited and raised as a security alert.
+  """
+  acknowledgePrivilegedTarget: Boolean
+}
+
+"A restore request to check (restorePreview)."
+input RestorePreviewInput {
+  artifactId: UUID!
+  targetConnectionId: UUID!
+  "Required for DATABASE artifacts, not allowed for GLOBALS."
+  mode: RestoreMode
+  "Required for DATABASE artifacts, not allowed for GLOBALS."
+  targetDatabase: String
+  keepOwners: Boolean
+}
+
+"A PostgreSQL globals restore request (admins only)."
+input RestoreGlobalsInput {
+  "A GLOBALS artifact."
+  artifactId: UUID!
+  "A PostgreSQL connection."
+  targetConnectionId: UUID!
+  "Must equal the preview's confirmText: `restore globals into <connection name>`."
+  confirmPhrase: String!
+  "Required when the target connection's role is privileged or unknown (D-068; usually the case for globals)."
+  acknowledgePrivilegedTarget: Boolean
+}
+
+"An accepted cancelRestore."
+type RestoreCancellation {
+  restoreId: UUID!
+  jobId: UUID!
+  """
+  CANCELED when the restore had not started; otherwise its current status
+  until its worker stops it (it then ends as CANCELED).
+  """
+  status: RestoreStatus!
+  requestedAt: Time!
+}
+
+extend type Query {
+  """
+  The connections an artifact may be restored to (same engine as the
+  backup; backup owners: the connections their jobs back up; admins also
+  see temporary restore connections). Globals backups: admins only.
+  """
+  restoreTargets(artifactId: UUID!): RestoreTargets! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The existing databases of one restore target, read through the runner
+  (cached for 30 seconds; one runner call per request, so it must be the
+  only field of its operation).
+  """
+  restoreTargetDatabases(artifactId: UUID!, targetConnectionId: UUID!): RestoreTargetDatabases! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Checks a restore request without running it (target rules, engine,
+  names; no second-factor check) and returns the warnings to show, the
+  target role's privilege verdict and the text to type for the
+  confirmation. It reads the target through the runner (cached for 30
+  seconds), so it must be the only field of its operation.
+  """
+  restorePreview(input: RestorePreviewInput!): RestorePreview! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Restores, newest first; backup owners see the restores of their own
+  jobs only. `first` is 1..200 (default 50).
+  """
+  restores(filter: RestoreFilter, first: Int, after: String): RestoreConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One restore; null when it does not exist (admins and maintainers).
+  Backup owners get FORBIDDEN for other jobs' restores and unknown ids.
+  """
+  restore(id: UUID!): Restore @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The log of a restore after `afterId` (default: from the start); `first`
+  is 1..1000 (default 200). Same access as `restore`.
+  """
+  restoreLogs(restoreId: UUID!, afterId: ID, first: Int): RestoreLogPage @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Queues a database restore (audited). Requires a passkey (with user
+  verification) or authenticator code check within the last 5 minutes;
+  STEP_UP_REQUIRED otherwise, REQUIRES_2FA_ENROLLMENT without a second
+  factor. Must be the only field of its operation (it may carry an age
+  identity). Show the restorePreview warnings first. A target whose role
+  is privileged or unknown (restorePreview.targetPrivileges) needs an
+  admin and acknowledgePrivilegedTarget: FORBIDDEN for others, VALIDATION
+  without the acknowledgement.
+  """
+  restoreArtifact(input: RestoreArtifactInput!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Queues a PostgreSQL globals restore (roles, tablespaces) into a
+  connection: admins only, fresh second factor, the exact confirmation
+  phrase. It changes existing roles that are in the backup, including
+  their passwords. A privileged or unknown target role (as usual for
+  globals) also needs acknowledgePrivilegedTarget.
+  """
+  restoreGlobals(input: RestoreGlobalsInput!): Restore! @hasRole(roles: [ADMIN])
+
+  """
+  Cancels a queued or running restore (admins and maintainers; audited).
+  CONFLICT when it already finished.
+  """
+  cancelRestore(id: UUID!): RestoreCancellation! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Subscription {
+  """
+  Live changes of one restore (status, progress, log counts): each event
+  is the restore re-loaded and authorized again when it is delivered, so
+  a caller who loses access stops receiving events. The stream completes
+  after the restore finished. Same access as `restore`.
+  """
+  restoreUpdated(restoreId: UUID!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}

@@ -96,6 +96,12 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.confirmSshHostKey":            authz.OpConnectionHostKeyConfirm,
 	"Mutation.setTlsMode":                   authz.OpConnectionUpdate,
 	"Mutation.generateConnectionSshKeypair": authz.OpConnectionSSHKeyGenerate,
+	// Temporary restore connections (task 4.4): admin only. The runner,
+	// pin, host-key and SSH-key mutations above act on them for admins.
+	"Query.temporaryConnections":         authz.OpTemporaryConnectionList,
+	"Mutation.createTemporaryConnection": authz.OpTemporaryConnectionCreate,
+	"Mutation.extendTemporaryConnection": authz.OpTemporaryConnectionExtend,
+	"Mutation.deleteTemporaryConnection": authz.OpTemporaryConnectionDelete,
 
 	// Jobs (task 3.5, D-146): staff manage every job; owners (role user)
 	// view and run their own (the resolvers authorize with the job id;
@@ -135,6 +141,28 @@ var RootFieldOperations = map[string]authz.Operation{
 	// Downloads (task 3.9, D-150): admins and owners (role user) only,
 	// re-checked with the artifact's job in internal/downloads.
 	"Mutation.createDownloadTicket": authz.OpArtifactDownload,
+	// Restores (task 4.5, D-167): owners restore their own jobs'
+	// artifacts into their own databases or a new database (the API
+	// authorizes with the artifact's job and the target from the DB);
+	// restoreArtifact needs a fresh passkey/TOTP check, restoreGlobals is
+	// admin only with the same check, cancelRestore staff only.
+	"Query.restoreTargets":         authz.OpRestoreTargetsList,
+	"Query.restoreTargetDatabases": authz.OpRestoreTargetsList,
+	"Query.restorePreview":         authz.OpRestorePreview,
+	"Query.restores":               authz.OpRestoreView,
+	"Query.restore":                authz.OpRestoreView,
+	"Query.restoreLogs":            authz.OpRestoreView,
+	"Mutation.restoreArtifact":     authz.OpRestoreArtifact,
+	"Mutation.restoreGlobals":      authz.OpRestoreGlobals,
+	"Mutation.cancelRestore":       authz.OpRestoreCancel,
+	"Subscription.restoreUpdated":  authz.OpRestoreView,
+	// Test restores (task 4.6): settings staff with a fresh second factor
+	// (the scratch target receives the job's data), runs staff, results
+	// staff and the job's owners (authorized with the job from the DB).
+	"Mutation.setJobTestRestore": authz.OpJobTestRestoreEdit,
+	"Mutation.runTestRestoreNow": authz.OpTestRestoreRun,
+	"Query.testRestores":         authz.OpTestRestoreView,
+	"Query.testRestore":          authz.OpTestRestoreView,
 }
 
 // PolicyAccess is the Access backed by internal/authz and the principal

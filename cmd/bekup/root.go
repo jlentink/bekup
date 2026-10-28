@@ -32,7 +32,8 @@ func newRootCmd() *cobra.Command {
 	pf.BoolVar(&g.dev, "dev", false, "dev mode (or BEKUP_DEV=1): relaxed guardrails, never use in production")
 	pf.StringVar(&g.logLevel, "log-level", "", "log level: debug, info, warn or error (overrides log.level)")
 
-	root.AddCommand(newVersionCmd(), newConfigCmd(g), newCertsCmd(g), newKeysCmd(), newMigrateCmd(g), newAuditCmd(g), newAdminCmd(g), newServeCmd(g), newWorkerCmd(g), newRunnerCmd(g), newHealthcheckCmd(g), newDocsCmd())
+	root.AddCommand(newVersionCmd(), newConfigCmd(g), newCertsCmd(g), newKeysCmd(g), newMigrateCmd(g), newAuditCmd(g), newAdminCmd(g), newServeCmd(g), newWorkerCmd(g), newRunnerCmd(g), newHealthcheckCmd(g), newDocsCmd(),
+		newVerifyCmd(), newDecryptCmd(), newReindexCmd(g))
 	for _, s := range stubs {
 		root.AddCommand(newStubCmd(s))
 	}

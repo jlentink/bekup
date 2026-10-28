@@ -176,6 +176,7 @@ type ComplexityRoot struct {
 		CreatedAt                  func(childComplexity int) int
 		EffectiveMaxConcurrentRuns func(childComplexity int) int
 		Engine                     func(childComplexity int) int
+		ExpiresAt                  func(childComplexity int) int
 		Host                       func(childComplexity int) int
 		ID                         func(childComplexity int) int
 		InsecureTransport          func(childComplexity int) int
@@ -190,6 +191,7 @@ type ComplexityRoot struct {
 		SSHEnabled                 func(childComplexity int) int
 		Settings                   func(childComplexity int) int
 		TLSMode                    func(childComplexity int) int
+		Temporary                  func(childComplexity int) int
 		UpdatedAt                  func(childComplexity int) int
 		VersionKey                 func(childComplexity int) int
 	}
@@ -235,6 +237,7 @@ type ComplexityRoot struct {
 		Legacy             func(childComplexity int) int
 		Message            func(childComplexity int) int
 		Ok                 func(childComplexity int) int
+		Privileges         func(childComplexity int) int
 		ServerVersion      func(childComplexity int) int
 		Warnings           func(childComplexity int) int
 	}
@@ -363,6 +366,7 @@ type ComplexityRoot struct {
 		Schedule              func(childComplexity int) int
 		ScheduleDescription   func(childComplexity int) int
 		Slug                  func(childComplexity int) int
+		TestRestore           func(childComplexity int) int
 		TimeoutSeconds        func(childComplexity int) int
 		UpdatedAt             func(childComplexity int) int
 		Verification          func(childComplexity int) int
@@ -439,6 +443,16 @@ type ComplexityRoot struct {
 		KeepLast func(childComplexity int) int
 	}
 
+	JobTestRestore struct {
+		Enabled                        func(childComplexity int) int
+		NextAt                         func(childComplexity int) int
+		PrivilegedTargetAcknowledgedAt func(childComplexity int) int
+		Schedule                       func(childComplexity int) int
+		ScheduleDescription            func(childComplexity int) int
+		Target                         func(childComplexity int) int
+		TargetPrivileges               func(childComplexity int) int
+	}
+
 	LoginResult struct {
 		AvailableFactors            func(childComplexity int) int
 		PasswordChangeRequired      func(childComplexity int) int
@@ -453,6 +467,7 @@ type ComplexityRoot struct {
 		BeginPasskeyRegistration      func(childComplexity int) int
 		BeginStepUp                   func(childComplexity int) int
 		BeginTotpEnrollment           func(childComplexity int) int
+		CancelRestore                 func(childComplexity int, id uuid.UUID) int
 		CancelRun                     func(childComplexity int, id uuid.UUID) int
 		ChangePassword                func(childComplexity int, currentPassword string, newPassword string) int
 		CompleteSecondFactor          func(childComplexity int, method model.SecondFactorKind, code *string, assertion model.JSON) int
@@ -465,11 +480,13 @@ type ComplexityRoot struct {
 		CreateDestination             func(childComplexity int, input model.CreateDestinationInput) int
 		CreateDownloadTicket          func(childComplexity int, artifactID uuid.UUID, mode model.DownloadMode, ageIdentity *string) int
 		CreateJob                     func(childComplexity int, input model.CreateJobInput) int
+		CreateTemporaryConnection     func(childComplexity int, input model.CreateTemporaryConnectionInput) int
 		CreateUser                    func(childComplexity int, input model.CreateUserInput) int
 		DeleteConnection              func(childComplexity int, id uuid.UUID) int
 		DeleteDestination             func(childComplexity int, id uuid.UUID) int
 		DeleteJob                     func(childComplexity int, id uuid.UUID) int
 		DeletePasskey                 func(childComplexity int, id uuid.UUID) int
+		DeleteTemporaryConnection     func(childComplexity int, id uuid.UUID) int
 		DeleteUser                    func(childComplexity int, id uuid.UUID) int
 		DetectVersion                 func(childComplexity int, id uuid.UUID) int
 		DisableJob                    func(childComplexity int, id uuid.UUID) int
@@ -480,6 +497,7 @@ type ComplexityRoot struct {
 		EnableJobEncryption           func(childComplexity int, jobID uuid.UUID, mode model.JobKeyMode) int
 		EnableUser                    func(childComplexity int, id uuid.UUID) int
 		ExportJobPassphrases          func(childComplexity int, jobID uuid.UUID) int
+		ExtendTemporaryConnection     func(childComplexity int, id uuid.UUID, expiresAt time.Time) int
 		FetchCertificate              func(childComplexity int, id uuid.UUID) int
 		FetchDestinationHostKey       func(childComplexity int, id uuid.UUID) int
 		FetchSSHHostKey               func(childComplexity int, id uuid.UUID) int
@@ -497,11 +515,15 @@ type ComplexityRoot struct {
 		RenamePasskey                 func(childComplexity int, id uuid.UUID, name string) int
 		ResetUserPassword             func(childComplexity int, id uuid.UUID) int
 		ResetUserSecondFactors        func(childComplexity int, userID uuid.UUID) int
+		RestoreArtifact               func(childComplexity int, input model.RestoreArtifactInput) int
+		RestoreGlobals                func(childComplexity int, input model.RestoreGlobalsInput) int
 		RevokeSession                 func(childComplexity int, id uuid.UUID) int
 		RevokeUserSessions            func(childComplexity int, userID uuid.UUID) int
 		RunJobNow                     func(childComplexity int, id uuid.UUID) int
+		RunTestRestoreNow             func(childComplexity int, jobID uuid.UUID) int
 		SetJobPassphrase              func(childComplexity int, jobID uuid.UUID, passphrase string) int
 		SetJobRecipient               func(childComplexity int, jobID uuid.UUID, recipient string, label *string) int
+		SetJobTestRestore             func(childComplexity int, jobID uuid.UUID, input model.JobTestRestoreInput) int
 		SetTLSMode                    func(childComplexity int, id uuid.UUID, mode model.ConnectionTLSMode) int
 		StageBackupPin                func(childComplexity int, id uuid.UUID, input model.CertificatePinInput) int
 		StartNextRunEarly             func(childComplexity int, id uuid.UUID) int
@@ -536,34 +558,163 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Artifacts         func(childComplexity int, filter *model.ArtifactFilter, first *int, after *string) int
-		AuditLog          func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
-		Calendar          func(childComplexity int, from time.Time, to time.Time, timezone string, jobIds []uuid.UUID) int
-		Connection        func(childComplexity int, id uuid.UUID) int
-		Connections       func(childComplexity int) int
-		Destination       func(childComplexity int, id uuid.UUID) int
-		Destinations      func(childComplexity int) int
-		EngineVersions    func(childComplexity int, engine *model.DatabaseEngine) int
-		Job               func(childComplexity int, id uuid.UUID) int
-		Jobs              func(childComplexity int, filter *model.JobFilter, first *int, after *string) int
-		Me                func(childComplexity int) int
-		MyPasskeys        func(childComplexity int) int
-		MySessions        func(childComplexity int) int
-		MyTwoFactorStatus func(childComplexity int) int
-		PreviewSchedule   func(childComplexity int, input model.ScheduleInput, count *int) int
-		Run               func(childComplexity int, id uuid.UUID) int
-		RunLogs           func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
-		Runs              func(childComplexity int, filter *model.RunFilter, first *int, after *string) int
-		ServerInfo        func(childComplexity int) int
-		TwoFactorPolicy   func(childComplexity int) int
-		User              func(childComplexity int, id uuid.UUID) int
-		UserSessions      func(childComplexity int, userID uuid.UUID) int
-		Users             func(childComplexity int, filter *model.UserFilter, first *int, after *string) int
-		WebauthnStatus    func(childComplexity int) int
+		Artifacts              func(childComplexity int, filter *model.ArtifactFilter, first *int, after *string) int
+		AuditLog               func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
+		Calendar               func(childComplexity int, from time.Time, to time.Time, timezone string, jobIds []uuid.UUID) int
+		Connection             func(childComplexity int, id uuid.UUID) int
+		Connections            func(childComplexity int) int
+		Destination            func(childComplexity int, id uuid.UUID) int
+		Destinations           func(childComplexity int) int
+		EngineVersions         func(childComplexity int, engine *model.DatabaseEngine) int
+		Job                    func(childComplexity int, id uuid.UUID) int
+		Jobs                   func(childComplexity int, filter *model.JobFilter, first *int, after *string) int
+		Me                     func(childComplexity int) int
+		MyPasskeys             func(childComplexity int) int
+		MySessions             func(childComplexity int) int
+		MyTwoFactorStatus      func(childComplexity int) int
+		PreviewSchedule        func(childComplexity int, input model.ScheduleInput, count *int) int
+		Restore                func(childComplexity int, id uuid.UUID) int
+		RestoreLogs            func(childComplexity int, restoreID uuid.UUID, afterID *string, first *int) int
+		RestorePreview         func(childComplexity int, input model.RestorePreviewInput) int
+		RestoreTargetDatabases func(childComplexity int, artifactID uuid.UUID, targetConnectionID uuid.UUID) int
+		RestoreTargets         func(childComplexity int, artifactID uuid.UUID) int
+		Restores               func(childComplexity int, filter *model.RestoreFilter, first *int, after *string) int
+		Run                    func(childComplexity int, id uuid.UUID) int
+		RunLogs                func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
+		Runs                   func(childComplexity int, filter *model.RunFilter, first *int, after *string) int
+		ServerInfo             func(childComplexity int) int
+		TemporaryConnections   func(childComplexity int) int
+		TestRestore            func(childComplexity int, id uuid.UUID) int
+		TestRestores           func(childComplexity int, jobID uuid.UUID, first *int, after *string) int
+		TwoFactorPolicy        func(childComplexity int) int
+		User                   func(childComplexity int, id uuid.UUID) int
+		UserSessions           func(childComplexity int, userID uuid.UUID) int
+		Users                  func(childComplexity int, filter *model.UserFilter, first *int, after *string) int
+		WebauthnStatus         func(childComplexity int) int
 	}
 
 	RecoveryCodes struct {
 		Codes func(childComplexity int) int
+	}
+
+	Restore struct {
+		ArtifactID      func(childComplexity int) int
+		CreatedAt       func(childComplexity int) int
+		DurationSeconds func(childComplexity int) int
+		ErrorCode       func(childComplexity int) int
+		ErrorMessage    func(childComplexity int) int
+		FinishedAt      func(childComplexity int) int
+		ID              func(childComplexity int) int
+		Job             func(childComplexity int) int
+		KeepOwners      func(childComplexity int) int
+		Kind            func(childComplexity int) int
+		LogLines        func(childComplexity int) int
+		LogLinesDropped func(childComplexity int) int
+		Mode            func(childComplexity int) int
+		RequestedBy     func(childComplexity int) int
+		RunID           func(childComplexity int) int
+		SourceDatabase  func(childComplexity int) int
+		StagedBytes     func(childComplexity int) int
+		StartedAt       func(childComplexity int) int
+		Status          func(childComplexity int) int
+		Target          func(childComplexity int) int
+		TargetDatabase  func(childComplexity int) int
+		UpdatedAt       func(childComplexity int) int
+		Warnings        func(childComplexity int) int
+	}
+
+	RestoreCancellation struct {
+		JobID       func(childComplexity int) int
+		RequestedAt func(childComplexity int) int
+		RestoreID   func(childComplexity int) int
+		Status      func(childComplexity int) int
+	}
+
+	RestoreConnection struct {
+		Edges    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	RestoreEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	RestoreLogPage struct {
+		Dropped   func(childComplexity int) int
+		EndID     func(childComplexity int) int
+		HasMore   func(childComplexity int) int
+		Lines     func(childComplexity int) int
+		RestoreID func(childComplexity int) int
+	}
+
+	RestoreOutcomeWarning struct {
+		Code    func(childComplexity int) int
+		Message func(childComplexity int) int
+	}
+
+	RestorePreview struct {
+		ConfirmText      func(childComplexity int) int
+		CrossSource      func(childComplexity int) int
+		Mode             func(childComplexity int) int
+		Source           func(childComplexity int) int
+		Target           func(childComplexity int) int
+		TargetDatabase   func(childComplexity int) int
+		TargetPrivileges func(childComplexity int) int
+		Warnings         func(childComplexity int) int
+	}
+
+	RestoreSource struct {
+		ArtifactID    func(childComplexity int) int
+		Database      func(childComplexity int) int
+		Engine        func(childComplexity int) int
+		JobID         func(childComplexity int) int
+		Kind          func(childComplexity int) int
+		NeedsIdentity func(childComplexity int) int
+		RunID         func(childComplexity int) int
+		ServerVersion func(childComplexity int) int
+		VersionKey    func(childComplexity int) int
+	}
+
+	RestoreTarget struct {
+		Engine             func(childComplexity int) int
+		ExistingRestricted func(childComplexity int) int
+		ExpiresAt          func(childComplexity int) int
+		ID                 func(childComplexity int) int
+		InsecureTransport  func(childComplexity int) int
+		Name               func(childComplexity int) int
+		NewDatabaseAllowed func(childComplexity int) int
+		NotReadyReason     func(childComplexity int) int
+		Original           func(childComplexity int) int
+		Ready              func(childComplexity int) int
+		Temporary          func(childComplexity int) int
+		VersionKey         func(childComplexity int) int
+	}
+
+	RestoreTargetDatabases struct {
+		Databases        func(childComplexity int) int
+		ListedAt         func(childComplexity int) int
+		Target           func(childComplexity int) int
+		TargetPrivileges func(childComplexity int) int
+		Warnings         func(childComplexity int) int
+	}
+
+	RestoreTargetRef struct {
+		Deleted   func(childComplexity int) int
+		Engine    func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Name      func(childComplexity int) int
+		Temporary func(childComplexity int) int
+	}
+
+	RestoreTargets struct {
+		Source  func(childComplexity int) int
+		Targets func(childComplexity int) int
+	}
+
+	RestoreWarning struct {
+		Code    func(childComplexity int) int
+		Message func(childComplexity int) int
 	}
 
 	Run struct {
@@ -791,14 +942,81 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
+		RestoreUpdated func(childComplexity int, restoreID uuid.UUID) int
 		RunLogAppended func(childComplexity int, runID uuid.UUID, afterID *string) int
 		RunUpdated     func(childComplexity int, jobID *uuid.UUID, runID *uuid.UUID) int
 		SessionEvents  func(childComplexity int) int
 	}
 
+	TargetPrivileges struct {
+		AcknowledgementRequired func(childComplexity int) int
+		Reasons                 func(childComplexity int) int
+		Status                  func(childComplexity int) int
+	}
+
 	TemporaryPassword struct {
 		ExpiresAt func(childComplexity int) int
 		Password  func(childComplexity int) int
+	}
+
+	TestRestore struct {
+		CreatedAt       func(childComplexity int) int
+		DatabaseCount   func(childComplexity int) int
+		Databases       func(childComplexity int) int
+		DurationSeconds func(childComplexity int) int
+		ErrorCode       func(childComplexity int) int
+		ErrorMessage    func(childComplexity int) int
+		Failed          func(childComplexity int) int
+		FinishedAt      func(childComplexity int) int
+		ID              func(childComplexity int) int
+		Job             func(childComplexity int) int
+		Passed          func(childComplexity int) int
+		RequestedBy     func(childComplexity int) int
+		RunID           func(childComplexity int) int
+		ScheduledFor    func(childComplexity int) int
+		StartedAt       func(childComplexity int) int
+		Status          func(childComplexity int) int
+		Target          func(childComplexity int) int
+		Trigger         func(childComplexity int) int
+		Warned          func(childComplexity int) int
+	}
+
+	TestRestoreConnection struct {
+		Edges    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
+	TestRestoreDatabase struct {
+		Database         func(childComplexity int) int
+		ErrorCode        func(childComplexity int) int
+		ErrorMessage     func(childComplexity int) int
+		ExactTables      func(childComplexity int) int
+		Findings         func(childComplexity int) int
+		FindingsTotal    func(childComplexity int) int
+		FinishedAt       func(childComplexity int) int
+		ID               func(childComplexity int) int
+		RestoreErrorCode func(childComplexity int) int
+		RestoreID        func(childComplexity int) int
+		RestoreStatus    func(childComplexity int) int
+		RunItemID        func(childComplexity int) int
+		ScratchDropped   func(childComplexity int) int
+		StartedAt        func(childComplexity int) int
+		Status           func(childComplexity int) int
+		TablesCompared   func(childComplexity int) int
+	}
+
+	TestRestoreEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	TestRestoreFinding struct {
+		Code     func(childComplexity int) int
+		Delta    func(childComplexity int) int
+		Object   func(childComplexity int) int
+		Restored func(childComplexity int) int
+		Severity func(childComplexity int) int
+		Source   func(childComplexity int) int
 	}
 
 	TotpEnrollment struct {
@@ -886,6 +1104,9 @@ type MutationResolver interface {
 	ConfirmSSHHostKey(ctx context.Context, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) (*model.Connection, error)
 	SetTLSMode(ctx context.Context, id uuid.UUID, mode model.ConnectionTLSMode) (*model.Connection, error)
 	GenerateConnectionSSHKeypair(ctx context.Context, id uuid.UUID) (*model.ConnectionSSHKeypair, error)
+	CreateTemporaryConnection(ctx context.Context, input model.CreateTemporaryConnectionInput) (*model.Connection, error)
+	ExtendTemporaryConnection(ctx context.Context, id uuid.UUID, expiresAt time.Time) (*model.Connection, error)
+	DeleteTemporaryConnection(ctx context.Context, id uuid.UUID) (bool, error)
 	CreateDestination(ctx context.Context, input model.CreateDestinationInput) (*model.Destination, error)
 	UpdateDestination(ctx context.Context, id uuid.UUID, input model.UpdateDestinationInput) (*model.Destination, error)
 	DeleteDestination(ctx context.Context, id uuid.UUID) (bool, error)
@@ -910,7 +1131,12 @@ type MutationResolver interface {
 	EnableJobEncryption(ctx context.Context, jobID uuid.UUID, mode model.JobKeyMode) (*model.JobEncryption, error)
 	DisableJobEncryption(ctx context.Context, jobID uuid.UUID, reason string) (*model.JobEncryption, error)
 	ExportJobPassphrases(ctx context.Context, jobID uuid.UUID) (*model.JobPassphraseExport, error)
+	RestoreArtifact(ctx context.Context, input model.RestoreArtifactInput) (*model.Restore, error)
+	RestoreGlobals(ctx context.Context, input model.RestoreGlobalsInput) (*model.Restore, error)
+	CancelRestore(ctx context.Context, id uuid.UUID) (*model.RestoreCancellation, error)
 	CancelRun(ctx context.Context, id uuid.UUID) (*model.RunCancellation, error)
+	SetJobTestRestore(ctx context.Context, jobID uuid.UUID, input model.JobTestRestoreInput) (*model.Job, error)
+	RunTestRestoreNow(ctx context.Context, jobID uuid.UUID) (*model.TestRestore, error)
 	BeginTotpEnrollment(ctx context.Context) (*model.TotpEnrollment, error)
 	ConfirmTotpEnrollment(ctx context.Context, code string) (*model.RecoveryCodes, error)
 	DisableTotp(ctx context.Context) (bool, error)
@@ -942,16 +1168,25 @@ type QueryResolver interface {
 	Calendar(ctx context.Context, from time.Time, to time.Time, timezone string, jobIds []uuid.UUID) (*model.Calendar, error)
 	Connections(ctx context.Context) ([]model.Connection, error)
 	Connection(ctx context.Context, id uuid.UUID) (*model.Connection, error)
+	TemporaryConnections(ctx context.Context) ([]model.Connection, error)
 	EngineVersions(ctx context.Context, engine *model.DatabaseEngine) ([]model.EngineVersion, error)
 	Destinations(ctx context.Context) ([]model.Destination, error)
 	Destination(ctx context.Context, id uuid.UUID) (*model.Destination, error)
 	Jobs(ctx context.Context, filter *model.JobFilter, first *int, after *string) (*model.JobConnection, error)
 	Job(ctx context.Context, id uuid.UUID) (*model.Job, error)
 	PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int) (*model.SchedulePreview, error)
+	RestoreTargets(ctx context.Context, artifactID uuid.UUID) (*model.RestoreTargets, error)
+	RestoreTargetDatabases(ctx context.Context, artifactID uuid.UUID, targetConnectionID uuid.UUID) (*model.RestoreTargetDatabases, error)
+	RestorePreview(ctx context.Context, input model.RestorePreviewInput) (*model.RestorePreview, error)
+	Restores(ctx context.Context, filter *model.RestoreFilter, first *int, after *string) (*model.RestoreConnection, error)
+	Restore(ctx context.Context, id uuid.UUID) (*model.Restore, error)
+	RestoreLogs(ctx context.Context, restoreID uuid.UUID, afterID *string, first *int) (*model.RestoreLogPage, error)
 	Runs(ctx context.Context, filter *model.RunFilter, first *int, after *string) (*model.RunConnection, error)
 	Run(ctx context.Context, id uuid.UUID) (*model.Run, error)
 	RunLogs(ctx context.Context, runID uuid.UUID, afterID *string, first *int) (*model.RunLogPage, error)
 	Artifacts(ctx context.Context, filter *model.ArtifactFilter, first *int, after *string) (*model.ArtifactConnection, error)
+	TestRestores(ctx context.Context, jobID uuid.UUID, first *int, after *string) (*model.TestRestoreConnection, error)
+	TestRestore(ctx context.Context, id uuid.UUID) (*model.TestRestore, error)
 	MyTwoFactorStatus(ctx context.Context) (*model.TwoFactorStatus, error)
 	TwoFactorPolicy(ctx context.Context) (*model.TwoFactorPolicy, error)
 	Users(ctx context.Context, filter *model.UserFilter, first *int, after *string) (*model.UserConnection, error)
@@ -970,6 +1205,7 @@ type RunItemResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context) (<-chan *model.SessionEvent, error)
+	RestoreUpdated(ctx context.Context, restoreID uuid.UUID) (<-chan *model.Restore, error)
 	RunUpdated(ctx context.Context, jobID *uuid.UUID, runID *uuid.UUID) (<-chan *model.Run, error)
 	RunLogAppended(ctx context.Context, runID uuid.UUID, afterID *string) (<-chan *model.RunLogBatch, error)
 }
@@ -1549,6 +1785,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Connection.Engine(childComplexity), true
+	case "Connection.expiresAt":
+		if e.ComplexityRoot.Connection.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.ExpiresAt(childComplexity), true
 	case "Connection.host":
 		if e.ComplexityRoot.Connection.Host == nil {
 			break
@@ -1633,6 +1875,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Connection.TLSMode(childComplexity), true
+	case "Connection.temporary":
+		if e.ComplexityRoot.Connection.Temporary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Connection.Temporary(childComplexity), true
 	case "Connection.updatedAt":
 		if e.ComplexityRoot.Connection.UpdatedAt == nil {
 			break
@@ -1818,6 +2066,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ConnectionTestResult.Ok(childComplexity), true
+	case "ConnectionTestResult.privileges":
+		if e.ComplexityRoot.ConnectionTestResult.Privileges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConnectionTestResult.Privileges(childComplexity), true
 	case "ConnectionTestResult.serverVersion":
 		if e.ComplexityRoot.ConnectionTestResult.ServerVersion == nil {
 			break
@@ -2336,6 +2590,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Job.Slug(childComplexity), true
+	case "Job.testRestore":
+		if e.ComplexityRoot.Job.TestRestore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Job.TestRestore(childComplexity), true
 	case "Job.timeoutSeconds":
 		if e.ComplexityRoot.Job.TimeoutSeconds == nil {
 			break
@@ -2611,6 +2871,49 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.JobRetention.KeepLast(childComplexity), true
 
+	case "JobTestRestore.enabled":
+		if e.ComplexityRoot.JobTestRestore.Enabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.Enabled(childComplexity), true
+	case "JobTestRestore.nextAt":
+		if e.ComplexityRoot.JobTestRestore.NextAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.NextAt(childComplexity), true
+	case "JobTestRestore.privilegedTargetAcknowledgedAt":
+		if e.ComplexityRoot.JobTestRestore.PrivilegedTargetAcknowledgedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.PrivilegedTargetAcknowledgedAt(childComplexity), true
+	case "JobTestRestore.schedule":
+		if e.ComplexityRoot.JobTestRestore.Schedule == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.Schedule(childComplexity), true
+	case "JobTestRestore.scheduleDescription":
+		if e.ComplexityRoot.JobTestRestore.ScheduleDescription == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.ScheduleDescription(childComplexity), true
+	case "JobTestRestore.target":
+		if e.ComplexityRoot.JobTestRestore.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.Target(childComplexity), true
+	case "JobTestRestore.targetPrivileges":
+		if e.ComplexityRoot.JobTestRestore.TargetPrivileges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobTestRestore.TargetPrivileges(childComplexity), true
+
 	case "LoginResult.availableFactors":
 		if e.ComplexityRoot.LoginResult.AvailableFactors == nil {
 			break
@@ -2677,6 +2980,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.BeginTotpEnrollment(childComplexity), true
+	case "Mutation.cancelRestore":
+		if e.ComplexityRoot.Mutation.CancelRestore == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_cancelRestore_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CancelRestore(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.cancelRun":
 		if e.ComplexityRoot.Mutation.CancelRun == nil {
 			break
@@ -2809,6 +3123,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateJob(childComplexity, args["input"].(model.CreateJobInput)), true
+	case "Mutation.createTemporaryConnection":
+		if e.ComplexityRoot.Mutation.CreateTemporaryConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createTemporaryConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateTemporaryConnection(childComplexity, args["input"].(model.CreateTemporaryConnectionInput)), true
 	case "Mutation.createUser":
 		if e.ComplexityRoot.Mutation.CreateUser == nil {
 			break
@@ -2864,6 +3189,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeletePasskey(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.deleteTemporaryConnection":
+		if e.ComplexityRoot.Mutation.DeleteTemporaryConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteTemporaryConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteTemporaryConnection(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.deleteUser":
 		if e.ComplexityRoot.Mutation.DeleteUser == nil {
 			break
@@ -2969,6 +3305,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ExportJobPassphrases(childComplexity, args["jobId"].(uuid.UUID)), true
+	case "Mutation.extendTemporaryConnection":
+		if e.ComplexityRoot.Mutation.ExtendTemporaryConnection == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_extendTemporaryConnection_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ExtendTemporaryConnection(childComplexity, args["id"].(uuid.UUID), args["expiresAt"].(time.Time)), true
 	case "Mutation.fetchCertificate":
 		if e.ComplexityRoot.Mutation.FetchCertificate == nil {
 			break
@@ -3146,6 +3493,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ResetUserSecondFactors(childComplexity, args["userId"].(uuid.UUID)), true
+	case "Mutation.restoreArtifact":
+		if e.ComplexityRoot.Mutation.RestoreArtifact == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_restoreArtifact_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RestoreArtifact(childComplexity, args["input"].(model.RestoreArtifactInput)), true
+	case "Mutation.restoreGlobals":
+		if e.ComplexityRoot.Mutation.RestoreGlobals == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_restoreGlobals_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RestoreGlobals(childComplexity, args["input"].(model.RestoreGlobalsInput)), true
 	case "Mutation.revokeSession":
 		if e.ComplexityRoot.Mutation.RevokeSession == nil {
 			break
@@ -3179,6 +3548,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RunJobNow(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.runTestRestoreNow":
+		if e.ComplexityRoot.Mutation.RunTestRestoreNow == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_runTestRestoreNow_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RunTestRestoreNow(childComplexity, args["jobId"].(uuid.UUID)), true
 	case "Mutation.setJobPassphrase":
 		if e.ComplexityRoot.Mutation.SetJobPassphrase == nil {
 			break
@@ -3201,6 +3581,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetJobRecipient(childComplexity, args["jobId"].(uuid.UUID), args["recipient"].(string), args["label"].(*string)), true
+	case "Mutation.setJobTestRestore":
+		if e.ComplexityRoot.Mutation.SetJobTestRestore == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setJobTestRestore_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetJobTestRestore(childComplexity, args["jobId"].(uuid.UUID), args["input"].(model.JobTestRestoreInput)), true
 	case "Mutation.setTlsMode":
 		if e.ComplexityRoot.Mutation.SetTLSMode == nil {
 			break
@@ -3545,6 +3936,72 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PreviewSchedule(childComplexity, args["input"].(model.ScheduleInput), args["count"].(*int)), true
+	case "Query.restore":
+		if e.ComplexityRoot.Query.Restore == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restore_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Restore(childComplexity, args["id"].(uuid.UUID)), true
+	case "Query.restoreLogs":
+		if e.ComplexityRoot.Query.RestoreLogs == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restoreLogs_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RestoreLogs(childComplexity, args["restoreId"].(uuid.UUID), args["afterId"].(*string), args["first"].(*int)), true
+	case "Query.restorePreview":
+		if e.ComplexityRoot.Query.RestorePreview == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restorePreview_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RestorePreview(childComplexity, args["input"].(model.RestorePreviewInput)), true
+	case "Query.restoreTargetDatabases":
+		if e.ComplexityRoot.Query.RestoreTargetDatabases == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restoreTargetDatabases_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RestoreTargetDatabases(childComplexity, args["artifactId"].(uuid.UUID), args["targetConnectionId"].(uuid.UUID)), true
+	case "Query.restoreTargets":
+		if e.ComplexityRoot.Query.RestoreTargets == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restoreTargets_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RestoreTargets(childComplexity, args["artifactId"].(uuid.UUID)), true
+	case "Query.restores":
+		if e.ComplexityRoot.Query.Restores == nil {
+			break
+		}
+
+		args, err := ec.field_Query_restores_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Restores(childComplexity, args["filter"].(*model.RestoreFilter), args["first"].(*int), args["after"].(*string)), true
 	case "Query.run":
 		if e.ComplexityRoot.Query.Run == nil {
 			break
@@ -3584,6 +4041,34 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.ServerInfo(childComplexity), true
+	case "Query.temporaryConnections":
+		if e.ComplexityRoot.Query.TemporaryConnections == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.TemporaryConnections(childComplexity), true
+	case "Query.testRestore":
+		if e.ComplexityRoot.Query.TestRestore == nil {
+			break
+		}
+
+		args, err := ec.field_Query_testRestore_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TestRestore(childComplexity, args["id"].(uuid.UUID)), true
+	case "Query.testRestores":
+		if e.ComplexityRoot.Query.TestRestores == nil {
+			break
+		}
+
+		args, err := ec.field_Query_testRestores_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.TestRestores(childComplexity, args["jobId"].(uuid.UUID), args["first"].(*int), args["after"].(*string)), true
 	case "Query.twoFactorPolicy":
 		if e.ComplexityRoot.Query.TwoFactorPolicy == nil {
 			break
@@ -3636,6 +4121,505 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RecoveryCodes.Codes(childComplexity), true
+
+	case "Restore.artifactId":
+		if e.ComplexityRoot.Restore.ArtifactID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.ArtifactID(childComplexity), true
+	case "Restore.createdAt":
+		if e.ComplexityRoot.Restore.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.CreatedAt(childComplexity), true
+	case "Restore.durationSeconds":
+		if e.ComplexityRoot.Restore.DurationSeconds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.DurationSeconds(childComplexity), true
+	case "Restore.errorCode":
+		if e.ComplexityRoot.Restore.ErrorCode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.ErrorCode(childComplexity), true
+	case "Restore.errorMessage":
+		if e.ComplexityRoot.Restore.ErrorMessage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.ErrorMessage(childComplexity), true
+	case "Restore.finishedAt":
+		if e.ComplexityRoot.Restore.FinishedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.FinishedAt(childComplexity), true
+	case "Restore.id":
+		if e.ComplexityRoot.Restore.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.ID(childComplexity), true
+	case "Restore.job":
+		if e.ComplexityRoot.Restore.Job == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Job(childComplexity), true
+	case "Restore.keepOwners":
+		if e.ComplexityRoot.Restore.KeepOwners == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.KeepOwners(childComplexity), true
+	case "Restore.kind":
+		if e.ComplexityRoot.Restore.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Kind(childComplexity), true
+	case "Restore.logLines":
+		if e.ComplexityRoot.Restore.LogLines == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.LogLines(childComplexity), true
+	case "Restore.logLinesDropped":
+		if e.ComplexityRoot.Restore.LogLinesDropped == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.LogLinesDropped(childComplexity), true
+	case "Restore.mode":
+		if e.ComplexityRoot.Restore.Mode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Mode(childComplexity), true
+	case "Restore.requestedBy":
+		if e.ComplexityRoot.Restore.RequestedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.RequestedBy(childComplexity), true
+	case "Restore.runId":
+		if e.ComplexityRoot.Restore.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.RunID(childComplexity), true
+	case "Restore.sourceDatabase":
+		if e.ComplexityRoot.Restore.SourceDatabase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.SourceDatabase(childComplexity), true
+	case "Restore.stagedBytes":
+		if e.ComplexityRoot.Restore.StagedBytes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.StagedBytes(childComplexity), true
+	case "Restore.startedAt":
+		if e.ComplexityRoot.Restore.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.StartedAt(childComplexity), true
+	case "Restore.status":
+		if e.ComplexityRoot.Restore.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Status(childComplexity), true
+	case "Restore.target":
+		if e.ComplexityRoot.Restore.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Target(childComplexity), true
+	case "Restore.targetDatabase":
+		if e.ComplexityRoot.Restore.TargetDatabase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.TargetDatabase(childComplexity), true
+	case "Restore.updatedAt":
+		if e.ComplexityRoot.Restore.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.UpdatedAt(childComplexity), true
+	case "Restore.warnings":
+		if e.ComplexityRoot.Restore.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Restore.Warnings(childComplexity), true
+
+	case "RestoreCancellation.jobId":
+		if e.ComplexityRoot.RestoreCancellation.JobID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreCancellation.JobID(childComplexity), true
+	case "RestoreCancellation.requestedAt":
+		if e.ComplexityRoot.RestoreCancellation.RequestedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreCancellation.RequestedAt(childComplexity), true
+	case "RestoreCancellation.restoreId":
+		if e.ComplexityRoot.RestoreCancellation.RestoreID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreCancellation.RestoreID(childComplexity), true
+	case "RestoreCancellation.status":
+		if e.ComplexityRoot.RestoreCancellation.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreCancellation.Status(childComplexity), true
+
+	case "RestoreConnection.edges":
+		if e.ComplexityRoot.RestoreConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreConnection.Edges(childComplexity), true
+	case "RestoreConnection.pageInfo":
+		if e.ComplexityRoot.RestoreConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreConnection.PageInfo(childComplexity), true
+
+	case "RestoreEdge.cursor":
+		if e.ComplexityRoot.RestoreEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreEdge.Cursor(childComplexity), true
+	case "RestoreEdge.node":
+		if e.ComplexityRoot.RestoreEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreEdge.Node(childComplexity), true
+
+	case "RestoreLogPage.dropped":
+		if e.ComplexityRoot.RestoreLogPage.Dropped == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreLogPage.Dropped(childComplexity), true
+	case "RestoreLogPage.endId":
+		if e.ComplexityRoot.RestoreLogPage.EndID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreLogPage.EndID(childComplexity), true
+	case "RestoreLogPage.hasMore":
+		if e.ComplexityRoot.RestoreLogPage.HasMore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreLogPage.HasMore(childComplexity), true
+	case "RestoreLogPage.lines":
+		if e.ComplexityRoot.RestoreLogPage.Lines == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreLogPage.Lines(childComplexity), true
+	case "RestoreLogPage.restoreId":
+		if e.ComplexityRoot.RestoreLogPage.RestoreID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreLogPage.RestoreID(childComplexity), true
+
+	case "RestoreOutcomeWarning.code":
+		if e.ComplexityRoot.RestoreOutcomeWarning.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreOutcomeWarning.Code(childComplexity), true
+	case "RestoreOutcomeWarning.message":
+		if e.ComplexityRoot.RestoreOutcomeWarning.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreOutcomeWarning.Message(childComplexity), true
+
+	case "RestorePreview.confirmText":
+		if e.ComplexityRoot.RestorePreview.ConfirmText == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.ConfirmText(childComplexity), true
+	case "RestorePreview.crossSource":
+		if e.ComplexityRoot.RestorePreview.CrossSource == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.CrossSource(childComplexity), true
+	case "RestorePreview.mode":
+		if e.ComplexityRoot.RestorePreview.Mode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.Mode(childComplexity), true
+	case "RestorePreview.source":
+		if e.ComplexityRoot.RestorePreview.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.Source(childComplexity), true
+	case "RestorePreview.target":
+		if e.ComplexityRoot.RestorePreview.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.Target(childComplexity), true
+	case "RestorePreview.targetDatabase":
+		if e.ComplexityRoot.RestorePreview.TargetDatabase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.TargetDatabase(childComplexity), true
+	case "RestorePreview.targetPrivileges":
+		if e.ComplexityRoot.RestorePreview.TargetPrivileges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.TargetPrivileges(childComplexity), true
+	case "RestorePreview.warnings":
+		if e.ComplexityRoot.RestorePreview.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestorePreview.Warnings(childComplexity), true
+
+	case "RestoreSource.artifactId":
+		if e.ComplexityRoot.RestoreSource.ArtifactID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.ArtifactID(childComplexity), true
+	case "RestoreSource.database":
+		if e.ComplexityRoot.RestoreSource.Database == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.Database(childComplexity), true
+	case "RestoreSource.engine":
+		if e.ComplexityRoot.RestoreSource.Engine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.Engine(childComplexity), true
+	case "RestoreSource.jobId":
+		if e.ComplexityRoot.RestoreSource.JobID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.JobID(childComplexity), true
+	case "RestoreSource.kind":
+		if e.ComplexityRoot.RestoreSource.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.Kind(childComplexity), true
+	case "RestoreSource.needsIdentity":
+		if e.ComplexityRoot.RestoreSource.NeedsIdentity == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.NeedsIdentity(childComplexity), true
+	case "RestoreSource.runId":
+		if e.ComplexityRoot.RestoreSource.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.RunID(childComplexity), true
+	case "RestoreSource.serverVersion":
+		if e.ComplexityRoot.RestoreSource.ServerVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.ServerVersion(childComplexity), true
+	case "RestoreSource.versionKey":
+		if e.ComplexityRoot.RestoreSource.VersionKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreSource.VersionKey(childComplexity), true
+
+	case "RestoreTarget.engine":
+		if e.ComplexityRoot.RestoreTarget.Engine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.Engine(childComplexity), true
+	case "RestoreTarget.existingRestricted":
+		if e.ComplexityRoot.RestoreTarget.ExistingRestricted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.ExistingRestricted(childComplexity), true
+	case "RestoreTarget.expiresAt":
+		if e.ComplexityRoot.RestoreTarget.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.ExpiresAt(childComplexity), true
+	case "RestoreTarget.id":
+		if e.ComplexityRoot.RestoreTarget.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.ID(childComplexity), true
+	case "RestoreTarget.insecureTransport":
+		if e.ComplexityRoot.RestoreTarget.InsecureTransport == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.InsecureTransport(childComplexity), true
+	case "RestoreTarget.name":
+		if e.ComplexityRoot.RestoreTarget.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.Name(childComplexity), true
+	case "RestoreTarget.newDatabaseAllowed":
+		if e.ComplexityRoot.RestoreTarget.NewDatabaseAllowed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.NewDatabaseAllowed(childComplexity), true
+	case "RestoreTarget.notReadyReason":
+		if e.ComplexityRoot.RestoreTarget.NotReadyReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.NotReadyReason(childComplexity), true
+	case "RestoreTarget.original":
+		if e.ComplexityRoot.RestoreTarget.Original == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.Original(childComplexity), true
+	case "RestoreTarget.ready":
+		if e.ComplexityRoot.RestoreTarget.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.Ready(childComplexity), true
+	case "RestoreTarget.temporary":
+		if e.ComplexityRoot.RestoreTarget.Temporary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.Temporary(childComplexity), true
+	case "RestoreTarget.versionKey":
+		if e.ComplexityRoot.RestoreTarget.VersionKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTarget.VersionKey(childComplexity), true
+
+	case "RestoreTargetDatabases.databases":
+		if e.ComplexityRoot.RestoreTargetDatabases.Databases == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetDatabases.Databases(childComplexity), true
+	case "RestoreTargetDatabases.listedAt":
+		if e.ComplexityRoot.RestoreTargetDatabases.ListedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetDatabases.ListedAt(childComplexity), true
+	case "RestoreTargetDatabases.target":
+		if e.ComplexityRoot.RestoreTargetDatabases.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetDatabases.Target(childComplexity), true
+	case "RestoreTargetDatabases.targetPrivileges":
+		if e.ComplexityRoot.RestoreTargetDatabases.TargetPrivileges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetDatabases.TargetPrivileges(childComplexity), true
+	case "RestoreTargetDatabases.warnings":
+		if e.ComplexityRoot.RestoreTargetDatabases.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetDatabases.Warnings(childComplexity), true
+
+	case "RestoreTargetRef.deleted":
+		if e.ComplexityRoot.RestoreTargetRef.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetRef.Deleted(childComplexity), true
+	case "RestoreTargetRef.engine":
+		if e.ComplexityRoot.RestoreTargetRef.Engine == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetRef.Engine(childComplexity), true
+	case "RestoreTargetRef.id":
+		if e.ComplexityRoot.RestoreTargetRef.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetRef.ID(childComplexity), true
+	case "RestoreTargetRef.name":
+		if e.ComplexityRoot.RestoreTargetRef.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetRef.Name(childComplexity), true
+	case "RestoreTargetRef.temporary":
+		if e.ComplexityRoot.RestoreTargetRef.Temporary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargetRef.Temporary(childComplexity), true
+
+	case "RestoreTargets.source":
+		if e.ComplexityRoot.RestoreTargets.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargets.Source(childComplexity), true
+	case "RestoreTargets.targets":
+		if e.ComplexityRoot.RestoreTargets.Targets == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreTargets.Targets(childComplexity), true
+
+	case "RestoreWarning.code":
+		if e.ComplexityRoot.RestoreWarning.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreWarning.Code(childComplexity), true
+	case "RestoreWarning.message":
+		if e.ComplexityRoot.RestoreWarning.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RestoreWarning.Message(childComplexity), true
 
 	case "Run.artifacts":
 		if e.ComplexityRoot.Run.Artifacts == nil {
@@ -4573,6 +5557,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.StepUpResult.StepUpAt(childComplexity), true
 
+	case "Subscription.restoreUpdated":
+		if e.ComplexityRoot.Subscription.RestoreUpdated == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_restoreUpdated_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.RestoreUpdated(childComplexity, args["restoreId"].(uuid.UUID)), true
 	case "Subscription.runLogAppended":
 		if e.ComplexityRoot.Subscription.RunLogAppended == nil {
 			break
@@ -4602,6 +5597,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Subscription.SessionEvents(childComplexity), true
 
+	case "TargetPrivileges.acknowledgementRequired":
+		if e.ComplexityRoot.TargetPrivileges.AcknowledgementRequired == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetPrivileges.AcknowledgementRequired(childComplexity), true
+	case "TargetPrivileges.reasons":
+		if e.ComplexityRoot.TargetPrivileges.Reasons == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetPrivileges.Reasons(childComplexity), true
+	case "TargetPrivileges.status":
+		if e.ComplexityRoot.TargetPrivileges.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TargetPrivileges.Status(childComplexity), true
+
 	case "TemporaryPassword.expiresAt":
 		if e.ComplexityRoot.TemporaryPassword.ExpiresAt == nil {
 			break
@@ -4614,6 +5628,281 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TemporaryPassword.Password(childComplexity), true
+
+	case "TestRestore.createdAt":
+		if e.ComplexityRoot.TestRestore.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.CreatedAt(childComplexity), true
+	case "TestRestore.databaseCount":
+		if e.ComplexityRoot.TestRestore.DatabaseCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.DatabaseCount(childComplexity), true
+	case "TestRestore.databases":
+		if e.ComplexityRoot.TestRestore.Databases == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Databases(childComplexity), true
+	case "TestRestore.durationSeconds":
+		if e.ComplexityRoot.TestRestore.DurationSeconds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.DurationSeconds(childComplexity), true
+	case "TestRestore.errorCode":
+		if e.ComplexityRoot.TestRestore.ErrorCode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.ErrorCode(childComplexity), true
+	case "TestRestore.errorMessage":
+		if e.ComplexityRoot.TestRestore.ErrorMessage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.ErrorMessage(childComplexity), true
+	case "TestRestore.failed":
+		if e.ComplexityRoot.TestRestore.Failed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Failed(childComplexity), true
+	case "TestRestore.finishedAt":
+		if e.ComplexityRoot.TestRestore.FinishedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.FinishedAt(childComplexity), true
+	case "TestRestore.id":
+		if e.ComplexityRoot.TestRestore.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.ID(childComplexity), true
+	case "TestRestore.job":
+		if e.ComplexityRoot.TestRestore.Job == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Job(childComplexity), true
+	case "TestRestore.passed":
+		if e.ComplexityRoot.TestRestore.Passed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Passed(childComplexity), true
+	case "TestRestore.requestedBy":
+		if e.ComplexityRoot.TestRestore.RequestedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.RequestedBy(childComplexity), true
+	case "TestRestore.runId":
+		if e.ComplexityRoot.TestRestore.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.RunID(childComplexity), true
+	case "TestRestore.scheduledFor":
+		if e.ComplexityRoot.TestRestore.ScheduledFor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.ScheduledFor(childComplexity), true
+	case "TestRestore.startedAt":
+		if e.ComplexityRoot.TestRestore.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.StartedAt(childComplexity), true
+	case "TestRestore.status":
+		if e.ComplexityRoot.TestRestore.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Status(childComplexity), true
+	case "TestRestore.target":
+		if e.ComplexityRoot.TestRestore.Target == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Target(childComplexity), true
+	case "TestRestore.trigger":
+		if e.ComplexityRoot.TestRestore.Trigger == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Trigger(childComplexity), true
+	case "TestRestore.warned":
+		if e.ComplexityRoot.TestRestore.Warned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestore.Warned(childComplexity), true
+
+	case "TestRestoreConnection.edges":
+		if e.ComplexityRoot.TestRestoreConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreConnection.Edges(childComplexity), true
+	case "TestRestoreConnection.pageInfo":
+		if e.ComplexityRoot.TestRestoreConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreConnection.PageInfo(childComplexity), true
+
+	case "TestRestoreDatabase.database":
+		if e.ComplexityRoot.TestRestoreDatabase.Database == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.Database(childComplexity), true
+	case "TestRestoreDatabase.errorCode":
+		if e.ComplexityRoot.TestRestoreDatabase.ErrorCode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.ErrorCode(childComplexity), true
+	case "TestRestoreDatabase.errorMessage":
+		if e.ComplexityRoot.TestRestoreDatabase.ErrorMessage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.ErrorMessage(childComplexity), true
+	case "TestRestoreDatabase.exactTables":
+		if e.ComplexityRoot.TestRestoreDatabase.ExactTables == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.ExactTables(childComplexity), true
+	case "TestRestoreDatabase.findings":
+		if e.ComplexityRoot.TestRestoreDatabase.Findings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.Findings(childComplexity), true
+	case "TestRestoreDatabase.findingsTotal":
+		if e.ComplexityRoot.TestRestoreDatabase.FindingsTotal == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.FindingsTotal(childComplexity), true
+	case "TestRestoreDatabase.finishedAt":
+		if e.ComplexityRoot.TestRestoreDatabase.FinishedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.FinishedAt(childComplexity), true
+	case "TestRestoreDatabase.id":
+		if e.ComplexityRoot.TestRestoreDatabase.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.ID(childComplexity), true
+	case "TestRestoreDatabase.restoreErrorCode":
+		if e.ComplexityRoot.TestRestoreDatabase.RestoreErrorCode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.RestoreErrorCode(childComplexity), true
+	case "TestRestoreDatabase.restoreId":
+		if e.ComplexityRoot.TestRestoreDatabase.RestoreID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.RestoreID(childComplexity), true
+	case "TestRestoreDatabase.restoreStatus":
+		if e.ComplexityRoot.TestRestoreDatabase.RestoreStatus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.RestoreStatus(childComplexity), true
+	case "TestRestoreDatabase.runItemId":
+		if e.ComplexityRoot.TestRestoreDatabase.RunItemID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.RunItemID(childComplexity), true
+	case "TestRestoreDatabase.scratchDropped":
+		if e.ComplexityRoot.TestRestoreDatabase.ScratchDropped == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.ScratchDropped(childComplexity), true
+	case "TestRestoreDatabase.startedAt":
+		if e.ComplexityRoot.TestRestoreDatabase.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.StartedAt(childComplexity), true
+	case "TestRestoreDatabase.status":
+		if e.ComplexityRoot.TestRestoreDatabase.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.Status(childComplexity), true
+	case "TestRestoreDatabase.tablesCompared":
+		if e.ComplexityRoot.TestRestoreDatabase.TablesCompared == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreDatabase.TablesCompared(childComplexity), true
+
+	case "TestRestoreEdge.cursor":
+		if e.ComplexityRoot.TestRestoreEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreEdge.Cursor(childComplexity), true
+	case "TestRestoreEdge.node":
+		if e.ComplexityRoot.TestRestoreEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreEdge.Node(childComplexity), true
+
+	case "TestRestoreFinding.code":
+		if e.ComplexityRoot.TestRestoreFinding.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Code(childComplexity), true
+	case "TestRestoreFinding.delta":
+		if e.ComplexityRoot.TestRestoreFinding.Delta == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Delta(childComplexity), true
+	case "TestRestoreFinding.object":
+		if e.ComplexityRoot.TestRestoreFinding.Object == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Object(childComplexity), true
+	case "TestRestoreFinding.restored":
+		if e.ComplexityRoot.TestRestoreFinding.Restored == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Restored(childComplexity), true
+	case "TestRestoreFinding.severity":
+		if e.ComplexityRoot.TestRestoreFinding.Severity == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Severity(childComplexity), true
+	case "TestRestoreFinding.source":
+		if e.ComplexityRoot.TestRestoreFinding.Source == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TestRestoreFinding.Source(childComplexity), true
 
 	case "TotpEnrollment.expiresAt":
 		if e.ComplexityRoot.TotpEnrollment.ExpiresAt == nil {
@@ -4836,11 +6125,17 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			graphql.NewInputUnmarshaler("CreateConnectionInput", ec.unmarshalInputCreateConnectionInput),
 			graphql.NewInputUnmarshaler("CreateDestinationInput", ec.unmarshalInputCreateDestinationInput),
 			graphql.NewInputUnmarshaler("CreateJobInput", ec.unmarshalInputCreateJobInput),
+			graphql.NewInputUnmarshaler("CreateTemporaryConnectionInput", ec.unmarshalInputCreateTemporaryConnectionInput),
 			graphql.NewInputUnmarshaler("CreateUserInput", ec.unmarshalInputCreateUserInput),
 			graphql.NewInputUnmarshaler("DiskDestinationInput", ec.unmarshalInputDiskDestinationInput),
 			graphql.NewInputUnmarshaler("JobEncryptionInput", ec.unmarshalInputJobEncryptionInput),
 			graphql.NewInputUnmarshaler("JobFilter", ec.unmarshalInputJobFilter),
 			graphql.NewInputUnmarshaler("JobRetentionInput", ec.unmarshalInputJobRetentionInput),
+			graphql.NewInputUnmarshaler("JobTestRestoreInput", ec.unmarshalInputJobTestRestoreInput),
+			graphql.NewInputUnmarshaler("RestoreArtifactInput", ec.unmarshalInputRestoreArtifactInput),
+			graphql.NewInputUnmarshaler("RestoreFilter", ec.unmarshalInputRestoreFilter),
+			graphql.NewInputUnmarshaler("RestoreGlobalsInput", ec.unmarshalInputRestoreGlobalsInput),
+			graphql.NewInputUnmarshaler("RestorePreviewInput", ec.unmarshalInputRestorePreviewInput),
 			graphql.NewInputUnmarshaler("RunFilter", ec.unmarshalInputRunFilter),
 			graphql.NewInputUnmarshaler("S3DestinationInput", ec.unmarshalInputS3DestinationInput),
 			graphql.NewInputUnmarshaler("ScheduleInput", ec.unmarshalInputScheduleInput),
@@ -5277,6 +6572,14 @@ type Connection {
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
   settings: ConnectionSettings
+  """
+  A temporary restore connection (task 4.4): admin only, usable only as a
+  restore target, deleted with its credentials destroyed at expiresAt or
+  once the restores that used it have finished.
+  """
+  temporary: Boolean!
+  "When a temporary connection expires; null for permanent connections."
+  expiresAt: Time
 }
 
 type ConnectionSettings {
@@ -5345,6 +6648,40 @@ type ConnectionTestResult {
   "Stable warning codes (compatibility, certificate expiry, staged pin in use)."
   warnings: [String!]!
   databaseCount: Int!
+  """
+  Whether the connection's role is privileged for restores (D-068); null
+  when the test failed before the check.
+  """
+  privileges: TargetPrivileges
+}
+
+"How privileged a connection's role is (D-068): SQL in a restored dump runs with its rights."
+enum TargetPrivilegeStatus {
+  "No privilege enabling host access or privilege escalation was found."
+  NOT_PRIVILEGED
+  """
+  Superuser or similar (PostgreSQL: SUPERUSER, CREATEROLE, REPLICATION,
+  BYPASSRLS, server file/program roles; MySQL/MariaDB: SUPER, FILE,
+  PROCESS, CREATE USER, global GRANT OPTION, admin privileges, writes to
+  the mysql schema).
+  """
+  PRIVILEGED
+  "Could not be determined completely (e.g. MySQL/MariaDB roles granted); treated as privileged."
+  UNKNOWN
+}
+
+"The privilege verdict on a connection's role (D-068)."
+type TargetPrivileges {
+  status: TargetPrivilegeStatus!
+  """
+  Stable reason codes, e.g. superuser, createrole,
+  member_of:pg_execute_server_program, member_of_role_with:superuser,
+  global:FILE, global:ALL PRIVILEGES, proxy, system_schema_write,
+  roles_granted, detection_failed.
+  """
+  reasons: [String!]!
+  "Restores into this connection need an admin and acknowledgePrivilegedTarget (PRIVILEGED or UNKNOWN)."
+  acknowledgementRequired: Boolean!
 }
 
 type ConnectionVersionInfo {
@@ -5410,6 +6747,12 @@ extend type Query {
 
   "One connection; null when it does not exist or was deleted."
   connection(id: UUID!): Connection @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  The unexpired temporary restore connections, newest first (at most 200;
+  the restore wizard). They never appear in connections or connection.
+  """
+  temporaryConnections: [Connection!]! @hasRole(roles: [ADMIN])
 
   "The allowlisted engine versions (image catalog) for versionKey and imageKey."
   engineVersions(engine: DatabaseEngine): [EngineVersion!]! @hasRole(roles: [ADMIN, MAINTAINER])
@@ -5494,6 +6837,26 @@ extend type Mutation {
   public key.
   """
   generateConnectionSshKeypair(id: UUID!): ConnectionSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Creates a temporary restore connection inside the restore wizard (task
+  4.4). It is validated like createConnection (TLS PINNED unless set
+  otherwise, an audited opt-out; D-132) and expires
+  restore.temp_connection_ttl from now. Pin its certificate / SSH host key
+  with the usual mutations, then use it as a restore target; it never
+  appears in connections and jobs cannot use it. At most 50 exist at a
+  time (CONFLICT). Must be the only field of its operation.
+  """
+  createTemporaryConnection(input: CreateTemporaryConnectionInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Moves the expiry of a temporary connection; at most
+  restore.temp_connection_max_ttl after its creation (VALIDATION).
+  """
+  extendTemporaryConnection(id: UUID!, expiresAt: Time!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Deletes a temporary connection now; its stored credentials are destroyed."
+  deleteTemporaryConnection(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
 }
 
 input CreateConnectionInput {
@@ -5549,6 +6912,31 @@ input UpdateConnectionInput {
   maxConcurrentRuns: Int
   "Returns to the global workers.max_runs_per_connection."
   clearMaxConcurrentRuns: Boolean
+}
+
+"""
+A temporary restore connection: the fields of CreateConnectionInput without
+the run limit (the global default applies).
+"""
+input CreateTemporaryConnectionInput {
+  "Default: \"Temporary: <host>\". Names of temporary connections may repeat."
+  name: String
+  engine: DatabaseEngine!
+  versionKey: String!
+  "Default: versionKey."
+  imageKey: String
+  host: String!
+  "Default: 5432 (PostgreSQL) or 3306."
+  port: Int
+  username: String!
+  "Write-only."
+  password: String
+  "Default PINNED; anything else is an audited opt-out."
+  tlsMode: ConnectionTlsMode
+  clientCertificatePem: String
+  "Write-only; required together with clientCertificatePem."
+  clientKeyPem: String
+  ssh: ConnectionSshInput
 }
 
 input ConnectionSshInput {
@@ -6345,6 +7733,356 @@ extend type Mutation {
   exportJobPassphrases(jobId: UUID!): JobPassphraseExport! @hasRole(roles: [ADMIN]) @stepUp
 }
 `, BuiltIn: false},
+	{Name: "../schema/restore.graphqls", Input: `# Restores (task 4.5, D-167). Admins and maintainers restore into any
+# connection with the backup's engine (admins also into temporary restore
+# connections); backup owners only into the databases their own jobs back
+# up, or into a new database on the connections their jobs use. Every
+# restore needs a fresh passkey (with user verification) or authenticator
+# code check (≤ 5 minutes, also with a password step-up done); accounts
+# without a second factor get REQUIRES_2FA_ENROLLMENT. Overwrites are
+# confirmed by typing the database name, globals restores by a phrase.
+# Error texts are fixed, sanitized messages chosen by bekup. Restores into
+# a connection whose role is privileged (or unknown) need an admin and an
+# explicit acknowledgement (task 4.8, D-068).
+
+"How a restore writes its target database."
+enum RestoreMode {
+  "Create a new database and restore into it (fails when it exists)."
+  NEW_DB
+  """
+  Replace an existing database. PostgreSQL: restored into a temporary
+  database and swapped in by renaming; MySQL/MariaDB: dropped and restored
+  in place (see the preview warnings).
+  """
+  OVERWRITE
+}
+
+"Status of a restore."
+enum RestoreStatus {
+  "Waiting for a worker or a concurrency slot."
+  QUEUED
+  "Downloading the backup to the scratch volume."
+  STAGING
+  "Checking the staged backup against its record and signed manifest."
+  VERIFYING
+  "Streaming the verified dump into the target."
+  RESTORING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+"The connection a restore writes to (non-secret identity only)."
+type RestoreTargetRef {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  temporary: Boolean!
+  deleted: Boolean!
+}
+
+"A warning recorded by a restore (stable code and fixed text)."
+type RestoreOutcomeWarning {
+  code: String!
+  message: String!
+}
+
+"A restore of a backup artifact."
+type Restore {
+  id: UUID!
+  job: RunJobRef!
+  artifactId: UUID!
+  runId: UUID!
+  "DATABASE or GLOBALS."
+  kind: RunItemKind!
+  "The backed-up database (null for globals)."
+  sourceDatabase: String
+  target: RestoreTargetRef!
+  "The database written (null for globals)."
+  targetDatabase: String
+  "Null for globals restores."
+  mode: RestoreMode
+  "PostgreSQL: object owners restored (pg_restore without --no-owner)."
+  keepOwners: Boolean!
+  status: RestoreStatus!
+  "The user who requested it; admins and maintainers only (null for backup owners)."
+  requestedBy: RunActor
+  createdAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  durationSeconds: Float
+  "Bytes of the verified local copy."
+  stagedBytes: Float!
+  errorCode: String
+  errorMessage: String
+  warnings: [RestoreOutcomeWarning!]!
+  logLines: Int!
+  logLinesDropped: Int!
+  updatedAt: Time!
+}
+
+"A page of restores."
+type RestoreConnection {
+  edges: [RestoreEdge!]!
+  pageInfo: PageInfo!
+}
+
+type RestoreEdge {
+  cursor: String!
+  node: Restore!
+}
+
+"Filters for restores; unset fields do not filter."
+input RestoreFilter {
+  jobId: UUID
+  artifactId: UUID
+  targetConnectionId: UUID
+  status: RestoreStatus
+}
+
+"A page of restore log lines in order (redacted and sanitized when written)."
+type RestoreLogPage {
+  restoreId: UUID!
+  lines: [RunLogLine!]!
+  "The id of the last line (the afterId for the next page); afterId when there are no lines."
+  endId: ID
+  hasMore: Boolean!
+  "Lines dropped because the restore exceeded the log caps."
+  dropped: Int!
+}
+
+"Where an artifact came from (verified against its signed manifest)."
+type RestoreSource {
+  artifactId: UUID!
+  jobId: UUID!
+  runId: UUID!
+  kind: RunItemKind!
+  database: String
+  engine: DatabaseEngine!
+  "Catalog key of the backed-up server's release series."
+  versionKey: String!
+  serverVersion: String!
+  "The restore needs the job's age identity (recipient-encrypted backup)."
+  needsIdentity: Boolean!
+}
+
+"A connection the caller may restore an artifact to."
+type RestoreTarget {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  versionKey: String!
+  "The connection the artifact's job backs up."
+  original: Boolean!
+  "A temporary restore connection (admins only)."
+  temporary: Boolean!
+  expiresAt: Time
+  ready: Boolean!
+  notReadyReason: String
+  insecureTransport: Boolean!
+  "A new database may be created (database backups)."
+  newDatabaseAllowed: Boolean!
+  "Only the databases your own jobs back up may be overwritten (backup owners)."
+  existingRestricted: Boolean!
+}
+
+"The connections an artifact may be restored to."
+type RestoreTargets {
+  source: RestoreSource!
+  targets: [RestoreTarget!]!
+}
+
+"The existing databases of one restore target the caller may overwrite."
+type RestoreTargetDatabases {
+  target: RestoreTarget!
+  """
+  Existing databases (backup owners: only those their jobs back up),
+  without bekup's temporary restore databases.
+  """
+  databases: [String!]!
+  "The runner's warning codes."
+  warnings: [String!]!
+  "The privilege verdict on the target connection's role (read with the list)."
+  targetPrivileges: TargetPrivileges!
+  "When the list was read from the server (it is cached for 30 seconds)."
+  listedAt: Time!
+}
+
+"Something to know before a restore (stable code, fixed text)."
+type RestoreWarning {
+  code: String!
+  message: String!
+}
+
+"The checked restore request: what will happen, the warnings and the confirmation text."
+type RestorePreview {
+  source: RestoreSource!
+  target: RestoreTarget!
+  "Null for globals restores."
+  mode: RestoreMode
+  "Null for globals restores."
+  targetDatabase: String
+  warnings: [RestoreWarning!]!
+  """
+  What must be typed to confirm: the database name for OVERWRITE
+  (confirmTargetName), the phrase for a globals restore (confirmPhrase);
+  null when no confirmation is needed.
+  """
+  confirmText: String
+  """
+  The privilege verdict on the target connection's role (D-068; read
+  through the runner, cached for 30 seconds; the request checks again).
+  When acknowledgementRequired, only admins may restore, with
+  acknowledgePrivilegedTarget.
+  """
+  targetPrivileges: TargetPrivileges!
+  "The target is not the connection the backup was taken from (also recorded in the audit entry)."
+  crossSource: Boolean!
+}
+
+"A database restore request."
+input RestoreArtifactInput {
+  "A DATABASE artifact (present, verified, covered by a signed manifest)."
+  artifactId: UUID!
+  targetConnectionId: UUID!
+  mode: RestoreMode!
+  "The database to create (NEW_DB) or replace (OVERWRITE)."
+  targetDatabase: String!
+  "OVERWRITE: must equal targetDatabase exactly."
+  confirmTargetName: String
+  "PostgreSQL only: restore the object owners (default: objects belong to the target connection's role)."
+  keepOwners: Boolean
+  """
+  The job's age identity (AGE-SECRET-KEY-1...) for recipient-encrypted
+  backups only. It is stored sealed until the restore starts and never
+  logged, audited or returned.
+  """
+  ageIdentity: String
+  """
+  Required (admins only) when the target connection's role is privileged
+  or its privileges are unknown (D-068): SQL in the backup runs with that
+  role's rights. Audited and raised as a security alert.
+  """
+  acknowledgePrivilegedTarget: Boolean
+}
+
+"A restore request to check (restorePreview)."
+input RestorePreviewInput {
+  artifactId: UUID!
+  targetConnectionId: UUID!
+  "Required for DATABASE artifacts, not allowed for GLOBALS."
+  mode: RestoreMode
+  "Required for DATABASE artifacts, not allowed for GLOBALS."
+  targetDatabase: String
+  keepOwners: Boolean
+}
+
+"A PostgreSQL globals restore request (admins only)."
+input RestoreGlobalsInput {
+  "A GLOBALS artifact."
+  artifactId: UUID!
+  "A PostgreSQL connection."
+  targetConnectionId: UUID!
+  "Must equal the preview's confirmText: ` + "`" + `restore globals into <connection name>` + "`" + `."
+  confirmPhrase: String!
+  "Required when the target connection's role is privileged or unknown (D-068; usually the case for globals)."
+  acknowledgePrivilegedTarget: Boolean
+}
+
+"An accepted cancelRestore."
+type RestoreCancellation {
+  restoreId: UUID!
+  jobId: UUID!
+  """
+  CANCELED when the restore had not started; otherwise its current status
+  until its worker stops it (it then ends as CANCELED).
+  """
+  status: RestoreStatus!
+  requestedAt: Time!
+}
+
+extend type Query {
+  """
+  The connections an artifact may be restored to (same engine as the
+  backup; backup owners: the connections their jobs back up; admins also
+  see temporary restore connections). Globals backups: admins only.
+  """
+  restoreTargets(artifactId: UUID!): RestoreTargets! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The existing databases of one restore target, read through the runner
+  (cached for 30 seconds; one runner call per request, so it must be the
+  only field of its operation).
+  """
+  restoreTargetDatabases(artifactId: UUID!, targetConnectionId: UUID!): RestoreTargetDatabases! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Checks a restore request without running it (target rules, engine,
+  names; no second-factor check) and returns the warnings to show, the
+  target role's privilege verdict and the text to type for the
+  confirmation. It reads the target through the runner (cached for 30
+  seconds), so it must be the only field of its operation.
+  """
+  restorePreview(input: RestorePreviewInput!): RestorePreview! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Restores, newest first; backup owners see the restores of their own
+  jobs only. ` + "`" + `first` + "`" + ` is 1..200 (default 50).
+  """
+  restores(filter: RestoreFilter, first: Int, after: String): RestoreConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One restore; null when it does not exist (admins and maintainers).
+  Backup owners get FORBIDDEN for other jobs' restores and unknown ids.
+  """
+  restore(id: UUID!): Restore @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The log of a restore after ` + "`" + `afterId` + "`" + ` (default: from the start); ` + "`" + `first` + "`" + `
+  is 1..1000 (default 200). Same access as ` + "`" + `restore` + "`" + `.
+  """
+  restoreLogs(restoreId: UUID!, afterId: ID, first: Int): RestoreLogPage @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Queues a database restore (audited). Requires a passkey (with user
+  verification) or authenticator code check within the last 5 minutes;
+  STEP_UP_REQUIRED otherwise, REQUIRES_2FA_ENROLLMENT without a second
+  factor. Must be the only field of its operation (it may carry an age
+  identity). Show the restorePreview warnings first. A target whose role
+  is privileged or unknown (restorePreview.targetPrivileges) needs an
+  admin and acknowledgePrivilegedTarget: FORBIDDEN for others, VALIDATION
+  without the acknowledgement.
+  """
+  restoreArtifact(input: RestoreArtifactInput!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Queues a PostgreSQL globals restore (roles, tablespaces) into a
+  connection: admins only, fresh second factor, the exact confirmation
+  phrase. It changes existing roles that are in the backup, including
+  their passwords. A privileged or unknown target role (as usual for
+  globals) also needs acknowledgePrivilegedTarget.
+  """
+  restoreGlobals(input: RestoreGlobalsInput!): Restore! @hasRole(roles: [ADMIN])
+
+  """
+  Cancels a queued or running restore (admins and maintainers; audited).
+  CONFLICT when it already finished.
+  """
+  cancelRestore(id: UUID!): RestoreCancellation! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Subscription {
+  """
+  Live changes of one restore (status, progress, log counts): each event
+  is the restore re-loaded and authorized again when it is delivered, so
+  a caller who loses access stops receiving events. The stream completes
+  after the restore finished. Same access as ` + "`" + `restore` + "`" + `.
+  """
+  restoreUpdated(restoreId: UUID!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+`, BuiltIn: false},
 	{Name: "../schema/runs.graphqls", Input: `# Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
 # see every run; backup owners see the runs and artifacts of the jobs they
 # own only (listings are filtered, single objects of other jobs answer
@@ -6841,6 +8579,205 @@ type SessionEvent {
   sessionId: UUID
   "True when the change concerns the session of this stream."
   current: Boolean!
+}
+`, BuiltIn: false},
+	{Name: "../schema/testrestore.graphqls", Input: `# Scheduled test restores (task 4.6). A job may designate a scratch target
+# connection (permanent, the job's engine): bekup regularly restores the
+# job's newest verified backup into a new database bekup_test_<id> there,
+# compares it with the backup's source statistics (object counts exactly;
+# PostgreSQL row counts exactly; MySQL/MariaDB row counts are estimates
+# and only warn) and always drops the scratch database again. Changing the
+# settings needs an admin or maintainer with a fresh passkey or
+# authenticator check (the scratch target receives a copy of the job's
+# data); backup owners see the settings and results of their jobs.
+# Designating a target probes its role (D-068, D-170): a privileged or
+# unknown role needs an admin and acknowledgePrivilegedTarget, and the
+# worker re-probes the target before every test restore.
+
+"The test-restore settings of a job."
+type JobTestRestore {
+  "Scheduled test restores are on."
+  enabled: Boolean!
+  "When test restores run (MANUAL: only runTestRestoreNow)."
+  schedule: Schedule!
+  scheduleDescription: String!
+  "The scratch connection (null: none designated)."
+  target: JobConnectionRef
+  "The next scheduled test restore (null: disabled or manual)."
+  nextAt: Time
+  """
+  The verdict on the target's role when it was designated (null: no
+  target). A target designated before this check is UNKNOWN.
+  """
+  targetPrivileges: TargetPrivileges
+  """
+  When an admin acknowledged the privileged or unknown target role (null:
+  none). Test restores refuse to run (errorCode privileged_target) when
+  the role is gated and its current reasons are not all covered by this
+  acknowledgement.
+  """
+  privilegedTargetAcknowledgedAt: Time
+}
+
+extend type Job {
+  "Scheduled test-restore settings (task 4.6)."
+  testRestore: JobTestRestore!
+}
+
+"Status of a test restore (or of one of its databases)."
+enum TestRestoreStatus {
+  "Waiting for a worker or a concurrency slot."
+  QUEUED
+  RUNNING
+  "Every database matched its source statistics."
+  PASSED
+  "No mismatch that proves data loss, but differences worth a look (estimates, unknown counts, source warnings)."
+  WARNINGS
+  "At least one database misses objects, tables or rows."
+  FAILED
+  "A database could not be restored or checked (see errorCode)."
+  ERROR
+  CANCELED
+}
+
+"Why a test restore ran."
+enum TestRestoreTrigger {
+  SCHEDULE
+  MANUAL
+}
+
+"One difference between a backup's source statistics and its restored copy (names and counts only)."
+type TestRestoreFinding {
+  "WARN or FAIL."
+  severity: String!
+  """
+  Stable code: object_count_mismatch, table_missing, table_unexpected,
+  row_count_mismatch, row_count_delta, row_count_unknown,
+  tables_total_mismatch, tables_truncated, source_stats_missing,
+  source_stats_invalid, source_warnings, scratch_stats_invalid.
+  """
+  code: String!
+  "The object kind, the table (schema.table, percent-encoded as recorded) or the source warning codes."
+  object: String
+  source: Float
+  restored: Float
+  "restored - source."
+  delta: Float
+}
+
+"One restored database of a test restore."
+type TestRestoreDatabase {
+  id: UUID!
+  runItemId: UUID!
+  "The backed-up database."
+  database: String!
+  "The internal restore into the scratch database (null when it could not be created)."
+  restoreId: UUID
+  status: TestRestoreStatus!
+  errorCode: String
+  errorMessage: String
+  "The scratch database was dropped (false: dropping failed and is retried)."
+  scratchDropped: Boolean!
+  "Findings, at most 200 (findingsTotal counts all)."
+  findings: [TestRestoreFinding!]!
+  findingsTotal: Int!
+  "Tables present on both sides, and of those the ones compared exactly."
+  tablesCompared: Int!
+  exactTables: Int!
+  "The internal restore's status and error code when it did not succeed."
+  restoreStatus: String
+  restoreErrorCode: String
+  startedAt: Time!
+  finishedAt: Time
+}
+
+"A test restore of a job's backup."
+type TestRestore {
+  id: UUID!
+  job: RunJobRef!
+  "The run tested (null until it started, or when no backup qualified)."
+  runId: UUID
+  target: RestoreTargetRef!
+  trigger: TestRestoreTrigger!
+  status: TestRestoreStatus!
+  "Who requested it (runTestRestoreNow); admins and maintainers only."
+  requestedBy: RunActor
+  scheduledFor: Time
+  createdAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  durationSeconds: Float
+  errorCode: String
+  errorMessage: String
+  databaseCount: Int!
+  passed: Int!
+  warned: Int!
+  failed: Int!
+  "The restored databases (testRestore only; empty in listings)."
+  databases: [TestRestoreDatabase!]!
+}
+
+"A page of test restores."
+type TestRestoreConnection {
+  edges: [TestRestoreEdge!]!
+  pageInfo: PageInfo!
+}
+
+type TestRestoreEdge {
+  cursor: String!
+  node: TestRestore!
+}
+
+"New test-restore settings of a job."
+input JobTestRestoreInput {
+  enabled: Boolean!
+  "Default: the current schedule (weekly, Sunday 04:00 UTC, when never set)."
+  schedule: ScheduleInput
+  """
+  A permanent connection with the job's engine; required while enabled.
+  bekup only ever creates and drops bekup_test_<id> databases on it.
+  """
+  targetConnectionId: UUID
+  """
+  Required (admins only) when the target's role is privileged or its
+  privileges are unknown: SQL in the tested backups runs with its rights
+  (D-068).
+  """
+  acknowledgePrivilegedTarget: Boolean
+}
+
+extend type Query {
+  """
+  A job's test restores, newest first; ` + "`" + `first` + "`" + ` is 1..200 (default 50).
+  Backup owners see their own jobs' test restores only.
+  """
+  testRestores(jobId: UUID!, first: Int, after: String): TestRestoreConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One test restore with its databases and comparison findings; null when
+  it does not exist (admins and maintainers). Backup owners get FORBIDDEN
+  for other jobs' test restores and unknown ids.
+  """
+  testRestore(id: UUID!): TestRestore @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Changes a job's test-restore settings (audited). Requires a passkey
+  (with user verification) or authenticator code check within the last 5
+  minutes: the scratch target receives a copy of the job's data. The
+  target's role is probed: when it is privileged or unknown, only admins
+  may designate it (FORBIDDEN for maintainers), with
+  acknowledgePrivilegedTarget (VALIDATION without it); audited and
+  alerted.
+  """
+  setJobTestRestore(jobId: UUID!, input: JobTestRestoreInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Queues a test restore of the job's newest verified backup now (audited).
+  The job needs a scratch target; CONFLICT while one is queued or running.
+  """
+  runTestRestoreNow(jobId: UUID!): TestRestore! @hasRole(roles: [ADMIN, MAINTAINER])
 }
 `, BuiltIn: false},
 	{Name: "../schema/totp.graphqls", Input: `# TOTP and recovery codes (task 1.7; D-111). Changing second factors needs
@@ -7595,6 +9532,10 @@ func (ec *executionContext) childFields_Connection(ctx context.Context, field gr
 		return ec.fieldContext_Connection_updatedAt(ctx, field)
 	case "settings":
 		return ec.fieldContext_Connection_settings(ctx, field)
+	case "temporary":
+		return ec.fieldContext_Connection_temporary(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_Connection_expiresAt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Connection", field.Name)
 }
@@ -7685,6 +9626,8 @@ func (ec *executionContext) childFields_ConnectionTestResult(ctx context.Context
 		return ec.fieldContext_ConnectionTestResult_warnings(ctx, field)
 	case "databaseCount":
 		return ec.fieldContext_ConnectionTestResult_databaseCount(ctx, field)
+	case "privileges":
+		return ec.fieldContext_ConnectionTestResult_privileges(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ConnectionTestResult", field.Name)
 }
@@ -7943,6 +9886,8 @@ func (ec *executionContext) childFields_Job(ctx context.Context, field graphql.C
 		return ec.fieldContext_Job_lastRun(ctx, field)
 	case "recentRuns":
 		return ec.fieldContext_Job_recentRuns(ctx, field)
+	case "testRestore":
+		return ec.fieldContext_Job_testRestore(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Job", field.Name)
 }
@@ -8089,6 +10034,26 @@ func (ec *executionContext) childFields_JobRetention(ctx context.Context, field 
 	return nil, fmt.Errorf("no field named %q was found under type JobRetention", field.Name)
 }
 
+func (ec *executionContext) childFields_JobTestRestore(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "enabled":
+		return ec.fieldContext_JobTestRestore_enabled(ctx, field)
+	case "schedule":
+		return ec.fieldContext_JobTestRestore_schedule(ctx, field)
+	case "scheduleDescription":
+		return ec.fieldContext_JobTestRestore_scheduleDescription(ctx, field)
+	case "target":
+		return ec.fieldContext_JobTestRestore_target(ctx, field)
+	case "nextAt":
+		return ec.fieldContext_JobTestRestore_nextAt(ctx, field)
+	case "targetPrivileges":
+		return ec.fieldContext_JobTestRestore_targetPrivileges(ctx, field)
+	case "privilegedTargetAcknowledgedAt":
+		return ec.fieldContext_JobTestRestore_privilegedTargetAcknowledgedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type JobTestRestore", field.Name)
+}
+
 func (ec *executionContext) childFields_LoginResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "user":
@@ -8151,6 +10116,246 @@ func (ec *executionContext) childFields_RecoveryCodes(ctx context.Context, field
 		return ec.fieldContext_RecoveryCodes_codes(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RecoveryCodes", field.Name)
+}
+
+func (ec *executionContext) childFields_Restore(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_Restore_id(ctx, field)
+	case "job":
+		return ec.fieldContext_Restore_job(ctx, field)
+	case "artifactId":
+		return ec.fieldContext_Restore_artifactId(ctx, field)
+	case "runId":
+		return ec.fieldContext_Restore_runId(ctx, field)
+	case "kind":
+		return ec.fieldContext_Restore_kind(ctx, field)
+	case "sourceDatabase":
+		return ec.fieldContext_Restore_sourceDatabase(ctx, field)
+	case "target":
+		return ec.fieldContext_Restore_target(ctx, field)
+	case "targetDatabase":
+		return ec.fieldContext_Restore_targetDatabase(ctx, field)
+	case "mode":
+		return ec.fieldContext_Restore_mode(ctx, field)
+	case "keepOwners":
+		return ec.fieldContext_Restore_keepOwners(ctx, field)
+	case "status":
+		return ec.fieldContext_Restore_status(ctx, field)
+	case "requestedBy":
+		return ec.fieldContext_Restore_requestedBy(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_Restore_createdAt(ctx, field)
+	case "startedAt":
+		return ec.fieldContext_Restore_startedAt(ctx, field)
+	case "finishedAt":
+		return ec.fieldContext_Restore_finishedAt(ctx, field)
+	case "durationSeconds":
+		return ec.fieldContext_Restore_durationSeconds(ctx, field)
+	case "stagedBytes":
+		return ec.fieldContext_Restore_stagedBytes(ctx, field)
+	case "errorCode":
+		return ec.fieldContext_Restore_errorCode(ctx, field)
+	case "errorMessage":
+		return ec.fieldContext_Restore_errorMessage(ctx, field)
+	case "warnings":
+		return ec.fieldContext_Restore_warnings(ctx, field)
+	case "logLines":
+		return ec.fieldContext_Restore_logLines(ctx, field)
+	case "logLinesDropped":
+		return ec.fieldContext_Restore_logLinesDropped(ctx, field)
+	case "updatedAt":
+		return ec.fieldContext_Restore_updatedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type Restore", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreCancellation(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "restoreId":
+		return ec.fieldContext_RestoreCancellation_restoreId(ctx, field)
+	case "jobId":
+		return ec.fieldContext_RestoreCancellation_jobId(ctx, field)
+	case "status":
+		return ec.fieldContext_RestoreCancellation_status(ctx, field)
+	case "requestedAt":
+		return ec.fieldContext_RestoreCancellation_requestedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreCancellation", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "edges":
+		return ec.fieldContext_RestoreConnection_edges(ctx, field)
+	case "pageInfo":
+		return ec.fieldContext_RestoreConnection_pageInfo(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreConnection", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreEdge(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "cursor":
+		return ec.fieldContext_RestoreEdge_cursor(ctx, field)
+	case "node":
+		return ec.fieldContext_RestoreEdge_node(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreEdge", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreLogPage(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "restoreId":
+		return ec.fieldContext_RestoreLogPage_restoreId(ctx, field)
+	case "lines":
+		return ec.fieldContext_RestoreLogPage_lines(ctx, field)
+	case "endId":
+		return ec.fieldContext_RestoreLogPage_endId(ctx, field)
+	case "hasMore":
+		return ec.fieldContext_RestoreLogPage_hasMore(ctx, field)
+	case "dropped":
+		return ec.fieldContext_RestoreLogPage_dropped(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreLogPage", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreOutcomeWarning(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "code":
+		return ec.fieldContext_RestoreOutcomeWarning_code(ctx, field)
+	case "message":
+		return ec.fieldContext_RestoreOutcomeWarning_message(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreOutcomeWarning", field.Name)
+}
+
+func (ec *executionContext) childFields_RestorePreview(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "source":
+		return ec.fieldContext_RestorePreview_source(ctx, field)
+	case "target":
+		return ec.fieldContext_RestorePreview_target(ctx, field)
+	case "mode":
+		return ec.fieldContext_RestorePreview_mode(ctx, field)
+	case "targetDatabase":
+		return ec.fieldContext_RestorePreview_targetDatabase(ctx, field)
+	case "warnings":
+		return ec.fieldContext_RestorePreview_warnings(ctx, field)
+	case "confirmText":
+		return ec.fieldContext_RestorePreview_confirmText(ctx, field)
+	case "targetPrivileges":
+		return ec.fieldContext_RestorePreview_targetPrivileges(ctx, field)
+	case "crossSource":
+		return ec.fieldContext_RestorePreview_crossSource(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestorePreview", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreSource(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "artifactId":
+		return ec.fieldContext_RestoreSource_artifactId(ctx, field)
+	case "jobId":
+		return ec.fieldContext_RestoreSource_jobId(ctx, field)
+	case "runId":
+		return ec.fieldContext_RestoreSource_runId(ctx, field)
+	case "kind":
+		return ec.fieldContext_RestoreSource_kind(ctx, field)
+	case "database":
+		return ec.fieldContext_RestoreSource_database(ctx, field)
+	case "engine":
+		return ec.fieldContext_RestoreSource_engine(ctx, field)
+	case "versionKey":
+		return ec.fieldContext_RestoreSource_versionKey(ctx, field)
+	case "serverVersion":
+		return ec.fieldContext_RestoreSource_serverVersion(ctx, field)
+	case "needsIdentity":
+		return ec.fieldContext_RestoreSource_needsIdentity(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreSource", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreTarget(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_RestoreTarget_id(ctx, field)
+	case "name":
+		return ec.fieldContext_RestoreTarget_name(ctx, field)
+	case "engine":
+		return ec.fieldContext_RestoreTarget_engine(ctx, field)
+	case "versionKey":
+		return ec.fieldContext_RestoreTarget_versionKey(ctx, field)
+	case "original":
+		return ec.fieldContext_RestoreTarget_original(ctx, field)
+	case "temporary":
+		return ec.fieldContext_RestoreTarget_temporary(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_RestoreTarget_expiresAt(ctx, field)
+	case "ready":
+		return ec.fieldContext_RestoreTarget_ready(ctx, field)
+	case "notReadyReason":
+		return ec.fieldContext_RestoreTarget_notReadyReason(ctx, field)
+	case "insecureTransport":
+		return ec.fieldContext_RestoreTarget_insecureTransport(ctx, field)
+	case "newDatabaseAllowed":
+		return ec.fieldContext_RestoreTarget_newDatabaseAllowed(ctx, field)
+	case "existingRestricted":
+		return ec.fieldContext_RestoreTarget_existingRestricted(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreTarget", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreTargetDatabases(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "target":
+		return ec.fieldContext_RestoreTargetDatabases_target(ctx, field)
+	case "databases":
+		return ec.fieldContext_RestoreTargetDatabases_databases(ctx, field)
+	case "warnings":
+		return ec.fieldContext_RestoreTargetDatabases_warnings(ctx, field)
+	case "targetPrivileges":
+		return ec.fieldContext_RestoreTargetDatabases_targetPrivileges(ctx, field)
+	case "listedAt":
+		return ec.fieldContext_RestoreTargetDatabases_listedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreTargetDatabases", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreTargetRef(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_RestoreTargetRef_id(ctx, field)
+	case "name":
+		return ec.fieldContext_RestoreTargetRef_name(ctx, field)
+	case "engine":
+		return ec.fieldContext_RestoreTargetRef_engine(ctx, field)
+	case "temporary":
+		return ec.fieldContext_RestoreTargetRef_temporary(ctx, field)
+	case "deleted":
+		return ec.fieldContext_RestoreTargetRef_deleted(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreTargetRef", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreTargets(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "source":
+		return ec.fieldContext_RestoreTargets_source(ctx, field)
+	case "targets":
+		return ec.fieldContext_RestoreTargets_targets(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreTargets", field.Name)
+}
+
+func (ec *executionContext) childFields_RestoreWarning(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "code":
+		return ec.fieldContext_RestoreWarning_code(ctx, field)
+	case "message":
+		return ec.fieldContext_RestoreWarning_message(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RestoreWarning", field.Name)
 }
 
 func (ec *executionContext) childFields_Run(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -8601,6 +10806,18 @@ func (ec *executionContext) childFields_StepUpResult(ctx context.Context, field 
 	return nil, fmt.Errorf("no field named %q was found under type StepUpResult", field.Name)
 }
 
+func (ec *executionContext) childFields_TargetPrivileges(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "status":
+		return ec.fieldContext_TargetPrivileges_status(ctx, field)
+	case "reasons":
+		return ec.fieldContext_TargetPrivileges_reasons(ctx, field)
+	case "acknowledgementRequired":
+		return ec.fieldContext_TargetPrivileges_acknowledgementRequired(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TargetPrivileges", field.Name)
+}
+
 func (ec *executionContext) childFields_TemporaryPassword(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "password":
@@ -8609,6 +10826,126 @@ func (ec *executionContext) childFields_TemporaryPassword(ctx context.Context, f
 		return ec.fieldContext_TemporaryPassword_expiresAt(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TemporaryPassword", field.Name)
+}
+
+func (ec *executionContext) childFields_TestRestore(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_TestRestore_id(ctx, field)
+	case "job":
+		return ec.fieldContext_TestRestore_job(ctx, field)
+	case "runId":
+		return ec.fieldContext_TestRestore_runId(ctx, field)
+	case "target":
+		return ec.fieldContext_TestRestore_target(ctx, field)
+	case "trigger":
+		return ec.fieldContext_TestRestore_trigger(ctx, field)
+	case "status":
+		return ec.fieldContext_TestRestore_status(ctx, field)
+	case "requestedBy":
+		return ec.fieldContext_TestRestore_requestedBy(ctx, field)
+	case "scheduledFor":
+		return ec.fieldContext_TestRestore_scheduledFor(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_TestRestore_createdAt(ctx, field)
+	case "startedAt":
+		return ec.fieldContext_TestRestore_startedAt(ctx, field)
+	case "finishedAt":
+		return ec.fieldContext_TestRestore_finishedAt(ctx, field)
+	case "durationSeconds":
+		return ec.fieldContext_TestRestore_durationSeconds(ctx, field)
+	case "errorCode":
+		return ec.fieldContext_TestRestore_errorCode(ctx, field)
+	case "errorMessage":
+		return ec.fieldContext_TestRestore_errorMessage(ctx, field)
+	case "databaseCount":
+		return ec.fieldContext_TestRestore_databaseCount(ctx, field)
+	case "passed":
+		return ec.fieldContext_TestRestore_passed(ctx, field)
+	case "warned":
+		return ec.fieldContext_TestRestore_warned(ctx, field)
+	case "failed":
+		return ec.fieldContext_TestRestore_failed(ctx, field)
+	case "databases":
+		return ec.fieldContext_TestRestore_databases(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TestRestore", field.Name)
+}
+
+func (ec *executionContext) childFields_TestRestoreConnection(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "edges":
+		return ec.fieldContext_TestRestoreConnection_edges(ctx, field)
+	case "pageInfo":
+		return ec.fieldContext_TestRestoreConnection_pageInfo(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TestRestoreConnection", field.Name)
+}
+
+func (ec *executionContext) childFields_TestRestoreDatabase(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_TestRestoreDatabase_id(ctx, field)
+	case "runItemId":
+		return ec.fieldContext_TestRestoreDatabase_runItemId(ctx, field)
+	case "database":
+		return ec.fieldContext_TestRestoreDatabase_database(ctx, field)
+	case "restoreId":
+		return ec.fieldContext_TestRestoreDatabase_restoreId(ctx, field)
+	case "status":
+		return ec.fieldContext_TestRestoreDatabase_status(ctx, field)
+	case "errorCode":
+		return ec.fieldContext_TestRestoreDatabase_errorCode(ctx, field)
+	case "errorMessage":
+		return ec.fieldContext_TestRestoreDatabase_errorMessage(ctx, field)
+	case "scratchDropped":
+		return ec.fieldContext_TestRestoreDatabase_scratchDropped(ctx, field)
+	case "findings":
+		return ec.fieldContext_TestRestoreDatabase_findings(ctx, field)
+	case "findingsTotal":
+		return ec.fieldContext_TestRestoreDatabase_findingsTotal(ctx, field)
+	case "tablesCompared":
+		return ec.fieldContext_TestRestoreDatabase_tablesCompared(ctx, field)
+	case "exactTables":
+		return ec.fieldContext_TestRestoreDatabase_exactTables(ctx, field)
+	case "restoreStatus":
+		return ec.fieldContext_TestRestoreDatabase_restoreStatus(ctx, field)
+	case "restoreErrorCode":
+		return ec.fieldContext_TestRestoreDatabase_restoreErrorCode(ctx, field)
+	case "startedAt":
+		return ec.fieldContext_TestRestoreDatabase_startedAt(ctx, field)
+	case "finishedAt":
+		return ec.fieldContext_TestRestoreDatabase_finishedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TestRestoreDatabase", field.Name)
+}
+
+func (ec *executionContext) childFields_TestRestoreEdge(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "cursor":
+		return ec.fieldContext_TestRestoreEdge_cursor(ctx, field)
+	case "node":
+		return ec.fieldContext_TestRestoreEdge_node(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TestRestoreEdge", field.Name)
+}
+
+func (ec *executionContext) childFields_TestRestoreFinding(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "severity":
+		return ec.fieldContext_TestRestoreFinding_severity(ctx, field)
+	case "code":
+		return ec.fieldContext_TestRestoreFinding_code(ctx, field)
+	case "object":
+		return ec.fieldContext_TestRestoreFinding_object(ctx, field)
+	case "source":
+		return ec.fieldContext_TestRestoreFinding_source(ctx, field)
+	case "restored":
+		return ec.fieldContext_TestRestoreFinding_restored(ctx, field)
+	case "delta":
+		return ec.fieldContext_TestRestoreFinding_delta(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type TestRestoreFinding", field.Name)
 }
 
 func (ec *executionContext) childFields_TotpEnrollment(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -8882,6 +11219,20 @@ func (ec *executionContext) field_Mutation_assignJobOwners_args(ctx context.Cont
 		return nil, err
 	}
 	args["users"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_cancelRestore_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -9173,6 +11524,20 @@ func (ec *executionContext) field_Mutation_createJob_args(ctx context.Context, r
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createTemporaryConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateTemporaryConnectionInput, error) {
+			return ec.unmarshalNCreateTemporaryConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateTemporaryConnectionInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9230,6 +11595,20 @@ func (ec *executionContext) field_Mutation_deleteJob_args(ctx context.Context, r
 }
 
 func (ec *executionContext) field_Mutation_deletePasskey_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteTemporaryConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
@@ -9382,6 +11761,28 @@ func (ec *executionContext) field_Mutation_exportJobPassphrases_args(ctx context
 		return nil, err
 	}
 	args["jobId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_extendTemporaryConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "expiresAt",
+		func(ctx context.Context, v any) (time.Time, error) {
+			return ec.unmarshalNTime2timeᚐTime(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["expiresAt"] = arg1
 	return args, nil
 }
 
@@ -9635,6 +12036,34 @@ func (ec *executionContext) field_Mutation_resetUserSecondFactors_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_restoreArtifact_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.RestoreArtifactInput, error) {
+			return ec.unmarshalNRestoreArtifactInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreArtifactInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_restoreGlobals_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.RestoreGlobalsInput, error) {
+			return ec.unmarshalNRestoreGlobalsInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreGlobalsInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_revokeSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9674,6 +12103,20 @@ func (ec *executionContext) field_Mutation_runJobNow_args(ctx context.Context, r
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_runTestRestoreNow_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "jobId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["jobId"] = arg0
 	return args, nil
 }
 
@@ -9726,6 +12169,28 @@ func (ec *executionContext) field_Mutation_setJobRecipient_args(ctx context.Cont
 		return nil, err
 	}
 	args["label"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setJobTestRestore_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "jobId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["jobId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.JobTestRestoreInput, error) {
+			return ec.unmarshalNJobTestRestoreInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobTestRestoreInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -10151,6 +12616,130 @@ func (ec *executionContext) field_Query_previewSchedule_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_restoreLogs_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "restoreId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["restoreId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "afterId",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOID2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["afterId"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_restorePreview_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.RestorePreviewInput, error) {
+			return ec.unmarshalNRestorePreviewInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestorePreviewInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_restoreTargetDatabases_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "artifactId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["artifactId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "targetConnectionId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["targetConnectionId"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_restoreTargets_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "artifactId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["artifactId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_restore_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_restores_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filter",
+		func(ctx context.Context, v any) (*model.RestoreFilter, error) {
+			return ec.unmarshalORestoreFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreFilter(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["filter"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_runLogs_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10225,6 +12814,50 @@ func (ec *executionContext) field_Query_runs_args(ctx context.Context, rawArgs m
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_testRestore_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_testRestores_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "jobId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["jobId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_userSessions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -10280,6 +12913,20 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["after"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_restoreUpdated_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "restoreId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["restoreId"] = arg0
 	return args, nil
 }
 
@@ -12947,6 +15594,52 @@ func (ec *executionContext) fieldContext_Connection_settings(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Connection_temporary(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_temporary(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Temporary, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_temporary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Connection_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.Connection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Connection_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Connection_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Connection", field, false, false, "Time")
+}
+
 func (ec *executionContext) _ConnectionDatabases_databases(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionDatabases) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13680,6 +16373,38 @@ func (ec *executionContext) _ConnectionTestResult_databaseCount(ctx context.Cont
 }
 func (ec *executionContext) fieldContext_ConnectionTestResult_databaseCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ConnectionTestResult", field, false, false, "Int")
+}
+
+func (ec *executionContext) _ConnectionTestResult_privileges(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConnectionTestResult_privileges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Privileges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+			return ec.marshalOTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ConnectionTestResult_privileges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConnectionTestResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetPrivileges(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _ConnectionVersionInfo_serverVersion(ctx context.Context, field graphql.CollectedField, obj *model.ConnectionVersionInfo) (ret graphql.Marshaler) {
@@ -15806,6 +18531,38 @@ func (ec *executionContext) fieldContext_Job_recentRuns(ctx context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Job_testRestore(ctx context.Context, field graphql.CollectedField, obj *model.Job) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Job_testRestore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TestRestore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.JobTestRestore) graphql.Marshaler {
+			return ec.marshalNJobTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobTestRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Job_testRestore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Job",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_JobTestRestore(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _JobConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.JobConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16792,6 +19549,194 @@ func (ec *executionContext) _JobRetention_keepDays(ctx context.Context, field gr
 }
 func (ec *executionContext) fieldContext_JobRetention_keepDays(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("JobRetention", field, false, false, "Int")
+}
+
+func (ec *executionContext) _JobTestRestore_enabled(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_enabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobTestRestore", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _JobTestRestore_schedule(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_schedule(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Schedule, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Schedule) graphql.Marshaler {
+			return ec.marshalNSchedule2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchedule(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_schedule(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JobTestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Schedule(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JobTestRestore_scheduleDescription(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_scheduleDescription(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ScheduleDescription, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_scheduleDescription(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobTestRestore", field, false, false, "String")
+}
+
+func (ec *executionContext) _JobTestRestore_target(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.JobConnectionRef) graphql.Marshaler {
+			return ec.marshalOJobConnectionRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobConnectionRef(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JobTestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_JobConnectionRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JobTestRestore_nextAt(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_nextAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NextAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_nextAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobTestRestore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _JobTestRestore_targetPrivileges(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_targetPrivileges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetPrivileges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+			return ec.marshalOTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_targetPrivileges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "JobTestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetPrivileges(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _JobTestRestore_privilegedTargetAcknowledgedAt(ctx context.Context, field graphql.CollectedField, obj *model.JobTestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobTestRestore_privilegedTargetAcknowledgedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PrivilegedTargetAcknowledgedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobTestRestore_privilegedTargetAcknowledgedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobTestRestore", field, false, false, "Time")
 }
 
 func (ec *executionContext) _LoginResult_user(ctx context.Context, field graphql.CollectedField, obj *model.LoginResult) (ret graphql.Marshaler) {
@@ -18030,6 +20975,213 @@ func (ec *executionContext) fieldContext_Mutation_generateConnectionSshKeypair(c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_generateConnectionSshKeypair_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_createTemporaryConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createTemporaryConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateTemporaryConnection(ctx, fc.Args["input"].(model.CreateTemporaryConnectionInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createTemporaryConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createTemporaryConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_extendTemporaryConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_extendTemporaryConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ExtendTemporaryConnection(ctx, fc.Args["id"].(uuid.UUID), fc.Args["expiresAt"].(time.Time))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Connection
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_extendTemporaryConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_extendTemporaryConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteTemporaryConnection(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteTemporaryConnection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteTemporaryConnection(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal bool
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal bool
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteTemporaryConnection(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteTemporaryConnection_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -19617,6 +22769,192 @@ func (ec *executionContext) fieldContext_Mutation_exportJobPassphrases(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_restoreArtifact(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_restoreArtifact(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RestoreArtifact(ctx, fc.Args["input"].(model.RestoreArtifactInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.Restore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Restore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+			return ec.marshalNRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_restoreArtifact(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Restore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_restoreArtifact_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_restoreGlobals(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_restoreGlobals(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RestoreGlobals(ctx, fc.Args["input"].(model.RestoreGlobalsInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Restore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Restore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+			return ec.marshalNRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_restoreGlobals(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Restore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_restoreGlobals_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cancelRestore(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_cancelRestore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CancelRestore(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.RestoreCancellation
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestoreCancellation
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreCancellation) graphql.Marshaler {
+			return ec.marshalNRestoreCancellation2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreCancellation(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_cancelRestore(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreCancellation(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_cancelRestore_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_cancelRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19673,6 +23011,130 @@ func (ec *executionContext) fieldContext_Mutation_cancelRun(ctx context.Context,
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_cancelRun_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setJobTestRestore(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setJobTestRestore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetJobTestRestore(ctx, fc.Args["jobId"].(uuid.UUID), fc.Args["input"].(model.JobTestRestoreInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.Job
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Job
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Job) graphql.Marshaler {
+			return ec.marshalNJob2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJob(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setJobTestRestore(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Job(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setJobTestRestore_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_runTestRestoreNow(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_runTestRestoreNow(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RunTestRestoreNow(ctx, fc.Args["jobId"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.TestRestore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.TestRestore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TestRestore) graphql.Marshaler {
+			return ec.marshalNTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_runTestRestoreNow(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_runTestRestoreNow_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -21634,6 +25096,56 @@ func (ec *executionContext) fieldContext_Query_connection(ctx context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_temporaryConnections(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_temporaryConnections(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().TemporaryConnections(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal []model.Connection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.Connection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.Connection) graphql.Marshaler {
+			return ec.marshalNConnection2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_temporaryConnections(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Connection(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_engineVersions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21994,6 +25506,378 @@ func (ec *executionContext) fieldContext_Query_previewSchedule(ctx context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_restoreTargets(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restoreTargets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RestoreTargets(ctx, fc.Args["artifactId"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.RestoreTargets
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestoreTargets
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTargets) graphql.Marshaler {
+			return ec.marshalNRestoreTargets2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargets(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restoreTargets(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTargets(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restoreTargets_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_restoreTargetDatabases(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restoreTargetDatabases(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RestoreTargetDatabases(ctx, fc.Args["artifactId"].(uuid.UUID), fc.Args["targetConnectionId"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.RestoreTargetDatabases
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestoreTargetDatabases
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTargetDatabases) graphql.Marshaler {
+			return ec.marshalNRestoreTargetDatabases2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetDatabases(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restoreTargetDatabases(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTargetDatabases(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restoreTargetDatabases_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_restorePreview(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restorePreview(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RestorePreview(ctx, fc.Args["input"].(model.RestorePreviewInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.RestorePreview
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestorePreview
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestorePreview) graphql.Marshaler {
+			return ec.marshalNRestorePreview2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestorePreview(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restorePreview(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestorePreview(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restorePreview_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_restores(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restores(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Restores(ctx, fc.Args["filter"].(*model.RestoreFilter), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.RestoreConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestoreConnection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreConnection) graphql.Marshaler {
+			return ec.marshalNRestoreConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restores(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restores_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_restore(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Restore(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.Restore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Restore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+			return ec.marshalORestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restore(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Restore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restore_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_restoreLogs(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_restoreLogs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RestoreLogs(ctx, fc.Args["restoreId"].(uuid.UUID), fc.Args["afterId"].(*string), fc.Args["first"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.RestoreLogPage
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RestoreLogPage
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreLogPage) graphql.Marshaler {
+			return ec.marshalORestoreLogPage2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreLogPage(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_restoreLogs(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreLogPage(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_restoreLogs_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_runs(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22236,6 +26120,130 @@ func (ec *executionContext) fieldContext_Query_artifacts(ctx context.Context, fi
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_artifacts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_testRestores(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_testRestores(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TestRestores(ctx, fc.Args["jobId"].(uuid.UUID), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.TestRestoreConnection
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.TestRestoreConnection
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TestRestoreConnection) graphql.Marshaler {
+			return ec.marshalNTestRestoreConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreConnection(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_testRestores(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestoreConnection(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_testRestores_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_testRestore(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_testRestore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().TestRestore(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.TestRestore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.TestRestore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TestRestore) graphql.Marshaler {
+			return ec.marshalOTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestore(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Query_testRestore(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_testRestore_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -22710,6 +26718,2013 @@ func (ec *executionContext) _RecoveryCodes_codes(ctx context.Context, field grap
 }
 func (ec *executionContext) fieldContext_RecoveryCodes_codes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RecoveryCodes", field, false, false, "String")
+}
+
+func (ec *executionContext) _Restore_id(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _Restore_job(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_job(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Job, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunJobRef) graphql.Marshaler {
+			return ec.marshalNRunJobRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunJobRef(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_job(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Restore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunJobRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Restore_artifactId(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_artifactId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_artifactId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _Restore_runId(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_runId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _Restore_kind(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_kind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RunItemKind) graphql.Marshaler {
+			return ec.marshalNRunItemKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunItemKind(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "RunItemKind")
+}
+
+func (ec *executionContext) _Restore_sourceDatabase(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_sourceDatabase(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SourceDatabase, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_sourceDatabase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "String")
+}
+
+func (ec *executionContext) _Restore_target(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTargetRef) graphql.Marshaler {
+			return ec.marshalNRestoreTargetRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetRef(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Restore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTargetRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Restore_targetDatabase(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_targetDatabase(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetDatabase, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_targetDatabase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "String")
+}
+
+func (ec *executionContext) _Restore_mode(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_mode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreMode) graphql.Marshaler {
+			return ec.marshalORestoreMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "RestoreMode")
+}
+
+func (ec *executionContext) _Restore_keepOwners(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_keepOwners(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.KeepOwners, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_keepOwners(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _Restore_status(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RestoreStatus) graphql.Marshaler {
+			return ec.marshalNRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "RestoreStatus")
+}
+
+func (ec *executionContext) _Restore_requestedBy(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_requestedBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunActor) graphql.Marshaler {
+			return ec.marshalORunActor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunActor(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_requestedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Restore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunActor(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Restore_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Restore_startedAt(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_startedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Restore_finishedAt(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_finishedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FinishedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_finishedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _Restore_durationSeconds(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_durationSeconds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DurationSeconds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *float64) graphql.Marshaler {
+			return ec.marshalOFloat2ᚖfloat64(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_durationSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Float")
+}
+
+func (ec *executionContext) _Restore_stagedBytes(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_stagedBytes(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StagedBytes, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_stagedBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Float")
+}
+
+func (ec *executionContext) _Restore_errorCode(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_errorCode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorCode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_errorCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "String")
+}
+
+func (ec *executionContext) _Restore_errorMessage(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_errorMessage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "String")
+}
+
+func (ec *executionContext) _Restore_warnings(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RestoreOutcomeWarning) graphql.Marshaler {
+			return ec.marshalNRestoreOutcomeWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreOutcomeWarningᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Restore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreOutcomeWarning(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Restore_logLines(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_logLines(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LogLines, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_logLines(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _Restore_logLinesDropped(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_logLinesDropped(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LogLinesDropped, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_logLinesDropped(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _Restore_updatedAt(ctx context.Context, field graphql.CollectedField, obj *model.Restore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Restore_updatedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Restore_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("Restore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RestoreCancellation_restoreId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreCancellation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreCancellation_restoreId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestoreID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreCancellation_restoreId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreCancellation", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreCancellation_jobId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreCancellation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreCancellation_jobId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JobID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreCancellation_jobId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreCancellation", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreCancellation_status(ctx context.Context, field graphql.CollectedField, obj *model.RestoreCancellation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreCancellation_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RestoreStatus) graphql.Marshaler {
+			return ec.marshalNRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreCancellation_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreCancellation", field, false, false, "RestoreStatus")
+}
+
+func (ec *executionContext) _RestoreCancellation_requestedAt(ctx context.Context, field graphql.CollectedField, obj *model.RestoreCancellation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreCancellation_requestedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreCancellation_requestedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreCancellation", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RestoreConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.RestoreConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreConnection_edges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RestoreEdge) graphql.Marshaler {
+			return ec.marshalNRestoreEdge2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreEdgeᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreEdge(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.RestoreConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreConnection_pageInfo(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
+			return ec.marshalNPageInfo2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐPageInfo(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PageInfo(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.RestoreEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreEdge_cursor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreEdge", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.RestoreEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreEdge_node(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+			return ec.marshalNRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Restore(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreLogPage_restoreId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreLogPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreLogPage_restoreId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestoreID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreLogPage_restoreId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreLogPage", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreLogPage_lines(ctx context.Context, field graphql.CollectedField, obj *model.RestoreLogPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreLogPage_lines(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Lines, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RunLogLine) graphql.Marshaler {
+			return ec.marshalNRunLogLine2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunLogLineᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreLogPage_lines(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreLogPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunLogLine(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreLogPage_endId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreLogPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreLogPage_endId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EndID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOID2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreLogPage_endId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreLogPage", field, false, false, "ID")
+}
+
+func (ec *executionContext) _RestoreLogPage_hasMore(ctx context.Context, field graphql.CollectedField, obj *model.RestoreLogPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreLogPage_hasMore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasMore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreLogPage_hasMore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreLogPage", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreLogPage_dropped(ctx context.Context, field graphql.CollectedField, obj *model.RestoreLogPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreLogPage_dropped(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Dropped, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreLogPage_dropped(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreLogPage", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RestoreOutcomeWarning_code(ctx context.Context, field graphql.CollectedField, obj *model.RestoreOutcomeWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreOutcomeWarning_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreOutcomeWarning_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreOutcomeWarning", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreOutcomeWarning_message(ctx context.Context, field graphql.CollectedField, obj *model.RestoreOutcomeWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreOutcomeWarning_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreOutcomeWarning_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreOutcomeWarning", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestorePreview_source(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_source(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreSource) graphql.Marshaler {
+			return ec.marshalNRestoreSource2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreSource(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestorePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreSource(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestorePreview_target(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTarget) graphql.Marshaler {
+			return ec.marshalNRestoreTarget2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTarget(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestorePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTarget(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestorePreview_mode(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_mode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreMode) graphql.Marshaler {
+			return ec.marshalORestoreMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestorePreview", field, false, false, "RestoreMode")
+}
+
+func (ec *executionContext) _RestorePreview_targetDatabase(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_targetDatabase(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetDatabase, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_targetDatabase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestorePreview", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestorePreview_warnings(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RestoreWarning) graphql.Marshaler {
+			return ec.marshalNRestoreWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreWarningᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestorePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreWarning(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestorePreview_confirmText(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_confirmText(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConfirmText, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_confirmText(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestorePreview", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestorePreview_targetPrivileges(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_targetPrivileges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetPrivileges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+			return ec.marshalNTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_targetPrivileges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestorePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetPrivileges(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestorePreview_crossSource(ctx context.Context, field graphql.CollectedField, obj *model.RestorePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestorePreview_crossSource(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CrossSource, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestorePreview_crossSource(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestorePreview", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreSource_artifactId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_artifactId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_artifactId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreSource_jobId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_jobId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JobID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_jobId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreSource_runId(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_runId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreSource_kind(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_kind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RunItemKind) graphql.Marshaler {
+			return ec.marshalNRunItemKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunItemKind(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "RunItemKind")
+}
+
+func (ec *executionContext) _RestoreSource_database(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_database(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Database, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_database(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreSource_engine(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_engine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_engine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "DatabaseEngine")
+}
+
+func (ec *executionContext) _RestoreSource_versionKey(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_versionKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.VersionKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_versionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreSource_serverVersion(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_serverVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ServerVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_serverVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreSource_needsIdentity(ctx context.Context, field graphql.CollectedField, obj *model.RestoreSource) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreSource_needsIdentity(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NeedsIdentity, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreSource_needsIdentity(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreSource", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_id(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreTarget_name(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTarget_engine(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_engine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_engine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "DatabaseEngine")
+}
+
+func (ec *executionContext) _RestoreTarget_versionKey(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_versionKey(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.VersionKey, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_versionKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTarget_original(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_original(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Original, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_original(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_temporary(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_temporary(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Temporary, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_temporary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RestoreTarget_ready(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_ready(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ready, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_notReadyReason(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_notReadyReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotReadyReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_notReadyReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTarget_insecureTransport(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_insecureTransport(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.InsecureTransport, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_insecureTransport(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_newDatabaseAllowed(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_newDatabaseAllowed(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NewDatabaseAllowed, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_newDatabaseAllowed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTarget_existingRestricted(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTarget) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTarget_existingRestricted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExistingRestricted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTarget_existingRestricted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTarget", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTargetDatabases_target(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetDatabases_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTarget) graphql.Marshaler {
+			return ec.marshalNRestoreTarget2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTarget(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetDatabases_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreTargetDatabases",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTarget(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreTargetDatabases_databases(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetDatabases_databases(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Databases, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetDatabases_databases(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetDatabases", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTargetDatabases_warnings(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetDatabases_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetDatabases_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetDatabases", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTargetDatabases_targetPrivileges(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetDatabases_targetPrivileges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TargetPrivileges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+			return ec.marshalNTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetDatabases_targetPrivileges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreTargetDatabases",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TargetPrivileges(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreTargetDatabases_listedAt(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetDatabases) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetDatabases_listedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ListedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetDatabases_listedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetDatabases", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RestoreTargetRef_id(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetRef_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetRef_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetRef", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RestoreTargetRef_name(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetRef_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetRef_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetRef", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreTargetRef_engine(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetRef_engine(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engine, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetRef_engine(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetRef", field, false, false, "DatabaseEngine")
+}
+
+func (ec *executionContext) _RestoreTargetRef_temporary(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetRef_temporary(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Temporary, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetRef_temporary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetRef", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTargetRef_deleted(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargetRef) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargetRef_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargetRef_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreTargetRef", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RestoreTargets_source(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargets) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargets_source(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreSource) graphql.Marshaler {
+			return ec.marshalNRestoreSource2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreSource(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargets_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreTargets",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreSource(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreTargets_targets(ctx context.Context, field graphql.CollectedField, obj *model.RestoreTargets) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreTargets_targets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Targets, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RestoreTarget) graphql.Marshaler {
+			return ec.marshalNRestoreTarget2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreTargets_targets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RestoreTargets",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTarget(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RestoreWarning_code(ctx context.Context, field graphql.CollectedField, obj *model.RestoreWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreWarning_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreWarning_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreWarning", field, false, false, "String")
+}
+
+func (ec *executionContext) _RestoreWarning_message(ctx context.Context, field graphql.CollectedField, obj *model.RestoreWarning) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RestoreWarning_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RestoreWarning_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RestoreWarning", field, false, false, "String")
 }
 
 func (ec *executionContext) _Run_id(ctx context.Context, field graphql.CollectedField, obj *model.Run) (ret graphql.Marshaler) {
@@ -26424,6 +32439,68 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_restoreUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Subscription_restoreUpdated(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().RestoreUpdated(ctx, fc.Args["restoreId"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal *model.Restore
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Restore
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+			return ec.marshalNRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Subscription_restoreUpdated(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Restore(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_restoreUpdated_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_runUpdated(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -26548,6 +32625,75 @@ func (ec *executionContext) fieldContext_Subscription_runLogAppended(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _TargetPrivileges_status(ctx context.Context, field graphql.CollectedField, obj *model.TargetPrivileges) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetPrivileges_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.TargetPrivilegeStatus) graphql.Marshaler {
+			return ec.marshalNTargetPrivilegeStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivilegeStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetPrivileges_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetPrivileges", field, false, false, "TargetPrivilegeStatus")
+}
+
+func (ec *executionContext) _TargetPrivileges_reasons(ctx context.Context, field graphql.CollectedField, obj *model.TargetPrivileges) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetPrivileges_reasons(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reasons, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetPrivileges_reasons(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetPrivileges", field, false, false, "String")
+}
+
+func (ec *executionContext) _TargetPrivileges_acknowledgementRequired(ctx context.Context, field graphql.CollectedField, obj *model.TargetPrivileges) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TargetPrivileges_acknowledgementRequired(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AcknowledgementRequired, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TargetPrivileges_acknowledgementRequired(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TargetPrivileges", field, false, false, "Boolean")
+}
+
 func (ec *executionContext) _TemporaryPassword_password(ctx context.Context, field graphql.CollectedField, obj *model.TemporaryPassword) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -26592,6 +32738,1113 @@ func (ec *executionContext) _TemporaryPassword_expiresAt(ctx context.Context, fi
 }
 func (ec *executionContext) fieldContext_TemporaryPassword_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("TemporaryPassword", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestore_id(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _TestRestore_job(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_job(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Job, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunJobRef) graphql.Marshaler {
+			return ec.marshalNRunJobRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunJobRef(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_job(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunJobRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestore_runId(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_runId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _TestRestore_target(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_target(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Target, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RestoreTargetRef) graphql.Marshaler {
+			return ec.marshalNRestoreTargetRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetRef(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_target(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RestoreTargetRef(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestore_trigger(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_trigger(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Trigger, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.TestRestoreTrigger) graphql.Marshaler {
+			return ec.marshalNTestRestoreTrigger2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreTrigger(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_trigger(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "TestRestoreTrigger")
+}
+
+func (ec *executionContext) _TestRestore_status(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.TestRestoreStatus) graphql.Marshaler {
+			return ec.marshalNTestRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "TestRestoreStatus")
+}
+
+func (ec *executionContext) _TestRestore_requestedBy(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_requestedBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunActor) graphql.Marshaler {
+			return ec.marshalORunActor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunActor(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_requestedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunActor(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestore_scheduledFor(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_scheduledFor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ScheduledFor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_scheduledFor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestore_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestore_startedAt(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_startedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestore_finishedAt(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_finishedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FinishedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_finishedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestore_durationSeconds(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_durationSeconds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DurationSeconds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *float64) graphql.Marshaler {
+			return ec.marshalOFloat2ᚖfloat64(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_durationSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Float")
+}
+
+func (ec *executionContext) _TestRestore_errorCode(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_errorCode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorCode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_errorCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestore_errorMessage(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_errorMessage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestore_databaseCount(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_databaseCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DatabaseCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_databaseCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestore_passed(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_passed(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Passed, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_passed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestore_warned(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_warned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_warned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestore_failed(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_failed(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Failed, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_failed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestore", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestore_databases(ctx context.Context, field graphql.CollectedField, obj *model.TestRestore) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestore_databases(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Databases, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.TestRestoreDatabase) graphql.Marshaler {
+			return ec.marshalNTestRestoreDatabase2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreDatabaseᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestore_databases(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestore",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestoreDatabase(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestoreConnection_edges(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreConnection_edges(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.TestRestoreEdge) graphql.Marshaler {
+			return ec.marshalNTestRestoreEdge2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreEdgeᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestoreConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestoreEdge(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestoreConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreConnection_pageInfo(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.PageInfo) graphql.Marshaler {
+			return ec.marshalNPageInfo2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐPageInfo(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestoreConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_PageInfo(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestoreDatabase_id(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_runItemId(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_runItemId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunItemID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_runItemId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_database(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_database(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Database, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_database(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_restoreId(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_restoreId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestoreID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_restoreId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_status(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.TestRestoreStatus) graphql.Marshaler {
+			return ec.marshalNTestRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "TestRestoreStatus")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_errorCode(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_errorCode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorCode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_errorCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_errorMessage(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_errorMessage(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ErrorMessage, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_errorMessage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_scratchDropped(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_scratchDropped(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ScratchDropped, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_scratchDropped(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_findings(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_findings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Findings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.TestRestoreFinding) graphql.Marshaler {
+			return ec.marshalNTestRestoreFinding2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreFindingᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_findings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestoreDatabase",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestoreFinding(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestoreDatabase_findingsTotal(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_findingsTotal(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FindingsTotal, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_findingsTotal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_tablesCompared(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_tablesCompared(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TablesCompared, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_tablesCompared(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_exactTables(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_exactTables(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExactTables, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_exactTables(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Int")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_restoreStatus(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_restoreStatus(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestoreStatus, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_restoreStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_restoreErrorCode(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_restoreErrorCode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RestoreErrorCode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_restoreErrorCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_startedAt(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_startedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestoreDatabase_finishedAt(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreDatabase) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreDatabase_finishedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FinishedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreDatabase_finishedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreDatabase", field, false, false, "Time")
+}
+
+func (ec *executionContext) _TestRestoreEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreEdge_cursor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreEdge", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreEdge_node(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreEdge_node(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.TestRestore) graphql.Marshaler {
+			return ec.marshalNTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestore(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TestRestoreEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_TestRestore(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TestRestoreFinding_severity(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_severity(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Severity, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_severity(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreFinding_code(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreFinding_object(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_object(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Object, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_object(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "String")
+}
+
+func (ec *executionContext) _TestRestoreFinding_source(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_source(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Source, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *float64) graphql.Marshaler {
+			return ec.marshalOFloat2ᚖfloat64(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_source(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "Float")
+}
+
+func (ec *executionContext) _TestRestoreFinding_restored(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_restored(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Restored, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *float64) graphql.Marshaler {
+			return ec.marshalOFloat2ᚖfloat64(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_restored(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "Float")
+}
+
+func (ec *executionContext) _TestRestoreFinding_delta(ctx context.Context, field graphql.CollectedField, obj *model.TestRestoreFinding) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_TestRestoreFinding_delta(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Delta, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *float64) graphql.Marshaler {
+			return ec.marshalOFloat2ᚖfloat64(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_TestRestoreFinding_delta(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("TestRestoreFinding", field, false, false, "Float")
 }
 
 func (ec *executionContext) _TotpEnrollment_otpauthUri(ctx context.Context, field graphql.CollectedField, obj *model.TotpEnrollment) (ret graphql.Marshaler) {
@@ -29104,6 +36357,125 @@ func UnmarshalCreateJobInput(ctx context.Context, raw any) (model.CreateJobInput
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputCreateTemporaryConnectionInput(ctx context.Context, obj any) (model.CreateTemporaryConnectionInput, error) {
+	var it model.CreateTemporaryConnectionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "engine", "versionKey", "imageKey", "host", "port", "username", "password", "tlsMode", "clientCertificatePem", "clientKeyPem", "ssh"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "engine":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("engine"))
+			data, err := ec.unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Engine = data
+		case "versionKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("versionKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.VersionKey = data
+		case "imageKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("imageKey"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ImageKey = data
+		case "host":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("host"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Host = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "tlsMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tlsMode"))
+			data, err := ec.unmarshalOConnectionTlsMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionTLSMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TLSMode = data
+		case "clientCertificatePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientCertificatePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientCertificatePem = data
+		case "clientKeyPem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientKeyPem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientKeyPem = data
+		case "ssh":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ssh"))
+			data, err := ec.unmarshalOConnectionSshInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐConnectionSSHInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SSH = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalCreateTemporaryConnectionInput unmarshals raw into the CreateTemporaryConnectionInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalCreateTemporaryConnectionInput(ctx context.Context, raw any) (model.CreateTemporaryConnectionInput, error) {
+	var out model.CreateTemporaryConnectionInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "CreateTemporaryConnectionInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, obj any) (model.CreateUserInput, error) {
 	var it model.CreateUserInput
 	if obj == nil {
@@ -29367,6 +36739,356 @@ func (ec *executionContext) unmarshalInputJobRetentionInput(ctx context.Context,
 func UnmarshalJobRetentionInput(ctx context.Context, raw any) (model.JobRetentionInput, error) {
 	var out model.JobRetentionInput
 	err := graphql.UnmarshalNamedInputFromContext(ctx, "JobRetentionInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputJobTestRestoreInput(ctx context.Context, obj any) (model.JobTestRestoreInput, error) {
+	var it model.JobTestRestoreInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"enabled", "schedule", "targetConnectionId", "acknowledgePrivilegedTarget"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "enabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Enabled = data
+		case "schedule":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("schedule"))
+			data, err := ec.unmarshalOScheduleInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐScheduleInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Schedule = data
+		case "targetConnectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetConnectionId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetConnectionID = data
+		case "acknowledgePrivilegedTarget":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("acknowledgePrivilegedTarget"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AcknowledgePrivilegedTarget = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalJobTestRestoreInput unmarshals raw into the JobTestRestoreInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalJobTestRestoreInput(ctx context.Context, raw any) (model.JobTestRestoreInput, error) {
+	var out model.JobTestRestoreInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "JobTestRestoreInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputRestoreArtifactInput(ctx context.Context, obj any) (model.RestoreArtifactInput, error) {
+	var it model.RestoreArtifactInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"artifactId", "targetConnectionId", "mode", "targetDatabase", "confirmTargetName", "keepOwners", "ageIdentity", "acknowledgePrivilegedTarget"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "artifactId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactID = data
+		case "targetConnectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetConnectionId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetConnectionID = data
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalNRestoreMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "targetDatabase":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetDatabase"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetDatabase = data
+		case "confirmTargetName":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("confirmTargetName"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConfirmTargetName = data
+		case "keepOwners":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keepOwners"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeepOwners = data
+		case "ageIdentity":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("ageIdentity"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AgeIdentity = data
+		case "acknowledgePrivilegedTarget":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("acknowledgePrivilegedTarget"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AcknowledgePrivilegedTarget = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalRestoreArtifactInput unmarshals raw into the RestoreArtifactInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalRestoreArtifactInput(ctx context.Context, raw any) (model.RestoreArtifactInput, error) {
+	var out model.RestoreArtifactInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "RestoreArtifactInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputRestoreFilter(ctx context.Context, obj any) (model.RestoreFilter, error) {
+	var it model.RestoreFilter
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"jobId", "artifactId", "targetConnectionId", "status"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "jobId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jobId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JobID = data
+		case "artifactId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactID = data
+		case "targetConnectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetConnectionId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetConnectionID = data
+		case "status":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
+			data, err := ec.unmarshalORestoreStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Status = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalRestoreFilter unmarshals raw into the RestoreFilter input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalRestoreFilter(ctx context.Context, raw any) (model.RestoreFilter, error) {
+	var out model.RestoreFilter
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "RestoreFilter", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputRestoreGlobalsInput(ctx context.Context, obj any) (model.RestoreGlobalsInput, error) {
+	var it model.RestoreGlobalsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"artifactId", "targetConnectionId", "confirmPhrase", "acknowledgePrivilegedTarget"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "artifactId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactID = data
+		case "targetConnectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetConnectionId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetConnectionID = data
+		case "confirmPhrase":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("confirmPhrase"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConfirmPhrase = data
+		case "acknowledgePrivilegedTarget":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("acknowledgePrivilegedTarget"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AcknowledgePrivilegedTarget = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalRestoreGlobalsInput unmarshals raw into the RestoreGlobalsInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalRestoreGlobalsInput(ctx context.Context, raw any) (model.RestoreGlobalsInput, error) {
+	var out model.RestoreGlobalsInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "RestoreGlobalsInput", raw, &out)
+	return out, err
+}
+
+func (ec *executionContext) unmarshalInputRestorePreviewInput(ctx context.Context, obj any) (model.RestorePreviewInput, error) {
+	var it model.RestorePreviewInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"artifactId", "targetConnectionId", "mode", "targetDatabase", "keepOwners"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "artifactId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactID = data
+		case "targetConnectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetConnectionId"))
+			data, err := ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetConnectionID = data
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalORestoreMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "targetDatabase":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("targetDatabase"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TargetDatabase = data
+		case "keepOwners":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keepOwners"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeepOwners = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalRestorePreviewInput unmarshals raw into the RestorePreviewInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalRestorePreviewInput(ctx context.Context, raw any) (model.RestorePreviewInput, error) {
+	var out model.RestorePreviewInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "RestorePreviewInput", raw, &out)
 	return out, err
 }
 
@@ -31200,6 +38922,16 @@ func (ec *executionContext) _Connection(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
+		case "temporary":
+			out.Values[i] = ec._Connection_temporary(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._Connection_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -31488,6 +39220,11 @@ func (ec *executionContext) _ConnectionTestResult(ctx context.Context, sel ast.S
 		case "databaseCount":
 			out.Values[i] = ec._ConnectionTestResult_databaseCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "privileges":
+			out.Values[i] = ec._ConnectionTestResult_privileges(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -32334,6 +40071,11 @@ func (ec *executionContext) _Job(ctx context.Context, sel ast.SelectionSet, obj 
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Job_recentRuns(ctx, field, obj)
 				})
+		case "testRestore":
+			out.Values[i] = ec._Job_testRestore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -32836,6 +40578,69 @@ func (ec *executionContext) _JobRetention(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var jobTestRestoreImplementors = []string{"JobTestRestore"}
+
+func (ec *executionContext) _JobTestRestore(ctx context.Context, sel ast.SelectionSet, obj *model.JobTestRestore) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, jobTestRestoreImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("JobTestRestore")
+		case "enabled":
+			out.Values[i] = ec._JobTestRestore_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "schedule":
+			out.Values[i] = ec._JobTestRestore_schedule(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "scheduleDescription":
+			out.Values[i] = ec._JobTestRestore_scheduleDescription(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "target":
+			out.Values[i] = ec._JobTestRestore_target(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "nextAt":
+			out.Values[i] = ec._JobTestRestore_nextAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "targetPrivileges":
+			out.Values[i] = ec._JobTestRestore_targetPrivileges(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "privilegedTargetAcknowledgedAt":
+			out.Values[i] = ec._JobTestRestore_privilegedTargetAcknowledgedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var loginResultImplementors = []string{"LoginResult"}
 
 func (ec *executionContext) _LoginResult(ctx context.Context, sel ast.SelectionSet, obj *model.LoginResult) graphql.Marshaler {
@@ -33034,6 +40839,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createTemporaryConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createTemporaryConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "extendTemporaryConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_extendTemporaryConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteTemporaryConnection":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteTemporaryConnection(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createDestination":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createDestination(ctx, field)
@@ -33202,9 +41028,44 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "restoreArtifact":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_restoreArtifact(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restoreGlobals":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_restoreGlobals(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelRestore":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cancelRestore(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "cancelRun":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_cancelRun(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setJobTestRestore":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setJobTestRestore(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runTestRestoreNow":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_runTestRestoreNow(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -33567,6 +41428,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_connection(ctx, field)
 				})
+		case "temporaryConnections":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_temporaryConnections(ctx, field)
+				})
 		case "engineVersions":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -33603,6 +41470,42 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_previewSchedule(ctx, field)
 				})
+		case "restoreTargets":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restoreTargets(ctx, field)
+				})
+		case "restoreTargetDatabases":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restoreTargetDatabases(ctx, field)
+				})
+		case "restorePreview":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restorePreview(ctx, field)
+				})
+		case "restores":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restores(ctx, field)
+				})
+		case "restore":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restore(ctx, field)
+				})
+		case "restoreLogs":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_restoreLogs(ctx, field)
+				})
 		case "runs":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -33626,6 +41529,18 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				true, true,
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_artifacts(ctx, field)
+				})
+		case "testRestores":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_testRestores(ctx, field)
+				})
+		case "testRestore":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_testRestore(ctx, field)
 				})
 		case "myTwoFactorStatus":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
@@ -33713,6 +41628,775 @@ func (ec *executionContext) _RecoveryCodes(ctx context.Context, sel ast.Selectio
 			out.Values[i] = graphql.MarshalString("RecoveryCodes")
 		case "codes":
 			out.Values[i] = ec._RecoveryCodes_codes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreImplementors = []string{"Restore"}
+
+func (ec *executionContext) _Restore(ctx context.Context, sel ast.SelectionSet, obj *model.Restore) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Restore")
+		case "id":
+			out.Values[i] = ec._Restore_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "job":
+			out.Values[i] = ec._Restore_job(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifactId":
+			out.Values[i] = ec._Restore_artifactId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runId":
+			out.Values[i] = ec._Restore_runId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._Restore_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sourceDatabase":
+			out.Values[i] = ec._Restore_sourceDatabase(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "target":
+			out.Values[i] = ec._Restore_target(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targetDatabase":
+			out.Values[i] = ec._Restore_targetDatabase(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "mode":
+			out.Values[i] = ec._Restore_mode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "keepOwners":
+			out.Values[i] = ec._Restore_keepOwners(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._Restore_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedBy":
+			out.Values[i] = ec._Restore_requestedBy(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._Restore_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "startedAt":
+			out.Values[i] = ec._Restore_startedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "finishedAt":
+			out.Values[i] = ec._Restore_finishedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "durationSeconds":
+			out.Values[i] = ec._Restore_durationSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "stagedBytes":
+			out.Values[i] = ec._Restore_stagedBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "errorCode":
+			out.Values[i] = ec._Restore_errorCode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "errorMessage":
+			out.Values[i] = ec._Restore_errorMessage(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._Restore_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "logLines":
+			out.Values[i] = ec._Restore_logLines(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "logLinesDropped":
+			out.Values[i] = ec._Restore_logLinesDropped(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatedAt":
+			out.Values[i] = ec._Restore_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreCancellationImplementors = []string{"RestoreCancellation"}
+
+func (ec *executionContext) _RestoreCancellation(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreCancellation) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreCancellationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreCancellation")
+		case "restoreId":
+			out.Values[i] = ec._RestoreCancellation_restoreId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jobId":
+			out.Values[i] = ec._RestoreCancellation_jobId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._RestoreCancellation_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedAt":
+			out.Values[i] = ec._RestoreCancellation_requestedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreConnectionImplementors = []string{"RestoreConnection"}
+
+func (ec *executionContext) _RestoreConnection(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreConnection")
+		case "edges":
+			out.Values[i] = ec._RestoreConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._RestoreConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreEdgeImplementors = []string{"RestoreEdge"}
+
+func (ec *executionContext) _RestoreEdge(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreEdge")
+		case "cursor":
+			out.Values[i] = ec._RestoreEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "node":
+			out.Values[i] = ec._RestoreEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreLogPageImplementors = []string{"RestoreLogPage"}
+
+func (ec *executionContext) _RestoreLogPage(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreLogPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreLogPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreLogPage")
+		case "restoreId":
+			out.Values[i] = ec._RestoreLogPage_restoreId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lines":
+			out.Values[i] = ec._RestoreLogPage_lines(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "endId":
+			out.Values[i] = ec._RestoreLogPage_endId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "hasMore":
+			out.Values[i] = ec._RestoreLogPage_hasMore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dropped":
+			out.Values[i] = ec._RestoreLogPage_dropped(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreOutcomeWarningImplementors = []string{"RestoreOutcomeWarning"}
+
+func (ec *executionContext) _RestoreOutcomeWarning(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreOutcomeWarning) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreOutcomeWarningImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreOutcomeWarning")
+		case "code":
+			out.Values[i] = ec._RestoreOutcomeWarning_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._RestoreOutcomeWarning_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restorePreviewImplementors = []string{"RestorePreview"}
+
+func (ec *executionContext) _RestorePreview(ctx context.Context, sel ast.SelectionSet, obj *model.RestorePreview) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restorePreviewImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestorePreview")
+		case "source":
+			out.Values[i] = ec._RestorePreview_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "target":
+			out.Values[i] = ec._RestorePreview_target(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mode":
+			out.Values[i] = ec._RestorePreview_mode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "targetDatabase":
+			out.Values[i] = ec._RestorePreview_targetDatabase(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._RestorePreview_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "confirmText":
+			out.Values[i] = ec._RestorePreview_confirmText(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "targetPrivileges":
+			out.Values[i] = ec._RestorePreview_targetPrivileges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "crossSource":
+			out.Values[i] = ec._RestorePreview_crossSource(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreSourceImplementors = []string{"RestoreSource"}
+
+func (ec *executionContext) _RestoreSource(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreSource) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreSourceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreSource")
+		case "artifactId":
+			out.Values[i] = ec._RestoreSource_artifactId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jobId":
+			out.Values[i] = ec._RestoreSource_jobId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runId":
+			out.Values[i] = ec._RestoreSource_runId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._RestoreSource_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "database":
+			out.Values[i] = ec._RestoreSource_database(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "engine":
+			out.Values[i] = ec._RestoreSource_engine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "versionKey":
+			out.Values[i] = ec._RestoreSource_versionKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "serverVersion":
+			out.Values[i] = ec._RestoreSource_serverVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "needsIdentity":
+			out.Values[i] = ec._RestoreSource_needsIdentity(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreTargetImplementors = []string{"RestoreTarget"}
+
+func (ec *executionContext) _RestoreTarget(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreTarget) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreTargetImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreTarget")
+		case "id":
+			out.Values[i] = ec._RestoreTarget_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._RestoreTarget_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "engine":
+			out.Values[i] = ec._RestoreTarget_engine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "versionKey":
+			out.Values[i] = ec._RestoreTarget_versionKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "original":
+			out.Values[i] = ec._RestoreTarget_original(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "temporary":
+			out.Values[i] = ec._RestoreTarget_temporary(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._RestoreTarget_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "ready":
+			out.Values[i] = ec._RestoreTarget_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notReadyReason":
+			out.Values[i] = ec._RestoreTarget_notReadyReason(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "insecureTransport":
+			out.Values[i] = ec._RestoreTarget_insecureTransport(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "newDatabaseAllowed":
+			out.Values[i] = ec._RestoreTarget_newDatabaseAllowed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "existingRestricted":
+			out.Values[i] = ec._RestoreTarget_existingRestricted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreTargetDatabasesImplementors = []string{"RestoreTargetDatabases"}
+
+func (ec *executionContext) _RestoreTargetDatabases(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreTargetDatabases) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreTargetDatabasesImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreTargetDatabases")
+		case "target":
+			out.Values[i] = ec._RestoreTargetDatabases_target(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "databases":
+			out.Values[i] = ec._RestoreTargetDatabases_databases(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._RestoreTargetDatabases_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targetPrivileges":
+			out.Values[i] = ec._RestoreTargetDatabases_targetPrivileges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "listedAt":
+			out.Values[i] = ec._RestoreTargetDatabases_listedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreTargetRefImplementors = []string{"RestoreTargetRef"}
+
+func (ec *executionContext) _RestoreTargetRef(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreTargetRef) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreTargetRefImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreTargetRef")
+		case "id":
+			out.Values[i] = ec._RestoreTargetRef_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._RestoreTargetRef_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "engine":
+			out.Values[i] = ec._RestoreTargetRef_engine(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "temporary":
+			out.Values[i] = ec._RestoreTargetRef_temporary(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleted":
+			out.Values[i] = ec._RestoreTargetRef_deleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreTargetsImplementors = []string{"RestoreTargets"}
+
+func (ec *executionContext) _RestoreTargets(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreTargets) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreTargetsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreTargets")
+		case "source":
+			out.Values[i] = ec._RestoreTargets_source(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targets":
+			out.Values[i] = ec._RestoreTargets_targets(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var restoreWarningImplementors = []string{"RestoreWarning"}
+
+func (ec *executionContext) _RestoreWarning(ctx context.Context, sel ast.SelectionSet, obj *model.RestoreWarning) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, restoreWarningImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RestoreWarning")
+		case "code":
+			out.Values[i] = ec._RestoreWarning_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._RestoreWarning_message(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -35184,6 +43868,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionEvents":
 		return ec._Subscription_sessionEvents(ctx, fields[0])
+	case "restoreUpdated":
+		return ec._Subscription_restoreUpdated(ctx, fields[0])
 	case "runUpdated":
 		return ec._Subscription_runUpdated(ctx, fields[0])
 	case "runLogAppended":
@@ -35191,6 +43877,49 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
+}
+
+var targetPrivilegesImplementors = []string{"TargetPrivileges"}
+
+func (ec *executionContext) _TargetPrivileges(ctx context.Context, sel ast.SelectionSet, obj *model.TargetPrivileges) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, targetPrivilegesImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TargetPrivileges")
+		case "status":
+			out.Values[i] = ec._TargetPrivileges_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reasons":
+			out.Values[i] = ec._TargetPrivileges_reasons(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "acknowledgementRequired":
+			out.Values[i] = ec._TargetPrivileges_acknowledgementRequired(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
 }
 
 var temporaryPasswordImplementors = []string{"TemporaryPassword"}
@@ -35212,6 +43941,371 @@ func (ec *executionContext) _TemporaryPassword(ctx context.Context, sel ast.Sele
 		case "expiresAt":
 			out.Values[i] = ec._TemporaryPassword_expiresAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var testRestoreImplementors = []string{"TestRestore"}
+
+func (ec *executionContext) _TestRestore(ctx context.Context, sel ast.SelectionSet, obj *model.TestRestore) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, testRestoreImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TestRestore")
+		case "id":
+			out.Values[i] = ec._TestRestore_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "job":
+			out.Values[i] = ec._TestRestore_job(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runId":
+			out.Values[i] = ec._TestRestore_runId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "target":
+			out.Values[i] = ec._TestRestore_target(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "trigger":
+			out.Values[i] = ec._TestRestore_trigger(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._TestRestore_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedBy":
+			out.Values[i] = ec._TestRestore_requestedBy(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "scheduledFor":
+			out.Values[i] = ec._TestRestore_scheduledFor(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._TestRestore_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "startedAt":
+			out.Values[i] = ec._TestRestore_startedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "finishedAt":
+			out.Values[i] = ec._TestRestore_finishedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "durationSeconds":
+			out.Values[i] = ec._TestRestore_durationSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "errorCode":
+			out.Values[i] = ec._TestRestore_errorCode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "errorMessage":
+			out.Values[i] = ec._TestRestore_errorMessage(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "databaseCount":
+			out.Values[i] = ec._TestRestore_databaseCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "passed":
+			out.Values[i] = ec._TestRestore_passed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warned":
+			out.Values[i] = ec._TestRestore_warned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "failed":
+			out.Values[i] = ec._TestRestore_failed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "databases":
+			out.Values[i] = ec._TestRestore_databases(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var testRestoreConnectionImplementors = []string{"TestRestoreConnection"}
+
+func (ec *executionContext) _TestRestoreConnection(ctx context.Context, sel ast.SelectionSet, obj *model.TestRestoreConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, testRestoreConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TestRestoreConnection")
+		case "edges":
+			out.Values[i] = ec._TestRestoreConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._TestRestoreConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var testRestoreDatabaseImplementors = []string{"TestRestoreDatabase"}
+
+func (ec *executionContext) _TestRestoreDatabase(ctx context.Context, sel ast.SelectionSet, obj *model.TestRestoreDatabase) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, testRestoreDatabaseImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TestRestoreDatabase")
+		case "id":
+			out.Values[i] = ec._TestRestoreDatabase_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runItemId":
+			out.Values[i] = ec._TestRestoreDatabase_runItemId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "database":
+			out.Values[i] = ec._TestRestoreDatabase_database(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restoreId":
+			out.Values[i] = ec._TestRestoreDatabase_restoreId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._TestRestoreDatabase_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "errorCode":
+			out.Values[i] = ec._TestRestoreDatabase_errorCode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "errorMessage":
+			out.Values[i] = ec._TestRestoreDatabase_errorMessage(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "scratchDropped":
+			out.Values[i] = ec._TestRestoreDatabase_scratchDropped(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "findings":
+			out.Values[i] = ec._TestRestoreDatabase_findings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "findingsTotal":
+			out.Values[i] = ec._TestRestoreDatabase_findingsTotal(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tablesCompared":
+			out.Values[i] = ec._TestRestoreDatabase_tablesCompared(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "exactTables":
+			out.Values[i] = ec._TestRestoreDatabase_exactTables(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "restoreStatus":
+			out.Values[i] = ec._TestRestoreDatabase_restoreStatus(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "restoreErrorCode":
+			out.Values[i] = ec._TestRestoreDatabase_restoreErrorCode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "startedAt":
+			out.Values[i] = ec._TestRestoreDatabase_startedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "finishedAt":
+			out.Values[i] = ec._TestRestoreDatabase_finishedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var testRestoreEdgeImplementors = []string{"TestRestoreEdge"}
+
+func (ec *executionContext) _TestRestoreEdge(ctx context.Context, sel ast.SelectionSet, obj *model.TestRestoreEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, testRestoreEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TestRestoreEdge")
+		case "cursor":
+			out.Values[i] = ec._TestRestoreEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "node":
+			out.Values[i] = ec._TestRestoreEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var testRestoreFindingImplementors = []string{"TestRestoreFinding"}
+
+func (ec *executionContext) _TestRestoreFinding(ctx context.Context, sel ast.SelectionSet, obj *model.TestRestoreFinding) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, testRestoreFindingImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TestRestoreFinding")
+		case "severity":
+			out.Values[i] = ec._TestRestoreFinding_severity(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "code":
+			out.Values[i] = ec._TestRestoreFinding_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "object":
+			out.Values[i] = ec._TestRestoreFinding_object(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "source":
+			out.Values[i] = ec._TestRestoreFinding_source(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "restored":
+			out.Values[i] = ec._TestRestoreFinding_restored(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "delta":
+			out.Values[i] = ec._TestRestoreFinding_delta(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
 		default:
@@ -36282,6 +45376,11 @@ func (ec *executionContext) marshalNCreateJobResult2ᚖgithubᚗcomᚋjlentink�
 	return ec._CreateJobResult(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNCreateTemporaryConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateTemporaryConnectionInput(ctx context.Context, v any) (model.CreateTemporaryConnectionInput, error) {
+	res, err := ec.unmarshalInputCreateTemporaryConnectionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateUserInput(ctx context.Context, v any) (model.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -36659,6 +45758,19 @@ func (ec *executionContext) unmarshalNJobRetentionInput2ᚖgithubᚗcomᚋjlenti
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNJobTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobTestRestore(ctx context.Context, sel ast.SelectionSet, v *model.JobTestRestore) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "JobTestRestore!")
+		return graphql.Null
+	}
+	return ec._JobTestRestore(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNJobTestRestoreInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobTestRestoreInput(ctx context.Context, v any) (model.JobTestRestoreInput, error) {
+	res, err := ec.unmarshalInputJobTestRestoreInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNJobVerification2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobVerification(ctx context.Context, v any) (model.JobVerification, error) {
 	var res model.JobVerification
 	err := res.UnmarshalGQL(v)
@@ -36719,6 +45831,193 @@ func (ec *executionContext) marshalNRecoveryCodes2ᚖgithubᚗcomᚋjlentinkᚋb
 		return graphql.Null
 	}
 	return ec._RecoveryCodes(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx context.Context, sel ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "Restore!")
+		return graphql.Null
+	}
+	return ec._Restore(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRestoreArtifactInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreArtifactInput(ctx context.Context, v any) (model.RestoreArtifactInput, error) {
+	res, err := ec.unmarshalInputRestoreArtifactInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRestoreCancellation2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreCancellation(ctx context.Context, sel ast.SelectionSet, v *model.RestoreCancellation) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreCancellation!")
+		return graphql.Null
+	}
+	return ec._RestoreCancellation(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreConnection(ctx context.Context, sel ast.SelectionSet, v *model.RestoreConnection) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreConnection!")
+		return graphql.Null
+	}
+	return ec._RestoreConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreEdge2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreEdge(ctx context.Context, sel ast.SelectionSet, v model.RestoreEdge) graphql.Marshaler {
+	return ec._RestoreEdge(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRestoreEdge2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RestoreEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRestoreEdge2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNRestoreGlobalsInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreGlobalsInput(ctx context.Context, v any) (model.RestoreGlobalsInput, error) {
+	res, err := ec.unmarshalInputRestoreGlobalsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNRestoreMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx context.Context, v any) (model.RestoreMode, error) {
+	var res model.RestoreMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRestoreMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx context.Context, sel ast.SelectionSet, v model.RestoreMode) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNRestoreOutcomeWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreOutcomeWarning(ctx context.Context, sel ast.SelectionSet, v model.RestoreOutcomeWarning) graphql.Marshaler {
+	return ec._RestoreOutcomeWarning(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRestoreOutcomeWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreOutcomeWarningᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RestoreOutcomeWarning) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRestoreOutcomeWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreOutcomeWarning(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRestorePreview2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestorePreview(ctx context.Context, sel ast.SelectionSet, v *model.RestorePreview) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestorePreview!")
+		return graphql.Null
+	}
+	return ec._RestorePreview(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRestorePreviewInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestorePreviewInput(ctx context.Context, v any) (model.RestorePreviewInput, error) {
+	res, err := ec.unmarshalInputRestorePreviewInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRestoreSource2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreSource(ctx context.Context, sel ast.SelectionSet, v *model.RestoreSource) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreSource!")
+		return graphql.Null
+	}
+	return ec._RestoreSource(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx context.Context, v any) (model.RestoreStatus, error) {
+	var res model.RestoreStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx context.Context, sel ast.SelectionSet, v model.RestoreStatus) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNRestoreTarget2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTarget(ctx context.Context, sel ast.SelectionSet, v model.RestoreTarget) graphql.Marshaler {
+	return ec._RestoreTarget(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRestoreTarget2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RestoreTarget) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRestoreTarget2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTarget(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRestoreTarget2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTarget(ctx context.Context, sel ast.SelectionSet, v *model.RestoreTarget) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreTarget!")
+		return graphql.Null
+	}
+	return ec._RestoreTarget(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreTargetDatabases2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetDatabases(ctx context.Context, sel ast.SelectionSet, v *model.RestoreTargetDatabases) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreTargetDatabases!")
+		return graphql.Null
+	}
+	return ec._RestoreTargetDatabases(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreTargetRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargetRef(ctx context.Context, sel ast.SelectionSet, v *model.RestoreTargetRef) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreTargetRef!")
+		return graphql.Null
+	}
+	return ec._RestoreTargetRef(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreTargets2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreTargets(ctx context.Context, sel ast.SelectionSet, v *model.RestoreTargets) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RestoreTargets!")
+		return graphql.Null
+	}
+	return ec._RestoreTargets(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRestoreWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreWarning(ctx context.Context, sel ast.SelectionSet, v model.RestoreWarning) graphql.Marshaler {
+	return ec._RestoreWarning(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRestoreWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreWarningᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RestoreWarning) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRestoreWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreWarning(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNRole2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (model.Role, error) {
@@ -37244,12 +46543,126 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
+func (ec *executionContext) unmarshalNTargetPrivilegeStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivilegeStatus(ctx context.Context, v any) (model.TargetPrivilegeStatus, error) {
+	var res model.TargetPrivilegeStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTargetPrivilegeStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivilegeStatus(ctx context.Context, sel ast.SelectionSet, v model.TargetPrivilegeStatus) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx context.Context, sel ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "TargetPrivileges!")
+		return graphql.Null
+	}
+	return ec._TargetPrivileges(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNTemporaryPassword2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTemporaryPassword(ctx context.Context, sel ast.SelectionSet, v *model.TemporaryPassword) graphql.Marshaler {
 	if v == nil {
 		graphql.AddInvalidNullError(ctx, "TemporaryPassword!")
 		return graphql.Null
 	}
 	return ec._TemporaryPassword(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestore(ctx context.Context, sel ast.SelectionSet, v *model.TestRestore) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "TestRestore!")
+		return graphql.Null
+	}
+	return ec._TestRestore(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTestRestoreConnection2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreConnection(ctx context.Context, sel ast.SelectionSet, v *model.TestRestoreConnection) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "TestRestoreConnection!")
+		return graphql.Null
+	}
+	return ec._TestRestoreConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTestRestoreDatabase2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreDatabase(ctx context.Context, sel ast.SelectionSet, v model.TestRestoreDatabase) graphql.Marshaler {
+	return ec._TestRestoreDatabase(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTestRestoreDatabase2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreDatabaseᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TestRestoreDatabase) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTestRestoreDatabase2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreDatabase(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTestRestoreEdge2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreEdge(ctx context.Context, sel ast.SelectionSet, v model.TestRestoreEdge) graphql.Marshaler {
+	return ec._TestRestoreEdge(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTestRestoreEdge2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TestRestoreEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTestRestoreEdge2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTestRestoreFinding2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreFinding(ctx context.Context, sel ast.SelectionSet, v model.TestRestoreFinding) graphql.Marshaler {
+	return ec._TestRestoreFinding(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTestRestoreFinding2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreFindingᚄ(ctx context.Context, sel ast.SelectionSet, v []model.TestRestoreFinding) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTestRestoreFinding2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreFinding(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNTestRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreStatus(ctx context.Context, v any) (model.TestRestoreStatus, error) {
+	var res model.TestRestoreStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTestRestoreStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreStatus(ctx context.Context, sel ast.SelectionSet, v model.TestRestoreStatus) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNTestRestoreTrigger2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreTrigger(ctx context.Context, v any) (model.TestRestoreTrigger, error) {
+	var res model.TestRestoreTrigger
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTestRestoreTrigger2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestoreTrigger(ctx context.Context, sel ast.SelectionSet, v model.TestRestoreTrigger) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
@@ -37857,6 +47270,13 @@ func (ec *executionContext) marshalOJob2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋint
 	return ec._Job(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalOJobConnectionRef2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobConnectionRef(ctx context.Context, sel ast.SelectionSet, v *model.JobConnectionRef) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._JobConnectionRef(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOJobDbMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobDbMode(ctx context.Context, v any) (*model.JobDbMode, error) {
 	if v == nil {
 		return nil, nil
@@ -37988,6 +47408,60 @@ func (ec *executionContext) unmarshalOObjectLockMode2ᚖgithubᚗcomᚋjlentink�
 }
 
 func (ec *executionContext) marshalOObjectLockMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐObjectLockMode(ctx context.Context, sel ast.SelectionSet, v *model.ObjectLockMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) marshalORestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestore(ctx context.Context, sel ast.SelectionSet, v *model.Restore) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Restore(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORestoreFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreFilter(ctx context.Context, v any) (*model.RestoreFilter, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputRestoreFilter(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORestoreLogPage2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreLogPage(ctx context.Context, sel ast.SelectionSet, v *model.RestoreLogPage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RestoreLogPage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORestoreMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx context.Context, v any) (*model.RestoreMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.RestoreMode)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORestoreMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreMode(ctx context.Context, sel ast.SelectionSet, v *model.RestoreMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalORestoreStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx context.Context, v any) (*model.RestoreStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.RestoreStatus)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORestoreStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRestoreStatus(ctx context.Context, sel ast.SelectionSet, v *model.RestoreStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -38215,6 +47689,20 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOTargetPrivileges2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTargetPrivileges(ctx context.Context, sel ast.SelectionSet, v *model.TargetPrivileges) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TargetPrivileges(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOTestRestore2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐTestRestore(ctx context.Context, sel ast.SelectionSet, v *model.TestRestore) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TestRestore(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v any) (*time.Time, error) {

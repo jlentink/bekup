@@ -131,7 +131,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-103](#d-103-app-db-tls-details-url-handling-require--ca-channel-binding-postgres-certificate-and-wrapper-task-10) | App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0) | accepted (item 3 superseded by D-104) |
 | [D-104](#d-104-app-db-tls-ecdsa-postgres-issuer-and-required-scram-channel-binding) | App DB TLS: ECDSA postgres issuer and required SCRAM channel binding | accepted |
 | [D-105](#d-105-graphql-server-details-transport-limits-access-convention-error-codes-task-12) | GraphQL server details: transport, limits, access convention, error codes (task 1.2) | accepted |
-| [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted (job.encryption_keys_edit roles superseded by D-154) |
+| [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted (job.encryption_keys_edit roles superseded by D-154; job.test_restore_edit freshness amended by D-169) |
 | [D-107](#d-107-passwords-sessions-lockout-and-the-login-api-task-15) | Passwords, sessions, lockout and the login API (task 1.5) | accepted ("Login = step-up" superseded by D-112; lockout counting superseded by D-117) |
 | [D-108](#d-108-websocket-subscription-transport-session-watcher-and-session-event-bus-task-110) | WebSocket subscription transport, session watcher and session event bus (task 1.10) | accepted (re-validation details superseded by D-118; transport, caps, close codes and web client superseded by D-124) |
 | [D-109](#d-109-webauthn-passkeys-as-a-second-factor-task-18) | WebAuthn passkeys as a second factor (task 1.8) | accepted (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116) |
@@ -187,6 +187,18 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-159](#d-159-job-calendar-query-details-task-314) | Job calendar query: details (task 3.14) | accepted (amended by D-160) |
 | [D-160](#d-160-m3-addendum-review-fixes-one-early-start-ahead-calendar-catch-up-time-prefix-truncation-and-bounded-reads) | M3 addendum review fixes: one early start ahead, calendar catch-up, time-prefix truncation and bounded reads | accepted |
 | [D-161](#d-161-notification-event-catalog-and-per-user-defaults) | Notification event catalog and per-user defaults | accepted |
+| [D-162](#d-162-restore-staging-and-verification) | Restore staging and verification | proposed |
+| [D-163](#d-163-temporary-restore-connections) | Temporary restore connections | proposed |
+| [D-164](#d-164-offline-recovery-tooling-verify-decrypt-reindeximport-and-public-key-export) | Offline recovery tooling: verify, decrypt, reindex/import and public key export | proposed |
+| [D-165](#d-165-mysqlmariadb-restore-in-place-overwrite-by-drop--create-in-the-client-session-hardened-client-trailer-check) | MySQL/MariaDB restore: in-place overwrite by DROP + CREATE in the client session, hardened client, trailer check | proposed |
+| [D-166](#d-166-restore-worker-and-postgresql-restore-temp-database--swap-droptempdatabase-rpc-restore-logs-and-events) | Restore worker and PostgreSQL restore: temp database + swap, DropTempDatabase RPC, restore logs and events | proposed |
+| [D-167](#d-167-restore-api-target-rules-fresh-second-factor-confirmations-request-time-manifest-check-cancel-and-the-stuck-restore-sweep) | Restore API: target rules, fresh second factor, confirmations, request-time manifest check, cancel and the stuck-restore sweep | proposed |
+| [D-168](#d-168-privileged-restore-targets-probe-privilege-verdict-fail-closed-unknown-admin--acknowledgement) | Privileged restore targets: Probe privilege verdict, fail-closed unknown, admin + acknowledgement | proposed (amended by D-172, D-173) |
+| [D-169](#d-169-scheduled-test-restores-scratch-target-internal-restores-runner-derived-scratch-databases-comparison-rules-and-results) | Scheduled test restores: scratch target, internal restores, runner-derived scratch databases, comparison rules and results | proposed (amended by D-170) |
+| [D-170](#d-170-test-restores-privileged-scratch-targets-hardened-scratch-databases-and-the-implicit-public-schema-m4-review) | Test restores: privileged scratch targets, hardened scratch databases and the implicit public schema (M4 review) | proposed |
+| [D-171](#d-171-neutralize-restored-postgresql-databases-security-definer-to-invoker-no-public-access-warn) | Neutralize restored PostgreSQL databases: SECURITY DEFINER to INVOKER, no PUBLIC access, warn | accepted |
+| [D-172](#d-172-privileged-restore-targets-global-data-privileges-and-pg_readwrite_all_data-are-gated-corrects-d-168) | Privileged restore targets: global data privileges and pg_read/write_all_data are gated (corrects D-168) | proposed |
+| [D-173](#d-173-restore-core-review-fixes-worker-privilege-re-check-stored-acknowledgement-slot-bound-temporary-targets-swap-state-cancel-race-identity-redaction) | Restore core review fixes: worker privilege re-check, stored acknowledgement, slot-bound temporary targets, swap state, cancel race, identity redaction | proposed |
 
 ---
 
@@ -2850,7 +2862,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-106: Authorization model: operation catalog, policy matrix and owner scope (task 1.4)
 
 - **Date:** 2026-10-26
-- **Status:** accepted (2026-10-27, user accepted all M1 proposals); the roles of `job.encryption_keys_edit` superseded by D-154
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals); the roles of `job.encryption_keys_edit` superseded by D-154; the freshness of `job.test_restore_edit` amended by D-169 (proposed)
 - **Decided by:** agent with user approval (task 1.4)
 - **Context:** D-011 to D-015, D-047, D-053, D-057 and D-067 fix who may do
   what in broad terms. The plan leaves open how the policy is expressed,
@@ -7648,3 +7660,1229 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** tasks 4.6, 5.3, 5.3b, 5.4, 6.10; amends the event list of
   D-051 (and D-023's scope).
 
+
+## D-162: Restore staging and verification
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 4.1)
+- **Context:** The plan fixes "stage → verify → restore" (D-022, D-039):
+  stage the artifact on the scratch volume, verify hash, manifest signature
+  and the DB records in full, then restore from the local copy; identities
+  never in River args (encrypted handoff, 15-minute TTL); staging deleted on
+  every path. The details (schema, grants, at-rest protection of the staged
+  copy, when the identity is read, free-space rule, holds, cleanup, sharing
+  the verification with downloads) were open.
+- **Decision:**
+  1. **Schema** (migration 00022): `restores` (artifact, run item, job,
+     target connection, target DB name (NULL only for globals), mode
+     `new_db|overwrite`, requested_by, status
+     `queued|staging|verifying|restoring|succeeded|failed|canceled`, River
+     job id (set once), staged_bytes, started/finished, sanitized
+     `error_code`/`error_message` like `runs`). `bekup_app` may INSERT and
+     SELECT, UPDATE only the progress columns, never DELETE; a trigger keeps
+     a terminal restore terminal and the identity columns fixed.
+     `restore_identity_handoff` (restore id PK, `sealed_identity` sealed with
+     the keyring under AAD `restore_identity_handoff:<restore_id>:identity`,
+     `expires_at` ≤ created + 15 min with `created_at` forced to `now()`):
+     `bekup_app` may only INSERT, SELECT and DELETE (no UPDATE, so a sealed
+     identity is never rewritten or moved); an insert trigger allows a
+     handoff only for a `queued` restore.
+  2. **Service API** (`internal/restore`): `CreateTx` (for
+     `restoreArtifact`, task 4.5, after authorization and the fresh 2FA
+     check) validates the artifact (present, verified, signed, key version
+     present), matches a recipient identity against the job's recipient and
+     seals it into the handoff; `SetRiverJob`, `Finish` (fixed codes via
+     `ErrorCode`), `Get`.
+  3. **Stage** (worker): one transaction moves `queued → staging` (exactly
+     once), takes an artifact hold of kind `restore` (D-155, renewed every
+     third of the TTL until `Cleanup` or the end of the worker context) and
+     **takes the handoff with `DELETE … RETURNING`** (the identity is read
+     once, at the start, so a long download cannot outlive the 15-minute
+     TTL; an expired handoff is refused and deleted). It then checks the key
+     (passphrase version / identity match) and the **free space of
+     `storage.scratch_dir` ≥ stored size + wrapping overhead +
+     `storage.scratch_reserve_bytes` (default 1 GiB) before downloading**,
+     streams the stored object into `restore-<id>/artifact.age` (dir 0700,
+     file 0600, every access through an `os.Root` of the scratch directory;
+     a group/world-writable scratch directory is refused) while hashing it,
+     moves to `verifying` and verifies: stored size + SHA-256 = the artifact
+     record, and the run manifest on the same destination through
+     `artifactverify.VerifyManifest` (signature, binding to job, run, slug,
+     timestamp and exactly the signed entries, plus the entry's encryption
+     mode and passphrase/recipient version = the record, plus the manifest
+     object's recorded digest).
+  4. **At-rest protection of the staged copy: every staged file (not only
+     opt-out ones) is wrapped with an ephemeral age X25519 key that exists
+     only in memory** and is destroyed by `Cleanup`. For opt-out artifacts
+     this keeps plaintext off the scratch volume (as planned); for encrypted
+     ones it also makes the staged copy tamper-evident after verification
+     (anyone with a job's public recipient could otherwise write a
+     different valid age file between verification and restore). `Open`
+     unwraps it, decrypts with the job passphrase version or the handed-off
+     identity (destroyed right after `Open`), decompresses with the bounded
+     `pipeline.OpenArtifact` helpers, bounds the stream by the recorded dump
+     size and, at its end, re-checks the stored and the dump SHA-256
+     (mismatch → error instead of EOF). `Open` may be called once.
+  5. **Tampering is a security event:** any verification failure is a
+     `*VerificationError` (code `stored_digest_mismatch`,
+     `dump_digest_mismatch`, `manifest_bad_signature`,
+     `manifest_unknown_key`, `manifest_replayed`,
+     `manifest_binding_mismatch`, `manifest_malformed`, `manifest_invalid`,
+     `decrypt_failed`), audited as `restore.verification_failed` (system
+     actor, target the restore) and passed to an `AlertFunc` (logged at
+     ERROR until task 5.5 delivers security alerts); the restore fails with
+     `verification_failed`.
+  6. **Cleanup on every path:** `Staged.Cleanup` (idempotent) removes the
+     directory, stops and releases the hold and destroys the keys; `Stage`
+     runs it on every error and on panics (re-raised), and registers it with
+     `context.AfterFunc` on the worker context. A failed staging fails the
+     restore (canceled when the context was canceled, `artifact_hold_lost`
+     when the hold expired mid-download). A sweeper (serve and worker, at
+     startup and every 10 minutes) removes `restore-<uuid>` directories of
+     restores that are not running and any older than
+     `storage.scratch_stale_after` (default 24 h, must exceed
+     `workers.restore_timeout`), never those this process is staging;
+     expired handoffs are deleted every minute.
+  7. **Shared verification** (`internal/artifactverify`): `VerifyManifest`,
+     `DigestReader`, `MatchIdentity` and `StoredFormat`, used by downloads
+     (refactored, behaviour unchanged apart from also checking the entry's
+     encryption facts and checking the signature before the manifest's
+     recorded digest) and restores. Offline tools without the DB (task 4.7)
+     keep `pipeline.VerifySignature`.
+- **Alternatives considered:** wrapping only opt-out staging (rejected:
+  leaves a TOCTOU window for recipient-encrypted artifacts); verifying the
+  staged file once and restoring from it unprotected (same); reading the
+  identity at `Open` time (rejected: a large download outlives the 15-minute
+  TTL); restoring straight from the destination stream (rejected by D-022:
+  the whole artifact must be verified before the first byte reaches the
+  target); a row-level-security policy for the handoff (rejected: one app
+  role, the grants and the insert trigger already bound it); refusing to
+  start serve without a usable scratch directory (rejected: processes that
+  never restore would need it; staging checks it instead).
+- **Consequences:** **Security impact:** a tampered, swapped or replayed
+  artifact or manifest is detected before any byte reaches a target, is
+  audited and alerted; the staged copy is never plaintext on disk and
+  cannot be replaced unnoticed; identities live in the DB only sealed and
+  ≤ 15 minutes, are read once and never in River args; retention cannot
+  delete an artifact during its restore. Costs: the scratch volume needs
+  the stored size plus the reserve per concurrent restore; one extra
+  ChaCha20-Poly1305 pass per restore; the decrypted dump is in memory only
+  while streaming. Two new config keys (`storage.scratch_reserve_bytes`,
+  `storage.scratch_stale_after`), one audit action, one migration.
+- **Related:** tasks 4.1, 4.2, 4.3, 4.5, 4.6, 4.7, 5.5; D-022, D-039, D-142,
+  D-144, D-145, D-147, D-150, D-154, D-155; SECURITY.md WK-2, WK-4, WK-20;
+  `internal/restore`, `internal/artifactverify`,
+  `internal/db/migrations/00022_restores.sql`.
+
+## D-163: Temporary restore connections
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent
+- **Context:** Task 4.4. The plan decided that temporary restore
+  connections are admin only, created in the restore wizard, stored
+  encrypted with `temporary` + `expires_at`, usable only as a restore
+  target and deleted (credentials crypto-shredded) after the restore or
+  after N hours (default 24 h, configurable maximum), with the runner's
+  target allowlist and the TLS defaults still applying. Open details: how
+  the existing connection flows treat them, how expiry and the restore end
+  are detected, what "crypto-shred" means for a row in PostgreSQL, and
+  whether rows are hard deleted.
+- **Decision:**
+  1. **Service** (`internal/connections`, `temporary.go`):
+     `CreateTemporary` runs the normal create validation (catalog keys,
+     D-132, pinned TLS by default, a weaker mode is the usual audited
+     opt-out with `connection.tls_downgrade`) and sets
+     `expires_at = now + restore.temp_connection_ttl`. No runner probe at
+     creation: every later use (certificate/host-key capture, test,
+     restore) goes through the runner and its target allowlist. Names may
+     repeat (the unique index already excludes temporary rows); an empty
+     name becomes `Temporary: <host>`. At most 50 unexpired temporary
+     connections exist (`CONFLICT`), a soft cap against accidents.
+  2. **Isolation:** `List`, `Get`, `Update`, `Delete`, `SetTLSMode` and
+     `Target` (backup runs) never return a temporary row; the jobs service
+     already refuses them (D-146). The runner, pin, host-key and SSH-key
+     operations accept one only when `Actor.AllowTemporary` is set, which
+     the resolvers set for admins only; for maintainers a temporary id is
+     `NOT_FOUND`. Restores use `GetForRestore`, `LockRestoreTargetTx`
+     (`FOR SHARE` inside the restore's insert transaction, task 4.5) and
+     `RestoreTarget`. An expired row is unusable at once in every query
+     (`expires_at > now`), independent of the cleanup latency.
+  3. **Lifetime:** `ExtendTemporary` (admin, step-up) moves `expires_at` to
+     a time in the future that is at most `restore.temp_connection_max_ttl`
+     after `created_at`, so extensions can never keep a connection alive
+     longer than the maximum. Config `[restore]`:
+     `temp_connection_ttl` (default 24h, 5m..max) and
+     `temp_connection_max_ttl` (default 168h, ≤ 30 days).
+  4. **Cleanup:** River kind `temporary_connection_cleanup` (maintenance
+     queue, periodic every 5 minutes, unique). It deletes a temporary
+     connection when it expired, or when every restore that targeted it
+     (`restores.target_connection_id`, task 4.1's table) has finished at
+     least 15 minutes ago (a retry may reuse it meanwhile), never while a
+     run slot on it is held. The decision is re-checked under the row
+     lock. `created_for_restore_id` stays reserved and unused: the restores
+     table already records the target, and an explicit binding would need
+     4.5 to keep a second reference in sync.
+  5. **Crypto-shred and soft delete:** deletion (manual or automatic) sets
+     `secret_enc` to NULL, clears every flag describing a credential
+     (`has_password`, `ssh_auth`, `ssh_has_passphrase`, `ssh_public_key`,
+     `client_cert_pem`) and sets `deleted_at`, in one transaction with the
+     audit entry (fail closed); the in-memory copy is zeroed. Rows are not
+     hard deleted: `restores.target_connection_id` references them and the
+     restore history keeps the non-secret target metadata. The sealed blob
+     is not first overwritten with random bytes: under MVCC an UPDATE
+     writes a new tuple version, so an overwrite does not touch the old
+     bytes and would only suggest a guarantee it does not give. Physical
+     removal of dead tuples happens at VACUUM; WAL archives and app-DB
+     backups keep the sealed blob until their own retention ends, and it
+     stays protected by the keyring (D-085).
+  6. **Audit:** `connection.temporary_created` (settings without
+     credentials, `expires_at`; plus `secret.changed`),
+     `connection.temporary_extended` (from, to),
+     `connection.temporary_deleted` (admin, reason `manual`) and
+     `connection.temporary_expired` (system actor, reason `expired` or
+     `restore_finished`); both deletions list `destroyed_fields` and add a
+     `secret.changed` entry with `destroyed: true`.
+  7. **API:** `createTemporaryConnection` (single root field),
+     `extendTemporaryConnection`, `deleteTemporaryConnection` (admin +
+     step-up: `connection.temporary_create|extend|delete`) and
+     `temporaryConnections` (admin: `connection.temporary_list`);
+     `Connection.temporary` and `Connection.expiresAt`.
+- **Alternatives considered:** reusing `createConnection` with a flag
+  (rejected: would mix the admin-only restore path into the general
+  connection API and its listings); letting `Extend` count from now
+  (rejected: unbounded lifetime); hard deleting rows (rejected: the
+  restores FK and the history); a random overwrite before NULL (rejected,
+  see 5); a per-row key held outside the DB for true erasure (rejected for
+  now: keys only in memory would not survive a restart, keys in the DB
+  share the backup problem); probing the target at creation (rejected:
+  pinned connections cannot be probed before the pin, and the allowlist
+  applies on every use anyway); binding through `created_for_restore_id`
+  (see 4).
+- **Consequences:** **Security impact:** a temporary connection can only
+  be created, seen, pinned, extended and deleted by an admin with a fresh
+  step-up; it can never become a backup source; it is unusable the moment
+  it expires and its credentials are removed from the live table within
+  minutes; every lifecycle step is audited. Residual risk: dead tuples,
+  WAL archives and app-DB backups retain the sealed blob until VACUUM or
+  their retention; anyone holding such a copy also needs the keyring. One
+  River kind, four audit actions, four authz operations, two config keys;
+  the cleanup query depends on task 4.1's `restores` table
+  (`target_connection_id`, `finished_at`).
+- **Related:** tasks 4.1, 4.4, 4.5; D-015, D-058, D-085, D-132, D-135,
+  D-140, D-145, D-146, D-147, D-162; SECURITY.md SV-7, SV-23, SC-6;
+  `internal/connections/temporary.go`, `internal/connections/cleanup.go`,
+  `internal/db/queries/connections.sql`.
+
+## D-164: Offline recovery tooling: verify, decrypt, reindex/import and public key export
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 4.7)
+- **Context:** D-040 asks for `bekup verify` / `bekup decrypt` with a
+  passphrase or identity, a documented format, a destination
+  re-index/import and escrow documentation for the master key and the
+  signing-key fingerprint. Open were: where the offline tools get the
+  public keys, how strictly decrypt verifies, how secrets reach the CLI,
+  how a destination is described without the DB, what an import writes
+  and when it may mark artifacts verified.
+- **Decision:**
+  1. **Package** `internal/offline` (reusable: `VerifyManifest`,
+     `CheckArtifact`, `VerifyRun`, `Decrypt`, `Source`/`DirSource`/
+     `DestSource`, `Scan`, `Importer`, `SafeText`); commands in
+     `cmd/bekup` (`verify`, `decrypt`, `reindex`, `keys export-public`).
+     The offline tools use `pipeline.VerifySignature` (no DB binding) and
+     always print the job and run identity for the operator's replay check;
+     DB-backed code keeps `internal/artifactverify` (D-162).
+  2. **Public keys:** `bekup keys export-public` (needs the DB, reads only
+     `instance_keys` public keys, no keyring) writes
+     `bekup-instance-public-keys v1` (one `key <id> <base64> created …
+     [retired …]` line per key, fingerprints as comments); `--pubkey`
+     takes that file (`config.ReadPublicFile` rules) or a bare base64
+     key, repeatable; a key line whose ID does not match its key is
+     rejected. Verification without `--pubkey` is refused.
+  3. **verify** parses `manifest.json` strictly, checks the signature,
+     streams every listed artifact (size + SHA-256, at most size+1 bytes)
+     from the run directory through an `os.Root` (`--artifact` checks only
+     the given files, the rest is reported skipped) and prints a report
+     (engine, versions, databases, sizes, encryption mode + passphrase /
+     recipient version and recipient fingerprints, stats summary,
+     warnings) or JSON; non-zero exit on any failure.
+  4. **decrypt** requires either `--manifest` + `--pubkey` (signature,
+     then a first streaming pass over the artifact's size + SHA-256 before
+     any decryption, then the dump's raw size + SHA-256 while decrypting,
+     output bounded by the signed raw size) or an explicit `--no-verify`
+     (loud warning; an unverified manifest, if given, is still used for
+     the digests and the passphrase version). Output goes to a 0600
+     temporary file next to `--out` and is committed only after every
+     check by a hard link (never replaces an existing file; `--force`
+     renames); `--out -` streams to stdout (refused on a terminal).
+     Secrets: `--passphrase-file` (a passphrase or a
+     `bekup-job-passphrases v1` export; the version comes from the
+     manifest or `--passphrase-version`, the export's job must match),
+     `--identity-file` (X25519 only), `--stdin-passphrase` (terminal
+     prompt without echo or the first stdin line, ≤ 64 KiB); files via
+     `config.ReadSecretFile`; hidden `--passphrase`/`--password`/
+     `--identity`/`--key` flags fail with guidance; key bytes are zeroed.
+     Bounds: scrypt work factor 2^18 by default (`--max-work-factor` ≤
+     2^20), zstd window 64 MiB (`pipeline.OpenArtifact`).
+  5. **reindex** describes a destination in an offline TOML file (`type`
+     + one of `[disk]`/`[s3]`/`[sftp]`, `[netguard]` allowlist; strict keys;
+     credentials only as `*_file`; SFTP host key pin mandatory) and opens it
+     in no-delete mode through the normal backends and the SSRF guard. It
+     lists `{slug}/{timestamp}/…` (≤ 2 M objects), verifies each manifest,
+     **rejects a manifest whose slug/timestamp differ from its directory**,
+     and checks every artifact (or only the manifests with
+     `--skip-artifacts`).
+  6. **Import** (`--import --job-slug --destination-id`, bekup config,
+     connects as `bekup_app`): verification uses the **database's**
+     instance keys only; only runs that verify completely (signature,
+     location, every artifact) are imported, because restores and
+     downloads bind to exactly the signed entries (D-150, D-162) and a
+     partly broken run could never be used. The job (not deleted) must
+     exist with the manifest's job ID (a job recreated after a total loss has a new ID and
+     is refused). One transaction per run inserts the run with the
+     manifest's run ID (status success, trigger `manual`, storage timestamp
+     and finish time from the manifest, manifest warnings as run warnings,
+     an `imported` notice), one verified run item and one verified,
+     signed artifact per entry and the manifest object (its size and
+     SHA-256), plus the audit event `cli.run.imported` (fail closed).
+     Existing run IDs or object keys are refused. New sqlc queries in
+     `internal/db/queries/reindex.sql`; no migration. Retention applies
+     to imported runs like to any other run (documented).
+  7. Manifest-derived text is escaped for terminals (`SafeText`).
+- **Alternatives considered:** letting decrypt run without a manifest by
+  default (rejected: unauthenticated content; D-001); taking public keys
+  only as fingerprints (rejected: ed25519 verification needs the key; the
+  fingerprint is the escrow cross-check); importing partly broken runs as
+  `partial` with unverified artifacts (rejected: the manifest binding of
+  restores would refuse every artifact of such a run); importing with
+  `--pubkey` keys that the DB does not know (rejected: restores verify with
+  the DB keys); a new `imported` run trigger (rejected for now: needs a
+  migration of the enum; the notice marks imported runs); adopting old
+  runs into a recreated job (rejected: breaks the job-ID binding).
+- **Consequences:** Backups stay verifiable and decryptable from the escrow
+  alone. **Security impact:** secrets never come from argv; forged or
+  replayed manifests are rejected or shown with their identity; tampered
+  artifacts never produce output under `--out`; an import cannot plant
+  unverified runs and is audited; destinations are only read. Residual:
+  `--no-verify` output is unauthenticated (warned); operators must compare
+  the key fingerprints and the run identity.
+- **Related:** D-040, D-087, D-088, D-141, D-142, D-144, D-150, D-151,
+  D-154, D-162; tasks 4.7, 4.1; SECURITY.md CL-2, CL-4, CL-5, CL-9, CL-10,
+  CL-11; `internal/offline`, `cmd/bekup/offline_cmd.go`,
+  `cmd/bekup/reindex_cmd.go`, `cmd/bekup/keys_cmd.go`,
+  `internal/db/queries/reindex.sql`, `docs/recovery.md`,
+  `docs/reference/artifact-format.md`, `docs/security/key-management.md`.
+
+## D-165: MySQL/MariaDB restore: in-place overwrite by DROP + CREATE in the client session, hardened client, trailer check
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 4.3; awaiting the user's confirmation)
+- **Context:** Task 4.3 restores MySQL and MariaDB dumps (plain SQL from
+  `mysqldump` / `mariadb-dump` without `--databases`, so no `CREATE
+  DATABASE` or `USE`). The plan asks for an in-place overwrite after an
+  explicit warning (MySQL has no `RENAME DATABASE`, so no temp + swap)
+  and for new-database creation. Open points: what "in place" means for
+  objects that are not in the dump (a dump only drops and recreates the
+  tables it contains), how the database is dropped without a runner RPC
+  that drops non-temporary databases (`DropDatabase` only accepts bekup
+  temporary names, D-123), what happens to a truncated dump that ends at
+  a statement boundary, and engine mixing.
+- **Decision:**
+  1. **Overwrite = drop and recreate the database, then restore**, in one
+     client session: serve's restorer (`internal/restore/mysql.go`)
+     prefixes the restore stream with fixed SQL built from the validated
+     name (`engine.QuoteMySQLIdent`; validated names contain no quotes,
+     backticks or backslashes): read `DEFAULT_CHARACTER_SET_NAME` /
+     `DEFAULT_COLLATION_NAME` of `DATABASE()` from
+     `information_schema.SCHEMATA` (a catalog view, never a user table,
+     D-152/D-153), `PREPARE` the `CREATE DATABASE` with those defaults,
+     `DROP DATABASE`, `EXECUTE`, `USE`; then the dump. A missing database
+     or an unreadable catalog fails before the `DROP`. Objects that are
+     not in the backup (tables, views, routines, triggers, events) are
+     removed; grants on the database survive (`mysql.db`). The client
+     stops at the first error, so a failure after the `DROP` leaves the
+     database empty or partially restored: the warning
+     (`restore.MySQLOverwriteWarning`, shown with the type-to-confirm of
+     task 4.5) and the restore log say so. The runner still requires the
+     database to exist (D-033 list check) and runs the client with its
+     own hardened argv; the runner API is unchanged.
+  2. **New database:** `CreateDatabase` (the runner requires the name to
+     be absent), then `Restore`. A failed restore leaves the new database
+     behind (no API drops a non-temporary database); the log says so and
+     the result carries the warning `partial_new_database`.
+  3. **Hardened client** (built by the runner, D-123): MySQL
+     `--system-command=OFF --commands=OFF --local-infile=0`, MariaDB
+     `--sandbox --local-infile=0`, both `--default-character-set=utf8mb4
+     --database=<db>`, the bekup option file first, no `--force`. Tests
+     inspect the argv through the runner's spec builder for every
+     allowlisted image, and hostile dumps (`\!`, `system`, `source`,
+     `\.`, `LOAD DATA LOCAL INFILE` against a server with `local_infile`
+     on, `tee`, `\T`, `pager`) are refused or have no effect on MySQL
+     8.4/9.7 and MariaDB 11.4/11.8.
+  4. **Trailer and size check:** the stream goes through the shared
+     `RunRestoreStream` (exactly `total_bytes`, the last chunk held back
+     until the staged source ended cleanly; its end re-checks the
+     digests, D-162); the MySQL/MariaDB restorer additionally requires
+     the dump to end with the `-- Dump completed` trailer
+     (`engine.DumpTrailerOK`), otherwise the stream is canceled so the
+     runner kills the client before it reads the end of the dump, and
+     the restore fails (`ErrRestoreIncomplete`). A client exit code other
+     than 0 is `ErrRestoreFailed`; client stderr lines (bounded, redacted
+     by the runner) go to the restore log, server text never into
+     errors.
+  5. **Refusals before any RPC:** `KindGlobals` (PostgreSQL only;
+     `engine.ErrUnsupported`), a source, target-connection or restorer
+     engine mismatch (MySQL and MariaDB are strictly separate,
+     `engine.ErrWrongEngine`), system databases and invalid names. The
+     restore client image is chosen by the runner
+     (`SelectRestoreClient`: max(dump client, server); the newest client
+     with the warning `client_older_than_server` when none is new
+     enough).
+  6. The restorers register themselves (`init`, `RegisterEngine` for
+     `mysql` and `mariadb`); `restore.MySQLFamilyRestorer` returns one
+     directly (tests).
+- **Alternatives considered:** Restore over the existing database without
+  dropping it (extra tables, views and routines would survive: not a
+  faithful restore). Dropping every object individually from catalog
+  queries (keeps the database itself but needs dynamic SQL loops per
+  object type and still misses some objects). A new runner RPC or a
+  `replace` flag on `RestoreHeader` (typed, but separate RPCs would leave
+  a window without the database and the runner's existence check, and
+  the change would touch the proto concurrently with task 4.2; the
+  stream prefix grants nothing beyond the dump itself, which already is
+  arbitrary SQL run with the target's credentials). `DROP DATABASE IF
+  EXISTS` (the database must exist; a missing one should fail before
+  anything is dropped). Ignoring the trailer (a dump cut at a statement
+  boundary would "succeed").
+- **Consequences:** An overwrite needs the `DROP` and `CREATE` privileges
+  on the target database; concurrent sessions holding metadata locks make
+  the `DROP` wait. There is no rollback for a failed in-place restore
+  (documented in the warning and in `docs/guides/restore.md`). A hostile
+  dump still runs arbitrary SQL with the target user's rights (for
+  example `USE other_db`): use a restore user limited to the target
+  databases. Security impact: no new trust boundary; SECURITY.md rows
+  for the MySQL/MariaDB restore path added.
+- **Related:** D-033, D-036, D-123, D-134, D-152, D-153, D-162; tasks 4.2,
+  4.3, 4.5; `internal/restore/mysql.go`, `internal/restore/mysqlit`,
+  `internal/engine/mysql.go`, `docs/guides/restore.md`, `SECURITY.md`.
+
+## D-166: Restore worker and PostgreSQL restore: temp database + swap, DropTempDatabase RPC, restore logs and events
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 4.2; awaiting the user's confirmation)
+- **Context:** Task 4.2 builds the shared restore worker (River kind
+  `restore`, D-145) and the PostgreSQL restore path. The plan fixes
+  `pg_restore --exit-on-error` into `<db>__bekup_restore_<id>` and a rename
+  swap for overwrites, globals via the hardened psql as a separate
+  admin-only action and the restore client max(dump, server). Open were:
+  how failed/canceled restores remove their temporary database and the
+  replaced database after a swap (the runner had no drop RPC), how engine
+  restorers plug in (task 4.3 runs concurrently), where restore logs and
+  live events go, the order of slot / lock / staging, `--no-owner`'s
+  default, and what a failed new-database restore leaves behind.
+- **Decision:**
+  1. **Engine interface** (`internal/restore/engine.go`):
+     `EngineRestorer.Restore(ctx, EngineRequest, src, LogSink)` with a
+     registry `RegisterEngine(engine, r)` (init-time; PostgreSQL in
+     `postgres.go`, MySQL/MariaDB in `mysql.go`). `EngineRequest` carries the
+     restore id, the runner client, a `TargetBuilder` (fresh unsealed target
+     per RPC, released right after it), target engine and database, mode,
+     kind (`database` | `globals`), source engine and version key from the
+     **signed manifest**, dump format, exact size and `NoOwner`. Shared
+     runner helpers: `RunRestoreStream` (header, 256 KiB chunks, **the last
+     chunk held back until the staged stream ended cleanly**, so a failed
+     final digest check never completes the tool's input; exit code and
+     byte count checked), `CreateDatabase`, `RenameSwap`,
+     `DropTempDatabase`. `TempID` = the first 48 bits of the restore id in
+     hex.
+  2. **New runner RPC `DropTempDatabase(target, database, temp_id, role)`**
+     (class run): the runner derives the name itself
+     (`<db>__bekup_restore_<id>` or `<db>__bekup_old_<id>`, roles
+     RESTORE/OLD) and the engine builder refuses anything that is not a
+     bekup temporary name (`DROP DATABASE IF EXISTS`, `WITH (FORCE)` on
+     PostgreSQL 13+). No API can drop another database.
+  3. **PostgreSQL restorer:** new database = `CREATE DATABASE … TEMPLATE
+     template0` + `pg_restore --exit-on-error`; a failure leaves the new,
+     partial database (it never held other data; the log says to drop it).
+     Overwrite = create the temporary database, restore into it, re-check
+     the context, `RenameSwapDatabase`, then drop the old database (failure
+     → warning `old_database_kept`). Until the swap the target is never
+     touched; on any failure, cancel or timeout the temporary database is
+     dropped on a fresh bounded context (`temp_database_kept` when that
+     fails). Globals: kind globals only with a SQL dump and no database,
+     `psql --no-psqlrc -v ON_ERROR_STOP=1` under the runner's `\restrict`
+     key against the maintenance database. pg_dumpall writes `CREATE ROLE
+     <name>;` for every role and relies on it failing harmlessly for
+     existing roles (always the connected one), which `ON_ERROR_STOP`
+     turns into a failed restore: the restorer reads the globals dump in
+     full (≤ 32 MiB, so its final digest check runs before any byte
+     reaches the runner) and rewrites exactly those lines (strict
+     identifier match, no `$` in the name) into `DO $bekup_role$BEGIN
+     CREATE ROLE <name>; EXCEPTION WHEN duplicate_object THEN NULL;
+     END$bekup_role$;`; every other error (e.g. an existing tablespace)
+     still stops psql. **`--no-owner` is on by default** (`restores.no_owner`,
+     fixed per restore; `CreateInput.KeepOwners` turns it off): restored
+     objects belong to the target connection's role, so a backup cannot
+     hand objects to roles that happen to exist on the target.
+  4. **Worker order:** load the restore (only `queued` is worked: a restore
+     runs at most once); take a run slot for the **target** connection
+     (shared pool, D-147/D-156; snooze while busy, which River does not
+     count as an attempt); re-check the target with
+     `LockRestoreTargetTx` (deleted / expired → `target_unavailable`);
+     audit `restore.started` (fail closed); `Stage`; re-check that the
+     target's engine equals the manifest's (`engine_mismatch`), the
+     artifact kind matches the request and a restorer exists; move to
+     `restoring`; restore; `Cleanup` always; finish with a sanitized code
+     plus the log counts and warning codes; audit `restore.finished`;
+     emit the D-161 hook (`restore.started|completed|failed`, a no-op
+     `Notifier` until task 5.3). River cancel → `canceled` (River job
+     canceled); queue timeout → `timeout`; lost slot → `slot_lost`;
+     shutdown → `interrupted`. TLS pin / SSH host-key mismatches are
+     recorded through `connections.RecordRunFailure`.
+  5. **Restore logs:** table `restore_logs` (same shape and caps as
+     `run_logs`, written through the run-log writer: sanitized, redacted
+     with the target's credentials registered for the restore's duration
+     plus URL/DSN credential redaction, truncated, capped, batched);
+     `restores.log_lines`, `log_lines_dropped`, `warnings` (≤ 32 codes).
+     `bekup_app` may only insert and read `restore_logs`.
+  6. **Events:** channel `bekup_restore_events` (fixed LISTEN query),
+     payload `restore:<id>` or `log:<id>`, published in the transaction of
+     every status change (staging, verifying, restoring, terminal) and log
+     batch; listeners re-load with the caller's rights.
+  7. `Service.EnqueueTx` inserts the River job (restore id only) in the
+     restore's insert transaction for task 4.5.
+- **Alternatives considered:** a generic `DropDatabase` RPC taking a name
+  (rejected: the runner would trust serve's name choice); keeping the old
+  database after a swap for manual rollback (rejected: doubles disk use
+  silently; a failed swap already leaves the target untouched); restoring a
+  new database through temp + rename too (rejected: needs another rename
+  RPC; a new database holds nothing to protect); `--no-owner` off by default
+  (rejected: ownership by arbitrary existing roles is a privilege surprise);
+  storing restore logs in `run_logs` (rejected: different parent table and
+  access rules); staging before taking the slot (rejected: a snooze after
+  staging would need a second staging).
+- **Consequences:** **Security impact:** the runner gains one RPC that can
+  only drop bekup-derived temporary names; an overwritten PostgreSQL
+  database changes only at the atomic swap; a canceled or failed restore
+  leaves no temporary database; restore logs never carry the target's
+  credentials. A failed new-database restore leaves a partial database
+  (documented); a globals restore can change attributes and passwords of
+  existing roles that are in the dump (admin only, documented). One
+  migration (00023), one River kind, two audit actions, one pubsub
+  channel.
+- **Related:** D-022, D-036, D-123, D-134, D-138, D-145, D-147, D-152,
+  D-155, D-156, D-161, D-162, D-163, D-165; tasks 4.2, 4.3, 4.5, 4.6, 5.3;
+  `internal/restore/{engine,worker,postgres,runner_calls,events,notify}.go`,
+  `internal/runner/ops_admin.go`, `proto/runner/v1/runner.proto`,
+  `internal/db/migrations/00023_restore_worker.sql`,
+  `docs/guides/restore.md`, `SECURITY.md`.
+
+## D-167: Restore API: target rules, fresh second factor, confirmations, request-time manifest check, cancel and the stuck-restore sweep
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 4.5; awaiting the user's confirmation)
+- **Context:** Task 4.5 exposes restores over GraphQL. The plan fixes the
+  target rules (admins/maintainers: any same-engine connection, existing
+  or new database; owners: only databases their jobs back up or a new
+  database on those connections; temporary connections admin only), the
+  mandatory fresh passkey/TOTP check (≤ 5 min, enrollment first, D-057,
+  D-116), type-to-confirm for overwrites and the target row lock
+  (D-163). Open were: which engine the API trusts before the worker
+  re-checks the signed manifest, how listing the target's databases fits
+  the one-runner-call-per-request rule (D-135), whether owners may cancel,
+  how globals are confirmed, what prevents two restores into one
+  database, what the UI is told before confirming, and what happens to
+  restores whose worker crashed (left open by 4.2).
+- **Decision:**
+  1. **API layer** `internal/restore.API` (resolvers only translate):
+     every operation authorizes with the central policy, the artifact's
+     job and the target loaded from the database. Order: syntax checks
+     (mode, database name: the strict charset, not a bekup temporary
+     name), artifact + `restore.targets_list` with its job (a missing
+     artifact is NOT_FOUND for staff, FORBIDDEN for owners), target via
+     `GetForRestore` (unknown: field error for staff, FORBIDDEN for
+     owners), then `restore.artifact` with `Job` + `RestoreTarget`
+     (owner target rule, temporary = admin only, then the fresh second
+     factor), and only then the destination read.
+  2. **Request-time manifest verification.** Before relying on the
+     source engine the API verifies the run manifest on the artifact's
+     destination (`artifactverify.VerifyManifest`, the same check as
+     downloads/staging) and takes engine, version and kind from it. A
+     failure is a possible tampering: refused (CONFLICT), alerted
+     (`restore_artifact_verification_failed`, stage `request`) and cached
+     with the success results for 5 minutes per artifact (one alert per
+     period, no destination read per click). The engine must equal the
+     target's (MySQL ≠ MariaDB; VALIDATION on `targetConnectionId`); a
+     system database is refused; `keepOwners` is PostgreSQL only. The
+     worker still re-checks everything against the staged, verified
+     copy (D-162, D-166).
+  3. **Fresh second factor:** `restoreArtifact` maps to `restore.artifact`
+     (FreshAAL2) and `restoreGlobals` to `restore.globals` (admin,
+     FreshAAL2): only a TOTP or user-verified passkey check within
+     `security.stepup_max_age` (≤ 5 min) passes; password, recovery-code
+     and UP-only passkey step-ups do not (D-116); accounts without a
+     factor get REQUIRES_2FA_ENROLLMENT. Both are D-117 single-root
+     fields (`restoreArtifact` may carry the age identity, both read a
+     destination) and `restore.artifact`/`restore.globals` are credential
+     operations.
+  4. **Confirmations:** OVERWRITE needs `confirmTargetName` equal to
+     `targetDatabase` byte for byte; a globals restore needs
+     `confirmPhrase` = `restore globals into <connection name>` because it
+     can change existing roles including passwords (D-166). Globals
+     restores are recorded with mode `overwrite`.
+  5. **Preview:** `restorePreview` (new operation `restore.preview`: the
+     target rules of `restore.artifact` without freshness) returns the
+     source, the target, the confirmation text and fixed warnings:
+     `overwrite_in_place` (MySQL/MariaDB, `restore.MySQLOverwriteWarning`),
+     `overwrite_swap` (PostgreSQL temp + swap, sessions terminated, room
+     for two copies), `new_database_partial_on_failure`, `client_version`
+     (the runner picks max(dump, server)), `cross_source_target` (the
+     target is not the job's connection: dump content runs with the
+     target role's privileges, D-068), `temporary_target`,
+     `target_not_ready`, `insecure_transport`, `keep_owners`,
+     `identity_required`, `globals_change_roles`. `restoreArtifact`
+     audits the warning codes it was requested with.
+  6. **Targets:** `restoreTargets(artifactId)` lists candidate
+     connections without runner calls (owners: connections their
+     non-deleted jobs back up; admins also unexpired temporary ones;
+     globals artifacts admins only, PostgreSQL targets only).
+     `restoreTargetDatabases(artifactId, targetConnectionId)` is a
+     separate single-root query with one runner Probe (D-135), cached
+     30 s per connection (the per-user runner limiter applies to fresh
+     reads); owners see only the databases their jobs back up
+     (`OwnerBackedUpDatabases`), bekup's `__bekup_restore_`/`__bekup_old_`
+     databases are hidden, at most 2000 names.
+  7. **One transaction:** `LockRestoreTargetTx` (share lock; deleted or
+     expired target refused; engine/temporary re-compared), a
+     transaction-scoped advisory lock on (connection, database|globals),
+     refusal while another restore into the same database (or the same
+     connection's globals) is queued or running (CONFLICT), `CreateTx`
+     (artifact + key checks, identity sealed into the handoff),
+     `EnqueueTx`, `restore.requested` (user actor; artifact, job, run,
+     kind, source engine/version/database, target connection/database,
+     temporary/original flags, mode, no_owner, warning codes,
+     `identity_supplied`; never the identity) and the restore event.
+  8. **Cancel and reads:** `cancelRestore` = new operation
+     `restore.cancel`, staff only like `run.cancel` (owners can start
+     restores of their jobs but not cancel them, D-106). In one
+     transaction: lock the row, CONFLICT when finished, cancel the River
+     job; when it was not running the restore is finished as canceled at
+     once and its identity handoff deleted; audit
+     `restore.cancel_requested`. `restores`/`restore`/`restoreLogs`/
+     `restoreUpdated` use `restore.view` (owners: their jobs' restores;
+     `requestedBy` staff only, like `Run.triggeredBy`).
+     `restoreUpdated(restoreId)` re-loads and re-authorizes on every
+     `bekup_restore_events` event (coalesced, ≤ 5 per second), and
+     completes after delivering the terminal status.
+  9. **Stuck-restore sweep** (River kind `restore_stuck_sweep`,
+     maintenance queue, every 5 minutes): a non-terminal restore that
+     started more than `workers.restore_timeout` + 15 minutes ago, or
+     that is idle for 15 minutes while its River job is gone or
+     finalized, is failed with code `abandoned` after a re-check under
+     its row lock; its identity handoff, artifact hold and run slot are
+     released, the local staging directory removed (other processes'
+     scratch sweepers remove theirs) and `restore.abandoned` audited
+     (system actor). Queued restores waiting for a slot are never
+     touched.
+- **Alternatives considered:** trusting the job's current connection
+  engine (rejected: a job can move to another connection; the signed
+  manifest is the authority); listing every target's databases in
+  `restoreTargets` (rejected: N runner calls per request, against
+  D-135); letting owners cancel (rejected for consistency with D-106);
+  a fixed globals phrase (rejected: typing the connection name makes the
+  target explicit); allowing concurrent restores into one database
+  (rejected: two MySQL in-place restores or PostgreSQL swaps would
+  interleave); failing stuck queued restores by age alone (rejected: a
+  restore may legitimately wait long for a slot).
+- **Consequences:** **Security impact:** no restore runs without a fresh
+  phishing-resistant-or-TOTP check by the requesting user; owners cannot
+  reach databases outside their jobs (server-side, DB-loaded); tampered
+  manifests are refused before a restore is recorded; identities stay
+  sealed and are never logged, audited or returned; crashed restores no
+  longer hold artifacts, slots or identities. **Open item (D-068):** the
+  runner's Probe does not yet report whether a connection's role is
+  privileged (superuser / SUPER / FILE), so `RestoreTarget.PrivilegedRole`
+  is never set and the "privileged restore role: admin only + explicit
+  acknowledgement" rule is not enforced yet; the `cross_source_target`
+  warning and the audit flag partly cover it. It needs a runner change
+  (Probe field + engine queries) and should be scheduled before M4
+  closes. Two new authz operations, three audit actions, one River kind,
+  new queries (no migration).
+- **Related:** tasks 4.1–4.6, 6.7; D-013, D-015, D-057, D-067, D-068,
+  D-106, D-112, D-116, D-117, D-135, D-145, D-150, D-155, D-162, D-163,
+  D-165, D-166; `internal/restore/{api,read,sweep}.go`,
+  `internal/graph/schema/restore.graphqls`,
+  `internal/graph/resolvers/restore.go`, `internal/authz/operations.go`,
+  `docs/guides/restore.md`, `SECURITY.md`.
+
+## D-168: Privileged restore targets: Probe privilege verdict, fail-closed unknown, admin + acknowledgement
+
+- **Date:** 2026-10-28
+- **Status:** proposed (amended by D-172: global data privileges and pg_read/write_all_data gate; by D-173: worker re-check)
+- **Decided by:** agent (task 4.8; awaiting the user's confirmation)
+- **Context:** D-068 (accepted) requires that `Probe` reports whether a
+  connection's role is privileged and that restores into such
+  connections need an admin and an explicit acknowledgement, because SQL
+  inside a dump runs with the restore role's rights (`SECURITY.md` OI-2).
+  D-167 left this open (`authz.RestoreTarget.PrivilegedRole` was never
+  set). Open were: which privileges count, how roles (MySQL 8 / MariaDB)
+  are handled, where the verdict comes from at request time, and what
+  happens when it cannot be determined.
+- **Decision:**
+  1. **Runner `Probe`** returns `privileges { status, reasons }`
+     (`PrivilegeStatus` NOT_PRIVILEGED / PRIVILEGED / UNKNOWN; reasons
+     are stable codes, ≤ 32 × 64 bytes, never server-provided names
+     other than privilege and predefined role names). It is computed in
+     the runner's hardened Go-driver session (D-152: pinned
+     `search_path`/`row_security`, schema-qualified SQL, enforced by the
+     qualification test; D-153: no user-table reads). A detection error
+     does not fail the Probe: the verdict is UNKNOWN (`detection_failed`).
+  2. **PostgreSQL privileged set:** the role's `rolsuper`,
+     `rolcreaterole`, `rolreplication`, `rolbypassrls`; membership
+     (direct or indirect, with or without INHERIT/SET, via
+     `pg_has_role(..., 'MEMBER')`, reachable with `SET ROLE`) in a role
+     with one of these attributes (`member_of_role_with:<attr>`) or in
+     `pg_execute_server_program`, `pg_read_server_files`,
+     `pg_write_server_files` (host access), `pg_signal_backend` (other
+     sessions), `pg_read_all_stats` (every session's statements) and
+     `pg_create_subscription` (outbound connections from the server)
+     (`member_of:<role>`). Owning databases, `CREATEDB`,
+     `pg_read_all_data` and `pg_write_all_data` are **not** privileged:
+     they act on the session's database only, which the restore replaces
+     anyway.
+  3. **MySQL/MariaDB:** `SHOW GRANTS` (the current account; no
+     `mysql.*` reads), parsed by a quote- and parenthesis-aware
+     tokenizer (fuzz-tested). Global (`*.*`) privileges outside a small
+     allowlist of data/schema privileges (SELECT, INSERT, UPDATE, DELETE,
+     CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES,
+     LOCK TABLES, EXECUTE, CREATE/SHOW VIEW, CREATE/ALTER ROUTINE, EVENT,
+     TRIGGER, SHOW DATABASES, REPLICATION CLIENT, USAGE and a few
+     harmless MariaDB/MySQL 8 monitor/flush privileges) are privileged
+     (`global:<NAME>`), so SUPER, FILE, PROCESS, RELOAD, SHUTDOWN,
+     CREATE USER, ALL PRIVILEGES, SET_USER_ID, SYSTEM_USER,
+     SYSTEM_VARIABLES_ADMIN, MariaDB's split SUPER privileges and every
+     dynamic privilege bekup does not know yet count; global `WITH GRANT
+     OPTION` (`global:GRANT OPTION`); `PROXY` grants (`proxy`); any
+     non-read privilege on a schema pattern matching `mysql` or on its
+     tables (`system_schema_write`; LIKE wildcards honored). Role grants
+     (MySQL 8 `GRANT role TO`, MariaDB roles and `SET DEFAULT ROLE`) are
+     a known limitation: their privileges are not listed and `SET ROLE`
+     can activate them, so the verdict is **UNKNOWN** (`roles_granted`);
+     so is any line the parser does not understand (`unparsed_grant`).
+  4. **Fail closed:** serve treats UNKNOWN, a missing verdict (older
+     runner: `no_verdict`) and an inconsistent one like PRIVILEGED. A
+     target connection that is not ready is UNKNOWN (`target_not_ready`)
+     without a runner call. Reasons from the runner are re-validated
+     (charset, length, count).
+  5. **Restore API:** `restorePreview` and `restoreTargetDatabases` show
+     `targetPrivileges { status reasons acknowledgementRequired }` (the
+     preview also `crossSource`) and the `privileged_target` warning;
+     they use the 30-second probe cache, and a failing preview probe
+     shows UNKNOWN (`probe_failed`; pin/host-key mismatches and
+     cancellations still fail). `restorePreview` is now a D-117
+     single-root field (it makes a runner call, D-135).
+     `restoreArtifact`/`restoreGlobals` **probe afresh** (no cache); for
+     a gated target the target rules run again with
+     `RestoreTarget.PrivilegedRole` (admins only: FORBIDDEN for
+     maintainers and owners) and then require the input flag
+     `acknowledgePrivilegedTarget: true` (VALIDATION otherwise); globals
+     (admin only already) need the flag likewise. A request whose probe
+     fails returns the error.
+  6. **Audit and alert:** `restore.requested` records
+     `target_privileges`, `target_privilege_reasons`,
+     `privileged_target_acknowledged` and `cross_source` (besides
+     `original_target` and the warning codes); an acknowledged restore
+     into a gated target raises the security alert
+     `restore_privileged_target` (logged until task 5.5 delivers it).
+     The cross-source flag of D-068 stays the `cross_source_target`
+     warning plus these audit fields.
+  7. The connection test (`testConnection`) also returns the verdict
+     (`ConnectionTestResult.privileges`), the basis for the connection
+     badge in the UI.
+- **Alternatives considered:** Store the verdict on the connection row
+  (stale; needs a migration and a refresh policy). Treat UNKNOWN as not
+  privileged (fails open on MySQL roles). Expand MySQL roles with `SHOW
+  GRANTS ... USING` (MySQL-only syntax, role names from the server in
+  SQL). Read `information_schema.USER_PRIVILEGES` (no role or proxy
+  information, GRANTEE matching). Count `pg_read_all_data` /
+  `pg_write_all_data` / global MySQL data privileges as privileged (they
+  are what most restore roles need; cross-database reads on MySQL are
+  documented instead). Re-check in the runner when the restore starts
+  (needs the acknowledgement stored with the restore and a new request
+  field; left as a follow-up).
+- **Consequences:** **Security impact:** maintainers and owners can no
+  longer run dump SQL with superuser-like rights; an admin must see the
+  reasons and acknowledge, and the acknowledgement is audited and
+  alerted. Fail-closed UNKNOWN means MySQL/MariaDB connections whose
+  account has roles always need an admin. Residual risks: the verdict is
+  read at request time, not when the queued restore starts (a role
+  elevated in between is not caught; operators control target grants);
+  MySQL global data privileges let a dump read other schemas (a
+  dedicated restore account limited to the restored schemas is
+  recommended in `docs/security/db-roles.md`). Every restore request now
+  makes one runner Probe (per-user runner limiter applies). No
+  migration; one proto field + enum (unreleased API), no new authz
+  operation (the existing `PrivilegedRole` target rule).
+- **Related:** D-013, D-015, D-033, D-068, D-117, D-134, D-135, D-152,
+  D-153, D-167; task 4.8; `internal/runner/dbprobe/privileges.go`,
+  `internal/runner/ops_probe.go`, `internal/connections/privileges.go`,
+  `internal/restore/api.go`, `internal/graph/schema/restore.graphqls`,
+  `docs/guides/restore.md`, `docs/security/db-roles.md`, `SECURITY.md`
+  (OI-2).
+
+## D-169: Scheduled test restores: scratch target, internal restores, runner-derived scratch databases, comparison rules and results
+
+- **Date:** 2026-10-28
+- **Status:** proposed (amended by D-170)
+- **Decided by:** agent (task 4.6; awaiting the user's confirmation)
+- **Context:** Task 4.6 restores backups regularly into a scratch database
+  and compares the result with the source statistics of 3.10 (D-141,
+  D-151, D-153), with results stored, shown and alerted, the scratch
+  database always dropped and the D-161 events emitted. Open were: where
+  the settings live and who may change them, which target a test restore
+  writes to and how the scratch database is named and dropped without a
+  runner API that can drop arbitrary databases, how the restore itself
+  runs (the restore worker needs a `restores` row and normally a fresh
+  second factor), how the scratch statistics are read (D-151 dropped the
+  planned `CaptureStats` RPC because the dump stats live in `Dump`), the
+  exact comparison rules, scheduling, and what happens on crashes.
+- **Decision:**
+  1. **Settings on the job** (migration 00024): `jobs.test_restore_enabled`,
+     `test_restore_schedule` (a D-143 schedule; default weekly, Sunday 04:00
+     UTC; MANUAL = only on demand), `test_restore_connection_id` (the scratch
+     target, required while enabled) and `test_restore_next_at`. The target
+     must be a permanent, non-deleted connection with the job's engine
+     (MySQL ≠ MariaDB); it may be the job's own connection. It blocks the
+     connection's deletion like the job's connection (`JobsUsingConnection`).
+     `setJobTestRestore` = `job.test_restore_edit`, now **staff with a fresh
+     second factor (FreshAAL2)**: designating a target makes bekup copy the
+     job's data there, which is what `restore.artifact` guards. Audited as
+     `job.test_restore_updated`. Owners see the settings (Job.testRestore).
+  2. **Runner-derived scratch databases.** The scratch database is
+     `bekup_test_<scratch id>` with the scratch id = the first 48 bits of
+     the internal restore's id in hex (`engine.ScratchDatabaseName`,
+     `^bekup_test_[a-z0-9]{12}$`). Two **new runner RPCs** (class run, in
+     their own files; Probe is untouched): `ScratchStats(target, temp_id,
+     stats)` and `DropScratchDatabase(target, temp_id)`. Both take only the
+     id; the runner derives the name, the engine's `DropDatabase` builder
+     accepts only bekup-derived names (temporary, old or scratch), so
+     neither RPC can inspect or drop another database. `bekup_test_*` is a
+     reserved namespace: the restore API refuses such target names and
+     hides them from `restoreTargetDatabases`.
+  3. **Scratch statistics** reuse the Dump capture code unchanged
+     (`captureStats`): the same pinned, hostile-safe Go-driver session
+     (D-152), PostgreSQL `deep` exact counts with server-side limits,
+     MySQL/MariaDB estimates only (D-153; the runner never counts there).
+     The statistics transaction ends at once (no dump follows).
+  4. **Internal restores through the restore worker.** For every
+     successful database item (never the globals) of the job's newest
+     `success` run with a present, verified, signed artifact (first
+     destination by position), one transaction records an internal restore
+     (`Service.CreateInternalTx`: mode `new_db`, no requester, `--no-owner`,
+     the scratch name derived from its id, the test restore's River job as
+     `river_job_id`) and the `test_restore_items` row; the restore then runs
+     in the test-restore worker's process through `Worker.RunInternal`:
+     target re-check, `restore.started`/`restore.finished` (system actor,
+     `test_restore_id` in the details), staging, verification against the
+     signed manifest, the engine restorer; no `restore.*` notifications. No
+     second-factor check: it is system work into a new, generated database
+     on a target an admin/maintainer designated with a fresh second factor.
+     Recipient-encrypted backups cannot be tested (bekup holds no identity:
+     `identity_required`).
+  5. **Always dropped.** After the comparison, on a failed or canceled
+     restore, on a stats error and on a panic, the worker calls
+     `DropScratchDatabase` on a fresh bounded context. A failed drop is
+     audited (`test_restore.scratch_kept`), alerted and retried by the
+     schedule worker (`scratch_dropped` per item).
+  6. **Comparison** (`restore.CompareStats`, canonical D-151 objects on
+     both sides): object counts exactly (fail); every source table must
+     exist and no other table may appear (fail), unless a side's table list
+     was truncated (counts only + warning); `tables_total` exactly;
+     PostgreSQL counts of a `snapshot` source that are `exact` must equal
+     the scratch database's exact count (fail); every other count
+     (estimates, MySQL/MariaDB, a PostgreSQL source without the dump's
+     snapshot) differing is a **warning with the delta**, never a failure;
+     `unknown` counts, missing or unreadable source stats and source
+     completeness warnings are warnings. At most 200 findings (the total is
+     kept), names as recorded (percent-encoded), never data values; the
+     stored diff is ≤ 200 KiB.
+  7. **Verdicts and results** (`test_restores`, `test_restore_items`;
+     `bekup_app` INSERT/SELECT and progress-column UPDATE only, guard
+     triggers keep finished rows final, at most one queued/running test
+     restore per job by a partial unique index): per database
+     passed/warnings/failed/error/canceled; the test restore is canceled
+     when stopped, failed when any database failed, error when any could
+     not be restored or checked, else warnings or passed. Audited
+     (`test_restore.requested`, user or system actor; `test_restore.finished`),
+     emitted through a `TestNotifier` hook (`test_restore.passed|warnings|
+     failed`, D-161; error/canceled as failed) until task 5.3, and failed/
+     error verdicts raise the `run.test_restore_failed` alert (logged at
+     ERROR until 5.5).
+  8. **Scheduling and robustness.** River kind `test_restore` (restore
+     queue, never retried, IDs only) holds one run slot on the target for
+     the whole test restore (shared pool, snooze while busy). River kind
+     `test_restore_schedule` (maintenance queue, every minute, unique)
+     enqueues due test restores one job per transaction (a due occurrence
+     while one is active is skipped; missed occurrences collapse; a job
+     whose enqueue fails still advances), fails test restores no worker will
+     finish (`abandoned`, like D-167's sweep) and retries leftover drops.
+     The worker re-checks before starting that the job still designates the
+     queued target (`target_changed`) and the engines match.
+  9. **API:** `runTestRestoreNow(jobId)` (`test_restore.run`, staff),
+     `testRestores(jobId, first, after)` and `testRestore(id)`
+     (`test_restore.view`, staff and the job's owners; unknown ids are
+     FORBIDDEN for owners), all authorized with the job from the database.
+- **Alternatives considered:** a separate settings table (the plan and the
+  job editor treat it as a job setting); enqueuing ordinary `restore` jobs
+  and waiting for them (two River jobs to coordinate, a restore could
+  outlive its test); extending `DropTempDatabase` with a scratch role (the
+  4.8 work runs in parallel; new RPCs keep the existing ones unchanged);
+  passing the scratch name in the request (the runner would trust serve's
+  name); keeping the scratch database on failure for inspection (contrary
+  to "always dropped"; the diff and restore log explain the failure);
+  failing on MySQL/MariaDB row-count differences (estimates, D-153);
+  `job.test_restore_edit` without a fresh second factor (a maintainer could
+  copy a job's data to any same-engine connection without the restore
+  checks).
+- **Consequences:** **Security impact:** the runner gains two RPCs that
+  can only read the statistics of, or drop, `bekup_test_<12 hex>` databases
+  it derives itself; restored backup content is only ever inspected through
+  the D-152 pinned session (no view or foreign table is read, no
+  search_path shadowing); designating a scratch target needs a fresh
+  phishing-resistant-or-TOTP check and is audited; test restores never
+  overwrite anything (the scratch database must not exist). Costs: one
+  restore plus `count(*)` per table (PostgreSQL) per tested database, on
+  the scratch target, bounded by the restore timeout and the stats budget;
+  scratch space on the target for one database at a time. Known false
+  positive: a source database without the `public` schema restored into a
+  database created from `template0` (which has it) fails the schema count.
+  One migration, two River kinds, two authz operations (plus the changed
+  rule), five audit actions, two runner RPCs.
+- **Related:** D-022, D-123, D-141, D-143, D-145, D-147, D-151, D-152,
+  D-153, D-155, D-156, D-161, D-162, D-166, D-167, D-168; tasks 3.10, 4.6,
+  5.3, 5.5, 6.7; `internal/restore/testrestore*.go`,
+  `internal/runner/ops_scratch.go`, `internal/runner/validate/scratch.go`,
+  `internal/engine/names.go`, `internal/jobs/test_restore.go`,
+  `internal/db/migrations/00024_test_restores.sql`,
+  `internal/graph/schema/testrestore.graphqls`, `docs/guides/restore.md`,
+  `docs/guides/jobs-and-schedules.md`, `SECURITY.md`.
+
+## D-170: Test restores: privileged scratch targets, hardened scratch databases and the implicit public schema (M4 review)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (M4 review fixes; awaiting the user's confirmation)
+- **Context:** The M4 reviews found that D-169 let a maintainer designate a
+  scratch connection whose role is privileged, so that every scheduled test
+  restore ran dump SQL with superuser-like rights without the D-068 / D-168
+  gate (admin + acknowledgement) that `restoreArtifact` enforces; that the
+  scratch database (owned by the possibly privileged restore role after
+  `--no-owner`) could be abused through `SECURITY DEFINER` functions or by
+  any role with `CONNECT` while it existed; that a PostgreSQL source
+  without the `public` schema always failed (the documented false positive
+  of D-169); that the worker's `FOR SHARE` connection reads ran outside a
+  transaction (no lock); and that the worker's statistics limits and
+  notifier were not wired from the app.
+- **Decision:** (amends D-169 items 1, 3, 5, 6 and 8)
+  1. **Designation probes the target.** `setJobTestRestore` with a target
+     makes one runner `Probe` (`connections.Service.ProbeTarget`, permanent
+     connections only, per-user runner limiter) before the transaction. A
+     not-ready connection, and a missing prober, are UNKNOWN; other probe
+     errors (runner down, pin/host-key mismatch, rate limit) are returned.
+     A privileged or unknown verdict needs role **admin**
+     (`jobs.ErrPrivilegedTargetAdminOnly` → FORBIDDEN otherwise) and the
+     input `acknowledgePrivilegedTarget: true` (VALIDATION otherwise); it
+     applies to every settings change that keeps or sets such a target.
+     Removing the target needs no probe.
+  2. **Stored with the job** (migration 00025): `jobs.test_restore_target_
+     privileges`, `test_restore_privilege_reasons`,
+     `test_restore_privileged_ack_by`, `test_restore_privileged_ack_at`,
+     always rewritten together with the target; CHECKs keep the reasons
+     bounded and allow an acknowledgement only for a designated, gated
+     verdict. `job.test_restore_updated` records `target_privileges`,
+     `target_privilege_reasons` and `privileged_target_acknowledged`; an
+     acknowledged designation raises the security alert
+     `test_restore_privileged_target`. `Job.testRestore` shows
+     `targetPrivileges` and `privilegedTargetAcknowledgedAt`.
+  3. **Re-check before every run.** `TestRestoreWorker.execute` probes the
+     target afresh (runner `Probe`, credentials registered for redaction,
+     pin/host-key mismatches recorded as security events) before it picks
+     the run. It refuses with `privileged_target` (status error, nothing
+     created on the target) when the probe fails, or when the role is
+     gated and the stored admin acknowledgement does not cover it: an
+     acknowledgement covers a verdict only if every current reason is among
+     the acknowledged reasons, so a role that gained privileges (or a
+     target designated before D-170, or as not privileged) needs a new
+     admin designation. `test_restore.finished` records the verdict and
+     whether an acknowledgement covered it.
+  4. **Hardened scratch databases.** The PostgreSQL restorer (restore
+     core, M4 review) creates new databases, scratch included, without
+     `PUBLIC` `CONNECT`/`TEMPORARY` and calls `NeutralizeRestored` (kind
+     scratch) after `pg_restore` and before the restore reports success;
+     a failure fails the internal restore (`neutralize_failed`), the
+     scratch database is dropped uninspected. The test-restore worker
+     therefore never reads statistics of an unhardened copy and does not
+     neutralize a second time.
+  5. **Implicit `public` schema.** `CompareStats` treats exactly one extra
+     schema in a PostgreSQL restore as equal when neither side lists a
+     table in `public` and neither table list was truncated (template0
+     always has `public`, `pg_dump` never drops it); every other object
+     count still has to match.
+  6. **Plain reads.** The worker reads the source and target connections
+     with `GetTestRestoreConnection` (no `FOR SHARE` outside a
+     transaction); the internal restores re-check the target under a share
+     lock themselves.
+  7. **Wiring.** The app passes the same statistics limits (`statsLimits`,
+     today the runner defaults) to the backup statistics and the
+     test-restore worker, and the test-restore notifier explicitly (the
+     no-op until task 5.3).
+- **Alternatives considered:** Requiring admin for every scratch target
+  (the plan lets maintainers designate unprivileged targets). Re-checking
+  only the status and not the reasons (a role that becomes superuser after
+  an acknowledgement for `createrole` would keep running). Treating a
+  failing run-time probe as UNKNOWN and letting a stored acknowledgement
+  cover it (a broken check would silently allow runs). A separate
+  neutralize step in the test-restore worker (duplicates the restorer's
+  step and leaves a window before it). Asking the runner whether `public`
+  is empty (a new stats field; the count-based rule is exact enough given
+  that all other counts must match).
+- **Consequences:** **Security impact:** test restores can no longer run
+  dump SQL with a privileged role unless an admin acknowledged exactly
+  those privileges, audited and alerted; a role elevated later stops test
+  restores (fail closed) until an admin designates it again; restored
+  scratch copies are not reachable by other roles and contain no
+  `SECURITY DEFINER` functions while they exist. Costs: one runner Probe
+  per designation and per test restore. Residual: an acknowledged
+  privileged role still runs the dumps' SQL with its rights (RN-16);
+  schemas are compared by count, so an empty schema missing alongside an
+  absent `public` is not detected. One migration, no new authz operation
+  (the admin rule is a service check like D-168's target rule), one alert
+  kind, one test-restore error code.
+- **Related:** D-068, D-141, D-151, D-152, D-153, D-168, D-169; task 4.6;
+  `internal/jobs/test_restore.go`, `internal/restore/testrestore.go`,
+  `internal/restore/testrestore_compare.go`,
+  `internal/db/migrations/00025_test_restore_privileges.sql`,
+  `internal/graph/schema/testrestore.graphqls`, `internal/app/restore.go`,
+  `docs/guides/restore.md`, `docs/guides/jobs-and-schedules.md`,
+  `SECURITY.md` (WK-23, RN-17).
+
+## D-171: Neutralize restored PostgreSQL databases: SECURITY DEFINER to INVOKER, no PUBLIC access, warn
+
+- **Date:** 2026-10-28
+- **Status:** accepted
+- **Decided by:** user (M4 security review, finding H1: "neutralize + warn")
+- **Context:** A PostgreSQL restore runs `pg_restore --no-owner` by default
+  (D-166), so every restored object belongs to the target connection's
+  role. A `SECURITY DEFINER` function in the dump (for example `esc()`
+  doing `ALTER ROLE CURRENT_USER PASSWORD 'pwned'`) then runs with the
+  restore role's rights for every role that can connect and call it: a
+  low-privileged database user takes over the restore role (confirmed by
+  the reviewer). Before the fix, `PUBLIC` also had `CONNECT` and
+  `TEMPORARY` on every database bekup created.
+- **Decision:**
+  1. **Neutralize before the swap or the success.** After `pg_restore`
+     succeeded and before an overwrite is swapped in (or a new-database or
+     test restore is reported as restored), serve calls the new runner RPC
+     `NeutralizeRestoredDatabase`. In its pinned Go-driver session (D-152:
+     schema-qualified SQL, enforced by the qualification test) the runner,
+     in one transaction, runs `ALTER FUNCTION|PROCEDURE <regprocedure>
+     SECURITY INVOKER` for **every** routine with `prosecdef` (whatever
+     its owner; only built-ins of the bootstrap superuser in `pg_catalog`
+     / `information_schema` are skipped), each through the extended
+     protocol (exactly one statement; the signature is the server's own
+     `regprocedure` rendering under the pinned search_path), then
+     `REVOKE CONNECT, TEMPORARY ON DATABASE ... FROM PUBLIC`, re-checks
+     that no such routine is left and that `PUBLIC` has neither privilege,
+     and commits. It returns the count and at most 50 signatures (each
+     ≤ 256 bytes; serve re-bounds them and replaces control characters).
+  2. **The runner picks the database.** `kind` RESTORE_STAGING derives
+     `<db>__bekup_restore_<temp_id>`, SCRATCH derives
+     `bekup_test_<temp_id>`, NEW_DATABASE takes a database that is neither
+     a bekup temporary/scratch name nor a system or maintenance database;
+     in every case the session's role must **own** the database
+     (`datdba`), so the RPC cannot alter databases the restore role did
+     not create. MySQL/MariaDB targets are refused (FailedPrecondition).
+     The RPC is in the run class of the runner limiter.
+  3. **PUBLIC never gets access to a database bekup creates:** the
+     runner's `CreateDatabase` (PostgreSQL) runs `REVOKE CONNECT,
+     TEMPORARY ... FROM PUBLIC` as a second psql command right after
+     `CREATE DATABASE` (staging, new and scratch databases).
+  4. **Race check.** After the commit, a client session of another
+     non-superuser role on the restored database (one that raced in
+     before the REVOKE) fails the call (the neutralization stays
+     committed): the restore stops as `neutralize_failed`.
+  5. **Fail closed.** Any failure aborts the restore before the swap: the
+     staging database is dropped and the target stays untouched
+     (`neutralize_failed`); a new database stays without PUBLIC access and
+     the log says to drop it; a scratch database is dropped by the test
+     restore.
+  6. **Warn and audit.** When routines were switched, the restore records
+     the warning `secdef_neutralized`, logs each signature (bounded) and
+     audits `restore.secdef_neutralized` (database, count, signatures)
+     **before** the swap (fail closed: an audit failure stops the
+     restore). `restorePreview` shows `restore_hardening` for every
+     PostgreSQL database restore. An admin may re-enable `SECURITY DEFINER`
+     deliberately after reviewing a function and grants `CONNECT` to the
+     roles that need the database (documented in the restore guide).
+- **Alternatives considered:** Refuse dumps with `SECURITY DEFINER`
+  functions (breaks legitimate schemas; the user chose neutralize + warn).
+  Restore with owners kept (the owners are arbitrary roles of the target
+  server; worse). Neutralize only functions owned by the restore role
+  (with `keepOwners` a function can belong to another powerful role, so
+  every one is switched). Do it in a psql container (no structured
+  result, server text). Leave PUBLIC's `CONNECT` (keeps the attack open
+  for every role on the server).
+- **Consequences:** **Security impact:** dump SQL can no longer plant code
+  that runs with the restore role's rights for other callers; other roles
+  cannot even connect until an admin grants access. Behaviour change:
+  restored databases have no `PUBLIC` `CONNECT`/`TEMPORARY` (applications
+  that relied on PUBLIC need an explicit grant after the restore) and
+  `SECURITY DEFINER` routines run as their callers until re-enabled.
+  Residual: views keep running with their owner's (the restore role's)
+  table privileges inside the restored database; a session that raced in
+  between `CREATE DATABASE` and the `REVOKE` is detected only at the end;
+  MySQL/MariaDB `SQL SECURITY DEFINER` routines and views are not
+  neutralized (follow-up; they need explicit `EXECUTE`/`SELECT` grants).
+  One more runner call per PostgreSQL database restore. No migration;
+  one RPC + enum (unreleased API), one audit action, two error codes.
+- **Related:** D-033, D-068, D-152, D-162, D-166, D-168, D-169, D-170;
+  task 4.9; `proto/runner/v1/runner.proto`,
+  `internal/runner/dbprobe/neutralize_pg.go`,
+  `internal/runner/ops_neutralize.go`, `internal/runner/validate/neutralize.go`,
+  `internal/engine/postgres.go`, `internal/restore/postgres.go`,
+  `internal/restore/runner_calls.go`, `internal/restore/worker.go`,
+  `docs/guides/restore.md`, `SECURITY.md` (RN-18, WK-8).
+
+## D-172: Privileged restore targets: global data privileges and pg_read/write_all_data are gated (corrects D-168)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (M4 security review M2; awaiting the user's confirmation)
+- **Context:** D-168 (item 2/3) classified MySQL/MariaDB global (`*.*`)
+  data/DDL privileges and PostgreSQL `pg_read_all_data` /
+  `pg_write_all_data` as not privileged, reasoning that they "act on the
+  session's database only, which the restore replaces anyway". That is
+  wrong: a global `SELECT`/`INSERT`/`DROP`/... reaches every schema of the
+  server, and `pg_read_all_data` / `pg_write_all_data` act on every
+  database the role can connect to, so dump SQL could read or change
+  other databases with them.
+- **Decision:** (amends D-168 items 2 and 3)
+  1. MySQL/MariaDB: global data/DDL privileges (SELECT, INSERT, UPDATE,
+     DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY
+     TABLES, LOCK TABLES, EXECUTE, CREATE/SHOW VIEW, CREATE/ALTER ROUTINE,
+     EVENT, TRIGGER, DELETE HISTORY, SHOW CREATE ROUTINE, SHOW_ROUTINE)
+     make the verdict PRIVILEGED with the reason class
+     `global_data:<NAME>` (listed after the other gating reasons, so the
+     32-reason cap never hides `global:FILE` and the like). Only USAGE,
+     SHOW DATABASES, REPLICATION CLIENT and a few monitoring privileges
+     stay harmless globally; FLUSH_TABLES now gates (`global:`).
+  2. PostgreSQL: membership in `pg_read_all_data` / `pg_write_all_data`
+     gates (`member_of:<role>`). `CONNECT` on many databases is not
+     detected (not cheap and not decisive): the docs require a restore
+     account limited to the target database.
+  3. `docs/security/db-roles.md` recommends a dedicated restore account
+     limited to the target database (schema-level grants on MySQL/MariaDB,
+     no `pg_*_all_data`) that is not the backup account.
+- **Alternatives considered:** Keep them ungated and document (D-168:
+  fails open for cross-database reads/writes). Gate only write
+  privileges (a global SELECT still exfiltrates other schemas).
+- **Consequences:** **Security impact:** restores through accounts that
+  reach other databases need an admin and an acknowledgement. Accounts
+  with global data grants (common for "root-like" restore users) now
+  show as privileged. No migration; reason codes only.
+- **Related:** D-068, D-168; task 4.9; `internal/runner/dbprobe/privileges.go`,
+  `internal/connections/privileges.go`, `docs/security/db-roles.md`,
+  `docs/guides/restore.md`, `SECURITY.md` (RN-16).
+
+## D-173: Restore core review fixes: worker privilege re-check, stored acknowledgement, slot-bound temporary targets, swap state, cancel race, identity redaction
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (M4 security and code reviews; awaiting the user's confirmation)
+- **Context:** The M4 reviews found: the privilege verdict is only taken
+  at request time (a role elevated while the restore is queued is not
+  caught; D-168 residual); a temporary target that expires while its
+  restore runs fails the restore mid-way (for example at the swap); a
+  failing `RenameSwapDatabase` call was always reported as "target
+  unchanged" although the swap may have happened; the stage's
+  `context.AfterFunc` cleanup closed the zstd decoder while the reader's
+  owner could be inside `Read` (data race); the age identity of a request
+  was not registered for log redaction; and an unused cancel cause
+  (`errInternalCanceled`).
+- **Decision:**
+  1. **Stored verdict and acknowledgement** (migration 00026): `restores`
+     gets `target_privileges`, `target_privilege_reasons` and
+     `privileged_target_acknowledged` (an admin's acknowledgement of a
+     gated verdict; CHECKed to need a requester and a gated verdict),
+     written at request time (`restoreArtifact`, `restoreGlobals`) and
+     part of the restore's immutable identity (`restores_guard`).
+     Internal test restores leave them NULL (D-170 checks those).
+  2. **Re-check in the worker.** After taking the run slot and the target
+     lock and before `restore.started` / staging, the worker probes the
+     target again (runner `Probe` through the slot holder's target load;
+     a not-ready target is unknown). A gated verdict passes only when the
+     row carries the acknowledgement, every current reason is one the
+     admin acknowledged, and the requester is still an active admin;
+     otherwise the restore fails with `privileged_target`, audited as
+     `restore.privileged_target_refused` (requested and current verdicts,
+     `refusal`: not_acknowledged / new_reasons / requester_not_admin) and
+     alerted (`restore_privileged_target`). Probe errors fail the restore
+     (pin/host-key mismatches are recorded as security events).
+  3. **Temporary targets and expiry.** A restore that holds its run slot
+     loads its target with `RunningRestoreTarget(id, holder)`: a temporary
+     target that expired after the start stays usable while the holder's
+     slot exists (the cleanup never deletes a connection while a slot is
+     held); a deleted one never loads. Requests and previews are refused
+     (VALIDATION on `targetConnectionId`) when the temporary target expires
+     within `workers.restore_timeout`.
+  4. **Swap state.** When `RenameSwapDatabase` fails, the restorer asks the
+     runner's `Probe` for the databases that accept connections: target
+     listed and staging gone = swapped (logged, the replaced database is
+     dropped, success); both listed = unchanged (as before); anything else
+     = `swap_state_unknown`. The staging drop's "existed" answer then
+     decides the log text ("unchanged" only when the staging database
+     still existed, otherwise "the swap has probably happened; check ...").
+     Never "unchanged" without proof.
+  5. **Cancel race.** `Staged.Cleanup` (which may run on the context's
+     AfterFunc goroutine) only marks the open reader aborted (atomic); the
+     next `Read` fails with `ErrCleanedUp` and the reader's owner closes
+     it. A `-race` test covers it.
+  6. **Identity redaction.** The resolver registers the request's age
+     identity with `logging.DefaultRegistry` for the request's duration
+     (the registry zeroes its copy) besides zeroing its own slice; the
+     worker registers the unsealed handoff identity while it holds it
+     (unregistered when it is destroyed).
+  7. `errInternalCanceled` is removed: an internal restore runs in the
+     test restore's context, whose River cancel cause it already
+     classifies.
+  8. **Scratch restores skip privileges.** Test restores into a scratch
+     database run `pg_restore --no-privileges` (new `RestoreHeader`
+     field `no_privileges`; the runner refuses it unless the database is
+     a `bekup_test_<id>` scratch name): the dump's GRANT/REVOKE may name
+     roles of the source server and nothing reads them. User restores
+     keep the source ACLs.
+- **Alternatives considered:** Re-check in the runner at `Restore` (the
+  runner has no acknowledgement); trust the request-time verdict (open
+  window); refuse any gated verdict in the worker (breaks acknowledged
+  admin restores); extend a temporary target's expiry automatically
+  (silently prolongs credential lifetime); report a failed swap as
+  failed without checking (wrong in both directions).
+- **Consequences:** **Security impact:** a target role elevated while a
+  restore waits is caught before any dump byte reaches it; an
+  acknowledgement covers exactly what the admin saw. One more runner
+  Probe per restore. Temporary credentials live until a running restore
+  ends even past `expires_at` (bounded by the restore timeout + the slot
+  heartbeat). Migration 00026; one audit action, two error codes
+  (`privileged_target`, `swap_state_unknown`).
+- **Related:** D-068, D-147, D-162, D-163, D-166, D-167, D-168, D-170;
+  task 4.9; `internal/restore/recheck.go`, `internal/restore/worker.go`,
+  `internal/restore/postgres.go`, `internal/restore/stage.go`,
+  `internal/connections/temporary.go`,
+  `internal/db/migrations/00026_restore_privilege_ack.sql`,
+  `internal/graph/resolvers/restore.go`, `SECURITY.md` (RN-16, SV-23).

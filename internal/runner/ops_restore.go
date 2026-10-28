@@ -79,7 +79,7 @@ func (o *operations) restore(stream restoreStream) (err error) {
 		if r.Dump == runnerpb.DumpKind_DUMP_KIND_GLOBALS {
 			return r.Engine.RestoreGlobals(entry, et)
 		}
-		return r.Engine.Restore(entry, et, r.Database, engine.RestoreOptions{NoOwner: r.NoOwner})
+		return r.Engine.Restore(entry, et, r.Database, engine.RestoreOptions{NoOwner: r.NoOwner, NoPrivileges: r.NoPrivileges})
 	}, chk.version)
 	var stdoutBytes uint64
 	// Tool stdout (psql / mysql echo) is counted, never returned: it may

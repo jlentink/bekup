@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/runner/dbprobe"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
@@ -41,7 +42,7 @@ func (o *operations) probe(ctx context.Context, req *runnerpb.ProbeRequest) (res
 		o.logCause(ctx, "Probe", err)
 		return nil, targetStatus(err)
 	}
-	resp = &runnerpb.ProbeResponse{ServerVersion: raw, Databases: dbs}
+	resp = &runnerpb.ProbeResponse{ServerVersion: raw, Databases: dbs, Privileges: o.privileges(ctx, conn)}
 	if skipped > 0 {
 		warns = append(warns, warnSkippedNames)
 	}
@@ -61,6 +62,22 @@ func (o *operations) probe(ctx context.Context, req *runnerpb.ProbeRequest) (res
 	}
 	resp.Warnings = dedup(warns)
 	return resp, nil
+}
+
+// privileges classifies the connection's role (D-068). A detection
+// failure does not fail the Probe: the verdict is UNKNOWN, which serve
+// treats as privileged.
+func (o *operations) privileges(ctx context.Context, conn dbprobe.Conn) *runnerpb.TargetPrivileges {
+	src, ok := conn.(dbprobe.PrivilegeSource)
+	if !ok {
+		p := dbprobe.UnknownPrivileges(dbprobe.ReasonDetectionMissing)
+		return &runnerpb.TargetPrivileges{Status: p.Status, Reasons: p.Reasons}
+	}
+	p, err := src.Privileges(ctx)
+	if err != nil {
+		o.logCause(ctx, "Probe", err)
+	}
+	return &runnerpb.TargetPrivileges{Status: p.Status, Reasons: p.Reasons}
 }
 
 // dedup removes repeated warning codes, keeping the first occurrence.

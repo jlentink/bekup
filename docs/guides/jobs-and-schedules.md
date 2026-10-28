@@ -123,6 +123,39 @@ and the key operations `setJobPassphrase`, `generateJobPassphrase`,
 `disableJobEncryption` and `exportJobPassphrases` (see
 [Encryption](encryption.md) and `docs/reference/schema.graphql`).
 
+### Test restores
+
+A job can regularly prove that its backups restore completely (task 4.6,
+D-169). The settings are part of the job:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `enabled` | off | scheduled test restores |
+| `schedule` | weekly, Sunday 04:00 UTC | any [schedule](#schedules); `MANUAL` = only `runTestRestoreNow` |
+| `targetConnectionId` | none | the **scratch connection**, required while enabled |
+| `acknowledgePrivilegedTarget` | false | required (admins only) when the scratch connection's role is privileged or unknown |
+
+The scratch connection must be a permanent connection with the job's
+engine (MySQL and MariaDB are different engines). It may be the job's own
+connection: bekup only ever creates and drops databases named
+`bekup_test_<id>` there, and never touches another database. Its user needs
+the right to create and drop databases (`CREATEDB` on PostgreSQL,
+`CREATE`/`DROP` on MySQL/MariaDB). A connection used as a scratch target
+cannot be deleted while a job designates it.
+
+Changing the settings (`setJobTestRestore`) is for admins and maintainers
+and needs a passkey or authenticator check within the last 5 minutes, like
+a restore: the scratch connection receives a full copy of the job's data.
+The change is audited (`job.test_restore_updated`). The scratch
+connection's role is probed when it is designated and again before every
+test restore: a privileged or unknown role needs an admin and
+`acknowledgePrivilegedTarget` (D-068, D-170; see
+[privileged scratch connections](restore.md#privileged-scratch-connections)). Removing or changing
+the scratch connection also stops test restores that were already queued
+for the old one. Backup owners see the settings and the results of their
+jobs. What a test restore checks and how results are reported is described
+in [Restore](restore.md#scheduled-test-restores).
+
 ## Schedules
 
 Every job has exactly one schedule (D-009, D-044, D-143):

@@ -89,8 +89,12 @@ func TestPostgresBuilders(t *testing.T) {
 			assertCommand(t, "restore", r, img,
 				[]string{"pg_restore", "--exit-on-error", "--no-password", "--format=custom", "--no-owner", "--dbname=" + pgCIPinned}, files, true)
 			r, err = eng.Restore(c, tgt, "shop", RestoreOptions{})
-			if err != nil || slices.Contains(r.Argv, "--no-owner") {
+			if err != nil || slices.Contains(r.Argv, "--no-owner") || slices.Contains(r.Argv, "--no-privileges") {
 				t.Errorf("restore without NoOwner: %q %v", r.Argv, err)
+			}
+			r, err = eng.Restore(c, tgt, "bekup_test_0123456789ab", RestoreOptions{NoOwner: true, NoPrivileges: true})
+			if err != nil || !slices.Contains(r.Argv, "--no-privileges") {
+				t.Errorf("restore with NoPrivileges: %q %v", r.Argv, err)
 			}
 
 			rg, err := eng.RestoreGlobals(c, tgt)
@@ -104,7 +108,8 @@ func TestPostgresBuilders(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertCommand(t, "create", cr, img,
-				append(slices.Clone(psql), `--command=CREATE DATABASE "shop__bekup_restore_7" TEMPLATE template0`), files, false)
+				append(slices.Clone(psql), `--command=CREATE DATABASE "shop__bekup_restore_7" TEMPLATE template0`,
+					`--command=REVOKE CONNECT, TEMPORARY ON DATABASE "shop__bekup_restore_7" FROM PUBLIC`), files, false)
 
 			sw, err := eng.RenameSwap(c, tgt, "shop", "7")
 			if err != nil {
@@ -127,6 +132,15 @@ func TestPostgresBuilders(t *testing.T) {
 			}
 			assertCommand(t, "drop", d, img,
 				append(slices.Clone(psql), `--command=DROP DATABASE IF EXISTS "shop__bekup_old_7" WITH (FORCE)`), files, false)
+			ds, err := eng.DropDatabase(c, tgt, "bekup_test_0123456789ab")
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertCommand(t, "drop scratch", ds, img,
+				append(slices.Clone(psql), `--command=DROP DATABASE IF EXISTS "bekup_test_0123456789ab" WITH (FORCE)`), files, false)
+			if _, err := eng.DropDatabase(c, tgt, "bekup_test_x"); !errors.Is(err, ErrNotBekupDatabase) {
+				t.Errorf("drop of a non-derived scratch name: %v", err)
+			}
 		})
 	}
 }

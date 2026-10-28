@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -232,15 +231,6 @@ func TestHoldbackWriterNeverReallocates(t *testing.T) {
 				t.Fatalf("size %d: wipe left plaintext in the buffer", size)
 			}
 		}
-	}
-}
-
-func TestDigestReaderLimit(t *testing.T) {
-	d := &digestReader{r: strings.NewReader("hello world"), h: sha256.New(), limit: 5}
-	buf := make([]byte, 64)
-	_, err := d.Read(buf)
-	if !errors.Is(err, errTooLong) {
-		t.Fatalf("err %v", err)
 	}
 }
 

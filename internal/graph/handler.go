@@ -33,6 +33,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -108,6 +109,12 @@ type Options struct {
 	Downloads *downloads.Service
 	// Calendar backs Query.calendar (task 3.14; nil: the field fails).
 	Calendar *calendar.Service
+	// Restores backs the restore fields (task 4.5; nil: those fields
+	// fail). restoreUpdated also needs Bus (pubsub.RestoreEvents).
+	Restores *restore.API
+	// TestRestores backs the test-restore fields (task 4.6; nil: those
+	// fields fail with an internal error).
+	TestRestores *restore.TestRestoreAPI
 }
 
 // Handler is the /graphql endpoint.
@@ -156,6 +163,8 @@ func New(opts Options) (*Handler, error) {
 			Bus:             opts.Bus,
 			Downloads:       opts.Downloads,
 			Calendar:        opts.Calendar,
+			Restores:        opts.Restores,
+			TestRestores:    opts.TestRestores,
 		},
 		Directives: directives(opts.Access),
 	})

@@ -6,8 +6,9 @@
 > signer uses it (task 1.3, D-101), and `bekup serve` refuses to start when
 > the keyring cannot open the active instance signing key or does not match
 > the key-check values stored in `settings` (D-119). Not wired yet:
-> re-encryption of stored credentials on rotation. Job encryption keys are task 3.2 and
-> offline recovery is task 4.7.
+> re-encryption of stored credentials on rotation. Job encryption keys are task 3.2;
+> the offline recovery tools and `bekup keys export-public` are task 4.7
+> ([recovery.md](../recovery.md)).
 
 bekup has three kinds of keys:
 
@@ -165,8 +166,8 @@ Manifests and audit chain heads are signed with an ed25519 **instance key**
 - **Key ID** = the first 8 bytes of SHA-256(public key), in hex (16
   characters), so an ID always matches exactly one public key.
 - **Fingerprint** = SHA-256 of the raw 32-byte public key, shown as hex and
-  as `SHA256:<base64>`. **Escrow the fingerprint** of every instance key
-  (with the keyring) so `bekup verify` can check manifests offline.
+  as `SHA256:<base64>`. **Escrow the public keys and their fingerprints**
+  (see below) so `bekup verify` can check manifests offline.
 - The private key (its 32-byte seed) is stored sealed with the keyring under
   AAD `instance_keys:<id>:private`; on load, the derived public key must
   match the stored one.
@@ -175,6 +176,47 @@ Manifests and audit chain heads are signed with an ed25519 **instance key**
   `"bekup-sig-v1" 0x00 <purpose> 0x00 <message>` (purposes such as
   `manifest`), so a signature for one purpose is never valid for another.
   Third-party verifiers must prepend the same prefix.
+
+### Escrowing the instance public keys
+
+The offline tools verify manifests without the database, so they need the
+public keys from somewhere else:
+
+```sh
+bekup keys export-public --out bekup-instance-keys.txt
+```
+
+reads only the public keys (active and retired) from `instance_keys`
+(no keyring needed) and writes them in the format of
+[artifact-format.md](../reference/artifact-format.md#instance-public-key-file),
+printing each key ID and `SHA256:` fingerprint. The file never overwrites
+an existing one without `--force`.
+
+- Store the file with the keyring escrow, and **record the fingerprints
+  separately** (for example on the printed escrow sheet). The file is not
+  secret, but whoever can replace it can make forged manifests verify:
+  compare the fingerprints before trusting a copy.
+- Export again after a new instance key appears (first start, or a
+  database that had no key). Keep retired keys: they verify the manifests
+  they signed.
+- Losing the public keys does not lose data (backups can still be
+  decrypted with `bekup decrypt --no-verify`), but it removes the
+  authenticity check.
+
+### Escrowing job keys
+
+- **Passphrase jobs:** an admin exports every passphrase version of a job
+  (`exportJobPassphrases`: step-up, audited as `job.passphrases_exported`,
+  security alert). `bekup decrypt --passphrase-file <export>` reads that file
+  directly and picks the version named in the manifest. The export is
+  **secret**: treat it like the keyring (offline, access-controlled, never in
+  a ticket or chat). Re-export after every passphrase change.
+- **Recipient jobs:** bekup never stores the age identity; keep the
+  one-time download (or your own identity) in the escrow.
+  `bekup decrypt --identity-file` reads it (X25519 only).
+- Key files given to the offline tools must be regular files owned by you
+  and not group- or world-accessible; secrets are never accepted as flag
+  values.
 
 ## Key generators
 

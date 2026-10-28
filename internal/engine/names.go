@@ -25,6 +25,9 @@ var (
 	restoreIDRe = regexp.MustCompile(`^[a-z0-9]{1,26}$`)
 	// bekupTempRe matches TempDatabaseName / OldDatabaseName results.
 	bekupTempRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_$.-]*__bekup_(?:restore|old)_[a-z0-9]{1,26}$`)
+	// scratchIDRe is the identifier of a test-restore scratch database
+	// (the first 48 bits of the restore id in hex, task 4.6).
+	scratchIDRe = regexp.MustCompile(`^[a-z0-9]{12}$`)
 	// snapshotRe is a pg_export_snapshot() id: upper-case hex groups
 	// separated by "-" ("00000003-0000001B-1"; older servers
 	// "000003A1-1"). It can never be read as an option or carry quotes.
@@ -176,4 +179,34 @@ func markedName(db, marker, id string) (string, error) {
 // or OldDatabaseName.
 func IsBekupTempDatabase(name string) bool {
 	return len(name) <= MaxDBNameLen && bekupTempRe.MatchString(name)
+}
+
+// ScratchPrefix starts the name of every test-restore scratch database
+// (task 4.6). Such names are reserved: the restore API refuses them as
+// targets and hides them from target listings.
+const ScratchPrefix = "bekup_test_"
+
+// ScratchDatabaseName is the scratch database of a test restore:
+// "bekup_test_<id>" with id exactly 12 characters of [a-z0-9]. The runner
+// derives it from the request's temp_id for the scratch RPCs; no request
+// names a scratch database to inspect or drop.
+func ScratchDatabaseName(id string) (string, error) {
+	if !scratchIDRe.MatchString(id) {
+		return "", fmt.Errorf("%w: scratch id %q", ErrInvalidName, truncate(id))
+	}
+	return ScratchPrefix + id, nil
+}
+
+// IsBekupScratchDatabase reports whether name was produced by
+// ScratchDatabaseName.
+func IsBekupScratchDatabase(name string) bool {
+	id, ok := strings.CutPrefix(name, ScratchPrefix)
+	return ok && scratchIDRe.MatchString(id)
+}
+
+// IsReservedScratchName reports names in bekup's scratch namespace (any
+// name starting with ScratchPrefix, case-insensitively): user restores
+// never target them.
+func IsReservedScratchName(name string) bool {
+	return len(name) >= len(ScratchPrefix) && strings.EqualFold(name[:len(ScratchPrefix)], ScratchPrefix)
 }

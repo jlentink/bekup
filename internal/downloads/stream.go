@@ -2,8 +2,6 @@ package downloads
 
 import (
 	"errors"
-	"hash"
-	"io"
 	"net/http"
 	"time"
 
@@ -18,30 +16,6 @@ const holdBack = 64 << 10
 // writeStall bounds a single write to the client (a stalled reader); the
 // server's write_timeout is lifted for downloads.
 const writeStall = 2 * time.Minute
-
-// errTooLong reports a stream longer than its recorded size.
-var errTooLong = errors.New("downloads: stream longer than recorded")
-
-// digestReader hashes and counts what is read through it and fails once
-// more than limit bytes arrived.
-type digestReader struct {
-	r     io.Reader
-	h     hash.Hash
-	n     int64
-	limit int64
-}
-
-func (d *digestReader) Read(p []byte) (int, error) {
-	n, err := d.r.Read(p)
-	if n > 0 {
-		d.h.Write(p[:n])
-		d.n += int64(n)
-		if d.n > d.limit {
-			return n, errTooLong
-		}
-	}
-	return n, err
-}
 
 // holdbackWriter writes to the client with a per-write deadline and keeps
 // the last holdBack bytes until finish. started reports whether any byte

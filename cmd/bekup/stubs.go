@@ -13,10 +13,7 @@ type stub struct {
 }
 
 // stubs are subcommands that later tasks implement.
-var stubs = []stub{
-	{"verify", "Verify a backup artifact offline", "4.7"},
-	{"decrypt", "Decrypt a backup artifact offline", "4.7"},
-}
+var stubs = []stub{}
 
 func newStubCmd(s stub) *cobra.Command {
 	return &cobra.Command{

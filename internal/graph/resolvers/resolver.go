@@ -25,6 +25,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -78,4 +79,10 @@ type Resolver struct {
 	// Calendar backs Query.calendar (task 3.14; nil: the field fails
 	// with an internal error).
 	Calendar *calendar.Service
+	// Restores backs the restore fields and, with Bus, restoreUpdated
+	// (task 4.5; nil: those fields fail with an internal error).
+	Restores *restore.API
+	// TestRestores backs the test-restore fields (task 4.6; nil: those
+	// fields fail with an internal error).
+	TestRestores *restore.TestRestoreAPI
 }

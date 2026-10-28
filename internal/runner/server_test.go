@@ -257,6 +257,8 @@ func TestUnimplementedRPCs(t *testing.T) {
 	invalid("CreateDatabase", err)
 	_, err = rpc.RenameSwapDatabase(ctx, &runnerpb.RenameSwapDatabaseRequest{})
 	invalid("RenameSwapDatabase", err)
+	_, err = rpc.DropTempDatabase(ctx, &runnerpb.DropTempDatabaseRequest{})
+	invalid("DropTempDatabase", err)
 	_, err = rpc.PrePull(ctx, &runnerpb.PrePullRequest{})
 	invalid("PrePull", err)
 	d, err := rpc.Dump(ctx, &runnerpb.DumpRequest{})
@@ -304,8 +306,8 @@ func TestMethodTableCoversService(t *testing.T) {
 	for _, s := range sd.Streams {
 		want["/"+sd.ServiceName+"/"+s.StreamName] = true
 	}
-	if len(want) != 12 {
-		t.Errorf("service has %d methods, want 12", len(want))
+	if len(want) != 16 {
+		t.Errorf("service has %d methods, want 16", len(want))
 	}
 	for m := range want {
 		if _, ok := methodClasses[m]; !ok {

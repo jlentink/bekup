@@ -162,6 +162,11 @@ type Connection struct {
 	CreatedBy                  *uuid.UUID
 	CreatedAt                  time.Time
 	UpdatedAt                  time.Time
+	// Temporary marks a temporary restore connection (task 4.4): admin
+	// only, a restore target only, deleted with its credentials destroyed
+	// at ExpiresAt or after the restore that used it finished.
+	Temporary bool
+	ExpiresAt *time.Time
 }
 
 // SSHInput sets the SSH tunnel. It replaces the non-secret tunnel

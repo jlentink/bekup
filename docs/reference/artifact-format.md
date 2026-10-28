@@ -53,8 +53,10 @@ With the standard tools:
 age -d app.dump.zst.age | zstd -d > app.dump
 # recipient jobs
 age -d -i job-key.agekey app.dump.zst.age | zstd -d > app.dump
-# or with bekup (bounded scrypt work factor, task 4.7)
-bekup decrypt ...
+# or with bekup: verifies the signed manifest first, bounded scrypt work
+# factor, X25519 identities only, zstd window cap (docs/recovery.md)
+bekup decrypt app.dump.zst.age --out app.dump --identity-file job-key.agekey \
+    --manifest manifest.json --pubkey bekup-instance-keys.txt
 ```
 
 **Verify before you trust or restore**: check the manifest signature, then
@@ -148,8 +150,8 @@ visible tables the user cannot SELECT), `non_transactional_tables`
 snapshot), `row_count_timeout`, `stats_budget_exceeded`,
 `row_count_failed`, `stats_partial` and `roles_without_passwords` (globals
 dumped with `--no-role-passwords`). The same object is stored per item in
-the `backup_stats` table; test restores (4.6) and `bekup verify` (4.7)
-compare a restore against it.
+the `backup_stats` table; test restores (4.6) compare a restore against
+it, and `bekup verify` (4.7) shows it so an operator can.
 
 ### Canonical JSON
 
@@ -180,10 +182,26 @@ The signed bytes are the canonical serialization of the `manifest` object:
 
 The instance public keys and their fingerprints (SHA-256 of the raw public
 key, shown as hex and as `SHA256:<base64>`) are stored in the bekup
-database (`instance_keys`; an export command follows with task 4.7);
-escrow them with the master key backup so that offline verification is
-possible (see [recovery](../recovery.md)). Retired keys stay valid for the
-manifests they signed.
+database (`instance_keys`); `bekup keys export-public` writes them in the
+file format below. Escrow them with the master key backup so that offline
+verification is possible (see [recovery](../recovery.md)). Retired keys
+stay valid for the manifests they signed.
+
+### Instance public key file
+
+`bekup keys export-public` writes, and `bekup verify --pubkey` /
+`bekup decrypt --pubkey` / `bekup reindex --pubkey` read:
+
+```
+bekup-instance-public-keys v1
+# <key id> (active|retired): fingerprint SHA256:<base64>, hex <hex>
+key <key id> <standard base64 of the 32-byte ed25519 public key> created <RFC 3339> [retired <RFC 3339>]
+```
+
+Blank lines and `#` comments are ignored; the key ID must be the ID of the
+key. A file (or `--pubkey` value) holding just one bare base64 key is
+accepted too. The passphrase export of a job (`bekup-job-passphrases v1`)
+is described in [the encryption guide](../guides/encryption.md).
 
 ### Binding (replay protection)
 
@@ -193,4 +211,6 @@ the manifest. bekup's restore additionally requires that the job ID, run ID
 (paths, stored sizes and SHA-256) are exactly those recorded in its
 database. A validly signed manifest of an older run, or of another job,
 placed into the directory is therefore rejected. Offline tools without the
-database show the job and run identity so the operator can make that check.
+database show the job and run identity so the operator can make that check;
+`bekup reindex` additionally rejects a manifest whose job slug and run
+timestamp do not match the `{job-slug}/{timestamp}` directory it lies in.

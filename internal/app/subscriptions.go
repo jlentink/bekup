@@ -45,7 +45,7 @@ func (a *App) newSubscriptions() error {
 	}
 	a.subs.listener, err = pubsub.NewListener(pubsub.ListenerOptions{
 		Connect:  connect,
-		Channels: []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents},
+		Channels: []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents, pubsub.RestoreEvents},
 		Bus:      a.subs.bus,
 		Logger:   a.opts.Logger,
 	})

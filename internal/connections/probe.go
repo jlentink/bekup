@@ -81,7 +81,7 @@ func (s *Service) acquire(actor Actor) (func(), error) {
 // begin loads the connection and acquires a slot; the returned context is
 // bounded by OperationTimeout.
 func (s *Service) begin(ctx context.Context, actor Actor, id uuid.UUID) (context.Context, sqlc.Connection, func(), error) {
-	row, err := s.load(ctx, sqlc.New(s.o.DB), id, false)
+	row, err := s.loadFor(ctx, sqlc.New(s.o.DB), id, false, actor)
 	if err != nil {
 		return nil, sqlc.Connection{}, nil, err
 	}
@@ -179,7 +179,8 @@ func (s *Service) RecordRunFailure(ctx context.Context, id uuid.UUID, op string,
 	default:
 		return nil
 	}
-	row, lerr := s.load(context.WithoutCancel(ctx), sqlc.New(s.o.DB), id, false)
+	// Restore runs (task 4.x) may target a temporary restore connection.
+	row, lerr := s.loadAs(context.WithoutCancel(ctx), sqlc.New(s.o.DB), id, false, true)
 	if lerr != nil {
 		return lerr
 	}
@@ -255,6 +256,10 @@ type TestResult struct {
 	Legacy    bool
 	Warnings  []string
 	Databases int
+	// Privileges is the verdict on the connection's role (D-068): a
+	// privileged (or unknown) role needs an admin and an acknowledgement
+	// for restores.
+	Privileges Privileges
 }
 
 // Test connects with the stored credentials through the runner (Probe).
@@ -277,6 +282,7 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (TestResu
 	res := TestResult{
 		OK: true, ServerVersion: resp.GetServerVersion(), DetectedVersionKey: resp.GetDetectedVersionKey(),
 		Compatible: resp.GetVersionKeyCompatible(), Warnings: resp.GetWarnings(), Databases: len(resp.GetDatabases()),
+		Privileges: PrivilegesFromRunner(resp.GetPrivileges()),
 	}
 	res.Legacy = s.legacy(engine.Kind(row.Engine), row.ImageKey, res.DetectedVersionKey)
 	if !res.Compatible {
@@ -351,7 +357,7 @@ type PrePullResult struct {
 
 // PrePull pulls the connection's client image on the runner (by digest).
 func (s *Service) PrePull(ctx context.Context, actor Actor, id uuid.UUID) (PrePullResult, error) {
-	row, err := s.load(ctx, sqlc.New(s.o.DB), id, false)
+	row, err := s.loadFor(ctx, sqlc.New(s.o.DB), id, false, actor)
 	if err != nil {
 		return PrePullResult{}, err
 	}

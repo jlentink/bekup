@@ -262,6 +262,12 @@ type Connection struct {
 	UpdatedAt                  time.Time `json:"updatedAt"`
 	// The full non-secret configuration. Admins only: null for maintainers.
 	Settings *ConnectionSettings `json:"settings,omitempty"`
+	// A temporary restore connection (task 4.4): admin only, usable only as a
+	// restore target, deleted with its credentials destroyed at expiresAt or
+	// once the restores that used it have finished.
+	Temporary bool `json:"temporary"`
+	// When a temporary connection expires; null for permanent connections.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 type ConnectionDatabases struct {
@@ -337,6 +343,9 @@ type ConnectionTestResult struct {
 	// Stable warning codes (compatibility, certificate expiry, staged pin in use).
 	Warnings      []string `json:"warnings"`
 	DatabaseCount int      `json:"databaseCount"`
+	// Whether the connection's role is privileged for restores (D-068); null
+	// when the test failed before the check.
+	Privileges *TargetPrivileges `json:"privileges,omitempty"`
 }
 
 type ConnectionVersionInfo struct {
@@ -414,6 +423,29 @@ type CreateJobResult struct {
 	GeneratedPassphrase *string `json:"generatedPassphrase,omitempty"`
 	// Set when bekup generated the job's age keypair.
 	GeneratedKeypair *GeneratedAgeKeypair `json:"generatedKeypair,omitempty"`
+}
+
+// A temporary restore connection: the fields of CreateConnectionInput without
+// the run limit (the global default applies).
+type CreateTemporaryConnectionInput struct {
+	// Default: "Temporary: <host>". Names of temporary connections may repeat.
+	Name       *string        `json:"name,omitempty"`
+	Engine     DatabaseEngine `json:"engine"`
+	VersionKey string         `json:"versionKey"`
+	// Default: versionKey.
+	ImageKey *string `json:"imageKey,omitempty"`
+	Host     string  `json:"host"`
+	// Default: 5432 (PostgreSQL) or 3306.
+	Port     *int   `json:"port,omitempty"`
+	Username string `json:"username"`
+	// Write-only.
+	Password *string `json:"password,omitempty"`
+	// Default PINNED; anything else is an audited opt-out.
+	TLSMode              *ConnectionTLSMode `json:"tlsMode,omitempty"`
+	ClientCertificatePem *string            `json:"clientCertificatePem,omitempty"`
+	// Write-only; required together with clientCertificatePem.
+	ClientKeyPem *string             `json:"clientKeyPem,omitempty"`
+	SSH          *ConnectionSSHInput `json:"ssh,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -582,6 +614,8 @@ type Job struct {
 	LastRun *Run `json:"lastRun,omitempty"`
 	// The newest runs of the job, newest first (`first` 1-20, default 5).
 	RecentRuns []Run `json:"recentRuns"`
+	// Scheduled test-restore settings (task 4.6).
+	TestRestore *JobTestRestore `json:"testRestore"`
 }
 
 // A page of jobs.
@@ -701,6 +735,41 @@ type JobRetentionInput struct {
 	KeepDays *int `json:"keepDays,omitempty"`
 }
 
+// The test-restore settings of a job.
+type JobTestRestore struct {
+	// Scheduled test restores are on.
+	Enabled bool `json:"enabled"`
+	// When test restores run (MANUAL: only runTestRestoreNow).
+	Schedule            *Schedule `json:"schedule"`
+	ScheduleDescription string    `json:"scheduleDescription"`
+	// The scratch connection (null: none designated).
+	Target *JobConnectionRef `json:"target,omitempty"`
+	// The next scheduled test restore (null: disabled or manual).
+	NextAt *time.Time `json:"nextAt,omitempty"`
+	// The verdict on the target's role when it was designated (null: no
+	// target). A target designated before this check is UNKNOWN.
+	TargetPrivileges *TargetPrivileges `json:"targetPrivileges,omitempty"`
+	// When an admin acknowledged the privileged or unknown target role (null:
+	// none). Test restores refuse to run (errorCode privileged_target) when
+	// the role is gated and its current reasons are not all covered by this
+	// acknowledgement.
+	PrivilegedTargetAcknowledgedAt *time.Time `json:"privilegedTargetAcknowledgedAt,omitempty"`
+}
+
+// New test-restore settings of a job.
+type JobTestRestoreInput struct {
+	Enabled bool `json:"enabled"`
+	// Default: the current schedule (weekly, Sunday 04:00 UTC, when never set).
+	Schedule *ScheduleInput `json:"schedule,omitempty"`
+	// A permanent connection with the job's engine; required while enabled.
+	// bekup only ever creates and drops bekup_test_<id> databases on it.
+	TargetConnectionID *uuid.UUID `json:"targetConnectionId,omitempty"`
+	// Required (admins only) when the target's role is privileged or its
+	// privileges are unknown: SQL in the tested backups runs with its rights
+	// (D-068).
+	AcknowledgePrivilegedTarget *bool `json:"acknowledgePrivilegedTarget,omitempty"`
+}
+
 // The result of login.
 type LoginResult struct {
 	// The signed-in user; null while secondFactorRequired is true (a login
@@ -758,6 +827,223 @@ type Query struct {
 // A new set of single-use recovery codes. They are never shown again.
 type RecoveryCodes struct {
 	Codes []string `json:"codes"`
+}
+
+// A restore of a backup artifact.
+type Restore struct {
+	ID         uuid.UUID  `json:"id"`
+	Job        *RunJobRef `json:"job"`
+	ArtifactID uuid.UUID  `json:"artifactId"`
+	RunID      uuid.UUID  `json:"runId"`
+	// DATABASE or GLOBALS.
+	Kind RunItemKind `json:"kind"`
+	// The backed-up database (null for globals).
+	SourceDatabase *string           `json:"sourceDatabase,omitempty"`
+	Target         *RestoreTargetRef `json:"target"`
+	// The database written (null for globals).
+	TargetDatabase *string `json:"targetDatabase,omitempty"`
+	// Null for globals restores.
+	Mode *RestoreMode `json:"mode,omitempty"`
+	// PostgreSQL: object owners restored (pg_restore without --no-owner).
+	KeepOwners bool          `json:"keepOwners"`
+	Status     RestoreStatus `json:"status"`
+	// The user who requested it; admins and maintainers only (null for backup owners).
+	RequestedBy     *RunActor  `json:"requestedBy,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	StartedAt       *time.Time `json:"startedAt,omitempty"`
+	FinishedAt      *time.Time `json:"finishedAt,omitempty"`
+	DurationSeconds *float64   `json:"durationSeconds,omitempty"`
+	// Bytes of the verified local copy.
+	StagedBytes     float64                 `json:"stagedBytes"`
+	ErrorCode       *string                 `json:"errorCode,omitempty"`
+	ErrorMessage    *string                 `json:"errorMessage,omitempty"`
+	Warnings        []RestoreOutcomeWarning `json:"warnings"`
+	LogLines        int                     `json:"logLines"`
+	LogLinesDropped int                     `json:"logLinesDropped"`
+	UpdatedAt       time.Time               `json:"updatedAt"`
+}
+
+// A database restore request.
+type RestoreArtifactInput struct {
+	// A DATABASE artifact (present, verified, covered by a signed manifest).
+	ArtifactID         uuid.UUID   `json:"artifactId"`
+	TargetConnectionID uuid.UUID   `json:"targetConnectionId"`
+	Mode               RestoreMode `json:"mode"`
+	// The database to create (NEW_DB) or replace (OVERWRITE).
+	TargetDatabase string `json:"targetDatabase"`
+	// OVERWRITE: must equal targetDatabase exactly.
+	ConfirmTargetName *string `json:"confirmTargetName,omitempty"`
+	// PostgreSQL only: restore the object owners (default: objects belong to the target connection's role).
+	KeepOwners *bool `json:"keepOwners,omitempty"`
+	// The job's age identity (AGE-SECRET-KEY-1...) for recipient-encrypted
+	// backups only. It is stored sealed until the restore starts and never
+	// logged, audited or returned.
+	AgeIdentity *string `json:"ageIdentity,omitempty"`
+	// Required (admins only) when the target connection's role is privileged
+	// or its privileges are unknown (D-068): SQL in the backup runs with that
+	// role's rights. Audited and raised as a security alert.
+	AcknowledgePrivilegedTarget *bool `json:"acknowledgePrivilegedTarget,omitempty"`
+}
+
+// An accepted cancelRestore.
+type RestoreCancellation struct {
+	RestoreID uuid.UUID `json:"restoreId"`
+	JobID     uuid.UUID `json:"jobId"`
+	// CANCELED when the restore had not started; otherwise its current status
+	// until its worker stops it (it then ends as CANCELED).
+	Status      RestoreStatus `json:"status"`
+	RequestedAt time.Time     `json:"requestedAt"`
+}
+
+// A page of restores.
+type RestoreConnection struct {
+	Edges    []RestoreEdge `json:"edges"`
+	PageInfo *PageInfo     `json:"pageInfo"`
+}
+
+type RestoreEdge struct {
+	Cursor string   `json:"cursor"`
+	Node   *Restore `json:"node"`
+}
+
+// Filters for restores; unset fields do not filter.
+type RestoreFilter struct {
+	JobID              *uuid.UUID     `json:"jobId,omitempty"`
+	ArtifactID         *uuid.UUID     `json:"artifactId,omitempty"`
+	TargetConnectionID *uuid.UUID     `json:"targetConnectionId,omitempty"`
+	Status             *RestoreStatus `json:"status,omitempty"`
+}
+
+// A PostgreSQL globals restore request (admins only).
+type RestoreGlobalsInput struct {
+	// A GLOBALS artifact.
+	ArtifactID uuid.UUID `json:"artifactId"`
+	// A PostgreSQL connection.
+	TargetConnectionID uuid.UUID `json:"targetConnectionId"`
+	// Must equal the preview's confirmText: `restore globals into <connection name>`.
+	ConfirmPhrase string `json:"confirmPhrase"`
+	// Required when the target connection's role is privileged or unknown (D-068; usually the case for globals).
+	AcknowledgePrivilegedTarget *bool `json:"acknowledgePrivilegedTarget,omitempty"`
+}
+
+// A page of restore log lines in order (redacted and sanitized when written).
+type RestoreLogPage struct {
+	RestoreID uuid.UUID    `json:"restoreId"`
+	Lines     []RunLogLine `json:"lines"`
+	// The id of the last line (the afterId for the next page); afterId when there are no lines.
+	EndID   *string `json:"endId,omitempty"`
+	HasMore bool    `json:"hasMore"`
+	// Lines dropped because the restore exceeded the log caps.
+	Dropped int `json:"dropped"`
+}
+
+// A warning recorded by a restore (stable code and fixed text).
+type RestoreOutcomeWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// The checked restore request: what will happen, the warnings and the confirmation text.
+type RestorePreview struct {
+	Source *RestoreSource `json:"source"`
+	Target *RestoreTarget `json:"target"`
+	// Null for globals restores.
+	Mode *RestoreMode `json:"mode,omitempty"`
+	// Null for globals restores.
+	TargetDatabase *string          `json:"targetDatabase,omitempty"`
+	Warnings       []RestoreWarning `json:"warnings"`
+	// What must be typed to confirm: the database name for OVERWRITE
+	// (confirmTargetName), the phrase for a globals restore (confirmPhrase);
+	// null when no confirmation is needed.
+	ConfirmText *string `json:"confirmText,omitempty"`
+	// The privilege verdict on the target connection's role (D-068; read
+	// through the runner, cached for 30 seconds; the request checks again).
+	// When acknowledgementRequired, only admins may restore, with
+	// acknowledgePrivilegedTarget.
+	TargetPrivileges *TargetPrivileges `json:"targetPrivileges"`
+	// The target is not the connection the backup was taken from (also recorded in the audit entry).
+	CrossSource bool `json:"crossSource"`
+}
+
+// A restore request to check (restorePreview).
+type RestorePreviewInput struct {
+	ArtifactID         uuid.UUID `json:"artifactId"`
+	TargetConnectionID uuid.UUID `json:"targetConnectionId"`
+	// Required for DATABASE artifacts, not allowed for GLOBALS.
+	Mode *RestoreMode `json:"mode,omitempty"`
+	// Required for DATABASE artifacts, not allowed for GLOBALS.
+	TargetDatabase *string `json:"targetDatabase,omitempty"`
+	KeepOwners     *bool   `json:"keepOwners,omitempty"`
+}
+
+// Where an artifact came from (verified against its signed manifest).
+type RestoreSource struct {
+	ArtifactID uuid.UUID      `json:"artifactId"`
+	JobID      uuid.UUID      `json:"jobId"`
+	RunID      uuid.UUID      `json:"runId"`
+	Kind       RunItemKind    `json:"kind"`
+	Database   *string        `json:"database,omitempty"`
+	Engine     DatabaseEngine `json:"engine"`
+	// Catalog key of the backed-up server's release series.
+	VersionKey    string `json:"versionKey"`
+	ServerVersion string `json:"serverVersion"`
+	// The restore needs the job's age identity (recipient-encrypted backup).
+	NeedsIdentity bool `json:"needsIdentity"`
+}
+
+// A connection the caller may restore an artifact to.
+type RestoreTarget struct {
+	ID         uuid.UUID      `json:"id"`
+	Name       string         `json:"name"`
+	Engine     DatabaseEngine `json:"engine"`
+	VersionKey string         `json:"versionKey"`
+	// The connection the artifact's job backs up.
+	Original bool `json:"original"`
+	// A temporary restore connection (admins only).
+	Temporary         bool       `json:"temporary"`
+	ExpiresAt         *time.Time `json:"expiresAt,omitempty"`
+	Ready             bool       `json:"ready"`
+	NotReadyReason    *string    `json:"notReadyReason,omitempty"`
+	InsecureTransport bool       `json:"insecureTransport"`
+	// A new database may be created (database backups).
+	NewDatabaseAllowed bool `json:"newDatabaseAllowed"`
+	// Only the databases your own jobs back up may be overwritten (backup owners).
+	ExistingRestricted bool `json:"existingRestricted"`
+}
+
+// The existing databases of one restore target the caller may overwrite.
+type RestoreTargetDatabases struct {
+	Target *RestoreTarget `json:"target"`
+	// Existing databases (backup owners: only those their jobs back up),
+	// without bekup's temporary restore databases.
+	Databases []string `json:"databases"`
+	// The runner's warning codes.
+	Warnings []string `json:"warnings"`
+	// The privilege verdict on the target connection's role (read with the list).
+	TargetPrivileges *TargetPrivileges `json:"targetPrivileges"`
+	// When the list was read from the server (it is cached for 30 seconds).
+	ListedAt time.Time `json:"listedAt"`
+}
+
+// The connection a restore writes to (non-secret identity only).
+type RestoreTargetRef struct {
+	ID        uuid.UUID      `json:"id"`
+	Name      string         `json:"name"`
+	Engine    DatabaseEngine `json:"engine"`
+	Temporary bool           `json:"temporary"`
+	Deleted   bool           `json:"deleted"`
+}
+
+// The connections an artifact may be restored to.
+type RestoreTargets struct {
+	Source  *RestoreSource  `json:"source"`
+	Targets []RestoreTarget `json:"targets"`
+}
+
+// Something to know before a restore (stable code, fixed text).
+type RestoreWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 // A backup run.
@@ -1138,11 +1424,103 @@ type StepUpResult struct {
 type Subscription struct {
 }
 
+// The privilege verdict on a connection's role (D-068).
+type TargetPrivileges struct {
+	Status TargetPrivilegeStatus `json:"status"`
+	// Stable reason codes, e.g. superuser, createrole,
+	// member_of:pg_execute_server_program, member_of_role_with:superuser,
+	// global:FILE, global:ALL PRIVILEGES, proxy, system_schema_write,
+	// roles_granted, detection_failed.
+	Reasons []string `json:"reasons"`
+	// Restores into this connection need an admin and acknowledgePrivilegedTarget (PRIVILEGED or UNKNOWN).
+	AcknowledgementRequired bool `json:"acknowledgementRequired"`
+}
+
 // A generated temporary password. Shown once: it is not stored in plain text
 // and cannot be retrieved again. The user must change it at the first login.
 type TemporaryPassword struct {
 	Password  string    `json:"password"`
 	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// A test restore of a job's backup.
+type TestRestore struct {
+	ID  uuid.UUID  `json:"id"`
+	Job *RunJobRef `json:"job"`
+	// The run tested (null until it started, or when no backup qualified).
+	RunID   *uuid.UUID         `json:"runId,omitempty"`
+	Target  *RestoreTargetRef  `json:"target"`
+	Trigger TestRestoreTrigger `json:"trigger"`
+	Status  TestRestoreStatus  `json:"status"`
+	// Who requested it (runTestRestoreNow); admins and maintainers only.
+	RequestedBy     *RunActor  `json:"requestedBy,omitempty"`
+	ScheduledFor    *time.Time `json:"scheduledFor,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	StartedAt       *time.Time `json:"startedAt,omitempty"`
+	FinishedAt      *time.Time `json:"finishedAt,omitempty"`
+	DurationSeconds *float64   `json:"durationSeconds,omitempty"`
+	ErrorCode       *string    `json:"errorCode,omitempty"`
+	ErrorMessage    *string    `json:"errorMessage,omitempty"`
+	DatabaseCount   int        `json:"databaseCount"`
+	Passed          int        `json:"passed"`
+	Warned          int        `json:"warned"`
+	Failed          int        `json:"failed"`
+	// The restored databases (testRestore only; empty in listings).
+	Databases []TestRestoreDatabase `json:"databases"`
+}
+
+// A page of test restores.
+type TestRestoreConnection struct {
+	Edges    []TestRestoreEdge `json:"edges"`
+	PageInfo *PageInfo         `json:"pageInfo"`
+}
+
+// One restored database of a test restore.
+type TestRestoreDatabase struct {
+	ID        uuid.UUID `json:"id"`
+	RunItemID uuid.UUID `json:"runItemId"`
+	// The backed-up database.
+	Database string `json:"database"`
+	// The internal restore into the scratch database (null when it could not be created).
+	RestoreID    *uuid.UUID        `json:"restoreId,omitempty"`
+	Status       TestRestoreStatus `json:"status"`
+	ErrorCode    *string           `json:"errorCode,omitempty"`
+	ErrorMessage *string           `json:"errorMessage,omitempty"`
+	// The scratch database was dropped (false: dropping failed and is retried).
+	ScratchDropped bool `json:"scratchDropped"`
+	// Findings, at most 200 (findingsTotal counts all).
+	Findings      []TestRestoreFinding `json:"findings"`
+	FindingsTotal int                  `json:"findingsTotal"`
+	// Tables present on both sides, and of those the ones compared exactly.
+	TablesCompared int `json:"tablesCompared"`
+	ExactTables    int `json:"exactTables"`
+	// The internal restore's status and error code when it did not succeed.
+	RestoreStatus    *string    `json:"restoreStatus,omitempty"`
+	RestoreErrorCode *string    `json:"restoreErrorCode,omitempty"`
+	StartedAt        time.Time  `json:"startedAt"`
+	FinishedAt       *time.Time `json:"finishedAt,omitempty"`
+}
+
+type TestRestoreEdge struct {
+	Cursor string       `json:"cursor"`
+	Node   *TestRestore `json:"node"`
+}
+
+// One difference between a backup's source statistics and its restored copy (names and counts only).
+type TestRestoreFinding struct {
+	// WARN or FAIL.
+	Severity string `json:"severity"`
+	// Stable code: object_count_mismatch, table_missing, table_unexpected,
+	// row_count_mismatch, row_count_delta, row_count_unknown,
+	// tables_total_mismatch, tables_truncated, source_stats_missing,
+	// source_stats_invalid, source_warnings, scratch_stats_invalid.
+	Code string `json:"code"`
+	// The object kind, the table (schema.table, percent-encoded as recorded) or the source warning codes.
+	Object   *string  `json:"object,omitempty"`
+	Source   *float64 `json:"source,omitempty"`
+	Restored *float64 `json:"restored,omitempty"`
+	// restored - source.
+	Delta *float64 `json:"delta,omitempty"`
 }
 
 // A begun TOTP enrollment. Every field but expiresAt carries the TOTP key.
@@ -2148,6 +2526,136 @@ func (e ObjectLockMode) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// How a restore writes its target database.
+type RestoreMode string
+
+const (
+	// Create a new database and restore into it (fails when it exists).
+	RestoreModeNewDb RestoreMode = "NEW_DB"
+	// Replace an existing database. PostgreSQL: restored into a temporary
+	// database and swapped in by renaming; MySQL/MariaDB: dropped and restored
+	// in place (see the preview warnings).
+	RestoreModeOverwrite RestoreMode = "OVERWRITE"
+)
+
+var AllRestoreMode = []RestoreMode{
+	RestoreModeNewDb,
+	RestoreModeOverwrite,
+}
+
+func (e RestoreMode) IsValid() bool {
+	switch e {
+	case RestoreModeNewDb, RestoreModeOverwrite:
+		return true
+	}
+	return false
+}
+
+func (e RestoreMode) String() string {
+	return string(e)
+}
+
+func (e *RestoreMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RestoreMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RestoreMode", str)
+	}
+	return nil
+}
+
+func (e RestoreMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RestoreMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RestoreMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Status of a restore.
+type RestoreStatus string
+
+const (
+	// Waiting for a worker or a concurrency slot.
+	RestoreStatusQueued RestoreStatus = "QUEUED"
+	// Downloading the backup to the scratch volume.
+	RestoreStatusStaging RestoreStatus = "STAGING"
+	// Checking the staged backup against its record and signed manifest.
+	RestoreStatusVerifying RestoreStatus = "VERIFYING"
+	// Streaming the verified dump into the target.
+	RestoreStatusRestoring RestoreStatus = "RESTORING"
+	RestoreStatusSucceeded RestoreStatus = "SUCCEEDED"
+	RestoreStatusFailed    RestoreStatus = "FAILED"
+	RestoreStatusCanceled  RestoreStatus = "CANCELED"
+)
+
+var AllRestoreStatus = []RestoreStatus{
+	RestoreStatusQueued,
+	RestoreStatusStaging,
+	RestoreStatusVerifying,
+	RestoreStatusRestoring,
+	RestoreStatusSucceeded,
+	RestoreStatusFailed,
+	RestoreStatusCanceled,
+}
+
+func (e RestoreStatus) IsValid() bool {
+	switch e {
+	case RestoreStatusQueued, RestoreStatusStaging, RestoreStatusVerifying, RestoreStatusRestoring, RestoreStatusSucceeded, RestoreStatusFailed, RestoreStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func (e RestoreStatus) String() string {
+	return string(e)
+}
+
+func (e *RestoreStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RestoreStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RestoreStatus", str)
+	}
+	return nil
+}
+
+func (e RestoreStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RestoreStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RestoreStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Roles of bekup users (D-011).
 type Role string
 
@@ -3051,6 +3559,197 @@ func (e *StepUpMethod) UnmarshalJSON(b []byte) error {
 }
 
 func (e StepUpMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How privileged a connection's role is (D-068): SQL in a restored dump runs with its rights.
+type TargetPrivilegeStatus string
+
+const (
+	// No privilege enabling host access or privilege escalation was found.
+	TargetPrivilegeStatusNotPrivileged TargetPrivilegeStatus = "NOT_PRIVILEGED"
+	// Superuser or similar (PostgreSQL: SUPERUSER, CREATEROLE, REPLICATION,
+	// BYPASSRLS, server file/program roles; MySQL/MariaDB: SUPER, FILE,
+	// PROCESS, CREATE USER, global GRANT OPTION, admin privileges, writes to
+	// the mysql schema).
+	TargetPrivilegeStatusPrivileged TargetPrivilegeStatus = "PRIVILEGED"
+	// Could not be determined completely (e.g. MySQL/MariaDB roles granted); treated as privileged.
+	TargetPrivilegeStatusUnknown TargetPrivilegeStatus = "UNKNOWN"
+)
+
+var AllTargetPrivilegeStatus = []TargetPrivilegeStatus{
+	TargetPrivilegeStatusNotPrivileged,
+	TargetPrivilegeStatusPrivileged,
+	TargetPrivilegeStatusUnknown,
+}
+
+func (e TargetPrivilegeStatus) IsValid() bool {
+	switch e {
+	case TargetPrivilegeStatusNotPrivileged, TargetPrivilegeStatusPrivileged, TargetPrivilegeStatusUnknown:
+		return true
+	}
+	return false
+}
+
+func (e TargetPrivilegeStatus) String() string {
+	return string(e)
+}
+
+func (e *TargetPrivilegeStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TargetPrivilegeStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TargetPrivilegeStatus", str)
+	}
+	return nil
+}
+
+func (e TargetPrivilegeStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TargetPrivilegeStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TargetPrivilegeStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Status of a test restore (or of one of its databases).
+type TestRestoreStatus string
+
+const (
+	// Waiting for a worker or a concurrency slot.
+	TestRestoreStatusQueued  TestRestoreStatus = "QUEUED"
+	TestRestoreStatusRunning TestRestoreStatus = "RUNNING"
+	// Every database matched its source statistics.
+	TestRestoreStatusPassed TestRestoreStatus = "PASSED"
+	// No mismatch that proves data loss, but differences worth a look (estimates, unknown counts, source warnings).
+	TestRestoreStatusWarnings TestRestoreStatus = "WARNINGS"
+	// At least one database misses objects, tables or rows.
+	TestRestoreStatusFailed TestRestoreStatus = "FAILED"
+	// A database could not be restored or checked (see errorCode).
+	TestRestoreStatusError    TestRestoreStatus = "ERROR"
+	TestRestoreStatusCanceled TestRestoreStatus = "CANCELED"
+)
+
+var AllTestRestoreStatus = []TestRestoreStatus{
+	TestRestoreStatusQueued,
+	TestRestoreStatusRunning,
+	TestRestoreStatusPassed,
+	TestRestoreStatusWarnings,
+	TestRestoreStatusFailed,
+	TestRestoreStatusError,
+	TestRestoreStatusCanceled,
+}
+
+func (e TestRestoreStatus) IsValid() bool {
+	switch e {
+	case TestRestoreStatusQueued, TestRestoreStatusRunning, TestRestoreStatusPassed, TestRestoreStatusWarnings, TestRestoreStatusFailed, TestRestoreStatusError, TestRestoreStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func (e TestRestoreStatus) String() string {
+	return string(e)
+}
+
+func (e *TestRestoreStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TestRestoreStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TestRestoreStatus", str)
+	}
+	return nil
+}
+
+func (e TestRestoreStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TestRestoreStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TestRestoreStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Why a test restore ran.
+type TestRestoreTrigger string
+
+const (
+	TestRestoreTriggerSchedule TestRestoreTrigger = "SCHEDULE"
+	TestRestoreTriggerManual   TestRestoreTrigger = "MANUAL"
+)
+
+var AllTestRestoreTrigger = []TestRestoreTrigger{
+	TestRestoreTriggerSchedule,
+	TestRestoreTriggerManual,
+}
+
+func (e TestRestoreTrigger) IsValid() bool {
+	switch e {
+	case TestRestoreTriggerSchedule, TestRestoreTriggerManual:
+		return true
+	}
+	return false
+}
+
+func (e TestRestoreTrigger) String() string {
+	return string(e)
+}
+
+func (e *TestRestoreTrigger) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = TestRestoreTrigger(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid TestRestoreTrigger", str)
+	}
+	return nil
+}
+
+func (e TestRestoreTrigger) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *TestRestoreTrigger) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e TestRestoreTrigger) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

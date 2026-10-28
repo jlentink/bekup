@@ -126,7 +126,12 @@ internal/
                 runner (mTLS gRPC server skeleton + Health: 2.4; validate/targets/spec/
                   preamble: 2.5; executor (Docker, per-run networks, proxy, reaper): 2.6;
                   RPC handlers ops*.go + dbprobe (Go-driver pre-checks): 2.7;
-                  pinning: 2.7a; FetchHostKey ops_hostkey.go: 2.11)
+                  pinning: 2.7a; FetchHostKey ops_hostkey.go: 2.11; Restore,
+                  CreateDatabase, RenameSwapDatabase, DropTempDatabase
+                  ops_restore.go: 4.2-4.3; ScratchStats, DropScratchDatabase
+                  ops_scratch.go/service_scratch.go + dbprobe/stats*.go: 4.6;
+                  NeutralizeRestoredDatabase ops_neutralize.go; role verdict
+                  dbprobe/privileges.go (Probe.privileges): 4.8)
                 runnerclient (mTLS gRPC client: 2.4)  runnerpb (generated: 2.4)
                 jobkeys (job encryption keys: versioned passphrases, recipients,
                   opt-out, export, pipeline.Encryptor: 3.2)
@@ -149,8 +154,30 @@ internal/
                   expiries, batched + bounded: 3.14)
                 downloads (download tickets, GET /api/download/{ticket},
                   raw/plain streaming with held-back integrity checks: 3.9)
+                offline (offline verify/decrypt/reindex+import, public key
+                  file, passphrase-export parser; no DB needed except import: 4.7)
+                artifactverify (DB-backed manifest verification, DigestReader,
+                  MatchIdentity, StoredFormat; shared by downloads + restore: 4.1)
+                digest (leaf stream helpers: digest.Reader (SHA-256 + count +
+                  limit, aliased as artifactverify.DigestReader) and the
+                  ctx-aware CtxReader; used by offline, artifactverify, restore)
+                restore (restores table API, identity handoff, Stage/verify,
+                  Staged.Open, Cleanup, scratch sweeper: 4.1; restore worker,
+                  EngineRestorer registry, PostgreSQL restorer, restore logs and
+                  events: 4.2; MySQL/MariaDB restorer: 4.3; API, reads, cancel,
+                  stuck sweep: 4.5; scheduled test restores, CompareStats: 4.6;
+                  restoretest seeds artifacts for tests). Layout: service.go
+                  (CreateTx, handoff) stage.go read.go scratch.go sweep.go
+                  (staging, verification, scratch) worker.go recheck.go
+                  runner_calls.go engine.go postgres.go mysql.go (worker +
+                  engine restorers) api.go errors.go events.go alerts.go
+                  notify.go (API, codes, events) testrestore*.go (4.6);
+                  mysqlit/ holds the MySQL/MariaDB integration harness
+                testutil (test-only helpers: dockertest skip policy,
+                  runnertest.WaitDockerOK for real-runner harnesses);
+                  storage/sftp/sftptest (atmoz/sftp test server)
   doc.go only until their task:
-    restore (4.1-4.5)  notify (5.1-5.3)  monitor (5.6)
+    notify (5.1-5.3)  monitor (5.6)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
 deploy/                 # postgres init, traefik/nginx proxy configs, dev/ keys + seeds
 scripts/                # helpers behind the justfile (doctor, bump, release, ...)
@@ -178,7 +205,10 @@ Each `internal/` package has a `doc.go` describing its responsibility.
 - Table-driven tests; fuzz tests for validators and parsers; testcontainers
   for integration tests. Tests that need Docker skip only via
   `dockertest.Skipf` (`internal/testutil/dockertest`): it skips locally
-  but fails with `CI=true`.
+  but fails with `CI=true`. Harnesses with a real runner wait for
+  `runnertest.WaitDockerOK` (Health reports `DOCKER_STATUS_OK`), never
+  only for the "runner listening" log line; SFTP tests start the server
+  with `sftptest.Start`.
 - Pass `context.Context` everywhere; no unbounded goroutines or channels.
 - **File naming:** never put `token` or `secret` in file or directory names
   (the maintainer's tooling denies AI access to such paths). Use e.g.
@@ -372,7 +402,7 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   keys are pinned only by `ConfirmHostKey`; a host/port change clears the
   pin. Jobs (3.5) must fill the `checkUnused` delete hook.
 - Connections (`internal/connections`, D-135): only the service touches
-  the `connections` table (temporary restore rows are excluded until 4.4).
+  the `connections` table.
   Credentials (DB password, SSH password/key + passphrase, TLS client key)
   live in one sealed TLV blob (AAD `connections:<id>:secret`), write-only
   in the API. Keys must exist in the embedded catalog; pinned TLS to an IP
@@ -390,6 +420,126 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   runner failures are `CONNECTION_FAILED` (fixed messages). Runner-calling
   fields are single-root and rate limited. Jobs (3.5) must fill
   `checkUnused`.
+- Temporary restore connections (`internal/connections/temporary.go`,
+  D-163): admin only (create/extend/delete with step-up,
+  `connection.temporary_*`), restore targets only. `List`/`Get`/`Update`/
+  `Delete`/`SetTLSMode`/`Target` never return them and jobs refuse them;
+  runner/pin/host-key/SSH-key operations accept them only with
+  `Actor.AllowTemporary` (resolvers: admins only). Restores (4.5) use
+  `GetForRestore`, `LockRestoreTargetTx` (FOR SHARE in the restore's insert
+  transaction) and `RestoreTarget`, never `Target`; a running restore
+  builds its runner targets with `RunningRestoreTarget(id, slot holder)`
+  (an expired row stays usable while the holder's run slot exists, a
+  deleted one never; D-173), and requests are refused when the target
+  expires within `workers.restore_timeout`. Every other query refuses an
+  expired row (`expires_at > now`); `ExtendTemporary` is capped at
+  `restore.temp_connection_max_ttl` after `created_at`. The River kind
+  `temporary_connection_cleanup` (maintenance, every 5 min) crypto-shreds
+  (`secret_enc` NULL, credential flags cleared) and soft deletes expired
+  ones and those whose restores (`restores.target_connection_id`) all
+  finished ≥ 15 min ago, never while a run slot is held; audited with the
+  system actor. Rows are never hard deleted (restores reference them).
+- MySQL/MariaDB restores (`internal/restore/mysql.go`, D-165): the
+  runner builds the hardened client (`--system-command=OFF --commands=OFF
+  --local-infile=0` / `--sandbox --local-infile=0`, `--database=`); never
+  mix the engines and never restore globals. Overwrite is in place: the
+  stream starts with `restore.MySQLOverwritePrefix` (read the database
+  defaults from `information_schema.SCHEMATA`, PREPARE the CREATE, DROP,
+  recreate, USE) in the same client session; 4.5 must show
+  `restore.MySQLOverwriteWarning` with the type-to-confirm. The dump must
+  end with the `-- Dump completed` trailer (checked before the last chunk
+  is sent). Integration tests: `internal/restore/mysqlit`.
+- Restore API (`internal/restore.API`, D-167): resolvers only translate;
+  every restore is requested through `API.Request`/`RequestGlobals`,
+  which authorize `restore.artifact` (owner `RestoreTarget` rule +
+  FreshAAL2: TOTP or UV passkey ≤ 5 min) / `restore.globals` (admin +
+  FreshAAL2) with the artifact's job and the target loaded from the DB,
+  verify the run manifest on the destination first (its engine is
+  authoritative; failures are alerted), require the exact
+  `confirmTargetName` for OVERWRITE and `restore globals into <name>` for
+  globals, and record restore + River job + `restore.requested` + event
+  in one transaction under `LockRestoreTargetTx` and a per-target
+  advisory lock (one active restore per database). `restoreArtifact`,
+  `restoreGlobals` and `restoreTargetDatabases` (one runner Probe, 30 s
+  cache) are single-root; `restorePreview` (`restore.preview`, no
+  freshness) returns the warnings (incl. `restore.MySQLOverwriteWarning`)
+  and the confirmation text; `cancelRestore` (`restore.cancel`) is staff
+  only. Never put the age identity anywhere but `CreateInput.Identity`
+  (zeroed by the resolver and registered with `logging.DefaultRegistry`
+  for the request; the worker registers the unsealed handoff while it
+  holds it). The stuck sweep (`restore_stuck_sweep`,
+  every 5 min) fails restores no worker will finish (`abandoned`) and
+  releases hold, slot and handoff.
+- Privileged restore targets (D-068, D-168): the runner's `Probe` returns
+  `privileges { status, reasons }` from `dbprobe.PrivilegeSource`
+  (PostgreSQL role attributes + dangerous predefined-role memberships via
+  schema-qualified `pg_catalog` SQL; MySQL/MariaDB `SHOW GRANTS` parsed by
+  `dbprobe.ParseMySQLGrants`, role grants = UNKNOWN). Serve converts it
+  only with `connections.PrivilegesFromRunner`; UNKNOWN, missing and
+  inconsistent verdicts are privileged (`Privileges.Gated`). Restore
+  requests probe afresh (`connections.Service.ProbeTarget`, never the
+  cache), then re-authorize with `authz.RestoreTarget.PrivilegedRole`
+  (admins only) and require `acknowledgePrivilegedTarget`; audited and
+  alerted (`restore_privileged_target`). `restorePreview` is single-root
+  (runner call). Never add a reason code that carries server-provided
+  names other than privilege / predefined role names. Global (`*.*`)
+  MySQL/MariaDB data privileges (`global_data:<NAME>`) and
+  `pg_read_all_data` / `pg_write_all_data` gate too (D-172). Requests
+  store the verdict and the acknowledgement on the restore
+  (`CreateInput.Privileges` / `PrivilegedAck`; immutable); the worker
+  re-probes before staging and refuses (`privileged_target`, audited
+  `restore.privileged_target_refused`) a gated verdict not covered by an
+  acknowledgement of a still-active admin (D-173). Internal test restores
+  leave them NULL (D-170 checks those).
+- Restored PostgreSQL databases are neutralized (D-171, accepted): the
+  runner's `CreateDatabase` revokes `CONNECT, TEMPORARY` from `PUBLIC`,
+  and the restorer calls `restore.NeutralizeRestored` (runner RPC
+  `NeutralizeRestoredDatabase`: every `SECURITY DEFINER` routine to
+  `SECURITY INVOKER`, the runner derives/validates the database and
+  requires the session role to own it) after `pg_restore` and **before**
+  the swap or the success; a failure stops the restore
+  (`neutralize_failed`); switched routines are warned
+  (`secdef_neutralized`) and audited (`restore.secdef_neutralized`, via
+  `EngineRequest.OnNeutralized`, fail closed). Never add a PostgreSQL
+  restore path that skips it. A failed swap call is resolved with
+  `swapStateOf` (never report "unchanged" without proof). `Staged.Cleanup`
+  only aborts an open reader; the reader's owner closes it.
+- Scheduled test restores (D-169): the settings are job columns
+  (`test_restore_*`) changed only through `jobs.Service.SetTestRestore`
+  (`job.test_restore_edit`: staff + FreshAAL2; the scratch target is a
+  permanent connection with the job's engine). Test restores run as River
+  `test_restore` (`restore.TestRestoreWorker`, restore queue, one slot on
+  the target) scheduled by `test_restore_schedule` (also the stuck sweep
+  and leftover drops). Each database is an internal restore
+  (`Service.CreateInternalTx` + `Worker.RunInternal`, never the user API)
+  into `bekup_test_<restore.TempID(id)>`; only the runner derives scratch
+  names (`ScratchStats`, `DropScratchDatabase` take the id; never add an
+  RPC that takes a database name to drop or inspect). Always drop the
+  scratch database on every path. Compare only with `restore.CompareStats`
+  on canonical stats (`jobs.CanonicalStats`): object counts and PostgreSQL
+  snapshot-exact rows fail, estimates (all MySQL/MariaDB) only warn.
+  `bekup_test_*` names are reserved (refused as restore targets, hidden).
+  Results: `test_restores` / `test_restore_items` (bounded diff, names and
+  counts only); events through `restore.TestNotifier` until 5.3.
+  Privileged scratch targets (D-170): `SetTestRestore` probes the target
+  (`Options.TestTargets`); a gated verdict needs an admin and
+  `AcknowledgePrivilegedTarget` (stored with the verdict, audited,
+  alerted); the worker re-probes before every run and refuses
+  (`privileged_target`) unless `jobs.TestTargetCovered`. Never read a
+  scratch database before the restorer has neutralized it.
+- Offline recovery (`internal/offline`, D-164): `bekup verify` / `decrypt`
+  / `reindex` work without the DB and keyring and trust only escrowed
+  instance public keys (`bekup keys export-public` format, `--pubkey`);
+  decrypt verifies the signed manifest before decrypting unless an
+  explicit `--no-verify`, commits output only after every check (0600,
+  no overwrite without `--force`) and takes secrets only from
+  `*-file` flags (`config.ReadSecretFile`) or stdin, never flag values.
+  `reindex` opens destinations read-only (no-delete, SSRF guard, `*_file`
+  credentials) and rejects manifests outside their own directory;
+  `--import` verifies with the DB's instance keys, imports only fully
+  verified runs of a job with the manifest's job ID (one transaction +
+  `cli.run.imported`). Escape manifest text with `offline.SafeText`
+  before printing it.
 - Downloads (`internal/downloads`, D-150): only through
   `createDownloadTicket` (`artifact.download`, step-up, single root) and
   `GET /api/download/{ticket}` (`httpserver.Options.Download`, behind the
@@ -406,6 +556,39 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   streaming, released at the end; D-155); limits come from
   `workers.max_concurrent_downloads` / `workers.max_downloads_per_user`.
   The hold-back buffer has a fixed capacity: never `append` past it.
+- Restores (`internal/restore`, D-162): create restores only with
+  `restore.Service.CreateTx` (after authz + fresh 2FA, task 4.5); a
+  recipient identity is sealed into `restore_identity_handoff` (AAD
+  `restore_identity_handoff:<restore_id>:identity`, 15 min) and never put
+  into River args. The worker calls `Stage(ctx, id)` with its own context
+  (it holds the artifact, takes the handoff once, checks scratch space,
+  stages wrapped with an ephemeral in-memory age key and verifies digest +
+  signed manifest), then `BeginRestore`, `Open` (once; bounded plaintext,
+  digests re-checked at EOF) and `defer Cleanup()`; finish with
+  `Service.Finish` (fixed codes from `restore.ErrorCode`, never raw errors
+  in `error_message`). Never read staged files or restore from a
+  destination stream directly. Manifest verification against the DB for any
+  artifact reader goes through `artifactverify.VerifyManifest` (offline
+  tools without the DB use `pipeline.VerifySignature`).
+- Restore worker and engines (D-166): River kind `restore` (args =
+  restore id only; enqueue with `Service.EnqueueTx` in the restore's insert
+  transaction). The worker takes a run slot for the target connection
+  (snooze when busy), re-checks the target with `LockRestoreTargetTx`,
+  audits `restore.started`, stages, re-checks the target engine against the
+  signed manifest and dispatches to the `restore.EngineRestorer` registered
+  for the engine (`RegisterEngine` in an `init`; PostgreSQL in
+  `postgres.go`, MySQL/MariaDB in `mysql.go`). An engine restorer only
+  calls the runner through the shared helpers (`RunRestoreStream`, which
+  holds the last chunk back until the staged stream ended cleanly,
+  `CreateDatabase`, `RenameSwap`, `DropTempDatabase`), builds a fresh target
+  per RPC with `EngineRequest.Target` and releases it right after, logs
+  only through `LogSink` (never secrets or dump contents) and returns
+  errors that `restore.ErrorCode` maps (sentinels or runner statuses) plus
+  stable warning codes. Status changes and log batches publish IDs on
+  `bekup_restore_events` (`restore.Payload`); notifications go through the
+  `restore.Notifier` hook (no-op until 5.3). The runner drops only
+  derived bekup temporary databases (`DropTempDatabase`, roles RESTORE /
+  OLD); never add an RPC that takes a database name to drop.
 - Audit: record through `internal/audit` only (`Record`, or `RecordTx` inside
   the action's `db.Tx`); audit failures fail the operation (fail closed);
   actions come from the typed catalog; details are redacted but still never

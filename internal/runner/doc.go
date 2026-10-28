@@ -18,8 +18,11 @@
 // RPC handlers in ops*.go (D-134): Probe with the Go drivers of dbprobe,
 // Dump, DumpGlobals (with the --no-role-passwords fallback), VerifyDump
 // (Go trailer checks or an offline pg_restore container), Restore,
-// CreateDatabase, RenameSwapDatabase and PrePull, all with normalized
+// CreateDatabase, RenameSwapDatabase, DropTempDatabase and PrePull, all with normalized
 // target errors (runnerpb.Reason) and one audit line per call. Task 2.11
 // adds FetchHostKey (ops_hostkey.go): the TOFU capture of a bastion's host
-// key through the target-allowlist dialer, without authentication.
+// key through the target-allowlist dialer, without authentication. Task 4.6
+// adds ScratchStats and DropScratchDatabase (ops_scratch.go): the
+// statistics and the drop of a test restore's runner-derived scratch
+// database bekup_test_<id>.
 package runner

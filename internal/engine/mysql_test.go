@@ -92,6 +92,12 @@ func TestMySQLFamilyBuilders(t *testing.T) {
 				}
 				assertCommand(t, "drop", dr, img,
 					concat(myConn(f.clientBin), f.tls, f.safety, []string{"--execute=DROP DATABASE IF EXISTS `shop__bekup_restore_9`"}), files, false)
+				ds, err := eng.DropDatabase(c, tgt, "bekup_test_0123456789ab")
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertCommand(t, "drop scratch", ds, img,
+					concat(myConn(f.clientBin), f.tls, f.safety, []string{"--execute=DROP DATABASE IF EXISTS `bekup_test_0123456789ab`"}), files, false)
 
 				if _, _, err := eng.DumpGlobals(c, tgt); !errors.Is(err, ErrUnsupported) {
 					t.Errorf("DumpGlobals: %v", err)

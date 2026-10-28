@@ -31,6 +31,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
+	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/runstate"
 )
@@ -124,6 +125,12 @@ type App struct {
 	jobs    *jobs.Service
 	// downloads serves download tickets (task 3.9, serve only).
 	downloads *downloads.Service
+	// restore stages and verifies restores (task 4.1).
+	restore *restore.Service
+	// restoreAPI backs the restore GraphQL fields (task 4.5).
+	restoreAPI *restore.API
+	// testRestoreAPI backs the test-restore GraphQL fields (task 4.6).
+	testRestoreAPI *restore.TestRestoreAPI
 	// subs is the subscription machinery (tasks 1.10, 2.13).
 	subs       subscriptions
 	addr       net.Addr
@@ -201,6 +208,10 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.newJobKeys(); err != nil {
 		return nil, err
 	}
+	// The restore service before the queue: the restore worker uses it.
+	if err := a.newRestore(); err != nil {
+		return nil, err
+	}
 	if err := a.newQueue(!opts.NoWorker); err != nil {
 		return nil, err
 	}
@@ -210,12 +221,18 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.newDownloads(); err != nil {
 		return nil, err
 	}
+	if err := a.newRestoreAPI(); err != nil {
+		return nil, err
+	}
+	if err := a.newTestRestoreAPI(); err != nil {
+		return nil, err
+	}
 	h, err := a.newHTTP(ctx)
 	if err != nil {
 		return nil, err
 	}
 	a.components = append(a.components, h, signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger},
-		downloadCleanupComponent{a.downloads})
+		downloadCleanupComponent{a.downloads}, restoreHousekeepingComponent{a.restore})
 	if err := a.newScheduler(); err != nil {
 		return nil, err
 	}
@@ -243,6 +260,10 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 	if err := a.newJobKeys(); err != nil {
 		return err
 	}
+	if err := a.newRestore(); err != nil {
+		return err
+	}
+	a.components = append(a.components, restoreHousekeepingComponent{a.restore})
 	return a.newQueue(true)
 }
 
@@ -441,6 +462,8 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		Streams:       a.subs.streams,
 		Downloads:     a.downloads,
 		Calendar:      calendar.New(a.pool),
+		Restores:      a.restoreAPI,
+		TestRestores:  a.testRestoreAPI,
 	})
 }
 

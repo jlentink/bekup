@@ -147,6 +147,33 @@ CREATE TYPE public.job_verification AS ENUM (
 ALTER TYPE public.job_verification OWNER TO bekup_owner;
 
 --
+-- Name: restore_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.restore_mode AS ENUM (
+    'new_db',
+    'overwrite'
+);
+
+ALTER TYPE public.restore_mode OWNER TO bekup_owner;
+
+--
+-- Name: restore_status; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.restore_status AS ENUM (
+    'queued',
+    'staging',
+    'verifying',
+    'restoring',
+    'succeeded',
+    'failed',
+    'canceled'
+);
+
+ALTER TYPE public.restore_status OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -241,6 +268,33 @@ CREATE TYPE public.run_trigger AS ENUM (
 );
 
 ALTER TYPE public.run_trigger OWNER TO bekup_owner;
+
+--
+-- Name: test_restore_status; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.test_restore_status AS ENUM (
+    'queued',
+    'running',
+    'passed',
+    'warnings',
+    'failed',
+    'error',
+    'canceled'
+);
+
+ALTER TYPE public.test_restore_status OWNER TO bekup_owner;
+
+--
+-- Name: test_restore_trigger; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.test_restore_trigger AS ENUM (
+    'schedule',
+    'manual'
+);
+
+ALTER TYPE public.test_restore_trigger OWNER TO bekup_owner;
 
 --
 -- Name: user_role; Type: TYPE; Schema: public; Owner: bekup_owner
@@ -450,6 +504,60 @@ $$;
 ALTER FUNCTION public.jobs_slug_immutable() OWNER TO bekup_owner;
 
 --
+-- Name: restore_identity_handoff_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.restore_identity_handoff_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    NEW.created_at := now();
+    IF NOT EXISTS (SELECT 1 FROM public.restores r WHERE r.id = NEW.restore_id AND r.status = 'queued') THEN
+        RAISE EXCEPTION 'restore_identity_handoff: restore % is not queued', NEW.restore_id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.restore_identity_handoff_guard() OWNER TO bekup_owner;
+
+--
+-- Name: restores_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.restores_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.status IN ('succeeded', 'failed', 'canceled') AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'restores: restore % is already finished', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.artifact_id IS DISTINCT FROM OLD.artifact_id OR NEW.run_item_id IS DISTINCT FROM OLD.run_item_id
+       OR NEW.job_id IS DISTINCT FROM OLD.job_id OR NEW.target_connection_id IS DISTINCT FROM OLD.target_connection_id
+       OR NEW.target_db_name IS DISTINCT FROM OLD.target_db_name OR NEW.mode IS DISTINCT FROM OLD.mode
+       OR NEW.requested_by IS DISTINCT FROM OLD.requested_by OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.no_owner IS DISTINCT FROM OLD.no_owner
+       OR NEW.target_privileges IS DISTINCT FROM OLD.target_privileges
+       OR NEW.target_privilege_reasons IS DISTINCT FROM OLD.target_privilege_reasons
+       OR NEW.privileged_target_acknowledged IS DISTINCT FROM OLD.privileged_target_acknowledged THEN
+        RAISE EXCEPTION 'restores: the identity of restore % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.river_job_id IS NOT NULL AND NEW.river_job_id IS DISTINCT FROM OLD.river_job_id THEN
+        RAISE EXCEPTION 'restores: the River job of restore % is already set', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.restores_guard() OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state_in_bitmask(bit, public.river_job_state); Type: FUNCTION; Schema: public; Owner: bekup_owner
 --
 
@@ -510,6 +618,62 @@ END
 $$;
 
 ALTER FUNCTION public.set_updated_at() OWNER TO bekup_owner;
+
+--
+-- Name: test_restore_items_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.test_restore_items_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.status <> 'running' AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'test_restore_items: item % is already finished', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.test_restore_id IS DISTINCT FROM OLD.test_restore_id OR NEW.run_item_id IS DISTINCT FROM OLD.run_item_id
+       OR NEW.db_name IS DISTINCT FROM OLD.db_name OR NEW.scratch_id IS DISTINCT FROM OLD.scratch_id
+       OR NEW.started_at IS DISTINCT FROM OLD.started_at
+       OR (OLD.restore_id IS NOT NULL AND NEW.restore_id IS DISTINCT FROM OLD.restore_id) THEN
+        RAISE EXCEPTION 'test_restore_items: the identity of item % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.test_restore_items_guard() OWNER TO bekup_owner;
+
+--
+-- Name: test_restores_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.test_restores_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.status NOT IN ('queued', 'running') AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'test_restores: test restore % is already finished', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.job_id IS DISTINCT FROM OLD.job_id OR NEW.target_connection_id IS DISTINCT FROM OLD.target_connection_id
+       OR NEW.trigger IS DISTINCT FROM OLD.trigger OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.scheduled_for IS DISTINCT FROM OLD.scheduled_for
+       OR (OLD.run_id IS NOT NULL AND NEW.run_id IS DISTINCT FROM OLD.run_id) THEN
+        RAISE EXCEPTION 'test_restores: the identity of test restore % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.river_job_id IS NOT NULL AND NEW.river_job_id IS DISTINCT FROM OLD.river_job_id THEN
+        RAISE EXCEPTION 'test_restores: the River job of test restore % is already set', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.test_restores_guard() OWNER TO bekup_owner;
 
 SET default_tablespace = '';
 
@@ -963,6 +1127,14 @@ CREATE TABLE public.jobs (
     expected_window_seconds integer,
     created_by uuid,
     updated_by uuid,
+    test_restore_enabled boolean DEFAULT false NOT NULL,
+    test_restore_schedule jsonb DEFAULT '{"cron": "0 4 * * 0", "kind": "cron", "timezone": "UTC"}'::jsonb NOT NULL,
+    test_restore_connection_id uuid,
+    test_restore_next_at timestamp with time zone,
+    test_restore_target_privileges text,
+    test_restore_privilege_reasons text[] DEFAULT '{}'::text[] NOT NULL,
+    test_restore_privileged_ack_by uuid,
+    test_restore_privileged_ack_at timestamp with time zone,
     CONSTRAINT jobs_databases_mode CHECK ((((db_mode = 'all'::public.job_db_mode) AND (cardinality(databases) = 0)) OR ((db_mode = 'selected'::public.job_db_mode) AND ((cardinality(databases) >= 1) AND (cardinality(databases) <= 256)) AND (cardinality(exclude) = 0)))),
     CONSTRAINT jobs_description_length CHECK ((char_length(description) <= 1000)),
     CONSTRAINT jobs_exclude_count CHECK ((cardinality(exclude) <= 256)),
@@ -972,6 +1144,11 @@ CREATE TABLE public.jobs (
     CONSTRAINT jobs_retention_required CHECK (((retention_keep_last IS NOT NULL) OR (retention_keep_days IS NOT NULL))),
     CONSTRAINT jobs_schedule_object CHECK (((jsonb_typeof(schedule) = 'object'::text) AND (octet_length((schedule)::text) <= 1024))),
     CONSTRAINT jobs_slug_format CHECK ((slug ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)),
+    CONSTRAINT jobs_test_restore_privilege_reasons_bounded CHECK (((cardinality(test_restore_privilege_reasons) <= 32) AND (octet_length(array_to_string(test_restore_privilege_reasons, ''::text)) <= (32 * 64)))),
+    CONSTRAINT jobs_test_restore_privileged_ack CHECK (((test_restore_privileged_ack_at IS NULL) OR ((test_restore_connection_id IS NOT NULL) AND (test_restore_target_privileges = ANY (ARRAY['privileged'::text, 'unknown'::text]))))),
+    CONSTRAINT jobs_test_restore_privileges_value CHECK (((test_restore_target_privileges IS NULL) OR (test_restore_target_privileges = ANY (ARRAY['not_privileged'::text, 'privileged'::text, 'unknown'::text])))),
+    CONSTRAINT jobs_test_restore_schedule_object CHECK (((jsonb_typeof(test_restore_schedule) = 'object'::text) AND (octet_length((test_restore_schedule)::text) <= 1024))),
+    CONSTRAINT jobs_test_restore_target CHECK (((NOT test_restore_enabled) OR (test_restore_connection_id IS NOT NULL))),
     CONSTRAINT jobs_timeout_range CHECK (((timeout_seconds IS NULL) OR ((timeout_seconds >= 60) AND (timeout_seconds <= 604800))))
 );
 
@@ -993,6 +1170,94 @@ CREATE TABLE public.recovery_codes (
 );
 
 ALTER TABLE public.recovery_codes OWNER TO bekup_owner;
+
+--
+-- Name: restore_identity_handoff; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.restore_identity_handoff (
+    restore_id uuid NOT NULL,
+    sealed_identity bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT restore_identity_handoff_expiry CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:15:00'::interval)))),
+    CONSTRAINT restore_identity_handoff_length CHECK (((octet_length(sealed_identity) >= 1) AND (octet_length(sealed_identity) <= 16384)))
+);
+
+ALTER TABLE public.restore_identity_handoff OWNER TO bekup_owner;
+
+--
+-- Name: restore_logs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.restore_logs (
+    id bigint NOT NULL,
+    restore_id uuid NOT NULL,
+    ts timestamp with time zone NOT NULL,
+    level public.run_log_level NOT NULL,
+    stream public.run_log_stream NOT NULL,
+    line text NOT NULL,
+    CONSTRAINT restore_logs_line_length CHECK ((octet_length(line) <= 16384))
+);
+
+ALTER TABLE public.restore_logs OWNER TO bekup_owner;
+
+--
+-- Name: restore_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE public.restore_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.restore_logs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+--
+-- Name: restores; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.restores (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    artifact_id uuid NOT NULL,
+    run_item_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    target_connection_id uuid NOT NULL,
+    target_db_name text,
+    mode public.restore_mode NOT NULL,
+    requested_by uuid,
+    status public.restore_status DEFAULT 'queued'::public.restore_status NOT NULL,
+    river_job_id bigint,
+    staged_bytes bigint DEFAULT 0 NOT NULL,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    error_code text,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    no_owner boolean DEFAULT true NOT NULL,
+    log_lines integer DEFAULT 0 NOT NULL,
+    log_lines_dropped integer DEFAULT 0 NOT NULL,
+    warnings text[] DEFAULT '{}'::text[] NOT NULL,
+    target_privileges text,
+    target_privilege_reasons text[] DEFAULT '{}'::text[] NOT NULL,
+    privileged_target_acknowledged boolean DEFAULT false NOT NULL,
+    CONSTRAINT restores_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT restores_error_message_length CHECK (((error_message IS NULL) OR (char_length(error_message) <= 1000))),
+    CONSTRAINT restores_finished CHECK (((status = ANY (ARRAY['queued'::public.restore_status, 'staging'::public.restore_status, 'verifying'::public.restore_status, 'restoring'::public.restore_status])) = (finished_at IS NULL))),
+    CONSTRAINT restores_log_counts CHECK (((log_lines >= 0) AND (log_lines_dropped >= 0))),
+    CONSTRAINT restores_privileged_target_ack CHECK (((NOT privileged_target_acknowledged) OR ((requested_by IS NOT NULL) AND (target_privileges = ANY (ARRAY['privileged'::text, 'unknown'::text]))))),
+    CONSTRAINT restores_staged_bytes CHECK ((staged_bytes >= 0)),
+    CONSTRAINT restores_started CHECK (((status = 'queued'::public.restore_status) OR (status = ANY (ARRAY['failed'::public.restore_status, 'canceled'::public.restore_status])) OR (started_at IS NOT NULL))),
+    CONSTRAINT restores_target_db_name CHECK (((target_db_name IS NULL) OR ((octet_length(target_db_name) >= 1) AND (octet_length(target_db_name) <= 255)))),
+    CONSTRAINT restores_target_privilege_reasons_bounded CHECK (((cardinality(target_privilege_reasons) <= 32) AND (octet_length(array_to_string(target_privilege_reasons, ''::text)) <= (32 * 64)))),
+    CONSTRAINT restores_target_privileges_value CHECK (((target_privileges IS NULL) OR (target_privileges = ANY (ARRAY['not_privileged'::text, 'privileged'::text, 'unknown'::text])))),
+    CONSTRAINT restores_warnings_count CHECK ((cardinality(warnings) <= 32))
+);
+
+ALTER TABLE public.restores OWNER TO bekup_owner;
 
 --
 -- Name: river_job; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -1299,6 +1564,65 @@ CREATE TABLE public.settings (
 ALTER TABLE public.settings OWNER TO bekup_owner;
 
 --
+-- Name: test_restore_items; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.test_restore_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    test_restore_id uuid NOT NULL,
+    run_item_id uuid NOT NULL,
+    restore_id uuid,
+    db_name text NOT NULL,
+    scratch_id text NOT NULL,
+    status public.test_restore_status DEFAULT 'running'::public.test_restore_status NOT NULL,
+    scratch_dropped boolean DEFAULT false NOT NULL,
+    error_code text,
+    diff jsonb DEFAULT '{}'::jsonb NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT test_restore_items_db_name CHECK (((octet_length(db_name) >= 1) AND (octet_length(db_name) <= 255))),
+    CONSTRAINT test_restore_items_diff CHECK (((jsonb_typeof(diff) = 'object'::text) AND (octet_length((diff)::text) <= 262144))),
+    CONSTRAINT test_restore_items_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT test_restore_items_finished CHECK (((status = 'running'::public.test_restore_status) = (finished_at IS NULL))),
+    CONSTRAINT test_restore_items_scratch_id CHECK ((scratch_id ~ '^[a-z0-9]{12}$'::text)),
+    CONSTRAINT test_restore_items_status CHECK ((status <> 'queued'::public.test_restore_status))
+);
+
+ALTER TABLE public.test_restore_items OWNER TO bekup_owner;
+
+--
+-- Name: test_restores; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.test_restores (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    job_id uuid NOT NULL,
+    target_connection_id uuid NOT NULL,
+    trigger public.test_restore_trigger NOT NULL,
+    requested_by uuid,
+    scheduled_for timestamp with time zone,
+    run_id uuid,
+    status public.test_restore_status DEFAULT 'queued'::public.test_restore_status NOT NULL,
+    river_job_id bigint,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    error_code text,
+    error_message text,
+    databases integer DEFAULT 0 NOT NULL,
+    passed integer DEFAULT 0 NOT NULL,
+    warned integer DEFAULT 0 NOT NULL,
+    failed integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT test_restores_counts CHECK (((databases >= 0) AND (passed >= 0) AND (warned >= 0) AND (failed >= 0))),
+    CONSTRAINT test_restores_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT test_restores_error_message_length CHECK (((error_message IS NULL) OR (char_length(error_message) <= 1000))),
+    CONSTRAINT test_restores_finished CHECK (((status = ANY (ARRAY['queued'::public.test_restore_status, 'running'::public.test_restore_status])) = (finished_at IS NULL)))
+);
+
+ALTER TABLE public.test_restores OWNER TO bekup_owner;
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -1568,6 +1892,27 @@ ALTER TABLE ONLY public.recovery_codes
     ADD CONSTRAINT recovery_codes_pkey PRIMARY KEY (id);
 
 --
+-- Name: restore_identity_handoff restore_identity_handoff_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restore_identity_handoff
+    ADD CONSTRAINT restore_identity_handoff_pkey PRIMARY KEY (restore_id);
+
+--
+-- Name: restore_logs restore_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restore_logs
+    ADD CONSTRAINT restore_logs_pkey PRIMARY KEY (id);
+
+--
+-- Name: restores restores_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_pkey PRIMARY KEY (id);
+
+--
 -- Name: river_job river_job_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -1650,6 +1995,20 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.settings
     ADD CONSTRAINT settings_pkey PRIMARY KEY (key);
+
+--
+-- Name: test_restore_items test_restore_items_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restore_items
+    ADD CONSTRAINT test_restore_items_pkey PRIMARY KEY (id);
+
+--
+-- Name: test_restores test_restores_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restores
+    ADD CONSTRAINT test_restores_pkey PRIMARY KEY (id);
 
 --
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1867,10 +2226,58 @@ CREATE UNIQUE INDEX jobs_name_active_idx ON public.jobs USING btree (lower(name)
 CREATE UNIQUE INDEX jobs_slug_idx ON public.jobs USING btree (slug);
 
 --
+-- Name: jobs_test_restore_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX jobs_test_restore_connection_idx ON public.jobs USING btree (test_restore_connection_id) WHERE (test_restore_connection_id IS NOT NULL);
+
+--
+-- Name: jobs_test_restore_due_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX jobs_test_restore_due_idx ON public.jobs USING btree (test_restore_next_at) WHERE (test_restore_enabled AND (deleted_at IS NULL) AND (test_restore_next_at IS NOT NULL));
+
+--
 -- Name: recovery_codes_user_id_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
 CREATE INDEX recovery_codes_user_id_idx ON public.recovery_codes USING btree (user_id);
+
+--
+-- Name: restore_identity_handoff_expires_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restore_identity_handoff_expires_idx ON public.restore_identity_handoff USING btree (expires_at);
+
+--
+-- Name: restore_logs_restore_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restore_logs_restore_idx ON public.restore_logs USING btree (restore_id, id);
+
+--
+-- Name: restores_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restores_active_idx ON public.restores USING btree (status) WHERE (status = ANY (ARRAY['queued'::public.restore_status, 'staging'::public.restore_status, 'verifying'::public.restore_status, 'restoring'::public.restore_status]));
+
+--
+-- Name: restores_artifact_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restores_artifact_idx ON public.restores USING btree (artifact_id);
+
+--
+-- Name: restores_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restores_job_idx ON public.restores USING btree (job_id, created_at DESC, id DESC);
+
+--
+-- Name: restores_target_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restores_target_idx ON public.restores USING btree (target_connection_id);
 
 --
 -- Name: river_job_args_index; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -2005,6 +2412,30 @@ CREATE INDEX sessions_absolute_expires_at_idx ON public.sessions USING btree (ab
 CREATE INDEX sessions_user_id_idx ON public.sessions USING btree (user_id);
 
 --
+-- Name: test_restore_items_scratch_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX test_restore_items_scratch_idx ON public.test_restore_items USING btree (scratch_id);
+
+--
+-- Name: test_restore_items_unique_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX test_restore_items_unique_idx ON public.test_restore_items USING btree (test_restore_id, run_item_id);
+
+--
+-- Name: test_restores_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX test_restores_active_idx ON public.test_restores USING btree (job_id) WHERE (status = ANY (ARRAY['queued'::public.test_restore_status, 'running'::public.test_restore_status]));
+
+--
+-- Name: test_restores_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX test_restores_job_idx ON public.test_restores USING btree (job_id, created_at DESC, id DESC);
+
+--
 -- Name: users_active_admins_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -2107,6 +2538,24 @@ CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXE
 CREATE TRIGGER jobs_slug_immutable BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.jobs_slug_immutable();
 
 --
+-- Name: restore_identity_handoff restore_identity_handoff_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER restore_identity_handoff_guard BEFORE INSERT ON public.restore_identity_handoff FOR EACH ROW EXECUTE FUNCTION public.restore_identity_handoff_guard();
+
+--
+-- Name: restores restores_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER restores_guard BEFORE UPDATE ON public.restores FOR EACH ROW EXECUTE FUNCTION public.restores_guard();
+
+--
+-- Name: restores restores_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER restores_set_updated_at BEFORE UPDATE ON public.restores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
 -- Name: runs runs_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -2123,6 +2572,24 @@ CREATE TRIGGER runs_terminal_guard BEFORE UPDATE ON public.runs FOR EACH ROW EXE
 --
 
 CREATE TRIGGER settings_set_updated_at BEFORE UPDATE ON public.settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: test_restore_items test_restore_items_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER test_restore_items_guard BEFORE UPDATE ON public.test_restore_items FOR EACH ROW EXECUTE FUNCTION public.test_restore_items_guard();
+
+--
+-- Name: test_restores test_restores_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER test_restores_guard BEFORE UPDATE ON public.test_restores FOR EACH ROW EXECUTE FUNCTION public.test_restores_guard();
+
+--
+-- Name: test_restores test_restores_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER test_restores_set_updated_at BEFORE UPDATE ON public.test_restores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
 -- Name: users users_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
@@ -2355,6 +2822,20 @@ ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 --
+-- Name: jobs jobs_test_restore_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_test_restore_connection_id_fkey FOREIGN KEY (test_restore_connection_id) REFERENCES public.connections(id);
+
+--
+-- Name: jobs jobs_test_restore_privileged_ack_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_test_restore_privileged_ack_by_fkey FOREIGN KEY (test_restore_privileged_ack_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
 -- Name: jobs jobs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2367,6 +2848,55 @@ ALTER TABLE ONLY public.jobs
 
 ALTER TABLE ONLY public.recovery_codes
     ADD CONSTRAINT recovery_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: restore_identity_handoff restore_identity_handoff_restore_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restore_identity_handoff
+    ADD CONSTRAINT restore_identity_handoff_restore_id_fkey FOREIGN KEY (restore_id) REFERENCES public.restores(id);
+
+--
+-- Name: restore_logs restore_logs_restore_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restore_logs
+    ADD CONSTRAINT restore_logs_restore_id_fkey FOREIGN KEY (restore_id) REFERENCES public.restores(id);
+
+--
+-- Name: restores restores_artifact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_artifact_id_fkey FOREIGN KEY (artifact_id) REFERENCES public.artifacts(id);
+
+--
+-- Name: restores restores_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: restores restores_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+--
+-- Name: restores restores_run_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_run_item_id_fkey FOREIGN KEY (run_item_id) REFERENCES public.run_items(id);
+
+--
+-- Name: restores restores_target_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.restores
+    ADD CONSTRAINT restores_target_connection_id_fkey FOREIGN KEY (target_connection_id) REFERENCES public.connections(id);
 
 --
 -- Name: run_items run_items_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -2423,6 +2953,55 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.settings
     ADD CONSTRAINT settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: test_restore_items test_restore_items_restore_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restore_items
+    ADD CONSTRAINT test_restore_items_restore_id_fkey FOREIGN KEY (restore_id) REFERENCES public.restores(id);
+
+--
+-- Name: test_restore_items test_restore_items_run_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restore_items
+    ADD CONSTRAINT test_restore_items_run_item_id_fkey FOREIGN KEY (run_item_id) REFERENCES public.run_items(id);
+
+--
+-- Name: test_restore_items test_restore_items_test_restore_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restore_items
+    ADD CONSTRAINT test_restore_items_test_restore_id_fkey FOREIGN KEY (test_restore_id) REFERENCES public.test_restores(id);
+
+--
+-- Name: test_restores test_restores_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restores
+    ADD CONSTRAINT test_restores_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: test_restores test_restores_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restores
+    ADD CONSTRAINT test_restores_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: test_restores test_restores_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restores
+    ADD CONSTRAINT test_restores_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: test_restores test_restores_target_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.test_restores
+    ADD CONSTRAINT test_restores_target_connection_id_fkey FOREIGN KEY (target_connection_id) REFERENCES public.connections(id);
 
 --
 -- Name: webauthn_ceremonies webauthn_ceremonies_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -2510,6 +3089,18 @@ REVOKE ALL ON FUNCTION public.job_keys_retire_only() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.jobs_slug_immutable() FROM PUBLIC;
 
 --
+-- Name: FUNCTION restore_identity_handoff_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.restore_identity_handoff_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION restores_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.restores_guard() FROM PUBLIC;
+
+--
 -- Name: FUNCTION river_job_state_in_bitmask(bitmask bit, state public.river_job_state); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -2527,6 +3118,18 @@ REVOKE ALL ON FUNCTION public.runs_terminal_guard() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.set_updated_at() FROM PUBLIC;
+
+--
+-- Name: FUNCTION test_restore_items_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.test_restore_items_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION test_restores_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.test_restores_guard() FROM PUBLIC;
 
 --
 -- Name: TABLE artifact_holds; Type: ACL; Schema: public; Owner: bekup_owner
@@ -2691,6 +3294,96 @@ GRANT SELECT,INSERT,UPDATE ON TABLE public.jobs TO bekup_app;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.recovery_codes TO bekup_app;
 
 --
+-- Name: TABLE restore_identity_handoff; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.restore_identity_handoff TO bekup_app;
+
+--
+-- Name: TABLE restore_logs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.restore_logs TO bekup_app;
+
+--
+-- Name: SEQUENCE restore_logs_id_seq; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.restore_logs_id_seq TO bekup_app;
+
+--
+-- Name: TABLE restores; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.status; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(status) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.river_job_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(river_job_id) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.staged_bytes; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(staged_bytes) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.started_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(started_at) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.finished_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(finished_at) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.error_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(error_code) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.error_message; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(error_message) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.log_lines; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(log_lines) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.log_lines_dropped; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(log_lines_dropped) ON TABLE public.restores TO bekup_app;
+
+--
+-- Name: COLUMN restores.warnings; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(warnings) ON TABLE public.restores TO bekup_app;
+
+--
 -- Name: TABLE river_job; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -2779,6 +3472,126 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.sessions TO bekup_app;
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.settings TO bekup_app;
+
+--
+-- Name: TABLE test_restore_items; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.restore_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(restore_id) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.status; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(status) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.scratch_dropped; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(scratch_dropped) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.error_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(error_code) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.diff; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(diff) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: COLUMN test_restore_items.finished_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(finished_at) ON TABLE public.test_restore_items TO bekup_app;
+
+--
+-- Name: TABLE test_restores; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.run_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(run_id) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.status; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(status) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.river_job_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(river_job_id) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.started_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(started_at) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.finished_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(finished_at) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.error_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(error_code) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.error_message; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(error_message) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.databases; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(databases) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.passed; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(passed) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.warned; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(warned) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.failed; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(failed) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: COLUMN test_restores.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.test_restores TO bekup_app;
 
 --
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: bekup_owner

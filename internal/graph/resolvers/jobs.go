@@ -729,6 +729,7 @@ func jobModel(j *jobs.Job) *model.Job {
 		TimeoutSeconds: durationSeconds(j.Timeout), ExpectedWindowSeconds: durationSeconds(j.ExpectedWindow),
 		Verification: verificationModel(j.Verification), CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
 		Destinations: make([]model.JobDestinationRef, 0, len(j.Destinations)),
+		TestRestore:  testRestoreJobModel(&j.TestRestore),
 	}
 	for _, d := range j.Destinations {
 		m.Destinations = append(m.Destinations, model.JobDestinationRef{

@@ -85,6 +85,7 @@ type svcEnv struct {
 	auditor *audit.Auditor
 	q       *sqlc.Queries
 	pool    *pgxpool.Pool
+	db      dbtest.DB
 	actor   Actor
 	alerts  []Alert
 	mu      sync.Mutex
@@ -94,7 +95,7 @@ func newSvcEnv(t *testing.T) *svcEnv {
 	t.Helper()
 	d := dbtest.Migrated(t)
 	pool := d.AppPool(t)
-	e := &svcEnv{runner: &fakeRunner{}, auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool), pool: pool}
+	e := &svcEnv{runner: &fakeRunner{}, auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool), pool: pool, db: d}
 	var err error
 	e.svc, err = New(Options{
 		DB: pool, Keyring: testKeyring(t), Auditor: e.auditor, Runner: e.runner,

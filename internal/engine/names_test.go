@@ -168,3 +168,25 @@ func FuzzValidateHost(f *testing.F) {
 		}
 	})
 }
+
+func TestScratchDatabaseName(t *testing.T) {
+	got, err := ScratchDatabaseName("0123456789ab")
+	if err != nil || got != "bekup_test_0123456789ab" || !IsBekupScratchDatabase(got) || ValidateDBName(got) != nil {
+		t.Fatalf("ScratchDatabaseName = %q, %v", got, err)
+	}
+	for _, bad := range []string{"", "0123456789a", "0123456789abc", "0123456789AB", "01234567-9ab", "x; DROP"} {
+		if _, err := ScratchDatabaseName(bad); err == nil {
+			t.Errorf("ScratchDatabaseName(%q) accepted", bad)
+		}
+	}
+	for _, name := range []string{"bekup_test_", "bekup_test_0123456789abc", "shop", "xbekup_test_0123456789ab", "BEKUP_TEST_0123456789ab"} {
+		if IsBekupScratchDatabase(name) {
+			t.Errorf("IsBekupScratchDatabase(%q) = true", name)
+		}
+	}
+	for name, want := range map[string]bool{"bekup_test_x": true, "BEKUP_Test_1": true, "bekup_tes": false, "shop": false, "a_bekup_test_1": false} {
+		if IsReservedScratchName(name) != want {
+			t.Errorf("IsReservedScratchName(%q) != %v", name, want)
+		}
+	}
+}

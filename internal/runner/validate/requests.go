@@ -202,6 +202,54 @@ func (v *Validator) RenameSwapDatabase(ctx context.Context, req *runnerpb.Rename
 	return &Swap{Target: t, Database: req.GetDatabase(), TempID: req.GetTempId()}, nil
 }
 
+// DropTemp is a validated DropTempDatabaseRequest.
+type DropTemp struct {
+	*Target
+	// Database is the restore's target database; Name is the derived
+	// temporary database to drop.
+	Database string
+	TempID   string
+	Name     string
+}
+
+// DropTempDatabase validates a DropTempDatabaseRequest and derives the
+// name to drop (engine.TempDatabaseName / OldDatabaseName): the request
+// never names the dropped database itself.
+func (v *Validator) DropTempDatabase(ctx context.Context, req *runnerpb.DropTempDatabaseRequest) (*DropTemp, error) {
+	if err := checkEnvelope(req, MaxRequestBytes); err != nil {
+		return nil, err
+	}
+	if err := checkRunContext(req.GetCtx()); err != nil {
+		return nil, err
+	}
+	t, err := v.target(ctx, "target.", req.GetTarget())
+	if err != nil {
+		return nil, err
+	}
+	if err := database(t, req.GetDatabase(), true); err != nil {
+		return nil, err
+	}
+	if engine.IsBekupTempDatabase(req.GetDatabase()) {
+		return nil, fieldError("database", "must not be a bekup temporary database")
+	}
+	if err := engine.ValidateRestoreID(req.GetTempId()); err != nil {
+		return nil, fieldError("temp_id", "must be [a-z0-9]{1,26}")
+	}
+	var name string
+	switch req.GetRole() {
+	case runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_RESTORE:
+		name, err = engine.TempDatabaseName(req.GetDatabase(), req.GetTempId())
+	case runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_OLD:
+		name, err = engine.OldDatabaseName(req.GetDatabase(), req.GetTempId())
+	default:
+		return nil, fieldError("role", "unknown or unspecified role")
+	}
+	if err != nil || !engine.IsBekupTempDatabase(name) || t.Engine.IsSystemDatabase(name) {
+		return nil, fieldError("temp_id", "cannot derive the temporary name")
+	}
+	return &DropTemp{Target: t, Database: req.GetDatabase(), TempID: req.GetTempId(), Name: name}, nil
+}
+
 // PrePull validates a PrePullRequest and returns the allowlisted entry.
 func (v *Validator) PrePull(req *runnerpb.PrePullRequest) (engine.Entry, error) {
 	if err := checkEnvelope(req, MaxRequestBytes); err != nil {
@@ -293,7 +341,9 @@ type Restore struct {
 	Source  engine.Entry
 	Dump    runnerpb.DumpKind
 	NoOwner bool
-	Total   uint64
+	// NoPrivileges: pg_restore --no-privileges (scratch databases only).
+	NoPrivileges bool
+	Total        uint64
 }
 
 // RestoreHeader validates the first message of a Restore stream; it must
@@ -323,6 +373,10 @@ func (v *Validator) RestoreHeader(ctx context.Context, req *runnerpb.RestoreRequ
 	if h.GetNoOwner() && (t.Kind != engine.KindPostgres || h.GetKind() != runnerpb.DumpKind_DUMP_KIND_DATABASE) {
 		return nil, nil, fieldError("header.no_owner", "only for PostgreSQL database restores")
 	}
+	if h.GetNoPrivileges() && (t.Kind != engine.KindPostgres || h.GetKind() != runnerpb.DumpKind_DUMP_KIND_DATABASE ||
+		!engine.IsBekupScratchDatabase(h.GetDatabase())) {
+		return nil, nil, fieldError("header.no_privileges", "only for PostgreSQL restores into a test-restore scratch database")
+	}
 	switch h.GetKind() {
 	case runnerpb.DumpKind_DUMP_KIND_GLOBALS:
 		if h.GetDatabase() != "" {
@@ -338,6 +392,6 @@ func (v *Validator) RestoreHeader(ctx context.Context, req *runnerpb.RestoreRequ
 	}
 	return &Restore{
 		Target: t, Database: h.GetDatabase(), Source: src, Dump: h.GetKind(),
-		NoOwner: h.GetNoOwner(), Total: h.GetTotalBytes(),
+		NoOwner: h.GetNoOwner(), NoPrivileges: h.GetNoPrivileges(), Total: h.GetTotalBytes(),
 	}, &Stream{total: h.GetTotalBytes()}, nil
 }

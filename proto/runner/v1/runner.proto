@@ -72,12 +72,36 @@ service RunnerService {
   // bekup temporary database in one transaction, keeping the old one under
   // a bekup temporary name.
   rpc RenameSwapDatabase(RenameSwapDatabaseRequest) returns (RenameSwapDatabaseResponse);
+  // DropTempDatabase drops a bekup temporary database of a restore: the
+  // staging database <database>__bekup_restore_<temp_id> (a failed or
+  // canceled restore) or the replaced <database>__bekup_old_<temp_id> (after
+  // a swap). The runner derives the name itself; no other database can be
+  // dropped through the API.
+  rpc DropTempDatabase(DropTempDatabaseRequest) returns (DropTempDatabaseResponse);
   // PrePull pulls the allowlisted image of an engine version ahead of a run.
   rpc PrePull(PrePullRequest) returns (PrePullResponse);
   // ListImages returns the runner's merged image allowlist (the embedded
   // catalog plus runner.toml images.extra_file), so serve can offer every
   // client version the runner accepts.
   rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  // ScratchStats captures the completeness statistics of a test-restore
+  // scratch database (task 4.6): the same catalog reads and counts as the
+  // Dump stats, through the same pinned, hostile-safe Go-driver session.
+  // The runner derives the database name bekup_test_<temp_id> itself.
+  rpc ScratchStats(ScratchStatsRequest) returns (ScratchStatsResponse);
+  // DropScratchDatabase drops the test-restore scratch database
+  // bekup_test_<temp_id> (task 4.6). The runner derives the name; no other
+  // database can be dropped through it.
+  rpc DropScratchDatabase(DropScratchDatabaseRequest) returns (DropScratchDatabaseResponse);
+  // NeutralizeRestoredDatabase hardens a freshly restored PostgreSQL
+  // database before it is swapped in or reported as restored (D-171):
+  // every SECURITY DEFINER function and procedure outside pg_catalog and
+  // information_schema becomes SECURITY INVOKER and PUBLIC loses CONNECT
+  // and TEMPORARY on the database. The runner derives or checks the name
+  // (the restore's staging database, a test-restore scratch database, or
+  // a new database owned by the connection's role) and works in its
+  // pinned Go-driver session (D-152).
+  rpc NeutralizeRestoredDatabase(NeutralizeRestoredDatabaseRequest) returns (NeutralizeRestoredDatabaseResponse);
 }
 
 // Engine is a database engine. MySQL and MariaDB are separate engines.
@@ -260,6 +284,30 @@ message ProbeResponse {
   bool version_key_compatible = 4;
   // Stable warning codes (compatibility, certificate pin).
   repeated string warnings = 5;
+  // Whether the connection's role is privileged (D-068): SQL in a restored
+  // dump runs with its rights.
+  TargetPrivileges privileges = 6;
+}
+
+// Privilege verdict of a target role (D-068). UNSPECIFIED (an older
+// runner) and UNKNOWN are treated as PRIVILEGED by serve (fail closed).
+enum PrivilegeStatus {
+  PRIVILEGE_STATUS_UNSPECIFIED = 0;
+  // No privilege enabling host access or privilege escalation was found.
+  PRIVILEGE_STATUS_NOT_PRIVILEGED = 1;
+  // At least one such privilege was found (reasons).
+  PRIVILEGE_STATUS_PRIVILEGED = 2;
+  // The privileges could not be determined completely (reasons say why,
+  // e.g. roles granted to a MySQL account).
+  PRIVILEGE_STATUS_UNKNOWN = 3;
+}
+
+message TargetPrivileges {
+  PrivilegeStatus status = 1;
+  // Stable reason codes (at most 32, each at most 64 bytes, from a fixed
+  // vocabulary; never server-provided names other than privilege and
+  // predefined role names).
+  repeated string reasons = 2;
 }
 
 message FetchServerCertificateRequest {
@@ -499,6 +547,10 @@ message RestoreHeader {
   bool no_owner = 6;
   // Exact size of the dump that follows.
   uint64 total_bytes = 7;
+  // PostgreSQL: pg_restore --no-privileges (GRANT/REVOKE skipped). Only
+  // for a test-restore scratch database (bekup_test_<id>); user restores
+  // keep the source ACLs.
+  bool no_privileges = 8;
 }
 
 message RestoreRequest {
@@ -543,6 +595,31 @@ message RenameSwapDatabaseRequest {
 
 message RenameSwapDatabaseResponse {}
 
+// TempDatabaseRole selects which derived temporary database to drop.
+enum TempDatabaseRole {
+  TEMP_DATABASE_ROLE_UNSPECIFIED = 0;
+  // <database>__bekup_restore_<temp_id>: the database a restore writes
+  // before the swap.
+  TEMP_DATABASE_ROLE_RESTORE = 1;
+  // <database>__bekup_old_<temp_id>: the replaced database after the swap.
+  TEMP_DATABASE_ROLE_OLD = 2;
+}
+
+message DropTempDatabaseRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  // The restore's target database the temporary name is derived from.
+  string database = 3;
+  // Identifier of the restore ([a-z0-9]{1,26}).
+  string temp_id = 4;
+  TempDatabaseRole role = 5;
+}
+
+message DropTempDatabaseResponse {
+  // existed: the database was in the server's list before the drop.
+  bool existed = 1;
+}
+
 message PrePullRequest {
   Engine engine = 1;
   string version_key = 2;
@@ -574,4 +651,65 @@ message AllowlistedImage {
   bool legacy = 5;
   // The entry comes from the runner's images.extra_file.
   bool extra = 6;
+}
+
+message ScratchStatsRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  // Identifier of the test restore's scratch database ([a-z0-9]{12}); the
+  // runner inspects bekup_test_<temp_id>, which must exist.
+  string temp_id = 3;
+  // Required and enabled. PostgreSQL deep: exact counts; MySQL/MariaDB
+  // always estimates (D-153).
+  StatsOptions stats = 4;
+}
+
+message ScratchStatsResponse {
+  DumpStats stats = 1;
+  // The inspected database (bekup_test_<temp_id>).
+  string database = 2;
+}
+
+message DropScratchDatabaseRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  // Identifier of the test restore's scratch database ([a-z0-9]{12}).
+  string temp_id = 3;
+}
+
+message DropScratchDatabaseResponse {
+  // existed: the database was in the server's list before the drop.
+  bool existed = 1;
+}
+
+// NeutralizeKind selects the database NeutralizeRestoredDatabase works on.
+enum NeutralizeKind {
+  NEUTRALIZE_KIND_UNSPECIFIED = 0;
+  // <database>__bekup_restore_<temp_id>: an overwrite's staging database.
+  NEUTRALIZE_KIND_RESTORE_STAGING = 1;
+  // database itself: a restore into a new database (not a bekup name).
+  NEUTRALIZE_KIND_NEW_DATABASE = 2;
+  // bekup_test_<temp_id>: a test-restore scratch database.
+  NEUTRALIZE_KIND_SCRATCH = 3;
+}
+
+message NeutralizeRestoredDatabaseRequest {
+  RunContext ctx = 1;
+  Target target = 2;
+  // The restore's target database (RESTORE_STAGING: the name the staging
+  // name is derived from; NEW_DATABASE: the new database; SCRATCH: empty).
+  string database = 3;
+  // Identifier of the restore ([a-z0-9]{1,26}; SCRATCH: [a-z0-9]{12}).
+  string temp_id = 4;
+  NeutralizeKind kind = 5;
+}
+
+message NeutralizeRestoredDatabaseResponse {
+  // The database that was hardened.
+  string database = 1;
+  // Number of functions and procedures switched to SECURITY INVOKER.
+  uint32 neutralized = 2;
+  // Their signatures (regprocedure text), at most 50, each at most 256
+  // bytes; truncated when neutralized is larger.
+  repeated string functions = 3;
 }

@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"filippo.io/age"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jlentink/bekup/internal/artifactverify"
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/authz"
@@ -383,17 +383,15 @@ func (s *Service) checkKeys(ctx context.Context, a *artifactInfo, in CreateInput
 	if err != nil {
 		return false, err
 	}
-	ids, err := crypto.ParseAgeIdentities(in.Identity)
-	if err != nil {
+	switch err := artifactverify.MatchIdentity(in.Identity, info.Recipient); {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, artifactverify.ErrIdentityInvalid):
 		// Never echo the input.
 		return false, serviceutil.FieldErr("ageIdentity", "not an age X25519 identity (AGE-SECRET-KEY-1...)")
+	default:
+		return false, serviceutil.FieldErr("ageIdentity", "this key does not match the recipient of the backup")
 	}
-	for _, id := range ids {
-		if x, ok := id.(*age.X25519Identity); ok && x.Recipient().String() == info.Recipient {
-			return true, nil
-		}
-	}
-	return false, serviceutil.FieldErr("ageIdentity", "this key does not match the recipient of the backup")
 }
 
 // identityAAD binds a sealed identity to its ticket row.

@@ -52,7 +52,7 @@ func (q *Queries) DeleteJobOwner(ctx context.Context, arg DeleteJobOwnerParams) 
 }
 
 const getJob = `-- name: GetJob :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by FROM jobs WHERE id = $1 AND deleted_at IS NULL
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetJob(ctx context.Context, id uuid.UUID) (Job, error) {
@@ -82,6 +82,14 @@ func (q *Queries) GetJob(ctx context.Context, id uuid.UUID) (Job, error) {
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }
@@ -112,7 +120,7 @@ func (q *Queries) GetJobConnectionInfo(ctx context.Context, id uuid.UUID) (GetJo
 }
 
 const getJobForShare = `-- name: GetJobForShare :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR SHARE
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR SHARE
 `
 
 // GetJobForShare locks a job that is not deleted against concurrent
@@ -144,12 +152,20 @@ func (q *Queries) GetJobForShare(ctx context.Context, id uuid.UUID) (Job, error)
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }
 
 const getJobForUpdate = `-- name: GetJobForUpdate :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetJobForUpdate locks a job that is not deleted.
@@ -180,6 +196,14 @@ func (q *Queries) GetJobForUpdate(ctx context.Context, id uuid.UUID) (Job, error
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }
@@ -224,7 +248,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7::text[], $8::text[],
         $9, $10::int, $11::int,
         $12::int, $13, $14::int,
         $15, $16, $17::timestamptz, $18, $18)
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
 `
 
 type InsertJobParams struct {
@@ -298,6 +322,14 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }
@@ -372,7 +404,7 @@ func (q *Queries) JobSlugTaken(ctx context.Context, slug string) (bool, error) {
 
 const jobsUsingConnection = `-- name: JobsUsingConnection :many
 SELECT id, name FROM jobs
-WHERE connection_id = $1 AND deleted_at IS NULL
+WHERE (connection_id = $1 OR test_restore_connection_id = $1) AND deleted_at IS NULL
 ORDER BY lower(name), id
 LIMIT 5
 `
@@ -383,7 +415,8 @@ type JobsUsingConnectionRow struct {
 }
 
 // JobsUsingConnection lists (up to 5) non-deleted jobs that back up the
-// connection (delete-in-use check).
+// connection or use it as their test-restore scratch target (delete-in-use
+// check).
 func (q *Queries) JobsUsingConnection(ctx context.Context, connectionID uuid.UUID) ([]JobsUsingConnectionRow, error) {
 	rows, err := q.db.Query(ctx, jobsUsingConnection, connectionID)
 	if err != nil {
@@ -523,7 +556,7 @@ func (q *Queries) ListJobOwners(ctx context.Context, jobID uuid.UUID) ([]ListJob
 }
 
 const listJobs = `-- name: ListJobs :many
-SELECT j.id, j.enabled, j.schedule, j.next_run_at, j.last_scheduled_at, j.deleted_at, j.created_at, j.updated_at, j.name, j.slug, j.description, j.connection_id, j.db_mode, j.databases, j.exclude, j.include_globals, j.retention_keep_last, j.retention_keep_days, j.timeout_seconds, j.verification, j.expected_window_seconds, j.created_by, j.updated_by FROM jobs j
+SELECT j.id, j.enabled, j.schedule, j.next_run_at, j.last_scheduled_at, j.deleted_at, j.created_at, j.updated_at, j.name, j.slug, j.description, j.connection_id, j.db_mode, j.databases, j.exclude, j.include_globals, j.retention_keep_last, j.retention_keep_days, j.timeout_seconds, j.verification, j.expected_window_seconds, j.created_by, j.updated_by, j.test_restore_enabled, j.test_restore_schedule, j.test_restore_connection_id, j.test_restore_next_at, j.test_restore_target_privileges, j.test_restore_privilege_reasons, j.test_restore_privileged_ack_by, j.test_restore_privileged_ack_at FROM jobs j
 WHERE j.deleted_at IS NULL
   AND ($1::boolean OR EXISTS (
         SELECT 1 FROM job_owners o WHERE o.job_id = j.id AND o.user_id = $2::uuid))
@@ -594,6 +627,14 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 			&i.ExpectedWindowSeconds,
 			&i.CreatedBy,
 			&i.UpdatedBy,
+			&i.TestRestoreEnabled,
+			&i.TestRestoreSchedule,
+			&i.TestRestoreConnectionID,
+			&i.TestRestoreNextAt,
+			&i.TestRestoreTargetPrivileges,
+			&i.TestRestorePrivilegeReasons,
+			&i.TestRestorePrivilegedAckBy,
+			&i.TestRestorePrivilegedAckAt,
 		); err != nil {
 			return nil, err
 		}
@@ -665,6 +706,49 @@ func (q *Queries) LockDestinationsForJob(ctx context.Context, ids []uuid.UUID) (
 	return items, nil
 }
 
+const ownerBackedUpDatabases = `-- name: OwnerBackedUpDatabases :many
+SELECT n.name::text AS name FROM unnest($1::text[]) AS n(name)
+WHERE EXISTS (
+    SELECT 1 FROM jobs j
+    JOIN job_owners o ON o.job_id = j.id
+    JOIN users u ON u.id = o.user_id AND u.deleted_at IS NULL
+    WHERE o.user_id = $2
+      AND j.connection_id = $3
+      AND j.deleted_at IS NULL
+      AND ((j.db_mode = 'all' AND NOT (n.name = ANY(j.exclude)))
+           OR (j.db_mode = 'selected' AND n.name = ANY(j.databases))))
+ORDER BY n.name
+`
+
+type OwnerBackedUpDatabasesParams struct {
+	Names        []string  `json:"names"`
+	UserID       uuid.UUID `json:"userId"`
+	ConnectionID uuid.UUID `json:"connectionId"`
+}
+
+// OwnerBackedUpDatabases returns the names among @names that a non-deleted
+// job owned by the user backs up on the connection (OwnerBacksUpDatabase
+// for a list; restore target listings, task 4.5).
+func (q *Queries) OwnerBackedUpDatabases(ctx context.Context, arg OwnerBackedUpDatabasesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, ownerBackedUpDatabases, arg.Names, arg.UserID, arg.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ownerBacksUpDatabase = `-- name: OwnerBacksUpDatabase :one
 SELECT EXISTS (
     SELECT 1 FROM jobs j
@@ -691,6 +775,36 @@ func (q *Queries) OwnerBacksUpDatabase(ctx context.Context, arg OwnerBacksUpData
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const ownerConnectionIDs = `-- name: OwnerConnectionIDs :many
+SELECT DISTINCT j.connection_id FROM jobs j
+JOIN job_owners o ON o.job_id = j.id
+JOIN users u ON u.id = o.user_id AND u.deleted_at IS NULL
+WHERE o.user_id = $1 AND j.deleted_at IS NULL
+ORDER BY j.connection_id
+`
+
+// OwnerConnectionIDs lists the connections that non-deleted jobs owned by
+// the user back up (restore targets of backup owners, task 4.5).
+func (q *Queries) OwnerConnectionIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, ownerConnectionIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var connection_id uuid.UUID
+		if err := rows.Scan(&connection_id); err != nil {
+			return nil, err
+		}
+		items = append(items, connection_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const ownerUsesConnection = `-- name: OwnerUsesConnection :one
@@ -720,7 +834,7 @@ SET enabled = $1,
     next_run_at = $2::timestamptz,
     updated_by = $3
 WHERE id = $4 AND deleted_at IS NULL
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
 `
 
 type SetJobEnabledParams struct {
@@ -762,6 +876,14 @@ func (q *Queries) SetJobEnabled(ctx context.Context, arg SetJobEnabledParams) (J
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }
@@ -805,7 +927,7 @@ SET name = $1,
     next_run_at = $14::timestamptz,
     updated_by = $15
 WHERE id = $16 AND deleted_at IS NULL
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
 `
 
 type UpdateJobParams struct {
@@ -871,6 +993,14 @@ func (q *Queries) UpdateJob(ctx context.Context, arg UpdateJobParams) (Job, erro
 		&i.ExpectedWindowSeconds,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
 	)
 	return i, err
 }

@@ -90,6 +90,14 @@ type Connection {
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
   settings: ConnectionSettings
+  """
+  A temporary restore connection (task 4.4): admin only, usable only as a
+  restore target, deleted with its credentials destroyed at expiresAt or
+  once the restores that used it have finished.
+  """
+  temporary: Boolean!
+  "When a temporary connection expires; null for permanent connections."
+  expiresAt: Time
 }
 
 type ConnectionSettings {
@@ -158,6 +166,40 @@ type ConnectionTestResult {
   "Stable warning codes (compatibility, certificate expiry, staged pin in use)."
   warnings: [String!]!
   databaseCount: Int!
+  """
+  Whether the connection's role is privileged for restores (D-068); null
+  when the test failed before the check.
+  """
+  privileges: TargetPrivileges
+}
+
+"How privileged a connection's role is (D-068): SQL in a restored dump runs with its rights."
+enum TargetPrivilegeStatus {
+  "No privilege enabling host access or privilege escalation was found."
+  NOT_PRIVILEGED
+  """
+  Superuser or similar (PostgreSQL: SUPERUSER, CREATEROLE, REPLICATION,
+  BYPASSRLS, server file/program roles; MySQL/MariaDB: SUPER, FILE,
+  PROCESS, CREATE USER, global GRANT OPTION, admin privileges, writes to
+  the mysql schema).
+  """
+  PRIVILEGED
+  "Could not be determined completely (e.g. MySQL/MariaDB roles granted); treated as privileged."
+  UNKNOWN
+}
+
+"The privilege verdict on a connection's role (D-068)."
+type TargetPrivileges {
+  status: TargetPrivilegeStatus!
+  """
+  Stable reason codes, e.g. superuser, createrole,
+  member_of:pg_execute_server_program, member_of_role_with:superuser,
+  global:FILE, global:ALL PRIVILEGES, proxy, system_schema_write,
+  roles_granted, detection_failed.
+  """
+  reasons: [String!]!
+  "Restores into this connection need an admin and acknowledgePrivilegedTarget (PRIVILEGED or UNKNOWN)."
+  acknowledgementRequired: Boolean!
 }
 
 type ConnectionVersionInfo {
@@ -223,6 +265,12 @@ extend type Query {
 
   "One connection; null when it does not exist or was deleted."
   connection(id: UUID!): Connection @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  The unexpired temporary restore connections, newest first (at most 200;
+  the restore wizard). They never appear in connections or connection.
+  """
+  temporaryConnections: [Connection!]! @hasRole(roles: [ADMIN])
 
   "The allowlisted engine versions (image catalog) for versionKey and imageKey."
   engineVersions(engine: DatabaseEngine): [EngineVersion!]! @hasRole(roles: [ADMIN, MAINTAINER])
@@ -307,6 +355,26 @@ extend type Mutation {
   public key.
   """
   generateConnectionSshKeypair(id: UUID!): ConnectionSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Creates a temporary restore connection inside the restore wizard (task
+  4.4). It is validated like createConnection (TLS PINNED unless set
+  otherwise, an audited opt-out; D-132) and expires
+  restore.temp_connection_ttl from now. Pin its certificate / SSH host key
+  with the usual mutations, then use it as a restore target; it never
+  appears in connections and jobs cannot use it. At most 50 exist at a
+  time (CONFLICT). Must be the only field of its operation.
+  """
+  createTemporaryConnection(input: CreateTemporaryConnectionInput!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Moves the expiry of a temporary connection; at most
+  restore.temp_connection_max_ttl after its creation (VALIDATION).
+  """
+  extendTemporaryConnection(id: UUID!, expiresAt: Time!): Connection! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Deletes a temporary connection now; its stored credentials are destroyed."
+  deleteTemporaryConnection(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
 }
 
 input CreateConnectionInput {
@@ -362,6 +430,31 @@ input UpdateConnectionInput {
   maxConcurrentRuns: Int
   "Returns to the global workers.max_runs_per_connection."
   clearMaxConcurrentRuns: Boolean
+}
+
+"""
+A temporary restore connection: the fields of CreateConnectionInput without
+the run limit (the global default applies).
+"""
+input CreateTemporaryConnectionInput {
+  "Default: \"Temporary: <host>\". Names of temporary connections may repeat."
+  name: String
+  engine: DatabaseEngine!
+  versionKey: String!
+  "Default: versionKey."
+  imageKey: String
+  host: String!
+  "Default: 5432 (PostgreSQL) or 3306."
+  port: Int
+  username: String!
+  "Write-only."
+  password: String
+  "Default PINNED; anything else is an audited opt-out."
+  tlsMode: ConnectionTlsMode
+  clientCertificatePem: String
+  "Write-only; required together with clientCertificatePem."
+  clientKeyPem: String
+  ssh: ConnectionSshInput
 }
 
 input ConnectionSshInput {

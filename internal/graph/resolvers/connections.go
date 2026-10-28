@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -73,6 +74,9 @@ func connectionError(err error) error {
 		return apierror.New(apierror.Conflict, "the connection is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
 	case errors.Is(err, connections.ErrInUse):
 		return apierror.New(apierror.Conflict, "the connection is still used by a job")
+	case errors.Is(err, connections.ErrTooManyTemporary):
+		return apierror.Newf(apierror.Conflict, "at most %d temporary restore connections can exist at a time; delete one first",
+			connections.MaxActiveTemporary)
 	case errors.Is(err, connections.ErrNoSSH):
 		return apierror.New(apierror.Validation, "the connection has no SSH tunnel")
 	default:
@@ -89,7 +93,11 @@ func (r *Resolver) connectionCaller(ctx context.Context) (*connections.Service, 
 	if err != nil {
 		return nil, auth.Principal{}, connections.Actor{}, err
 	}
-	return r.Connections, p, connections.Actor{UserID: p.UserID, IP: auth.RequestMetaFrom(ctx).IP}, nil
+	// Only admins may act on temporary restore connections (task 4.4);
+	// for everyone else they do not exist.
+	return r.Connections, p, connections.Actor{
+		UserID: p.UserID, IP: auth.RequestMetaFrom(ctx).IP, AllowTemporary: p.Role == auth.RoleAdmin,
+	}, nil
 }
 
 func (r *Resolver) connections(ctx context.Context) ([]model.Connection, error) {
@@ -228,11 +236,15 @@ func (r *Resolver) testConnection(ctx context.Context, id uuid.UUID) (*model.Con
 	if warnings == nil {
 		warnings = []string{}
 	}
-	return &model.ConnectionTestResult{
+	out := &model.ConnectionTestResult{
 		Ok: res.OK, Code: nonEmpty(res.Code), Message: nonEmpty(res.Message), ServerVersion: nonEmpty(res.ServerVersion),
 		DetectedVersionKey: nonEmpty(res.DetectedVersionKey), Compatible: res.Compatible, Legacy: res.Legacy,
 		Warnings: warnings, DatabaseCount: res.Databases,
-	}, nil
+	}
+	if res.Privileges.Status != "" {
+		out.Privileges = targetPrivilegesModel(res.Privileges)
+	}
+	return out, nil
 }
 
 func (r *Resolver) detectVersion(ctx context.Context, id uuid.UUID) (*model.ConnectionVersionInfo, error) {
@@ -411,6 +423,82 @@ func (r *Resolver) generateConnectionSSHKeypair(ctx context.Context, id uuid.UUI
 	return &model.ConnectionSSHKeypair{Connection: connectionModel(&c, true), PublicKey: kp.AuthorizedKey, FingerprintSha256: kp.Fingerprint}, nil
 }
 
+// --- temporary restore connections (task 4.4) -------------------------------
+
+func (r *Resolver) temporaryConnections(ctx context.Context) ([]model.Connection, error) {
+	svc, _, _, err := r.connectionCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	list, err := svc.ListTemporary(ctx)
+	if err != nil {
+		return nil, connectionError(err)
+	}
+	out := make([]model.Connection, 0, len(list))
+	for i := range list {
+		out = append(out, *connectionModel(&list[i], true))
+	}
+	return out, nil
+}
+
+func (r *Resolver) createTemporaryConnection(ctx context.Context, in model.CreateTemporaryConnectionInput) (*model.Connection, error) {
+	svc, _, actor, err := r.connectionCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	kind, ok := engineFromModel(in.Engine)
+	if !ok {
+		return nil, apierror.Invalid("engine", "unknown engine")
+	}
+	ci := connections.CreateInput{
+		Name: derefString(in.Name), Engine: kind, VersionKey: in.VersionKey, ImageKey: derefString(in.ImageKey), Host: in.Host,
+		Username: in.Username, Password: secretBytes(in.Password), ClientCertPEM: derefString(in.ClientCertificatePem),
+		ClientKeyPEM: secretBytes(in.ClientKeyPem), SSH: sshInput(in.SSH),
+	}
+	if in.Port != nil {
+		ci.Port = *in.Port
+	}
+	if in.TLSMode != nil {
+		if ci.TLSMode, ok = tlsModeFromModel(*in.TLSMode); !ok {
+			return nil, apierror.Invalid("tlsMode", "unknown TLS mode")
+		}
+		// Creating without pinned TLS is the same opt-out as a downgrade.
+		if ci.TLSMode != connections.TLSPinned {
+			if err := r.Authz.Authorize(ctx, authz.OpConnectionTLSDowngrade); err != nil {
+				return nil, err
+			}
+		}
+	}
+	c, err := svc.CreateTemporary(ctx, actor, ci)
+	if err != nil {
+		return nil, connectionError(err)
+	}
+	return connectionModel(&c, true), nil
+}
+
+func (r *Resolver) extendTemporaryConnection(ctx context.Context, id uuid.UUID, expiresAt time.Time) (*model.Connection, error) {
+	svc, _, actor, err := r.connectionCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := svc.ExtendTemporary(ctx, actor, id, expiresAt)
+	if err != nil {
+		return nil, connectionError(err)
+	}
+	return connectionModel(&c, true), nil
+}
+
+func (r *Resolver) deleteTemporaryConnection(ctx context.Context, id uuid.UUID) (bool, error) {
+	svc, _, actor, err := r.connectionCaller(ctx)
+	if err != nil {
+		return false, err
+	}
+	if err := svc.DeleteTemporary(ctx, actor, id); err != nil {
+		return false, connectionError(err)
+	}
+	return true, nil
+}
+
 // --- conversions -------------------------------------------------------------
 
 func isTrue(b *bool) bool { return b != nil && *b }
@@ -517,6 +605,7 @@ func connectionModel(c *connections.Connection, full bool) *model.Connection {
 		PinStatus: pinStatusModel(c.PinStatus), PinExpiresAt: c.PinExpiresAt, SSHEnabled: c.SSH != nil,
 		Ready: c.Ready, NotReadyReason: nonEmpty(c.NotReadyReason), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 		MaxConcurrentRuns: c.MaxConcurrentRuns, EffectiveMaxConcurrentRuns: c.EffectiveMaxConcurrentRuns,
+		Temporary: c.Temporary, ExpiresAt: c.ExpiresAt,
 	}
 	if !full {
 		return m

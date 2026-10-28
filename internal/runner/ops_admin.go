@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -201,6 +202,47 @@ func (o *operations) renameSwap(ctx context.Context, req *runnerpb.RenameSwapDat
 	}
 	rollback()
 	return nil, swapErr
+}
+
+// dropTemp implements DropTempDatabase: the derived bekup temporary
+// database (restore staging or replaced old database) is dropped with
+// DROP DATABASE IF EXISTS (WITH (FORCE) on PostgreSQL 13+). The engine
+// builder refuses any name that is not a bekup temporary name.
+func (o *operations) dropTemp(ctx context.Context, req *runnerpb.DropTempDatabaseRequest) (resp *runnerpb.DropTempDatabaseResponse, err error) {
+	a := newAudit("DropTempDatabase", req.GetCtx().GetRunId())
+	defer func() { o.audit(ctx, a, err) }()
+	d, err := o.val.DropTempDatabase(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	a.target(d.Target)
+	a.database = d.Name
+	if o.exec == nil {
+		return nil, errNoExecutor
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+	chk, err := o.precheck(ctx, d.Target, req.GetTarget(), checkOpts{})
+	if err != nil {
+		o.logCause(ctx, "DropTempDatabase", err)
+		return nil, targetStatus(err)
+	}
+	existed := slices.Contains(chk.databases, d.Name)
+	// Its own step: the drop often follows a canceled Restore of the same
+	// run whose container and network are still being removed.
+	step := "droptemp"
+	if req.GetRole() == runnerpb.TempDatabaseRole_TEMP_DATABASE_ROLE_OLD {
+		step = "dropold"
+	}
+	code, err := o.statement(ctx, req.GetCtx().GetRunId(), step, d.Target, req.GetTarget(), chk.version,
+		func(et engine.Target) (engine.Command, error) {
+			return d.Engine.DropDatabase(d.Entry, et, d.Name)
+		})
+	a.exitCode = &code
+	if err != nil {
+		return nil, err
+	}
+	return &runnerpb.DropTempDatabaseResponse{Existed: existed}, nil
 }
 
 // prePull implements PrePull: the allowlisted image of the engine version

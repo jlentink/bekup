@@ -203,7 +203,7 @@ func (f mysqlFamily) DropDatabase(c Entry, t Target, db string) (Command, error)
 	if err := f.prepare(c, t); err != nil {
 		return Command{}, err
 	}
-	if !IsBekupTempDatabase(db) {
+	if !IsBekupTempDatabase(db) && !IsBekupScratchDatabase(db) {
 		return Command{}, fmt.Errorf("%w: %q", ErrNotBekupDatabase, truncate(db))
 	}
 	q, err := QuoteMySQLIdent(db)

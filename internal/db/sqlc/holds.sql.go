@@ -104,6 +104,25 @@ func (q *Queries) ReleaseArtifactHold(ctx context.Context, id uuid.UUID) (int64,
 	return result.RowsAffected(), nil
 }
 
+const releaseArtifactHoldsOfHolder = `-- name: ReleaseArtifactHoldsOfHolder :execrows
+DELETE FROM artifact_holds WHERE kind = $1::text AND holder_id = $2
+`
+
+type ReleaseArtifactHoldsOfHolderParams struct {
+	Kind     string    `json:"kind"`
+	HolderID uuid.UUID `json:"holderId"`
+}
+
+// ReleaseArtifactHoldsOfHolder removes the holds of one holder (the stuck
+// restore sweep, task 4.5).
+func (q *Queries) ReleaseArtifactHoldsOfHolder(ctx context.Context, arg ReleaseArtifactHoldsOfHolderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseArtifactHoldsOfHolder, arg.Kind, arg.HolderID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const renewArtifactHold = `-- name: RenewArtifactHold :execrows
 UPDATE artifact_holds
 SET expires_at = now() + make_interval(secs => $1::double precision)

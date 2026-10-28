@@ -189,6 +189,9 @@ func (e postgresEngine) Restore(c Entry, t Target, db string, o RestoreOptions) 
 	if o.NoOwner {
 		argv = append(argv, "--no-owner")
 	}
+	if o.NoPrivileges {
+		argv = append(argv, "--no-privileges")
+	}
 	argv = append(argv, "--dbname="+pgConninfo(t, db))
 	return Command{Image: c.image, Argv: argv, Files: pgFiles(t), Stdin: true}, nil
 }
@@ -270,7 +273,13 @@ func (e postgresEngine) CreateDatabase(c Entry, t Target, db string) (Command, e
 	if err != nil {
 		return Command{}, err
 	}
-	return psqlCommand(c, t, "CREATE DATABASE "+q+" TEMPLATE template0"), nil
+	// PUBLIC never gets CONNECT or TEMPORARY on a database bekup creates
+	// (D-171): until the restored content is neutralized (SECURITY
+	// DEFINER -> INVOKER) and an admin grants access deliberately, only
+	// the restore role (owner) and superusers can connect. Each --command
+	// runs in its own transaction (CREATE DATABASE cannot run in one).
+	return psqlCommand(c, t, "CREATE DATABASE "+q+" TEMPLATE template0",
+		"REVOKE CONNECT, TEMPORARY ON DATABASE "+q+" FROM PUBLIC"), nil
 }
 
 func (e postgresEngine) RenameSwap(c Entry, t Target, db, id string) (SwapPlan, error) {
@@ -325,7 +334,7 @@ func (postgresEngine) DropDatabase(c Entry, t Target, db string) (Command, error
 	if err := pgPrepare(c, t); err != nil {
 		return Command{}, err
 	}
-	if !IsBekupTempDatabase(db) {
+	if !IsBekupTempDatabase(db) && !IsBekupScratchDatabase(db) {
 		return Command{}, fmt.Errorf("%w: %q", ErrNotBekupDatabase, truncate(db))
 	}
 	q, err := QuotePGIdent(db)

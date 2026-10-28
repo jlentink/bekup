@@ -82,6 +82,16 @@ func (s *service) RenameSwapDatabase(ctx context.Context, req *runnerpb.RenameSw
 	return s.ops.renameSwap(ctx, req)
 }
 
+// DropTempDatabase drops a bekup temporary database of a restore (the
+// name is derived from temp_id).
+func (s *service) DropTempDatabase(ctx context.Context, req *runnerpb.DropTempDatabaseRequest) (*runnerpb.DropTempDatabaseResponse, error) {
+	defer runnerpb.ZeroSecrets(req)
+	if s.ops == nil {
+		return nil, errOpsUnavailable
+	}
+	return s.ops.dropTemp(ctx, req)
+}
+
 // PrePull pulls an allowlisted image by digest.
 func (s *service) PrePull(ctx context.Context, req *runnerpb.PrePullRequest) (*runnerpb.PrePullResponse, error) {
 	if s.ops == nil {

@@ -156,6 +156,58 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `object_key`, `newest_complete`) for an object that vanished without
   bekup deleting it. Dry runs and sweeps with nothing to delete record
   nothing; per-object outcomes are the artifact rows' state.
+- Restores (task 4.1, D-162; system actor, target type `restore`, target id
+  the restore id): `restore.verification_failed` when a staged artifact
+  fails the verification (`reason`: stored_digest_mismatch,
+  dump_digest_mismatch, manifest_bad_signature, manifest_unknown_key,
+  manifest_replayed, manifest_binding_mismatch, manifest_malformed,
+  manifest_invalid, decrypt_failed; `artifact_id`, `job_id`, `run_id`,
+  `destination_id`, `object_key`). It is also raised as a security alert.
+  The restore worker (task 4.2, D-166) records `restore.started` when it
+  takes a queued restore (`job_id`, `artifact_id`,
+  `target_connection_id`, `target_database`, `mode`, `no_owner`,
+  `requested_by`, `target_engine`, `temporary_target`, `attempt`; fail
+  closed: the restore does not start without it) and `restore.finished`
+  when it ends (the same fields plus `status`, `error_code`, `warnings`,
+  `log_lines`, `log_lines_dropped`). The request (task 4.5, D-167; user
+  actor, with the IP) is `restore.requested` (`job_id`, `artifact_id`,
+  `run_id`, `kind`, `source_engine`, `source_version`, `source_database`,
+  `target_connection_id`, `target_connection`, `target_database`,
+  `temporary_target`, `original_target`, `mode`, `no_owner`, `warnings`
+  (the preview warning codes), `identity_supplied`, `cross_source`,
+  `target_privileges` (`not_privileged`, `privileged`, `unknown`),
+  `target_privilege_reasons`, `privileged_target_acknowledged` (task 4.8,
+  D-168); never the age identity), recorded in the same transaction as
+  the restore;
+  `restore.cancel_requested` (user actor; `job_id`, `status`,
+  `river_state`) for `cancelRestore`; and `restore.abandoned` (system
+  actor; `job_id`, `artifact_id`, `target_connection_id`,
+  `target_database`, `mode`, `previous_status`, `started_at`,
+  `error_code`) when the stuck-restore sweep fails a restore no worker
+  finished; `restore.secdef_neutralized` (system actor; the restore's
+  fields plus `database`, `functions_neutralized`, `functions` (at most
+  50 signatures), `functions_listed`) when a PostgreSQL restore switched
+  `SECURITY DEFINER` routines to `SECURITY INVOKER`, recorded before the
+  swap (fail closed, D-171); and `restore.privileged_target_refused`
+  (system actor; `requested_privileges`, `requested_privilege_reasons`,
+  `privileged_target_acknowledged`, `target_privileges`,
+  `target_privilege_reasons`, `refusal`) when the worker's re-check found
+  a privileged or unknown role the request did not acknowledge (D-173).
+- Test restores (task 4.6, D-169): `job.test_restore_updated` (user
+  actor, target the job: `name`, `enabled`, `schedule`,
+  `target_connection_id`, `target_connection`,
+  `target_is_job_connection`); `test_restore.requested` (user actor for
+  `runTestRestoreNow`, system actor for the schedule; `job_id`,
+  `target_connection_id`, `trigger`, `queue_job_id`, `scheduled_for`);
+  `test_restore.finished` (system actor: `job_id`, `target_connection_id`,
+  `trigger`, `status`, `error_code`, `run_id`, `databases` with each
+  database's `status` and `error_code`); `test_restore.scratch_kept`
+  (system actor; `scratch_database`, `restore_id`, `error_code`) when a
+  scratch database could not be dropped (also alerted, retried); and
+  `test_restore.abandoned` (system actor) from the stuck sweep. The
+  internal restores of a test restore record `restore.started` and
+  `restore.finished` with `test_restore_id` and `scratch` in the details
+  and no `requested_by`.
 - Destinations (task 2.12, D-131): `destination.created` (settings
   without credentials, `credentials_set` names), `destination.updated`
   (`changed` field names, `values` with old/new for short non-secret
@@ -185,6 +237,13 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   events `connection.tls_pin_mismatch` (`check`, host, port, operation) and
   `connection.ssh_host_key_mismatch` (bastion, pinned fingerprint).
   Credentials appear by name only (and as `secret.changed`).
+  Temporary restore connections (task 4.4, D-163):
+  `connection.temporary_created` (as `connection.created`, plus
+  `expires_at`), `connection.temporary_extended` (from, to),
+  `connection.temporary_deleted` (admin, reason `manual`) and
+  `connection.temporary_expired` (actor `system`, reason `expired` or
+  `restore_finished`); both deletions list `destroyed_fields` and add a
+  `secret.changed` entry with `destroyed: true`.
 - User administration (D-110) records `user.created`,
   `user.updated`, `user.role_changed`, `user.disabled`, `user.enabled`,
   `user.password_reset`, `user.unlocked`, `user.deleted`,
@@ -193,7 +252,10 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   break-glass CLI records `cli.admin.created` (also for the first admin,
   D-113), `cli.admin.password_reset`, `cli.admin.mfa_reset`,
   `cli.admin.unlocked` and `cli.admin.disabled` with actor `cli`.
-  Passwords and temporary passwords are never recorded. (The `setup.*`
+  Passwords and temporary passwords are never recorded. `bekup reindex
+  --import` (task 4.7) records `cli.run.imported` per imported run (target
+  the run id; job, destination, manifest key and SHA-256, signing key,
+  artifact and verified counts). (The `setup.*`
   actions of the removed web setup flow no longer exist.)
 - Passkeys (task 1.8, D-109): `auth.passkey.registration_begun`,
   `auth.passkey.registration_failed` (`reason`), `auth.mfa.enrolled` and

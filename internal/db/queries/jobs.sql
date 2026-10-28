@@ -159,11 +159,37 @@ SELECT EXISTS (
     WHERE o.user_id = @user_id AND j.connection_id = @connection_id AND j.deleted_at IS NULL
 )::boolean;
 
+-- OwnerConnectionIDs lists the connections that non-deleted jobs owned by
+-- the user back up (restore targets of backup owners, task 4.5).
+-- name: OwnerConnectionIDs :many
+SELECT DISTINCT j.connection_id FROM jobs j
+JOIN job_owners o ON o.job_id = j.id
+JOIN users u ON u.id = o.user_id AND u.deleted_at IS NULL
+WHERE o.user_id = @user_id AND j.deleted_at IS NULL
+ORDER BY j.connection_id;
+
+-- OwnerBackedUpDatabases returns the names among @names that a non-deleted
+-- job owned by the user backs up on the connection (OwnerBacksUpDatabase
+-- for a list; restore target listings, task 4.5).
+-- name: OwnerBackedUpDatabases :many
+SELECT n.name::text AS name FROM unnest(@names::text[]) AS n(name)
+WHERE EXISTS (
+    SELECT 1 FROM jobs j
+    JOIN job_owners o ON o.job_id = j.id
+    JOIN users u ON u.id = o.user_id AND u.deleted_at IS NULL
+    WHERE o.user_id = @user_id
+      AND j.connection_id = @connection_id
+      AND j.deleted_at IS NULL
+      AND ((j.db_mode = 'all' AND NOT (n.name = ANY(j.exclude)))
+           OR (j.db_mode = 'selected' AND n.name = ANY(j.databases))))
+ORDER BY n.name;
+
 -- JobsUsingConnection lists (up to 5) non-deleted jobs that back up the
--- connection (delete-in-use check).
+-- connection or use it as their test-restore scratch target (delete-in-use
+-- check).
 -- name: JobsUsingConnection :many
 SELECT id, name FROM jobs
-WHERE connection_id = $1 AND deleted_at IS NULL
+WHERE (connection_id = $1 OR test_restore_connection_id = $1) AND deleted_at IS NULL
 ORDER BY lower(name), id
 LIMIT 5;
 

@@ -10,18 +10,20 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jlentink/bekup/internal/crypto"
+	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/offline"
 )
 
-func newKeysCmd() *cobra.Command {
+func newKeysCmd(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "keys",
-		Short: "Generate and rotate the master keyring",
+		Short: "Generate and rotate the master keyring; export the instance public keys",
 		Long: "Manage the master keyring that encrypts every credential bekup stores (AES-256-GCM).\n" +
 			"Format, rotation and escrow: docs/security/key-management.md.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newKeysGenerateCmd(), newKeysRotateCmd())
+	cmd.AddCommand(newKeysGenerateCmd(), newKeysRotateCmd(), newKeysExportPublicCmd(g))
 	return cmd
 }
 
@@ -116,5 +118,63 @@ destination passwords, SSH keys, job backup passphrases, TOTP secrets).
 
 See docs/security/key-management.md.
 `, path, k.PrimaryID())
+	return err
+}
+
+func newKeysExportPublicCmd(g *globalFlags) *cobra.Command {
+	var out string
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "export-public [--out <file>]",
+		Short: "Export the instance public keys (manifest signatures) for escrow and offline verification",
+		Long: "Writes every instance signing public key (active and retired) from the bekup database in the\n" +
+			"format `bekup verify --pubkey` reads, with their fingerprints. Only public keys are read; no\n" +
+			"keyring is needed. Escrow the file with the master keyring and record the fingerprints\n" +
+			"independently (docs/recovery.md, docs/security/key-management.md).",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			pool, _, _, closePool, err := openAppDB(c, g, "bekup-keys")
+			if err != nil {
+				return err
+			}
+			defer closePool()
+			keys, err := offline.DBPublicKeys(c.Context(), sqlc.New(pool))
+			if err != nil {
+				return err
+			}
+			if len(keys) == 0 {
+				return errors.New("the database has no instance keys yet (bekup serve creates the first one)")
+			}
+			return writePublicKeys(c, keys, out, force)
+		},
+	}
+	cmd.Flags().StringVar(&out, "out", "", "write to this file instead of stdout (never overwritten without --force)")
+	cmd.Flags().BoolVar(&force, "force", false, "replace an existing --out file")
+	return cmd
+}
+
+func writePublicKeys(c *cobra.Command, keys []offline.PublicKey, out string, force bool) error {
+	now := time.Now()
+	if out == "" || out == "-" {
+		return offline.FormatPublicKeys(c.OutOrStdout(), keys, now)
+	}
+	f, err := offline.CreateOutput(out, force)
+	if err != nil {
+		return err
+	}
+	defer f.Abort()
+	if err := offline.FormatPublicKeys(f, keys, now); err != nil {
+		return err
+	}
+	if err := f.Commit(); err != nil {
+		return err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "wrote %d instance public key(s) to %s\n", len(keys), out)
+	for _, k := range keys {
+		fmt.Fprintf(&b, "  %s  %s\n", k.ID, k.Fingerprint())
+	}
+	b.WriteString("Escrow the file with the master keyring and record these fingerprints independently.\n")
+	_, err = io.WriteString(c.ErrOrStderr(), b.String())
 	return err
 }

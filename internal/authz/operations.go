@@ -83,6 +83,9 @@ const (
 	OpConnectionTLSDowngrade    Operation = "connection.tls_downgrade"
 	OpConnectionSSHKeyGenerate  Operation = "connection.ssh_key_generate"
 	OpTemporaryConnectionCreate Operation = "connection.temporary_create" // restore wizard (task 4.4)
+	OpTemporaryConnectionList   Operation = "connection.temporary_list"
+	OpTemporaryConnectionExtend Operation = "connection.temporary_extend"
+	OpTemporaryConnectionDelete Operation = "connection.temporary_delete"
 
 	// Destinations (task 2.12, D-131). Maintainers use destinations:
 	// metadata (name, type, mode flags, readiness) and test; no CRUD, no
@@ -151,10 +154,27 @@ const (
 	OpArtifactDownloadRedeem Operation = "artifact.download_redeem"
 
 	// Restores (tasks 4.2-4.6).
-	OpRestoreTargetsList Operation = "restore.targets_list"
-	OpRestoreArtifact    Operation = "restore.artifact" // needs a RestoreTarget resource
+	OpRestoreTargetsList Operation = "restore.targets_list" // restoreTargets, restoreTargetDatabases
+	OpRestoreArtifact    Operation = "restore.artifact"     // needs a RestoreTarget resource
 	OpRestoreGlobals     Operation = "restore.globals"
-	OpRestoreView        Operation = "restore.view"
+	OpRestoreView        Operation = "restore.view" // restores, restore, restoreLogs, restoreUpdated
+	// OpRestorePreview checks a restore request without running it
+	// (restorePreview, task 4.5): the target rules of OpRestoreArtifact
+	// (needs a RestoreTarget resource) without the fresh second factor.
+	OpRestorePreview Operation = "restore.preview"
+	// OpRestoreCancel cancels a queued or running restore: staff only,
+	// like run.cancel (D-106: owners cannot cancel runs, nor restores).
+	OpRestoreCancel Operation = "restore.cancel"
+
+	// Test restores (task 4.6). The settings are OpJobTestRestoreEdit;
+	// reading them is part of job.view.
+	// OpTestRestoreView reads a job's test restores and their diffs
+	// (testRestores, testRestore): staff and the job's owners.
+	OpTestRestoreView Operation = "test_restore.view"
+	// OpTestRestoreRun queues a test restore now (runTestRestoreNow):
+	// staff only. The scratch target was designated with a fresh second
+	// factor (OpJobTestRestoreEdit).
+	OpTestRestoreRun Operation = "test_restore.run"
 
 	// Notifications (tasks 5.3b, 6.10).
 	OpSharedChannelList     Operation = "notification.shared_channel_list"
@@ -279,6 +299,9 @@ var policy = map[Operation]Rule{
 	OpConnectionTLSDowngrade:    {Roles: adminOnly, Fresh: FreshStepUp},
 	OpConnectionSSHKeyGenerate:  {Roles: adminOnly, Fresh: FreshStepUp},
 	OpTemporaryConnectionCreate: {Roles: adminOnly, Fresh: FreshStepUp},
+	OpTemporaryConnectionList:   {Roles: adminOnly},
+	OpTemporaryConnectionExtend: {Roles: adminOnly, Fresh: FreshStepUp},
+	OpTemporaryConnectionDelete: {Roles: adminOnly, Fresh: FreshStepUp},
 
 	OpDestinationList:           {Roles: staff},
 	OpDestinationView:           {Roles: staff},
@@ -305,7 +328,10 @@ var policy = map[Operation]Rule{
 	OpJobEncryptionKeysEdit: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpJobEncryptionOptOut:   {Roles: adminOnly, Fresh: FreshStepUp},
 	OpJobPassphraseExport:   {Roles: adminOnly, Fresh: FreshStepUp},
-	OpJobTestRestoreEdit:    {Roles: staff},
+	// Task 4.6: designating the scratch target makes bekup restore the
+	// job's backups into that connection, as a restore does: the same
+	// fresh second factor as restore.artifact.
+	OpJobTestRestoreEdit:    {Roles: staff, Fresh: FreshAAL2},
 	OpJobSharedChannelsEdit: {Roles: adminOnly},
 
 	OpRunList:       {Roles: staff, Owner: OwnerList},
@@ -330,6 +356,11 @@ var policy = map[Operation]Rule{
 	OpRestoreArtifact:    {Roles: staff, Owner: OwnerJob, Fresh: FreshAAL2, NeedsTarget: true},
 	OpRestoreGlobals:     {Roles: adminOnly, Fresh: FreshAAL2},
 	OpRestoreView:        {Roles: staff, Owner: OwnerJob},
+	OpRestorePreview:     {Roles: staff, Owner: OwnerJob, NeedsTarget: true},
+	OpRestoreCancel:      {Roles: staff},
+
+	OpTestRestoreView: {Roles: staff, Owner: OwnerJob},
+	OpTestRestoreRun:  {Roles: staff},
 
 	OpSharedChannelList:     {Roles: adminOnly},
 	OpSharedChannelEdit:     {Roles: adminOnly, Fresh: FreshStepUp},

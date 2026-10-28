@@ -99,6 +99,10 @@ type Options struct {
 	Limits scheduler.Limits
 	// MaxTimeout is workers.backup_timeout, the cap of a job's timeout.
 	MaxTimeout time.Duration
+	// TestTargets probes a scratch target's role when it is designated
+	// (D-170; nil: every target is unknown, so only admins with the
+	// acknowledgement can designate one).
+	TestTargets TestTargetProber
 	// Alerts receives security events (owner changes); nil logs them.
 	Alerts AlertFunc
 	// Now overrides the clock (tests).
@@ -209,6 +213,9 @@ func (s *Service) view(ctx context.Context, q *sqlc.Queries, row *sqlc.Job) (Job
 		j.Destinations = append(j.Destinations, DestinationRef{
 			ID: d.DestinationID, Name: d.Name, Type: string(d.Type), Position: int(d.Position), Deleted: d.DeletedAt != nil,
 		})
+	}
+	if j.TestRestore, err = testRestoreView(ctx, q, row); err != nil {
+		return Job{}, err
 	}
 	return j, nil
 }

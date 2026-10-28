@@ -71,7 +71,7 @@ func (s *Service) ConfirmHostKey(ctx context.Context, actor Actor, id uuid.UUID,
 	line, typ, fp := info.AuthorizedKey, info.Type, info.FingerprintSHA256
 	var out sqlc.Connection
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
-		r, err := s.load(ctx, q, id, true)
+		r, err := s.loadFor(ctx, q, id, true, actor)
 		if err != nil {
 			return err
 		}
@@ -83,6 +83,7 @@ func (s *Service) ConfirmHostKey(ctx context.Context, actor Actor, id uuid.UUID,
 		}
 		out, err = q.SetConnectionHostKey(ctx, sqlc.SetConnectionHostKeyParams{
 			ID: id, HostKeyType: &typ, HostKeyFingerprint: &fp, HostKeyAuthorizedKey: &line, ConfirmedBy: &actor.UserID,
+			AllowTemporary: r.Temporary,
 		})
 		if err != nil {
 			return fmt.Errorf("connections: set host key: %w", err)
@@ -121,7 +122,7 @@ func (s *Service) GenerateSSHKeypair(ctx context.Context, actor Actor, id uuid.U
 	defer kp.PrivateKeyPEM.Destroy()
 	var out sqlc.Connection
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
-		r, err := s.load(ctx, q, id, true)
+		r, err := s.loadFor(ctx, q, id, true, actor)
 		if err != nil {
 			return err
 		}
@@ -148,7 +149,7 @@ func (s *Service) GenerateSSHKeypair(ctx context.Context, actor Actor, id uuid.U
 		}
 		out, err = q.SetConnectionSSHAuth(ctx, sqlc.SetConnectionSSHAuthParams{
 			ID: id, SshAuth: sqlc.ConnectionSshAuthPrivateKey, SshHasPassphrase: false,
-			SshPublicKey: &kp.AuthorizedKey, SecretEnc: sealed,
+			SshPublicKey: &kp.AuthorizedKey, SecretEnc: sealed, AllowTemporary: r.Temporary,
 		})
 		if err != nil {
 			return fmt.Errorf("connections: store keypair: %w", err)

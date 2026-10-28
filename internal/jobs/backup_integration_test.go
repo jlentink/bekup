@@ -82,6 +82,7 @@ import (
 	"github.com/jlentink/bekup/internal/scheduler"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/runnertest"
 )
 
 const (
@@ -561,6 +562,8 @@ func (e *biEnv) services() {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { biIgnore(rc.Close()) })
+	// "runner listening" precedes the executor's own-container detection.
+	runnertest.WaitDockerOK(t, rc, 0, nil)
 	e.conns, err = connections.New(connections.Options{
 		DB: e.pool, Keyring: e.keyring, Auditor: e.auditor, Runner: rc.RPC(), OperationTimeout: 3 * time.Minute,
 		Limiter: func(string) (bool, time.Duration) { return true, 0 }, Logger: logger,

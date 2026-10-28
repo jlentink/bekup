@@ -21,4 +21,10 @@
 // host-key mismatch reported by the runner is audited and raised through
 // the AlertFunc (task 5.5); TLS downgrades are audited as security.opt_out
 // and alerted too.
+//
+// Temporary restore connections (task 4.4, D-163; temporary.go) are admin
+// only and restore targets only: CreateTemporary, ExtendTemporary,
+// DeleteTemporary, ListTemporary, GetForRestore, LockRestoreTargetTx and
+// RestoreTarget. The cleanup worker (cleanup.go) destroys their
+// credentials and soft deletes them on expiry or after their restores.
 package connections

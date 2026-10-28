@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/queue"
+	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
@@ -69,7 +71,28 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	if err != nil {
 		return err
 	}
-	return retention.Register(ws, rw)
+	if err := retention.Register(ws, rw); err != nil {
+		return err
+	}
+	// Restores (tasks 4.2/4.3).
+	rsw, err := a.newRestoreWorker()
+	if err != nil {
+		return err
+	}
+	if err := restore.Register(ws, rsw); err != nil {
+		return err
+	}
+	// Scheduled test restores (task 4.6) run through the restore worker.
+	if err := a.registerTestRestores(ws, rsw); err != nil {
+		return err
+	}
+	// Restores no worker will finish (task 4.5): failed, released, audited.
+	if err := restore.RegisterStuckSweep(ws, a.restore, a.opts.Config.Workers.RestoreTimeout.D()); err != nil {
+		return err
+	}
+	// Temporary restore connections (task 4.4): expiry / after-restore
+	// cleanup with crypto-shredding.
+	return connections.RegisterCleanup(ws, a.connections)
 }
 
 // queueInserter resolves the queue client late: workers are built before

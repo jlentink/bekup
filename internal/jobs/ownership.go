@@ -58,3 +58,31 @@ func (o Ownership) UsesConnection(ctx context.Context, userID, connectionID uuid
 	}
 	return ok, nil
 }
+
+// OwnedConnections lists the connections that non-deleted jobs owned by
+// userID back up (the restore targets of a backup owner, task 4.5). It is
+// a listing aid: every restore is authorized again through the policy.
+func (o Ownership) OwnedConnections(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	if userID == uuid.Nil {
+		return nil, nil
+	}
+	ids, err := sqlc.New(o.DB).OwnerConnectionIDs(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("jobs: owner connections: %w", err)
+	}
+	return ids, nil
+}
+
+// BackedUpDatabases returns the names among names that a non-deleted job
+// owned by userID backs up on connectionID (BacksUpDatabase for a list;
+// restore target listings, task 4.5).
+func (o Ownership) BackedUpDatabases(ctx context.Context, userID, connectionID uuid.UUID, names []string) ([]string, error) {
+	if userID == uuid.Nil || connectionID == uuid.Nil || len(names) == 0 {
+		return nil, nil
+	}
+	out, err := sqlc.New(o.DB).OwnerBackedUpDatabases(ctx, sqlc.OwnerBackedUpDatabasesParams{Names: names, UserID: userID, ConnectionID: connectionID})
+	if err != nil {
+		return nil, fmt.Errorf("jobs: owner databases: %w", err)
+	}
+	return out, nil
+}

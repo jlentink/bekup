@@ -427,6 +427,11 @@ func TestUpdateReplanAndSlug(t *testing.T) {
 	if len(a) == 0 || !strings.Contains(strings.Join(anyStrings(a[0]["fields"]), ","), "destination_ids") {
 		t.Fatalf("audit: %v", a)
 	}
+	// A temporary restore connection is refused on update too (task 4.4).
+	temp := e.temp
+	if _, err := e.svc.Update(e.admin.ctx, e.admin.actor, j.ID, UpdateInput{ConnectionID: &temp}); fieldOf(t, err) != "connectionId" {
+		t.Fatalf("temporary connection: %v", err)
+	}
 	// Moving to MySQL with globals still on is refused; with globals off
 	// it works.
 	my := e.my

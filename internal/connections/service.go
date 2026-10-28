@@ -91,6 +91,12 @@ type Options struct {
 	DefaultRunsPerConnection int
 	// OperationTimeout bounds one runner operation (default 60s).
 	OperationTimeout time.Duration
+	// TempTTL is restore.temp_connection_ttl, the lifetime of a temporary
+	// restore connection (default 24h); TempMaxTTL is
+	// restore.temp_connection_max_ttl, the cap on its lifetime counted from
+	// its creation (default 7 days; task 4.4).
+	TempTTL    time.Duration
+	TempMaxTTL time.Duration
 	// Now overrides the clock (tests).
 	Now func() time.Time
 	// Logger receives operational events (never secrets).
@@ -101,6 +107,10 @@ type Options struct {
 type Actor struct {
 	UserID uuid.UUID
 	IP     netip.Addr
+	// AllowTemporary lets the runner, pin, host-key and SSH-key operations
+	// act on temporary restore connections (task 4.4). The API sets it only
+	// for admins; maintainers never see temporary connections.
+	AllowTemporary bool
 }
 
 // Service manages connections; see the package documentation.
@@ -132,6 +142,15 @@ func New(o Options) (*Service, error) {
 	}
 	if o.DefaultRunsPerConnection <= 0 {
 		o.DefaultRunsPerConnection = 1
+	}
+	if o.TempMaxTTL <= 0 {
+		o.TempMaxTTL = DefaultTempMaxTTL
+	}
+	if o.TempTTL <= 0 {
+		o.TempTTL = min(DefaultTempTTL, o.TempMaxTTL)
+	}
+	if o.TempTTL > o.TempMaxTTL {
+		return nil, errors.New("connections: TempTTL must not exceed TempMaxTTL")
 	}
 	if o.Now == nil {
 		o.Now = time.Now
@@ -186,6 +205,11 @@ func (s *Service) view(row *sqlc.Connection) Connection {
 		Host: row.Host, Port: int(row.Port), Username: row.Username, HasPassword: row.HasPassword,
 		ClientCertPEM: deref(row.ClientCertPem), TLSMode: TLSMode(row.TlsMode),
 		CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+		Temporary: row.Temporary,
+	}
+	if row.Temporary && row.ExpiresAt != nil {
+		at := *row.ExpiresAt
+		c.ExpiresAt = &at
 	}
 	c.MaxConcurrentRuns, c.EffectiveMaxConcurrentRuns = s.runLimits(row.MaxConcurrentRuns)
 	for _, k := range []string{row.VersionKey, row.ImageKey} {
@@ -275,14 +299,30 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (Connection, error) {
 	return s.view(&row), nil
 }
 
+// load reads a permanent connection (temporary ones are ErrNotFound).
 func (s *Service) load(ctx context.Context, q *sqlc.Queries, id uuid.UUID, lock bool) (sqlc.Connection, error) {
+	return s.loadAs(ctx, q, id, lock, false)
+}
+
+// loadFor reads a connection for actor: a temporary restore connection that
+// has not expired only when actor.AllowTemporary (admins, task 4.4).
+func (s *Service) loadFor(ctx context.Context, q *sqlc.Queries, id uuid.UUID, lock bool, actor Actor) (sqlc.Connection, error) {
+	return s.loadAs(ctx, q, id, lock, actor.AllowTemporary)
+}
+
+func (s *Service) loadAs(ctx context.Context, q *sqlc.Queries, id uuid.UUID, lock, temporary bool) (sqlc.Connection, error) {
 	var (
 		row sqlc.Connection
 		err error
 	)
-	if lock {
+	switch {
+	case temporary && lock:
+		row, err = q.GetConnectionAnyForUpdate(ctx, sqlc.GetConnectionAnyForUpdateParams{ID: id, Now: s.o.Now()})
+	case temporary:
+		row, err = q.GetConnectionAny(ctx, sqlc.GetConnectionAnyParams{ID: id, Now: s.o.Now()})
+	case lock:
 		row, err = q.GetConnectionForUpdate(ctx, id)
-	} else {
+	default:
 		row, err = q.GetConnection(ctx, id)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -500,19 +540,17 @@ func optInt32(n int, set bool) *int32 {
 // are zeroed before Create returns. A TLS mode other than pinned is an
 // opt-out: it is audited as security.opt_out and raises an alert.
 func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Connection, error) {
-	defer crypto.Zero(in.Password)
-	defer crypto.Zero(in.ClientKeyPEM)
-	defer zeroSSHInput(in.SSH)
-	name, err := normalizeName(in.Name)
-	if err != nil {
-		return Connection{}, err
-	}
+	return s.create(ctx, actor, in, nil)
+}
+
+// createState validates in into the state of a new connection. The caller
+// zeroes st.creds (also on error, when st is not nil).
+func (s *Service) createState(in *CreateInput, name string) (*state, error) {
 	st := &state{
 		name: name, engine: in.Engine, versionKey: strings.TrimSpace(in.VersionKey), imageKey: strings.TrimSpace(in.ImageKey),
 		host: strings.TrimSpace(in.Host), port: in.Port, username: strings.TrimSpace(in.Username), tlsMode: in.TLSMode,
 		sshAuth: SSHAuthNone, creds: &Credentials{},
 	}
-	defer st.creds.Zero()
 	if st.imageKey == "" {
 		st.imageKey = st.versionKey
 	}
@@ -524,7 +562,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 	}
 	if in.Password != nil {
 		if err := checkPassword("password", in.Password); err != nil {
-			return Connection{}, err
+			return st, err
 		}
 		st.creds.Password = append([]byte(nil), in.Password...)
 		st.changedCred("password")
@@ -532,7 +570,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 	if in.ClientCertPEM != "" || in.ClientKeyPEM != nil {
 		cert, err := checkClientCertificate(in.ClientCertPEM, in.ClientKeyPEM)
 		if err != nil {
-			return Connection{}, err
+			return st, err
 		}
 		st.clientCertPEM = cert
 		st.creds.ClientKey = append([]byte(nil), in.ClientKeyPEM...)
@@ -540,17 +578,42 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 	}
 	if in.SSH != nil {
 		if err := applySSH(st, in.SSH); err != nil {
-			return Connection{}, err
+			return st, err
 		}
 	}
 	if in.MaxConcurrentRuns != nil {
 		if err := s.checkRunLimit(*in.MaxConcurrentRuns); err != nil {
-			return Connection{}, err
+			return st, err
 		}
 		n := *in.MaxConcurrentRuns
 		st.maxRuns = &n
 	}
-	if err := s.validate(st); err != nil {
+	return st, s.validate(st)
+}
+
+// temporaryCreate carries what CreateTemporary adds to create.
+type temporaryCreate struct {
+	expiresAt time.Time
+}
+
+// create stores a new connection; tmp != nil makes it a temporary restore
+// connection (task 4.4).
+func (s *Service) create(ctx context.Context, actor Actor, in CreateInput, tmp *temporaryCreate) (Connection, error) {
+	defer crypto.Zero(in.Password)
+	defer crypto.Zero(in.ClientKeyPEM)
+	defer zeroSSHInput(in.SSH)
+	if tmp != nil && strings.TrimSpace(in.Name) == "" {
+		in.Name = temporaryName(in.Host)
+	}
+	name, err := normalizeName(in.Name)
+	if err != nil {
+		return Connection{}, err
+	}
+	st, err := s.createState(&in, name)
+	if st != nil {
+		defer st.creds.Zero()
+	}
+	if err != nil {
 		return Connection{}, err
 	}
 	defer registerSecrets(st.creds)()
@@ -562,14 +625,36 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 	}
 	var out sqlc.Connection
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
-		row, err := q.InsertConnection(ctx, sqlc.InsertConnectionParams{
-			ID: id, Name: st.name, Engine: sqlc.ConnectionEngine(st.engine), VersionKey: st.versionKey, ImageKey: st.imageKey,
-			Host: st.host, Port: int32(st.port), Username: st.username, HasPassword: len(st.creds.Password) > 0, //nolint:gosec // G115: validated port
-			ClientCertPem: optString(st.clientCertPEM), TlsMode: sqlc.ConnectionTlsMode(st.tlsMode),
-			SshEnabled: st.ssh, SshHost: optString(st.sshHost), SshPort: optInt32(st.sshPort, st.ssh), SshUser: optString(st.sshUser),
-			SshAuth: sqlc.ConnectionSshAuth(st.sshAuth), SshHasPassphrase: st.sshPass, SshPublicKey: optString(st.sshPublicKey),
-			SecretEnc: sealed, CreatedBy: &actor.UserID, MaxConcurrentRuns: int32Ptr(st.maxRuns),
-		})
+		var (
+			row    sqlc.Connection
+			err    error
+			action = audit.ActionConnectionCreated
+		)
+		details := audit.Details{"name": st.name, "settings": auditSettings(st), "credentials_set": st.credsChanged}
+		if tmp == nil {
+			row, err = q.InsertConnection(ctx, sqlc.InsertConnectionParams{
+				ID: id, Name: st.name, Engine: sqlc.ConnectionEngine(st.engine), VersionKey: st.versionKey, ImageKey: st.imageKey,
+				Host: st.host, Port: int32(st.port), Username: st.username, HasPassword: len(st.creds.Password) > 0, //nolint:gosec // G115: validated port
+				ClientCertPem: optString(st.clientCertPEM), TlsMode: sqlc.ConnectionTlsMode(st.tlsMode),
+				SshEnabled: st.ssh, SshHost: optString(st.sshHost), SshPort: optInt32(st.sshPort, st.ssh), SshUser: optString(st.sshUser),
+				SshAuth: sqlc.ConnectionSshAuth(st.sshAuth), SshHasPassphrase: st.sshPass, SshPublicKey: optString(st.sshPublicKey),
+				SecretEnc: sealed, CreatedBy: &actor.UserID, MaxConcurrentRuns: int32Ptr(st.maxRuns),
+			})
+		} else {
+			if err := s.checkTemporaryCap(ctx, q); err != nil {
+				return err
+			}
+			action = audit.ActionConnectionTemporaryCreated
+			details["expires_at"] = tmp.expiresAt.UTC().Format(time.RFC3339)
+			row, err = q.InsertTemporaryConnection(ctx, sqlc.InsertTemporaryConnectionParams{
+				ID: id, Name: st.name, Engine: sqlc.ConnectionEngine(st.engine), VersionKey: st.versionKey, ImageKey: st.imageKey,
+				Host: st.host, Port: int32(st.port), Username: st.username, HasPassword: len(st.creds.Password) > 0, //nolint:gosec // G115: validated port
+				ClientCertPem: optString(st.clientCertPEM), TlsMode: sqlc.ConnectionTlsMode(st.tlsMode),
+				SshEnabled: st.ssh, SshHost: optString(st.sshHost), SshPort: optInt32(st.sshPort, st.ssh), SshUser: optString(st.sshUser),
+				SshAuth: sqlc.ConnectionSshAuth(st.sshAuth), SshHasPassphrase: st.sshPass, SshPublicKey: optString(st.sshPublicKey),
+				SecretEnc: sealed, CreatedBy: &actor.UserID, MaxConcurrentRuns: int32Ptr(st.maxRuns), ExpiresAt: &tmp.expiresAt,
+			})
+		}
 		if serviceutil.IsUniqueViolation(err) {
 			return ErrNameTaken
 		}
@@ -577,8 +662,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 			return fmt.Errorf("connections: insert: %w", err)
 		}
 		out = row
-		details := audit.Details{"name": st.name, "settings": auditSettings(st), "credentials_set": st.credsChanged}
-		if err := s.record(ctx, q, actor, audit.ActionConnectionCreated, id, details, st.credsChanged); err != nil {
+		if err := s.record(ctx, q, actor, action, id, details, st.credsChanged); err != nil {
 			return err
 		}
 		if st.tlsMode != TLSPinned {

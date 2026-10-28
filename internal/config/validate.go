@@ -392,6 +392,13 @@ func validateBekup(c *Bekup, dev bool) []error {
 		v.addf("storage.disk_root", "must not be the filesystem root")
 	}
 	v.absPath("storage.scratch_dir", c.Storage.ScratchDir, true)
+	if c.Storage.ScratchReserveBytes < 0 || c.Storage.ScratchReserveBytes > 1<<40 {
+		v.addf("storage.scratch_reserve_bytes", "must be 0..1099511627776 (got %d)", c.Storage.ScratchReserveBytes)
+	}
+	v.duration("storage.scratch_stale_after", c.Storage.ScratchStaleAfter, time.Hour, 30*24*time.Hour)
+	if c.Storage.ScratchStaleAfter.D() <= c.Workers.RestoreTimeout.D() {
+		v.addf("storage.scratch_stale_after", "must be longer than workers.restore_timeout")
+	}
 
 	// [workers]
 	v.positive("workers.max_concurrent_runs", int64(c.Workers.MaxConcurrentRuns))
@@ -448,6 +455,13 @@ func validateBekup(c *Bekup, dev bool) []error {
 		v.addf("retention.max_deletions_per_sweep", "must be 1..%d (got %d)", maxRetentionDeletions, n)
 	}
 	v.duration("retention.partial_cleanup_age", c.Retention.PartialCleanupAge, time.Hour, 30*24*time.Hour)
+
+	// [restore]
+	v.duration("restore.temp_connection_max_ttl", c.Restore.TempConnectionMaxTTL, 5*time.Minute, 30*24*time.Hour)
+	v.duration("restore.temp_connection_ttl", c.Restore.TempConnectionTTL, 5*time.Minute, 30*24*time.Hour)
+	if c.Restore.TempConnectionTTL.D() > c.Restore.TempConnectionMaxTTL.D() {
+		v.addf("restore.temp_connection_ttl", "must be <= restore.temp_connection_max_ttl")
+	}
 
 	// [notifications]
 	v.positive("notifications.max_per_user_per_hour", int64(c.Notifications.MaxPerUserPerHour))

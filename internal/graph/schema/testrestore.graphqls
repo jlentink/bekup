@@ -1,0 +1,198 @@
+# Scheduled test restores (task 4.6). A job may designate a scratch target
+# connection (permanent, the job's engine): bekup regularly restores the
+# job's newest verified backup into a new database bekup_test_<id> there,
+# compares it with the backup's source statistics (object counts exactly;
+# PostgreSQL row counts exactly; MySQL/MariaDB row counts are estimates
+# and only warn) and always drops the scratch database again. Changing the
+# settings needs an admin or maintainer with a fresh passkey or
+# authenticator check (the scratch target receives a copy of the job's
+# data); backup owners see the settings and results of their jobs.
+# Designating a target probes its role (D-068, D-170): a privileged or
+# unknown role needs an admin and acknowledgePrivilegedTarget, and the
+# worker re-probes the target before every test restore.
+
+"The test-restore settings of a job."
+type JobTestRestore {
+  "Scheduled test restores are on."
+  enabled: Boolean!
+  "When test restores run (MANUAL: only runTestRestoreNow)."
+  schedule: Schedule!
+  scheduleDescription: String!
+  "The scratch connection (null: none designated)."
+  target: JobConnectionRef
+  "The next scheduled test restore (null: disabled or manual)."
+  nextAt: Time
+  """
+  The verdict on the target's role when it was designated (null: no
+  target). A target designated before this check is UNKNOWN.
+  """
+  targetPrivileges: TargetPrivileges
+  """
+  When an admin acknowledged the privileged or unknown target role (null:
+  none). Test restores refuse to run (errorCode privileged_target) when
+  the role is gated and its current reasons are not all covered by this
+  acknowledgement.
+  """
+  privilegedTargetAcknowledgedAt: Time
+}
+
+extend type Job {
+  "Scheduled test-restore settings (task 4.6)."
+  testRestore: JobTestRestore!
+}
+
+"Status of a test restore (or of one of its databases)."
+enum TestRestoreStatus {
+  "Waiting for a worker or a concurrency slot."
+  QUEUED
+  RUNNING
+  "Every database matched its source statistics."
+  PASSED
+  "No mismatch that proves data loss, but differences worth a look (estimates, unknown counts, source warnings)."
+  WARNINGS
+  "At least one database misses objects, tables or rows."
+  FAILED
+  "A database could not be restored or checked (see errorCode)."
+  ERROR
+  CANCELED
+}
+
+"Why a test restore ran."
+enum TestRestoreTrigger {
+  SCHEDULE
+  MANUAL
+}
+
+"One difference between a backup's source statistics and its restored copy (names and counts only)."
+type TestRestoreFinding {
+  "WARN or FAIL."
+  severity: String!
+  """
+  Stable code: object_count_mismatch, table_missing, table_unexpected,
+  row_count_mismatch, row_count_delta, row_count_unknown,
+  tables_total_mismatch, tables_truncated, source_stats_missing,
+  source_stats_invalid, source_warnings, scratch_stats_invalid.
+  """
+  code: String!
+  "The object kind, the table (schema.table, percent-encoded as recorded) or the source warning codes."
+  object: String
+  source: Float
+  restored: Float
+  "restored - source."
+  delta: Float
+}
+
+"One restored database of a test restore."
+type TestRestoreDatabase {
+  id: UUID!
+  runItemId: UUID!
+  "The backed-up database."
+  database: String!
+  "The internal restore into the scratch database (null when it could not be created)."
+  restoreId: UUID
+  status: TestRestoreStatus!
+  errorCode: String
+  errorMessage: String
+  "The scratch database was dropped (false: dropping failed and is retried)."
+  scratchDropped: Boolean!
+  "Findings, at most 200 (findingsTotal counts all)."
+  findings: [TestRestoreFinding!]!
+  findingsTotal: Int!
+  "Tables present on both sides, and of those the ones compared exactly."
+  tablesCompared: Int!
+  exactTables: Int!
+  "The internal restore's status and error code when it did not succeed."
+  restoreStatus: String
+  restoreErrorCode: String
+  startedAt: Time!
+  finishedAt: Time
+}
+
+"A test restore of a job's backup."
+type TestRestore {
+  id: UUID!
+  job: RunJobRef!
+  "The run tested (null until it started, or when no backup qualified)."
+  runId: UUID
+  target: RestoreTargetRef!
+  trigger: TestRestoreTrigger!
+  status: TestRestoreStatus!
+  "Who requested it (runTestRestoreNow); admins and maintainers only."
+  requestedBy: RunActor
+  scheduledFor: Time
+  createdAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  durationSeconds: Float
+  errorCode: String
+  errorMessage: String
+  databaseCount: Int!
+  passed: Int!
+  warned: Int!
+  failed: Int!
+  "The restored databases (testRestore only; empty in listings)."
+  databases: [TestRestoreDatabase!]!
+}
+
+"A page of test restores."
+type TestRestoreConnection {
+  edges: [TestRestoreEdge!]!
+  pageInfo: PageInfo!
+}
+
+type TestRestoreEdge {
+  cursor: String!
+  node: TestRestore!
+}
+
+"New test-restore settings of a job."
+input JobTestRestoreInput {
+  enabled: Boolean!
+  "Default: the current schedule (weekly, Sunday 04:00 UTC, when never set)."
+  schedule: ScheduleInput
+  """
+  A permanent connection with the job's engine; required while enabled.
+  bekup only ever creates and drops bekup_test_<id> databases on it.
+  """
+  targetConnectionId: UUID
+  """
+  Required (admins only) when the target's role is privileged or its
+  privileges are unknown: SQL in the tested backups runs with its rights
+  (D-068).
+  """
+  acknowledgePrivilegedTarget: Boolean
+}
+
+extend type Query {
+  """
+  A job's test restores, newest first; `first` is 1..200 (default 50).
+  Backup owners see their own jobs' test restores only.
+  """
+  testRestores(jobId: UUID!, first: Int, after: String): TestRestoreConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One test restore with its databases and comparison findings; null when
+  it does not exist (admins and maintainers). Backup owners get FORBIDDEN
+  for other jobs' test restores and unknown ids.
+  """
+  testRestore(id: UUID!): TestRestore @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Changes a job's test-restore settings (audited). Requires a passkey
+  (with user verification) or authenticator code check within the last 5
+  minutes: the scratch target receives a copy of the job's data. The
+  target's role is probed: when it is privileged or unknown, only admins
+  may designate it (FORBIDDEN for maintainers), with
+  acknowledgePrivilegedTarget (VALIDATION without it); audited and
+  alerted.
+  """
+  setJobTestRestore(jobId: UUID!, input: JobTestRestoreInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Queues a test restore of the job's newest verified backup now (audited).
+  The job needs a scratch target; CONFLICT while one is queued or running.
+  """
+  runTestRestoreNow(jobId: UUID!): TestRestore! @hasRole(roles: [ADMIN, MAINTAINER])
+}

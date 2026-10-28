@@ -9,8 +9,8 @@ Decisions: D-008, D-016, D-040, D-088, D-142.
 > (task 3.5: `Job.encryption`, `createJob(input.encryption)`,
 > `setJobPassphrase`, `generateJobPassphrase`, `setJobRecipient`,
 > `generateAgeKeypair`, `enableJobEncryption`, `disableJobEncryption`,
-> `exportJobPassphrases`) exist. The UI follows in task 6.x, the offline
-> `bekup decrypt` tool with task 4.7.
+> `exportJobPassphrases`) exist, and so does the offline `bekup decrypt`
+> tool (task 4.7, [recovery.md](../recovery.md)). The UI follows in task 6.x.
 
 ## Modes
 
@@ -90,8 +90,9 @@ destination.
 An admin can export **all** passphrase versions of a job (step-up required;
 audited as `job.passphrases_exported` and raised as a security alert). Keep
 the export for disaster recovery when the bekup database is lost: with it,
-the offline tools (`bekup decrypt`, task 4.7, or plain `age -d`) decrypt the
-backups without bekup.
+the offline tools (`bekup decrypt --passphrase-file <export>`, which picks
+the version from the run's manifest, or plain `age -d`) decrypt the backups
+without bekup.
 
 The export is a text file (`bekup-job-<job-id>-passphrases.txt`):
 
@@ -111,6 +112,11 @@ backups. Treat it like the master key: offline, access-controlled, never in
 a ticket or chat.
 
 ## Recovery without bekup
+
+Preferred: `bekup decrypt <artifact> --out <file> --passphrase-file <export>`
+(or `--identity-file <identity>`) `--manifest manifest.json --pubkey
+<instance keys>`; it verifies the signed manifest first. With the stock
+tools:
 
 - **Passphrase mode:** `age -d -o dump.zst file.age` and enter the
   passphrase of the artifact's version (from the export), then

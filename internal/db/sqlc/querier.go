@@ -30,8 +30,15 @@ type Querier interface {
 	// ActiveAdminExists reports whether an active (not disabled, not deleted)
 	// admin account exists; serve warns at startup when none does (D-113).
 	ActiveAdminExists(ctx context.Context) (bool, error)
+	// ActiveRestoreForTarget reports a queued or running restore into the same
+	// target database (NULL: the connection's globals).
+	ActiveRestoreForTarget(ctx context.Context, arg ActiveRestoreForTargetParams) (bool, error)
 	// AdvanceJobSchedule stores the next occurrence (NULL = unschedulable).
 	AdvanceJobSchedule(ctx context.Context, arg AdvanceJobScheduleParams) error
+	AdvanceRestoreStatus(ctx context.Context, arg AdvanceRestoreStatusParams) (int64, error)
+	// AdvanceTestRestore sets the next scheduled test restore of a job.
+	AdvanceTestRestore(ctx context.Context, arg AdvanceTestRestoreParams) error
+	ArtifactKeyExists(ctx context.Context, arg ArtifactKeyExistsParams) (bool, error)
 	// Session re-validation for long-lived connections (event
 	// streams of subscriptions, tasks 1.10/2.13). Looks the session up by id, never by token,
 	// and does not touch it: an open stream is not user activity, so the idle
@@ -44,6 +51,7 @@ type Querier interface {
 	// pending secret is still the one that was verified and not expired.
 	ConfirmTOTP(ctx context.Context, arg ConfirmTOTPParams) (int64, error)
 	CountActiveDownloadTickets(ctx context.Context, arg CountActiveDownloadTicketsParams) (int64, error)
+	CountActiveTemporaryConnections(ctx context.Context, now time.Time) (int64, error)
 	CountJobOwners(ctx context.Context, jobID uuid.UUID) (int32, error)
 	CountRunSlots(ctx context.Context) (int64, error)
 	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -57,10 +65,14 @@ type Querier interface {
 	// DeleteExpiredDownloadTickets removes tickets that expired before the
 	// cutoff (used or not), and with them any identity left in an unused one.
 	DeleteExpiredDownloadTickets(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteExpiredRestoreIdentityHandoffs(ctx context.Context) (int64, error)
 	DeleteExpiredWebAuthnCeremonies(ctx context.Context) (int64, error)
 	DeleteJobDestinations(ctx context.Context, jobID uuid.UUID) error
 	DeleteJobOwner(ctx context.Context, arg DeleteJobOwnerParams) (int64, error)
 	DeleteRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	// DeleteRestoreIdentityHandoff removes the identity handoff of a restore
+	// that will never start (canceled or abandoned).
+	DeleteRestoreIdentityHandoff(ctx context.Context, restoreID uuid.UUID) (int64, error)
 	DeleteRunSlot(ctx context.Context, holderID uuid.UUID) error
 	// DeleteScheduleSkipsBefore removes skip records older than the retention
 	// period, in bounded batches.
@@ -84,9 +96,19 @@ type Querier interface {
 	// EnsureJobEncryption creates the encryption row of a job that has none
 	// (mode passphrase until a key or an opt-out says otherwise).
 	EnsureJobEncryption(ctx context.Context, arg EnsureJobEncryptionParams) error
+	// FailRunningTestRestoreItems ends the unfinished items of an abandoned
+	// test restore.
+	FailRunningTestRestoreItems(ctx context.Context, arg FailRunningTestRestoreItemsParams) error
+	// FinishRestore sets a terminal status (no-op on a finished restore)
+	// with the outcome (log counts, warning codes).
+	FinishRestore(ctx context.Context, arg FinishRestoreParams) (int64, error)
 	// FinishRun records the terminal status of a run that is still active.
 	FinishRun(ctx context.Context, arg FinishRunParams) (Run, error)
 	FinishRunItem(ctx context.Context, arg FinishRunItemParams) (RunItem, error)
+	// FinishTestRestore sets the terminal status of an unfinished test restore.
+	FinishTestRestore(ctx context.Context, arg FinishTestRestoreParams) (int64, error)
+	// FinishTestRestoreItem records an item's verdict (once).
+	FinishTestRestoreItem(ctx context.Context, arg FinishTestRestoreItemParams) (int64, error)
 	// Instance signing keys (D-087; internal/audit instance key loader).
 	GetActiveInstanceKey(ctx context.Context) (InstanceKey, error)
 	GetActiveJobPassphrase(ctx context.Context, jobID uuid.UUID) (JobPassphrase, error)
@@ -106,6 +128,23 @@ type Querier interface {
 	GetAuditLogChainAnchor(ctx context.Context, beforeID int64) (GetAuditLogChainAnchorRow, error)
 	GetBackupStatsByItem(ctx context.Context, runItemID uuid.UUID) (BackupStat, error)
 	GetConnection(ctx context.Context, id uuid.UUID) (Connection, error)
+	// --- Temporary restore connections (task 4.4, D-163) -------------------------
+	// Admin only, restore targets only. A temporary connection is usable until
+	// expires_at (checked against the caller's clock, @now); the cleanup worker
+	// then destroys its credentials and soft deletes it.
+	// GetConnectionAny reads a connection that is not deleted, permanent or a
+	// temporary one that has not expired.
+	GetConnectionAny(ctx context.Context, arg GetConnectionAnyParams) (Connection, error)
+	GetConnectionAnyForShare(ctx context.Context, arg GetConnectionAnyForShareParams) (Connection, error)
+	GetConnectionAnyForUpdate(ctx context.Context, arg GetConnectionAnyForUpdateParams) (Connection, error)
+	// GetConnectionAnyForShare share-locks a usable connection (permanent or
+	// an unexpired temporary one) as a restore target (task 4.5): the cleanup
+	// worker's row lock waits for the restore's transaction.
+	// GetConnectionForSlotHolder loads a restore target for a run that holds
+	// a run slot on it (holder): a permanent connection, or a temporary one
+	// that is unexpired or whose slot the holder holds (the cleanup never
+	// deletes a connection while a slot is held). Deleted rows never load.
+	GetConnectionForSlotHolder(ctx context.Context, arg GetConnectionForSlotHolderParams) (Connection, error)
 	// GetConnectionForUpdate locks a connection that is not deleted.
 	GetConnectionForUpdate(ctx context.Context, id uuid.UUID) (Connection, error)
 	GetDestination(ctx context.Context, id uuid.UUID) (Destination, error)
@@ -116,7 +155,8 @@ type Querier interface {
 	// destination must still open, because artifacts keep referencing it; the
 	// API never shows deleted rows.
 	GetDestinationIncludingDeleted(ctx context.Context, id uuid.UUID) (Destination, error)
-	// Download tickets (task 3.9, D-150). Only internal/downloads uses these.
+	// Download tickets (task 3.9, D-150). The artifact and manifest lookups are
+	// shared with restores through internal/artifactverify (task 4.1, D-162).
 	// GetDownloadArtifact loads an artifact with what a download needs: the
 	// run's directory timestamp, the job slug, the engine and the item's
 	// database name and raw digest.
@@ -128,6 +168,13 @@ type Querier interface {
 	GetDownloadTicketForUpdate(ctx context.Context, ticketHash []byte) (DownloadTicket, error)
 	GetInstanceKey(ctx context.Context, id string) (InstanceKey, error)
 	GetJob(ctx context.Context, id uuid.UUID) (Job, error)
+	// Offline re-index/import (task 4.7, `bekup reindex --import`): rebuilds
+	// the run history of a job from the signed manifests on a destination
+	// after the bekup database lost it. Used only by internal/offline, inside
+	// one transaction per run together with its audit event.
+	// GetJobBySlugForImport finds a job by its slug (deleted jobs too: slugs
+	// are unique among all jobs and never reused).
+	GetJobBySlugForImport(ctx context.Context, slug string) (GetJobBySlugForImportRow, error)
 	GetJobConnectionInfo(ctx context.Context, id uuid.UUID) (GetJobConnectionInfoRow, error)
 	GetJobEncryption(ctx context.Context, jobID uuid.UUID) (JobEncryption, error)
 	// GetJobEncryptionForShare reads the mode while blocking key changes, so
@@ -149,6 +196,8 @@ type Querier interface {
 	GetLatestAuditChainHead(ctx context.Context) (AuditChainHead, error)
 	GetLatestAuditLog(ctx context.Context) (AuditLog, error)
 	GetOwnerCandidates(ctx context.Context, ids []uuid.UUID) ([]GetOwnerCandidatesRow, error)
+	GetRestore(ctx context.Context, id uuid.UUID) (Restore, error)
+	GetRestoreView(ctx context.Context, id uuid.UUID) (GetRestoreViewRow, error)
 	GetRun(ctx context.Context, id uuid.UUID) (Run, error)
 	GetRunForUpdate(ctx context.Context, id uuid.UUID) (Run, error)
 	GetRunLogCounts(ctx context.Context, id uuid.UUID) (GetRunLogCountsRow, error)
@@ -162,6 +211,18 @@ type Querier interface {
 	GetSetting(ctx context.Context, key string) (Setting, error)
 	// GetSettingForUpdate locks a setting row (read-modify-write updates).
 	GetSettingForUpdate(ctx context.Context, key string) (Setting, error)
+	// GetTemporaryConnectionCleanupState re-reads the state of one candidate
+	// of ListTemporaryConnectionCleanup under the connection's row lock.
+	GetTemporaryConnectionCleanupState(ctx context.Context, id uuid.UUID) (GetTemporaryConnectionCleanupStateRow, error)
+	// GetTemporaryConnectionForUpdate locks a temporary connection that is not
+	// deleted, expired or not (delete, cleanup).
+	GetTemporaryConnectionForUpdate(ctx context.Context, id uuid.UUID) (Connection, error)
+	GetTestRestore(ctx context.Context, id uuid.UUID) (TestRestore, error)
+	// GetTestRestoreConnection reads a connection the test-restore worker
+	// checks before it starts (a plain read: the worker holds no transaction;
+	// the run slot and the restore worker's own share lock protect the run).
+	GetTestRestoreConnection(ctx context.Context, id uuid.UUID) (GetTestRestoreConnectionRow, error)
+	GetTestRestoreView(ctx context.Context, id uuid.UUID) (GetTestRestoreViewRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	// GetUserForUpdate locks a user row that is not deleted.
@@ -172,6 +233,11 @@ type Querier interface {
 	// HasTOTP reports whether the user has a confirmed TOTP secret.
 	HasTOTP(ctx context.Context, id uuid.UUID) (bool, error)
 	HeartbeatRunSlot(ctx context.Context, holderID uuid.UUID) (int64, error)
+	ImportArtifact(ctx context.Context, arg ImportArtifactParams) (Artifact, error)
+	// ImportRun inserts a finished run with the run id of its manifest, so the
+	// manifest binding (job id, run id, timestamp) of restores holds.
+	ImportRun(ctx context.Context, arg ImportRunParams) (Run, error)
+	ImportRunItem(ctx context.Context, arg ImportRunItemParams) (RunItem, error)
 	InsertArtifact(ctx context.Context, arg InsertArtifactParams) (Artifact, error)
 	InsertAuditChainHead(ctx context.Context, arg InsertAuditChainHeadParams) (AuditChainHead, error)
 	// InsertAuditLog appends an audit row. id, ts, prev_hash and hash are always
@@ -201,6 +267,18 @@ type Querier interface {
 	InsertJobPassphrase(ctx context.Context, arg InsertJobPassphraseParams) (JobPassphrase, error)
 	InsertJobRecipient(ctx context.Context, arg InsertJobRecipientParams) (JobRecipient, error)
 	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
+	// Restores and the identity handoff (task 4.1, D-162). Only
+	// internal/restore uses these. The artifact facts of a restore come from
+	// GetDownloadArtifact and the manifest lookups from
+	// GetDownloadManifestArtifact / ListDownloadManifestEntries (shared through
+	// internal/artifactverify).
+	InsertRestore(ctx context.Context, arg InsertRestoreParams) (Restore, error)
+	// InsertRestoreIdentityHandoff stores a sealed identity for a queued
+	// restore; it expires ttl_seconds (at most 15 minutes) from now.
+	InsertRestoreIdentityHandoff(ctx context.Context, arg InsertRestoreIdentityHandoffParams) error
+	// InsertRestoreLogs appends a batch of restore log lines (arrays of equal
+	// length; task 4.2).
+	InsertRestoreLogs(ctx context.Context, arg InsertRestoreLogsParams) error
 	// Backup runs (task 3.6, D-147). Only internal/runstate writes these
 	// tables; tasks 3.7 (run queries), 3.8 (retention) and 4.x (restores) read
 	// them.
@@ -214,14 +292,26 @@ type Querier interface {
 	// InsertSettingIfAbsent stores a setting only while the key is unset (0
 	// rows: someone else stored it first).
 	InsertSettingIfAbsent(ctx context.Context, arg InsertSettingIfAbsentParams) (int64, error)
+	InsertTemporaryConnection(ctx context.Context, arg InsertTemporaryConnectionParams) (Connection, error)
+	// InsertTestRestore records a queued test restore; no row when the job
+	// already has a queued or running one.
+	InsertTestRestore(ctx context.Context, arg InsertTestRestoreParams) (TestRestore, error)
+	InsertTestRestoreItem(ctx context.Context, arg InsertTestRestoreItemParams) (TestRestoreItem, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	InsertWebAuthnCredential(ctx context.Context, arg InsertWebAuthnCredentialParams) (WebauthnCredential, error)
 	// IsJobOwner: the user (not deleted) is listed as an owner of the job. The
 	// job may be soft deleted: its artifacts stay restorable by its owners.
 	IsJobOwner(ctx context.Context, arg IsJobOwnerParams) (bool, error)
+	// IsRestoreStuck re-checks ListStuckRestores' condition for one restore
+	// under its row lock (the sweep).
+	IsRestoreStuck(ctx context.Context, arg IsRestoreStuckParams) (bool, error)
+	// IsTestRestoreStuck re-checks ListStuckTestRestores' condition under the
+	// row lock.
+	IsTestRestoreStuck(ctx context.Context, arg IsTestRestoreStuckParams) (bool, error)
 	JobSlugTaken(ctx context.Context, slug string) (bool, error)
 	// JobsUsingConnection lists (up to 5) non-deleted jobs that back up the
-	// connection (delete-in-use check).
+	// connection or use it as their test-restore scratch target (delete-in-use
+	// check).
 	JobsUsingConnection(ctx context.Context, connectionID uuid.UUID) ([]JobsUsingConnectionRow, error)
 	// JobsUsingDestination lists (up to 5) non-deleted jobs that write to the
 	// destination (delete-in-use check).
@@ -229,6 +319,8 @@ type Querier interface {
 	// LatestRunForRiverJob locks the newest run of a River job (the row the
 	// enqueue created, or the run of the previous attempt).
 	LatestRunForRiverJob(ctx context.Context, riverJobID int64) (Run, error)
+	// LatestTestRestore is a job's newest finished test restore.
+	LatestTestRestore(ctx context.Context, jobID uuid.UUID) (TestRestore, error)
 	// ListActiveUserSessions returns the user's sessions that are neither
 	// revoked nor expired, most recently used first.
 	ListActiveUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
@@ -278,8 +370,9 @@ type Querier interface {
 	ListCalendarSkips(ctx context.Context, arg ListCalendarSkipsParams) ([]ScheduleSkip, error)
 	// Database connections (task 2.11, D-135). Only internal/connections uses
 	// these queries; secret_enc is sealed under AAD connections:<id>:secret.
-	// Temporary restore connections (task 4.4) are excluded until that task
-	// adds its own queries.
+	// Temporary restore connections (task 4.4, D-163) are excluded from every
+	// query below except the *Any* / *Temporary* ones and the pin, host-key and
+	// SSH-key updates with allow_temporary (the service decides).
 	ListConnections(ctx context.Context) ([]Connection, error)
 	// Backup destinations (task 2.12, D-131). Only internal/destinations uses
 	// these queries; secret_enc is sealed under AAD destinations:<id>:secret.
@@ -304,6 +397,16 @@ type Querier interface {
 	// ListRecentRunsForJobs returns the newest @per_job runs of each job
 	// (Job.lastRun / Job.recentRuns, one query per page of jobs).
 	ListRecentRunsForJobs(ctx context.Context, arg ListRecentRunsForJobsParams) ([]ListRecentRunsForJobsRow, error)
+	ListRestoreLogs(ctx context.Context, arg ListRestoreLogsParams) ([]RestoreLog, error)
+	// ListRestoreStatuses returns the status of the given restores (scratch
+	// sweeper).
+	ListRestoreStatuses(ctx context.Context, ids []uuid.UUID) ([]ListRestoreStatusesRow, error)
+	// Restore API reads and writes (task 4.5). Listings take scope_all = false
+	// to limit rows to the jobs @user_id owns (authz.JobScope, the same rule as
+	// IsJobOwner: deleted users own nothing).
+	// ListRestoresPage returns one page of restores, newest first
+	// ((created_at, id) descending), after the cursor.
+	ListRestoresPage(ctx context.Context, arg ListRestoresPageParams) ([]ListRestoresPageRow, error)
 	// ListRetentionArtifacts returns the present artifacts of a job's finished
 	// runs (queued and running runs are never considered).
 	ListRetentionArtifacts(ctx context.Context, jobID uuid.UUID) ([]ListRetentionArtifactsRow, error)
@@ -333,12 +436,41 @@ type Querier interface {
 	// descending), after the cursor.
 	ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]ListRunsPageRow, error)
 	ListScheduleSkips(ctx context.Context, arg ListScheduleSkipsParams) ([]ScheduleSkip, error)
+	// ListStuckRestores finds restores in a non-terminal status that no worker
+	// will finish: started before @started_before (the restore timeout plus a
+	// grace period has passed, so a live worker would have ended it), or idle
+	// since @idle_before while their River job is gone or already finalized
+	// (a crashed or discarded attempt).
+	ListStuckRestores(ctx context.Context, arg ListStuckRestoresParams) ([]ListStuckRestoresRow, error)
+	// ListStuckTestRestores finds unfinished test restores that no worker will
+	// finish: started before @started_before, or idle since @idle_before while
+	// their River job is gone or finalized.
+	ListStuckTestRestores(ctx context.Context, arg ListStuckTestRestoresParams) ([]uuid.UUID, error)
+	// ListTemporaryConnectionCleanup returns the temporary connections the
+	// cleanup worker has to look at: expired ones and those a restore
+	// (task 4.1, restores.target_connection_id) has used, with the number of
+	// unfinished restores and the latest finish time. Connections with a held
+	// run slot (a running backup or restore) wait until the run released it.
+	ListTemporaryConnectionCleanup(ctx context.Context, arg ListTemporaryConnectionCleanupParams) ([]ListTemporaryConnectionCleanupRow, error)
+	ListTemporaryConnections(ctx context.Context, now time.Time) ([]Connection, error)
+	// ListTestRestoreCandidates lists a run's successful database items with
+	// one restorable artifact each (the first destination of the job that
+	// holds a present, verified, signed copy) and the item's backup_stats.
+	ListTestRestoreCandidates(ctx context.Context, arg ListTestRestoreCandidatesParams) ([]ListTestRestoreCandidatesRow, error)
+	ListTestRestoreItems(ctx context.Context, testRestoreID uuid.UUID) ([]TestRestoreItem, error)
+	// ListTestRestoreViews returns one page of a job's test restores, newest
+	// first, after the keyset cursor, with the job, target and requester names.
+	ListTestRestoreViews(ctx context.Context, arg ListTestRestoreViewsParams) ([]ListTestRestoreViewsRow, error)
+	// ListUndroppedScratch lists the items of finished (or abandoned) test
+	// restores whose scratch database may still exist.
+	ListUndroppedScratch(ctx context.Context, maxRows int32) ([]ListUndroppedScratchRow, error)
 	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]ListUnusedRecoveryCodesRow, error)
 	// ListUsers pages users ordered by e-mail, then id. after_email/after_id is
 	// the last row of the previous page (both NULL: first page).
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// WebAuthn passkeys (task 1.8): registered passkeys and pending ceremonies.
 	ListWebAuthnCredentials(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	ListenRestoreEvents(ctx context.Context) error
 	ListenRunEvents(ctx context.Context) error
 	ListenSessionEvents(ctx context.Context) error
 	// LockActiveAdmins locks every active (not disabled, not deleted) admin row
@@ -361,6 +493,13 @@ type Querier interface {
 	// and no longer match. Manual schedules are never due. @exclude skips jobs
 	// whose handling failed earlier in the same tick (retried next tick).
 	LockDueJobs(ctx context.Context, arg LockDueJobsParams) ([]LockDueJobsRow, error)
+	// LockDueTestRestores locks the jobs whose next test restore is due.
+	LockDueTestRestores(ctx context.Context, arg LockDueTestRestoresParams) ([]LockDueTestRestoresRow, error)
+	// LockRestore locks a restore row (cancelRestore, the stuck sweep).
+	LockRestore(ctx context.Context, id uuid.UUID) (Restore, error)
+	// LockRestoreTargetName serializes restore requests for one target
+	// database (or one connection's globals) until the transaction ends.
+	LockRestoreTargetName(ctx context.Context, lockKey string) error
 	// LockRiverJobState locks a River job row and returns its state (cancelRun
 	// of a run whose job waits for a retry; internal/queue only).
 	LockRiverJobState(ctx context.Context, id int64) (string, error)
@@ -368,6 +507,7 @@ type Querier interface {
 	// LockRunSlots serializes slot changes for the rest of the transaction
 	// (transaction-scoped advisory lock: safe on pooled connections).
 	LockRunSlots(ctx context.Context) error
+	LockTestRestore(ctx context.Context, id uuid.UUID) (TestRestore, error)
 	// LockUserForFactorChange serializes second-factor changes of one user
 	// (enrollment limits, last-factor protection).
 	LockUserForFactorChange(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -392,10 +532,20 @@ type Querier interface {
 	// delivers it only on commit (and drops it on rollback).
 	Notify(ctx context.Context, arg NotifyParams) error
 	OptOutJobEncryption(ctx context.Context, arg OptOutJobEncryptionParams) (JobEncryption, error)
+	// OwnerBackedUpDatabases returns the names among @names that a non-deleted
+	// job owned by the user backs up on the connection (OwnerBacksUpDatabase
+	// for a list; restore target listings, task 4.5).
+	OwnerBackedUpDatabases(ctx context.Context, arg OwnerBackedUpDatabasesParams) ([]string, error)
 	// BacksUpDatabase: a non-deleted job owned by the user backs up the
 	// database on the connection (mode 'all' unless excluded, or selected).
 	OwnerBacksUpDatabase(ctx context.Context, arg OwnerBacksUpDatabaseParams) (bool, error)
+	// OwnerConnectionIDs lists the connections that non-deleted jobs owned by
+	// the user back up (restore targets of backup owners, task 4.5).
+	OwnerConnectionIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	OwnerUsesConnection(ctx context.Context, arg OwnerUsesConnectionParams) (bool, error)
+	// PickTestRestoreRun is the newest successful run of a job with at least
+	// one present, verified, signed database artifact.
+	PickTestRestoreRun(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
 	PutSetting(ctx context.Context, arg PutSettingParams) (Setting, error)
 	// PutWebAuthnCeremony stores the pending ceremony of a session, replacing
 	// an earlier one of the same kind (only the newest challenge is valid).
@@ -412,6 +562,9 @@ type Querier interface {
 	// verified (a concurrent password change wins).
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
 	ReleaseArtifactHold(ctx context.Context, id uuid.UUID) (int64, error)
+	// ReleaseArtifactHoldsOfHolder removes the holds of one holder (the stuck
+	// restore sweep, task 4.5).
+	ReleaseArtifactHoldsOfHolder(ctx context.Context, arg ReleaseArtifactHoldsOfHolderParams) (int64, error)
 	ReleaseMigrationLock(ctx context.Context) (bool, error)
 	RenameWebAuthnCredential(ctx context.Context, arg RenameWebAuthnCredentialParams) (WebauthnCredential, error)
 	// RenewArtifactHold moves an unexpired hold's expiry forward.
@@ -464,6 +617,7 @@ type Querier interface {
 	// does not exist.
 	RoleSecurityCheck(ctx context.Context, arg RoleSecurityCheckParams) (RoleSecurityCheckRow, error)
 	RunCancelRequested(ctx context.Context, id uuid.UUID) (bool, error)
+	RunExists(ctx context.Context, id uuid.UUID) (bool, error)
 	// SchemaVersion returns the highest applied migration version through the
 	// SECURITY DEFINER function bekup_schema_version() (migration 00006), because
 	// bekup_app cannot read goose_db_version. Used by `bekup serve` at startup and
@@ -490,14 +644,31 @@ type Querier interface {
 	// SetJobEncryptionMode switches between the key modes and clears an
 	// opt-out.
 	SetJobEncryptionMode(ctx context.Context, arg SetJobEncryptionModeParams) (JobEncryption, error)
+	// Scheduled test restores (task 4.6). The settings live on jobs and are
+	// written only by internal/jobs; test_restores / test_restore_items only by
+	// internal/restore.
+	// SetJobTestRestore changes a job's test-restore settings.
+	SetJobTestRestore(ctx context.Context, arg SetJobTestRestoreParams) (Job, error)
+	SetRestoreRiverJob(ctx context.Context, arg SetRestoreRiverJobParams) (int64, error)
+	SetRestoreStagedBytes(ctx context.Context, arg SetRestoreStagedBytesParams) (int64, error)
 	SetRunLogCounts(ctx context.Context, arg SetRunLogCountsParams) error
 	// SetTOTPPending stores a new pending secret, replacing an older pending
 	// one; refused (0 rows) once TOTP is enabled.
 	SetTOTPPending(ctx context.Context, arg SetTOTPPendingParams) (int64, error)
+	SetTemporaryConnectionExpiry(ctx context.Context, arg SetTemporaryConnectionExpiryParams) (Connection, error)
+	// SetTestRestoreItemDropped records that an item's scratch database is gone.
+	SetTestRestoreItemDropped(ctx context.Context, id uuid.UUID) error
+	SetTestRestoreRiverJob(ctx context.Context, arg SetTestRestoreRiverJobParams) (int64, error)
+	// SetTestRestoreRun records the run a test restore tests (once).
+	SetTestRestoreRun(ctx context.Context, arg SetTestRestoreRunParams) (int64, error)
 	SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error
 	// SetUserPassword sets a password (temporary until the given time, or
 	// permanent when NULL) and clears the lockout state.
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error)
+	// ShredTemporaryConnection destroys the stored credentials (the sealed
+	// blob and every flag describing it) and soft deletes the row; the
+	// non-secret metadata stays for the restore history and the audit log.
+	ShredTemporaryConnection(ctx context.Context, id uuid.UUID) (int64, error)
 	SoftDeleteConnection(ctx context.Context, id uuid.UUID) (int64, error)
 	SoftDeleteDestination(ctx context.Context, id uuid.UUID) (int64, error)
 	// SoftDeleteJob marks a job deleted and unschedules it. Its key, owner and
@@ -506,8 +677,17 @@ type Querier interface {
 	// SoftDeleteUser marks the account deleted and disabled and drops its
 	// password. The row stays for audit integrity.
 	SoftDeleteUser(ctx context.Context, id uuid.UUID) (int64, error)
+	// StartRestoreStaging moves a queued restore to staging (once: a second
+	// worker attempt finds it no longer queued).
+	StartRestoreStaging(ctx context.Context, id uuid.UUID) (Restore, error)
 	// StartRun moves a queued run to running.
 	StartRun(ctx context.Context, arg StartRunParams) (Run, error)
+	// StartTestRestore moves a queued test restore to running.
+	StartTestRestore(ctx context.Context, id uuid.UUID) (int64, error)
+	// TakeRestoreIdentityHandoff deletes the handoff of a restore and returns
+	// it: an identity is read at most once. valid is false when it had
+	// expired.
+	TakeRestoreIdentityHandoff(ctx context.Context, restoreID uuid.UUID) (TakeRestoreIdentityHandoffRow, error)
 	// TakeWebAuthnCeremony consumes the pending ceremony of a session and user
 	// (single use): it is deleted whether or not it is still valid; expired
 	// rows are returned to no one.

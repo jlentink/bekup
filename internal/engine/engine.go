@@ -153,6 +153,9 @@ type Command struct {
 type RestoreOptions struct {
 	// NoOwner skips ownership commands (PostgreSQL --no-owner).
 	NoOwner bool
+	// NoPrivileges skips GRANT/REVOKE (PostgreSQL --no-privileges; test
+	// restores into scratch databases only).
+	NoPrivileges bool
 }
 
 // SwapPlan is the PostgreSQL overwrite sequence: Prepare blocks new
@@ -201,8 +204,9 @@ type Engine interface {
 	// RenameSwap replaces db with its restore temp database for restore ID
 	// id (PostgreSQL only).
 	RenameSwap(c Entry, t Target, db, id string) (SwapPlan, error)
-	// DropDatabase drops a bekup temporary database (a TempDatabaseName or
-	// OldDatabaseName); any other name is refused.
+	// DropDatabase drops a bekup temporary database (a TempDatabaseName,
+	// OldDatabaseName or test-restore ScratchDatabaseName); any other name
+	// is refused.
 	DropDatabase(c Entry, t Target, db string) (Command, error)
 }
 

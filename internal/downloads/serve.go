@@ -3,7 +3,6 @@ package downloads
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jlentink/bekup/internal/artifactverify"
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/authz"
@@ -24,7 +24,6 @@ import (
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/httpserver"
-	"github.com/jlentink/bekup/internal/instancekeys"
 	"github.com/jlentink/bekup/internal/pipeline"
 	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/storage"
@@ -378,9 +377,9 @@ func (s *Service) prepareAndCopy(ctx context.Context, w http.ResponseWriter, hw 
 	if info.Size > 0 && info.Size != art.Size || len(info.SHA256) > 0 && !bytes.Equal(info.SHA256, art.Sha256) {
 		return fail(failIntegrity, http.StatusBadGateway, errors.New("downloads: stored object differs from the record"))
 	}
-	stored := &digestReader{r: rc, h: sha256.New(), limit: art.Size}
+	stored := artifactverify.NewDigestReader(rc, art.Size)
 	var body io.Reader = stored
-	var raw *digestReader
+	var raw *artifactverify.DigestReader
 	if mode == ModePlain {
 		plain, err := pipeline.OpenArtifact(stored, dec)
 		if err != nil {
@@ -391,7 +390,7 @@ func (s *Service) prepareAndCopy(ctx context.Context, w http.ResponseWriter, hw 
 		if a.row.ItemRawSize != nil && *a.row.ItemRawSize > 0 {
 			limit = *a.row.ItemRawSize
 		}
-		raw = &digestReader{r: plain, h: sha256.New(), limit: limit}
+		raw = artifactverify.NewDigestReader(plain, limit)
 		body = raw
 	}
 	if err := onStart(); err != nil {
@@ -417,12 +416,12 @@ func (s *Service) prepareAndCopy(ctx context.Context, w http.ResponseWriter, hw 
 		if _, err := io.Copy(io.Discard, stored); err != nil {
 			return copyFailure(ctx, err)
 		}
-		if a.row.ItemRawSize != nil && raw.n != *a.row.ItemRawSize ||
-			len(a.row.ItemRawSha256) > 0 && !bytes.Equal(raw.h.Sum(nil), a.row.ItemRawSha256) {
+		if a.row.ItemRawSize != nil && raw.N() != *a.row.ItemRawSize ||
+			len(a.row.ItemRawSha256) > 0 && !bytes.Equal(raw.Sum(), a.row.ItemRawSha256) {
 			return fail(failIntegrity, http.StatusBadGateway, errors.New("downloads: dump digest mismatch"))
 		}
 	}
-	if stored.n != art.Size || !bytes.Equal(stored.h.Sum(nil), art.Sha256) {
+	if !stored.Matches(art.Size, art.Sha256) {
 		return fail(failIntegrity, http.StatusBadGateway, errors.New("downloads: artifact digest mismatch"))
 	}
 	if err := hw.finish(); err != nil {
@@ -438,7 +437,7 @@ func copyFailure(ctx context.Context, err error) *streamFailure {
 		return fail(failHold, http.StatusInternalServerError, err)
 	case ctx.Err() != nil:
 		return fail(failClient, http.StatusInternalServerError, err)
-	case errors.Is(err, errTooLong):
+	case errors.Is(err, artifactverify.ErrTooLong):
 		return fail(failIntegrity, http.StatusBadGateway, err)
 	case errors.Is(err, pipeline.ErrArtifact):
 		return fail(failDecrypt, http.StatusBadGateway, err)
@@ -450,69 +449,22 @@ func copyFailure(ctx context.Context, err error) *streamFailure {
 	}
 }
 
-// verifyManifest reads the run's manifest.json from the artifact's
-// destination and verifies it (signature with the instance keys, binding
-// to the job, run and the artifacts recorded as signed there), so the
-// recorded digest the stream is checked against is the one bekup signed.
+// verifyManifest verifies the run's signed manifest.json on the artifact's
+// destination against the database records (artifactverify.VerifyManifest),
+// so the recorded digest the stream is checked against is the one bekup
+// signed.
 func (s *Service) verifyManifest(ctx context.Context, dest storage.Destination, a *artifactInfo) *streamFailure {
-	art := a.art()
-	q := sqlc.New(s.o.DB)
-	m, err := q.GetDownloadManifestArtifact(ctx, sqlc.GetDownloadManifestArtifactParams{RunID: art.RunID, DestinationID: art.DestinationID})
-	if err != nil {
-		return fail(failManifest, http.StatusBadGateway, fmt.Errorf("downloads: manifest record: %w", err))
-	}
-	if m.State != sqlc.ArtifactStatePresent || m.Size <= 0 || m.Size > pipeline.MaxManifestBytes {
-		return fail(failManifest, http.StatusBadGateway, errors.New("downloads: manifest not available"))
-	}
-	entries, err := q.ListDownloadManifestEntries(ctx, sqlc.ListDownloadManifestEntriesParams{
-		RunID: art.RunID, DestinationID: art.DestinationID, SigningKeyID: *art.SigningKeyID,
-	})
-	if err != nil {
-		return fail(failManifest, http.StatusInternalServerError, fmt.Errorf("downloads: manifest entries: %w", err))
-	}
-	key, err := storage.ParseKey(m.ObjectKey)
-	if err != nil {
-		return fail(failManifest, http.StatusInternalServerError, err)
-	}
-	rc, _, err := dest.Get(ctx, key)
-	if err != nil {
+	_, err := artifactverify.VerifyManifest(ctx, sqlc.New(s.o.DB), dest, artifactverify.FromDownloadRow(&a.row))
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, artifactverify.ErrDestination):
 		return fail(failDestination, http.StatusBadGateway, err)
-	}
-	data, err := io.ReadAll(io.LimitReader(rc, m.Size+1))
-	s.closeLogged(ctx, rc, "manifest reader")
-	if err != nil {
-		return fail(failDestination, http.StatusBadGateway, err)
-	}
-	if sum := sha256.Sum256(data); int64(len(data)) != m.Size || !bytes.Equal(sum[:], m.Sha256) {
-		return fail(failManifest, http.StatusBadGateway, errors.New("downloads: manifest digest mismatch"))
-	}
-	keys, err := instancekeys.Verifier(ctx, q)
-	if err != nil {
-		return fail(failManifest, http.StatusInternalServerError, err)
-	}
-	expect := pipeline.Binding{
-		JobID: art.JobID.String(), RunID: art.RunID.String(), JobSlug: a.row.JobSlug,
-		RunTimestamp: *a.row.RunStorageTimestamp,
-	}
-	found := false
-	for _, e := range entries {
-		k, err := storage.ParseKey(e.ObjectKey)
-		if err != nil {
-			return fail(failManifest, http.StatusInternalServerError, err)
-		}
-		segs := k.Segments()
-		expect.Entries = append(expect.Entries, pipeline.ExpectedEntry{
-			Path: segs[len(segs)-1], SHA256: e.Sha256, StoredSize: e.Size, RawSHA256: e.ItemRawSha256,
-		})
-		found = found || e.ObjectKey == art.ObjectKey
-	}
-	if !found {
-		return fail(failManifest, http.StatusBadGateway, errors.New("downloads: artifact not among the signed entries"))
-	}
-	if _, err := pipeline.Verify(data, keys, expect); err != nil {
+	case errors.Is(err, artifactverify.ErrManifest):
 		return fail(failManifest, http.StatusBadGateway, err)
+	default:
+		return fail(failManifest, http.StatusInternalServerError, err)
 	}
-	return nil
 }
 
 // writeStatus writes a short, generic plain-text error (no details, no

@@ -19,6 +19,7 @@ type Bekup struct {
 	Workers       Workers       `toml:"workers"`
 	Scheduler     Scheduler     `toml:"scheduler"`
 	Retention     Retention     `toml:"retention"`
+	Restore       Restore       `toml:"restore"`
 	Notifications Notifications `toml:"notifications"`
 	Netguard      Netguard      `toml:"netguard"`
 	Metrics       Metrics       `toml:"metrics"`
@@ -126,7 +127,13 @@ type RunnerClient struct {
 // Storage configures local paths.
 type Storage struct {
 	DiskRoot   string `toml:"disk_root" doc:"Root directory that confines all disk destinations (os.Root)."`
-	ScratchDir string `toml:"scratch_dir" doc:"Directory for temporary files (restore staging)."`
+	ScratchDir string `toml:"scratch_dir" doc:"Directory for temporary files (restore staging). Each restore stages its artifact in a private 0700 subdirectory, encrypted at rest with a key held only in memory, and removes it on every path."`
+	// ScratchReserveBytes is kept free on the scratch file system.
+	ScratchReserveBytes int64 `toml:"scratch_reserve_bytes" doc:"Bytes that must stay free on the scratch_dir file system after a restore staged its artifact (0 to 1 TiB). A restore whose artifact does not fit with this reserve is refused before anything is downloaded."`
+	// ScratchStaleAfter: leftover staging directories of restores that are
+	// no longer running are removed at startup and periodically; this age
+	// removes even those of restores still recorded as running.
+	ScratchStaleAfter Duration `toml:"scratch_stale_after" doc:"Staging directories older than this are removed by the scratch sweeper even when their restore is still recorded as running (1h to 30 days; must exceed workers.restore_timeout). Directories of restores that are no longer running are removed at startup and every 10 minutes."`
 }
 
 // Workers configures concurrency limits and timeouts of background work.
@@ -163,6 +170,14 @@ type Retention struct {
 	DryRun               bool     `toml:"dry_run" doc:"Compute and log every retention plan without deleting anything (instance-wide dry run)."`
 	MaxDeletionsPerSweep int      `toml:"max_deletions_per_sweep" doc:"Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep."`
 	PartialCleanupAge    Duration `toml:"partial_cleanup_age" doc:"The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days)."`
+}
+
+// Restore configures restores. Temporary restore connections (task 4.4,
+// admin only) live for TempConnectionTTL after their creation; an admin may
+// move the expiry, but never beyond TempConnectionMaxTTL after the creation.
+type Restore struct {
+	TempConnectionTTL    Duration `toml:"temp_connection_ttl" doc:"Lifetime of a temporary restore connection after its creation (5m up to temp_connection_max_ttl). Expired temporary connections are deleted and their stored credentials destroyed."`
+	TempConnectionMaxTTL Duration `toml:"temp_connection_max_ttl" doc:"Longest lifetime of a temporary restore connection counted from its creation, including extensions (at least temp_connection_ttl, at most 30 days)."`
 }
 
 // Notifications configures delivery rate limits.
@@ -271,8 +286,10 @@ func DefaultBekup() Bekup {
 			DialTimeout: Duration(10 * time.Second),
 		},
 		Storage: Storage{
-			DiskRoot:   "/var/lib/bekup/backups",
-			ScratchDir: "/var/lib/bekup/scratch",
+			DiskRoot:            "/var/lib/bekup/backups",
+			ScratchDir:          "/var/lib/bekup/scratch",
+			ScratchReserveBytes: 1 << 30,
+			ScratchStaleAfter:   Duration(24 * time.Hour),
 		},
 		Workers: Workers{
 			MaxConcurrentRuns:       4,
@@ -302,6 +319,10 @@ func DefaultBekup() Bekup {
 			DryRun:               false,
 			MaxDeletionsPerSweep: 500,
 			PartialCleanupAge:    Duration(24 * time.Hour),
+		},
+		Restore: Restore{
+			TempConnectionTTL:    Duration(24 * time.Hour),
+			TempConnectionMaxTTL: Duration(7 * 24 * time.Hour),
 		},
 		Notifications: Notifications{
 			MaxPerUserPerHour:       30,

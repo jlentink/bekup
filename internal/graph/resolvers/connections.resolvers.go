@@ -7,6 +7,7 @@ package resolvers
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jlentink/bekup/internal/graph/model"
@@ -68,12 +69,28 @@ func (r *mutationResolver) GenerateConnectionSSHKeypair(ctx context.Context, id 
 	return r.generateConnectionSSHKeypair(ctx, id)
 }
 
+func (r *mutationResolver) CreateTemporaryConnection(ctx context.Context, input model.CreateTemporaryConnectionInput) (*model.Connection, error) {
+	return r.createTemporaryConnection(ctx, input)
+}
+
+func (r *mutationResolver) ExtendTemporaryConnection(ctx context.Context, id uuid.UUID, expiresAt time.Time) (*model.Connection, error) {
+	return r.extendTemporaryConnection(ctx, id, expiresAt)
+}
+
+func (r *mutationResolver) DeleteTemporaryConnection(ctx context.Context, id uuid.UUID) (bool, error) {
+	return r.deleteTemporaryConnection(ctx, id)
+}
+
 func (r *queryResolver) Connections(ctx context.Context) ([]model.Connection, error) {
 	return r.connections(ctx)
 }
 
 func (r *queryResolver) Connection(ctx context.Context, id uuid.UUID) (*model.Connection, error) {
 	return r.connection(ctx, id)
+}
+
+func (r *queryResolver) TemporaryConnections(ctx context.Context) ([]model.Connection, error) {
+	return r.temporaryConnections(ctx)
 }
 
 func (r *queryResolver) EngineVersions(ctx context.Context, engine *model.DatabaseEngine) ([]model.EngineVersion, error) {
