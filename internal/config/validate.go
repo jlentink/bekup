@@ -18,6 +18,18 @@ type validator struct {
 	errs []error
 }
 
+// Upper bounds of the queue settings: River's per-queue maximum and a
+// scheduler batch that keeps one transaction short.
+const (
+	maxQueueWorkers   = 10_000
+	maxSchedulerBatch = 1000
+	// maxRetentionDeletions bounds retention.max_deletions_per_sweep.
+	maxRetentionDeletions = 100_000
+	// maxConcurrentDownloads bounds workers.max_concurrent_downloads (a
+	// passphrase decryption may need 256 MiB of memory).
+	maxConcurrentDownloads = 64
+)
+
 func (v *validator) addf(path, format string, args ...any) {
 	v.errs = append(v.errs, fmt.Errorf("%s: %s", path, fmt.Sprintf(format, args...)))
 }
@@ -388,12 +400,54 @@ func validateBekup(c *Bekup, dev bool) []error {
 		v.addf("workers.max_runs_per_connection", "must be <= workers.max_concurrent_runs")
 	}
 	v.positive("workers.max_concurrent_downloads", int64(c.Workers.MaxConcurrentDownloads))
+	if c.Workers.MaxConcurrentDownloads > maxConcurrentDownloads {
+		v.addf("workers.max_concurrent_downloads", "must be at most %d (got %d)", maxConcurrentDownloads, c.Workers.MaxConcurrentDownloads)
+	}
+	v.positive("workers.max_downloads_per_user", int64(c.Workers.MaxDownloadsPerUser))
+	if c.Workers.MaxDownloadsPerUser > c.Workers.MaxConcurrentDownloads {
+		v.addf("workers.max_downloads_per_user", "must be <= workers.max_concurrent_downloads")
+	}
 	v.duration("workers.backup_timeout", c.Workers.BackupTimeout, time.Minute, 0)
 	v.duration("workers.restore_timeout", c.Workers.RestoreTimeout, time.Minute, 0)
 	v.duration("workers.notify_timeout", c.Workers.NotifyTimeout, time.Second, 0)
+	v.duration("workers.retention_timeout", c.Workers.RetentionTimeout, time.Minute, 0)
+	v.duration("workers.shutdown_timeout", c.Workers.ShutdownTimeout, time.Second, time.Hour)
+	for _, q := range []struct {
+		key string
+		n   int
+	}{
+		{"workers.backup_queue_workers", c.Workers.BackupQueueWorkers},
+		{"workers.restore_queue_workers", c.Workers.RestoreQueueWorkers},
+		{"workers.retention_queue_workers", c.Workers.RetentionQueueWorkers},
+		{"workers.notify_queue_workers", c.Workers.NotifyQueueWorkers},
+		{"workers.maintenance_queue_workers", c.Workers.MaintenanceQueueWorkers},
+	} {
+		v.positive(q.key, int64(q.n))
+		if q.n > maxQueueWorkers {
+			v.addf(q.key, "must be at most %d (got %d)", maxQueueWorkers, q.n)
+		}
+	}
+
+	if n := c.Workers.RunLogMaxLines; n < 100 || n > 1_000_000 {
+		v.addf("workers.run_log_max_lines", "must be 100..1000000 (got %d)", n)
+	}
+	if n := c.Workers.RunLogMaxLineBytes; n < 128 || n > 16384 {
+		v.addf("workers.run_log_max_line_bytes", "must be 128..16384 (got %d)", n)
+	}
 
 	// [scheduler]
 	v.duration("scheduler.tick_interval", c.Scheduler.TickInterval, time.Second, time.Hour)
+	v.duration("scheduler.min_interval", c.Scheduler.MinInterval, time.Minute, 24*time.Hour)
+	v.positive("scheduler.batch_size", int64(c.Scheduler.BatchSize))
+	if c.Scheduler.BatchSize > maxSchedulerBatch {
+		v.addf("scheduler.batch_size", "must be at most %d (got %d)", maxSchedulerBatch, c.Scheduler.BatchSize)
+	}
+
+	// [retention]
+	if n := c.Retention.MaxDeletionsPerSweep; n < 1 || n > maxRetentionDeletions {
+		v.addf("retention.max_deletions_per_sweep", "must be 1..%d (got %d)", maxRetentionDeletions, n)
+	}
+	v.duration("retention.partial_cleanup_age", c.Retention.PartialCleanupAge, time.Hour, 30*24*time.Hour)
 
 	// [notifications]
 	v.positive("notifications.max_per_user_per_hour", int64(c.Notifications.MaxPerUserPerHour))

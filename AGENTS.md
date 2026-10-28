@@ -36,7 +36,9 @@ Components (one Go binary, several subcommands; D-025):
 - **`bekup serve`**: GraphQL API, sessions, embedded UI, scheduler, River
   workers (backup, restore, retention, notify), pipeline and uploads to
   destinations. Talks to Postgres as `bekup_app`, to destinations/SMTP/webhooks
-  through the SSRF guard, and to the runner over mTLS gRPC.
+  through the SSRF guard, and to the runner over mTLS gRPC. `--no-worker`
+  drops the workers; **`bekup worker`** runs only the workers (no HTTP, no
+  scheduler) to scale out (D-145).
 - **`bekup runner`**: the **only** component with Docker access (D-003). Small,
   typed mTLS gRPC API; image allowlist and target allowlist from its own
   `runner.toml`; builds hardened container specs itself (D-029–D-033).
@@ -126,9 +128,29 @@ internal/
                   RPC handlers ops*.go + dbprobe (Go-driver pre-checks): 2.7;
                   pinning: 2.7a; FetchHostKey ops_hostkey.go: 2.11)
                 runnerclient (mTLS gRPC client: 2.4)  runnerpb (generated: 2.4)
+                jobkeys (job encryption keys: versioned passphrases, recipients,
+                  opt-out, export, pipeline.Encryptor: 3.2)
+                scheduler (schedule format + next-run math, DST, catch-up: 3.3;
+                  multi-instance loop + schedule_skips cleanup worker: 3.4)
+                queue (River client, queues, kind catalog, IDs-only args check,
+                  worker registration, graceful shutdown: 3.4)
+                pipeline (zstd → age → bounded fan-out with lag drop, signed
+                  manifest, Verify, OpenArtifact: 3.1)
+                jobs (job model + service, Ownership, runNow: 3.5; backup run
+                  worker backup_*.go, cancelRun, StatsCollector hook: 3.6;
+                  RunnerStats completeness evidence: 3.10)
+                runstate (run tables writer, EnqueueTx, run events, run slots,
+                  batched/capped/redacted run logs: 3.6; artifact state
+                  + finish hook: 3.8; read-only Reader for the API: 3.7)
+                retention (per-destination policy Plan, retention_sweep
+                  worker, daily fan-out + partial cleanup: 3.8; Expiries
+                  projection: 3.14)
+                calendar (read-only job calendar: planned/runs/skips/
+                  expiries, batched + bounded: 3.14)
+                downloads (download tickets, GET /api/download/{ticket},
+                  raw/plain streaming with held-back integrity checks: 3.9)
   doc.go only until their task:
-    pipeline (3.1)  scheduler (3.3)  jobs (3.4-3.6)
-    retention (3.8)  restore (4.1-4.5)  notify (5.1-5.3)  monitor (5.6)
+    restore (4.1-4.5)  notify (5.1-5.3)  monitor (5.6)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
 deploy/                 # postgres init, traefik/nginx proxy configs, dev/ keys + seeds
 scripts/                # helpers behind the justfile (doctor, bump, release, ...)
@@ -368,6 +390,22 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   runner failures are `CONNECTION_FAILED` (fixed messages). Runner-calling
   fields are single-root and rate limited. Jobs (3.5) must fill
   `checkUnused`.
+- Downloads (`internal/downloads`, D-150): only through
+  `createDownloadTicket` (`artifact.download`, step-up, single root) and
+  `GET /api/download/{ticket}` (`httpserver.Options.Download`, behind the
+  session middleware). Tickets: 256 bits, only sha256 stored, 60 s, single
+  use, bound to the session (another session burns them), role/ownership
+  re-checked at use (`artifact.download_redeem`). Only present, verified,
+  manifest-signed artifacts; the manifest is re-verified before streaming
+  and the last 64 KiB are held back until the digests match (else abort
+  with `http.ErrAbortHandler`). An age identity for plain downloads lives
+  only sealed in the ticket row (AAD `download_tickets:<id>:identity`) and
+  is cleared at redemption. Never log ticket values or put them anywhere
+  but the mutation's response. A redeemed download holds its artifact
+  (`runstate.AcquireHoldTx` in the redemption transaction, renewed while
+  streaming, released at the end; D-155); limits come from
+  `workers.max_concurrent_downloads` / `workers.max_downloads_per_user`.
+  The hold-back buffer has a fixed capacity: never `append` past it.
 - Audit: record through `internal/audit` only (`Record`, or `RecordTx` inside
   the action's `db.Tx`); audit failures fail the operation (fail closed);
   actions come from the typed catalog; details are redacted but still never
@@ -535,6 +573,204 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   the password again (VALIDATION otherwise) and audits
   `reentered_for_new_endpoint`. Workers open destinations through
   `Service.Open`, which also opens soft-deleted rows.
+- Schedules (D-143, proposed): parse/validate schedules only with
+  `scheduler.Parse`/`Schedule.Validate(scheduler.Limits{MinInterval:
+  cfg.Scheduler.MinInterval})` on create/update and compute only with
+  `scheduler.Compile` + `Plan.Next`/`NextN`/`Due` (never robfig's `Next`,
+  never `time.Date` for local times: DST rules live in the package). Store
+  the canonical JSON (`Schedule.Encode`); `Due` yields at most one run per
+  tick (catch-up collapse) and the new `next_run_at`.
+- Job encryption keys (`internal/jobkeys`, D-142, proposed): only the
+  service touches `job_encryption`, `job_passphrases` (sealed under AAD
+  `job_passphrases:<job_id>:v<version>`) and `job_recipients`. Keys are
+  versioned and only ever retired, never deleted or rewritten (bekup_app
+  has no DELETE; a trigger allows only retiring). Changes go through the
+  service, which re-checks `Policy.Authorize` on the caller's principal
+  (`job.encryption_keys_edit` **admin only** + step-up, user decision
+  D-154, re-checked by role in the service (`ErrAdminOnly`); a key chosen
+  at creation needs it too, the default generated passphrase comes with
+  `job.create`; opt-out
+  `job.encryption_opt_out` and export `job.passphrase_export` admin +
+  step-up) and requires `Actor` = that principal. Generated passphrases
+  and identities are returned once (`Destroy` them) and never stored in
+  plaintext or logged. Backups take keys only from `Service.Encryptor(job)`
+  / `KeyMaterialFor` (fails closed without configuration) and record the
+  version; restores use `PassphraseForVersion`. Task 3.5 creates the
+  configuration with `InitTx` inside `createJob`.
+- Backup pipeline (`internal/pipeline`, D-144, proposed): stream dumps
+  only through `pipeline.Run` (never write artifacts to destinations
+  directly) with the `pipeline.Encryption` from `jobkeys`; the zero value
+  fails closed and `none` needs `OptedOut`. Build names with
+  `ArtifactFileName`/`ArtifactKey`/`ManifestKey`. A dropped destination
+  makes the run `partial`; write `manifest.json` with `WriteManifest` only
+  after all entries are finalized and only to destinations holding all of
+  them. Before trusting an artifact, call `pipeline.Verify` with a
+  `Binding` built from the DB (job/run IDs + exact entries; never from the
+  manifest itself), then compare the artifact's SHA-256; `VerifySignature`
+  is for offline tools only. Read artifacts only with `OpenArtifact`
+  (bounded scrypt and zstd). Manifest `stats` (3.10) must be a JSON object
+  of integers and strings only (canonical JSON). Show users
+  `DestinationResult.Code`, never `Err`.
+- Job queue (`internal/queue`, D-043, D-145, proposed): insert River jobs
+  only with `queue.Client.InsertTx(ctx, tx, args, opts)` inside the
+  caller's transaction (`db.TxWith` gives the `pgx.Tx`); never through
+  `Client.River()` directly. **To add a worker:** (1) add the kind constant,
+  its args type and a catalog entry (queue, optional MaxAttempts override,
+  `Unique` with `river:"unique"` fields) in `internal/queue/kinds.go`;
+  (2) implement `river.Worker[T]`; (3) register it in
+  `app.registerWorkers` with `queue.Register(ws, w)` (periodic jobs:
+  `ws.AddPeriodic`). Every attempt is bounded by its queue's timeout (the
+  worker's own `Timeout` is ignored: enforce shorter per-job limits inside
+  `Work`); restore kinds never retry. **Args carry IDs only:** uuid,
+  integers, time, bool, named enum strings (and slices/pointers/structs of
+  those); plain strings, bytes, maps, interfaces and secret-looking names
+  fail `queue.CheckArgs`, which `serve`/`worker` run at startup and a test
+  runs over the catalog. Runs of one backup job never overlap (unique by
+  `job_id` over the active states); manual runs (3.6) must use the same
+  `backup_run` kind (runJobNow does: `trigger: manual` + `triggered_by`).
+  The scheduler loop (`scheduler.Loop`) is the only writer of
+  `next_run_at` advances and `schedule_skips`; it handles each due job
+  under a savepoint (a failing job is rolled back alone, logged and
+  retried next tick, D-155); the jobs service (3.5) sets
+  the initial `next_run_at` with `Plan.Next(now)`. `serve`
+  runs scheduler + workers (`--no-worker` drops the workers),
+  `bekup worker` runs only workers (with the destination, connection and
+  job key services the backup worker needs).
+- Backup jobs (`internal/jobs`, D-146, proposed): only `jobs.Service`
+  writes `jobs`, `job_destinations` and `job_owners`; it re-checks every
+  mutation with the policy (actor = caller) and audits it in the same
+  transaction. `createJob` calls `jobkeys.InitTx` in its transaction
+  (encryption always on). `next_run_at` is computed on create, changed
+  schedule and enable (never catch-up), cleared on disable/delete. The
+  slug is immutable and never reused (DB trigger + unique index); delete is
+  soft and a running run finishes (the 3.6 worker must skip deleted or
+  disabled jobs when a queued run starts and enforce min(job timeout,
+  `workers.backup_timeout`)). Job saves share-lock their connection and
+  destinations; `connections`/`destinations` deletes refuse (CONFLICT,
+  `InUseError`) while a non-deleted job uses them. `jobs.Ownership` is the
+  policy's `authz.Ownership` (deleted users own nothing; owners keep access
+  to a soft-deleted job). Owner-scoped resolvers call `Policy.Authorize`
+  with `authz.Job{ID}` **before** loading the job (no existence probing);
+  lists use `Policy.JobScope` passed to `Service.List`; `Job.owners` needs
+  `job.owners_view` (null otherwise). Owner changes: step-up, maintainers
+  never themselves, audited and alerted (`jobs.AlertFunc`).
+- Backup runs (`internal/runstate`, `internal/jobs` backup worker,
+  D-147, proposed): `internal/runstate` is the only writer of `runs`,
+  `run_items`, `artifacts`, `run_logs` and `run_slots`, and every write
+  publishes `run|log:<run id>:<job id>` on `bekup_run_events` in its
+  transaction (3.7 only subscribes). Enqueue backup runs only with
+  `runstate.EnqueueTx` (River job + queued run row together; scheduler and
+  runJobNow do). `bekup_app` cannot DELETE run history; retention (3.8)
+  sets `artifacts.state = 'deleted'` (+ `deleted_at`), never deletes rows,
+  and must ignore `verified = false` artifacts for the "newest good backup"
+  rule; restores (4.1) bind manifests to artifact rows with a non-NULL
+  `signing_key_id` and the run's `storage_timestamp`. Run errors and
+  warnings are fixed texts per code (`jobs.Code*`), never server output;
+  run logs go through `runstate.LogWriter` (scrub before truncate, caps
+  `workers.run_log_*`). Concurrency only via `runstate.Slots`
+  (transaction-scoped advisory lock; restores use kind `restore`); a busy
+  slot snoozes the River job. The per-connection limit is
+  `connections.max_concurrent_runs` (NULL = `workers.max_runs_per_connection`,
+  ≤ `workers.max_concurrent_runs`), read by the slot query itself; never
+  cache it in a worker (D-156, D-158). Cancellation: `jobs.Service.CancelRun`
+  (run.cancel, staff only) → River `JobCancelTx` + `cancel_requested_at`;
+  a finished run whose River job waits for a retry gets the retry canceled
+  (`queue.Client.CancelPendingTx`, `retryCanceled`); long operations must
+  honor ctx cancellation. `MarkSigned` takes exactly the artifact ids of
+  the manifest's entries on that destination (`AddArtifact` returns the
+  id). Warnings are byte-bounded by `runstate` (never pre-encode them);
+  informational findings (e.g. `databases_excluded`) go to
+  `Result.Notices`, not warnings, so `has_warnings` stays meaningful
+  (D-155). The runner's VerifyDump
+  takes a streamed dump (header `total_bytes` 0 + `VerifyDumpTrailer`).
+  Completeness evidence (3.10) plugs into `jobs.StatsCollector`
+  (Begin/PrepareDump/End; `jobs.RunnerStats` in the worker).
+- Completeness evidence (task 3.10, D-141, D-151, proposed): the stats
+  are a phase of the runner's `Dump`/`DumpGlobals` (`StatsOptions` in the
+  request, one `DumpStats` message before the first chunk; anything else
+  is a protocol error). The runner captures them only through
+  `dbprobe.StatsSource` on an `o.session` connection (same allowlist, pin
+  and TLS rules); PostgreSQL exports the snapshot of a `REPEATABLE READ
+  READ ONLY` transaction, runs `engine.DumpSnapshot` (`--snapshot`,
+  validated id) and keeps the transaction open until the container ended;
+  MySQL/MariaDB counts are always `approximate`. Quote catalog names only
+  with `engine.QuotePGObject`/`QuoteMySQLObject`; keep counts bounded
+  (per-table timeout, budget, 10 000 tables, 32 warnings × 50 names) and
+  never return data values. The worker re-validates the message, writes
+  the canonical object (integers/strings only) to the manifest
+  `stats.databases.<enc db>`/`globals` and the insert-only `backup_stats`
+  table, and the warnings (stable codes) to the item; completeness
+  warnings never change the run status (`runs.has_warnings`).
+- Run history and live runs (D-149, proposed): read runs, items,
+  artifacts and logs only through `runstate.Reader`
+  (`internal/db/queries/run_reads.sql`). Lists filter by
+  `Policy.JobScope` in SQL; single runs load the row first and authorize
+  with its stored job (`run.view` / `run.logs_view`; owners get FORBIDDEN
+  for foreign and unknown ids). `Run.triggeredBy` needs `run.actor_view`.
+  Per-row run data in list resolvers goes through the per-operation
+  `runLoader` (`hintRuns` / `hintJobs` + `loadItems` / `loadArtifacts` /
+  `loadRecentRuns`), never one query per row; subscriptions get no loader.
+  `runUpdated` / `runLogAppended` use the `bekup_run_events` bus channel,
+  treat payload ids as pre-filters only, re-load and authorize every event
+  in `streams.Deliver`, and keep one goroutine + one bus subscription per
+  stream; log batches ≤ 200 lines. `runUpdated` coalesces per stream
+  (pending set ≤ 100, then a resync; ≤ 20 deliveries/s; D-155). The UI
+  uses one `runUpdated` stream per page (stream cap 4 per session).
+- Retention (`internal/retention`, D-148, proposed): one River kind
+  `retention_sweep` (`job_id` optional + unique, `reason`, `dry_run`),
+  enqueued by the `runstate.Store` finish hook (`retention.PostRunHook`,
+  success/partial, under a savepoint) and by the daily periodic fan-out
+  (no job id; also removes old `*.partial` files on disk/SFTP).
+  `retention.Plan` is the pure policy: per destination, a run is complete
+  when every item has a present verified artifact there plus the manifest;
+  keep = newest complete (always) ∪ newest N ∪ younger than X days ∪
+  recorded locks ∪ incomplete runs newer than the newest complete; no
+  complete run → delete nothing. Soft-deleted jobs keep their retention.
+  Artifact state changes only via `runstate.MarkArtifactDeletedTx` /
+  `MarkArtifactMissingTx`; Stat before every delete (gone → `missing` +
+  `retention.artifact_missing` audit + alert hook); no-delete destinations
+  are skipped; `ErrDeleteNotPermitted` keeps the artifact; the newest
+  complete run is re-checked on the backend before any delete; deletes
+  capped by `retention.max_deletions_per_sweep`; `retention.dry_run`.
+  Every delete runs under `runstate.LockForDeletionTx` (artifact row
+  `FOR NO KEY UPDATE`): a held artifact (`artifact_holds`, downloads now,
+  restores in 4.x via `AcquireHoldTx` kind `restore`) is skipped until a
+  later sweep (D-155).
+  Audit: `retention.deletion_planned` (before, fail closed) +
+  `retention.swept` per destination, `retention.aborted`.
+  Keep rules live once in `internal/retention` (`keepLastCovers`,
+  `keepDaysUntil`, `newerNeeded`): `Plan` and the calendar's
+  `retention.Expiries` share them (a property test ties both); change a
+  keep rule there, never in a copy.
+- Calendar (`internal/calendar`, D-156, D-159, D-160 proposed): `calendar(from,
+  to, timezone, jobIds)`, `calendar.view` for every role + `JobScope`
+  (invisible ids dropped silently). Four batched, index-bounded queries
+  (`internal/db/queries/calendar.sql`) for the whole job set in one
+  read-only transaction with `calendar.QueryTimeout` (5 s,
+  `SetCalendarReadLimits` first), a pure `compute`; every bound (93 days,
+  jobs, rows, planned per job, projection budget, 5,000 events) sets
+  `truncated`, and the event cap keeps the earliest events (time prefix).
+  An early run (`trigger = early` + `scheduled_for`, D-157) marks its slot
+  `startedEarly` and suppresses the planned occurrence and skip there; an
+  overdue enabled job shows one `overdue` catch-up at now and projects
+  from it like `scheduler.Plan.Due`.
+- Start early (D-157, D-160): `startNextRunEarly` only pulls forward the
+  natural next occurrence (`next_run_at <= scheduler.Next(schedule, now)`),
+  so owners cannot push the schedule more than one occurrence ahead.
+- Target-DB sessions (D-152, D-153): target databases and their owners are
+  untrusted. Every Go-driver PostgreSQL session goes through
+  `internal/runner/dbprobe`, which sends `search_path=pg_catalog, pg_temp`
+  and `row_security=off` as startup parameters, verifies and re-sets
+  them after authentication (fail closed) and sets
+  `restrict_nonsystem_relation_kind = 'view, foreign-table'` (no row
+  counts without it, `SafeRowCounts`). All SQL sent to a target is
+  schema-qualified: `pg_catalog.f()`, `OPERATOR(pg_catalog.=)`, `= ANY`
+  instead of `IN`, `::pg_catalog.type`, `pg_catalog."C"`; identifiers
+  only via `engine.QuotePGObject`/`QuoteMySQLObject`
+  (`TestPGQueriesQualified` enforces it). Never read data or call user
+  functions. MySQL/MariaDB: never run a statement on a user table or
+  view (stats are `information_schema` estimates and grants only; `deep`
+  equals `standard` there, D-153).
 - Runner mTLS: clients are identified only by the URI SAN
   `spiffe://bekup/<component>`; the runner cert uses DNS `runner`; the CA is
   name-constrained, its key age-encrypted and kept offline; CA rotation is

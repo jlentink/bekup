@@ -22,4 +22,12 @@ var (
 		Name:   "bekup_session_events",
 		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenSessionEvents(ctx) },
 	}
+
+	// RunEvents carries backup run changes (internal/runstate: event
+	// kind, run id, job id; task 3.6). The live run views of task 3.7
+	// subscribe to it.
+	RunEvents = Channel{
+		Name:   "bekup_run_events",
+		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenRunEvents(ctx) },
+	}
 )

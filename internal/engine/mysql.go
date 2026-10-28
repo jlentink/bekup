@@ -140,6 +140,15 @@ func (f mysqlFamily) Dump(c Entry, t Target, db string) (Command, error) {
 	return Command{Image: c.image, Argv: argv, Files: f.files(t)}, nil
 }
 
+// DumpSnapshot refuses a snapshot: mysqldump/mariadb-dump take their own
+// consistent snapshot (--single-transaction).
+func (f mysqlFamily) DumpSnapshot(c Entry, t Target, db, snapshot string) (Command, error) {
+	if snapshot != "" {
+		return Command{}, fmt.Errorf("%w: %s snapshot import", ErrUnsupported, f.kind)
+	}
+	return f.Dump(c, t, db)
+}
+
 func (f mysqlFamily) DumpGlobals(Entry, Target) (primary, fallback Command, err error) {
 	return Command{}, Command{}, fmt.Errorf("%w: %s globals", ErrUnsupported, f.kind)
 }

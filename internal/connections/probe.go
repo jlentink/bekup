@@ -161,6 +161,37 @@ func (s *Service) runnerError(ctx context.Context, actor Actor, row *sqlc.Connec
 	}
 }
 
+// ReasonMessage returns the presentable, fixed text of a runner reason
+// (false for reasons without one).
+func ReasonMessage(r runnerpb.Reason) (string, bool) {
+	m, ok := reasonMessages[r]
+	return m, ok
+}
+
+// RecordRunFailure handles the security events of a runner call a worker
+// made for connection id (backup runs, task 3.6): a TLS pin or SSH host-key
+// mismatch is audited with the system actor (fail closed: the audit error
+// is returned) and alerted, exactly like an interactive test. Other errors
+// are ignored (nil); the caller classifies them itself.
+func (s *Service) RecordRunFailure(ctx context.Context, id uuid.UUID, op string, err error) error {
+	switch runnerpb.ErrorReason(err) {
+	case runnerpb.ReasonPinMismatch, runnerpb.ReasonSSHHostKey:
+	default:
+		return nil
+	}
+	row, lerr := s.load(context.WithoutCancel(ctx), sqlc.New(s.o.DB), id, false)
+	if lerr != nil {
+		return lerr
+	}
+	mapped := s.runnerError(context.WithoutCancel(ctx), Actor{}, &row, op, err)
+	var pm *PinMismatchError
+	var hk *HostKeyMismatchError
+	if errors.As(mapped, &pm) || errors.As(mapped, &hk) {
+		return nil
+	}
+	return mapped
+}
+
 // securityEvent audits a mismatch (fail closed: an audit failure is
 // returned) and raises the alert.
 func (s *Service) securityEvent(ctx context.Context, actor Actor, row *sqlc.Connection, action audit.Action, kind AlertKind, op string, details map[string]any) error {
@@ -168,8 +199,12 @@ func (s *Service) securityEvent(ctx context.Context, actor Actor, row *sqlc.Conn
 	for k, v := range details {
 		d[k] = v
 	}
+	ev := audit.UserActor(actor.UserID)
+	if actor.UserID == uuid.Nil {
+		ev = audit.SystemActor() // a worker's run (RecordRunFailure)
+	}
 	if _, err := s.o.Auditor.Record(context.WithoutCancel(ctx), audit.Event{
-		Actor: audit.UserActor(actor.UserID), Action: action, TargetType: "connection",
+		Actor: ev, Action: action, TargetType: "connection",
 		TargetID: row.ID.String(), IP: actor.IP, Details: d,
 	}); err != nil {
 		return err

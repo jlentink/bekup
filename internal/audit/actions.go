@@ -111,8 +111,16 @@ const (
 	// alerted in task 5.5.
 	ActionAuditVerifyFailed     Action = "audit.verify.failed"
 	ActionAuditHeadExportFailed Action = "audit.head_export.failed"
-	// Reserved: recorded from task 3.9 (download tickets).
-	ActionDownloadTicketCreated Action = "download.ticket_created"
+	// Downloads (task 3.9, D-150; target type artifact). Details carry
+	// the ticket id, mode and artifact/job/run ids, never the ticket value
+	// or an age identity. ticket_rejected: a ticket was presented by
+	// another session, after use, after expiry or by a caller who lost
+	// access (the ticket is burned).
+	ActionDownloadTicketCreated  Action = "download.ticket_created"
+	ActionDownloadTicketRejected Action = "download.ticket_rejected"
+	ActionDownloadStarted        Action = "download.started"
+	ActionDownloadCompleted      Action = "download.completed"
+	ActionDownloadFailed         Action = "download.failed"
 
 	// Connections (task 2.11, D-135). Details name the changed fields;
 	// credential fields only ever appear by name (and additionally as a
@@ -145,6 +153,67 @@ const (
 	// host key than the pinned one during a test (security event, D-140;
 	// alerted in task 5.5).
 	ActionDestinationHostKeyMismatch Action = "destination.ssh_host_key_mismatch"
+
+	// Job encryption (task 3.2, D-142). Details carry versions, modes and
+	// public recipients only, never a passphrase or an identity. An opt-out
+	// is recorded as job.encryption_opted_out plus security.opt_out.
+	ActionJobEncryptionRecipientSet Action = "job.encryption_recipient_set"
+	ActionJobEncryptionOptedOut     Action = "job.encryption_opted_out"
+	ActionJobEncryptionOptedIn      Action = "job.encryption_opted_in"
+)
+
+// Job passphrase actions (task 3.2, D-142): a new passphrase version (set
+// or generated; also recorded as secret.changed) and the offline-recovery
+// export of every version (admin, step-up; alerted).
+const (
+	ActionJobEncryptionPassphraseSet Action = "job.encryption_passphrase_set"
+	ActionJobPassphrasesExported     Action = "job.passphrases_exported"
+)
+
+// Job actions (task 3.5, D-146). Details carry field names and short
+// non-secret values (names, slugs, ids, schedule JSON), never key material.
+// Owner changes grant data access to role user and raise a security alert
+// (D-067); a manual run request records the requesting user.
+const (
+	ActionJobCreated      Action = "job.created"
+	ActionJobUpdated      Action = "job.updated"
+	ActionJobDeleted      Action = "job.deleted"
+	ActionJobEnabled      Action = "job.enabled"
+	ActionJobDisabled     Action = "job.disabled"
+	ActionJobOwnerAdded   Action = "job.owner_added"
+	ActionJobOwnerRemoved Action = "job.owner_removed"
+	ActionJobRunRequested Action = "job.run_requested"
+	// ActionJobRunStartedEarly: startNextRunEarly (task 3.12, D-156) with
+	// the pulled-forward and the new next_run_at.
+	ActionJobRunStartedEarly Action = "job.run_started_early"
+)
+
+// Run actions (task 3.6, D-147; target type run, target id the run id).
+// A cancel request records the job, the run status at the request and the
+// River job state; runs themselves are operational history in the runs
+// table, not audit events.
+const (
+	ActionRunCancelRequested Action = "run.cancel_requested"
+)
+
+// Retention actions (task 3.8, D-148; system actor, target type job with
+// the job id, except artifact_missing: target type artifact). Per-object
+// outcomes live in the artifacts table (state, state_changed_at); the audit
+// log gets one entry before and one after the deletions on a destination.
+const (
+	// ActionRetentionDeletionPlanned: recorded before the first delete on
+	// a destination (eligible runs and object count); a failure aborts.
+	ActionRetentionDeletionPlanned Action = "retention.deletion_planned"
+	// ActionRetentionSwept: the outcome on a destination (deleted,
+	// missing, locked, failed, capped).
+	ActionRetentionSwept Action = "retention.swept"
+	// ActionRetentionAborted: a safety check stopped retention on a
+	// destination (newest complete backup missing or changed, plan
+	// invariant violated); also alerted.
+	ActionRetentionAborted Action = "retention.aborted"
+	// ActionRetentionArtifactMissing: an object vanished without bekup
+	// deleting it (unexpected deletion; also alerted).
+	ActionRetentionArtifactMissing Action = "retention.artifact_missing"
 )
 
 // Passkey actions (task 1.8). Enrollment and removal use auth.mfa.enrolled
@@ -182,12 +251,19 @@ var catalog = []Action{
 	ActionCLIAdminDisabled,
 	ActionKeysRotated, ActionKeysCheckValueStored, ActionInstanceKeyCreated, ActionCertsRotated,
 	ActionAuditVerifyFailed, ActionAuditHeadExportFailed,
-	ActionDownloadTicketCreated,
+	ActionDownloadTicketCreated, ActionDownloadTicketRejected, ActionDownloadStarted, ActionDownloadCompleted,
+	ActionDownloadFailed,
 	ActionConnectionCreated, ActionConnectionUpdated, ActionConnectionDeleted, ActionConnectionTLSMode,
 	ActionConnectionPinConfirmed, ActionConnectionBackupPinStaged, ActionConnectionHostKeyConfirmed,
 	ActionConnectionSSHKeyGenerated, ActionConnectionPinMismatch, ActionConnectionHostKeyMismatch,
 	ActionDestinationCreated, ActionDestinationUpdated, ActionDestinationDeleted,
 	ActionDestinationHostKeyConfirmed, ActionDestinationSSHKeyGenerated, ActionDestinationHostKeyMismatch,
+	ActionJobEncryptionPassphraseSet, ActionJobEncryptionRecipientSet, ActionJobEncryptionOptedOut,
+	ActionJobEncryptionOptedIn, ActionJobPassphrasesExported,
+	ActionJobCreated, ActionJobUpdated, ActionJobDeleted, ActionJobEnabled, ActionJobDisabled,
+	ActionJobOwnerAdded, ActionJobOwnerRemoved, ActionJobRunRequested, ActionJobRunStartedEarly,
+	ActionRunCancelRequested,
+	ActionRetentionDeletionPlanned, ActionRetentionSwept, ActionRetentionAborted, ActionRetentionArtifactMissing,
 }
 
 // actionRe is the syntax of an action: at least two dot-separated words,

@@ -49,13 +49,17 @@ service RunnerService {
   // FetchHostKey captures an SSH bastion's host key for TOFU confirmation.
   rpc FetchHostKey(FetchHostKeyRequest) returns (FetchHostKeyResponse);
   // Dump streams a single-database dump (data chunks interleaved with log
-  // lines) and ends with exactly one result.
+  // lines) and ends with exactly one result. With stats enabled, one
+  // DumpStats message precedes the first chunk (task 3.10).
   rpc Dump(DumpRequest) returns (stream DumpResponse);
   // DumpGlobals streams the cluster globals (roles, tablespaces; PostgreSQL
-  // only) and ends with exactly one result.
+  // only) and ends with exactly one result (optionally preceded by one
+  // DumpStats message).
   rpc DumpGlobals(DumpGlobalsRequest) returns (stream DumpGlobalsResponse);
   // VerifyDump checks a dump with the engine's native tool. The first
-  // message is the header, every further message a chunk.
+  // message is the header, every further message a chunk. A header without
+  // total_bytes announces a streamed dump of unknown size: its chunks must
+  // be followed by exactly one trailer carrying the total (task 3.6).
   rpc VerifyDump(stream VerifyDumpRequest) returns (VerifyDumpResponse);
   // Restore feeds a dump into a target. The first message is the header,
   // every further message a chunk; the runner streams log lines and ends
@@ -298,6 +302,114 @@ message DumpRequest {
   RunContext ctx = 1;
   Target target = 2;
   string database = 3;
+  // Completeness evidence (task 3.10, D-141, D-151: the stats travel inside
+  // the Dump call). Absent or disabled: no stats.
+  StatsOptions stats = 4;
+}
+
+// StatsLevel is a job's verification level (D-141, D-151).
+enum StatsLevel {
+  STATS_LEVEL_UNSPECIFIED = 0;
+  // Object counts plus the catalog's row estimates (reltuples,
+  // TABLE_ROWS): cheap for huge databases.
+  STATS_LEVEL_STANDARD = 1;
+  // Object counts plus an exact count(*) per table.
+  STATS_LEVEL_DEEP = 2;
+}
+
+// StatsOptions asks the runner to capture source statistics before the
+// dump. PostgreSQL: the runner exports a snapshot in a REPEATABLE READ READ
+// ONLY transaction, counts inside it and runs pg_dump --snapshot=<id>
+// while the transaction stays open, so stats and dump are the same
+// snapshot. MySQL/MariaDB: counts in a consistent-snapshot transaction
+// right before the dump (approximate).
+message StatsOptions {
+  bool enabled = 1;
+  // Required when enabled.
+  StatsLevel level = 2;
+  // Deep only: the limit of one count(*) in milliseconds (0 = the runner
+  // default, 5 minutes; at most 1 hour). A table that exceeds it is
+  // reported as unknown with a warning.
+  uint32 per_table_timeout_ms = 3;
+  // The limit of the whole capture in milliseconds (0 = the runner default,
+  // 30 minutes; at most 6 hours). Tables not counted in time are unknown.
+  uint32 budget_ms = 4;
+}
+
+// RowCount says how a table's row count was obtained.
+enum RowCount {
+  ROW_COUNT_UNSPECIFIED = 0;
+  // count(*) inside the stats transaction.
+  ROW_COUNT_EXACT = 1;
+  // The catalog estimate (reltuples, TABLE_ROWS).
+  ROW_COUNT_ESTIMATE = 2;
+  // Not available (timeout, budget, no privilege, no estimate yet).
+  ROW_COUNT_UNKNOWN = 3;
+}
+
+// TableStats is one table of the dumped database: names and counts only,
+// never data values.
+message TableStats {
+  // PostgreSQL schema; empty for MySQL/MariaDB (the database is the
+  // schema).
+  string schema = 1;
+  string name = 2;
+  // Valid unless count is ROW_COUNT_UNKNOWN.
+  int64 rows = 3;
+  RowCount count = 4;
+  // MySQL/MariaDB: the dump tool takes its own snapshot, so rows written
+  // between the stats and the dump may differ.
+  bool approximate = 5;
+}
+
+// ObjectCounts are the dumped database's objects outside the system
+// schemas (or the cluster globals of a DumpGlobals).
+message ObjectCounts {
+  uint32 schemas = 1;
+  uint32 tables = 2;
+  uint32 views = 3;
+  uint32 materialized_views = 4;
+  uint32 sequences = 5;
+  uint32 functions = 6;
+  uint32 procedures = 7;
+  uint32 triggers = 8;
+  uint32 extensions = 9;
+  uint32 events = 10;
+  // DumpGlobals only (roles without the predefined pg_* roles;
+  // tablespaces without pg_default and pg_global).
+  uint32 roles = 11;
+  uint32 tablespaces = 12;
+}
+
+// StatsWarning is one completeness warning with the affected objects
+// (qualified names, bounded).
+message StatsWarning {
+  // Stable code: insufficient_privileges, non_transactional_tables,
+  // row_count_timeout, stats_budget_exceeded, roles_without_passwords,
+  // snapshot_unavailable, stats_partial.
+  string code = 1;
+  // Number of affected objects (may exceed the listed ones).
+  uint32 count = 2;
+  // At most 50 qualified object names.
+  repeated string objects = 3;
+  bool objects_truncated = 4;
+}
+
+// DumpStats is the completeness evidence of one dump. It is sent at most
+// once, before the first data chunk.
+message DumpStats {
+  StatsLevel level = 1;
+  // PostgreSQL: the dump ran in the exported snapshot of these stats, so
+  // exact row counts equal the dump's.
+  bool same_snapshot = 2;
+  ObjectCounts objects = 3;
+  // Sorted by schema and name; at most 10000 entries and about 768 KiB.
+  repeated TableStats tables = 4;
+  // Number of tables in the database (tables may be truncated).
+  uint32 tables_total = 5;
+  bool tables_truncated = 6;
+  // At most 32 warnings.
+  repeated StatsWarning warnings = 7;
 }
 
 // DumpResult ends a Dump or DumpGlobals stream.
@@ -319,12 +431,16 @@ message DumpResponse {
     DataChunk chunk = 1;
     LogLine log = 2;
     DumpResult result = 3;
+    // At most once, before the first chunk (task 3.10).
+    DumpStats stats = 4;
   }
 }
 
 message DumpGlobalsRequest {
   RunContext ctx = 1;
   Target target = 2;
+  // Completeness evidence (roles, tablespaces; the level is ignored).
+  StatsOptions stats = 3;
 }
 
 message DumpGlobalsResponse {
@@ -332,6 +448,8 @@ message DumpGlobalsResponse {
     DataChunk chunk = 1;
     LogLine log = 2;
     DumpResult result = 3;
+    // At most once, before the first chunk (task 3.10).
+    DumpStats stats = 4;
   }
 }
 
@@ -340,14 +458,24 @@ message VerifyDumpHeader {
   Engine engine = 2;
   string version_key = 3;
   DumpKind kind = 4;
-  // Exact size of the dump that follows.
+  // Exact size of the dump that follows. 0 = streamed: the size is not
+  // known yet (the dump is verified while it is being taken) and a
+  // VerifyDumpTrailer with the total must end the stream.
   uint64 total_bytes = 5;
+}
+
+// VerifyDumpTrailer ends a streamed VerifyDump (header total_bytes 0). It
+// must be the last message; total_bytes must equal the bytes of every chunk
+// sent. A stream that ends without it is incomplete.
+message VerifyDumpTrailer {
+  uint64 total_bytes = 1;
 }
 
 message VerifyDumpRequest {
   oneof msg {
     VerifyDumpHeader header = 1;
     DataChunk chunk = 2;
+    VerifyDumpTrailer trailer = 3;
   }
 }
 

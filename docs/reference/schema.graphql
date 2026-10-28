@@ -154,6 +154,88 @@ type Session {
   "True for the session of this request."
   current: Boolean!
 }
+# Job calendar (task 3.14, D-156). Read only. Admins and maintainers see
+# every job; backup owners see the jobs they own only (requested job ids
+# that are not visible are dropped silently). The range is at most 93 days
+# and the result is bounded (see Calendar.truncated).
+
+"What a calendar event shows."
+enum CalendarEventKind {
+  "A planned occurrence (paused for a disabled job, or started early)."
+  PLANNED
+  "A run, by status."
+  RUN
+  "A skipped occurrence (the reason is in `detail`)."
+  SKIPPED
+  """
+  The earliest time retention may remove a run's copy on one destination
+  (the next retention sweep at or after it removes it).
+  """
+  EXPIRY
+}
+
+"One calendar entry. Times are UTC."
+type CalendarEvent {
+  jobId: UUID!
+  jobName: String!
+  kind: CalendarEventKind!
+  start: Time!
+  "The end of a finished run (null otherwise)."
+  end: Time
+  "The run's status (RUN only)."
+  status: RunStatus
+  "What started the run (RUN only)."
+  trigger: RunTrigger
+  "The run (RUN, EXPIRY, and PLANNED when started early)."
+  runId: UUID
+  "The destination of the copy (EXPIRY only)."
+  destinationId: UUID
+  """
+  EXPIRY only: the time depends on future runs (keep-last or the newest
+  complete run, which is kept until a newer complete run exists) and
+  assumes every planned run succeeds. False: exact (keep-days or Object
+  Lock).
+  """
+  projected: Boolean!
+  "PLANNED only: the job is disabled; the occurrence will not run."
+  paused: Boolean!
+  "PLANNED only: this occurrence was pulled forward (startNextRunEarly); `runId` is the early run."
+  startedEarly: Boolean!
+  """
+  PLANNED only: the pending catch-up run of an enabled job whose planned time
+  has passed (the scheduler runs it at its next tick, missed occurrences
+  collapse into this one run); shown at the time of the query.
+  """
+  overdue: Boolean!
+  "A fixed, bekup-chosen text (skip reason, run error code, expiry rule)."
+  detail: String
+}
+
+"A calendar range."
+type Calendar {
+  "Events ordered by start time."
+  events: [CalendarEvent!]!
+  """
+  A bound was hit (at most 5,000 events, 500 planned occurrences per job,
+  500 jobs, and bounded loads): some events are missing. When the event cap
+  is hit, the earliest 5,000 events are kept (a time prefix of the range).
+  Narrow the range or the jobs.
+  """
+  truncated: Boolean!
+  from: Time!
+  to: Time!
+  "The requested IANA zone, echoed for day bucketing (times stay UTC)."
+  timezone: String!
+}
+
+extend type Query {
+  """
+  The job calendar for [from, to): at most 93 days, `timezone` an IANA
+  zone name, `jobIds` (at most 500; null: every visible job) narrows the
+  jobs. Planned occurrences start at the later of `from` and now.
+  """
+  calendar(from: Time!, to: Time!, timezone: String!, jobIds: [UUID!]): Calendar! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
 # Database connections (task 2.11; D-106, D-132, D-133, D-135). Admins
 # manage them; every change needs a fresh step-up and is audited.
 # Maintainers see metadata only (name, engine, version, host, port, TLS mode,
@@ -228,6 +310,20 @@ type Connection {
   ready: Boolean!
   "What is missing when not ready."
   notReadyReason: String
+  """
+  The connection's own limit of concurrent runs; null uses the global
+  workers.max_runs_per_connection (task 3.13). Backups and restores share
+  this limit (a limit of 1 makes a restore wait behind a running backup).
+  The stored value may exceed a since lowered workers.max_concurrent_runs;
+  effectiveMaxConcurrentRuns shows the clamped value, and the global cap is
+  always enforced when a run takes its slot.
+  """
+  maxConcurrentRuns: Int
+  """
+  The limit that applies: maxConcurrentRuns or the global default, clamped
+  to workers.max_concurrent_runs. Runs beyond it wait for a slot.
+  """
+  effectiveMaxConcurrentRuns: Int!
   createdAt: Time!
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
@@ -469,6 +565,8 @@ input CreateConnectionInput {
   "Write-only; required together with clientCertificatePem."
   clientKeyPem: String
   ssh: ConnectionSshInput
+  "Concurrent run limit, 1..64 and at most workers.max_concurrent_runs; omit for the global default."
+  maxConcurrentRuns: Int
 }
 
 "Fields to change; unset fields stay unchanged. The engine and TLS mode cannot change here."
@@ -495,6 +593,13 @@ input UpdateConnectionInput {
   ssh: ConnectionSshInput
   "Removes the SSH tunnel with its credentials and host-key pin."
   disableSsh: Boolean
+  """
+  Concurrent run limit, 1..64 and at most workers.max_concurrent_runs.
+  Lowering it never stops active runs; new runs wait until fewer run.
+  """
+  maxConcurrentRuns: Int
+  "Returns to the global workers.max_runs_per_connection."
+  clearMaxConcurrentRuns: Boolean
 }
 
 input ConnectionSshInput {
@@ -807,6 +912,877 @@ input SftpDestinationInput {
   privateKey: String
   "Write-only; only together with privateKey."
   privateKeyPassphrase: String
+}
+# Backup downloads (task 3.9, D-150): admins and the backup owners of the
+# artifact's job (role user), never maintainers (D-012, D-067).
+
+"What a download delivers."
+enum DownloadMode {
+  "The stored artifact unchanged (zstd-compressed, normally age-encrypted)."
+  RAW
+  """
+  The decrypted and decompressed dump, ready for `pg_restore` (`.dump`) or
+  `psql`/`mysql` (`.sql`).
+  """
+  PLAIN
+}
+
+"A single-use download ticket."
+type DownloadTicket {
+  """
+  Relative URL of the download (`/api/download/<ticket>`). GET it once,
+  from the same browser session, before `expiresAt`. Never log or share it.
+  """
+  url: String!
+  "The ticket expires 60 seconds after creation."
+  expiresAt: Time!
+  mode: DownloadMode!
+  "The (sanitized) file name the download is saved under."
+  fileName: String!
+  "`dump` (PostgreSQL custom archive) or `sql` (plain SQL script)."
+  format: String!
+  """
+  A shell command template to restore or unpack the file; placeholders in
+  angle brackets (`<database>`, `<key-file>`, `<dump-file>`).
+  """
+  restoreCommand: String!
+}
+
+extend type Mutation {
+  """
+  Creates a single-use download ticket for an artifact (admins, and owners
+  of the artifact's job with role user; fresh step-up; audited). The
+  artifact must be present, verified and covered by a signed manifest.
+  `ageIdentity` (an `AGE-SECRET-KEY-1...` identity) is required for, and
+  only accepted by, PLAIN downloads of recipient-encrypted artifacts; it is
+  stored sealed with the ticket only until the download starts.
+  """
+  createDownloadTicket(artifactId: UUID!, mode: DownloadMode!, ageIdentity: String): DownloadTicket! @stepUp
+}
+# Backup jobs (task 3.5; D-106, D-142, D-143, D-146). Admins and
+# maintainers manage every job; backup owners (role user, listed in a job's
+# owners) see and run their own jobs only. Owner assignment and key changes
+# need a fresh step-up; the encryption opt-out and the passphrase export are
+# admin only. Jobs are soft deleted.
+
+"Which databases of the connection a job backs up."
+enum JobDbMode {
+  "Every database on the server except `exclude` (one file per database)."
+  ALL
+  "Exactly the listed `databases`."
+  SELECTED
+}
+
+"Completeness evidence level of a job (task 3.10)."
+enum JobVerification {
+  "Object counts and row estimates (cheap for huge databases)."
+  STANDARD
+  "Exact per-table row counts."
+  DEEP
+}
+
+"Schedule kinds (D-143)."
+enum ScheduleKind {
+  "Never runs on its own; only runJobNow."
+  MANUAL
+  "Every N minutes/hours/days/weeks/months from an anchor."
+  INTERVAL
+  "A 5-field cron expression."
+  CRON
+}
+
+"Units of interval schedules."
+enum ScheduleUnit {
+  MINUTES
+  HOURS
+  DAYS
+  WEEKS
+  MONTHS
+}
+
+"""
+A schedule in its canonical form (D-143). Interval: every, unit, anchor
+(local YYYY-MM-DDTHH:MM in the zone), weekday (weeks), dayOfMonth (months)
+and timezone; cron: cron and timezone; manual: nothing else.
+"""
+type Schedule {
+  kind: ScheduleKind!
+  every: Int
+  unit: ScheduleUnit
+  anchor: String
+  "Lower-case English weekday name (weeks only)."
+  weekday: String
+  "1-31 (months only); shorter months use their last day."
+  dayOfMonth: Int
+  cron: String
+  "IANA zone name, e.g. Europe/Amsterdam."
+  timezone: String
+}
+
+input ScheduleInput {
+  kind: ScheduleKind!
+  every: Int
+  unit: ScheduleUnit
+  anchor: String
+  weekday: String
+  dayOfMonth: Int
+  cron: String
+  timezone: String
+}
+
+"The next occurrences of a schedule (nothing is stored)."
+type SchedulePreview {
+  "The canonical schedule (defaults filled in)."
+  schedule: Schedule!
+  "A short English summary, e.g. `Every 2 days at 03:00 (Europe/Amsterdam)`."
+  description: String!
+  "The next occurrences after now (empty for MANUAL)."
+  next: [Time!]!
+}
+
+"How many backups a job keeps per destination; at least one limit is set."
+type JobRetention {
+  "Keep the newest N backups."
+  keepLast: Int
+  "Keep backups younger than N days."
+  keepDays: Int
+}
+
+input JobRetentionInput {
+  keepLast: Int
+  keepDays: Int
+}
+
+"The connection a job backs up (non-secret identity only)."
+type JobConnectionRef {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  versionKey: String!
+  deleted: Boolean!
+}
+
+"One destination of a job (non-secret identity only), in fan-out order."
+type JobDestinationRef {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  position: Int!
+  deleted: Boolean!
+}
+
+"A backup owner of a job. Only owners with role USER gain rights (D-067)."
+type JobOwner {
+  userId: UUID!
+  email: String!
+  displayName: String!
+  role: Role!
+  disabled: Boolean!
+  addedAt: Time!
+}
+
+"Encryption modes of backup files (D-008, D-142)."
+enum JobEncryptionMode {
+  "age with the job's versioned passphrase (stored encrypted)."
+  PASSPHRASE
+  "age to a public X25519 recipient; the private key is supplied at restore time."
+  RECIPIENT
+  "Opted out by an admin: backups are not encrypted (badge)."
+  NONE
+}
+
+"The key modes a job can encrypt with."
+enum JobKeyMode {
+  PASSPHRASE
+  RECIPIENT
+}
+
+"The active passphrase version (never the passphrase)."
+type JobPassphraseInfo {
+  version: Int!
+  createdAt: Time!
+}
+
+"The active recipient version (public data)."
+type JobRecipientInfo {
+  version: Int!
+  "The age1... public key."
+  recipient: String!
+  "Lowercase hex SHA-256 of the recipient (as in the manifest)."
+  fingerprint: String!
+  label: String!
+  "bekup generated the keypair (its identity was shown once)."
+  generated: Boolean!
+  createdAt: Time!
+}
+
+"The encryption status of a job. It never contains key material."
+type JobEncryption {
+  "False only for a job without an encryption configuration (backups refuse to run)."
+  configured: Boolean!
+  mode: JobEncryptionMode
+  "Badge: an admin turned encryption off."
+  optedOut: Boolean!
+  optedOutAt: Time
+  optOutReason: String
+  passphrase: JobPassphraseInfo
+  recipient: JobRecipientInfo
+  updatedAt: Time
+}
+
+"A backup job."
+type Job {
+  id: UUID!
+  name: String!
+  "Names the job's directory in every destination; never changes."
+  slug: String!
+  description: String!
+  connection: JobConnectionRef!
+  dbMode: JobDbMode!
+  "SELECTED: the databases backed up."
+  databases: [String!]!
+  "ALL: databases skipped."
+  exclude: [String!]!
+  "PostgreSQL: also dump the cluster globals (roles, tablespaces)."
+  includeGlobals: Boolean!
+  schedule: Schedule!
+  scheduleDescription: String!
+  enabled: Boolean!
+  "The next scheduled run (null: manual, disabled or unschedulable)."
+  nextRunAt: Time
+  lastScheduledAt: Time
+  retention: JobRetention!
+  "The job's run timeout; null means workers.backup_timeout."
+  timeoutSeconds: Int
+  "Missed-backup alert window; null means derived from the schedule."
+  expectedWindowSeconds: Int
+  verification: JobVerification!
+  destinations: [JobDestinationRef!]!
+  encryption: JobEncryption!
+  "Admins and maintainers only (null for backup owners)."
+  owners: [JobOwner!]
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+"A page of jobs."
+type JobConnection {
+  edges: [JobEdge!]!
+  pageInfo: PageInfo!
+}
+
+type JobEdge {
+  cursor: String!
+  node: Job!
+}
+
+"Filters for jobs; unset fields do not filter."
+input JobFilter {
+  enabled: Boolean
+  connectionId: UUID
+  "Substring of the name or slug (case-insensitive)."
+  search: String
+}
+
+"""
+The initial encryption of a new job (always on; an admin may opt out
+afterwards). Without a passphrase or recipient bekup generates the key and
+returns it once in CreateJobResult. The default (a generated passphrase) is
+available to everyone who may create jobs; choosing the key (a passphrase,
+RECIPIENT mode or a recipient) is a key change and needs an admin with a
+fresh step-up (FORBIDDEN / STEP_UP_REQUIRED otherwise).
+"""
+input JobEncryptionInput {
+  "Default PASSPHRASE."
+  mode: JobKeyMode
+  "Write-only; at least 20 characters and very strong. Prefer a generated one."
+  passphrase: String
+  "An age1... X25519 recipient (RECIPIENT mode)."
+  recipient: String
+  label: String
+}
+
+input CreateJobInput {
+  name: String!
+  "Optional; derived from the name. Lower-case letters, digits and inner hyphens; never changes."
+  slug: String
+  description: String
+  connectionId: UUID!
+  "Default ALL."
+  dbMode: JobDbMode
+  databases: [String!]
+  exclude: [String!]
+  "Default true for PostgreSQL; MySQL/MariaDB have no globals."
+  includeGlobals: Boolean
+  schedule: ScheduleInput!
+  "Default true."
+  enabled: Boolean
+  retention: JobRetentionInput!
+  "60 seconds up to workers.backup_timeout; omit for the default."
+  timeoutSeconds: Int
+  expectedWindowSeconds: Int
+  "Default STANDARD."
+  verification: JobVerification
+  "1-16 destinations in fan-out order."
+  destinationIds: [UUID!]!
+  encryption: JobEncryptionInput
+}
+
+"Fields to change; unset fields stay unchanged. The slug cannot change."
+input UpdateJobInput {
+  name: String
+  description: String
+  connectionId: UUID
+  dbMode: JobDbMode
+  databases: [String!]
+  exclude: [String!]
+  includeGlobals: Boolean
+  "A changed schedule is re-planned from now."
+  schedule: ScheduleInput
+  "Replaces both limits."
+  retention: JobRetentionInput
+  timeoutSeconds: Int
+  "Reset the timeout to workers.backup_timeout."
+  clearTimeout: Boolean
+  expectedWindowSeconds: Int
+  clearExpectedWindow: Boolean
+  verification: JobVerification
+  "Replaces the destinations (1-16, fan-out order)."
+  destinationIds: [UUID!]
+}
+
+"A generated age keypair. The identity is shown once and never stored."
+type GeneratedAgeKeypair {
+  encryption: JobEncryption!
+  version: Int!
+  recipient: String!
+  fingerprint: String!
+  "The AGE-SECRET-KEY-1... identity. Store it offline now: bekup cannot show it again."
+  identity: String!
+  "The identity as an age-keygen file (for age -d -i and bekup decrypt)."
+  identityFile: String!
+  fileName: String!
+}
+
+"A generated passphrase, shown once."
+type GeneratedJobPassphrase {
+  encryption: JobEncryption!
+  version: Int!
+  passphrase: String!
+}
+
+"The result of createJob: the job and a generated key, shown once."
+type CreateJobResult {
+  job: Job!
+  "Set when bekup generated the job's passphrase."
+  generatedPassphrase: String
+  "Set when bekup generated the job's age keypair."
+  generatedKeypair: GeneratedAgeKeypair
+}
+
+"Every passphrase version of a job for offline recovery (docs/guides/encryption.md)."
+type JobPassphraseExport {
+  fileName: String!
+  "The export file. SECRET: anyone with it can decrypt the job's passphrase-encrypted backups."
+  content: String!
+  versions: [Int!]!
+}
+
+"An accepted runJobNow or startNextRunEarly."
+type RunJobNowResult {
+  job: Job!
+  "The queued run (see cancelRun)."
+  runId: UUID!
+  queuedAt: Time!
+}
+
+extend type Query {
+  """
+  Jobs that are not deleted, ordered by name; backup owners see only their
+  own jobs. `first` is 1..200 (default 50); `after` is the `endCursor` of
+  the previous page.
+  """
+  jobs(filter: JobFilter, first: Int, after: String): JobConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One job; null when it does not exist or was deleted. Backup owners may
+  view only their own jobs (FORBIDDEN otherwise).
+  """
+  job(id: UUID!): Job @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  "Validates a schedule and returns its next `count` occurrences (1-50, default 5)."
+  previewSchedule(input: ScheduleInput!, count: Int): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Creates a job with encryption on (a generated passphrase unless a key is
+  given). A name or slug already in use answers CONFLICT.
+  """
+  createJob(input: CreateJobInput!): CreateJobResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Changes a job. A changed schedule is re-planned from now."
+  updateJob(id: UUID!, input: UpdateJobInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Soft deletes a job: its schedule stops at once, a run in progress
+  finishes, artifacts and keys stay.
+  """
+  deleteJob(id: UUID!): Boolean! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Enables a job and plans its next run from now (missed periods are not caught up)."
+  enableJob(id: UUID!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Disables a job: no scheduled or manual runs."
+  disableJob(id: UUID!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Adds backup owners (`users`: user ids; audited, alerted). A maintainer
+  cannot add themselves. Returns the job's owners.
+  """
+  assignJobOwners(jobId: UUID!, users: [UUID!]!): [JobOwner!]! @hasRole(roles: [ADMIN, MAINTAINER]) @stepUp
+
+  "Removes a backup owner (audited, alerted). Returns the job's owners."
+  removeJobOwner(jobId: UUID!, userId: UUID!): [JobOwner!]! @hasRole(roles: [ADMIN, MAINTAINER]) @stepUp
+
+  """
+  Enqueues a manual backup run (admins, maintainers and the job's owners).
+  CONFLICT when a run of the job is already queued or running, or the job
+  is disabled (note: startNextRunEarly reports a disabled job as
+  VALIDATION instead; clients should handle both codes).
+  """
+  runJobNow(id: UUID!): RunJobNowResult! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Starts the job's next planned run now (trigger EARLY, scheduledFor = the
+  planned time) and skips it at its planned time: the schedule continues
+  with the following occurrence (`job.nextRunAt`). Admins, maintainers and
+  the job's owners. Only the occurrence that is genuinely next can be
+  pulled forward: once it was started early, the following one is refused
+  until the original time has passed, so the planned schedule is never more
+  than one occurrence ahead. VALIDATION for a disabled job (unlike
+  runJobNow, which reports CONFLICT), one without a planned run (manual
+  schedule), or one whose next planned run was already started early;
+  CONFLICT, with nothing changed, when a run of the job is already queued
+  or running. runJobNow adds an extra run instead.
+  """
+  startNextRunEarly(id: UUID!): RunJobNowResult! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  "Sets a new passphrase version (switches the job to PASSPHRASE mode and opts back in). Admin only."
+  setJobPassphrase(jobId: UUID!, passphrase: String!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Generates a new passphrase version and returns it once. Admin only."
+  generateJobPassphrase(jobId: UUID!): GeneratedJobPassphrase! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Sets a new age recipient version (switches the job to RECIPIENT mode and opts back in). Admin only."
+  setJobRecipient(jobId: UUID!, recipient: String!, label: String): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Generates an age keypair; only the recipient is stored, the identity is returned once. Admin only."
+  generateAgeKeypair(jobId: UUID!, label: String): GeneratedAgeKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Opts an opted-out job back in with an existing key of `mode`. Admin only."
+  enableJobEncryption(jobId: UUID!, mode: JobKeyMode!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Turns a job's encryption off (admin; audited as security.opt_out,
+  alerted, permanent badge). Keys are kept.
+  """
+  disableJobEncryption(jobId: UUID!, reason: String!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Exports every passphrase version of a job for offline recovery (admin; audited, alerted)."
+  exportJobPassphrases(jobId: UUID!): JobPassphraseExport! @hasRole(roles: [ADMIN]) @stepUp
+}
+# Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
+# see every run; backup owners see the runs and artifacts of the jobs they
+# own only (listings are filtered, single objects of other jobs answer
+# FORBIDDEN). Sizes are bytes as Float (exact up to 2^53). Error and
+# warning texts are fixed, sanitized messages chosen by bekup, never
+# server output.
+
+"Status of a backup run."
+enum RunStatus {
+  "Enqueued; waiting for a worker or a concurrency slot."
+  QUEUED
+  RUNNING
+  "Every database stored and verified on every destination, with the signed manifest."
+  SUCCESS
+  "At least one complete, verified artifact, but something is missing (a destination, a database, the manifest)."
+  PARTIAL
+  "Nothing usable was stored."
+  FAILED
+  CANCELED
+  "Not run: the job was deleted or disabled before the run started."
+  SKIPPED
+}
+
+"What started a run."
+enum RunTrigger {
+  SCHEDULE
+  "A missed scheduled run caught up after downtime."
+  CATCH_UP
+  "runJobNow."
+  MANUAL
+  "startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward."
+  EARLY
+}
+
+"What a run item backs up."
+enum RunItemKind {
+  DATABASE
+  "The PostgreSQL cluster globals (roles, tablespaces)."
+  GLOBALS
+}
+
+"Status of one database of a run."
+enum RunItemStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  CANCELED
+}
+
+"What an artifact holds."
+enum ArtifactKind {
+  DATABASE
+  GLOBALS
+  "The signed manifest.json of the run on that destination."
+  MANIFEST
+}
+
+"Whether an artifact still exists on its destination."
+enum ArtifactState {
+  PRESENT
+  "Removed by retention (the record stays)."
+  DELETED
+  "A verification did not find it."
+  MISSING
+}
+
+enum RunLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+"Where a log line came from."
+enum RunLogStream {
+  WORKER
+  RUNNER
+  STDOUT
+  STDERR
+}
+
+"An accepted cancelRun."
+type RunCancellation {
+  runId: UUID!
+  jobId: UUID!
+  """
+  CANCELED when the run had not started yet; otherwise QUEUED or RUNNING
+  until its worker stops it (the run then ends as CANCELED).
+  """
+  status: RunStatus!
+  requestedAt: Time!
+  """
+  The run had already finished, but its job was waiting for a retry: the
+  retry was canceled (no new attempt starts) and `status` is the run's final
+  status.
+  """
+  retryCanceled: Boolean!
+}
+
+"The job of a run or artifact (non-secret identity only)."
+type RunJobRef {
+  id: UUID!
+  name: String!
+  slug: String!
+  deleted: Boolean!
+}
+
+"The user who started a manual run."
+type RunActor {
+  userId: UUID!
+  displayName: String!
+  email: String!
+}
+
+"A warning recorded by a run or item (fixed texts)."
+type RunWarning {
+  code: String!
+  message: String!
+  "The database it concerns, if any."
+  database: String
+  "The destination it concerns, if any."
+  destinationId: UUID
+}
+
+"The destination of an artifact (non-secret identity only)."
+type ArtifactDestinationRef {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  deleted: Boolean!
+}
+
+"How an artifact is encrypted (key versions, never key material)."
+type ArtifactEncryption {
+  "PASSPHRASE, RECIPIENT or NONE (null for manifests, which are signed, not encrypted)."
+  mode: JobEncryptionMode
+  passphraseVersion: Int
+  recipientVersion: Int
+}
+
+"One object stored on a destination."
+type Artifact {
+  id: UUID!
+  runId: UUID!
+  "The run item (null for the manifest)."
+  runItemId: UUID
+  job: RunJobRef!
+  destination: ArtifactDestinationRef!
+  kind: ArtifactKind!
+  "The item's database (null for globals and manifests)."
+  database: String
+  "The object key on the destination ({slug}/{timestamp}/...)."
+  objectKey: String!
+  "The run's directory timestamp."
+  storageTimestamp: Time
+  size: Float!
+  "Lowercase hex SHA-256 of the stored object."
+  sha256: String!
+  "The S3 object version, if versioned."
+  versionId: String
+  encryption: ArtifactEncryption!
+  "The native verification passed. Unverified objects are never in a manifest."
+  verified: Boolean!
+  "A signed manifest next to it covers this object."
+  signed: Boolean!
+  "The instance key id of that manifest."
+  signingKeyId: String
+  "Object Lock retention end."
+  lockUntil: Time
+  state: ArtifactState!
+  stateChangedAt: Time
+  createdAt: Time!
+  deletedAt: Time
+}
+
+"One database (or the PostgreSQL globals) of a run."
+type RunItem {
+  id: UUID!
+  runId: UUID!
+  kind: RunItemKind!
+  "The database (null for the globals)."
+  database: String
+  position: Int!
+  status: RunItemStatus!
+  rawSize: Float!
+  storedSize: Float!
+  "Lowercase hex SHA-256 of the dump before compression and encryption."
+  rawSha256: String
+  "Lowercase hex SHA-256 of the stored file."
+  sha256: String
+  verified: Boolean!
+  startedAt: Time!
+  finishedAt: Time
+  durationSeconds: Float
+  errorCode: String
+  errorMessage: String
+  warnings: [RunWarning!]!
+  "The objects of this item, one per destination."
+  artifacts: [Artifact!]!
+}
+
+"The signed manifests of a run."
+type RunManifest {
+  "At least one destination holds a signed manifest."
+  signed: Boolean!
+  "The instance key id that signed it."
+  signingKeyId: String
+  "The manifest objects, one per destination that holds every complete item."
+  copies: [Artifact!]!
+  "Items with at least one signed, verified object."
+  coveredItems: Int!
+  totalItems: Int!
+}
+
+"A backup run."
+type Run {
+  id: UUID!
+  job: RunJobRef!
+  status: RunStatus!
+  trigger: RunTrigger!
+  "The user of a manual run; admins and maintainers only (null for backup owners)."
+  triggeredBy: RunActor
+  scheduledFor: Time
+  attempt: Int!
+  queuedAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  "finishedAt (or now while running) minus startedAt."
+  durationSeconds: Float
+  "The run's directory timestamp on every destination."
+  storageTimestamp: Time
+  errorCode: String
+  errorMessage: String
+  "Problems worth attention (completeness, destinations, manifest)."
+  warnings: [RunWarning!]!
+  """
+  Informational findings that are not warnings, e.g. `databases_excluded`
+  (databases the job's exclude list leaves out on purpose).
+  """
+  notices: [RunWarning!]!
+  bytesRaw: Float!
+  bytesStored: Float!
+  cancelRequested: Boolean!
+  cancelRequestedAt: Time
+  logLines: Int!
+  logLinesDropped: Int!
+  updatedAt: Time!
+  items: [RunItem!]!
+  "Every stored object of the run (dumps and manifests)."
+  artifacts: [Artifact!]!
+  manifest: RunManifest!
+}
+
+"A page of runs."
+type RunConnection {
+  edges: [RunEdge!]!
+  pageInfo: PageInfo!
+}
+
+type RunEdge {
+  cursor: String!
+  node: Run!
+}
+
+"Filters for runs; unset fields do not filter."
+input RunFilter {
+  jobId: UUID
+  status: RunStatus
+  trigger: RunTrigger
+  "Runs queued at or after this time."
+  since: Time
+  "Runs queued before this time."
+  until: Time
+}
+
+"A page of artifacts."
+type ArtifactConnection {
+  edges: [ArtifactEdge!]!
+  pageInfo: PageInfo!
+}
+
+type ArtifactEdge {
+  cursor: String!
+  node: Artifact!
+}
+
+"Filters for artifacts; unset fields do not filter."
+input ArtifactFilter {
+  jobId: UUID
+  destinationId: UUID
+  runId: UUID
+  state: ArtifactState
+  kind: ArtifactKind
+}
+
+"One run log line (redacted and sanitized when it was written)."
+type RunLogLine {
+  "Increasing; use it as afterId."
+  id: ID!
+  time: Time!
+  level: RunLogLevel!
+  stream: RunLogStream!
+  line: String!
+}
+
+"A page of run log lines in order."
+type RunLogPage {
+  runId: UUID!
+  lines: [RunLogLine!]!
+  "The id of the last line (the afterId for the next page); afterId when there are no lines."
+  endId: ID
+  hasMore: Boolean!
+  "Lines dropped because the run exceeded the log caps."
+  dropped: Int!
+}
+
+"New log lines of a run (runLogAppended)."
+type RunLogBatch {
+  runId: UUID!
+  lines: [RunLogLine!]!
+  endId: ID
+  "The run finished and every line was delivered; the stream completes after this event."
+  done: Boolean!
+}
+
+extend type Job {
+  "The newest run of the job."
+  lastRun: Run
+  "The newest runs of the job, newest first (`first` 1-20, default 5)."
+  recentRuns(first: Int): [Run!]!
+}
+
+extend type Query {
+  """
+  Runs, newest first; backup owners see the runs of their own jobs only.
+  `first` is 1..200 (default 50); `after` is the `endCursor` of the
+  previous page.
+  """
+  runs(filter: RunFilter, first: Int, after: String): RunConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One run; null when it does not exist (admins and maintainers). Backup
+  owners get FORBIDDEN for runs of other jobs and for unknown ids.
+  """
+  run(id: UUID!): Run @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The log of a run in order, after `afterId` (default: from the start);
+  `first` is 1..1000 (default 200). Same access as `run`.
+  """
+  runLogs(runId: UUID!, afterId: ID, first: Int): RunLogPage @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The backup browser: stored objects, newest first; backup owners see the
+  artifacts of their own jobs only. `first` is 1..200 (default 50).
+  """
+  artifacts(filter: ArtifactFilter, first: Int, after: String): ArtifactConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Cancels a queued or running backup run (admins and maintainers; audited).
+  The dump container is killed and no partial object is finalized. A
+  finished run whose job waits for a retry gets that retry canceled
+  (`retryCanceled`). CONFLICT when the run already finished otherwise.
+  """
+  cancelRun(id: UUID!): RunCancellation! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Subscription {
+  """
+  Live run changes (status, progress, items, artifacts): each event is the
+  run re-loaded when it is delivered and authorized again (backup owners
+  receive runs of the jobs they own at that moment only). Filter by `jobId`
+  and/or `runId` (FORBIDDEN when you may not view that job or run); without
+  a filter you receive every run you may view. Events are coalesced per
+  stream: a run that changes several times while an event is pending is
+  sent once (with its state at delivery), and a stream delivers at most 20
+  runs per second; the rest waits (no update is lost, only merged). Streams
+  count against the per-session cap (graphql.stream_max_per_session,
+  default 4): open one runUpdated stream per page and filter on the client.
+  """
+  runUpdated(jobId: UUID, runId: UUID): Run! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  New log lines of a run after `afterId` (default: from the start), in
+  batches of at most 200 lines. The stream completes with a `done` batch
+  once the run finished and every line was delivered. Same access as
+  `runLogs`, checked again for every batch.
+  """
+  runLogAppended(runId: UUID!, afterId: ID): RunLogBatch! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }
 # bekup GraphQL schema: shared scalars, directives and types (task 1.2).
 # Feature tasks add their own *.graphqls files next to this one and extend

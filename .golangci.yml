@@ -131,7 +131,7 @@ linters:
         linters:
           - revive
           - gocritic
-        text: "unused-parameter|exported: exported method Resolver\\.|typeDefFirst|paramTypeCombine"
+        text: "unused-parameter|exported: exported method Resolver\\.|typeDefFirst|paramTypeCombine|var-naming: method parameter \\w+Ids should be"
       # Tests may use unchecked type assertions and weaker crypto fixtures,
       # but never disable security linters for production code.
       - path: _test\.go

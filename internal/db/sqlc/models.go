@@ -15,6 +15,128 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ArtifactKind string
+
+const (
+	ArtifactKindDatabase ArtifactKind = "database"
+	ArtifactKindGlobals  ArtifactKind = "globals"
+	ArtifactKindManifest ArtifactKind = "manifest"
+)
+
+func (e *ArtifactKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ArtifactKind(s)
+	case string:
+		*e = ArtifactKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ArtifactKind: %T", src)
+	}
+	return nil
+}
+
+type NullArtifactKind struct {
+	ArtifactKind ArtifactKind `json:"artifactKind"`
+	Valid        bool         `json:"valid"` // Valid is true if ArtifactKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullArtifactKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.ArtifactKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ArtifactKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullArtifactKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ArtifactKind), nil
+}
+
+func (e ArtifactKind) Valid() bool {
+	switch e {
+	case ArtifactKindDatabase,
+		ArtifactKindGlobals,
+		ArtifactKindManifest:
+		return true
+	}
+	return false
+}
+
+func AllArtifactKindValues() []ArtifactKind {
+	return []ArtifactKind{
+		ArtifactKindDatabase,
+		ArtifactKindGlobals,
+		ArtifactKindManifest,
+	}
+}
+
+type ArtifactState string
+
+const (
+	ArtifactStatePresent ArtifactState = "present"
+	ArtifactStateDeleted ArtifactState = "deleted"
+	ArtifactStateMissing ArtifactState = "missing"
+)
+
+func (e *ArtifactState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ArtifactState(s)
+	case string:
+		*e = ArtifactState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ArtifactState: %T", src)
+	}
+	return nil
+}
+
+type NullArtifactState struct {
+	ArtifactState ArtifactState `json:"artifactState"`
+	Valid         bool          `json:"valid"` // Valid is true if ArtifactState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullArtifactState) Scan(value interface{}) error {
+	if value == nil {
+		ns.ArtifactState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ArtifactState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullArtifactState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ArtifactState), nil
+}
+
+func (e ArtifactState) Valid() bool {
+	switch e {
+	case ArtifactStatePresent,
+		ArtifactStateDeleted,
+		ArtifactStateMissing:
+		return true
+	}
+	return false
+}
+
+func AllArtifactStateValues() []ArtifactState {
+	return []ArtifactState{
+		ArtifactStatePresent,
+		ArtifactStateDeleted,
+		ArtifactStateMissing,
+	}
+}
+
 type ConnectionEngine string
 
 const (
@@ -259,6 +381,241 @@ func AllDestinationTypeValues() []DestinationType {
 	}
 }
 
+type DownloadMode string
+
+const (
+	DownloadModeRaw   DownloadMode = "raw"
+	DownloadModePlain DownloadMode = "plain"
+)
+
+func (e *DownloadMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DownloadMode(s)
+	case string:
+		*e = DownloadMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DownloadMode: %T", src)
+	}
+	return nil
+}
+
+type NullDownloadMode struct {
+	DownloadMode DownloadMode `json:"downloadMode"`
+	Valid        bool         `json:"valid"` // Valid is true if DownloadMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDownloadMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.DownloadMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DownloadMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDownloadMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DownloadMode), nil
+}
+
+func (e DownloadMode) Valid() bool {
+	switch e {
+	case DownloadModeRaw,
+		DownloadModePlain:
+		return true
+	}
+	return false
+}
+
+func AllDownloadModeValues() []DownloadMode {
+	return []DownloadMode{
+		DownloadModeRaw,
+		DownloadModePlain,
+	}
+}
+
+type JobDbMode string
+
+const (
+	JobDbModeAll      JobDbMode = "all"
+	JobDbModeSelected JobDbMode = "selected"
+)
+
+func (e *JobDbMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JobDbMode(s)
+	case string:
+		*e = JobDbMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JobDbMode: %T", src)
+	}
+	return nil
+}
+
+type NullJobDbMode struct {
+	JobDbMode JobDbMode `json:"jobDbMode"`
+	Valid     bool      `json:"valid"` // Valid is true if JobDbMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobDbMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobDbMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobDbMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobDbMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobDbMode), nil
+}
+
+func (e JobDbMode) Valid() bool {
+	switch e {
+	case JobDbModeAll,
+		JobDbModeSelected:
+		return true
+	}
+	return false
+}
+
+func AllJobDbModeValues() []JobDbMode {
+	return []JobDbMode{
+		JobDbModeAll,
+		JobDbModeSelected,
+	}
+}
+
+type JobEncryptionMode string
+
+const (
+	JobEncryptionModePassphrase JobEncryptionMode = "passphrase"
+	JobEncryptionModeRecipient  JobEncryptionMode = "recipient"
+	JobEncryptionModeNone       JobEncryptionMode = "none"
+)
+
+func (e *JobEncryptionMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JobEncryptionMode(s)
+	case string:
+		*e = JobEncryptionMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JobEncryptionMode: %T", src)
+	}
+	return nil
+}
+
+type NullJobEncryptionMode struct {
+	JobEncryptionMode JobEncryptionMode `json:"jobEncryptionMode"`
+	Valid             bool              `json:"valid"` // Valid is true if JobEncryptionMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobEncryptionMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobEncryptionMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobEncryptionMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobEncryptionMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobEncryptionMode), nil
+}
+
+func (e JobEncryptionMode) Valid() bool {
+	switch e {
+	case JobEncryptionModePassphrase,
+		JobEncryptionModeRecipient,
+		JobEncryptionModeNone:
+		return true
+	}
+	return false
+}
+
+func AllJobEncryptionModeValues() []JobEncryptionMode {
+	return []JobEncryptionMode{
+		JobEncryptionModePassphrase,
+		JobEncryptionModeRecipient,
+		JobEncryptionModeNone,
+	}
+}
+
+type JobVerification string
+
+const (
+	JobVerificationStandard JobVerification = "standard"
+	JobVerificationDeep     JobVerification = "deep"
+)
+
+func (e *JobVerification) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JobVerification(s)
+	case string:
+		*e = JobVerification(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JobVerification: %T", src)
+	}
+	return nil
+}
+
+type NullJobVerification struct {
+	JobVerification JobVerification `json:"jobVerification"`
+	Valid           bool            `json:"valid"` // Valid is true if JobVerification is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobVerification) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobVerification, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobVerification.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobVerification) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobVerification), nil
+}
+
+func (e JobVerification) Valid() bool {
+	switch e {
+	case JobVerificationStandard,
+		JobVerificationDeep:
+		return true
+	}
+	return false
+}
+
+func AllJobVerificationValues() []JobVerification {
+	return []JobVerification{
+		JobVerificationStandard,
+		JobVerificationDeep,
+	}
+}
+
 type RiverJobState string
 
 const (
@@ -335,6 +692,393 @@ func AllRiverJobStateValues() []RiverJobState {
 	}
 }
 
+type RunItemKind string
+
+const (
+	RunItemKindDatabase RunItemKind = "database"
+	RunItemKindGlobals  RunItemKind = "globals"
+)
+
+func (e *RunItemKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunItemKind(s)
+	case string:
+		*e = RunItemKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunItemKind: %T", src)
+	}
+	return nil
+}
+
+type NullRunItemKind struct {
+	RunItemKind RunItemKind `json:"runItemKind"`
+	Valid       bool        `json:"valid"` // Valid is true if RunItemKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunItemKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunItemKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunItemKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunItemKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunItemKind), nil
+}
+
+func (e RunItemKind) Valid() bool {
+	switch e {
+	case RunItemKindDatabase,
+		RunItemKindGlobals:
+		return true
+	}
+	return false
+}
+
+func AllRunItemKindValues() []RunItemKind {
+	return []RunItemKind{
+		RunItemKindDatabase,
+		RunItemKindGlobals,
+	}
+}
+
+type RunItemStatus string
+
+const (
+	RunItemStatusRunning  RunItemStatus = "running"
+	RunItemStatusSuccess  RunItemStatus = "success"
+	RunItemStatusPartial  RunItemStatus = "partial"
+	RunItemStatusFailed   RunItemStatus = "failed"
+	RunItemStatusCanceled RunItemStatus = "canceled"
+)
+
+func (e *RunItemStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunItemStatus(s)
+	case string:
+		*e = RunItemStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunItemStatus: %T", src)
+	}
+	return nil
+}
+
+type NullRunItemStatus struct {
+	RunItemStatus RunItemStatus `json:"runItemStatus"`
+	Valid         bool          `json:"valid"` // Valid is true if RunItemStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunItemStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunItemStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunItemStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunItemStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunItemStatus), nil
+}
+
+func (e RunItemStatus) Valid() bool {
+	switch e {
+	case RunItemStatusRunning,
+		RunItemStatusSuccess,
+		RunItemStatusPartial,
+		RunItemStatusFailed,
+		RunItemStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func AllRunItemStatusValues() []RunItemStatus {
+	return []RunItemStatus{
+		RunItemStatusRunning,
+		RunItemStatusSuccess,
+		RunItemStatusPartial,
+		RunItemStatusFailed,
+		RunItemStatusCanceled,
+	}
+}
+
+type RunLogLevel string
+
+const (
+	RunLogLevelInfo  RunLogLevel = "info"
+	RunLogLevelWarn  RunLogLevel = "warn"
+	RunLogLevelError RunLogLevel = "error"
+)
+
+func (e *RunLogLevel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunLogLevel(s)
+	case string:
+		*e = RunLogLevel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunLogLevel: %T", src)
+	}
+	return nil
+}
+
+type NullRunLogLevel struct {
+	RunLogLevel RunLogLevel `json:"runLogLevel"`
+	Valid       bool        `json:"valid"` // Valid is true if RunLogLevel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunLogLevel) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunLogLevel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunLogLevel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunLogLevel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunLogLevel), nil
+}
+
+func (e RunLogLevel) Valid() bool {
+	switch e {
+	case RunLogLevelInfo,
+		RunLogLevelWarn,
+		RunLogLevelError:
+		return true
+	}
+	return false
+}
+
+func AllRunLogLevelValues() []RunLogLevel {
+	return []RunLogLevel{
+		RunLogLevelInfo,
+		RunLogLevelWarn,
+		RunLogLevelError,
+	}
+}
+
+type RunLogStream string
+
+const (
+	RunLogStreamWorker RunLogStream = "worker"
+	RunLogStreamRunner RunLogStream = "runner"
+	RunLogStreamStdout RunLogStream = "stdout"
+	RunLogStreamStderr RunLogStream = "stderr"
+)
+
+func (e *RunLogStream) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunLogStream(s)
+	case string:
+		*e = RunLogStream(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunLogStream: %T", src)
+	}
+	return nil
+}
+
+type NullRunLogStream struct {
+	RunLogStream RunLogStream `json:"runLogStream"`
+	Valid        bool         `json:"valid"` // Valid is true if RunLogStream is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunLogStream) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunLogStream, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunLogStream.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunLogStream) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunLogStream), nil
+}
+
+func (e RunLogStream) Valid() bool {
+	switch e {
+	case RunLogStreamWorker,
+		RunLogStreamRunner,
+		RunLogStreamStdout,
+		RunLogStreamStderr:
+		return true
+	}
+	return false
+}
+
+func AllRunLogStreamValues() []RunLogStream {
+	return []RunLogStream{
+		RunLogStreamWorker,
+		RunLogStreamRunner,
+		RunLogStreamStdout,
+		RunLogStreamStderr,
+	}
+}
+
+type RunStatus string
+
+const (
+	RunStatusQueued   RunStatus = "queued"
+	RunStatusRunning  RunStatus = "running"
+	RunStatusSuccess  RunStatus = "success"
+	RunStatusPartial  RunStatus = "partial"
+	RunStatusFailed   RunStatus = "failed"
+	RunStatusCanceled RunStatus = "canceled"
+	RunStatusSkipped  RunStatus = "skipped"
+)
+
+func (e *RunStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunStatus(s)
+	case string:
+		*e = RunStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunStatus: %T", src)
+	}
+	return nil
+}
+
+type NullRunStatus struct {
+	RunStatus RunStatus `json:"runStatus"`
+	Valid     bool      `json:"valid"` // Valid is true if RunStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunStatus), nil
+}
+
+func (e RunStatus) Valid() bool {
+	switch e {
+	case RunStatusQueued,
+		RunStatusRunning,
+		RunStatusSuccess,
+		RunStatusPartial,
+		RunStatusFailed,
+		RunStatusCanceled,
+		RunStatusSkipped:
+		return true
+	}
+	return false
+}
+
+func AllRunStatusValues() []RunStatus {
+	return []RunStatus{
+		RunStatusQueued,
+		RunStatusRunning,
+		RunStatusSuccess,
+		RunStatusPartial,
+		RunStatusFailed,
+		RunStatusCanceled,
+		RunStatusSkipped,
+	}
+}
+
+type RunTrigger string
+
+const (
+	RunTriggerSchedule RunTrigger = "schedule"
+	RunTriggerCatchUp  RunTrigger = "catch_up"
+	RunTriggerManual   RunTrigger = "manual"
+	RunTriggerEarly    RunTrigger = "early"
+)
+
+func (e *RunTrigger) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RunTrigger(s)
+	case string:
+		*e = RunTrigger(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RunTrigger: %T", src)
+	}
+	return nil
+}
+
+type NullRunTrigger struct {
+	RunTrigger RunTrigger `json:"runTrigger"`
+	Valid      bool       `json:"valid"` // Valid is true if RunTrigger is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRunTrigger) Scan(value interface{}) error {
+	if value == nil {
+		ns.RunTrigger, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RunTrigger.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRunTrigger) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RunTrigger), nil
+}
+
+func (e RunTrigger) Valid() bool {
+	switch e {
+	case RunTriggerSchedule,
+		RunTriggerCatchUp,
+		RunTriggerManual,
+		RunTriggerEarly:
+		return true
+	}
+	return false
+}
+
+func AllRunTriggerValues() []RunTrigger {
+	return []RunTrigger{
+		RunTriggerSchedule,
+		RunTriggerCatchUp,
+		RunTriggerManual,
+		RunTriggerEarly,
+	}
+}
+
 type UserRole string
 
 const (
@@ -396,6 +1140,38 @@ func AllUserRoleValues() []UserRole {
 	}
 }
 
+type Artifact struct {
+	ID                uuid.UUID     `json:"id"`
+	RunID             uuid.UUID     `json:"runId"`
+	RunItemID         *uuid.UUID    `json:"runItemId"`
+	JobID             uuid.UUID     `json:"jobId"`
+	DestinationID     uuid.UUID     `json:"destinationId"`
+	Kind              ArtifactKind  `json:"kind"`
+	ObjectKey         string        `json:"objectKey"`
+	Size              int64         `json:"size"`
+	Sha256            []byte        `json:"sha256"`
+	VersionID         *string       `json:"versionId"`
+	EncryptionMode    *string       `json:"encryptionMode"`
+	PassphraseVersion *int32        `json:"passphraseVersion"`
+	RecipientVersion  *int32        `json:"recipientVersion"`
+	SigningKeyID      *string       `json:"signingKeyId"`
+	Verified          bool          `json:"verified"`
+	LockUntil         *time.Time    `json:"lockUntil"`
+	State             ArtifactState `json:"state"`
+	StateChangedAt    *time.Time    `json:"stateChangedAt"`
+	CreatedAt         time.Time     `json:"createdAt"`
+	DeletedAt         *time.Time    `json:"deletedAt"`
+}
+
+type ArtifactHold struct {
+	ID         uuid.UUID `json:"id"`
+	ArtifactID uuid.UUID `json:"artifactId"`
+	Kind       string    `json:"kind"`
+	HolderID   uuid.UUID `json:"holderId"`
+	CreatedAt  time.Time `json:"createdAt"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+}
+
 type AuditChainHead struct {
 	ID        int64     `json:"id"`
 	ChainID   int64     `json:"chainId"`
@@ -417,6 +1193,18 @@ type AuditLog struct {
 	Details     json.RawMessage `json:"details"`
 	PrevHash    []byte          `json:"prevHash"`
 	Hash        []byte          `json:"hash"`
+}
+
+type BackupStat struct {
+	RunItemID    uuid.UUID       `json:"runItemId"`
+	RunID        uuid.UUID       `json:"runId"`
+	JobID        uuid.UUID       `json:"jobId"`
+	Level        JobVerification `json:"level"`
+	Consistency  string          `json:"consistency"`
+	TablesTotal  int32           `json:"tablesTotal"`
+	WarningCount int32           `json:"warningCount"`
+	Stats        json.RawMessage `json:"stats"`
+	CreatedAt    time.Time       `json:"createdAt"`
 }
 
 type Connection struct {
@@ -461,6 +1249,7 @@ type Connection struct {
 	CreatedAt               time.Time         `json:"createdAt"`
 	UpdatedAt               time.Time         `json:"updatedAt"`
 	DeletedAt               *time.Time        `json:"deletedAt"`
+	MaxConcurrentRuns       *int32            `json:"maxConcurrentRuns"`
 }
 
 type Destination struct {
@@ -483,12 +1272,96 @@ type Destination struct {
 	DeletedAt               *time.Time      `json:"deletedAt"`
 }
 
+type DownloadTicket struct {
+	ID             uuid.UUID    `json:"id"`
+	TicketHash     []byte       `json:"ticketHash"`
+	SessionID      uuid.UUID    `json:"sessionId"`
+	UserID         uuid.UUID    `json:"userId"`
+	ArtifactID     uuid.UUID    `json:"artifactId"`
+	Mode           DownloadMode `json:"mode"`
+	SealedIdentity []byte       `json:"sealedIdentity"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	ExpiresAt      time.Time    `json:"expiresAt"`
+	UsedAt         *time.Time   `json:"usedAt"`
+}
+
 type InstanceKey struct {
 	ID               string     `json:"id"`
 	PublicKey        []byte     `json:"publicKey"`
 	SealedPrivateKey []byte     `json:"sealedPrivateKey"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	RetiredAt        *time.Time `json:"retiredAt"`
+}
+
+type Job struct {
+	ID                    uuid.UUID       `json:"id"`
+	Enabled               bool            `json:"enabled"`
+	Schedule              json.RawMessage `json:"schedule"`
+	NextRunAt             *time.Time      `json:"nextRunAt"`
+	LastScheduledAt       *time.Time      `json:"lastScheduledAt"`
+	DeletedAt             *time.Time      `json:"deletedAt"`
+	CreatedAt             time.Time       `json:"createdAt"`
+	UpdatedAt             time.Time       `json:"updatedAt"`
+	Name                  string          `json:"name"`
+	Slug                  string          `json:"slug"`
+	Description           string          `json:"description"`
+	ConnectionID          uuid.UUID       `json:"connectionId"`
+	DbMode                JobDbMode       `json:"dbMode"`
+	Databases             []string        `json:"databases"`
+	Exclude               []string        `json:"exclude"`
+	IncludeGlobals        bool            `json:"includeGlobals"`
+	RetentionKeepLast     *int32          `json:"retentionKeepLast"`
+	RetentionKeepDays     *int32          `json:"retentionKeepDays"`
+	TimeoutSeconds        *int32          `json:"timeoutSeconds"`
+	Verification          JobVerification `json:"verification"`
+	ExpectedWindowSeconds *int32          `json:"expectedWindowSeconds"`
+	CreatedBy             *uuid.UUID      `json:"createdBy"`
+	UpdatedBy             *uuid.UUID      `json:"updatedBy"`
+}
+
+type JobDestination struct {
+	JobID         uuid.UUID `json:"jobId"`
+	DestinationID uuid.UUID `json:"destinationId"`
+	Position      int32     `json:"position"`
+}
+
+type JobEncryption struct {
+	JobID        uuid.UUID         `json:"jobId"`
+	Mode         JobEncryptionMode `json:"mode"`
+	OptedOutBy   *uuid.UUID        `json:"optedOutBy"`
+	OptedOutAt   *time.Time        `json:"optedOutAt"`
+	OptOutReason *string           `json:"optOutReason"`
+	UpdatedBy    *uuid.UUID        `json:"updatedBy"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	UpdatedAt    time.Time         `json:"updatedAt"`
+}
+
+type JobOwner struct {
+	JobID     uuid.UUID  `json:"jobId"`
+	UserID    uuid.UUID  `json:"userId"`
+	CreatedBy *uuid.UUID `json:"createdBy"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type JobPassphrase struct {
+	JobID            uuid.UUID  `json:"jobId"`
+	Version          int32      `json:"version"`
+	SealedPassphrase []byte     `json:"sealedPassphrase"`
+	CreatedBy        *uuid.UUID `json:"createdBy"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	RetiredAt        *time.Time `json:"retiredAt"`
+}
+
+type JobRecipient struct {
+	JobID       uuid.UUID  `json:"jobId"`
+	Version     int32      `json:"version"`
+	Recipient   string     `json:"recipient"`
+	Fingerprint string     `json:"fingerprint"`
+	Label       string     `json:"label"`
+	Generated   bool       `json:"generated"`
+	CreatedBy   *uuid.UUID `json:"createdBy"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	RetiredAt   *time.Time `json:"retiredAt"`
 }
 
 type RecoveryCode struct {
@@ -541,6 +1414,78 @@ type RiverQueue struct {
 	Metadata  json.RawMessage `json:"metadata"`
 	PausedAt  *time.Time      `json:"pausedAt"`
 	UpdatedAt time.Time       `json:"updatedAt"`
+}
+
+type Run struct {
+	ID                uuid.UUID       `json:"id"`
+	JobID             uuid.UUID       `json:"jobId"`
+	Trigger           RunTrigger      `json:"trigger"`
+	TriggeredBy       *uuid.UUID      `json:"triggeredBy"`
+	ScheduledFor      *time.Time      `json:"scheduledFor"`
+	Status            RunStatus       `json:"status"`
+	RiverJobID        *int64          `json:"riverJobId"`
+	Attempt           int32           `json:"attempt"`
+	QueuedAt          time.Time       `json:"queuedAt"`
+	StartedAt         *time.Time      `json:"startedAt"`
+	FinishedAt        *time.Time      `json:"finishedAt"`
+	StorageTimestamp  *time.Time      `json:"storageTimestamp"`
+	ErrorCode         *string         `json:"errorCode"`
+	ErrorMessage      *string         `json:"errorMessage"`
+	Warnings          json.RawMessage `json:"warnings"`
+	BytesRaw          int64           `json:"bytesRaw"`
+	BytesStored       int64           `json:"bytesStored"`
+	CancelRequestedAt *time.Time      `json:"cancelRequestedAt"`
+	CancelRequestedBy *uuid.UUID      `json:"cancelRequestedBy"`
+	LogLines          int32           `json:"logLines"`
+	LogLinesDropped   int32           `json:"logLinesDropped"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
+	HasWarnings       bool            `json:"hasWarnings"`
+	Notices           json.RawMessage `json:"notices"`
+}
+
+type RunItem struct {
+	ID           uuid.UUID       `json:"id"`
+	RunID        uuid.UUID       `json:"runId"`
+	Kind         RunItemKind     `json:"kind"`
+	DbName       *string         `json:"dbName"`
+	Position     int32           `json:"position"`
+	Status       RunItemStatus   `json:"status"`
+	RawSize      int64           `json:"rawSize"`
+	StoredSize   int64           `json:"storedSize"`
+	RawSha256    []byte          `json:"rawSha256"`
+	Sha256       []byte          `json:"sha256"`
+	Verified     bool            `json:"verified"`
+	StartedAt    time.Time       `json:"startedAt"`
+	FinishedAt   *time.Time      `json:"finishedAt"`
+	ErrorCode    *string         `json:"errorCode"`
+	ErrorMessage *string         `json:"errorMessage"`
+	Warnings     json.RawMessage `json:"warnings"`
+}
+
+type RunLog struct {
+	ID     int64        `json:"id"`
+	RunID  uuid.UUID    `json:"runId"`
+	Ts     time.Time    `json:"ts"`
+	Level  RunLogLevel  `json:"level"`
+	Stream RunLogStream `json:"stream"`
+	Line   string       `json:"line"`
+}
+
+type RunSlot struct {
+	HolderID     uuid.UUID `json:"holderId"`
+	Kind         string    `json:"kind"`
+	ConnectionID uuid.UUID `json:"connectionId"`
+	AcquiredAt   time.Time `json:"acquiredAt"`
+	HeartbeatAt  time.Time `json:"heartbeatAt"`
+}
+
+type ScheduleSkip struct {
+	ID           int64      `json:"id"`
+	JobID        uuid.UUID  `json:"jobId"`
+	ScheduledFor *time.Time `json:"scheduledFor"`
+	Reason       string     `json:"reason"`
+	CreatedAt    time.Time  `json:"createdAt"`
 }
 
 type Session struct {

@@ -49,3 +49,30 @@ models:
         resolver: true
       twoFactorEnrollmentDeadline:
         resolver: true
+  # Encryption status and owners are loaded per job; owners only for
+  # admins and maintainers (task 3.5).
+  Job:
+    fields:
+      encryption:
+        resolver: true
+      owners:
+        resolver: true
+      # Run history of the job, batch-loaded per page (task 3.7).
+      lastRun:
+        resolver: true
+      recentRuns:
+        resolver: true
+  # Items, artifacts and the manifest are batch-loaded per page of runs
+  # (task 3.7, runLoader).
+  Run:
+    fields:
+      items:
+        resolver: true
+      artifacts:
+        resolver: true
+      manifest:
+        resolver: true
+  RunItem:
+    fields:
+      artifacts:
+        resolver: true

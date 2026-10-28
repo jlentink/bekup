@@ -1,6 +1,14 @@
 ## bekup worker
 
-Run background workers only (not implemented yet)
+Run background workers only
+
+### Synopsis
+
+Run only the River background workers (backups, restores, retention, notifications,
+housekeeping) as bekup_app, without HTTP and without the scheduler, to scale work out next to
+`bekup serve --no-worker`. Same startup checks as serve (database role, schema version,
+master keyring). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within
+workers.shutdown_timeout, then cancel them.
 
 ```
 bekup worker [flags]

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,7 @@ var (
 
 // connectionError maps service errors to API errors.
 func connectionError(err error) error {
+	var inUse *connections.InUseError
 	var (
 		fe *connections.FieldError
 		nr *connections.NotReadyError
@@ -67,6 +69,8 @@ func connectionError(err error) error {
 		return apierror.New(apierror.Conflict, "another connection already uses this name")
 	case errors.Is(err, connections.ErrConflict):
 		return apierror.New(apierror.Conflict, "the connection was changed in the meantime; reload and try again")
+	case errors.As(err, &inUse):
+		return apierror.New(apierror.Conflict, "the connection is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
 	case errors.Is(err, connections.ErrInUse):
 		return apierror.New(apierror.Conflict, "the connection is still used by a job")
 	case errors.Is(err, connections.ErrNoSSH):
@@ -149,7 +153,7 @@ func (r *Resolver) createConnection(ctx context.Context, in model.CreateConnecti
 	ci := connections.CreateInput{
 		Name: in.Name, Engine: kind, VersionKey: in.VersionKey, ImageKey: derefString(in.ImageKey), Host: in.Host,
 		Username: in.Username, Password: secretBytes(in.Password), ClientCertPEM: derefString(in.ClientCertificatePem),
-		ClientKeyPEM: secretBytes(in.ClientKeyPem), SSH: sshInput(in.SSH),
+		ClientKeyPEM: secretBytes(in.ClientKeyPem), SSH: sshInput(in.SSH), MaxConcurrentRuns: in.MaxConcurrentRuns,
 	}
 	if in.Port != nil {
 		ci.Port = *in.Port
@@ -191,6 +195,7 @@ func (r *Resolver) updateConnection(ctx context.Context, id uuid.UUID, in model.
 		ClientCertPEM: in.ClientCertificatePem, ClientKeyPEM: secretBytes(in.ClientKeyPem),
 		ClearClientCertificate: isTrue(in.ClearClientCertificate),
 		SSH:                    sshInput(in.SSH), DisableSSH: isTrue(in.DisableSSH),
+		MaxConcurrentRuns: in.MaxConcurrentRuns, ClearMaxConcurrentRuns: isTrue(in.ClearMaxConcurrentRuns),
 	}
 	c, err := svc.Update(ctx, actor, id, ui)
 	if err != nil {
@@ -511,6 +516,7 @@ func connectionModel(c *connections.Connection, full bool) *model.Connection {
 		Host: c.Host, Port: c.Port, TLSMode: tlsModeModel(c.TLSMode), InsecureTransport: c.InsecureTransport,
 		PinStatus: pinStatusModel(c.PinStatus), PinExpiresAt: c.PinExpiresAt, SSHEnabled: c.SSH != nil,
 		Ready: c.Ready, NotReadyReason: nonEmpty(c.NotReadyReason), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+		MaxConcurrentRuns: c.MaxConcurrentRuns, EffectiveMaxConcurrentRuns: c.EffectiveMaxConcurrentRuns,
 	}
 	if !full {
 		return m

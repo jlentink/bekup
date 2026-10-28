@@ -1,0 +1,392 @@
+# Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
+# see every run; backup owners see the runs and artifacts of the jobs they
+# own only (listings are filtered, single objects of other jobs answer
+# FORBIDDEN). Sizes are bytes as Float (exact up to 2^53). Error and
+# warning texts are fixed, sanitized messages chosen by bekup, never
+# server output.
+
+"Status of a backup run."
+enum RunStatus {
+  "Enqueued; waiting for a worker or a concurrency slot."
+  QUEUED
+  RUNNING
+  "Every database stored and verified on every destination, with the signed manifest."
+  SUCCESS
+  "At least one complete, verified artifact, but something is missing (a destination, a database, the manifest)."
+  PARTIAL
+  "Nothing usable was stored."
+  FAILED
+  CANCELED
+  "Not run: the job was deleted or disabled before the run started."
+  SKIPPED
+}
+
+"What started a run."
+enum RunTrigger {
+  SCHEDULE
+  "A missed scheduled run caught up after downtime."
+  CATCH_UP
+  "runJobNow."
+  MANUAL
+  "startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward."
+  EARLY
+}
+
+"What a run item backs up."
+enum RunItemKind {
+  DATABASE
+  "The PostgreSQL cluster globals (roles, tablespaces)."
+  GLOBALS
+}
+
+"Status of one database of a run."
+enum RunItemStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  CANCELED
+}
+
+"What an artifact holds."
+enum ArtifactKind {
+  DATABASE
+  GLOBALS
+  "The signed manifest.json of the run on that destination."
+  MANIFEST
+}
+
+"Whether an artifact still exists on its destination."
+enum ArtifactState {
+  PRESENT
+  "Removed by retention (the record stays)."
+  DELETED
+  "A verification did not find it."
+  MISSING
+}
+
+enum RunLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+"Where a log line came from."
+enum RunLogStream {
+  WORKER
+  RUNNER
+  STDOUT
+  STDERR
+}
+
+"An accepted cancelRun."
+type RunCancellation {
+  runId: UUID!
+  jobId: UUID!
+  """
+  CANCELED when the run had not started yet; otherwise QUEUED or RUNNING
+  until its worker stops it (the run then ends as CANCELED).
+  """
+  status: RunStatus!
+  requestedAt: Time!
+  """
+  The run had already finished, but its job was waiting for a retry: the
+  retry was canceled (no new attempt starts) and `status` is the run's final
+  status.
+  """
+  retryCanceled: Boolean!
+}
+
+"The job of a run or artifact (non-secret identity only)."
+type RunJobRef {
+  id: UUID!
+  name: String!
+  slug: String!
+  deleted: Boolean!
+}
+
+"The user who started a manual run."
+type RunActor {
+  userId: UUID!
+  displayName: String!
+  email: String!
+}
+
+"A warning recorded by a run or item (fixed texts)."
+type RunWarning {
+  code: String!
+  message: String!
+  "The database it concerns, if any."
+  database: String
+  "The destination it concerns, if any."
+  destinationId: UUID
+}
+
+"The destination of an artifact (non-secret identity only)."
+type ArtifactDestinationRef {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  deleted: Boolean!
+}
+
+"How an artifact is encrypted (key versions, never key material)."
+type ArtifactEncryption {
+  "PASSPHRASE, RECIPIENT or NONE (null for manifests, which are signed, not encrypted)."
+  mode: JobEncryptionMode
+  passphraseVersion: Int
+  recipientVersion: Int
+}
+
+"One object stored on a destination."
+type Artifact {
+  id: UUID!
+  runId: UUID!
+  "The run item (null for the manifest)."
+  runItemId: UUID
+  job: RunJobRef!
+  destination: ArtifactDestinationRef!
+  kind: ArtifactKind!
+  "The item's database (null for globals and manifests)."
+  database: String
+  "The object key on the destination ({slug}/{timestamp}/...)."
+  objectKey: String!
+  "The run's directory timestamp."
+  storageTimestamp: Time
+  size: Float!
+  "Lowercase hex SHA-256 of the stored object."
+  sha256: String!
+  "The S3 object version, if versioned."
+  versionId: String
+  encryption: ArtifactEncryption!
+  "The native verification passed. Unverified objects are never in a manifest."
+  verified: Boolean!
+  "A signed manifest next to it covers this object."
+  signed: Boolean!
+  "The instance key id of that manifest."
+  signingKeyId: String
+  "Object Lock retention end."
+  lockUntil: Time
+  state: ArtifactState!
+  stateChangedAt: Time
+  createdAt: Time!
+  deletedAt: Time
+}
+
+"One database (or the PostgreSQL globals) of a run."
+type RunItem {
+  id: UUID!
+  runId: UUID!
+  kind: RunItemKind!
+  "The database (null for the globals)."
+  database: String
+  position: Int!
+  status: RunItemStatus!
+  rawSize: Float!
+  storedSize: Float!
+  "Lowercase hex SHA-256 of the dump before compression and encryption."
+  rawSha256: String
+  "Lowercase hex SHA-256 of the stored file."
+  sha256: String
+  verified: Boolean!
+  startedAt: Time!
+  finishedAt: Time
+  durationSeconds: Float
+  errorCode: String
+  errorMessage: String
+  warnings: [RunWarning!]!
+  "The objects of this item, one per destination."
+  artifacts: [Artifact!]!
+}
+
+"The signed manifests of a run."
+type RunManifest {
+  "At least one destination holds a signed manifest."
+  signed: Boolean!
+  "The instance key id that signed it."
+  signingKeyId: String
+  "The manifest objects, one per destination that holds every complete item."
+  copies: [Artifact!]!
+  "Items with at least one signed, verified object."
+  coveredItems: Int!
+  totalItems: Int!
+}
+
+"A backup run."
+type Run {
+  id: UUID!
+  job: RunJobRef!
+  status: RunStatus!
+  trigger: RunTrigger!
+  "The user of a manual run; admins and maintainers only (null for backup owners)."
+  triggeredBy: RunActor
+  scheduledFor: Time
+  attempt: Int!
+  queuedAt: Time!
+  startedAt: Time
+  finishedAt: Time
+  "finishedAt (or now while running) minus startedAt."
+  durationSeconds: Float
+  "The run's directory timestamp on every destination."
+  storageTimestamp: Time
+  errorCode: String
+  errorMessage: String
+  "Problems worth attention (completeness, destinations, manifest)."
+  warnings: [RunWarning!]!
+  """
+  Informational findings that are not warnings, e.g. `databases_excluded`
+  (databases the job's exclude list leaves out on purpose).
+  """
+  notices: [RunWarning!]!
+  bytesRaw: Float!
+  bytesStored: Float!
+  cancelRequested: Boolean!
+  cancelRequestedAt: Time
+  logLines: Int!
+  logLinesDropped: Int!
+  updatedAt: Time!
+  items: [RunItem!]!
+  "Every stored object of the run (dumps and manifests)."
+  artifacts: [Artifact!]!
+  manifest: RunManifest!
+}
+
+"A page of runs."
+type RunConnection {
+  edges: [RunEdge!]!
+  pageInfo: PageInfo!
+}
+
+type RunEdge {
+  cursor: String!
+  node: Run!
+}
+
+"Filters for runs; unset fields do not filter."
+input RunFilter {
+  jobId: UUID
+  status: RunStatus
+  trigger: RunTrigger
+  "Runs queued at or after this time."
+  since: Time
+  "Runs queued before this time."
+  until: Time
+}
+
+"A page of artifacts."
+type ArtifactConnection {
+  edges: [ArtifactEdge!]!
+  pageInfo: PageInfo!
+}
+
+type ArtifactEdge {
+  cursor: String!
+  node: Artifact!
+}
+
+"Filters for artifacts; unset fields do not filter."
+input ArtifactFilter {
+  jobId: UUID
+  destinationId: UUID
+  runId: UUID
+  state: ArtifactState
+  kind: ArtifactKind
+}
+
+"One run log line (redacted and sanitized when it was written)."
+type RunLogLine {
+  "Increasing; use it as afterId."
+  id: ID!
+  time: Time!
+  level: RunLogLevel!
+  stream: RunLogStream!
+  line: String!
+}
+
+"A page of run log lines in order."
+type RunLogPage {
+  runId: UUID!
+  lines: [RunLogLine!]!
+  "The id of the last line (the afterId for the next page); afterId when there are no lines."
+  endId: ID
+  hasMore: Boolean!
+  "Lines dropped because the run exceeded the log caps."
+  dropped: Int!
+}
+
+"New log lines of a run (runLogAppended)."
+type RunLogBatch {
+  runId: UUID!
+  lines: [RunLogLine!]!
+  endId: ID
+  "The run finished and every line was delivered; the stream completes after this event."
+  done: Boolean!
+}
+
+extend type Job {
+  "The newest run of the job."
+  lastRun: Run
+  "The newest runs of the job, newest first (`first` 1-20, default 5)."
+  recentRuns(first: Int): [Run!]!
+}
+
+extend type Query {
+  """
+  Runs, newest first; backup owners see the runs of their own jobs only.
+  `first` is 1..200 (default 50); `after` is the `endCursor` of the
+  previous page.
+  """
+  runs(filter: RunFilter, first: Int, after: String): RunConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One run; null when it does not exist (admins and maintainers). Backup
+  owners get FORBIDDEN for runs of other jobs and for unknown ids.
+  """
+  run(id: UUID!): Run @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The log of a run in order, after `afterId` (default: from the start);
+  `first` is 1..1000 (default 200). Same access as `run`.
+  """
+  runLogs(runId: UUID!, afterId: ID, first: Int): RunLogPage @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The backup browser: stored objects, newest first; backup owners see the
+  artifacts of their own jobs only. `first` is 1..200 (default 50).
+  """
+  artifacts(filter: ArtifactFilter, first: Int, after: String): ArtifactConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Cancels a queued or running backup run (admins and maintainers; audited).
+  The dump container is killed and no partial object is finalized. A
+  finished run whose job waits for a retry gets that retry canceled
+  (`retryCanceled`). CONFLICT when the run already finished otherwise.
+  """
+  cancelRun(id: UUID!): RunCancellation! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Subscription {
+  """
+  Live run changes (status, progress, items, artifacts): each event is the
+  run re-loaded when it is delivered and authorized again (backup owners
+  receive runs of the jobs they own at that moment only). Filter by `jobId`
+  and/or `runId` (FORBIDDEN when you may not view that job or run); without
+  a filter you receive every run you may view. Events are coalesced per
+  stream: a run that changes several times while an event is pending is
+  sent once (with its state at delivery), and a stream delivers at most 20
+  runs per second; the rest waits (no update is lost, only merged). Streams
+  count against the per-session cap (graphql.stream_max_per_session,
+  default 4): open one runUpdated stream per page and filter on the client.
+  """
+  runUpdated(jobId: UUID, runId: UUID): Run! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  New log lines of a run after `afterId` (default: from the start), in
+  batches of at most 200 lines. The stream completes with a `done` batch
+  once the run finished and every line was delivered. Same access as
+  `runLogs`, checked again for every batch.
+  """
+  runLogAppended(runId: UUID!, afterId: ID): RunLogBatch! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}

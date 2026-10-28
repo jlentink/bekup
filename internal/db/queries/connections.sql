@@ -20,10 +20,10 @@ SELECT * FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary
 -- name: InsertConnection :one
 INSERT INTO connections (id, name, engine, version_key, image_key, host, port, username,
                          has_password, client_cert_pem, tls_mode, ssh_enabled, ssh_host, ssh_port, ssh_user,
-                         ssh_auth, ssh_has_passphrase, ssh_public_key, secret_enc, created_by)
+                         ssh_auth, ssh_has_passphrase, ssh_public_key, secret_enc, created_by, max_concurrent_runs)
 VALUES (@id, @name, @engine, @version_key, @image_key, @host, @port, @username,
         @has_password, @client_cert_pem, @tls_mode, @ssh_enabled, @ssh_host, @ssh_port, @ssh_user,
-        @ssh_auth, @ssh_has_passphrase, @ssh_public_key, @secret_enc, @created_by)
+        @ssh_auth, @ssh_has_passphrase, @ssh_public_key, @secret_enc, @created_by, @max_concurrent_runs)
 RETURNING *;
 
 -- UpdateConnection replaces the mutable fields (not the TLS mode, which
@@ -49,6 +49,7 @@ SET name = @name,
     ssh_has_passphrase = @ssh_has_passphrase,
     ssh_public_key = @ssh_public_key,
     secret_enc = @secret_enc,
+    max_concurrent_runs = @max_concurrent_runs,
     tls_pin_cert_pem = CASE WHEN @clear_pins::boolean THEN NULL ELSE tls_pin_cert_pem END,
     tls_pin_spki = CASE WHEN @clear_pins::boolean THEN NULL ELSE tls_pin_spki END,
     tls_pin_not_after = CASE WHEN @clear_pins::boolean THEN NULL ELSE tls_pin_not_after END,

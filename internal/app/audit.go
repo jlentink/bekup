@@ -14,40 +14,50 @@ import (
 	"github.com/jlentink/bekup/internal/instancekeys"
 )
 
-// newAuditHeadSigner loads the master keyring (fail closed: serve does not
-// start without it) and checks that it opens the active instance signing
-// key, if one exists, so a wrong or rotated-away keyring is caught at startup
-// rather than at the first signature. The key itself is created lazily by
-// the first signature (D-101).
-func (a *App) newAuditHeadSigner(ctx context.Context) (*headSignerComponent, error) {
+// loadKeyring loads the master keyring (fail closed: bekup does not start
+// without it), verifies it against the stored key-check values and checks
+// that it opens the active instance signing key, if one exists, so a wrong
+// or rotated-away keyring is caught at startup rather than at the first
+// signature. The key itself is created lazily by the first signature
+// (D-101).
+func (a *App) loadKeyring(ctx context.Context) error {
 	cfg := a.opts.Config
 	raw, err := cfg.MasterKey()
 	if err != nil {
-		return nil, fmt.Errorf("refusing to start: read master keyring: %w", err)
+		return fmt.Errorf("refusing to start: read master keyring: %w", err)
 	}
 	a.keyring, err = crypto.ParseKeyring(raw)
 	crypto.Zero(raw)
 	if err != nil {
-		return nil, fmt.Errorf("refusing to start: master keyring: %w", err)
+		return fmt.Errorf("refusing to start: master keyring: %w", err)
 	}
 	cctx, cancel := context.WithTimeout(ctx, startupTimeout(cfg))
 	defer cancel()
 	// The key-check values catch a wrong keyring before anything is
 	// decrypted (D-086, D-119).
 	if err := a.checkKeyring(cctx); err != nil {
-		return nil, fmt.Errorf("refusing to start: %w", err)
+		return fmt.Errorf("refusing to start: %w", err)
 	}
 	key, err := instancekeys.Load(cctx, sqlc.New(a.pool), a.keyring)
 	switch {
 	case errors.Is(err, instancekeys.ErrNoActiveKey):
 	case err != nil:
-		return nil, fmt.Errorf("refusing to start: the master keyring cannot open the instance signing key in the database (wrong keyring?): %w", err)
+		return fmt.Errorf("refusing to start: the master keyring cannot open the instance signing key in the database (wrong keyring?): %w", err)
 	default:
 		key.Destroy()
 	}
+	return nil
+}
+
+// newAuditHeadSigner loads the keyring (loadKeyring) and builds the
+// periodic audit chain head signer.
+func (a *App) newAuditHeadSigner(ctx context.Context) (*headSignerComponent, error) {
+	if err := a.loadKeyring(ctx); err != nil {
+		return nil, err
+	}
 	return &headSignerComponent{
 		signer:   audit.NewHeadSigner(a.pool, a.keyring, a.auditor, nil),
-		interval: cfg.Security.AuditHeadSignInterval.D(),
+		interval: a.opts.Config.Security.AuditHeadSignInterval.D(),
 		logger:   a.opts.Logger,
 	}, nil
 }

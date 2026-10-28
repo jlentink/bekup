@@ -28,8 +28,8 @@ encrypts them and writes them to disk, S3 and SFTP.
 * [bekup keys](bekup_keys.md)	 - Generate and rotate the master keyring
 * [bekup migrate](bekup_migrate.md)	 - Apply database migrations (as bekup_owner); default action: up
 * [bekup runner](bekup_runner.md)	 - Run the Docker runner (mTLS gRPC, reads runner.toml)
-* [bekup serve](bekup_serve.md)	 - Run the web UI, GraphQL API and scheduler
+* [bekup serve](bekup_serve.md)	 - Run the web UI, GraphQL API, scheduler and background workers
 * [bekup verify](bekup_verify.md)	 - Verify a backup artifact offline (not implemented yet)
 * [bekup version](bekup_version.md)	 - Print the bekup version
-* [bekup worker](bekup_worker.md)	 - Run background workers only (not implemented yet)
+* [bekup worker](bekup_worker.md)	 - Run background workers only
 

@@ -151,9 +151,17 @@ type Connection struct {
 	// NotReadyReason says what is missing (a fixed, presentable text).
 	Ready          bool
 	NotReadyReason string
-	CreatedBy      *uuid.UUID
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// MaxConcurrentRuns is the connection's own run limit as stored (nil =
+	// the global workers.max_runs_per_connection); it may exceed a since
+	// lowered workers.max_concurrent_runs. EffectiveMaxConcurrentRuns is the
+	// limit that applies, clamped to that global cap (task 3.13, D-156);
+	// the cap itself is enforced by runstate's TryInsertRunSlot, which
+	// counts every run slot of the process against it.
+	MaxConcurrentRuns          *int
+	EffectiveMaxConcurrentRuns int
+	CreatedBy                  *uuid.UUID
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 // SSHInput sets the SSH tunnel. It replaces the non-secret tunnel
@@ -186,6 +194,10 @@ type CreateInput struct {
 	ClientCertPEM string
 	ClientKeyPEM  []byte
 	SSH           *SSHInput
+	// MaxConcurrentRuns is the connection's own run limit (nil = the
+	// global workers.max_runs_per_connection); 1..64, at most
+	// workers.max_concurrent_runs.
+	MaxConcurrentRuns *int
 }
 
 // UpdateInput changes a connection; nil fields stay unchanged. The engine
@@ -210,6 +222,10 @@ type UpdateInput struct {
 	// credentials and host-key pin.
 	SSH        *SSHInput
 	DisableSSH bool
+	// MaxConcurrentRuns sets the connection's own run limit;
+	// ClearMaxConcurrentRuns returns to the global default.
+	MaxConcurrentRuns      *int
+	ClearMaxConcurrentRuns bool
 }
 
 // PinInput selects the anchor of a certificate pin: CertIndex into a fresh

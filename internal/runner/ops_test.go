@@ -756,6 +756,40 @@ func TestVerifyDumpPostgresOffline(t *testing.T) {
 	}
 }
 
+func verifyTrailerMsg(total int) *runnerpb.VerifyDumpRequest {
+	return &runnerpb.VerifyDumpRequest{Msg: &runnerpb.VerifyDumpRequest_Trailer{Trailer: &runnerpb.VerifyDumpTrailer{TotalBytes: uint64(total)}}} //nolint:gosec // test sizes
+}
+
+// TestVerifyDumpStreamed: a streamed verify (total_bytes 0, task 3.6) needs
+// its trailer, for the Go check and for the offline container alike.
+func TestVerifyDumpStreamed(t *testing.T) {
+	env := newOpsEnv(t)
+	good := []byte("-- MySQL dump\nINSERT 1;\n-- Dump completed on 2026-10-27  9:00:00\n")
+	msgs := append(verifyMsgs(runnerpb.Engine_ENGINE_MYSQL, "8.4", runnerpb.DumpKind_DUMP_KIND_DATABASE, 0, good[:10], good[10:]), verifyTrailerMsg(len(good)))
+	resp, err := env.ops.verifyDump(&fakeClientStream[runnerpb.VerifyDumpRequest]{ctx: t.Context(), msgs: msgs})
+	if err != nil || !resp.GetVerified() {
+		t.Fatalf("streamed: %v %v", resp, err)
+	}
+	// Without the trailer the stream is incomplete.
+	msgs = verifyMsgs(runnerpb.Engine_ENGINE_MYSQL, "8.4", runnerpb.DumpKind_DUMP_KIND_DATABASE, 0, good)
+	if _, err := env.ops.verifyDump(&fakeClientStream[runnerpb.VerifyDumpRequest]{ctx: t.Context(), msgs: msgs}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("no trailer: %v", err)
+	}
+	// PostgreSQL archive through the offline container.
+	archive := bytes.Repeat([]byte("PGDMP"), 1000)
+	env.exec.script = []func(context.Context, *call) (executor.Result, error){
+		func(context.Context, *call) (executor.Result, error) { return executor.Result{}, nil },
+	}
+	msgs = append(verifyMsgs(runnerpb.Engine_ENGINE_POSTGRES, "17", runnerpb.DumpKind_DUMP_KIND_DATABASE, 0, archive[:2000], archive[2000:]), verifyTrailerMsg(len(archive)))
+	resp, err = env.ops.verifyDump(&fakeClientStream[runnerpb.VerifyDumpRequest]{ctx: t.Context(), msgs: msgs})
+	if err != nil || !resp.GetVerified() {
+		t.Fatalf("streamed archive: %v %v", resp, err)
+	}
+	if c := env.exec.Calls()[0]; !bytes.Equal(c.stdin, archive) || c.spec.Step != verifyStep {
+		t.Fatalf("stdin %d bytes, step %q", len(c.stdin), c.spec.Step)
+	}
+}
+
 // --- Restore ----------------------------------------------------------------
 
 func restoreMsgs(tg *runnerpb.Target, db, src string, dk runnerpb.DumpKind, total int, chunks ...[]byte) []*runnerpb.RestoreRequest {

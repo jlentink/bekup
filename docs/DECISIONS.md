@@ -131,7 +131,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-103](#d-103-app-db-tls-details-url-handling-require--ca-channel-binding-postgres-certificate-and-wrapper-task-10) | App DB TLS details: URL handling, require + CA, channel binding, postgres certificate and wrapper (task 1.0) | accepted (item 3 superseded by D-104) |
 | [D-104](#d-104-app-db-tls-ecdsa-postgres-issuer-and-required-scram-channel-binding) | App DB TLS: ECDSA postgres issuer and required SCRAM channel binding | accepted |
 | [D-105](#d-105-graphql-server-details-transport-limits-access-convention-error-codes-task-12) | GraphQL server details: transport, limits, access convention, error codes (task 1.2) | accepted |
-| [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted |
+| [D-106](#d-106-authorization-model-operation-catalog-policy-matrix-and-owner-scope-task-14) | Authorization model: operation catalog, policy matrix and owner scope (task 1.4) | accepted (job.encryption_keys_edit roles superseded by D-154) |
 | [D-107](#d-107-passwords-sessions-lockout-and-the-login-api-task-15) | Passwords, sessions, lockout and the login API (task 1.5) | accepted ("Login = step-up" superseded by D-112; lockout counting superseded by D-117) |
 | [D-108](#d-108-websocket-subscription-transport-session-watcher-and-session-event-bus-task-110) | WebSocket subscription transport, session watcher and session event bus (task 1.10) | accepted (re-validation details superseded by D-118; transport, caps, close codes and web client superseded by D-124) |
 | [D-109](#d-109-webauthn-passkeys-as-a-second-factor-task-18) | WebAuthn passkeys as a second factor (task 1.8) | accepted (last-factor error code superseded by D-112; AAL2 without user verification superseded by D-116) |
@@ -167,6 +167,26 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-139](#d-139-pin-anchors-are-a-self-signed-leaf-or-a-private-ca-the-same-ca-leaf-window-is-accepted-residual-risk) | Pin anchors are a self-signed leaf or a private CA; the same-CA leaf window is accepted residual risk | accepted |
 | [D-140](#d-140-ssh-policy-and-host-names-in-one-place-endpoint-bound-host-key-and-pin-confirmation-no-password-reuse-after-retargeting-m2-review) | SSH policy and host names in one place, endpoint-bound host-key and pin confirmation, no password reuse after retargeting (M2 review) | accepted |
 | [D-141](#d-141-backup-completeness-evidence-source-stats-and-test-restore-comparison) | Backup completeness evidence: source stats and test-restore comparison | accepted |
+| [D-142](#d-142-job-encryption-keys-tables-versioning-aad-authorization-split-and-the-service-api-task-32) | Job encryption keys: tables, versioning, AAD, authorization split and the service API (task 3.2) | accepted (item 5 key-change roles superseded by D-154) |
+| [D-143](#d-143-schedule-format-and-next-run-math-anchored-intervals-wall-clock-dst-rules-for-cron-catch-up-decision-schedule-limits) | Schedule format and next-run math: anchored intervals, wall-clock DST rules for cron, catch-up decision, schedule limits | accepted |
+| [D-144](#d-144-backup-pipeline-bounded-fan-out-with-lag-drop-artifact-naming-and-the-signed-manifest-format-task-31) | Backup pipeline: bounded fan-out with lag drop, artifact naming and the signed manifest format (task 3.1) | accepted |
+| [D-145](#d-145-scheduler-loop-and-river-setup-minimal-jobs-table-skip-records-kind-catalog-ids-only-args-queue-timeouts-and-process-model-task-34) | Scheduler loop and River setup: minimal jobs table, skip records, kind catalog, IDs-only args, queue timeouts and process model (task 3.4) | accepted |
+| [D-146](#d-146-backup-jobs-data-model-service-ownership-queries-delete-in-use-checks-and-the-graphql-api-task-35) | Backup jobs: data model, service, ownership queries, delete-in-use checks and the GraphQL API (task 3.5) | accepted |
+| [D-147](#d-147-backup-run-worker-run-tables-streamed-verification-concurrency-slots-cancellation-and-run-logs-task-36) | Backup run worker: run tables, streamed verification, concurrency slots, cancellation and run logs (task 3.6) | accepted |
+| [D-148](#d-148-retention-worker-per-destination-policy-completeness-safety-checks-object-lock--no-delete-interplay-and-audit-shape-task-38) | Retention worker: per-destination policy, completeness, safety checks, Object Lock / no-delete interplay and audit shape (task 3.8) | accepted |
+| [D-149](#d-149-run-history-queries-and-live-run-events-scoped-reads-per-operation-batch-loader-delivery-time-re-load-and-log-streams-task-37) | Run history queries and live run events: scoped reads, per-operation batch loader, delivery-time re-load and log streams (task 3.7) | accepted |
+| [D-150](#d-150-download-tickets-single-use-session-bound-tickets-use-time-re-check-manifest-pre-verification-held-back-tail-and-sealed-identity-handoff-task-39) | Download tickets: single-use session-bound tickets, use-time re-check, manifest pre-verification, held-back tail and sealed identity handoff (task 3.9) | accepted |
+| [D-151](#d-151-completeness-evidence-stats-inside-the-dump-call-same-snapshot-postgresql-counts-warnings-model-and-backup_stats-task-310) | Completeness evidence: stats inside the Dump call, same-snapshot PostgreSQL counts, warnings model and backup_stats (task 3.10) | accepted |
+| [D-152](#d-152-hostile-target-databases-pinned-session-settings-schema-qualified-sql-and-relation-kind-restriction-for-every-go-driver-session) | Hostile target databases: pinned session settings, schema-qualified SQL and relation-kind restriction for every Go-driver session | accepted (item 6 superseded by D-153) |
+| [D-153](#d-153-mysqlmariadb-statistics-are-estimates-only-no-statement-on-user-tables-or-views) | MySQL/MariaDB statistics are estimates only: no statement on user tables or views | accepted |
+| [D-154](#d-154-job-encryption-key-changes-are-admin-only-m3-review) | Job encryption key changes are admin only (M3 review) | accepted |
+| [D-155](#d-155-m3-review-fixes-artifact-holds-run-notices-byte-bounded-warnings-exact-manifest-signing-scheduler-savepoints-retry-cancellation-and-coalesced-run-events) | M3 review fixes: artifact holds, run notices, byte-bounded warnings, exact manifest signing, scheduler savepoints, retry cancellation and coalesced run events | accepted |
+| [D-156](#d-156-job-calendar-start-early-per-connection-run-limit-and-enabledisable) | Job calendar, start early, per-connection run limit and enable/disable | accepted |
+| [D-157](#d-157-start-the-next-planned-run-early-semantics-details-task-312) | Start the next planned run early: semantics details (task 3.12) | accepted (amended by D-160) |
+| [D-158](#d-158-per-connection-run-limit-details-task-313) | Per-connection run limit: details (task 3.13) | accepted |
+| [D-159](#d-159-job-calendar-query-details-task-314) | Job calendar query: details (task 3.14) | accepted (amended by D-160) |
+| [D-160](#d-160-m3-addendum-review-fixes-one-early-start-ahead-calendar-catch-up-time-prefix-truncation-and-bounded-reads) | M3 addendum review fixes: one early start ahead, calendar catch-up, time-prefix truncation and bounded reads | accepted |
+| [D-161](#d-161-notification-event-catalog-and-per-user-defaults) | Notification event catalog and per-user defaults | accepted |
 
 ---
 
@@ -2830,7 +2850,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-106: Authorization model: operation catalog, policy matrix and owner scope (task 1.4)
 
 - **Date:** 2026-10-26
-- **Status:** accepted (2026-10-27, user accepted all M1 proposals)
+- **Status:** accepted (2026-10-27, user accepted all M1 proposals); the roles of `job.encryption_keys_edit` superseded by D-154
 - **Decided by:** agent with user approval (task 1.4)
 - **Context:** D-011 to D-015, D-047, D-053, D-057 and D-067 fix who may do
   what in broad terms. The plan leaves open how the policy is expressed,
@@ -5919,4 +5939,1712 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   contain table names and counts but no data, and are covered by the
   manifest signature; they are as sensitive as the manifest itself.
 - **Related:** tasks 3.1, 3.6, 3.10, 4.6, 4.7, 6.6, 7.1; D-134, D-133.
+
+## D-142: Job encryption keys: tables, versioning, AAD, authorization split and the service API (task 3.2)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals); item 5 (maintainers may change keys) superseded by D-154
+- **Decided by:** agent with user approval (task 3.2)
+- **Context:** D-008, D-016 and D-040 fix the policy (age on by default,
+  versioned passphrase or public recipient, generated keys shown once,
+  admin-only opt-out, passphrase export) but not the storage, the
+  authorization split between maintainers and admins or the API the
+  pipeline (3.1), the job CRUD (3.5) and restores (4.1) build on. The jobs
+  table does not exist yet.
+- **Decision:**
+  1. **Tables** (migration 00013): `job_encryption` (job_id PK, mode
+     `passphrase|recipient|none`, `opted_out_by/at`, `opt_out_reason`;
+     mode `none` iff the opt-out fields are set), `job_passphrases`
+     (`(job_id, version)` PK, `sealed_passphrase`, created_by/at,
+     retired_at) and `job_recipients` (`(job_id, version)` PK, canonical
+     `age1...` recipient, fingerprint, label, `generated`, created_by/at,
+     retired_at). A partial unique index allows one active (unretired)
+     version per job and table. `job_id` has no foreign key until task 3.5
+     adds `REFERENCES jobs (id)`. `bekup_app` has no DELETE/TRUNCATE on the
+     three tables and only `UPDATE (retired_at)` on the key tables; a
+     trigger lets `retired_at` change only from NULL to a timestamp, so a
+     key is never deleted, revived or rewritten (old artifacts need old
+     versions).
+  2. **Sealing:** `Keyring.Seal` under AAD
+     `job_passphrases:<job_id>:v<version>` (table, job id, version as the
+     field), so a ciphertext moved to another job or version fails to
+     open. Versions are allocated under a row lock on `job_encryption`.
+  3. **Recipients:** only age X25519 recipients (no SSH, plugin or
+     post-quantum recipients), stored canonical. The fingerprint is the
+     lowercase hex SHA-256 of the recipient string, identical to the
+     manifest's `pipeline.RecipientFingerprint`. A generated keypair's
+     identity is returned once (string + age-keygen style identity file
+     `bekup-job-<id>-v<n>.agekey`) and never stored or logged.
+  4. **User-chosen passphrases** need at least 20 characters, no control
+     characters or surrounding white space, at most 1024 bytes and zxcvbn
+     score 4 (backup files face offline guessing for their whole
+     lifetime). Generated passphrases are 10 EFF words (D-088).
+  5. **Authorization** (existing operations, D-106): key changes
+     (set/generate passphrase or keypair) are `job.encryption_keys_edit`
+     (admin + maintainer, step-up: maintainers manage jobs and the
+     encryption config is part of the job editor); the opt-out is
+     `job.encryption_opt_out` (admin, step-up); the export is
+     `job.passphrase_export` (admin, step-up). **Opting back in** (or
+     setting a key while opted out, which also opts in) is a tightening
+     and needs only `job.encryption_keys_edit`. Reading the encryption
+     status (mode, versions, recipient, badge) is nested under the job and
+     inherits `job.view`; it never contains key material. The service
+     re-checks every change with `Policy.Authorize` on the context's
+     principal and requires the actor to be that principal.
+  6. **Audit and alerts:** `job.encryption_passphrase_set` (+
+     `secret.changed`), `job.encryption_recipient_set` (public recipient,
+     fingerprint, label), `job.encryption_opted_out` + `security.opt_out`
+     (`setting: job.encryption`, reason), `job.encryption_opted_in`,
+     `job.passphrases_exported` (versions). The opt-out and the export
+     raise an alert hook (`AlertFunc`, logged until task 5.5). The export
+     is returned only after its audit entry committed.
+  7. **Service API** (`internal/jobkeys`): `Status`, `Passphrases`,
+     `Recipients`, `SetPassphrase`, `GeneratePassphrase`, `SetRecipient`,
+     `GenerateAgeKeypair`, `OptOut`, `OptIn`, `ExportPassphrases` (+ a
+     documented text file format), `InitTx` (task 3.5's job creation in
+     its transaction: passphrase by default, generated unless supplied;
+     never opted out), and for workers `KeyMaterialFor`,
+     `Encryptor(job)` (`pipeline.Encryptor`), `PassphraseForVersion` and
+     `RecipientForVersion`. A job without a `job_encryption` row fails
+     closed (`ErrNotConfigured`).
+- **Alternatives considered:** a single key table for both kinds (rejected:
+  different columns and invariants); hard deletes of old passphrases after
+  retention (rejected: an artifact can outlive any guess, and a deleted
+  version makes its artifacts unrecoverable); admin-only key changes
+  (rejected: the plan gives maintainers the job editor; changes need
+  step-up and are audited); admin-only opt-in (rejected: re-enabling
+  encryption only tightens security).
+- **Consequences:** Old passphrase versions live as long as the instance
+  (sealed); a stolen master keyring plus a DB dump reveals all versions (as
+  for every stored secret, D-046). A maintainer with step-up can replace a
+  job's key with one they know, which affects only future artifacts and is
+  audited. Task 3.5 must add the foreign keys, call `InitTx` in
+  `createJob` and wire the GraphQL fields; task 3.6 stores
+  `PassphraseVersion`/recipient version per artifact.
+- **Related:** tasks 3.1, 3.2, 3.5, 3.6, 4.1, 4.7, 5.5, 6.9; D-008, D-016,
+  D-040, D-046, D-085, D-086, D-088, D-106.
+
+## D-143: Schedule format and next-run math: anchored intervals, wall-clock DST rules for cron, catch-up decision, schedule limits
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.3)
+- **Context:** D-009 and D-044 fix the schedule kinds and the DST rules but
+  not the stored format, the phase of multi-day intervals, the month-end
+  rule in detail, how cron meets the DST rules, what "collapse into one
+  catch-up run" returns, or the input limits.
+- **Decision:**
+  - A schedule is a compact JSON object (`internal/scheduler.Schedule`):
+    `{"kind":"manual"}`; `{"kind":"interval","every":N,"unit":
+    "minutes|hours|days|weeks|months","anchor":"YYYY-MM-DDTHH:MM",
+    "weekday":"monday" (weeks),"day_of_month":31 (months),"timezone":
+    "Europe/Amsterdam"}`; `{"kind":"cron","cron":"0 3 * * 1-5",
+    "timezone":"..."}`. The anchor is a local date-time in the zone and is
+    the first occurrence; it fixes the phase of "every 2 days/weeks/months"
+    and the time of day. `weekday`/`day_of_month` default to the anchor's
+    and are stored explicitly (canonical form). Parsing is strict (unknown
+    fields, trailing data and > 1 KiB rejected).
+  - Minutes/hours: anchor instant + k·interval in elapsed time. Days/weeks:
+    anchor date + k·N days (weeks: from the first configured weekday on or
+    after the anchor date) at the anchor time; months: anchor month + k·N,
+    always targeting `day_of_month`, clamped to the last day of shorter
+    months (31 → Feb 28/29 → Mar 31, never drifting).
+  - Local times are resolved deterministically (not via `time.Date`, whose
+    choice is unspecified): ambiguous → the earlier instant (runs once);
+    nonexistent → read with the offset before the transition, i.e. shifted
+    forward by the gap (02:30 → 03:30; Lord Howe 02:15 → 02:45).
+  - Cron: robfig/cron/v3 parses only (5 fields, names, ranges, steps, `?`,
+    plus `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`,
+    `@midnight`, `@hourly`; `@every`, `@reboot`, seconds and `TZ=`/
+    `CRON_TZ=` prefixes rejected; parser panics recovered; empty fields and
+    expressions without any matching date rejected). Occurrences are
+    computed by bekup on the wall clock with the same resolution rules,
+    because robfig's `Next` skips nonexistent times, fires twice in the
+    fall-back hour and drifts by 30 minutes in half-hour DST zones. A
+    matching time that is shifted onto an existing occurrence runs once; in
+    the repeated fall-back hour an hourly cron runs only in the first pass.
+  - `Due(schedule, next_run_at, now)` returns at most one run, standing for
+    the stored `next_run_at` (River unique key), flags `CatchUp` when more
+    than one occurrence passed, and the new `next_run_at` = first
+    occurrence strictly after now (missed ones are skipped).
+  - Limits: `scheduler.min_interval` (new config key, default 5m, 1m–24h)
+    applies on create/update to minute/hour intervals and to the closest
+    pair of cron occurrences; computation never re-checks it, so tightening
+    it does not break existing jobs. Hard caps: every ≤ 1440 minutes,
+    168 hours, 366 days, 52 weeks, 24 months; anchor years 2000–2199; cron
+    ≤ 128 characters; previews ≤ 50; cron search ≤ 29 years. Zones must be
+    IANA names (no `Local`, no paths) and `time/tzdata` is embedded in the
+    binary and the package.
+- **Alternatives considered:** separate time-of-day/weekday/day fields
+  without an anchor (no phase for N > 1); clamping relative to the previous
+  occurrence (drifts 31 → 28 forever); robfig's own `Next` (violates
+  D-044 at DST edges); `rapid` for property tests (a new dependency; seeded
+  `math/rand/v2` loops with fixed seeds suffice and stay deterministic).
+- **Consequences:** Schedules behave predictably across DST in every zone,
+  including 30-minute and midnight transitions; one well-defined run per
+  missed period. The `min_interval` floor and input caps bound the DoS
+  surface (SECURITY.md SC-2/SC-3). A cron expression valid for robfig may
+  be refused here (seconds, `@every`, `TZ=`, dense minutes).
+- **Related:** tasks 3.3, 3.4, 3.5, 6.5; D-009, D-044; `internal/scheduler`,
+  `docs/guides/jobs-and-schedules.md`.
+
+## D-144: Backup pipeline: bounded fan-out with lag drop, artifact naming and the signed manifest format (task 3.1)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.1)
+- **Context:** The plan fixes the chain (counter → zstd → age → SHA-256 →
+  bounded per-destination fan-out, laggards dropped, run `partial`) and the
+  manifest content (D-038, D-087, D-141), but not the buffering and drop
+  semantics, the artifact name of the globals dump, the manifest schema,
+  its serialization or how a verifier binds it to the database.
+- **Decision:**
+  1. **Fan-out.** The stored bytes are cut into immutable chunks
+     (default 1 MiB, 4 KiB–16 MiB) shared by all targets; each target has a
+     bounded channel (default 8 chunks, max 256) read by its `Put`. The
+     fan-out holds at most (buffer + 2) × chunk bytes, plus one chunk per
+     dropped target whose backend has not returned yet; a live but slow
+     target applies backpressure to the source, a dropped one never does.
+     A target is dropped when its `Put` fails, or when its buffer stays
+     full for `LagTimeout` (default 2 min; one deadline per chunk shared by
+     all blocked targets, so N slow targets cost one threshold, not N);
+     after the stream ended, a target that has unread data but reads
+     nothing for `LagTimeout` is dropped too. Dropping cancels the target's
+     `Put` context. The reader handed to `Put` returns `io.EOF` **only**
+     after every byte was queued and only to a target that was not dropped;
+     on abort, cancellation or drop it returns an error, so the backends'
+     atomic finalize (D-121, D-128, D-129) never publishes a partial
+     object. A target whose `Put` reports success with a size or SHA-256
+     different from the streamed bytes (or without reading to EOF) counts
+     as dropped (`verify`) and the object is deleted best-effort. All
+     targets dropped → `ErrAllDestinationsFailed`; `ctx` canceled → every
+     `Put` canceled.
+  2. **Compression and encryption.** zstd (klauspost) level 1–22 (default
+     3), encoder concurrency 1–8 (default 2), frame CRC on. age with a
+     passphrase (scrypt work factor 18 by default, at most 20, D-088) or
+     1–16 X25519 recipients; mode `none` only with the explicit
+     `OptedOut` flag (D-008); the zero configuration is invalid. The
+     pipeline borrows the passphrase and never destroys it. The interface
+     to task 3.2 is `pipeline.Encryption` / `pipeline.Encryptor`.
+     Reading (`OpenArtifact`) uses the bounded crypto helpers and a zstd
+     decoder with one goroutine and a 64 MiB maximum window. The SHA-256 is
+     computed over both the raw dump and the stored artifact.
+  3. **Names.** Databases: `{enc(db)}.{dump|sql}.zst[.age]`; globals:
+     `globals.globals.sql.zst[.age]` (the extra `globals` extension part
+     keeps a database named `globals` from colliding). `.age` is omitted
+     only for opt-out jobs.
+  4. **Manifest v1** (`docs/reference/artifact-format.md`): format version,
+     bekup version, instance key ID, job ID + slug, run ID, run timestamp
+     (the directory timestamp, UTC seconds), created_at, engine (kind,
+     catalog version key, server version), entries (`db` as a reversible,
+     never-hashed percent encoding of the full name; kind; path relative to
+     the manifest; raw/stored size; stored/raw SHA-256; compression;
+     encryption mode + passphrase version, or recipient version (the
+     job's recipient key generation, D-142) + recipient fingerprints =
+     hex SHA-256 of the canonical `age1...` string), an optional extensible
+     `stats` object (task 3.10) and warnings. Validation is strict (paths
+     must match the db name and encryption mode, one globals entry at
+     most, bounded sizes and counts).
+  5. **Canonical JSON:** UTF-8, sorted keys (byte order), no whitespace,
+     no duplicate keys, Go `encoding/json` string escaping without HTML
+     escaping, **integers only** (int64; other numbers must be strings),
+     depth ≤ 32, ≤ 16 MiB. `manifest.json` is the canonical object
+     `{"key_id","manifest","signature"}`; the signature is ed25519 over
+     `"bekup-sig-v1" 0x00 "manifest" 0x00 <canonical manifest>` (D-087).
+     The verifier re-canonicalizes the embedded manifest (so a reformatted
+     file still verifies), then requires the typed manifest to re-serialize
+     to exactly the signed bytes (no case-folded keys, unknown fields or
+     alternative timestamp forms).
+  6. **Verification.** `Verify(file, keys, binding)` checks the signature
+     with the named key (retired keys verify while known), that the
+     envelope's key ID equals the signed one, and the binding: job ID and
+     run ID (required), job slug and run timestamp (when given) → a
+     mismatch is `ErrReplay`; the exact set of entries with stored size and
+     SHA-256 (raw SHA-256 when given) → `ErrBindingMismatch`. A binding
+     without job/run IDs or entries is refused. `VerifySignature` (no
+     binding) is reserved for offline tools without the database (4.7).
+  7. **Writing.** `WriteManifest` signs and puts `manifest.json` to each
+     target concurrently (expected SHA-256, never overwrite), only after
+     the entries are finalized and only to targets holding all entries;
+     per-target outcomes are returned.
+- **Alternatives considered:** one `io.Pipe` per target without chunk
+  sharing (copies per target, no lag detection); dropping on per-chunk
+  timers (N slow targets would stall N × threshold); storing the manifest
+  as base64 of the signed bytes (robust, but unreadable for operators);
+  RFC 8785 JCS with floats (needs ECMAScript number formatting; integers
+  suffice); signing the file bytes as written (any reformatting breaks
+  verification); `globals.sql.zst.age` (collides with a database named
+  `globals` for SQL dumps).
+- **Consequences:** Memory per artifact is bounded and configurable; a bad
+  destination costs at most one lag threshold. Restores (4.1) must call
+  `Verify` with the run's DB records, then compare the staged artifact's
+  SHA-256 with the verified entry. Stats producers (3.10) must use
+  integers and strings only. Security impact: replayed or swapped
+  manifests and artifacts are rejected; a compromised `serve` can still
+  sign (T4, unchanged).
+- **Related:** tasks 3.1, 3.2, 3.6, 3.10, 4.1, 4.7; D-008, D-038, D-087,
+  D-088, D-121, D-128, D-129, D-141, D-142; `internal/pipeline`,
+  `docs/reference/artifact-format.md`.
+
+## D-145: Scheduler loop and River setup: minimal jobs table, skip records, kind catalog, IDs-only args, queue timeouts and process model (task 3.4)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.4)
+- **Context:** D-043 and D-044 fix the River settings and the scheduler
+  transaction, but jobs (task 3.5) and the backup worker (3.6) do not exist
+  yet, River v0.49 has constraints the plan does not mention (required
+  unique states, insert-time kind checks, an owner-only reindexer), and
+  the plan leaves open where skipped occurrences go, how timeouts map to
+  per-job limits, how the process model splits work and how "args never
+  contain secrets" is enforced.
+- **Decision:**
+  1. **Minimal `jobs` table now** (migration 00014): `id`, `enabled`,
+     `schedule` (canonical D-143 JSON, object ≤ 1 KiB), `next_run_at`,
+     `last_scheduled_at`, `deleted_at`, timestamps, a partial due index.
+     Task 3.5 extends it with `ALTER TABLE` and adds the foreign keys from
+     the 3.2 key tables; `bekup_app` cannot DELETE jobs (soft delete).
+     The jobs service (3.5) sets `next_run_at` (= `scheduler.Next(now)`)
+     on create, schedule change and enable; the loop only handles rows
+     with a non-NULL `next_run_at <= now`, never `{"kind":"manual"}`
+     (filtered in SQL and by `Due`). Chosen over a `DueSource` interface
+     because sqlc needs real tables and 3.5 extends rather than replaces.
+  2. **Loop:** every `scheduler.tick_interval` on every serve instance
+     with `scheduler.enabled` (default on; independent of workers): per
+     batch (`scheduler.batch_size`, default 100, ≤ 1000; at most 20
+     batches per tick) one transaction locks due jobs `FOR UPDATE SKIP
+     LOCKED`, evaluates `Due` without re-checking `min_interval`, inserts
+     `backup_run {job_id, scheduled_for, trigger: schedule|catch_up}`,
+     and advances `next_run_at`/`last_scheduled_at`. A River duplicate
+     (the job's previous run is still active) skips the occurrence; an
+     undecodable/uncompilable schedule or one without a further
+     occurrence sets `next_run_at` NULL. Both are recorded in a new
+     `schedule_skips` table (`still_running` | `unschedulable`; logged,
+     metric hook), not in the audit log (operational, not security
+     events); rows are deleted after 90 days by a periodic maintenance job
+     (`schedule_skip_cleanup`, every 6h). A tick is bounded by 30s;
+     shutdown mid-tick rolls back. The clock is injectable; metrics go
+     through `scheduler.Metrics` (no-op until 5.6).
+  3. **Queues and timeouts:** `backup`, `restore`, `retention`, `notify`,
+     `maintenance` with per-process concurrency `[workers]
+     *_queue_workers` (new keys; defaults 4/2/2/8/1, ≤ 10000). Each
+     queue has one attempt timeout: `backup_timeout` (the cap of the
+     per-job timeout of 3.5; the 3.6 worker enforces the job's own
+     shorter timeout inside `Work`, because River's `Timeout` cannot read
+     the job row and args carry IDs only), `restore_timeout`, new
+     `retention_timeout` (1h), `notify_timeout`, maintenance 15 min.
+     `queue.Register` wraps every worker so its `Timeout` is the queue's
+     (the worker's own is ignored). Default attempts per queue: backup 2,
+     restore 1 (validated, kinds cannot raise it), retention 3, notify
+     10, maintenance 3. `RescueStuckJobsAfter` = longest queue timeout +
+     1h (19h with defaults).
+  4. **Uniqueness:** unique kinds use `ByArgs` on the fields tagged
+     `river:"unique"` (`backup_run`: `job_id` only) and `ByState` =
+     available, **pending**, scheduled, running, retryable. River v0.49
+     requires `pending` in any custom set; bekup never creates pending
+     jobs, so this equals D-043's list. Completed, canceled and discarded
+     never block.
+  5. **Kind catalog and insert path:** every kind (queue, attempts
+     override, unique flag, args type) is declared in
+     `internal/queue/kinds.go`; `Client.InsertTx(ctx, tx, args, opts)` is
+     the only insert path and applies the catalog's options, so an
+     insert-only client (`serve --no-worker`) inserts exactly as a worker
+     would. River's insert-time "kind not registered" check is disabled
+     (`SkipUnknownJobCheck`; the catalog check replaces it) and workers set
+     `FetchOnlyKnownKinds`, so a kind whose worker is not deployed (yet,
+     or in an older binary during a rolling upgrade) waits instead of
+     failing as unknown.
+  6. **IDs-only args:** `queue.CheckArgs` walks the args type: fields may
+     be only `uuid.UUID`, `time.Time`, bool, integers, named string types
+     (enums) and pointers/slices/structs of those; plain strings, byte
+     slices/arrays, maps, interfaces and floats are rejected, as is any
+     Go or JSON field name matching
+     password/passphrase/pwd/key/token/secret/identity/credential/private/
+     cookie/dsn. It runs in `queue.New` (startup fails closed), in
+     `Register`, and in a test over the whole catalog. River's logger is
+     wrapped to drop `args`/`encoded_args`/`metadata`/`output` attributes.
+  7. **River housekeeping:** completed rows kept 24h, canceled and
+     discarded 7 days (the run history lives in bekup's tables);
+     reindexer disabled (`bekup_app` does not own River's indexes;
+     operators can `REINDEX` as `bekup_owner`).
+  8. **Process model:** `serve` runs HTTP + scheduler + workers;
+     `serve --no-worker` keeps the scheduler and an insert-only client;
+     `bekup worker` runs only the workers (no HTTP, no scheduler) after the
+     same checks as serve (CheckAppRole, schema version, keyring KCV +
+     instance key, weakened DB TLS audit) with application name
+     `bekup-worker`. Shutdown: River stops fetching, running jobs get
+     `workers.shutdown_timeout` (new, default 2m, ≤ 1h), then their
+     contexts are canceled and the process waits at most 30s more.
+     Compose gives serve a 180s stop grace period. `database.max_conns`
+     default rises from 10 to 25 (a worker process wants the sum of its
+     queue workers + 4; startup warns otherwise).
+  9. **Registration API for later tasks:** add the kind + args type to
+     the catalog, implement `river.Worker[T]`, register it in
+     `app.registerWorkers` with `queue.Register(ws, w)` (periodic jobs via
+     `ws.AddPeriodic`).
+- **Alternatives considered:** a `DueSource` interface with a test table
+  (sqlc cannot generate queries against a missing table; 3.5 would rewrite
+  them); recording skips in the audit log (hash-chained security log
+  flooded by operational events) or only in logs (no record for the UI
+  and dead-man logic); the scheduler only in processes with workers
+  (couples two unrelated concerns; SKIP LOCKED makes it safe anywhere);
+  the scheduler also in `bekup worker` (the plan's worker runs only
+  workers; one place to toggle it); per-job timeouts in args (args are
+  IDs only) or River's per-job `Timeout` reading the DB (no context,
+  blocking in River's executor); a deny-list of field names alone
+  (a free-form string field could still carry a secret); River's own
+  `SoftStopTimeout` (the explicit stop → cancel sequence logs and bounds
+  the hard stop too).
+- **Consequences:** runs of one job never overlap, across any number of
+  serve and worker processes; scheduled runs are never lost to a crash
+  mid-tick. Until 3.6 registers the backup worker, enqueued `backup_run`
+  jobs wait in `available`. Later kinds must use IDs and enums only. A
+  backup run can last at most `backup_timeout`; raising a job's timeout
+  above it is refused by 3.5. Security impact: args cannot carry secrets
+  by construction (WK-1); stuck or hung jobs are bounded (WK-15); the
+  scheduler is safe to replicate (SC-1); unschedulable jobs are visible
+  (SC-5). `bekup worker` has the same trust as serve (B3/B4/B5) without
+  an HTTP listener.
+- **Related:** tasks 3.3, 3.5, 3.6, 3.8, 4.x, 5.3, 5.4, 5.6; D-025, D-042,
+  D-043, D-044, D-099, D-119, D-143; `internal/queue`,
+  `internal/scheduler`, `internal/app`, `docs/architecture.md`,
+  `docs/operations.md`.
+
+## D-146: Backup jobs: data model, service, ownership queries, delete-in-use checks and the GraphQL API (task 3.5)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.5)
+- **Context:** The plan lists the job columns and the roles (D-011, D-012,
+  D-067, D-106) and tasks 3.2-3.4 left hooks (D-142 `InitTx` and the key
+  table foreign keys, D-145 the minimal `jobs` table, D-131/D-135
+  `checkUnused`, D-106 `Ownership`). Open were: storage of durations, the
+  slug rule, defaults, what update/enable/delete do to `next_run_at`,
+  whether owners keep access to deleted jobs, which users may be owners,
+  manual runs of disabled jobs, and the GraphQL shape.
+- **Decision:**
+  1. **Schema** (migration 00015, `ALTER TABLE jobs`): `name` (1-100,
+     unique case-insensitively among non-deleted jobs), `slug`
+     (`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`, unique over **all** jobs,
+     immutable: a trigger refuses a changed slug and un-deleting a job),
+     `description` (≤ 1000), `connection_id` FK, `db_mode`
+     `all|selected` + `databases[]`/`exclude[]` (CHECK: `all` has no
+     databases, `selected` has 1-256 and no excludes), `include_globals`,
+     `retention_keep_last` (1-10000) / `retention_keep_days` (1-36500),
+     at least one (CHECK), `timeout_seconds` (NULL = `workers.backup_timeout`;
+     60 s-7 d in the column), `verification` `standard|deep` (task 3.10),
+     `expected_window_seconds` (NULL = derived, task 5.4), `created_by`,
+     `updated_by`. Durations are integer seconds, not `interval` (exact,
+     no month/day ambiguity, plain `int32` in sqlc). `job_destinations`
+     (job, destination, position 0-15; unique position) and `job_owners`
+     (job, user, created_by/at). FKs from `job_encryption`,
+     `job_passphrases`, `job_recipients` to `jobs(id)`. `bekup_app` keeps
+     no DELETE on jobs; it may delete/insert `job_destinations` and
+     `job_owners` rows (no UPDATE). No notification stub: shared channels
+     attach to jobs in task 5.x with their own table.
+  2. **Service `internal/jobs`** (the planned package; the 3.6 worker
+     joins it). Every mutation re-checks the caller with the policy and
+     requires actor = caller. Create validates everything (name,
+     description, slug or a derived one: ASCII letters/digits lower-cased,
+     other runs a hyphen, `-2`... on collision; selection with
+     `engine.ValidateDBName`, sorted, no duplicates; schedule normalized
+     and checked against `scheduler.min_interval`; retention; timeout ≤
+     `workers.backup_timeout`; window 1 min-366 d; 1-16 distinct
+     destinations), then in one transaction share-locks the connection
+     (exists, not deleted, not temporary; `include_globals` only for
+     PostgreSQL, default on there) and the destinations (exist, not
+     deleted), inserts the job and its destinations, calls
+     `jobkeys.InitTx` (encryption on: generated passphrase by default) and
+     audits `job.created`. Defaults: mode `all`, enabled, `standard`.
+  3. **Scheduling:** `next_run_at` = `scheduler.Next(now)` on create, on a
+     changed schedule (re-planned from now; `min_interval` checked only
+     when the schedule changed, D-143) and on enable; NULL for manual
+     schedules, disabled and deleted jobs. Enabling does not catch up the
+     disabled period. An update that leaves the canonical schedule
+     unchanged keeps `next_run_at`.
+  4. **Delete** is soft: `deleted_at`, `enabled = false`,
+     `next_run_at = NULL`; keys, owners and destination links stay. A run
+     already queued or running is **allowed to finish**; the scheduler
+     ignores deleted jobs and the backup worker (3.6) must skip a job that
+     is deleted (or disabled) when a queued run starts. The name becomes
+     reusable, the slug never does.
+  5. **Delete-in-use:** `connections`/`destinations` `checkUnused` refuse
+     (CONFLICT, listing up to five job names to the admin) while a
+     non-deleted job references the row. Job saves share-lock the rows and
+     deletes hold `FOR UPDATE`, so neither can slip past the other.
+  6. **Ownership** (`jobs.Ownership`, the real `authz.Ownership`):
+     `IsJobOwner` = listed in `job_owners` and the user not deleted (also
+     for a soft-deleted job, so owners keep access to its artifacts for
+     downloads/restores); `BacksUpDatabase` (non-deleted job; mode `all`
+     unless excluded, or listed) and `UsesConnection` (non-deleted job).
+     Any non-deleted account may be listed as an owner (D-067 allows
+     maintainers; only role user gains rights); a maintainer cannot add
+     themselves; assignment and removal need step-up
+     (`job.owners_assign`), are audited (`job.owner_added|removed`) and
+     raise an alert hook (`AlertFunc`, logged until 5.5); at most 50
+     owners per job. New operation `job.owners_view` (staff) for
+     `Job.owners`, which is null for owners.
+  7. **Run now** (`run.now`: staff and owners of the job): refused for a
+     disabled job (CONFLICT; disabled means no runs at all) and for a
+     deleted one (NOT_FOUND); inserts `backup_run {job_id, trigger:
+     manual, triggered_by}` with `queue.InsertTx` in the transaction that
+     records `job.run_requested`; a River duplicate (active run) answers
+     CONFLICT "a run of this job is already active" and records nothing.
+  8. **GraphQL** (`schema/jobs.graphqls`): `jobs(filter, first, after)`
+     (keyset cursor on lower(name), id; JobScope-filtered in SQL), `job(id)`
+     (ownership checked before the lookup, so non-owners get FORBIDDEN for
+     existing and missing ids alike), `previewSchedule(input, count)`,
+     `createJob` (returns a generated passphrase or keypair once),
+     `updateJob`, `deleteJob`, `enableJob`, `disableJob`,
+     `assignJobOwners(jobId, users)`, `removeJobOwner`, `runJobNow`, and
+     the D-142 key fields (`setJobPassphrase`, `generateJobPassphrase`,
+     `setJobRecipient`, `generateAgeKeypair`, `enableJobEncryption`,
+     `disableJobEncryption`, `exportJobPassphrases`), which first check
+     that the job exists and is not deleted. Schedules are typed
+     (`ScheduleInput`/`Schedule`), not raw JSON. Owners see the
+     connection's and destinations' name/type/engine only.
+- **Alternatives considered:** `interval` columns (month/day semantics,
+  awkward in Go); a mutable slug (would orphan or merge storage
+  directories); hard delete (artifacts and audit references); refusing to
+  delete a job with a queued run (blocks cleanup of a stuck job; the
+  worker re-check is enough); owners losing access when a job is deleted
+  (would strand restores of its backups); only role user as owners
+  (rejected by D-067 for view/run use cases, harmless since others gain
+  nothing); manual runs of disabled jobs (surprising; disable is the
+  emergency stop); a `JSON` schedule argument (weaker typing for the UI).
+- **Consequences:** Owner access, restore-target checks and list filtering
+  now rest on real queries (integration-tested). Connections and
+  destinations used by jobs cannot be deleted until their jobs are. Task
+  3.6 must re-check `deleted_at`/`enabled` when a run starts and enforce
+  min(job timeout, queue cap). Security impact: job definitions cannot be
+  changed by owners, ownership grants need step-up and are audited and
+  alerted, temporary connections cannot be backed up by jobs, storage
+  paths cannot be redirected via the slug (SECURITY.md SV-4, SC-4, SC-6).
+- **Related:** tasks 3.2, 3.3, 3.4, 3.6, 3.8, 3.10, 5.3, 5.4, 6.5, 6.8;
+  D-008, D-011, D-012, D-013, D-067, D-106, D-131, D-135, D-142, D-143,
+  D-144, D-145; `internal/jobs`, `internal/db/migrations/00015_jobs.sql`,
+  `internal/graph/schema/jobs.graphqls`, `docs/guides/jobs-and-schedules.md`.
+
+## D-147: Backup run worker: run tables, streamed verification, concurrency slots, cancellation and run logs (task 3.6)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.6)
+- **Context:** Task 3.6 executes the backups that 3.1-3.5 prepared. The plan
+  names the tables (runs, run_items, artifacts with path/size/sha256/
+  passphrase_version/signing_key_id/lock_until/state, run_logs), the
+  statuses, log caps, global and per-connection limits and `cancelRun`,
+  but not when a run row exists, how partial/failed are decided, how a
+  dump is verified without downloading it again (D-134 VerifyDump needs
+  the exact size up front), how the limits work across processes without
+  session advisory locks (D-044), what is retried, or how 3.7 (events),
+  3.8 (retention), 3.10 (stats) and 4.1 (restore) attach.
+- **Decision:**
+  1. **Tables** (migration 00016, `internal/runstate` is the only writer):
+     `runs` (job, trigger schedule|catch_up|manual, triggered_by,
+     scheduled_for, status queued|running|success|partial|failed|
+     canceled|skipped, river_job_id + attempt, queued/started/finished_at,
+     `storage_timestamp` = the run's directory timestamp, sanitized
+     `error_code`/`error_message`, `warnings` jsonb, bytes raw/stored,
+     cancel_requested_at/by, log line counters); `run_items` (database or
+     globals, sizes, raw/stored SHA-256, `verified`, error, warnings);
+     `artifacts` (one row per finalized object incl. `manifest.json`:
+     run, item, job, destination, kind, key, size, SHA-256, S3 version id,
+     encryption mode + passphrase/recipient version, `signing_key_id` of
+     the manifest next to it, `verified`, `lock_until`, state
+     present|deleted|missing, deleted_at); `run_logs`; `run_slots`.
+     `bekup_app` cannot DELETE runs, items, artifacts or logs, cannot
+     UPDATE logs and may UPDATE only `state`, `state_changed_at`,
+     `deleted_at` and `signing_key_id` of artifacts (column grants);
+     triggers keep a finished run finished, `deleted` final and the
+     signing key set-once. Retention (3.8) marks artifacts deleted, it
+     never deletes rows.
+  2. **Queued runs exist from enqueue on:** `runstate.EnqueueTx` inserts the
+     `backup_run` River job and its `queued` run row in one transaction
+     (scheduler and `runJobNow`, which now returns `runId`); a River
+     duplicate creates no row. The worker's `Store.Begin` takes the queued
+     row of its River job; a retry gets a new row (attempt n), and a row
+     of an earlier attempt still `running` is finished as failed
+     `interrupted` (crash, rescued job).
+  3. **Run events:** every status write publishes
+     `<kind>:<run id>:<job id>` (kind `run` or `log`) on the new channel
+     `bekup_run_events` (`pubsub.RunEvents`, fixed LISTEN query) in the
+     same transaction; serve's listener already subscribes. Task 3.7 only
+     adds the GraphQL side.
+  4. **Worker flow** (`internal/jobs.BackupWorker`): a missing, deleted or
+     disabled job → `skipped`; a cancel requested before the start →
+     `canceled`; no free slot → `river.JobSnooze(15 s + jitter)` (the run
+     stays queued, no River attempt is used). Then: start (directory
+     timestamp = start, UTC seconds), job timeout = min(job timeout,
+     `workers.backup_timeout`) as a context deadline, encryption from
+     `jobkeys.Encryptor`, open every job destination (soft-deleted ones
+     included), runner Probe (server version, database list; a TLS pin or
+     SSH host-key mismatch is audited with the system actor and alerted
+     via the connection service), resolve the selection (`all` = listed
+     minus excludes, sorted; `selected` = configured order, a missing one
+     is a failed item with a warning), dump each database sequentially,
+     then the PostgreSQL globals. Target-level failures (unreachable, auth,
+     TLS, pin, SSH, runner down, not allowlisted) stop the run; database-
+     level ones fail only their item.
+  5. **Streamed verification (amends D-134 item 5):** the raw runner stream
+     is teed into a concurrent `VerifyDump` while the pipeline stores it, so
+     nothing is read back. `VerifyDumpHeader.total_bytes = 0` announces a
+     streamed dump; a new `VerifyDumpTrailer{total_bytes}` must be the last
+     message and match the received bytes (otherwise the stream is
+     incomplete; sized streams refuse a trailer; Restore still needs a
+     size). The offline verify container is named
+     `bekup-run-<run id>-verify` (`RunSpec.Step`), so it never collides
+     with the run's Dump container. PostgreSQL archives are verified this
+     way (pg_restore to /dev/null); MySQL/MariaDB dumps and the globals use
+     the runner's trailer check that `DumpResult.verified` already
+     carries (same stream, no second transfer). The pipeline only sees EOF
+     after a complete `DumpResult` (exit 0, byte count equal), so an
+     incomplete dump is never finalized.
+  6. **Outcomes:** a destination whose Put fails, lags or mis-stores is
+     dropped for the rest of the run (it can no longer hold every entry).
+     A verify failure fails the item; its stored objects stay as artifacts
+     with `verified = false`, without signing key and outside the manifest.
+     The manifest (instance key, purpose `manifest`; created and audited on
+     first use like the audit head key; stats from the hook below; the
+     run's and items' warnings) covers the complete items and goes to every
+     destination that holds all of them; it is also written after a
+     timeout or cancel for the items completed before, with a bounded
+     finalization context. Status: `canceled`; `success` (every item stored
+     and verified on every job destination, manifest on all of them, no
+     timeout); `partial` (at least one complete, verified artifact);
+     `failed` (none). The terminal state is written with a context that
+     survives the run's and River's cancellation.
+  7. **River results:** canceled → `river.JobCancel` (never retried);
+     interrupted by shutdown, or runner unavailable/busy with nothing
+     stored → an error with the failure code only (one retry, D-043);
+     timeout and every other recorded outcome → nil (the runs table is
+     the history; a timeout would only time out again).
+  8. **Concurrency:** `run_slots` is a DB semaphore shared by every serve
+     and worker process: acquiring runs under a transaction-scoped advisory
+     lock (`pg_advisory_xact_lock`, safe on pooled connections), removes
+     slots without a heartbeat for 2 min, and inserts only when the global
+     (`workers.max_concurrent_runs`) and per-connection
+     (`workers.max_runs_per_connection`) counts leave room; holders refresh
+     every 30 s, a lost slot stops the run (`slot_lost`). Restores (4.x)
+     reuse it with kind `restore`. Each process applies its own configured
+     limits.
+  9. **Cancellation:** `cancelRun(id)` (run.cancel: admin + maintainer;
+     owners cannot cancel, D-106) marks the run, cancels its River job
+     (`JobCancelTx`) and records `run.cancel_requested` in one
+     transaction; a run nobody works on is finished `canceled` at once. A
+     running worker stops on River's cancel signal or on its own 2 s poll
+     of `cancel_requested_at`: runner calls are canceled (the runner kills
+     the container), the pipeline cancels every Put (no partial object,
+     S3 multipart aborted), the run ends `canceled`.
+  10. **Run logs:** runner log lines and worker events go through
+      `runstate.LogWriter`: control characters and invalid UTF-8
+      sanitized, known secrets scrubbed (registry + `RedactCredentials`)
+      **before** truncation to `workers.run_log_max_line_bytes` (new, 4096,
+      128-16384), at most `workers.run_log_max_lines` (new, 10000,
+      100-1000000) lines per run, batched every 500 ms or 100 lines through
+      a bounded queue (a full queue drops and counts instead of blocking
+      the dump), a closing notice with the dropped count; failed inserts
+      never fail a run.
+  11. **Secrets and errors:** the connection's credentials (each runner
+      request) and the job passphrase are registered for redaction for the
+      run's duration and zeroed after each call; stored and logged run
+      errors are fixed texts per code (runner reasons, gRPC classes,
+      storage codes), never server output, paths or DSNs. An SFTP host-key
+      mismatch seen by a run is audited like a test (system actor).
+  12. **Completeness hook:** `jobs.StatsCollector` opens a session before
+      each dump (`PrepareDump` may adjust the request: 3.10's
+      `--snapshot`) and ends it after; its stats go into the manifest's
+      `stats` (`databases` by encoded name, `globals`) and its warnings
+      into the item and manifest. `NoStats` until task 3.10.
+  13. **Process model:** `bekup worker` now builds the destination, runner
+      client, connection and job key services the worker needs (same
+      startup checks as before).
+- **Alternatives considered:** the worker creating the run row (queued runs
+  would be invisible and not cancelable); verifying by downloading the
+  stored artifact again (doubles transfer, slower) or spooling to scratch
+  to learn the size first (disk per dump); a VerifyDump per MySQL dump
+  (the trailer check already runs on the same stream); waiting for a slot
+  inside the worker (blocks River's worker slots for other connections);
+  River queue concurrency alone (per process, no per-connection limit);
+  session advisory locks (break on pooled connections, D-044); retrying
+  every failure (a timeout or a permission error repeats); deleting
+  artifact rows on retention (restore and audit lose the history);
+  writing no manifest for a canceled/timed-out run (completed artifacts
+  would be unverifiable).
+- **Consequences:** Runs, items, artifacts and logs grow without a DELETE
+  path for the app role (log volume is capped per run; a cleanup policy
+  can come later as `bekup_owner`/maintenance). A snoozed run can wait
+  indefinitely while its connection is busy. Each process uses its own
+  limits against the shared slot table. The runner proto gains a
+  wire-compatible trailer. Security impact: dumps are verified before
+  they count, unverified objects are never in a manifest, incomplete
+  dumps and canceled runs never finalize objects (RN/SV rows in
+  SECURITY.md), run logs and errors cannot carry registered secrets or
+  credentials, history rows cannot be deleted or rewritten by `serve`, a
+  maintainer can cancel but owners cannot.
+- **Related:** tasks 3.6, 3.7, 3.8, 3.10, 4.1, 4.x, 5.6; D-043, D-044,
+  D-087, D-106, D-134, D-142, D-144, D-145, D-146;
+  `internal/runstate`, `internal/jobs/backup_*.go`, `internal/jobs/cancel.go`,
+  `internal/db/migrations/00016_runs.sql`, `proto/runner/v1/runner.proto`,
+  `internal/runner/validate/stream.go`, `internal/graph/schema/runs.graphqls`,
+  `docs/architecture.md`, `docs/guides/jobs-and-schedules.md`,
+  `docs/operations.md`, `SECURITY.md`.
+
+## D-148: Retention worker: per-destination policy, completeness, safety checks, Object Lock / no-delete interplay and audit shape (task 3.8)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.8)
+- **Context:** The plan fixes the policy (keep last N and/or younger than X
+  days, per destination, never the newest successful backup, respect
+  Object Lock, no-delete mode leaves deletion to lifecycle rules,
+  unexpected deletions alert) but not: what "successful" means on one
+  destination when a run was partial, how the sweep is triggered and
+  serialized, what happens to soft-deleted jobs, how a vanished object is
+  told apart from an ordinary delete (`Delete` is idempotent, D-121), how
+  a buggy plan is contained, and how much goes into the audit log.
+- **Decision:**
+  1. **Trigger:** one River kind `retention_sweep` (retention queue,
+     `retention_timeout`, 3 attempts) with args `job_id` (optional, the
+     only unique field), `reason` `post_run|daily` and `dry_run`.
+     **Post-run:** a `runstate.Store` finish hook enqueues the job's sweep
+     inside the transaction that records a `success`/`partial` terminal
+     status, under a savepoint, so a failed enqueue is logged and never
+     fails the run (the backup worker itself is unchanged). **Daily:** a
+     River periodic job (24 h, leader-elected, also at leader start;
+     chosen over the scheduler loop because periodic housekeeping already
+     uses it, D-145) enqueues the fan-out (no job id), which enqueues one
+     sweep per job with present artifacts and removes leftover temporary
+     upload files older than `retention.partial_cleanup_age` (default 24 h)
+     on disk and SFTP destinations. Uniqueness per job means two sweeps of
+     one job never run at the same time; a post-run enqueue while the
+     job's sweep is still active is dropped (the daily sweep catches up).
+  2. **Completeness per destination:** a finished run (never queued or
+     running) is complete on destination D when it has at least one item,
+     every item has a `present`, `verified` artifact on D and its manifest
+     is present on D. A partial run caused by a dropped destination is
+     therefore complete on the other destinations; a run with a failed
+     item is complete nowhere.
+  3. **Keep set per destination:** the newest complete run (always), the
+     newest N complete runs, complete runs younger than X days (union),
+     every run with an artifact whose recorded `lock_until` is in the
+     future, and incomplete runs newer than the newest complete one.
+     Everything else is eligible, including incomplete runs older than the
+     newest complete one. A destination without a complete run deletes
+     nothing; a job without an active policy (impossible by CHECK) deletes
+     nothing. Runs are ordered by their storage timestamp (ties by id).
+     The policy is a pure function (`retention.Plan`).
+  4. **Soft-deleted jobs keep their retention:** their backups stay
+     restorable and age out by the job's policy; the newest complete run of
+     a deleted job is therefore kept indefinitely (a purge is a later,
+     explicit admin action).
+  5. **Deletion:** per eligible run, oldest first: the dumps, then the
+     manifest only once every dump of that run is gone from D. Every
+     delete is preceded by a `Stat`: `ErrNotFound` marks the artifact
+     `missing`, records `retention.artifact_missing` in the same
+     transaction and raises the `retention_artifact_missing` alert hook
+     (task 5.5); a successful delete marks it `deleted` (with
+     `deleted_at`, written even if the sweep is being canceled);
+     `ErrDeleteNotPermitted` (Object Lock retention or legal hold, also
+     bucket defaults unknown to bekup) keeps the artifact `present` and
+     records the lock in the summary (`locked`, `locked_until_max`; the
+     app role cannot update `lock_until`, D-147). Three failures in a row
+     abort the destination. S3 deletes stay version-exact (D-129).
+  6. **No-delete destinations** (`Capabilities().NoDeleteMode`) are
+     skipped entirely, without backend calls: artifacts stay `present`
+     and the skip is logged once per sweep (lifecycle rules delete the
+     objects; reconciling such rows is a possible follow-up).
+  7. **Safety:** (a) the plan is checked against its invariants (newest
+     complete kept, nothing kept or of another destination in the delete
+     list); (b) before the first delete on D, every artifact of the
+     newest complete run must exist with its recorded size: a missing one
+     is marked missing (audited, alerted) and, like a size change or an
+     invariant violation, aborts D (`retention.aborted` + the
+     `retention_sweep_aborted` alert); a transient Stat error only skips
+     D (logged); (c) at most `retention.max_deletions_per_sweep` (default
+     500, 1-100000) deletes per job sweep, the rest waits for the next
+     sweep; (d) `retention.dry_run` (instance-wide, warned at startup) or
+     the args' `dry_run` only computes and logs the plans (no backend
+     call, no audit, partial cleanup skipped).
+  8. **Audit shape:** per-object outcomes live in the artifacts table
+     (`state`, `state_changed_at`, `deleted_at`); the audit log gets, per
+     destination with eligible objects, `retention.deletion_planned`
+     before the first delete (a failure aborts: fail closed) and
+     `retention.swept` after (counts, up to 50 deleted run ids, capped,
+     aborted), plus `retention.artifact_missing` per vanished object and
+     `retention.aborted` per safety abort. System actor, target the job
+     (or the artifact). Sweeps with nothing eligible record nothing.
+- **Alternatives considered:** an audit entry per deleted object (floods
+  the hash-chained log on large jobs; the artifacts table already is the
+  per-object record); a retention log table (a migration for data the
+  artifacts table holds); enqueueing from the backup worker (touches the
+  run worker; not atomic with the terminal status); per-job sweeps from
+  the periodic job directly (one leader job would run every job serially
+  within one timeout); trusting `Delete`'s idempotence (an object deleted
+  by an attacker would be silently recorded as an ordinary deletion);
+  counting a partial run as complete everywhere (keep-last 1 could delete
+  the only good copy of a database that failed in the newest run);
+  stopping retention for deleted jobs (keeps everything forever) or
+  purging them at once (destroys restorable backups).
+- **Consequences:** Retention can never empty a destination that holds a
+  complete backup and never deletes on a destination that holds none. A
+  backup deleted outside bekup is detected when retention reaches it or
+  when it belongs to the newest complete run (full periodic verification
+  of kept objects is task 5.x). Object Lock refusals are retried each
+  sweep until the lock expires. A restore or download of an eligible
+  artifact can race a sweep (tasks 3.9 / 4.x should hold such artifacts;
+  until then the window is the gap between plan and delete). Security
+  impact: bounded blast radius (cap, invariants, dry run), fail-closed
+  audit before deleting, unexpected deletions are audited and alerted,
+  no-delete and Object Lock are honored by retention and again by the
+  backends (SECURITY.md SV/DS rows).
+- **Related:** tasks 3.6, 3.8, 3.9, 4.x, 5.5; D-007, D-121, D-128, D-129,
+  D-145, D-146, D-147; `internal/retention`, `internal/runstate`
+  (`artifacts.go`, finish hook), `internal/queue/kinds.go`,
+  `internal/db/queries/retention.sql`, `internal/config` (`[retention]`),
+  `docs/guides/retention.md`, `docs/security/immutable-backups.md`.
+
+## D-149: Run history queries and live run events: scoped reads, per-operation batch loader, delivery-time re-load and log streams (task 3.7)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.7)
+- **Context:** Task 3.7 adds the GraphQL side of the run tables (D-147):
+  run and artifact listings, run details, run logs and live updates over
+  the SSE transport (D-124). The plan fixes the names (`runUpdated`,
+  `runLogAppended`), cursor pagination and IDs-only events, but not how
+  backup owners are scoped on single objects, how pages avoid N+1 queries,
+  what an event carries, how lost notifications are handled, how log
+  streams are bounded and end, or who may see who started a run.
+- **Decision:**
+  1. **Reads** go through `runstate.Reader` (read only, sqlc queries in
+     `internal/db/queries/run_reads.sql`); `internal/runstate` stays the
+     only writer. Listings (`runs`, `artifacts`) take `authz.JobScope`
+     (`run.list`, `artifact.list`): owners get only runs/artifacts of jobs
+     they are listed on (same rule as `IsJobOwner`, deleted users own
+     nothing). Pages are newest first with opaque cursors
+     (`(queued_at, id)` / `(created_at, id)`), `first` 1..200 (default 50);
+     `runLogs` pages by line id (`afterId`, `first` 1..1000, default 200).
+  2. **Single objects** (`run`, `runLogs`, subscription filters) load the
+     row first and authorize with the job stored on it (`run.view`,
+     `run.logs_view`, never a job id from input). An unknown id answers
+     like a run of another job for backup owners (FORBIDDEN), and null /
+     NOT_FOUND for staff, so owners cannot probe ids.
+  3. **Who started a run** (`Run.triggeredBy`: user id, display name,
+     e-mail) needs the new operation `run.actor_view` (admin, maintainer);
+     backup owners get null. Error and warning texts are re-sanitized
+     (`runstate.SanitizeLine`) on output in addition to being fixed texts
+     when written.
+  4. **No N+1:** a per-operation `runLoader` (installed by
+     `graph.New` via `AroundOperations` for queries and mutations only)
+     batch-loads the items and artifacts of every run of a page, and the
+     recent runs of every job of a `jobs` page (`Job.lastRun`,
+     `Job.recentRuns(first ≤ 20)`), from ids the list resolvers hint. A
+     page of 50 runs with items, artifacts and manifest costs three reader
+     queries (tested). The loader caches only data its parent field was
+     authorized for and never decides access; subscriptions get no loader,
+     so every event reads fresh rows.
+  5. **`runUpdated(jobId, runId)`** subscribes to `bekup_run_events` on the
+     in-process bus (fed by the existing LISTEN bridge; no new channel).
+     The payload ids only pre-filter; per event `streams.Deliver`
+     re-checks the session and `streams.Authorize` loads the run by id
+     and authorizes `run.view` with its stored job, and exactly that
+     loaded row is sent. A backup owner who loses a job stops receiving
+     its runs with the next event. After possibly lost notifications (bus
+     overflow, listener reconnect) the stream re-sends up to 100 runs
+     changed since the last resync (30 s clock margin), each authorized
+     again. Filters the caller may not use answer FORBIDDEN up front.
+  6. **`runLogAppended(runId, afterId)`** sends coalesced batches of at
+     most 200 new lines (authorized per batch with `run.logs_view`; the
+     run's job is immutable, ownership is looked up each time) and
+     completes with a `done` batch once the run is terminal and every
+     line was delivered (status read before lines: the log writer
+     flushes before the run finishes). One goroutine and one bus
+     subscription per stream; both end with the stream.
+  7. **Stream cap:** both subscriptions count against
+     `graphql.stream_max_per_session` (default 4); the UI opens one
+     unfiltered or job-filtered `runUpdated` stream per page and filters
+     on the client, plus at most one `runLogAppended` on a run page.
+  8. Sizes are GraphQL `Float` (bytes, exact up to 2^53) rather than a new
+     64-bit scalar.
+- **Alternatives considered:** loading the job id from the event payload
+  for authorization (a forged or stale NOTIFY could widen access);
+  time-window dataloaders (non-deterministic batching); one query per
+  row (N+1); pushing full run payloads in NOTIFY (8 KB limit, data
+  prepared for another caller, D-050); a dedicated log channel per run
+  (unbounded LISTEN set); returning NOT_FOUND to owners for unknown runs
+  (an existence oracle); exposing `triggeredBy` to owners (reveals staff
+  identities).
+- **Consequences:** Run pages are cheap and bounded; owners can never see
+  runs, artifacts, logs or events of jobs they do not own at the moment of
+  delivery; staff identities stay hidden from owners. Lost notifications
+  delay but do not drop updates for long. Security impact: no new trust
+  boundary; the read side relies on `JobScope` and the stored job id, the
+  event side on D-050/D-124 delivery-time checks. The `authz` matrix has a
+  new row (`run.actor_view`).
+- **Related:** tasks 3.6, 3.7, 6.2, 6.6; D-050, D-106, D-124, D-147;
+  `internal/runstate/read.go`, `internal/db/queries/run_reads.sql`,
+  `internal/graph/schema/runs.graphqls`,
+  `internal/graph/resolvers/runs_read.go`, `runs_loader.go`,
+  `runs_events.go`, `internal/graph/handler.go`.
+
+## D-150: Download tickets: single-use session-bound tickets, use-time re-check, manifest pre-verification, held-back tail and sealed identity handoff (task 3.9)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.9)
+- **Context:** The plan fixes the policy (admins + owners only, never
+  maintainers, D-012/D-067; step-up; audited; raw or plain; single-use 60s
+  session-bound tickets; `Cache-Control: no-store`; a sanitized file name;
+  identities never stored in plaintext) and the authz operation
+  `artifact.download` (D-106), but not the ticket storage, what happens to
+  a ticket presented by the wrong session, whether authorization is
+  re-checked when the ticket is used (60s later, with an expired step-up
+  window), which artifacts qualify, how integrity is enforced on a stream
+  whose headers are already sent, or the concurrency and cleanup rules.
+- **Decision:**
+  1. **Tickets** (migration 00017, `download_tickets`): 256 random bits
+     (`crypto/rand`), unpadded base64url (43 characters) in the URL
+     `/api/download/<ticket>`; only SHA-256 of the raw bytes is stored
+     (unique). The row binds the session, user, artifact and mode;
+     `expires_at` = creation + 60s (a CHECK caps it at 5 minutes);
+     `used_at` is set once. `bekup_app` may only update `used_at` and
+     clear `sealed_identity` (column grants + a trigger); rows are deleted
+     by a serve housekeeping loop every 30s once expired for a minute. A
+     user has at most 5 unused, unexpired tickets (`RATE_LIMITED`).
+  2. **Creation** (`createDownloadTicket(artifactId, mode, ageIdentity)`,
+     `@stepUp`, a D-117 single-root field because it may carry a
+     credential): `artifact.download` with the artifact's job loaded from
+     the DB (a missing id is `NOT_FOUND` for admins and `FORBIDDEN` for
+     everyone else). The artifact must be a database/globals object,
+     `present`, `verified` **and covered by a signed manifest on its
+     destination** (`signing_key_id` set). Unverified or unsigned artifacts
+     are always refused, also for admins (no override flag: a dump that
+     failed its native verification or lacks a signed manifest is exactly
+     what must not leave the system unnoticed; operators can still read
+     the destination directly). Plain mode: passphrase artifacts use the
+     artifact's passphrase version (checked to exist); recipient artifacts
+     require `ageIdentity`, which must parse as X25519 identities
+     (≤ 4 KiB) and match the artifact's recipient version, and is sealed
+     with the keyring under AAD `download_tickets:<id>:identity`; raw mode
+     and non-recipient artifacts refuse an identity. Audited as
+     `download.ticket_created` (artifact, job, run, destination, mode,
+     encryption, ticket id; never the value or the identity) in the
+     insert's transaction. The response carries the URL, expiry, file
+     name, format and a restore command template with placeholders only.
+  3. **Redemption** (`GET /api/download/{ticket}`, behind the session
+     middleware; other methods never reach it): a malformed value or a
+     `Sec-Fetch-Site` other than `same-origin`/`none` is 404 without a
+     database lookup. In one transaction the ticket row is locked by hash:
+     unknown → 404; used → 410; expired → 410 and burned; another session,
+     another user or no session → 404 and **burned** (a leaked URL is
+     treated as compromised); then `artifact.download_redeem` is
+     re-checked (new operation: the same roles and owner grant as
+     `artifact.download` but **no freshness**, because the step-up was
+     proven at creation and the ticket is single use, session bound and
+     lives 60s) → on denial 404 and burned. Otherwise `used_at` is set and
+     the sealed identity cleared in the same transaction, before any byte
+     is streamed. Every rejection of a known ticket is audited
+     (`download.ticket_rejected` with the reason).
+  4. **Integrity.** Before the response starts, the run's `manifest.json`
+     on the same destination is read (≤ 16 MiB), compared with its
+     recorded size and SHA-256 and verified with `pipeline.Verify`
+     (instance keys; binding = job, run, slug, run timestamp and every
+     artifact recorded as signed with that key there). While streaming,
+     the stored bytes are hashed and counted (and in plain mode the dump
+     too, against the item's raw SHA-256 and size; age authenticates each
+     64 KiB chunk and the zstd frames carry checksums). The last 64 KiB of
+     the response are **held back** until every digest matched; on a
+     mismatch the handler aborts the connection (`http.ErrAbortHandler`),
+     so the client sees a truncated download (raw: short of its
+     `Content-Length`; plain: an unterminated chunked body) and never a
+     complete file. Browsers have no usable trailers, and a pre-pass over
+     the artifact would double the transfer; the hold-back gives the same
+     guarantee at one transfer (bounded memory: 128 KiB per download).
+  5. **Streaming.** Raw = the stored object with `Content-Length`; plain =
+     `pipeline.OpenArtifact` (scrypt work factor ≤ the default 18, X25519
+     only, zstd window ≤ 64 MiB, one decoder goroutine). Headers:
+     `Content-Type: application/octet-stream`, `Content-Disposition:
+     attachment; filename="…"; filename*=UTF-8''…` with a strict sanitizer
+     (ASCII letters, digits, `.`, `-`, `_`; no leading dot/dash, no `..`,
+     ≤ 200 bytes, no Windows device names), `Cache-Control: no-store`,
+     `X-Content-Type-Options: nosniff`, and the HTTP layer's CSP and
+     security headers. Names: `<job-slug>_<db>_<YYYYMMDDTHHMMSSZ>.<ext>`
+     (`.dump.zst.age`/`.sql.zst.age` raw, `.dump`/`.sql` plain). The
+     server write deadline is lifted for the stream; each write has its
+     own 2-minute deadline. At most 4 concurrent downloads per process and
+     2 per user (a refused request answers 429 without consuming the
+     ticket). `download.started` is recorded before the headers (failing
+     it fails the download) and `download.completed` or `download.failed`
+     (fixed reason codes) afterwards.
+  6. **Logging.** The access log already cuts `/api/download/` paths to
+     the prefix (D-102); the ticket value is never logged, audited or
+     stored.
+- **Alternatives considered:** storing the ticket in plaintext or only
+  encrypted (a DB reader could redeem it); refusing a wrong-session use
+  without burning (lets a leaked URL be retried until the owner uses it);
+  re-requiring a fresh step-up at use time (fails legitimate downloads
+  whose ticket was created near the end of the window, without adding
+  security over the 60s single-use binding); no use-time re-check (a
+  revoked owner could still use a ticket); an admin override for
+  unverified artifacts (rejected, see 2); verifying with a full pre-pass
+  (double transfer and latency) or not at all before streaming (a swapped
+  DB digest would go unnoticed); HTTP trailers (ignored by browsers);
+  passing the identity in the GET (it would sit in URLs and logs);
+  a River job for the cleanup (a serve loop is enough for a table only
+  serve uses).
+- **Consequences:** A download needs a step-up within the last
+  `security.stepup_max_age` and is usable for 60s from the same browser
+  session; a leaked URL is useless to anyone else and burns itself. A
+  passphrase download costs up to 256 MiB for scrypt, bounded by the
+  concurrency limits. Tampered artifacts or manifests never produce a
+  complete file; the failure is audited. A session rotation (e.g.
+  `ElevateAAL`) between creation and use invalidates the ticket (create
+  a new one). An identity lives only sealed in the row until redemption
+  or, if unused, at most about two minutes until cleanup; the GraphQL
+  string itself cannot be zeroed (as for passwords). Security impact:
+  SECURITY.md rows for tickets, identities and download integrity; task
+  6.6 builds the dialog on this API (`createDownloadTicket` then a
+  same-origin navigation to `url`).
+- **Related:** tasks 3.6, 3.9, 4.1, 6.6; D-012, D-050, D-067, D-082,
+  D-085, D-086, D-088, D-102, D-106, D-112, D-117, D-142, D-144, D-147;
+  `internal/downloads`, `internal/db/migrations/00017_download_tickets.sql`,
+  `internal/graph/schema/download.graphqls`, `internal/httpserver`
+  (`Options.Download`), `docs/guides/downloads.md`.
+
+## D-151: Completeness evidence: stats inside the Dump call, same-snapshot PostgreSQL counts, warnings model and backup_stats (task 3.10)
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.10)
+- **Context:** D-141 (user decision) fixes what is captured (object counts,
+  per-table row counts, completeness warnings; PostgreSQL in the dump's
+  snapshot, MySQL/MariaDB approximate; `standard | deep`) and that the
+  stats are signed into the manifest. It leaves open how the snapshot is
+  handed to `pg_dump`, what crosses the runner API, the limits, the
+  warning codes, where the stats are stored and how a run shows them.
+- **Decision:**
+  1. **No separate RPC.** The plan named a `CaptureStats` RPC; the stats
+     are instead a phase of `Dump` (and `DumpGlobals`): `DumpRequest.stats`
+     / `DumpGlobalsRequest.stats` (`StatsOptions{enabled, level
+     standard|deep, per_table_timeout_ms (default 5 min, ≤ 1 h), budget_ms
+     (default 30 min, ≤ 6 h)}`) and one `DumpStats` message in the
+     response stream **before the first chunk** (at most once; anything
+     else is a protocol error the worker fails the item on). A separate
+     RPC would have to keep a database transaction open across calls.
+  2. **PostgreSQL same snapshot.** The runner opens a Go-driver session to
+     the dumped database through the same target allowlist / SSH tunnel,
+     pin pre-flight and TLS rules as every check (D-134), runs `BEGIN
+     ISOLATION LEVEL REPEATABLE READ READ ONLY`, lifts
+     `idle_in_transaction_session_timeout` and `transaction_timeout` for
+     the transaction (`set_config(..., true)` where the server has them),
+     `SELECT pg_export_snapshot()`, reads the catalog and counts inside it,
+     sends the stats, then starts `pg_dump --snapshot=<id>` and **keeps the
+     transaction open until the dump container finished** (then ROLLBACK).
+     The id is validated (`^[0-9A-F]{1,16}(-[0-9A-F]{1,16}){1,3}$`) before
+     it reaches argv (`engine.DumpSnapshot`; MySQL/MariaDB refuse a
+     snapshot). `pg_dump` connects as the same user to the same database,
+     as snapshot import requires. If the capture fails the dump runs
+     without `--snapshot`, the result carries `stats_unavailable` and the
+     item gets that warning.
+  3. **Counting.** Object counts exclude system schemas and extension
+     members (PG: schemas, tables r+p, views, matviews, sequences,
+     functions, procedures, non-internal triggers, extensions; MySQL/
+     MariaDB from information_schema: tables, views, sequences, functions,
+     procedures, triggers, events; globals: roles without `pg_*`,
+     tablespaces without `pg_default`/`pg_global`). Row stats cover tables
+     holding data (PG relkind r, `count(*) FROM ONLY`). `deep`: exact
+     `count(*)`, identifiers quoted with `engine.QuotePGObject` /
+     `QuoteMySQLObject` (catalog names: valid UTF-8, no NUL, ≤ 63 bytes /
+     64 characters); each count is limited server-side to min(per-table
+     timeout, remaining budget) (PG: `SAVEPOINT` + `SET LOCAL
+     statement_timeout`, rolled back on failure so the snapshot survives;
+     MySQL: `MAX_EXECUTION_TIME` hint; MariaDB: `SET STATEMENT
+     max_statement_time`); up to two helper sessions import the snapshot
+     (`SET TRANSACTION SNAPSHOT`) or start their own consistent snapshot
+     (MySQL/MariaDB) from 16 tables on. `standard`: `reltuples` (−1 =
+     unknown) / `TABLE_ROWS`, marked `estimate`. MySQL/MariaDB counts run
+     in `START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY` right
+     before the dump, the session ends before the dump starts, and every
+     table is `approximate`.
+  4. **Bounds.** At most 10 000 tables (first by schema/name, byte order)
+     and ~768 KiB of table entries per message (`tables_total` + 
+     `tables_truncated` + a `stats_partial` warning otherwise), at most 32
+     warnings with ≤ 50 object names each. Only names and counts cross the
+     API, never data values. The worker re-validates everything (codes,
+     name sizes, kinds, duplicates) and discards malformed stats
+     (`stats_invalid`).
+  5. **Warnings** (stable codes, per item and in the manifest):
+     `insufficient_privileges` (PG: tables/sequences without SELECT and
+     schemas without USAGE per `has_*_privilege`; functions are not
+     flagged because `pg_dump` reads them from the catalog without
+     EXECUTE; MySQL/MariaDB: visible tables that fail a zero-row `SELECT`
+     probe (standard) or the count (deep); objects an account cannot see
+     at all are invisible to information_schema and to the dump tool alike
+     and cannot be detected), `non_transactional_tables` (engines other
+     than InnoDB/RocksDB/TokuDB/SEQUENCE; replaces the runner's
+     `non_innodb_tables` summary when stats exist), `row_count_timeout`,
+     `stats_budget_exceeded`, `row_count_failed`, `stats_partial`,
+     `roles_without_passwords` (the globals fallback joins the stats
+     warnings), `stats_unavailable`, and the run-level
+     `databases_excluded` (mode `all`: databases on the server left out by
+     the exclude list).
+  6. **Storage.** The worker's `jobs.RunnerStats` (the `StatsCollector` of
+     D-147) puts the job's level into the request, turns the message into
+     a canonical object (integers and strings only, flags as `1`):
+     `{"level","consistency":"snapshot"|"approximate","objects":{...},
+     "tables":{"<enc schema>.<enc table>":{"rows":N,"count":"exact"|
+     "estimate"|"unknown","approximate":1}},"tables_total",
+     "tables_truncated","warnings":[{"code","count","objects",
+     "truncated"}]}` (names percent-encoded with `pipeline.EncodeName`,
+     MySQL keys without schema), stores it in the new **`backup_stats`**
+     table (one row per complete, verified item; `bekup_app` INSERT/SELECT
+     only) and in the manifest's `stats.databases.<enc db>` / `globals`. If
+     all stats together exceed 8 MiB the manifest keeps the counts and
+     warnings but drops the table lists (`"tables_omitted":1`).
+  7. **Run status.** Completeness warnings never change the status
+     (success/partial/failed stay as in D-147); `runs.has_warnings`
+     (generated: the run's warnings, which include every item warning, are
+     not empty) flags such runs for the UI and alerts.
+- **Alternatives considered:** a separate `CaptureStats` RPC (a transaction
+  spanning RPCs, or an unrelated snapshot); `SERIALIZABLE READ ONLY
+  DEFERRABLE` (may wait for a safe snapshot on busy servers; REPEATABLE
+  READ gives the same snapshot to pg_dump); closing the exporting
+  transaction once pg_dump reported its start (needs parsing tool output;
+  holding to the end is simpler and costs one idle session);
+  client-side cancellation for count timeouts (cancel requests need a new
+  connection through the tunnel/guard); a `stats jsonb` column on
+  `run_items` (the plan names a table; a separate insert-only table keeps
+  the evidence immutable without new column grants); flagging functions
+  without EXECUTE (false positives).
+- **Consequences:** `deep` costs a `count(*)` per table (bounded by the
+  budget) and up to three runner sessions; the PostgreSQL exporting
+  transaction holds back vacuum for the dump's duration, as `pg_dump`
+  itself does. Test restores (4.6) compare against `backup_stats` /
+  the signed manifest: exact where `consistency` is `snapshot` and
+  `count` is `exact`. Security impact: no new network path (the stats
+  session uses the existing Go-driver path and rules); only catalog
+  names and counts leave the target, bounded in size; the snapshot id is
+  validated before it reaches argv and catalog names are quoted with the
+  complete escaping rule; the evidence rows are insert-only for `serve`
+  and covered by the manifest signature.
+- **Related:** tasks 3.10, 4.6, 4.7, 6.6, 7.1; D-033, D-034, D-134, D-141,
+  D-144, D-147; `proto/runner/v1/runner.proto`,
+  `internal/runner/ops_stats.go`, `internal/runner/dbprobe/stats*.go`,
+  `internal/runner/validate/stats.go`, `internal/engine` (`DumpSnapshot`,
+  `QuotePGObject`, `QuoteMySQLObject`), `internal/jobs/backup_stats.go`,
+  `internal/db/migrations/00018_backup_stats.sql`,
+  `docs/reference/artifact-format.md`, `docs/guides/jobs-and-schedules.md`.
+
+## D-152: Hostile target databases: pinned session settings, schema-qualified SQL and relation-kind restriction for every Go-driver session
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals) (item 6 superseded by D-153)
+- **Decided by:** agent with user approval (security review fix, milestone 3)
+- **Context:** The runner's Go-driver sessions to PostgreSQL targets
+  (probe, database list, version, the stats session that exports the
+  snapshot and the helper sessions that import it; D-134, D-151) ran
+  unqualified functions and operators (`count(*)`, `||`, `=`, `<>`,
+  `!~`, `IN`) without pinning `search_path`. A target database's owner
+  (not a superuser) can `CREATE AGGREGATE evil.count(*)`, shadow
+  operators and catalog functions, and `ALTER DATABASE ... SET
+  search_path = evil, pg_catalog`; the next stats capture then runs that
+  code as the backup role, which is often a superuser (reproduced:
+  "running as postgres, superuser=on"; a superuser can `COPY ... TO
+  PROGRAM` even in a READ ONLY transaction). Deep counts additionally
+  executed row-level security policy expressions as the backup role, and
+  a table swapped for a view (or a foreign table) between the catalog
+  read and its count would have run the view's functions as the backup
+  role (the CVE-2024-7348 pattern).
+- **Decision:**
+  1. **Startup pins.** Every PostgreSQL session of `internal/runner/dbprobe`
+     sends `search_path=pg_catalog, pg_temp` and `row_security=off` as
+     startup parameters. Startup parameters take precedence over
+     `ALTER DATABASE` / `ALTER ROLE` settings; after authentication the
+     session reads both back with `pg_catalog.current_setting` and is
+     refused (closed, `FAILED "session settings"`) if they are not in
+     effect (a server or pooler ignoring them fails closed), then sets
+     both again with `pg_catalog.set_config` (belt and braces).
+     `pg_temp` is last: temporary relations cannot shadow catalog
+     relations, and functions/operators are never looked up in it.
+  2. **Relation-kind restriction.** Each session sets
+     `restrict_nonsystem_relation_kind = 'view, foreign-table'` through
+     `set_config` from `pg_settings` where the server has it (12.20,
+     13.16, 14.13, 15.8, 16.4, 17+), exactly as `pg_dump` does. A row
+     count therefore can only read a stored relation; a view or foreign
+     table swapped in is an error. On a server without the setting the
+     connection reports `SafeRowCounts() == false` and refuses
+     `CountRows` (`ErrCountUnsafe`): `deep` stats keep the catalog part,
+     every table is `unknown` with `row_count_failed` and the runner logs
+     `runner_stats_counts_disabled`. Catalog reads stay allowed (they
+     touch only `pg_catalog` relations).
+  3. **Schema-qualified SQL.** Every statement names functions and
+     aggregates `pg_catalog.f(...)`, operators `OPERATOR(pg_catalog.op)`
+     (`x IN (...)` becomes `x OPERATOR(pg_catalog.=) ANY
+     ('{...}'::pg_catalog.type[])`, since IN resolves `=` by name), casts
+     `::pg_catalog.type`, collations `pg_catalog."C"`; the count is
+     `SELECT pg_catalog.count(*) FROM ONLY <QuotePGObject schema>.<name>`.
+     A unit test (`TestPGQueriesQualified`) fails on any unqualified
+     function, operator, cast, collation or `IN`.
+  4. **Row-level security.** With `row_security=off` a table whose
+     policies apply to the backup role makes the count fail (42501)
+     instead of evaluating the policies; it is reported `unknown` with
+     the existing `insufficient_privileges` warning (the role needs
+     BYPASSRLS, and `pg_dump` refuses such a table for the same reason).
+     Superusers and BYPASSRLS roles bypass policies, so none run.
+  5. **The dump tools.** The pinned `pg_dump`/`pg_dumpall` clients (13.23+)
+     set `search_path = ''` as their first statement, run with
+     `row_security = off` (the runner never passes
+     `--enable-row-security`) and set `restrict_nonsystem_relation_kind`
+     where the server has it; nothing to change. `mysqldump` /
+     `mariadb-dump` do not call stored functions and do not select view
+     data.
+  6. **MySQL/MariaDB** (superseded by D-153: estimates only, no statement on user tables). Built-ins (`COUNT`, `CAST`, `VERSION`) cannot be
+     shadowed (a stored function named like a built-in is only reachable
+     qualified), the catalog queries read `information_schema`, SELECT
+     fires no triggers and only base tables are counted. Residual risk
+     (documented, accepted pending the user's confirmation):
+     `information_schema` is outside the consistent snapshot, so an owner
+     who replaces a listed table with a `SQL SECURITY INVOKER` view
+     between listing and count has it evaluated with the backup
+     account's rights inside the READ ONLY transaction; `mysqldump` has
+     the same window. The backup account must not hold administrative
+     privileges (SUPER, SYSTEM_VARIABLES_ADMIN, FILE, ...).
+- **Alternatives considered:** only `SET search_path` after connect
+  (a per-database setting is applied before the first statement and an
+  unqualified first statement would already resolve through it); an
+  empty `search_path` (equivalent for qualified SQL, but `pg_catalog,
+  pg_temp` keeps `pg_temp` from being implicitly first); a lock plus
+  OID/relkind re-check before each count on unpatched servers (racy:
+  renaming the schema needs no lock on the table); counting on unpatched
+  servers anyway (code execution as the backup role); a new warning code
+  for the disabled counts (`row_count_failed` already says "unknown",
+  and the worker knows only the existing codes).
+- **Consequences:** Security impact: closes code execution as the backup
+  role through search_path shadowing, RLS policies and view/foreign-table
+  swaps in the runner's own sessions. `deep` stats need a patched server
+  (any PostgreSQL minor release since August 2024); unpatched servers
+  get catalog stats only. A connection pooler that rejects
+  `search_path`/`row_security` startup parameters cannot be used for the
+  Go-driver checks (fails closed). Three extra round trips per session.
+  Integration-tested against a hostile database on PostgreSQL 13, 16 and
+  18 (shadowed `count(*)`, operators and functions, `ALTER DATABASE SET
+  search_path`, an RLS policy and a view calling trap functions; a
+  positive control shows the traps fire for ordinary sessions; stats and
+  dumps as a superuser and as a read-only role fire none).
+- **Related:** D-001, D-033, D-134, D-141, D-151; SECURITY.md RN-13,
+  RN-14; `internal/runner/dbprobe/postgres.go`,
+  `internal/runner/dbprobe/stats_pg.go`, `internal/runner/dbprobe/stats_mysql.go`,
+  `internal/runner/ops_stats.go`,
+  `internal/runner/ops_hostile_integration_inner_test.go`.
+
+## D-153: MySQL/MariaDB statistics are estimates only: no statement on user tables or views
+
+- **Date:** 2026-10-27
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** D-152 item 6 left a residual risk for MySQL/MariaDB: exact
+  counts (`deep`) and the zero-row SELECT privilege probe (`standard`)
+  named user tables, and `information_schema` is outside the consistent
+  snapshot, so a database owner could swap a listed table for a
+  `SQL SECURITY INVOKER` view and have it evaluated with the backup
+  account's rights. MySQL/MariaDB counts were `approximate` anyway (the
+  dump takes its own snapshot), and the test-restore comparison (task
+  4.6) treats them as approximate.
+- **Decision:** The runner never runs a statement that reads a
+  MySQL/MariaDB user table or view, at either level. Row stats are the
+  `information_schema.TABLES.TABLE_ROWS` estimates (`estimate`,
+  `approximate`); object counts stay exact. `deep` behaves like
+  `standard` for MySQL/MariaDB and the stats are recorded at level
+  `standard`; the job setting stays (docs/UI note: `deep` only adds
+  exactness for PostgreSQL). `non_transactional_tables` comes from
+  `information_schema.TABLES.ENGINE`; `insufficient_privileges` from the
+  account's grants in `information_schema` (`USER_PRIVILEGES`,
+  `SCHEMA_PRIVILEGES` with pattern match, `TABLE_PRIVILEGES`; grantee from
+  `CURRENT_USER()`); with an active role (`CURRENT_ROLE()` not
+  `NONE`/NULL) the privilege check is skipped because role grants are not
+  visible there. `dbprobe` MySQL connections report `SafeRowCounts() ==
+  false` and refuse `CountRows`. This supersedes D-152 item 6 (the
+  residual risk is removed); the rest of D-152 stands.
+- **Alternatives considered:** keeping exact counts with a documented
+  residual (D-152 item 6); `HANDLER ... OPEN` to pin base tables (its
+  metadata lock is released on conflicting DDL); general-log or role
+  introspection for privileges (`SHOW GRANTS` parsing).
+- **Consequences:** MySQL/MariaDB stats lose exact InnoDB counts (they
+  were approximate already). Privilege warnings may miss column-level or
+  role-based grants (false positives only when no global/database/table
+  SELECT grant is visible; skipped with active roles); the dump tool
+  still fails on a real missing privilege. Security impact: the runner
+  can no longer be made to evaluate database-owner code on MySQL/MariaDB
+  targets; `mysqldump`'s own list-then-SELECT window remains a property
+  of the native tool (least-privileged backup account recommended).
+  Integration-tested: the server's general log shows no statement
+  addressing a user table during `standard` and `deep` captures, with a
+  positive control.
+- **Related:** D-141, D-151, D-152; SECURITY.md RN-14;
+  `internal/runner/dbprobe/stats_mysql.go`, `internal/runner/ops_stats.go`,
+  `internal/runner/ops_stats_integration_inner_test.go`,
+  `docs/guides/jobs-and-schedules.md`.
+
+## D-154: Job encryption key changes are admin only (M3 review)
+
+- **Date:** 2026-10-27
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** D-142 item 5 and D-106 let maintainers change a job's
+  encryption keys (`job.encryption_keys_edit`: set or generate a
+  passphrase or an age recipient, opt an opted-out job back in) with
+  step-up, so a maintainer could replace a job's key with one they know.
+  The M3 review raised it; the user decided.
+- **Decision:**
+  1. `job.encryption_keys_edit` is **admin only**, with a fresh step-up
+     (policy rule `adminOnly` + `FreshStepUp`, matrix row `YFFFFU` / `S`).
+     The GraphQL mutations `setJobPassphrase`, `generateJobPassphrase`,
+     `setJobRecipient`, `generateAgeKeypair` and `enableJobEncryption` carry
+     `@hasRole(roles: [ADMIN]) @stepUp`.
+  2. `internal/jobkeys` re-checks it itself: after `Policy.Authorize` and
+     the actor check, a key change by a principal whose role is not admin
+     fails with `ErrAdminOnly` (FORBIDDEN), independent of the policy table.
+  3. Job creation: every role that may create jobs (`job.create`) still
+     gets the default, a **generated passphrase**, automatically. Choosing
+     the key at creation (a passphrase, RECIPIENT mode or a recipient in
+     `CreateJobInput.encryption`) is a key change and additionally needs
+     `job.encryption_keys_edit` (admin, fresh step-up).
+  4. Opt-out and passphrase export stay admin only (D-142); opting back in
+     is a key change and therefore admin only too.
+- **Alternatives considered:** keeping maintainers with step-up and audit
+  (D-142; rejected by the user); letting maintainers choose a key at
+  creation only (it is the same capability on a new job).
+- **Consequences:** Maintainers manage jobs but never their keys; key
+  rotation needs an admin. Security impact: a compromised or malicious
+  maintainer account can no longer redirect future backups to a key it
+  controls. Supersedes D-142 item 5 (key-change roles) and the
+  corresponding D-106 matrix entry.
+- **Related:** D-106, D-142; tasks 3.2, 3.5, 3.11; `internal/authz/operations.go`,
+  `internal/authz/matrix_test.go`, `internal/jobkeys/service.go`,
+  `internal/graph/schema/jobs.graphqls`, SECURITY.md (job keys row).
+
+## D-155: M3 review fixes: artifact holds, run notices, byte-bounded warnings, exact manifest signing, scheduler savepoints, retry cancellation and coalesced run events
+
+- **Date:** 2026-10-27
+- **Status:** accepted (2026-10-28, user accepted all M3 proposals)
+- **Decided by:** agent with user approval (task 3.11)
+- **Context:** The M3 dual review and the 3.11 follow-ups found gaps in
+  D-144, D-145, D-147, D-148, D-149, D-150 and D-151: a retention sweep
+  could delete an artifact while it was being downloaded; the configured
+  `databases_excluded` finding made `has_warnings` permanently true; long
+  multibyte warnings could exceed the `warnings` column CHECKs and make
+  `Finish` fail; `MarkSigned` signed every verified object of the run on a
+  destination instead of the manifest's entries; the completeness warnings
+  of a failed dump were dropped; `workers.max_concurrent_downloads` was not
+  wired; one failing job blocked a whole scheduler batch; `cancelRun` could
+  not stop a pending retry; the download hold-back buffer could be
+  reallocated by `append` with plaintext left in the old array; and an
+  unfiltered `runUpdated` stream loaded and authorized every run event.
+- **Decision:**
+  1. **Artifact holds** (migration 00019, `artifact_holds`: artifact,
+     kind `download|restore`, holder id, expiry ≤ 1 h; `bekup_app` may
+     INSERT/SELECT/DELETE and UPDATE only `expires_at`). A download takes a
+     hold when its ticket is redeemed (in the redemption transaction, under
+     a `FOR SHARE` lock of the present artifact row), renews it every third
+     of `HoldTTL` (default 5 min) while it streams and releases it at the
+     end; an expired hold is the safety net (a hold that could not be
+     renewed stops the stream, `download.failed` reason
+     `artifact_hold_lost`). Retention deletes each object inside a
+     transaction that locks the artifact row `FOR NO KEY UPDATE` and checks
+     for an unexpired hold first: a held artifact is skipped (`held` in the
+     sweep result and the `retention.swept` audit details) and retried by
+     the next sweep, and while the row is locked no hold can be taken, so a
+     hold and a deletion never interleave. A run's manifest is only deleted
+     once all its dumps are gone, so a held dump keeps it. Restores (4.x)
+     use the same API (`runstate.AcquireHoldTx` kind `restore`). Expired
+     holds are removed by the download cleanup.
+  2. **Run notices:** `runs.notices` (jsonb array ≤ 64 KiB) holds
+     informational findings that are not warnings. `databases_excluded` is a
+     notice now, so `has_warnings` flags real problems only. The manifest no
+     longer lists it as a warning; its `stats` object gains
+     `"databases_excluded": [<encoded db>, ...]` (strings only, at most
+     1000 names, D-144 canonical rules), so the exclusion is still signed.
+     GraphQL `Run.notices: [RunWarning!]!`.
+  3. **Byte-bounded warnings:** each warning message is capped at 500
+     characters and 1024 bytes, its database name at 255 bytes; the encoded
+     list is budgeted per entry (encoded size + 16 bytes for jsonb's extra
+     spaces) to 200 KiB for runs and 60 KiB for items and notices, well
+     below the CHECKs (256/64/64 KiB), with one closing
+     `warnings_truncated` entry. `Finish`/`FinishItem` can no longer fail on
+     warnings.
+  4. **Exact manifest signing:** `AddArtifact` returns the artifact id; the
+     worker passes exactly the artifact ids of the manifest's entries on a
+     destination to `MarkSigned`, which signs only those (and fails without
+     recording anything unless each is a verified, unsigned object of the
+     run on that destination).
+  5. **Failed dumps keep completeness warnings:** a dump that fails or is
+     unverified still validates the runner's stats and records their
+     warnings on the item; only the `backup_stats` row and the manifest
+     stats are skipped.
+  6. **Download limits:** `workers.max_concurrent_downloads` (1-64, default
+     4) and the new `workers.max_downloads_per_user` (1..the former,
+     default 2) configure the downloads service of each serve process.
+  7. **Scheduler savepoints:** each due job is handled under its own
+     savepoint; a failing job is rolled back alone (no River job, no run
+     row, `next_run_at` unchanged), logged, excluded from the rest of the
+     tick and retried by the next tick (`LockDueJobs` takes an exclude
+     list). A failure of the batch transaction itself still fails the batch.
+  8. **Cancel a pending retry:** `cancelRun` of a finished run that is the
+     newest attempt of its River job, while the job waits (`available`,
+     `scheduled`, `pending` or `retryable`; the River row is locked first),
+     cancels that job, so no new attempt starts. The run keeps its final
+     status; the response has `retryCanceled: true`; audited as
+     `run.cancel_requested` with `retry_canceled`.
+  9. **Hold-back buffer:** fixed capacity, never reallocated; `Write`
+     copies its input in pieces that fit and keeps the tail in the same
+     array, so `wipe` zeroes every byte of plaintext it held.
+  10. **Coalesced run events:** each `runUpdated` stream keeps a set of
+      pending run ids (a run already pending is not queued again; delivery
+      re-loads its current state anyway), at most 100 pending (beyond that
+      it falls back to a resync from the database), and delivers at most
+      one run every 50 ms. Filters stay optional (the UI's run list needs
+      the unfiltered stream); the cost of an unfiltered stream is bounded
+      per distinct run instead of per event.
+- **Alternatives considered:** a `holds` column on artifacts (no history of
+  holders, harder renewal); retention skipping artifacts with recent
+  download tickets (tickets end at redemption, streams last longer);
+  holding no row lock during the delete (a hold could be taken between
+  the check and the delete); a separate `notices` table (one jsonb column
+  matches `warnings`); character-based caps only (multibyte input exceeds
+  the byte CHECKs); requiring a filter for non-admins on `runUpdated` (owners
+  need a cross-job list; coalescing bounds the cost without breaking it);
+  advancing a failing job's `next_run_at` (loses the occurrence).
+- **Consequences:** Retention holds one pool connection and a row lock
+  per object while deleting it (bounded by a 5-minute storage timeout).
+  A download that cannot renew its hold for 5 minutes is aborted. Security
+  impact: an artifact being read can no longer be deleted under the
+  reader; signing keys can only mark objects the manifest lists; run
+  warnings can no longer make the terminal write fail (no run stuck
+  `running` on hostile catalog names); no plaintext copy survives in
+  freed memory; one subscriber cannot amplify run events into unbounded
+  database load.
+- **Related:** D-144, D-145, D-147, D-148, D-149, D-150, D-151; tasks
+  3.6-3.11, 4.x; `internal/db/migrations/00018_backup_stats.sql`,
+  `internal/db/migrations/00019_artifact_holds.sql`,
+  `internal/runstate/holds.go`, `internal/runstate/store.go`,
+  `internal/retention/worker.go`, `internal/downloads`,
+  `internal/jobs/backup_*.go`, `internal/jobs/cancel.go`,
+  `internal/queue/client.go`, `internal/scheduler/loop.go`,
+  `internal/graph/resolvers/runs_events.go`, `internal/config`.
+
+## D-156: Job calendar, start early, per-connection run limit and enable/disable
+
+- **Date:** 2026-10-28
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** The user asked for a calendar view of backup jobs, starting a
+  planned job early, a "max concurrent backups" setting per server, and
+  enabling/disabling jobs. Enable/disable (`enableJob`/`disableJob`) and an
+  extra on-demand run (`runJobNow`) already existed in the backend; a global
+  per-connection limit existed in config.
+- **Decision:**
+  - **Start early:** offer both "run now (extra run)" (unchanged
+    `runJobNow`) and "start the next planned run early"
+    (`startNextRunEarly`): the next planned occurrence runs now (trigger
+    `early`) and is skipped at its original time; the schedule continues
+    from the following occurrence. A conflict (a run already active) changes
+    nothing.
+  - **Server = connection:** a per-connection `max_concurrent_runs`
+    (NULL = the global `workers.max_runs_per_connection`), admin + step-up
+    to change.
+  - **Calendar:** planned occurrences (incl. paused, started-early and
+    skipped markers), past/active runs by status, and retention expiries
+    (exact where determined by Object Lock or keep-days, projected where they
+    depend on future runs under keep-last); month, week and day views;
+    owners see only their jobs.
+  - **Timing:** backend now (tasks 3.12–3.14, before M4), UI in M6 (6.11
+    calendar page; enable/disable and both run actions in 6.5/6.6; the
+    connection limit in 6.3).
+- **Alternatives considered:** start early as an extra run only, or as the
+  pull-forward only (rejected: the user wants both); a per-host limit across
+  connections (rejected: per connection is simpler and explicit).
+- **Consequences:** a new run trigger value `early`; the calendar query is
+  bounded (≤ 93 days, capped events) to stay cheap; projected expiries are
+  labelled as projections.
+- **Related:** tasks 3.12, 3.13, 3.14, 6.3, 6.5, 6.6, 6.11; D-143, D-146,
+  D-147, D-148.
+
+## D-157: Start the next planned run early: semantics details (task 3.12)
+
+- **Date:** 2026-10-28
+- **Status:** accepted (2026-10-28, user accepted the M3 addendum proposals) (amended by D-160: only the genuinely next occurrence can be started early; the security-impact statement below is corrected there)
+- **Decided by:** agent with user approval (task 3.12)
+- **Context:** D-156 decides that `startNextRunEarly` runs the next planned
+  occurrence now and skips it at its original time. Details it leaves open:
+  how the pulled-forward occurrence is recorded (calendar, task 3.14), the
+  error codes of refusals, the authorization, the audit entry, and what
+  "the following occurrence" is when the job is already overdue.
+- **Decision:**
+  - **Record:** a new `run_trigger` value `early` (queue trigger `early`);
+    the run's `scheduled_for` is the original `next_run_at` and
+    `triggered_by` the requesting user. A run with trigger `early` and its
+    `scheduled_for` is the "started early" marker of that occurrence; no
+    extra column or table. The `runs` migration (uncommitted M3) gains the
+    enum value in place.
+  - **One transaction** under the job's row lock (`FOR UPDATE`; the
+    scheduler locks due jobs with `SKIP LOCKED`): enqueue (River job +
+    queued run row) → advance `next_run_at` (and `last_scheduled_at` =
+    now) → audit. River's unique key refusing the insert is CONFLICT
+    ("a run of this job is already active") and the transaction changes
+    nothing.
+  - **New next_run_at:** `Plan.Next(original)`, exactly one occurrence
+    later (wall-clock schedules keep their local time across DST changes;
+    monthly day-31 schedules clamp). Only when the job was overdue
+    (original ≤ now, the scheduler had not handled it yet) and that next
+    occurrence has passed too, it is `Plan.Next(now)`, matching the
+    scheduler's collapse of missed occurrences (D-143). A schedule without
+    a further occurrence is refused (VALIDATION) like the scheduler refuses
+    to run it.
+  - **Refusals:** disabled job, manual schedule, or no `next_run_at` →
+    VALIDATION (field `id`) with a message naming the reason (manual points
+    to `runJobNow`); deleted or unknown jobs → NOT_FOUND like every other
+    job operation (no hint that a deleted job exists).
+  - **Authz:** new operation `run.start_early` with the same rule as
+    `run.now` (admin, maintainer, owner of the job with role user; no
+    step-up). An early start only moves an occurrence the owner could also
+    trigger as an extra run.
+  - **Audit:** `job.run_started_early` (name, `queue_job_id`, `run_id`,
+    `scheduled_for` = the original occurrence, `next_run_at` = the new one);
+    refusals record nothing.
+- **Alternatives considered:** a `runs.started_early_for` column or a
+  `schedule_skips` row with reason `started_early` (rejected: duplicates
+  what `trigger = early` + `scheduled_for` already say); refusing overdue
+  jobs (rejected: the scheduler may simply not have ticked yet);
+  VALIDATION for deleted jobs (rejected: inconsistent with the other job
+  operations and reveals deleted rows); step-up (rejected: the same
+  privilege as `runJobNow`).
+- **Consequences:** the scheduler never sees the original slot as due
+  because `next_run_at` moved in the same transaction. A missed scheduled
+  run after an early start is not possible; a conflict leaves the schedule
+  untouched. Security impact: none beyond `runJobNow` (same authorization,
+  audited, owners limited to their jobs).
+- **Related:** task 3.12; D-143, D-145, D-146, D-147, D-156.
+
+## D-158: Per-connection run limit: details (task 3.13)
+
+- **Date:** 2026-10-28
+- **Status:** accepted (2026-10-28, user accepted the M3 addendum proposals)
+- **Decided by:** agent with user approval
+- **Context:** D-156 decides a per-connection `max_concurrent_runs`
+  (NULL = `workers.max_runs_per_connection`, admin + step-up). It does not
+  say where the value is applied, how it interacts with a global cap that
+  is lowered later, how it is cleared over GraphQL, or whether restores
+  count against it.
+- **Decision:**
+  1. **Column** `connections.max_concurrent_runs integer NULL`, CHECK
+     1..64 (migration 00020). The service also refuses values above
+     `workers.max_concurrent_runs` of the serve process (VALIDATION).
+  2. **Applied in the slot query:** `TryInsertRunSlot` reads the column
+     under the run-slot advisory lock (D-147) and falls back to the
+     acquiring process's `workers.max_runs_per_connection`. No worker reads
+     or caches it, so a change applies to the next acquisition. Lowering
+     the limit never stops active runs; new runs snooze until the
+     connection's slot count is below the new limit. The global
+     `workers.max_concurrent_runs` check stays in the same query, so a
+     connection's limit can never exceed the global cap in practice.
+  3. **Backups and restores share the limit** (both take run slots on the
+     connection; restores in M4).
+  4. **API:** `Connection.maxConcurrentRuns` (nullable) and
+     `effectiveMaxConcurrentRuns` = own value or the global default,
+     clamped to `workers.max_concurrent_runs`; visible to admins and
+     maintainers (metadata, not under `settings`). `createConnection` and
+     `updateConnection` accept `maxConcurrentRuns`; `updateConnection`
+     takes `clearMaxConcurrentRuns` to return to the default (the
+     `clear*` pattern of the other inputs). Both mutations keep their
+     admin + step-up rule; no new operation.
+  5. **Validation only when set:** a stored value above a since lowered
+     global cap does not block unrelated updates (the slot query caps it).
+  6. **Audit:** `connection.created` settings and `connection.updated`
+     `changed`/`values` carry `max_concurrent_runs` with old/new values.
+- **Alternatives considered:** passing the limit from the worker (needs a
+  connection lookup in `internal/jobs` and could act on a stale value);
+  a nullable-input distinction instead of a clear flag (gqlgen omittable
+  fields; inconsistent with the other inputs); rejecting stored values
+  above a lowered cap on every update (blocks unrelated edits).
+- **Consequences:** a one-line subquery in the slot statement (indexed by
+  primary key). Security impact: none; the limit only bounds load on the
+  target, changes need admin + step-up and are audited.
+- **Related:** task 3.13, 6.3; D-135, D-140, D-147, D-156.
+
+## D-159: Job calendar query: details (task 3.14)
+
+- **Date:** 2026-10-28
+- **Status:** accepted (2026-10-28, user accepted the M3 addendum proposals) (amended by D-160: overdue catch-up, time-prefix truncation, run look-back by start time, bounded reads)
+- **Decided by:** agent with user approval (task 3.14)
+- **Context:** D-156 decides the calendar's content (planned, paused,
+  started-early and skipped occurrences, runs, exact and projected
+  retention expiries), the 93-day bound and owner scoping. Open were the
+  exact expiry semantics, the bounds, the scope details and how the data is
+  loaded without per-job queries.
+- **Decision:**
+  - **API:** `calendar(from, to, timezone, jobIds)` → flat
+    `CalendarEvent`s (kind PLANNED / RUN / SKIPPED / EXPIRY) ordered by
+    start, plus `truncated`. Times are UTC; `timezone` (validated like a
+    schedule zone: IANA name, never `Local`) is only echoed for the
+    client's day bucketing. `to` > `from`, `to − from` ≤ 93 × 24 h, both in
+    the scheduler's years 2000–2199; `jobIds` ≤ 500, `null` = every
+    visible job, `[]` = none. Authz `calendar.view`: every role, jobs
+    filtered by `JobScope`; invisible ids are dropped silently (no
+    probing). Only non-deleted jobs appear.
+  - **Planned:** occurrences in [max(from, now), to) from `next_run_at`
+    (enabled jobs) or from the schedule (disabled jobs: `paused`), ≤ 500
+    per job. A run with trigger `early` whose `scheduled_for` is in the
+    range is shown as that occurrence with `startedEarly` (D-157); a
+    computed occurrence or skip record at the same slot is suppressed.
+  - **Runs:** start = `started_at`, else `scheduled_for` (not for early
+    runs), else `queued_at`; end = `finished_at` (active runs last until
+    now). The scan looks back 8 days before `from` (the job timeout is at
+    most 7 days) plus every still active run.
+  - **Expiries:** per (run, destination) copy of present artifacts, the
+    earliest time retention may remove it, computed by
+    `retention.Expiries` from the same keep rules as `retention.Plan`
+    (shared helpers, and a property test checks the projection against
+    `Plan`): the later of keep-days (run time + days), the time of the
+    N-th future complete run when keep-last or the newest-complete rule
+    (or the newer-incomplete rule) still keeps it, and Object Lock
+    `lock_until`. `projected` is set whenever the time depends on future
+    runs; future runs are the job's planned occurrences assuming success,
+    only for enabled scheduled jobs (paused or manual jobs get no projected
+    expiries). Already eligible copies show at now ("next sweep").
+    Completeness per copy is aggregated in SQL with `Plan`'s meaning.
+  - **Loading and bounds:** four batched queries for the whole job set
+    (jobs ≤ 500, runs ≤ 5,000, skips ≤ 5,000, copy summaries ≤ 50,000; a
+    cut-off job gets no expiries), the projection ≤ 100,000 schedule
+    computations per request, ≤ 5,000 events. Hitting any bound sets
+    `truncated`.
+- **Alternatives considered:** loading every artifact and running
+  `retention.Plan` per job (rejected: unbounded rows); `projected` only
+  when the projected date is the latest one (rejected: the date is still
+  conditional on future runs); returning local times (rejected: UTC plus
+  the zone is unambiguous across DST); showing deleted jobs (rejected: the
+  calendar is about live jobs; history stays in `runs`).
+- **Consequences:** a read-only, constant-query endpoint whose cost is
+  bounded per request (on top of the GraphQL complexity, rate limit and
+  body limits). Security impact: no new data beyond what `runs`,
+  `artifacts` and `jobs` already show to the same caller; owners see only
+  their jobs; detail texts are fixed strings or stored codes.
+- **Related:** task 3.14, 6.11; D-143, D-145, D-146, D-148, D-156, D-157.
+
+## D-160: M3 addendum review fixes: one early start ahead, calendar catch-up, time-prefix truncation and bounded reads
+
+- **Date:** 2026-10-28
+- **Status:** accepted (2026-10-28, user accepted the M3 addendum proposals)
+- **Decided by:** agent with user approval (M3 addendum review fixes)
+- **Context:** The reviews of tasks 3.12–3.14 found: (security, medium) an
+  owner could call `startNextRunEarly` again after each early run finished
+  and push `next_run_at` weeks ahead, effectively pausing the planned
+  backups of a job whose schedule owners cannot edit; D-157 wrongly stated
+  "no security impact beyond `runJobNow`". (code) The calendar projected an
+  overdue job's future runs from the missed occurrences instead of one
+  catch-up run at now; the event cap kept the first events computed, not
+  the earliest; the run scan looked back by `queued_at`, missing long-queued
+  runs that started recently; an overdue job's pending run was invisible.
+  (security, low) The calendar's copy query counted run items in correlated
+  subqueries, its `trigger = 'early'` branch could scan a job's whole run
+  history, and the reads had no statement timeout.
+- **Decision:**
+  1. **At most one occurrence ahead.** `startNextRunEarly` refuses
+     (VALIDATION, field `id`, "the next planned run was already started
+     early") when the stored `next_run_at` is later than the schedule's
+     natural next occurrence after now (`scheduler.Next(schedule, now)`),
+     i.e. the next occurrence was already pulled forward. Once the original
+     time of the pulled-forward occurrence has passed, the stored value is
+     the natural next one again and an early start is allowed. The check
+     runs under the job's row lock before anything is enqueued; refusals
+     record nothing. An active run still answers CONFLICT when the
+     occurrence is the natural next one.
+  2. **Calendar catch-up (D-143 semantics).** For an enabled job whose
+     `next_run_at` ≤ now, the projection counts one catch-up run at now and
+     continues from `Plan.Next(now)`, like `scheduler.Plan.Due`; the
+     calendar shows that pending run as a PLANNED event at now with the new
+     `CalendarEvent.overdue` flag and a fixed detail text, followed by the
+     occurrences after now.
+  3. **Truncation is a time prefix.** The event collector keeps the
+     `MaxEvents` earliest events (start, then job, kind, run and
+     destination ids for a deterministic order) whatever order they are
+     computed in; it holds at most 2 × `MaxEvents` (sort and cut when full,
+     then refuse events after the last kept one).
+  4. **Run look-back by start.** `ListCalendarRuns` bounds finished runs by
+     `coalesce(started_at, queued_at) >= scan_from` (a run lasts at most the
+     job timeout after it started).
+  5. **Bounded reads.** `ListCalendarRuns` is a `UNION` of three
+     index-bounded branches (look-back: new index `runs_job_start_idx` on
+     `(job_id, coalesce(started_at, queued_at))`; active runs:
+     `runs_active_idx`; started-early slots: new partial index
+     `runs_job_early_idx` on `(job_id, scheduled_for) WHERE trigger =
+     'early'`; migration 00021). `ListCalendarCopies` computes each run's
+     item count once (CTE) instead of per copy; the present artifacts use
+     the existing partial `artifacts_job_destination_idx` (leading
+     `job_id`, `WHERE state = 'present'`), checked with EXPLAIN on a seeded
+     database, so no new artifacts index. The four reads run in one
+     transaction started with `SetCalendarReadLimits` (read only,
+     `statement_timeout` = `calendar.QueryTimeout`, 5 s, transaction-local);
+     a timeout fails the request (masked internal error).
+  6. **Docs.** Backups and restores share the per-connection slot pool (a
+     limit of 1 makes a restore wait behind a backup); a stored
+     `maxConcurrentRuns` may exceed a since lowered global cap (shown
+     clamped, the global cap is enforced by `TryInsertRunSlot`); artifact
+     holds can briefly outlive a shown expiry; `runJobNow` answers CONFLICT
+     but `startNextRunEarly` VALIDATION for a disabled job (established
+     behaviour of D-146/D-157, documented for the M6 UI rather than
+     changed).
+- **Alternatives considered:** a per-job cooldown or a counter of early
+  starts (rejected: time-based state the schedule already implies);
+  allowing owners only one early start per day (rejected: arbitrary and
+  still drifts for sub-daily schedules); suppressing the overdue event
+  (rejected: the pending run is real and imminent); a separate query for
+  early runs (rejected: one more round trip; the union keeps the constant
+  query count); a configurable calendar timeout (rejected for now: a
+  constant is enough for a bounded read, configurable later if needed).
+- **Consequences:** **Security impact (corrects D-157):** an early start
+  does change the planned schedule, unlike `runJobNow`; without this rule a
+  backup owner could defer a job's planned backups indefinitely. With it,
+  `next_run_at` is never more than one occurrence beyond the natural
+  schedule, so planned backups are delayed by at most one interval and
+  never skipped in sequence; every early start stays audited. The
+  calendar's cost per request is bounded by indexes and a 5 s statement
+  timeout in a read-only transaction (SV-22). Two more indexes on `runs`
+  (slightly more write cost per run). A new GraphQL field
+  `CalendarEvent.overdue` (additive).
+- **Related:** tasks 3.12, 3.13, 3.14, 6.6, 6.11; D-143, D-146, D-155,
+  D-157, D-158, D-159; SV-22.
+
+## D-161: Notification event catalog and per-user defaults
+
+- **Date:** 2026-10-28
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** Users should choose exactly which notifications they receive
+  (e.g. backup failed, backup successful, backup started, restore started).
+  The planned per-user preference matrix (D-023, D-051) only knew a handful of
+  outcome events.
+- **Decision:** A typed event catalog in four groups plus the mandatory
+  security events: backup lifecycle (`backup.started`, `succeeded`,
+  `succeeded_with_warnings`, `partial`, `failed`, `canceled`, `missed`,
+  `started_early`), restore lifecycle (`restore.started`, `completed`,
+  `failed`; `test_restore.passed`, `warnings`, `failed`), retention & storage
+  (`retention.summary` as a daily digest, `artifact.missing`,
+  `destination.test_failed`), job & config changes (`job.created`, `updated`,
+  `disabled`, `enabled`, `deleted`, `encryption_changed`;
+  `connection.pin_changed`, `tls_downgraded`, `host_key_changed`; staff, and
+  owners only for their own jobs' job events). Recipients are users who may
+  see the subject at delivery time and whose preference for (event, channel)
+  is on; per-job overrides win. **New-user defaults: every event visible to
+  the user's role goes to the in-app inbox; email only for problem events;
+  webhooks/push are opt-in.** `*.started` events are low priority and
+  collapsed per job within a short window; retention removals are a daily
+  digest, never per file. Security alerts stay mandatory (inbox + email).
+- **Alternatives considered:** problem-only defaults; nothing by default
+  (both rejected by the user in favour of "everything in-app").
+- **Consequences:** a busier in-app inbox by default (mitigated by the
+  collapse rules and per-event toggles); emitters wired through the existing
+  runstate/pubsub/audit hooks so new events don't scatter calls.
+- **Related:** tasks 4.6, 5.3, 5.3b, 5.4, 6.10; amends the event list of
+  D-051 (and D-023's scope).
 

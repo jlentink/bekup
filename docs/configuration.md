@@ -261,7 +261,7 @@ Generated from the config structs; regenerate with
 | `url` | `BEKUP_DATABASE_URL` | string | `(empty)` | **Dev mode only.** Inline connection URL. Dev mode only; rejected otherwise. Use url_file instead. |
 | `owner_url_file` | `BEKUP_DATABASE_OWNER_URL_FILE` | string | `'/run/secrets/bekup_database_owner_url'` | **Secret file.** Path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate. |
 | `owner_url` | `BEKUP_DATABASE_OWNER_URL` | string | `(empty)` | **Dev mode only.** Inline bekup_owner connection URL. Dev mode only; rejected otherwise. Use owner_url_file instead. |
-| `max_conns` | `BEKUP_DATABASE_MAX_CONNS` | int | `10` | Maximum number of pooled connections. |
+| `max_conns` | `BEKUP_DATABASE_MAX_CONNS` | int | `25` | Maximum number of pooled connections (worker processes: at least the sum of the [workers] *_queue_workers plus 4). |
 | `min_conns` | `BEKUP_DATABASE_MIN_CONNS` | int | `0` | Minimum number of idle pooled connections. |
 | `conn_max_lifetime` | `BEKUP_DATABASE_CONN_MAX_LIFETIME` | duration | `'1h0m0s'` | Maximum lifetime of a pooled connection. |
 | `conn_max_idle_time` | `BEKUP_DATABASE_CONN_MAX_IDLE_TIME` | duration | `'30m0s'` | Maximum idle time of a pooled connection. |
@@ -319,10 +319,20 @@ Generated from the config structs; regenerate with
 |---|---|---|---|---|
 | `max_concurrent_runs` | `BEKUP_WORKERS_MAX_CONCURRENT_RUNS` | int | `4` | Maximum backup/restore runs at the same time (global). |
 | `max_runs_per_connection` | `BEKUP_WORKERS_MAX_RUNS_PER_CONNECTION` | int | `1` | Maximum concurrent runs against one connection. |
-| `max_concurrent_downloads` | `BEKUP_WORKERS_MAX_CONCURRENT_DOWNLOADS` | int | `4` | Maximum concurrent artifact downloads. |
-| `backup_timeout` | `BEKUP_WORKERS_BACKUP_TIMEOUT` | duration | `'6h0m0s'` | Default timeout of a backup run. |
+| `max_concurrent_downloads` | `BEKUP_WORKERS_MAX_CONCURRENT_DOWNLOADS` | int | `4` | Maximum concurrent artifact downloads served by this process (1-64; a plain download of a passphrase-encrypted artifact needs up to 256 MiB for scrypt). |
+| `max_downloads_per_user` | `BEKUP_WORKERS_MAX_DOWNLOADS_PER_USER` | int | `2` | Maximum concurrent artifact downloads of one user in this process (1..max_concurrent_downloads). |
+| `backup_timeout` | `BEKUP_WORKERS_BACKUP_TIMEOUT` | duration | `'6h0m0s'` | Default timeout of a backup run and the cap on each job's timeoutSeconds. |
 | `restore_timeout` | `BEKUP_WORKERS_RESTORE_TIMEOUT` | duration | `'12h0m0s'` | Timeout of a restore run. |
 | `notify_timeout` | `BEKUP_WORKERS_NOTIFY_TIMEOUT` | duration | `'30s'` | Timeout of a single notification delivery. |
+| `retention_timeout` | `BEKUP_WORKERS_RETENTION_TIMEOUT` | duration | `'1h0m0s'` | Timeout of a single retention pass of one job. |
+| `shutdown_timeout` | `BEKUP_WORKERS_SHUTDOWN_TIMEOUT` | duration | `'2m0s'` | On shutdown, how long running jobs may finish before they are canceled (River soft stop, then hard stop). |
+| `backup_queue_workers` | `BEKUP_WORKERS_BACKUP_QUEUE_WORKERS` | int | `4` | Backup jobs this process works at the same time (River queue backup, 1-10000). |
+| `restore_queue_workers` | `BEKUP_WORKERS_RESTORE_QUEUE_WORKERS` | int | `2` | Restore jobs this process works at the same time (River queue restore, 1-10000). |
+| `retention_queue_workers` | `BEKUP_WORKERS_RETENTION_QUEUE_WORKERS` | int | `2` | Retention jobs this process works at the same time (River queue retention, 1-10000). |
+| `notify_queue_workers` | `BEKUP_WORKERS_NOTIFY_QUEUE_WORKERS` | int | `8` | Notification deliveries this process works at the same time (River queue notify, 1-10000). |
+| `maintenance_queue_workers` | `BEKUP_WORKERS_MAINTENANCE_QUEUE_WORKERS` | int | `1` | Housekeeping jobs this process works at the same time (River queue maintenance, 1-10000). |
+| `run_log_max_lines` | `BEKUP_WORKERS_RUN_LOG_MAX_LINES` | int | `10000` | Log lines stored per backup run (runner output and worker events, 100-1000000); further lines are counted and dropped. |
+| `run_log_max_line_bytes` | `BEKUP_WORKERS_RUN_LOG_MAX_LINE_BYTES` | int | `4096` | Maximum bytes of one stored run-log line (128-16384); longer lines are truncated after redaction. |
 
 #### `[scheduler]`
 
@@ -330,6 +340,16 @@ Generated from the config structs; regenerate with
 |---|---|---|---|---|
 | `enabled` | `BEKUP_SCHEDULER_ENABLED` | bool | `true` | Run the scheduler loop in this process. |
 | `tick_interval` | `BEKUP_SCHEDULER_TICK_INTERVAL` | duration | `'15s'` | How often due jobs are enqueued (>= 1s). |
+| `min_interval` | `BEKUP_SCHEDULER_MIN_INTERVAL` | duration | `'5m0s'` | Shortest allowed schedule interval for new or changed jobs, incl. the gap between cron occurrences (1m to 24h). |
+| `batch_size` | `BEKUP_SCHEDULER_BATCH_SIZE` | int | `100` | Due jobs locked and enqueued per scheduler transaction (1-1000). |
+
+#### `[retention]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `dry_run` | `BEKUP_RETENTION_DRY_RUN` | bool | `false` | Compute and log every retention plan without deleting anything (instance-wide dry run). |
+| `max_deletions_per_sweep` | `BEKUP_RETENTION_MAX_DELETIONS_PER_SWEEP` | int | `500` | Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep. |
+| `partial_cleanup_age` | `BEKUP_RETENTION_PARTIAL_CLEANUP_AGE` | duration | `'24h0m0s'` | The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days). |
 
 #### `[notifications]`
 

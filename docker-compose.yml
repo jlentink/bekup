@@ -214,7 +214,8 @@ services:
       runner:
         condition: service_started
     restart: unless-stopped
-    stop_grace_period: 60s
+    # > workers.shutdown_timeout (2m) + 30s hard stop (D-145).
+    stop_grace_period: 180s
     deploy:
       resources:
         # argon2id (64 MiB x argon2_max_concurrent) + S3 multipart buffers

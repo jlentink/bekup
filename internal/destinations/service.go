@@ -681,14 +681,33 @@ func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	})
 }
 
-// checkUnused is the hook that refuses deleting a destination that is
-// still in use. Jobs (task 3.5, job_destinations) must refuse it while an
-// enabled job targets the destination; artifacts (tasks 3.6+) keep
-// referencing a soft-deleted row, so they never block the soft delete but
-// retention/restore must still be able to open it. Until those tables
-// exist nothing references destinations.
-func (s *Service) checkUnused(context.Context, *sqlc.Queries, uuid.UUID) error {
-	return nil
+// InUseError reports the (up to five) non-deleted jobs that still write to
+// the destination; it matches ErrInUse with errors.Is. Job names are shown only
+// to admins (the only role that may delete).
+type InUseError struct{ Jobs []string }
+
+func (e *InUseError) Error() string { return ErrInUse.Error() + ": " + strings.Join(e.Jobs, ", ") }
+
+// Is matches ErrInUse.
+func (e *InUseError) Is(target error) bool { return target == ErrInUse }
+
+// checkUnused refuses deleting a destination that a non-deleted job still uses
+// (task 3.5). The job side share-locks the destination row when it saves a job,
+// and Delete holds the row lock here, so the two cannot race. Artifacts
+// (tasks 3.6+) keep referencing a soft-deleted row and never block.
+func (s *Service) checkUnused(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
+	rows, err := q.JobsUsingDestination(ctx, id)
+	if err != nil {
+		return fmt.Errorf("destinations: in-use check: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	names := make([]string, len(rows))
+	for i, r := range rows {
+		names[i] = r.Name
+	}
+	return &InUseError{Jobs: names}
 }
 
 // record writes one audit entry, plus a secret.changed entry when

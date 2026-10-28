@@ -98,7 +98,7 @@ url_file = "/run/secrets/bekup_database_url"
 owner_url_file = "/run/secrets/bekup_database_owner_url"
 # Dev mode only, rejected otherwise:
 # owner_url = "postgres://bekup_owner:bekup_owner@localhost:5432/bekup"
-max_conns = 10
+max_conns = 25         # >= the sum of [workers] *_queue_workers + 4 in worker processes
 min_conns = 0
 conn_max_lifetime = "1h"
 conn_max_idle_time = "30m"
@@ -171,14 +171,45 @@ scratch_dir = "/var/lib/bekup/scratch"
 [workers]
 max_concurrent_runs = 4
 max_runs_per_connection = 1
+# Downloads served by this process at the same time (1-64), and per user.
 max_concurrent_downloads = 4
+max_downloads_per_user = 2
 backup_timeout = "6h"
 restore_timeout = "12h"
 notify_timeout = "30s"
+retention_timeout = "1h"
+# On SIGTERM: stop fetching jobs, let running ones finish for this long, then
+# cancel them (a canceled backup is retried once, restores never are).
+shutdown_timeout = "2m"
+# Per-process concurrency of the River queues (serve with workers and every
+# `bekup worker` process).
+backup_queue_workers = 4
+restore_queue_workers = 2
+retention_queue_workers = 2
+notify_queue_workers = 8
+maintenance_queue_workers = 1
+# Run logs (runner output + worker events) per backup run: at most this many
+# lines, each at most this many bytes (redacted first, then truncated).
+run_log_max_lines = 10000
+run_log_max_line_bytes = 4096
 
 [scheduler]
 enabled = true
 tick_interval = "15s"
+min_interval = "5m"
+batch_size = 100
+
+[retention]
+# Retention policies (keep last N / keep N days) are set per job and applied
+# per destination after every successful or partial run and once a day.
+# dry_run = true only computes and logs the plans (nothing is deleted).
+dry_run = false
+# Hard cap on the objects one sweep of one job may delete (limits the blast
+# radius of a misconfiguration); the rest is deleted by later sweeps.
+max_deletions_per_sweep = 500
+# Leftover temporary upload files on disk/SFTP destinations older than this
+# are removed by the daily sweep.
+partial_cleanup_age = "24h"
 
 [notifications]
 max_per_user_per_hour = 30

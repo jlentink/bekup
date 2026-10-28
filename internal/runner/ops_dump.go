@@ -17,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runner/executor"
+	"github.com/jlentink/bekup/internal/runner/validate"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
@@ -81,6 +82,23 @@ func (w *output) Final(send func() error) error {
 	}
 	w.abandoned = true
 	return send()
+}
+
+// Send sends a control message (the stats) under the output lock.
+func (w *output) Send(send func() error) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.abandoned {
+		return errAbandoned
+	}
+	if w.sendErr != nil {
+		return w.sendErr
+	}
+	if err := send(); err != nil {
+		w.sendErr = err
+		return err
+	}
+	return nil
 }
 
 // Abandon marks the output finished (every handler return path): it waits
@@ -263,11 +281,34 @@ func (o *operations) dump(ctx context.Context, req *runnerpb.DumpRequest, send f
 			return send(&runnerpb.DumpResponse{Msg: &runnerpb.DumpResponse_Log{Log: l}})
 		})
 	defer out.Abandon()
+	// Statistics (task 3.10): captured before the container starts; the
+	// PostgreSQL snapshot transaction stays open until the dump finished.
+	var sc *statsCapture
+	if d.Stats != nil {
+		sc = o.captureStats(ctx, d, req.GetTarget())
+		defer sc.close(ctx)
+		if sc == nil {
+			cw = append(cw, warnStatsUnavailable)
+			out.Runner("source statistics could not be captured; the dump runs without them")
+		} else {
+			a.extra = append(a.extra, statsAudit(sc.msg)...)
+			if err := out.Send(func() error {
+				return send(&runnerpb.DumpResponse{Msg: &runnerpb.DumpResponse_Stats{Stats: sc.msg}})
+			}); err != nil {
+				return status.Error(codes.Aborted, executor.ErrOutput.Error())
+			}
+		}
+	}
+	snapshot := ""
+	if sc != nil {
+		snapshot = sc.snapshot
+	}
 	rs := o.runSpec(req.GetCtx().GetRunId(), d.Entry, d.Target, req.GetTarget(), func(et engine.Target) (engine.Command, error) {
-		return d.Engine.Dump(d.Entry, et, d.Database)
+		return d.Engine.DumpSnapshot(d.Entry, et, d.Database, snapshot)
 	}, chk.version)
 	rs.Stdout, rs.Log, rs.Timeout = out.Stdout, out.Log, remaining(ctx)
 	res, err := o.exec.Run(ctx, rs)
+	sc.close(ctx)
 	if err != nil {
 		return targetStatus(err)
 	}
@@ -307,6 +348,10 @@ func (o *operations) dumpGlobals(ctx context.Context, req *runnerpb.DumpGlobalsR
 	if err != nil {
 		return err
 	}
+	st, err := validate.StatsOptions(req.GetStats())
+	if err != nil {
+		return err
+	}
 	a.target(t)
 	if o.exec == nil {
 		return errNoExecutor
@@ -328,6 +373,16 @@ func (o *operations) dumpGlobals(ctx context.Context, req *runnerpb.DumpGlobalsR
 			return send(&runnerpb.DumpGlobalsResponse{Msg: &runnerpb.DumpGlobalsResponse_Log{Log: l}})
 		})
 	defer out.Abandon()
+	if st != nil {
+		if gs := o.captureGlobalStats(ctx, t, req.GetTarget(), st); gs == nil {
+			cw = append(cw, warnStatsUnavailable)
+			out.Runner("source statistics could not be captured; the dump runs without them")
+		} else if err := out.Send(func() error {
+			return send(&runnerpb.DumpGlobalsResponse{Msg: &runnerpb.DumpGlobalsResponse_Stats{Stats: gs}})
+		}); err != nil {
+			return status.Error(codes.Aborted, executor.ErrOutput.Error())
+		}
+	}
 	attempt := func(fallback bool) (executor.Result, error) {
 		rs := o.runSpec(req.GetCtx().GetRunId(), t.Entry, t, req.GetTarget(), func(et engine.Target) (engine.Command, error) {
 			primary, fb, err := t.Engine.DumpGlobals(t.Entry, et)

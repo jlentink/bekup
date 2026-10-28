@@ -96,6 +96,45 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.confirmSshHostKey":            authz.OpConnectionHostKeyConfirm,
 	"Mutation.setTlsMode":                   authz.OpConnectionUpdate,
 	"Mutation.generateConnectionSshKeypair": authz.OpConnectionSSHKeyGenerate,
+
+	// Jobs (task 3.5, D-146): staff manage every job; owners (role user)
+	// view and run their own (the resolvers authorize with the job id;
+	// the list filters by JobScope). Owner changes need step-up.
+	"Query.jobs":                 authz.OpJobList,
+	"Query.job":                  authz.OpJobView,
+	"Query.previewSchedule":      authz.OpJobSchedulePreview,
+	"Mutation.createJob":         authz.OpJobCreate,
+	"Mutation.updateJob":         authz.OpJobUpdate,
+	"Mutation.deleteJob":         authz.OpJobDelete,
+	"Mutation.enableJob":         authz.OpJobUpdate,
+	"Mutation.disableJob":        authz.OpJobUpdate,
+	"Mutation.assignJobOwners":   authz.OpJobOwnersAssign,
+	"Mutation.removeJobOwner":    authz.OpJobOwnersAssign,
+	"Mutation.runJobNow":         authz.OpRunNow,
+	"Mutation.startNextRunEarly": authz.OpRunStartEarly,
+	"Mutation.cancelRun":         authz.OpRunCancel,
+	// Run history and live runs (task 3.7): owners see their own jobs'
+	// runs (lists filtered by JobScope, single runs authorized with the
+	// run's job from the DB, stream events re-authorized per event).
+	"Query.runs":                  authz.OpRunList,
+	"Query.run":                   authz.OpRunView,
+	"Query.runLogs":               authz.OpRunLogsView,
+	"Query.artifacts":             authz.OpArtifactList,
+	"Subscription.runUpdated":     authz.OpRunView,
+	"Subscription.runLogAppended": authz.OpRunLogsView,
+	// Job calendar (task 3.14, D-156): jobs filtered by JobScope.
+	"Query.calendar": authz.OpCalendarView,
+	// Job encryption (task 3.2, D-142; re-checked in internal/jobkeys).
+	"Mutation.setJobPassphrase":      authz.OpJobEncryptionKeysEdit,
+	"Mutation.generateJobPassphrase": authz.OpJobEncryptionKeysEdit,
+	"Mutation.setJobRecipient":       authz.OpJobEncryptionKeysEdit,
+	"Mutation.generateAgeKeypair":    authz.OpJobEncryptionKeysEdit,
+	"Mutation.enableJobEncryption":   authz.OpJobEncryptionKeysEdit,
+	"Mutation.disableJobEncryption":  authz.OpJobEncryptionOptOut,
+	"Mutation.exportJobPassphrases":  authz.OpJobPassphraseExport,
+	// Downloads (task 3.9, D-150): admins and owners (role user) only,
+	// re-checked with the artifact's job in internal/downloads.
+	"Mutation.createDownloadTicket": authz.OpArtifactDownload,
 }
 
 // PolicyAccess is the Access backed by internal/authz and the principal

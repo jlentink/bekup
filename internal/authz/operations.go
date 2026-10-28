@@ -103,17 +103,23 @@ const (
 	OpStorageUsageView          Operation = "destination.usage_view"
 
 	// Jobs (tasks 3.2, 3.5, 4.6). Owners see their own jobs only.
-	OpJobList               Operation = "job.list"
-	OpJobView               Operation = "job.view"
-	OpJobCreate             Operation = "job.create"
-	OpJobUpdate             Operation = "job.update"
-	OpJobDelete             Operation = "job.delete"
-	OpJobSchedulePreview    Operation = "job.schedule_preview"
-	OpJobOwnersAssign       Operation = "job.owners_assign"
-	OpJobRetentionUpdate    Operation = "job.retention_update"
-	OpJobEncryptionKeysEdit Operation = "job.encryption_keys_edit" // passphrase / age keypair
-	OpJobEncryptionOptOut   Operation = "job.encryption_opt_out"
-	OpJobPassphraseExport   Operation = "job.passphrase_export"
+	OpJobList            Operation = "job.list"
+	OpJobView            Operation = "job.view"
+	OpJobCreate          Operation = "job.create"
+	OpJobUpdate          Operation = "job.update"
+	OpJobDelete          Operation = "job.delete"
+	OpJobSchedulePreview Operation = "job.schedule_preview"
+	OpJobOwnersAssign    Operation = "job.owners_assign"
+	// OpJobOwnersView reads a job's owners (Job.owners; staff only, null
+	// for backup owners).
+	OpJobOwnersView      Operation = "job.owners_view"
+	OpJobRetentionUpdate Operation = "job.retention_update"
+	// Job encryption (task 3.2, D-142; enforced again in internal/jobkeys).
+	// The encryption status (mode, versions, public recipient, opt-out
+	// badge) is nested under the job and inherits job.view.
+	OpJobEncryptionKeysEdit Operation = "job.encryption_keys_edit" // set/generate passphrase or age keypair; opt back in; a chosen key at creation (admin)
+	OpJobEncryptionOptOut   Operation = "job.encryption_opt_out"   // turn encryption off (admin)
+	OpJobPassphraseExport   Operation = "job.passphrase_export"    // every passphrase version, offline recovery (admin)
 	OpJobTestRestoreEdit    Operation = "job.test_restore_edit"
 	OpJobSharedChannelsEdit Operation = "job.shared_channels_edit"
 
@@ -122,12 +128,27 @@ const (
 	OpRunView     Operation = "run.view" // incl. runUpdated
 	OpRunLogsView Operation = "run.logs_view"
 	OpRunNow      Operation = "run.now"
-	OpRunCancel   Operation = "run.cancel"
+	// OpRunStartEarly starts the next planned run early (task 3.12, D-156):
+	// the same rule as OpRunNow.
+	OpRunStartEarly Operation = "run.start_early"
+	OpRunCancel     Operation = "run.cancel"
+	// OpRunActorView shows who started a manual run (Run.triggeredBy):
+	// staff only, backup owners see null (task 3.7).
+	OpRunActorView Operation = "run.actor_view"
+
+	// OpCalendarView is the job calendar (task 3.14, D-156): every role;
+	// the jobs are filtered by JobScope like a listing.
+	OpCalendarView Operation = "calendar.view"
 
 	// Artifacts and downloads (tasks 3.7, 3.9).
 	OpArtifactList     Operation = "artifact.list"
 	OpArtifactView     Operation = "artifact.view"
 	OpArtifactDownload Operation = "artifact.download" // createDownloadTicket (raw or plain)
+	// OpArtifactDownloadRedeem is the use-time re-check of a download
+	// ticket (GET /api/download/{ticket}, D-150): the same callers as
+	// OpArtifactDownload, without a fresh step-up (the ticket creation
+	// required one; the ticket is single use, session bound and lives 60s).
+	OpArtifactDownloadRedeem Operation = "artifact.download_redeem"
 
 	// Restores (tasks 4.2-4.6).
 	OpRestoreTargetsList Operation = "restore.targets_list"
@@ -271,31 +292,39 @@ var policy = map[Operation]Rule{
 	OpDestinationSSHKeyGenerate: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpStorageUsageView:          {Roles: staff},
 
-	OpJobList:               {Roles: staff, Owner: OwnerList},
-	OpJobView:               {Roles: staff, Owner: OwnerJob},
-	OpJobCreate:             {Roles: staff},
-	OpJobUpdate:             {Roles: staff},
-	OpJobDelete:             {Roles: staff},
-	OpJobSchedulePreview:    {Roles: staff},
-	OpJobOwnersAssign:       {Roles: staff, Fresh: FreshStepUp},
-	OpJobRetentionUpdate:    {Roles: staff},
-	OpJobEncryptionKeysEdit: {Roles: staff, Fresh: FreshStepUp},
+	OpJobList:            {Roles: staff, Owner: OwnerList},
+	OpJobView:            {Roles: staff, Owner: OwnerJob},
+	OpJobCreate:          {Roles: staff},
+	OpJobUpdate:          {Roles: staff},
+	OpJobDelete:          {Roles: staff},
+	OpJobSchedulePreview: {Roles: staff},
+	OpJobOwnersAssign:    {Roles: staff, Fresh: FreshStepUp},
+	OpJobOwnersView:      {Roles: staff},
+	OpJobRetentionUpdate: {Roles: staff},
+	// User decision (M3 review): choosing a job's keys is admin-only.
+	OpJobEncryptionKeysEdit: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpJobEncryptionOptOut:   {Roles: adminOnly, Fresh: FreshStepUp},
 	OpJobPassphraseExport:   {Roles: adminOnly, Fresh: FreshStepUp},
 	OpJobTestRestoreEdit:    {Roles: staff},
 	OpJobSharedChannelsEdit: {Roles: adminOnly},
 
-	OpRunList:     {Roles: staff, Owner: OwnerList},
-	OpRunView:     {Roles: staff, Owner: OwnerJob},
-	OpRunLogsView: {Roles: staff, Owner: OwnerJob},
-	OpRunNow:      {Roles: staff, Owner: OwnerJob},
-	OpRunCancel:   {Roles: staff},
+	OpRunList:       {Roles: staff, Owner: OwnerList},
+	OpRunView:       {Roles: staff, Owner: OwnerJob},
+	OpRunLogsView:   {Roles: staff, Owner: OwnerJob},
+	OpRunNow:        {Roles: staff, Owner: OwnerJob},
+	OpRunStartEarly: {Roles: staff, Owner: OwnerJob},
+	OpRunCancel:     {Roles: staff},
+	OpRunActorView:  {Roles: staff},
+
+	OpCalendarView: {Roles: staff, Owner: OwnerList},
 
 	OpArtifactList: {Roles: staff, Owner: OwnerList},
 	OpArtifactView: {Roles: staff, Owner: OwnerJob},
 	// D-012/D-067: admins and owners only; never maintainers, not even
 	// when they are listed as owners.
 	OpArtifactDownload: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
+	// D-150: redeeming a ticket re-checks role and ownership at use time.
+	OpArtifactDownloadRedeem: {Roles: adminOnly, Owner: OwnerJob},
 
 	OpRestoreTargetsList: {Roles: staff, Owner: OwnerJob},
 	OpRestoreArtifact:    {Roles: staff, Owner: OwnerJob, Fresh: FreshAAL2, NeedsTarget: true},

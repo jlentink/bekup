@@ -64,6 +64,8 @@ var SingleRootFields = []string{
 	"Mutation.confirmCertificatePin",
 	"Mutation.stageBackupPin",
 	"Mutation.fetchSshHostKey",
+	// Download tickets (task 3.9, D-150): may carry an age identity.
+	"Mutation.createDownloadTicket",
 }
 
 // CredentialOperations are the authz operations whose root fields verify,
@@ -85,6 +87,8 @@ var CredentialOperations = []authz.Operation{
 	authz.OpConnectionCertFetch,
 	authz.OpConnectionPinConfirm,
 	authz.OpConnectionHostKeyFetch,
+	// createDownloadTicket may carry an age identity (D-150).
+	authz.OpArtifactDownload,
 }
 
 // CheckSingleRootFields verifies that every entry of single is a root

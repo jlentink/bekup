@@ -12,6 +12,77 @@ import (
 	"github.com/google/uuid"
 )
 
+// One object stored on a destination.
+type Artifact struct {
+	ID    uuid.UUID `json:"id"`
+	RunID uuid.UUID `json:"runId"`
+	// The run item (null for the manifest).
+	RunItemID   *uuid.UUID              `json:"runItemId,omitempty"`
+	Job         *RunJobRef              `json:"job"`
+	Destination *ArtifactDestinationRef `json:"destination"`
+	Kind        ArtifactKind            `json:"kind"`
+	// The item's database (null for globals and manifests).
+	Database *string `json:"database,omitempty"`
+	// The object key on the destination ({slug}/{timestamp}/...).
+	ObjectKey string `json:"objectKey"`
+	// The run's directory timestamp.
+	StorageTimestamp *time.Time `json:"storageTimestamp,omitempty"`
+	Size             float64    `json:"size"`
+	// Lowercase hex SHA-256 of the stored object.
+	Sha256 string `json:"sha256"`
+	// The S3 object version, if versioned.
+	VersionID  *string             `json:"versionId,omitempty"`
+	Encryption *ArtifactEncryption `json:"encryption"`
+	// The native verification passed. Unverified objects are never in a manifest.
+	Verified bool `json:"verified"`
+	// A signed manifest next to it covers this object.
+	Signed bool `json:"signed"`
+	// The instance key id of that manifest.
+	SigningKeyID *string `json:"signingKeyId,omitempty"`
+	// Object Lock retention end.
+	LockUntil      *time.Time    `json:"lockUntil,omitempty"`
+	State          ArtifactState `json:"state"`
+	StateChangedAt *time.Time    `json:"stateChangedAt,omitempty"`
+	CreatedAt      time.Time     `json:"createdAt"`
+	DeletedAt      *time.Time    `json:"deletedAt,omitempty"`
+}
+
+// A page of artifacts.
+type ArtifactConnection struct {
+	Edges    []ArtifactEdge `json:"edges"`
+	PageInfo *PageInfo      `json:"pageInfo"`
+}
+
+// The destination of an artifact (non-secret identity only).
+type ArtifactDestinationRef struct {
+	ID      uuid.UUID       `json:"id"`
+	Name    string          `json:"name"`
+	Type    DestinationType `json:"type"`
+	Deleted bool            `json:"deleted"`
+}
+
+type ArtifactEdge struct {
+	Cursor string    `json:"cursor"`
+	Node   *Artifact `json:"node"`
+}
+
+// How an artifact is encrypted (key versions, never key material).
+type ArtifactEncryption struct {
+	// PASSPHRASE, RECIPIENT or NONE (null for manifests, which are signed, not encrypted).
+	Mode              *JobEncryptionMode `json:"mode,omitempty"`
+	PassphraseVersion *int               `json:"passphraseVersion,omitempty"`
+	RecipientVersion  *int               `json:"recipientVersion,omitempty"`
+}
+
+// Filters for artifacts; unset fields do not filter.
+type ArtifactFilter struct {
+	JobID         *uuid.UUID     `json:"jobId,omitempty"`
+	DestinationID *uuid.UUID     `json:"destinationId,omitempty"`
+	RunID         *uuid.UUID     `json:"runId,omitempty"`
+	State         *ArtifactState `json:"state,omitempty"`
+	Kind          *ArtifactKind  `json:"kind,omitempty"`
+}
+
 // A page of audit entries.
 type AuditLogConnection struct {
 	Edges    []AuditLogEdge `json:"edges"`
@@ -54,6 +125,54 @@ type AuditLogFilter struct {
 	From *time.Time `json:"from,omitempty"`
 	// Entries before this time.
 	To *time.Time `json:"to,omitempty"`
+}
+
+// A calendar range.
+type Calendar struct {
+	// Events ordered by start time.
+	Events []CalendarEvent `json:"events"`
+	// A bound was hit (at most 5,000 events, 500 planned occurrences per job,
+	// 500 jobs, and bounded loads): some events are missing. When the event cap
+	// is hit, the earliest 5,000 events are kept (a time prefix of the range).
+	// Narrow the range or the jobs.
+	Truncated bool      `json:"truncated"`
+	From      time.Time `json:"from"`
+	To        time.Time `json:"to"`
+	// The requested IANA zone, echoed for day bucketing (times stay UTC).
+	Timezone string `json:"timezone"`
+}
+
+// One calendar entry. Times are UTC.
+type CalendarEvent struct {
+	JobID   uuid.UUID         `json:"jobId"`
+	JobName string            `json:"jobName"`
+	Kind    CalendarEventKind `json:"kind"`
+	Start   time.Time         `json:"start"`
+	// The end of a finished run (null otherwise).
+	End *time.Time `json:"end,omitempty"`
+	// The run's status (RUN only).
+	Status *RunStatus `json:"status,omitempty"`
+	// What started the run (RUN only).
+	Trigger *RunTrigger `json:"trigger,omitempty"`
+	// The run (RUN, EXPIRY, and PLANNED when started early).
+	RunID *uuid.UUID `json:"runId,omitempty"`
+	// The destination of the copy (EXPIRY only).
+	DestinationID *uuid.UUID `json:"destinationId,omitempty"`
+	// EXPIRY only: the time depends on future runs (keep-last or the newest
+	// complete run, which is kept until a newer complete run exists) and
+	// assumes every planned run succeeds. False: exact (keep-days or Object
+	// Lock).
+	Projected bool `json:"projected"`
+	// PLANNED only: the job is disabled; the occurrence will not run.
+	Paused bool `json:"paused"`
+	// PLANNED only: this occurrence was pulled forward (startNextRunEarly); `runId` is the early run.
+	StartedEarly bool `json:"startedEarly"`
+	// PLANNED only: the pending catch-up run of an enabled job whose planned time
+	// has passed (the scheduler runs it at its next tick, missed occurrences
+	// collapse into this one run); shown at the time of the query.
+	Overdue bool `json:"overdue"`
+	// A fixed, bekup-chosen text (skip reason, run error code, expiry rule).
+	Detail *string `json:"detail,omitempty"`
 }
 
 // A captured certificate chain. Nothing is trusted: compare it out of band.
@@ -128,9 +247,19 @@ type Connection struct {
 	// True when the connection can be used (pin and, with SSH, host key and credential present).
 	Ready bool `json:"ready"`
 	// What is missing when not ready.
-	NotReadyReason *string   `json:"notReadyReason,omitempty"`
-	CreatedAt      time.Time `json:"createdAt"`
-	UpdatedAt      time.Time `json:"updatedAt"`
+	NotReadyReason *string `json:"notReadyReason,omitempty"`
+	// The connection's own limit of concurrent runs; null uses the global
+	// workers.max_runs_per_connection (task 3.13). Backups and restores share
+	// this limit (a limit of 1 makes a restore wait behind a running backup).
+	// The stored value may exceed a since lowered workers.max_concurrent_runs;
+	// effectiveMaxConcurrentRuns shows the clamped value, and the global cap is
+	// always enforced when a run takes its slot.
+	MaxConcurrentRuns *int `json:"maxConcurrentRuns,omitempty"`
+	// The limit that applies: maxConcurrentRuns or the global default, clamped
+	// to workers.max_concurrent_runs. Runs beyond it wait for a slot.
+	EffectiveMaxConcurrentRuns int       `json:"effectiveMaxConcurrentRuns"`
+	CreatedAt                  time.Time `json:"createdAt"`
+	UpdatedAt                  time.Time `json:"updatedAt"`
 	// The full non-secret configuration. Admins only: null for maintainers.
 	Settings *ConnectionSettings `json:"settings,omitempty"`
 }
@@ -238,6 +367,8 @@ type CreateConnectionInput struct {
 	// Write-only; required together with clientCertificatePem.
 	ClientKeyPem *string             `json:"clientKeyPem,omitempty"`
 	SSH          *ConnectionSSHInput `json:"ssh,omitempty"`
+	// Concurrent run limit, 1..64 and at most workers.max_concurrent_runs; omit for the global default.
+	MaxConcurrentRuns *int `json:"maxConcurrentRuns,omitempty"`
 }
 
 type CreateDestinationInput struct {
@@ -248,6 +379,41 @@ type CreateDestinationInput struct {
 	Disk     *DiskDestinationInput `json:"disk,omitempty"`
 	S3       *S3DestinationInput   `json:"s3,omitempty"`
 	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
+}
+
+type CreateJobInput struct {
+	Name string `json:"name"`
+	// Optional; derived from the name. Lower-case letters, digits and inner hyphens; never changes.
+	Slug         *string   `json:"slug,omitempty"`
+	Description  *string   `json:"description,omitempty"`
+	ConnectionID uuid.UUID `json:"connectionId"`
+	// Default ALL.
+	DbMode    *JobDbMode `json:"dbMode,omitempty"`
+	Databases []string   `json:"databases,omitempty"`
+	Exclude   []string   `json:"exclude,omitempty"`
+	// Default true for PostgreSQL; MySQL/MariaDB have no globals.
+	IncludeGlobals *bool          `json:"includeGlobals,omitempty"`
+	Schedule       *ScheduleInput `json:"schedule"`
+	// Default true.
+	Enabled   *bool              `json:"enabled,omitempty"`
+	Retention *JobRetentionInput `json:"retention"`
+	// 60 seconds up to workers.backup_timeout; omit for the default.
+	TimeoutSeconds        *int `json:"timeoutSeconds,omitempty"`
+	ExpectedWindowSeconds *int `json:"expectedWindowSeconds,omitempty"`
+	// Default STANDARD.
+	Verification *JobVerification `json:"verification,omitempty"`
+	// 1-16 destinations in fan-out order.
+	DestinationIds []uuid.UUID         `json:"destinationIds"`
+	Encryption     *JobEncryptionInput `json:"encryption,omitempty"`
+}
+
+// The result of createJob: the job and a generated key, shown once.
+type CreateJobResult struct {
+	Job *Job `json:"job"`
+	// Set when bekup generated the job's passphrase.
+	GeneratedPassphrase *string `json:"generatedPassphrase,omitempty"`
+	// Set when bekup generated the job's age keypair.
+	GeneratedKeypair *GeneratedAgeKeypair `json:"generatedKeypair,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -327,6 +493,23 @@ type DiskDestinationSettings struct {
 	Path string `json:"path"`
 }
 
+// A single-use download ticket.
+type DownloadTicket struct {
+	// Relative URL of the download (`/api/download/<ticket>`). GET it once,
+	// from the same browser session, before `expiresAt`. Never log or share it.
+	URL string `json:"url"`
+	// The ticket expires 60 seconds after creation.
+	ExpiresAt time.Time    `json:"expiresAt"`
+	Mode      DownloadMode `json:"mode"`
+	// The (sanitized) file name the download is saved under.
+	FileName string `json:"fileName"`
+	// `dump` (PostgreSQL custom archive) or `sql` (plain SQL script).
+	Format string `json:"format"`
+	// A shell command template to restore or unpack the file; placeholders in
+	// angle brackets (`<database>`, `<key-file>`, `<dump-file>`).
+	RestoreCommand string `json:"restoreCommand"`
+}
+
 // An allowlisted engine version of the image catalog.
 type EngineVersion struct {
 	Engine DatabaseEngine `json:"engine"`
@@ -336,10 +519,186 @@ type EngineVersion struct {
 	Legacy        bool   `json:"legacy"`
 }
 
+// A generated age keypair. The identity is shown once and never stored.
+type GeneratedAgeKeypair struct {
+	Encryption  *JobEncryption `json:"encryption"`
+	Version     int            `json:"version"`
+	Recipient   string         `json:"recipient"`
+	Fingerprint string         `json:"fingerprint"`
+	// The AGE-SECRET-KEY-1... identity. Store it offline now: bekup cannot show it again.
+	Identity string `json:"identity"`
+	// The identity as an age-keygen file (for age -d -i and bekup decrypt).
+	IdentityFile string `json:"identityFile"`
+	FileName     string `json:"fileName"`
+}
+
+// A generated passphrase, shown once.
+type GeneratedJobPassphrase struct {
+	Encryption *JobEncryption `json:"encryption"`
+	Version    int            `json:"version"`
+	Passphrase string         `json:"passphrase"`
+}
+
 type ImagePrePullResult struct {
 	// The digest-pinned image reference.
 	ImageRef       string `json:"imageRef"`
 	AlreadyPresent bool   `json:"alreadyPresent"`
+}
+
+// A backup job.
+type Job struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	// Names the job's directory in every destination; never changes.
+	Slug        string            `json:"slug"`
+	Description string            `json:"description"`
+	Connection  *JobConnectionRef `json:"connection"`
+	DbMode      JobDbMode         `json:"dbMode"`
+	// SELECTED: the databases backed up.
+	Databases []string `json:"databases"`
+	// ALL: databases skipped.
+	Exclude []string `json:"exclude"`
+	// PostgreSQL: also dump the cluster globals (roles, tablespaces).
+	IncludeGlobals      bool      `json:"includeGlobals"`
+	Schedule            *Schedule `json:"schedule"`
+	ScheduleDescription string    `json:"scheduleDescription"`
+	Enabled             bool      `json:"enabled"`
+	// The next scheduled run (null: manual, disabled or unschedulable).
+	NextRunAt       *time.Time    `json:"nextRunAt,omitempty"`
+	LastScheduledAt *time.Time    `json:"lastScheduledAt,omitempty"`
+	Retention       *JobRetention `json:"retention"`
+	// The job's run timeout; null means workers.backup_timeout.
+	TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
+	// Missed-backup alert window; null means derived from the schedule.
+	ExpectedWindowSeconds *int                `json:"expectedWindowSeconds,omitempty"`
+	Verification          JobVerification     `json:"verification"`
+	Destinations          []JobDestinationRef `json:"destinations"`
+	Encryption            *JobEncryption      `json:"encryption"`
+	// Admins and maintainers only (null for backup owners).
+	Owners    []JobOwner `json:"owners,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+	// The newest run of the job.
+	LastRun *Run `json:"lastRun,omitempty"`
+	// The newest runs of the job, newest first (`first` 1-20, default 5).
+	RecentRuns []Run `json:"recentRuns"`
+}
+
+// A page of jobs.
+type JobConnection struct {
+	Edges    []JobEdge `json:"edges"`
+	PageInfo *PageInfo `json:"pageInfo"`
+}
+
+// The connection a job backs up (non-secret identity only).
+type JobConnectionRef struct {
+	ID         uuid.UUID      `json:"id"`
+	Name       string         `json:"name"`
+	Engine     DatabaseEngine `json:"engine"`
+	VersionKey string         `json:"versionKey"`
+	Deleted    bool           `json:"deleted"`
+}
+
+// One destination of a job (non-secret identity only), in fan-out order.
+type JobDestinationRef struct {
+	ID       uuid.UUID       `json:"id"`
+	Name     string          `json:"name"`
+	Type     DestinationType `json:"type"`
+	Position int             `json:"position"`
+	Deleted  bool            `json:"deleted"`
+}
+
+type JobEdge struct {
+	Cursor string `json:"cursor"`
+	Node   *Job   `json:"node"`
+}
+
+// The encryption status of a job. It never contains key material.
+type JobEncryption struct {
+	// False only for a job without an encryption configuration (backups refuse to run).
+	Configured bool               `json:"configured"`
+	Mode       *JobEncryptionMode `json:"mode,omitempty"`
+	// Badge: an admin turned encryption off.
+	OptedOut     bool               `json:"optedOut"`
+	OptedOutAt   *time.Time         `json:"optedOutAt,omitempty"`
+	OptOutReason *string            `json:"optOutReason,omitempty"`
+	Passphrase   *JobPassphraseInfo `json:"passphrase,omitempty"`
+	Recipient    *JobRecipientInfo  `json:"recipient,omitempty"`
+	UpdatedAt    *time.Time         `json:"updatedAt,omitempty"`
+}
+
+// The initial encryption of a new job (always on; an admin may opt out
+// afterwards). Without a passphrase or recipient bekup generates the key and
+// returns it once in CreateJobResult. The default (a generated passphrase) is
+// available to everyone who may create jobs; choosing the key (a passphrase,
+// RECIPIENT mode or a recipient) is a key change and needs an admin with a
+// fresh step-up (FORBIDDEN / STEP_UP_REQUIRED otherwise).
+type JobEncryptionInput struct {
+	// Default PASSPHRASE.
+	Mode *JobKeyMode `json:"mode,omitempty"`
+	// Write-only; at least 20 characters and very strong. Prefer a generated one.
+	Passphrase *string `json:"passphrase,omitempty"`
+	// An age1... X25519 recipient (RECIPIENT mode).
+	Recipient *string `json:"recipient,omitempty"`
+	Label     *string `json:"label,omitempty"`
+}
+
+// Filters for jobs; unset fields do not filter.
+type JobFilter struct {
+	Enabled      *bool      `json:"enabled,omitempty"`
+	ConnectionID *uuid.UUID `json:"connectionId,omitempty"`
+	// Substring of the name or slug (case-insensitive).
+	Search *string `json:"search,omitempty"`
+}
+
+// A backup owner of a job. Only owners with role USER gain rights (D-067).
+type JobOwner struct {
+	UserID      uuid.UUID `json:"userId"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"displayName"`
+	Role        Role      `json:"role"`
+	Disabled    bool      `json:"disabled"`
+	AddedAt     time.Time `json:"addedAt"`
+}
+
+// Every passphrase version of a job for offline recovery (docs/guides/encryption.md).
+type JobPassphraseExport struct {
+	FileName string `json:"fileName"`
+	// The export file. SECRET: anyone with it can decrypt the job's passphrase-encrypted backups.
+	Content  string `json:"content"`
+	Versions []int  `json:"versions"`
+}
+
+// The active passphrase version (never the passphrase).
+type JobPassphraseInfo struct {
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// The active recipient version (public data).
+type JobRecipientInfo struct {
+	Version int `json:"version"`
+	// The age1... public key.
+	Recipient string `json:"recipient"`
+	// Lowercase hex SHA-256 of the recipient (as in the manifest).
+	Fingerprint string `json:"fingerprint"`
+	Label       string `json:"label"`
+	// bekup generated the keypair (its identity was shown once).
+	Generated bool      `json:"generated"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// How many backups a job keeps per destination; at least one limit is set.
+type JobRetention struct {
+	// Keep the newest N backups.
+	KeepLast *int `json:"keepLast,omitempty"`
+	// Keep backups younger than N days.
+	KeepDays *int `json:"keepDays,omitempty"`
+}
+
+type JobRetentionInput struct {
+	KeepLast *int `json:"keepLast,omitempty"`
+	KeepDays *int `json:"keepDays,omitempty"`
 }
 
 // The result of login.
@@ -401,6 +760,181 @@ type RecoveryCodes struct {
 	Codes []string `json:"codes"`
 }
 
+// A backup run.
+type Run struct {
+	ID      uuid.UUID  `json:"id"`
+	Job     *RunJobRef `json:"job"`
+	Status  RunStatus  `json:"status"`
+	Trigger RunTrigger `json:"trigger"`
+	// The user of a manual run; admins and maintainers only (null for backup owners).
+	TriggeredBy  *RunActor  `json:"triggeredBy,omitempty"`
+	ScheduledFor *time.Time `json:"scheduledFor,omitempty"`
+	Attempt      int        `json:"attempt"`
+	QueuedAt     time.Time  `json:"queuedAt"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
+	// finishedAt (or now while running) minus startedAt.
+	DurationSeconds *float64 `json:"durationSeconds,omitempty"`
+	// The run's directory timestamp on every destination.
+	StorageTimestamp *time.Time `json:"storageTimestamp,omitempty"`
+	ErrorCode        *string    `json:"errorCode,omitempty"`
+	ErrorMessage     *string    `json:"errorMessage,omitempty"`
+	// Problems worth attention (completeness, destinations, manifest).
+	Warnings []RunWarning `json:"warnings"`
+	// Informational findings that are not warnings, e.g. `databases_excluded`
+	// (databases the job's exclude list leaves out on purpose).
+	Notices           []RunWarning `json:"notices"`
+	BytesRaw          float64      `json:"bytesRaw"`
+	BytesStored       float64      `json:"bytesStored"`
+	CancelRequested   bool         `json:"cancelRequested"`
+	CancelRequestedAt *time.Time   `json:"cancelRequestedAt,omitempty"`
+	LogLines          int          `json:"logLines"`
+	LogLinesDropped   int          `json:"logLinesDropped"`
+	UpdatedAt         time.Time    `json:"updatedAt"`
+	Items             []RunItem    `json:"items"`
+	// Every stored object of the run (dumps and manifests).
+	Artifacts []Artifact   `json:"artifacts"`
+	Manifest  *RunManifest `json:"manifest"`
+}
+
+// The user who started a manual run.
+type RunActor struct {
+	UserID      uuid.UUID `json:"userId"`
+	DisplayName string    `json:"displayName"`
+	Email       string    `json:"email"`
+}
+
+// An accepted cancelRun.
+type RunCancellation struct {
+	RunID uuid.UUID `json:"runId"`
+	JobID uuid.UUID `json:"jobId"`
+	// CANCELED when the run had not started yet; otherwise QUEUED or RUNNING
+	// until its worker stops it (the run then ends as CANCELED).
+	Status      RunStatus `json:"status"`
+	RequestedAt time.Time `json:"requestedAt"`
+	// The run had already finished, but its job was waiting for a retry: the
+	// retry was canceled (no new attempt starts) and `status` is the run's final
+	// status.
+	RetryCanceled bool `json:"retryCanceled"`
+}
+
+// A page of runs.
+type RunConnection struct {
+	Edges    []RunEdge `json:"edges"`
+	PageInfo *PageInfo `json:"pageInfo"`
+}
+
+type RunEdge struct {
+	Cursor string `json:"cursor"`
+	Node   *Run   `json:"node"`
+}
+
+// Filters for runs; unset fields do not filter.
+type RunFilter struct {
+	JobID   *uuid.UUID  `json:"jobId,omitempty"`
+	Status  *RunStatus  `json:"status,omitempty"`
+	Trigger *RunTrigger `json:"trigger,omitempty"`
+	// Runs queued at or after this time.
+	Since *time.Time `json:"since,omitempty"`
+	// Runs queued before this time.
+	Until *time.Time `json:"until,omitempty"`
+}
+
+// One database (or the PostgreSQL globals) of a run.
+type RunItem struct {
+	ID    uuid.UUID   `json:"id"`
+	RunID uuid.UUID   `json:"runId"`
+	Kind  RunItemKind `json:"kind"`
+	// The database (null for the globals).
+	Database   *string       `json:"database,omitempty"`
+	Position   int           `json:"position"`
+	Status     RunItemStatus `json:"status"`
+	RawSize    float64       `json:"rawSize"`
+	StoredSize float64       `json:"storedSize"`
+	// Lowercase hex SHA-256 of the dump before compression and encryption.
+	RawSha256 *string `json:"rawSha256,omitempty"`
+	// Lowercase hex SHA-256 of the stored file.
+	Sha256          *string      `json:"sha256,omitempty"`
+	Verified        bool         `json:"verified"`
+	StartedAt       time.Time    `json:"startedAt"`
+	FinishedAt      *time.Time   `json:"finishedAt,omitempty"`
+	DurationSeconds *float64     `json:"durationSeconds,omitempty"`
+	ErrorCode       *string      `json:"errorCode,omitempty"`
+	ErrorMessage    *string      `json:"errorMessage,omitempty"`
+	Warnings        []RunWarning `json:"warnings"`
+	// The objects of this item, one per destination.
+	Artifacts []Artifact `json:"artifacts"`
+}
+
+// An accepted runJobNow or startNextRunEarly.
+type RunJobNowResult struct {
+	Job *Job `json:"job"`
+	// The queued run (see cancelRun).
+	RunID    uuid.UUID `json:"runId"`
+	QueuedAt time.Time `json:"queuedAt"`
+}
+
+// The job of a run or artifact (non-secret identity only).
+type RunJobRef struct {
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Slug    string    `json:"slug"`
+	Deleted bool      `json:"deleted"`
+}
+
+// New log lines of a run (runLogAppended).
+type RunLogBatch struct {
+	RunID uuid.UUID    `json:"runId"`
+	Lines []RunLogLine `json:"lines"`
+	EndID *string      `json:"endId,omitempty"`
+	// The run finished and every line was delivered; the stream completes after this event.
+	Done bool `json:"done"`
+}
+
+// One run log line (redacted and sanitized when it was written).
+type RunLogLine struct {
+	// Increasing; use it as afterId.
+	ID     string       `json:"id"`
+	Time   time.Time    `json:"time"`
+	Level  RunLogLevel  `json:"level"`
+	Stream RunLogStream `json:"stream"`
+	Line   string       `json:"line"`
+}
+
+// A page of run log lines in order.
+type RunLogPage struct {
+	RunID uuid.UUID    `json:"runId"`
+	Lines []RunLogLine `json:"lines"`
+	// The id of the last line (the afterId for the next page); afterId when there are no lines.
+	EndID   *string `json:"endId,omitempty"`
+	HasMore bool    `json:"hasMore"`
+	// Lines dropped because the run exceeded the log caps.
+	Dropped int `json:"dropped"`
+}
+
+// The signed manifests of a run.
+type RunManifest struct {
+	// At least one destination holds a signed manifest.
+	Signed bool `json:"signed"`
+	// The instance key id that signed it.
+	SigningKeyID *string `json:"signingKeyId,omitempty"`
+	// The manifest objects, one per destination that holds every complete item.
+	Copies []Artifact `json:"copies"`
+	// Items with at least one signed, verified object.
+	CoveredItems int `json:"coveredItems"`
+	TotalItems   int `json:"totalItems"`
+}
+
+// A warning recorded by a run or item (fixed texts).
+type RunWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	// The database it concerns, if any.
+	Database *string `json:"database,omitempty"`
+	// The destination it concerns, if any.
+	DestinationID *uuid.UUID `json:"destinationId,omitempty"`
+}
+
 type S3DestinationInput struct {
 	// https URL of an S3-compatible service (http only in dev mode); omit for AWS S3.
 	Endpoint     *string         `json:"endpoint,omitempty"`
@@ -441,6 +975,44 @@ type S3DestinationSettings struct {
 	HasSecretAccessKey bool   `json:"hasSecretAccessKey"`
 	// A custom CA bundle (PEM) that replaces the system roots for the endpoint.
 	CaBundlePem *string `json:"caBundlePem,omitempty"`
+}
+
+// A schedule in its canonical form (D-143). Interval: every, unit, anchor
+// (local YYYY-MM-DDTHH:MM in the zone), weekday (weeks), dayOfMonth (months)
+// and timezone; cron: cron and timezone; manual: nothing else.
+type Schedule struct {
+	Kind   ScheduleKind  `json:"kind"`
+	Every  *int          `json:"every,omitempty"`
+	Unit   *ScheduleUnit `json:"unit,omitempty"`
+	Anchor *string       `json:"anchor,omitempty"`
+	// Lower-case English weekday name (weeks only).
+	Weekday *string `json:"weekday,omitempty"`
+	// 1-31 (months only); shorter months use their last day.
+	DayOfMonth *int    `json:"dayOfMonth,omitempty"`
+	Cron       *string `json:"cron,omitempty"`
+	// IANA zone name, e.g. Europe/Amsterdam.
+	Timezone *string `json:"timezone,omitempty"`
+}
+
+type ScheduleInput struct {
+	Kind       ScheduleKind  `json:"kind"`
+	Every      *int          `json:"every,omitempty"`
+	Unit       *ScheduleUnit `json:"unit,omitempty"`
+	Anchor     *string       `json:"anchor,omitempty"`
+	Weekday    *string       `json:"weekday,omitempty"`
+	DayOfMonth *int          `json:"dayOfMonth,omitempty"`
+	Cron       *string       `json:"cron,omitempty"`
+	Timezone   *string       `json:"timezone,omitempty"`
+}
+
+// The next occurrences of a schedule (nothing is stored).
+type SchedulePreview struct {
+	// The canonical schedule (defaults filled in).
+	Schedule *Schedule `json:"schedule"`
+	// A short English summary, e.g. `Every 2 days at 03:00 (Europe/Amsterdam)`.
+	Description string `json:"description"`
+	// The next occurrences after now (empty for MANUAL).
+	Next []time.Time `json:"next"`
 }
 
 // The result of resetUserSecondFactors.
@@ -643,6 +1215,11 @@ type UpdateConnectionInput struct {
 	SSH *ConnectionSSHInput `json:"ssh,omitempty"`
 	// Removes the SSH tunnel with its credentials and host-key pin.
 	DisableSSH *bool `json:"disableSsh,omitempty"`
+	// Concurrent run limit, 1..64 and at most workers.max_concurrent_runs.
+	// Lowering it never stops active runs; new runs wait until fewer run.
+	MaxConcurrentRuns *int `json:"maxConcurrentRuns,omitempty"`
+	// Returns to the global workers.max_runs_per_connection.
+	ClearMaxConcurrentRuns *bool `json:"clearMaxConcurrentRuns,omitempty"`
 }
 
 // Fields to change; unset fields stay unchanged.
@@ -652,6 +1229,29 @@ type UpdateDestinationInput struct {
 	Disk     *DiskDestinationInput `json:"disk,omitempty"`
 	S3       *S3DestinationInput   `json:"s3,omitempty"`
 	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
+}
+
+// Fields to change; unset fields stay unchanged. The slug cannot change.
+type UpdateJobInput struct {
+	Name           *string    `json:"name,omitempty"`
+	Description    *string    `json:"description,omitempty"`
+	ConnectionID   *uuid.UUID `json:"connectionId,omitempty"`
+	DbMode         *JobDbMode `json:"dbMode,omitempty"`
+	Databases      []string   `json:"databases,omitempty"`
+	Exclude        []string   `json:"exclude,omitempty"`
+	IncludeGlobals *bool      `json:"includeGlobals,omitempty"`
+	// A changed schedule is re-planned from now.
+	Schedule *ScheduleInput `json:"schedule,omitempty"`
+	// Replaces both limits.
+	Retention      *JobRetentionInput `json:"retention,omitempty"`
+	TimeoutSeconds *int               `json:"timeoutSeconds,omitempty"`
+	// Reset the timeout to workers.backup_timeout.
+	ClearTimeout          *bool            `json:"clearTimeout,omitempty"`
+	ExpectedWindowSeconds *int             `json:"expectedWindowSeconds,omitempty"`
+	ClearExpectedWindow   *bool            `json:"clearExpectedWindow,omitempty"`
+	Verification          *JobVerification `json:"verification,omitempty"`
+	// Replaces the destinations (1-16, fan-out order).
+	DestinationIds []uuid.UUID `json:"destinationIds,omitempty"`
 }
 
 // Fields to change; unset fields stay unchanged.
@@ -720,6 +1320,125 @@ type WebAuthnStatus struct {
 	RpID *string `json:"rpId,omitempty"`
 }
 
+// What an artifact holds.
+type ArtifactKind string
+
+const (
+	ArtifactKindDatabase ArtifactKind = "DATABASE"
+	ArtifactKindGlobals  ArtifactKind = "GLOBALS"
+	// The signed manifest.json of the run on that destination.
+	ArtifactKindManifest ArtifactKind = "MANIFEST"
+)
+
+var AllArtifactKind = []ArtifactKind{
+	ArtifactKindDatabase,
+	ArtifactKindGlobals,
+	ArtifactKindManifest,
+}
+
+func (e ArtifactKind) IsValid() bool {
+	switch e {
+	case ArtifactKindDatabase, ArtifactKindGlobals, ArtifactKindManifest:
+		return true
+	}
+	return false
+}
+
+func (e ArtifactKind) String() string {
+	return string(e)
+}
+
+func (e *ArtifactKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ArtifactKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ArtifactKind", str)
+	}
+	return nil
+}
+
+func (e ArtifactKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ArtifactKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ArtifactKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Whether an artifact still exists on its destination.
+type ArtifactState string
+
+const (
+	ArtifactStatePresent ArtifactState = "PRESENT"
+	// Removed by retention (the record stays).
+	ArtifactStateDeleted ArtifactState = "DELETED"
+	// A verification did not find it.
+	ArtifactStateMissing ArtifactState = "MISSING"
+)
+
+var AllArtifactState = []ArtifactState{
+	ArtifactStatePresent,
+	ArtifactStateDeleted,
+	ArtifactStateMissing,
+}
+
+func (e ArtifactState) IsValid() bool {
+	switch e {
+	case ArtifactStatePresent, ArtifactStateDeleted, ArtifactStateMissing:
+		return true
+	}
+	return false
+}
+
+func (e ArtifactState) String() string {
+	return string(e)
+}
+
+func (e *ArtifactState) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ArtifactState(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ArtifactState", str)
+	}
+	return nil
+}
+
+func (e ArtifactState) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ArtifactState) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ArtifactState) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Who performed an audited action.
 type AuditActorKind string
 
@@ -776,6 +1495,71 @@ func (e *AuditActorKind) UnmarshalJSON(b []byte) error {
 }
 
 func (e AuditActorKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What a calendar event shows.
+type CalendarEventKind string
+
+const (
+	// A planned occurrence (paused for a disabled job, or started early).
+	CalendarEventKindPlanned CalendarEventKind = "PLANNED"
+	// A run, by status.
+	CalendarEventKindRun CalendarEventKind = "RUN"
+	// A skipped occurrence (the reason is in `detail`).
+	CalendarEventKindSkipped CalendarEventKind = "SKIPPED"
+	// The earliest time retention may remove a run's copy on one destination
+	// (the next retention sweep at or after it removes it).
+	CalendarEventKindExpiry CalendarEventKind = "EXPIRY"
+)
+
+var AllCalendarEventKind = []CalendarEventKind{
+	CalendarEventKindPlanned,
+	CalendarEventKindRun,
+	CalendarEventKindSkipped,
+	CalendarEventKindExpiry,
+}
+
+func (e CalendarEventKind) IsValid() bool {
+	switch e {
+	case CalendarEventKindPlanned, CalendarEventKindRun, CalendarEventKindSkipped, CalendarEventKindExpiry:
+		return true
+	}
+	return false
+}
+
+func (e CalendarEventKind) String() string {
+	return string(e)
+}
+
+func (e *CalendarEventKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = CalendarEventKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid CalendarEventKind", str)
+	}
+	return nil
+}
+
+func (e CalendarEventKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *CalendarEventKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e CalendarEventKind) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -1016,6 +1800,298 @@ func (e DestinationType) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// What a download delivers.
+type DownloadMode string
+
+const (
+	// The stored artifact unchanged (zstd-compressed, normally age-encrypted).
+	DownloadModeRaw DownloadMode = "RAW"
+	// The decrypted and decompressed dump, ready for `pg_restore` (`.dump`) or
+	// `psql`/`mysql` (`.sql`).
+	DownloadModePlain DownloadMode = "PLAIN"
+)
+
+var AllDownloadMode = []DownloadMode{
+	DownloadModeRaw,
+	DownloadModePlain,
+}
+
+func (e DownloadMode) IsValid() bool {
+	switch e {
+	case DownloadModeRaw, DownloadModePlain:
+		return true
+	}
+	return false
+}
+
+func (e DownloadMode) String() string {
+	return string(e)
+}
+
+func (e *DownloadMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DownloadMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DownloadMode", str)
+	}
+	return nil
+}
+
+func (e DownloadMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DownloadMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DownloadMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Which databases of the connection a job backs up.
+type JobDbMode string
+
+const (
+	// Every database on the server except `exclude` (one file per database).
+	JobDbModeAll JobDbMode = "ALL"
+	// Exactly the listed `databases`.
+	JobDbModeSelected JobDbMode = "SELECTED"
+)
+
+var AllJobDbMode = []JobDbMode{
+	JobDbModeAll,
+	JobDbModeSelected,
+}
+
+func (e JobDbMode) IsValid() bool {
+	switch e {
+	case JobDbModeAll, JobDbModeSelected:
+		return true
+	}
+	return false
+}
+
+func (e JobDbMode) String() string {
+	return string(e)
+}
+
+func (e *JobDbMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = JobDbMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid JobDbMode", str)
+	}
+	return nil
+}
+
+func (e JobDbMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *JobDbMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e JobDbMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Encryption modes of backup files (D-008, D-142).
+type JobEncryptionMode string
+
+const (
+	// age with the job's versioned passphrase (stored encrypted).
+	JobEncryptionModePassphrase JobEncryptionMode = "PASSPHRASE"
+	// age to a public X25519 recipient; the private key is supplied at restore time.
+	JobEncryptionModeRecipient JobEncryptionMode = "RECIPIENT"
+	// Opted out by an admin: backups are not encrypted (badge).
+	JobEncryptionModeNone JobEncryptionMode = "NONE"
+)
+
+var AllJobEncryptionMode = []JobEncryptionMode{
+	JobEncryptionModePassphrase,
+	JobEncryptionModeRecipient,
+	JobEncryptionModeNone,
+}
+
+func (e JobEncryptionMode) IsValid() bool {
+	switch e {
+	case JobEncryptionModePassphrase, JobEncryptionModeRecipient, JobEncryptionModeNone:
+		return true
+	}
+	return false
+}
+
+func (e JobEncryptionMode) String() string {
+	return string(e)
+}
+
+func (e *JobEncryptionMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = JobEncryptionMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid JobEncryptionMode", str)
+	}
+	return nil
+}
+
+func (e JobEncryptionMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *JobEncryptionMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e JobEncryptionMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// The key modes a job can encrypt with.
+type JobKeyMode string
+
+const (
+	JobKeyModePassphrase JobKeyMode = "PASSPHRASE"
+	JobKeyModeRecipient  JobKeyMode = "RECIPIENT"
+)
+
+var AllJobKeyMode = []JobKeyMode{
+	JobKeyModePassphrase,
+	JobKeyModeRecipient,
+}
+
+func (e JobKeyMode) IsValid() bool {
+	switch e {
+	case JobKeyModePassphrase, JobKeyModeRecipient:
+		return true
+	}
+	return false
+}
+
+func (e JobKeyMode) String() string {
+	return string(e)
+}
+
+func (e *JobKeyMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = JobKeyMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid JobKeyMode", str)
+	}
+	return nil
+}
+
+func (e JobKeyMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *JobKeyMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e JobKeyMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Completeness evidence level of a job (task 3.10).
+type JobVerification string
+
+const (
+	// Object counts and row estimates (cheap for huge databases).
+	JobVerificationStandard JobVerification = "STANDARD"
+	// Exact per-table row counts.
+	JobVerificationDeep JobVerification = "DEEP"
+)
+
+var AllJobVerification = []JobVerification{
+	JobVerificationStandard,
+	JobVerificationDeep,
+}
+
+func (e JobVerification) IsValid() bool {
+	switch e {
+	case JobVerificationStandard, JobVerificationDeep:
+		return true
+	}
+	return false
+}
+
+func (e JobVerification) String() string {
+	return string(e)
+}
+
+func (e *JobVerification) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = JobVerification(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid JobVerification", str)
+	}
+	return nil
+}
+
+func (e JobVerification) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *JobVerification) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e JobVerification) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // S3 Object Lock retention modes.
 type ObjectLockMode string
 
@@ -1125,6 +2201,376 @@ func (e *Role) UnmarshalJSON(b []byte) error {
 }
 
 func (e Role) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What a run item backs up.
+type RunItemKind string
+
+const (
+	RunItemKindDatabase RunItemKind = "DATABASE"
+	// The PostgreSQL cluster globals (roles, tablespaces).
+	RunItemKindGlobals RunItemKind = "GLOBALS"
+)
+
+var AllRunItemKind = []RunItemKind{
+	RunItemKindDatabase,
+	RunItemKindGlobals,
+}
+
+func (e RunItemKind) IsValid() bool {
+	switch e {
+	case RunItemKindDatabase, RunItemKindGlobals:
+		return true
+	}
+	return false
+}
+
+func (e RunItemKind) String() string {
+	return string(e)
+}
+
+func (e *RunItemKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunItemKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunItemKind", str)
+	}
+	return nil
+}
+
+func (e RunItemKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunItemKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunItemKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Status of one database of a run.
+type RunItemStatus string
+
+const (
+	RunItemStatusRunning  RunItemStatus = "RUNNING"
+	RunItemStatusSuccess  RunItemStatus = "SUCCESS"
+	RunItemStatusPartial  RunItemStatus = "PARTIAL"
+	RunItemStatusFailed   RunItemStatus = "FAILED"
+	RunItemStatusCanceled RunItemStatus = "CANCELED"
+)
+
+var AllRunItemStatus = []RunItemStatus{
+	RunItemStatusRunning,
+	RunItemStatusSuccess,
+	RunItemStatusPartial,
+	RunItemStatusFailed,
+	RunItemStatusCanceled,
+}
+
+func (e RunItemStatus) IsValid() bool {
+	switch e {
+	case RunItemStatusRunning, RunItemStatusSuccess, RunItemStatusPartial, RunItemStatusFailed, RunItemStatusCanceled:
+		return true
+	}
+	return false
+}
+
+func (e RunItemStatus) String() string {
+	return string(e)
+}
+
+func (e *RunItemStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunItemStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunItemStatus", str)
+	}
+	return nil
+}
+
+func (e RunItemStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunItemStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunItemStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RunLogLevel string
+
+const (
+	RunLogLevelInfo  RunLogLevel = "INFO"
+	RunLogLevelWarn  RunLogLevel = "WARN"
+	RunLogLevelError RunLogLevel = "ERROR"
+)
+
+var AllRunLogLevel = []RunLogLevel{
+	RunLogLevelInfo,
+	RunLogLevelWarn,
+	RunLogLevelError,
+}
+
+func (e RunLogLevel) IsValid() bool {
+	switch e {
+	case RunLogLevelInfo, RunLogLevelWarn, RunLogLevelError:
+		return true
+	}
+	return false
+}
+
+func (e RunLogLevel) String() string {
+	return string(e)
+}
+
+func (e *RunLogLevel) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunLogLevel(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunLogLevel", str)
+	}
+	return nil
+}
+
+func (e RunLogLevel) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunLogLevel) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunLogLevel) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Where a log line came from.
+type RunLogStream string
+
+const (
+	RunLogStreamWorker RunLogStream = "WORKER"
+	RunLogStreamRunner RunLogStream = "RUNNER"
+	RunLogStreamStdout RunLogStream = "STDOUT"
+	RunLogStreamStderr RunLogStream = "STDERR"
+)
+
+var AllRunLogStream = []RunLogStream{
+	RunLogStreamWorker,
+	RunLogStreamRunner,
+	RunLogStreamStdout,
+	RunLogStreamStderr,
+}
+
+func (e RunLogStream) IsValid() bool {
+	switch e {
+	case RunLogStreamWorker, RunLogStreamRunner, RunLogStreamStdout, RunLogStreamStderr:
+		return true
+	}
+	return false
+}
+
+func (e RunLogStream) String() string {
+	return string(e)
+}
+
+func (e *RunLogStream) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunLogStream(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunLogStream", str)
+	}
+	return nil
+}
+
+func (e RunLogStream) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunLogStream) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunLogStream) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Status of a backup run.
+type RunStatus string
+
+const (
+	// Enqueued; waiting for a worker or a concurrency slot.
+	RunStatusQueued  RunStatus = "QUEUED"
+	RunStatusRunning RunStatus = "RUNNING"
+	// Every database stored and verified on every destination, with the signed manifest.
+	RunStatusSuccess RunStatus = "SUCCESS"
+	// At least one complete, verified artifact, but something is missing (a destination, a database, the manifest).
+	RunStatusPartial RunStatus = "PARTIAL"
+	// Nothing usable was stored.
+	RunStatusFailed   RunStatus = "FAILED"
+	RunStatusCanceled RunStatus = "CANCELED"
+	// Not run: the job was deleted or disabled before the run started.
+	RunStatusSkipped RunStatus = "SKIPPED"
+)
+
+var AllRunStatus = []RunStatus{
+	RunStatusQueued,
+	RunStatusRunning,
+	RunStatusSuccess,
+	RunStatusPartial,
+	RunStatusFailed,
+	RunStatusCanceled,
+	RunStatusSkipped,
+}
+
+func (e RunStatus) IsValid() bool {
+	switch e {
+	case RunStatusQueued, RunStatusRunning, RunStatusSuccess, RunStatusPartial, RunStatusFailed, RunStatusCanceled, RunStatusSkipped:
+		return true
+	}
+	return false
+}
+
+func (e RunStatus) String() string {
+	return string(e)
+}
+
+func (e *RunStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunStatus", str)
+	}
+	return nil
+}
+
+func (e RunStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What started a run.
+type RunTrigger string
+
+const (
+	RunTriggerSchedule RunTrigger = "SCHEDULE"
+	// A missed scheduled run caught up after downtime.
+	RunTriggerCatchUp RunTrigger = "CATCH_UP"
+	// runJobNow.
+	RunTriggerManual RunTrigger = "MANUAL"
+	// startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward.
+	RunTriggerEarly RunTrigger = "EARLY"
+)
+
+var AllRunTrigger = []RunTrigger{
+	RunTriggerSchedule,
+	RunTriggerCatchUp,
+	RunTriggerManual,
+	RunTriggerEarly,
+}
+
+func (e RunTrigger) IsValid() bool {
+	switch e {
+	case RunTriggerSchedule, RunTriggerCatchUp, RunTriggerManual, RunTriggerEarly:
+		return true
+	}
+	return false
+}
+
+func (e RunTrigger) String() string {
+	return string(e)
+}
+
+func (e *RunTrigger) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunTrigger(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunTrigger", str)
+	}
+	return nil
+}
+
+func (e RunTrigger) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunTrigger) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunTrigger) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -1243,6 +2689,129 @@ func (e *S3Encryption) UnmarshalJSON(b []byte) error {
 }
 
 func (e S3Encryption) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Schedule kinds (D-143).
+type ScheduleKind string
+
+const (
+	// Never runs on its own; only runJobNow.
+	ScheduleKindManual ScheduleKind = "MANUAL"
+	// Every N minutes/hours/days/weeks/months from an anchor.
+	ScheduleKindInterval ScheduleKind = "INTERVAL"
+	// A 5-field cron expression.
+	ScheduleKindCron ScheduleKind = "CRON"
+)
+
+var AllScheduleKind = []ScheduleKind{
+	ScheduleKindManual,
+	ScheduleKindInterval,
+	ScheduleKindCron,
+}
+
+func (e ScheduleKind) IsValid() bool {
+	switch e {
+	case ScheduleKindManual, ScheduleKindInterval, ScheduleKindCron:
+		return true
+	}
+	return false
+}
+
+func (e ScheduleKind) String() string {
+	return string(e)
+}
+
+func (e *ScheduleKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ScheduleKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ScheduleKind", str)
+	}
+	return nil
+}
+
+func (e ScheduleKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ScheduleKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ScheduleKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Units of interval schedules.
+type ScheduleUnit string
+
+const (
+	ScheduleUnitMinutes ScheduleUnit = "MINUTES"
+	ScheduleUnitHours   ScheduleUnit = "HOURS"
+	ScheduleUnitDays    ScheduleUnit = "DAYS"
+	ScheduleUnitWeeks   ScheduleUnit = "WEEKS"
+	ScheduleUnitMonths  ScheduleUnit = "MONTHS"
+)
+
+var AllScheduleUnit = []ScheduleUnit{
+	ScheduleUnitMinutes,
+	ScheduleUnitHours,
+	ScheduleUnitDays,
+	ScheduleUnitWeeks,
+	ScheduleUnitMonths,
+}
+
+func (e ScheduleUnit) IsValid() bool {
+	switch e {
+	case ScheduleUnitMinutes, ScheduleUnitHours, ScheduleUnitDays, ScheduleUnitWeeks, ScheduleUnitMonths:
+		return true
+	}
+	return false
+}
+
+func (e ScheduleUnit) String() string {
+	return string(e)
+}
+
+func (e *ScheduleUnit) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ScheduleUnit(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ScheduleUnit", str)
+	}
+	return nil
+}
+
+func (e ScheduleUnit) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ScheduleUnit) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ScheduleUnit) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

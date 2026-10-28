@@ -22,12 +22,18 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
+	"github.com/jlentink/bekup/internal/calendar"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/destinations"
+	"github.com/jlentink/bekup/internal/downloads"
 	"github.com/jlentink/bekup/internal/graph/generated"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/graph/resolvers"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/jobkeys"
+	"github.com/jlentink/bekup/internal/jobs"
+	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/runstate"
 )
 
 // Fixed limits (not configurable: no legitimate client comes close).
@@ -88,6 +94,20 @@ type Options struct {
 	// Connections backs the connection fields (task 2.11; nil: those
 	// fields fail).
 	Connections *connections.Service
+	// Jobs and JobKeys back the job and job encryption fields (tasks 3.5,
+	// 3.2; nil: those fields fail).
+	Jobs    *jobs.Service
+	JobKeys *jobkeys.Service
+	// Runs backs the run history fields and Bus (the bus the LISTEN
+	// bridge feeds, carrying pubsub.RunEvents) the run subscriptions
+	// (task 3.7; nil: those fields fail).
+	Runs *runstate.Reader
+	Bus  *pubsub.Bus
+	// Downloads backs createDownloadTicket (task 3.9; nil: the field
+	// fails).
+	Downloads *downloads.Service
+	// Calendar backs Query.calendar (task 3.14; nil: the field fails).
+	Calendar *calendar.Service
 }
 
 // Handler is the /graphql endpoint.
@@ -130,6 +150,12 @@ func New(opts Options) (*Handler, error) {
 			TwoFactorPolicy: opts.TwoFactorPolicy,
 			Destinations:    opts.Destinations,
 			Connections:     opts.Connections,
+			Jobs:            opts.Jobs,
+			JobKeys:         opts.JobKeys,
+			Runs:            opts.Runs,
+			Bus:             opts.Bus,
+			Downloads:       opts.Downloads,
+			Calendar:        opts.Calendar,
 		},
 		Directives: directives(opts.Access),
 	})
@@ -169,6 +195,16 @@ func New(opts Options) (*Handler, error) {
 	srv.Use(transportGate{public: pubSet(PublicRootFields), ops: RootFieldOperations, access: access})
 	srv.Use(extension.FixedComplexityLimit(opts.MaxComplexity))
 	srv.AroundRootFields(rootFieldGuard(PublicRootFields, RootFieldOperations, access))
+	// Per-operation batch loader of the run fields (task 3.7): queries
+	// and mutations only, so subscription events never read a cache.
+	srv.AroundOperations(func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+		if graphql.HasOperationContext(ctx) {
+			if oc := graphql.GetOperationContext(ctx); oc.Operation != nil && oc.Operation.Operation != ast.Subscription {
+				ctx = resolvers.WithRunLoader(ctx)
+			}
+		}
+		return next(ctx)
+	})
 	return &Handler{opts: opts, srv: srv}, nil
 }
 

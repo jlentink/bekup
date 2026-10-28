@@ -311,6 +311,115 @@ func (LogStream) EnumDescriptor() ([]byte, []int) {
 	return file_runner_v1_runner_proto_rawDescGZIP(), []int{4}
 }
 
+// StatsLevel is a job's verification level (D-141, D-151).
+type StatsLevel int32
+
+const (
+	StatsLevel_STATS_LEVEL_UNSPECIFIED StatsLevel = 0
+	// Object counts plus the catalog's row estimates (reltuples,
+	// TABLE_ROWS): cheap for huge databases.
+	StatsLevel_STATS_LEVEL_STANDARD StatsLevel = 1
+	// Object counts plus an exact count(*) per table.
+	StatsLevel_STATS_LEVEL_DEEP StatsLevel = 2
+)
+
+// Enum value maps for StatsLevel.
+var (
+	StatsLevel_name = map[int32]string{
+		0: "STATS_LEVEL_UNSPECIFIED",
+		1: "STATS_LEVEL_STANDARD",
+		2: "STATS_LEVEL_DEEP",
+	}
+	StatsLevel_value = map[string]int32{
+		"STATS_LEVEL_UNSPECIFIED": 0,
+		"STATS_LEVEL_STANDARD":    1,
+		"STATS_LEVEL_DEEP":        2,
+	}
+)
+
+func (x StatsLevel) Enum() *StatsLevel {
+	p := new(StatsLevel)
+	*p = x
+	return p
+}
+
+func (x StatsLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StatsLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[5].Descriptor()
+}
+
+func (StatsLevel) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[5]
+}
+
+func (x StatsLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StatsLevel.Descriptor instead.
+func (StatsLevel) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{5}
+}
+
+// RowCount says how a table's row count was obtained.
+type RowCount int32
+
+const (
+	RowCount_ROW_COUNT_UNSPECIFIED RowCount = 0
+	// count(*) inside the stats transaction.
+	RowCount_ROW_COUNT_EXACT RowCount = 1
+	// The catalog estimate (reltuples, TABLE_ROWS).
+	RowCount_ROW_COUNT_ESTIMATE RowCount = 2
+	// Not available (timeout, budget, no privilege, no estimate yet).
+	RowCount_ROW_COUNT_UNKNOWN RowCount = 3
+)
+
+// Enum value maps for RowCount.
+var (
+	RowCount_name = map[int32]string{
+		0: "ROW_COUNT_UNSPECIFIED",
+		1: "ROW_COUNT_EXACT",
+		2: "ROW_COUNT_ESTIMATE",
+		3: "ROW_COUNT_UNKNOWN",
+	}
+	RowCount_value = map[string]int32{
+		"ROW_COUNT_UNSPECIFIED": 0,
+		"ROW_COUNT_EXACT":       1,
+		"ROW_COUNT_ESTIMATE":    2,
+		"ROW_COUNT_UNKNOWN":     3,
+	}
+)
+
+func (x RowCount) Enum() *RowCount {
+	p := new(RowCount)
+	*p = x
+	return p
+}
+
+func (x RowCount) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RowCount) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[6].Descriptor()
+}
+
+func (RowCount) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[6]
+}
+
+func (x RowCount) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RowCount.Descriptor instead.
+func (RowCount) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{6}
+}
+
 // RunContext correlates a call with a bekup run.
 type RunContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1543,10 +1652,13 @@ func (x *FetchHostKeyResponse) GetAuthorizedKey() string {
 }
 
 type DumpRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *RunContext            `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
-	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
-	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Ctx      *RunContext            `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Target   *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	Database string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	// Completeness evidence (task 3.10, D-141, D-151: the stats travel inside
+	// the Dump call). Absent or disabled: no stats.
+	Stats         *StatsOptions `protobuf:"bytes,4,opt,name=stats,proto3" json:"stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1602,6 +1714,486 @@ func (x *DumpRequest) GetDatabase() string {
 	return ""
 }
 
+func (x *DumpRequest) GetStats() *StatsOptions {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
+// StatsOptions asks the runner to capture source statistics before the
+// dump. PostgreSQL: the runner exports a snapshot in a REPEATABLE READ READ
+// ONLY transaction, counts inside it and runs pg_dump --snapshot=<id>
+// while the transaction stays open, so stats and dump are the same
+// snapshot. MySQL/MariaDB: counts in a consistent-snapshot transaction
+// right before the dump (approximate).
+type StatsOptions struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Enabled bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Required when enabled.
+	Level StatsLevel `protobuf:"varint,2,opt,name=level,proto3,enum=runner.v1.StatsLevel" json:"level,omitempty"`
+	// Deep only: the limit of one count(*) in milliseconds (0 = the runner
+	// default, 5 minutes; at most 1 hour). A table that exceeds it is
+	// reported as unknown with a warning.
+	PerTableTimeoutMs uint32 `protobuf:"varint,3,opt,name=per_table_timeout_ms,json=perTableTimeoutMs,proto3" json:"per_table_timeout_ms,omitempty"`
+	// The limit of the whole capture in milliseconds (0 = the runner default,
+	// 30 minutes; at most 6 hours). Tables not counted in time are unknown.
+	BudgetMs      uint32 `protobuf:"varint,4,opt,name=budget_ms,json=budgetMs,proto3" json:"budget_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatsOptions) Reset() {
+	*x = StatsOptions{}
+	mi := &file_runner_v1_runner_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsOptions) ProtoMessage() {}
+
+func (x *StatsOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsOptions.ProtoReflect.Descriptor instead.
+func (*StatsOptions) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *StatsOptions) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *StatsOptions) GetLevel() StatsLevel {
+	if x != nil {
+		return x.Level
+	}
+	return StatsLevel_STATS_LEVEL_UNSPECIFIED
+}
+
+func (x *StatsOptions) GetPerTableTimeoutMs() uint32 {
+	if x != nil {
+		return x.PerTableTimeoutMs
+	}
+	return 0
+}
+
+func (x *StatsOptions) GetBudgetMs() uint32 {
+	if x != nil {
+		return x.BudgetMs
+	}
+	return 0
+}
+
+// TableStats is one table of the dumped database: names and counts only,
+// never data values.
+type TableStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// PostgreSQL schema; empty for MySQL/MariaDB (the database is the
+	// schema).
+	Schema string `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	Name   string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Valid unless count is ROW_COUNT_UNKNOWN.
+	Rows  int64    `protobuf:"varint,3,opt,name=rows,proto3" json:"rows,omitempty"`
+	Count RowCount `protobuf:"varint,4,opt,name=count,proto3,enum=runner.v1.RowCount" json:"count,omitempty"`
+	// MySQL/MariaDB: the dump tool takes its own snapshot, so rows written
+	// between the stats and the dump may differ.
+	Approximate   bool `protobuf:"varint,5,opt,name=approximate,proto3" json:"approximate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TableStats) Reset() {
+	*x = TableStats{}
+	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TableStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TableStats) ProtoMessage() {}
+
+func (x *TableStats) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TableStats.ProtoReflect.Descriptor instead.
+func (*TableStats) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *TableStats) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *TableStats) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TableStats) GetRows() int64 {
+	if x != nil {
+		return x.Rows
+	}
+	return 0
+}
+
+func (x *TableStats) GetCount() RowCount {
+	if x != nil {
+		return x.Count
+	}
+	return RowCount_ROW_COUNT_UNSPECIFIED
+}
+
+func (x *TableStats) GetApproximate() bool {
+	if x != nil {
+		return x.Approximate
+	}
+	return false
+}
+
+// ObjectCounts are the dumped database's objects outside the system
+// schemas (or the cluster globals of a DumpGlobals).
+type ObjectCounts struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Schemas           uint32                 `protobuf:"varint,1,opt,name=schemas,proto3" json:"schemas,omitempty"`
+	Tables            uint32                 `protobuf:"varint,2,opt,name=tables,proto3" json:"tables,omitempty"`
+	Views             uint32                 `protobuf:"varint,3,opt,name=views,proto3" json:"views,omitempty"`
+	MaterializedViews uint32                 `protobuf:"varint,4,opt,name=materialized_views,json=materializedViews,proto3" json:"materialized_views,omitempty"`
+	Sequences         uint32                 `protobuf:"varint,5,opt,name=sequences,proto3" json:"sequences,omitempty"`
+	Functions         uint32                 `protobuf:"varint,6,opt,name=functions,proto3" json:"functions,omitempty"`
+	Procedures        uint32                 `protobuf:"varint,7,opt,name=procedures,proto3" json:"procedures,omitempty"`
+	Triggers          uint32                 `protobuf:"varint,8,opt,name=triggers,proto3" json:"triggers,omitempty"`
+	Extensions        uint32                 `protobuf:"varint,9,opt,name=extensions,proto3" json:"extensions,omitempty"`
+	Events            uint32                 `protobuf:"varint,10,opt,name=events,proto3" json:"events,omitempty"`
+	// DumpGlobals only (roles without the predefined pg_* roles;
+	// tablespaces without pg_default and pg_global).
+	Roles         uint32 `protobuf:"varint,11,opt,name=roles,proto3" json:"roles,omitempty"`
+	Tablespaces   uint32 `protobuf:"varint,12,opt,name=tablespaces,proto3" json:"tablespaces,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectCounts) Reset() {
+	*x = ObjectCounts{}
+	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectCounts) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectCounts) ProtoMessage() {}
+
+func (x *ObjectCounts) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectCounts.ProtoReflect.Descriptor instead.
+func (*ObjectCounts) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ObjectCounts) GetSchemas() uint32 {
+	if x != nil {
+		return x.Schemas
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetTables() uint32 {
+	if x != nil {
+		return x.Tables
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetViews() uint32 {
+	if x != nil {
+		return x.Views
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetMaterializedViews() uint32 {
+	if x != nil {
+		return x.MaterializedViews
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetSequences() uint32 {
+	if x != nil {
+		return x.Sequences
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetFunctions() uint32 {
+	if x != nil {
+		return x.Functions
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetProcedures() uint32 {
+	if x != nil {
+		return x.Procedures
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetTriggers() uint32 {
+	if x != nil {
+		return x.Triggers
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetExtensions() uint32 {
+	if x != nil {
+		return x.Extensions
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetEvents() uint32 {
+	if x != nil {
+		return x.Events
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetRoles() uint32 {
+	if x != nil {
+		return x.Roles
+	}
+	return 0
+}
+
+func (x *ObjectCounts) GetTablespaces() uint32 {
+	if x != nil {
+		return x.Tablespaces
+	}
+	return 0
+}
+
+// StatsWarning is one completeness warning with the affected objects
+// (qualified names, bounded).
+type StatsWarning struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable code: insufficient_privileges, non_transactional_tables,
+	// row_count_timeout, stats_budget_exceeded, roles_without_passwords,
+	// snapshot_unavailable, stats_partial.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// Number of affected objects (may exceed the listed ones).
+	Count uint32 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	// At most 50 qualified object names.
+	Objects          []string `protobuf:"bytes,3,rep,name=objects,proto3" json:"objects,omitempty"`
+	ObjectsTruncated bool     `protobuf:"varint,4,opt,name=objects_truncated,json=objectsTruncated,proto3" json:"objects_truncated,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *StatsWarning) Reset() {
+	*x = StatsWarning{}
+	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsWarning) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsWarning) ProtoMessage() {}
+
+func (x *StatsWarning) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsWarning.ProtoReflect.Descriptor instead.
+func (*StatsWarning) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *StatsWarning) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *StatsWarning) GetCount() uint32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *StatsWarning) GetObjects() []string {
+	if x != nil {
+		return x.Objects
+	}
+	return nil
+}
+
+func (x *StatsWarning) GetObjectsTruncated() bool {
+	if x != nil {
+		return x.ObjectsTruncated
+	}
+	return false
+}
+
+// DumpStats is the completeness evidence of one dump. It is sent at most
+// once, before the first data chunk.
+type DumpStats struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Level StatsLevel             `protobuf:"varint,1,opt,name=level,proto3,enum=runner.v1.StatsLevel" json:"level,omitempty"`
+	// PostgreSQL: the dump ran in the exported snapshot of these stats, so
+	// exact row counts equal the dump's.
+	SameSnapshot bool          `protobuf:"varint,2,opt,name=same_snapshot,json=sameSnapshot,proto3" json:"same_snapshot,omitempty"`
+	Objects      *ObjectCounts `protobuf:"bytes,3,opt,name=objects,proto3" json:"objects,omitempty"`
+	// Sorted by schema and name; at most 10000 entries and about 768 KiB.
+	Tables []*TableStats `protobuf:"bytes,4,rep,name=tables,proto3" json:"tables,omitempty"`
+	// Number of tables in the database (tables may be truncated).
+	TablesTotal     uint32 `protobuf:"varint,5,opt,name=tables_total,json=tablesTotal,proto3" json:"tables_total,omitempty"`
+	TablesTruncated bool   `protobuf:"varint,6,opt,name=tables_truncated,json=tablesTruncated,proto3" json:"tables_truncated,omitempty"`
+	// At most 32 warnings.
+	Warnings      []*StatsWarning `protobuf:"bytes,7,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DumpStats) Reset() {
+	*x = DumpStats{}
+	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DumpStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DumpStats) ProtoMessage() {}
+
+func (x *DumpStats) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DumpStats.ProtoReflect.Descriptor instead.
+func (*DumpStats) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DumpStats) GetLevel() StatsLevel {
+	if x != nil {
+		return x.Level
+	}
+	return StatsLevel_STATS_LEVEL_UNSPECIFIED
+}
+
+func (x *DumpStats) GetSameSnapshot() bool {
+	if x != nil {
+		return x.SameSnapshot
+	}
+	return false
+}
+
+func (x *DumpStats) GetObjects() *ObjectCounts {
+	if x != nil {
+		return x.Objects
+	}
+	return nil
+}
+
+func (x *DumpStats) GetTables() []*TableStats {
+	if x != nil {
+		return x.Tables
+	}
+	return nil
+}
+
+func (x *DumpStats) GetTablesTotal() uint32 {
+	if x != nil {
+		return x.TablesTotal
+	}
+	return 0
+}
+
+func (x *DumpStats) GetTablesTruncated() bool {
+	if x != nil {
+		return x.TablesTruncated
+	}
+	return false
+}
+
+func (x *DumpStats) GetWarnings() []*StatsWarning {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
 // DumpResult ends a Dump or DumpGlobals stream.
 type DumpResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1621,7 +2213,7 @@ type DumpResult struct {
 
 func (x *DumpResult) Reset() {
 	*x = DumpResult{}
-	mi := &file_runner_v1_runner_proto_msgTypes[18]
+	mi := &file_runner_v1_runner_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1633,7 +2225,7 @@ func (x *DumpResult) String() string {
 func (*DumpResult) ProtoMessage() {}
 
 func (x *DumpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[18]
+	mi := &file_runner_v1_runner_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1646,7 +2238,7 @@ func (x *DumpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpResult.ProtoReflect.Descriptor instead.
 func (*DumpResult) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{18}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DumpResult) GetBytes() uint64 {
@@ -1698,6 +2290,7 @@ type DumpResponse struct {
 	//	*DumpResponse_Chunk
 	//	*DumpResponse_Log
 	//	*DumpResponse_Result
+	//	*DumpResponse_Stats
 	Msg           isDumpResponse_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1705,7 +2298,7 @@ type DumpResponse struct {
 
 func (x *DumpResponse) Reset() {
 	*x = DumpResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	mi := &file_runner_v1_runner_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1717,7 +2310,7 @@ func (x *DumpResponse) String() string {
 func (*DumpResponse) ProtoMessage() {}
 
 func (x *DumpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	mi := &file_runner_v1_runner_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1730,7 +2323,7 @@ func (x *DumpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpResponse.ProtoReflect.Descriptor instead.
 func (*DumpResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{19}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DumpResponse) GetMsg() isDumpResponse_Msg {
@@ -1767,6 +2360,15 @@ func (x *DumpResponse) GetResult() *DumpResult {
 	return nil
 }
 
+func (x *DumpResponse) GetStats() *DumpStats {
+	if x != nil {
+		if x, ok := x.Msg.(*DumpResponse_Stats); ok {
+			return x.Stats
+		}
+	}
+	return nil
+}
+
 type isDumpResponse_Msg interface {
 	isDumpResponse_Msg()
 }
@@ -1783,23 +2385,32 @@ type DumpResponse_Result struct {
 	Result *DumpResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
 }
 
+type DumpResponse_Stats struct {
+	// At most once, before the first chunk (task 3.10).
+	Stats *DumpStats `protobuf:"bytes,4,opt,name=stats,proto3,oneof"`
+}
+
 func (*DumpResponse_Chunk) isDumpResponse_Msg() {}
 
 func (*DumpResponse_Log) isDumpResponse_Msg() {}
 
 func (*DumpResponse_Result) isDumpResponse_Msg() {}
 
+func (*DumpResponse_Stats) isDumpResponse_Msg() {}
+
 type DumpGlobalsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ctx           *RunContext            `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
-	Target        *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Ctx    *RunContext            `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
+	Target *Target                `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	// Completeness evidence (roles, tablespaces; the level is ignored).
+	Stats         *StatsOptions `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DumpGlobalsRequest) Reset() {
 	*x = DumpGlobalsRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	mi := &file_runner_v1_runner_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +2422,7 @@ func (x *DumpGlobalsRequest) String() string {
 func (*DumpGlobalsRequest) ProtoMessage() {}
 
 func (x *DumpGlobalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	mi := &file_runner_v1_runner_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1824,7 +2435,7 @@ func (x *DumpGlobalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpGlobalsRequest.ProtoReflect.Descriptor instead.
 func (*DumpGlobalsRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{20}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DumpGlobalsRequest) GetCtx() *RunContext {
@@ -1841,6 +2452,13 @@ func (x *DumpGlobalsRequest) GetTarget() *Target {
 	return nil
 }
 
+func (x *DumpGlobalsRequest) GetStats() *StatsOptions {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
 type DumpGlobalsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -1848,6 +2466,7 @@ type DumpGlobalsResponse struct {
 	//	*DumpGlobalsResponse_Chunk
 	//	*DumpGlobalsResponse_Log
 	//	*DumpGlobalsResponse_Result
+	//	*DumpGlobalsResponse_Stats
 	Msg           isDumpGlobalsResponse_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1855,7 +2474,7 @@ type DumpGlobalsResponse struct {
 
 func (x *DumpGlobalsResponse) Reset() {
 	*x = DumpGlobalsResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	mi := &file_runner_v1_runner_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1867,7 +2486,7 @@ func (x *DumpGlobalsResponse) String() string {
 func (*DumpGlobalsResponse) ProtoMessage() {}
 
 func (x *DumpGlobalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	mi := &file_runner_v1_runner_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1880,7 +2499,7 @@ func (x *DumpGlobalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpGlobalsResponse.ProtoReflect.Descriptor instead.
 func (*DumpGlobalsResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{21}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DumpGlobalsResponse) GetMsg() isDumpGlobalsResponse_Msg {
@@ -1917,6 +2536,15 @@ func (x *DumpGlobalsResponse) GetResult() *DumpResult {
 	return nil
 }
 
+func (x *DumpGlobalsResponse) GetStats() *DumpStats {
+	if x != nil {
+		if x, ok := x.Msg.(*DumpGlobalsResponse_Stats); ok {
+			return x.Stats
+		}
+	}
+	return nil
+}
+
 type isDumpGlobalsResponse_Msg interface {
 	isDumpGlobalsResponse_Msg()
 }
@@ -1933,11 +2561,18 @@ type DumpGlobalsResponse_Result struct {
 	Result *DumpResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
 }
 
+type DumpGlobalsResponse_Stats struct {
+	// At most once, before the first chunk (task 3.10).
+	Stats *DumpStats `protobuf:"bytes,4,opt,name=stats,proto3,oneof"`
+}
+
 func (*DumpGlobalsResponse_Chunk) isDumpGlobalsResponse_Msg() {}
 
 func (*DumpGlobalsResponse_Log) isDumpGlobalsResponse_Msg() {}
 
 func (*DumpGlobalsResponse_Result) isDumpGlobalsResponse_Msg() {}
+
+func (*DumpGlobalsResponse_Stats) isDumpGlobalsResponse_Msg() {}
 
 type VerifyDumpHeader struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -1945,7 +2580,9 @@ type VerifyDumpHeader struct {
 	Engine     Engine                 `protobuf:"varint,2,opt,name=engine,proto3,enum=runner.v1.Engine" json:"engine,omitempty"`
 	VersionKey string                 `protobuf:"bytes,3,opt,name=version_key,json=versionKey,proto3" json:"version_key,omitempty"`
 	Kind       DumpKind               `protobuf:"varint,4,opt,name=kind,proto3,enum=runner.v1.DumpKind" json:"kind,omitempty"`
-	// Exact size of the dump that follows.
+	// Exact size of the dump that follows. 0 = streamed: the size is not
+	// known yet (the dump is verified while it is being taken) and a
+	// VerifyDumpTrailer with the total must end the stream.
 	TotalBytes    uint64 `protobuf:"varint,5,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1953,7 +2590,7 @@ type VerifyDumpHeader struct {
 
 func (x *VerifyDumpHeader) Reset() {
 	*x = VerifyDumpHeader{}
-	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	mi := &file_runner_v1_runner_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +2602,7 @@ func (x *VerifyDumpHeader) String() string {
 func (*VerifyDumpHeader) ProtoMessage() {}
 
 func (x *VerifyDumpHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	mi := &file_runner_v1_runner_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +2615,7 @@ func (x *VerifyDumpHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpHeader.ProtoReflect.Descriptor instead.
 func (*VerifyDumpHeader) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{22}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *VerifyDumpHeader) GetCtx() *RunContext {
@@ -2016,12 +2653,60 @@ func (x *VerifyDumpHeader) GetTotalBytes() uint64 {
 	return 0
 }
 
+// VerifyDumpTrailer ends a streamed VerifyDump (header total_bytes 0). It
+// must be the last message; total_bytes must equal the bytes of every chunk
+// sent. A stream that ends without it is incomplete.
+type VerifyDumpTrailer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TotalBytes    uint64                 `protobuf:"varint,1,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyDumpTrailer) Reset() {
+	*x = VerifyDumpTrailer{}
+	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyDumpTrailer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyDumpTrailer) ProtoMessage() {}
+
+func (x *VerifyDumpTrailer) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyDumpTrailer.ProtoReflect.Descriptor instead.
+func (*VerifyDumpTrailer) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *VerifyDumpTrailer) GetTotalBytes() uint64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
 type VerifyDumpRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
 	//
 	//	*VerifyDumpRequest_Header
 	//	*VerifyDumpRequest_Chunk
+	//	*VerifyDumpRequest_Trailer
 	Msg           isVerifyDumpRequest_Msg `protobuf_oneof:"msg"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2029,7 +2714,7 @@ type VerifyDumpRequest struct {
 
 func (x *VerifyDumpRequest) Reset() {
 	*x = VerifyDumpRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[23]
+	mi := &file_runner_v1_runner_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2041,7 +2726,7 @@ func (x *VerifyDumpRequest) String() string {
 func (*VerifyDumpRequest) ProtoMessage() {}
 
 func (x *VerifyDumpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[23]
+	mi := &file_runner_v1_runner_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2054,7 +2739,7 @@ func (x *VerifyDumpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpRequest.ProtoReflect.Descriptor instead.
 func (*VerifyDumpRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{23}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *VerifyDumpRequest) GetMsg() isVerifyDumpRequest_Msg {
@@ -2082,6 +2767,15 @@ func (x *VerifyDumpRequest) GetChunk() *DataChunk {
 	return nil
 }
 
+func (x *VerifyDumpRequest) GetTrailer() *VerifyDumpTrailer {
+	if x != nil {
+		if x, ok := x.Msg.(*VerifyDumpRequest_Trailer); ok {
+			return x.Trailer
+		}
+	}
+	return nil
+}
+
 type isVerifyDumpRequest_Msg interface {
 	isVerifyDumpRequest_Msg()
 }
@@ -2094,9 +2788,15 @@ type VerifyDumpRequest_Chunk struct {
 	Chunk *DataChunk `protobuf:"bytes,2,opt,name=chunk,proto3,oneof"`
 }
 
+type VerifyDumpRequest_Trailer struct {
+	Trailer *VerifyDumpTrailer `protobuf:"bytes,3,opt,name=trailer,proto3,oneof"`
+}
+
 func (*VerifyDumpRequest_Header) isVerifyDumpRequest_Msg() {}
 
 func (*VerifyDumpRequest_Chunk) isVerifyDumpRequest_Msg() {}
+
+func (*VerifyDumpRequest_Trailer) isVerifyDumpRequest_Msg() {}
 
 type VerifyDumpResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -2112,7 +2812,7 @@ type VerifyDumpResponse struct {
 
 func (x *VerifyDumpResponse) Reset() {
 	*x = VerifyDumpResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[24]
+	mi := &file_runner_v1_runner_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2124,7 +2824,7 @@ func (x *VerifyDumpResponse) String() string {
 func (*VerifyDumpResponse) ProtoMessage() {}
 
 func (x *VerifyDumpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[24]
+	mi := &file_runner_v1_runner_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2137,7 +2837,7 @@ func (x *VerifyDumpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpResponse.ProtoReflect.Descriptor instead.
 func (*VerifyDumpResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{24}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *VerifyDumpResponse) GetVerified() bool {
@@ -2193,7 +2893,7 @@ type RestoreHeader struct {
 
 func (x *RestoreHeader) Reset() {
 	*x = RestoreHeader{}
-	mi := &file_runner_v1_runner_proto_msgTypes[25]
+	mi := &file_runner_v1_runner_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2205,7 +2905,7 @@ func (x *RestoreHeader) String() string {
 func (*RestoreHeader) ProtoMessage() {}
 
 func (x *RestoreHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[25]
+	mi := &file_runner_v1_runner_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2218,7 +2918,7 @@ func (x *RestoreHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreHeader.ProtoReflect.Descriptor instead.
 func (*RestoreHeader) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{25}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *RestoreHeader) GetCtx() *RunContext {
@@ -2283,7 +2983,7 @@ type RestoreRequest struct {
 
 func (x *RestoreRequest) Reset() {
 	*x = RestoreRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[26]
+	mi := &file_runner_v1_runner_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2295,7 +2995,7 @@ func (x *RestoreRequest) String() string {
 func (*RestoreRequest) ProtoMessage() {}
 
 func (x *RestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[26]
+	mi := &file_runner_v1_runner_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2308,7 +3008,7 @@ func (x *RestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreRequest.ProtoReflect.Descriptor instead.
 func (*RestoreRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{26}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *RestoreRequest) GetMsg() isRestoreRequest_Msg {
@@ -2364,7 +3064,7 @@ type RestoreResult struct {
 
 func (x *RestoreResult) Reset() {
 	*x = RestoreResult{}
-	mi := &file_runner_v1_runner_proto_msgTypes[27]
+	mi := &file_runner_v1_runner_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2376,7 +3076,7 @@ func (x *RestoreResult) String() string {
 func (*RestoreResult) ProtoMessage() {}
 
 func (x *RestoreResult) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[27]
+	mi := &file_runner_v1_runner_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2389,7 +3089,7 @@ func (x *RestoreResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreResult.ProtoReflect.Descriptor instead.
 func (*RestoreResult) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{27}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RestoreResult) GetBytesReceived() uint64 {
@@ -2433,7 +3133,7 @@ type RestoreResponse struct {
 
 func (x *RestoreResponse) Reset() {
 	*x = RestoreResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	mi := &file_runner_v1_runner_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2445,7 +3145,7 @@ func (x *RestoreResponse) String() string {
 func (*RestoreResponse) ProtoMessage() {}
 
 func (x *RestoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	mi := &file_runner_v1_runner_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2458,7 +3158,7 @@ func (x *RestoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreResponse.ProtoReflect.Descriptor instead.
 func (*RestoreResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{28}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RestoreResponse) GetMsg() isRestoreResponse_Msg {
@@ -2513,7 +3213,7 @@ type CreateDatabaseRequest struct {
 
 func (x *CreateDatabaseRequest) Reset() {
 	*x = CreateDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[29]
+	mi := &file_runner_v1_runner_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2525,7 +3225,7 @@ func (x *CreateDatabaseRequest) String() string {
 func (*CreateDatabaseRequest) ProtoMessage() {}
 
 func (x *CreateDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[29]
+	mi := &file_runner_v1_runner_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2538,7 +3238,7 @@ func (x *CreateDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*CreateDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{29}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *CreateDatabaseRequest) GetCtx() *RunContext {
@@ -2570,7 +3270,7 @@ type CreateDatabaseResponse struct {
 
 func (x *CreateDatabaseResponse) Reset() {
 	*x = CreateDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[30]
+	mi := &file_runner_v1_runner_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2582,7 +3282,7 @@ func (x *CreateDatabaseResponse) String() string {
 func (*CreateDatabaseResponse) ProtoMessage() {}
 
 func (x *CreateDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[30]
+	mi := &file_runner_v1_runner_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2595,7 +3295,7 @@ func (x *CreateDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*CreateDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{30}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{36}
 }
 
 type RenameSwapDatabaseRequest struct {
@@ -2614,7 +3314,7 @@ type RenameSwapDatabaseRequest struct {
 
 func (x *RenameSwapDatabaseRequest) Reset() {
 	*x = RenameSwapDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[31]
+	mi := &file_runner_v1_runner_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2626,7 +3326,7 @@ func (x *RenameSwapDatabaseRequest) String() string {
 func (*RenameSwapDatabaseRequest) ProtoMessage() {}
 
 func (x *RenameSwapDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[31]
+	mi := &file_runner_v1_runner_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2639,7 +3339,7 @@ func (x *RenameSwapDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSwapDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*RenameSwapDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{31}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *RenameSwapDatabaseRequest) GetCtx() *RunContext {
@@ -2678,7 +3378,7 @@ type RenameSwapDatabaseResponse struct {
 
 func (x *RenameSwapDatabaseResponse) Reset() {
 	*x = RenameSwapDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[32]
+	mi := &file_runner_v1_runner_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2690,7 +3390,7 @@ func (x *RenameSwapDatabaseResponse) String() string {
 func (*RenameSwapDatabaseResponse) ProtoMessage() {}
 
 func (x *RenameSwapDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[32]
+	mi := &file_runner_v1_runner_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2703,7 +3403,7 @@ func (x *RenameSwapDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSwapDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*RenameSwapDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{32}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{38}
 }
 
 type PrePullRequest struct {
@@ -2716,7 +3416,7 @@ type PrePullRequest struct {
 
 func (x *PrePullRequest) Reset() {
 	*x = PrePullRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[33]
+	mi := &file_runner_v1_runner_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2728,7 +3428,7 @@ func (x *PrePullRequest) String() string {
 func (*PrePullRequest) ProtoMessage() {}
 
 func (x *PrePullRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[33]
+	mi := &file_runner_v1_runner_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2741,7 +3441,7 @@ func (x *PrePullRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrePullRequest.ProtoReflect.Descriptor instead.
 func (*PrePullRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{33}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *PrePullRequest) GetEngine() Engine {
@@ -2769,7 +3469,7 @@ type PrePullResponse struct {
 
 func (x *PrePullResponse) Reset() {
 	*x = PrePullResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[34]
+	mi := &file_runner_v1_runner_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +3481,7 @@ func (x *PrePullResponse) String() string {
 func (*PrePullResponse) ProtoMessage() {}
 
 func (x *PrePullResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[34]
+	mi := &file_runner_v1_runner_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +3494,7 @@ func (x *PrePullResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrePullResponse.ProtoReflect.Descriptor instead.
 func (*PrePullResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{34}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *PrePullResponse) GetImageRef() string {
@@ -2819,7 +3519,7 @@ type ListImagesRequest struct {
 
 func (x *ListImagesRequest) Reset() {
 	*x = ListImagesRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[35]
+	mi := &file_runner_v1_runner_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2831,7 +3531,7 @@ func (x *ListImagesRequest) String() string {
 func (*ListImagesRequest) ProtoMessage() {}
 
 func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[35]
+	mi := &file_runner_v1_runner_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2844,7 +3544,7 @@ func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesRequest.ProtoReflect.Descriptor instead.
 func (*ListImagesRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{35}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{41}
 }
 
 type ListImagesResponse struct {
@@ -2857,7 +3557,7 @@ type ListImagesResponse struct {
 
 func (x *ListImagesResponse) Reset() {
 	*x = ListImagesResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[36]
+	mi := &file_runner_v1_runner_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2869,7 +3569,7 @@ func (x *ListImagesResponse) String() string {
 func (*ListImagesResponse) ProtoMessage() {}
 
 func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[36]
+	mi := &file_runner_v1_runner_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2882,7 +3582,7 @@ func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesResponse.ProtoReflect.Descriptor instead.
 func (*ListImagesResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{36}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ListImagesResponse) GetImages() []*AllowlistedImage {
@@ -2912,7 +3612,7 @@ type AllowlistedImage struct {
 
 func (x *AllowlistedImage) Reset() {
 	*x = AllowlistedImage{}
-	mi := &file_runner_v1_runner_proto_msgTypes[37]
+	mi := &file_runner_v1_runner_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2924,7 +3624,7 @@ func (x *AllowlistedImage) String() string {
 func (*AllowlistedImage) ProtoMessage() {}
 
 func (x *AllowlistedImage) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[37]
+	mi := &file_runner_v1_runner_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2937,7 +3637,7 @@ func (x *AllowlistedImage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllowlistedImage.ProtoReflect.Descriptor instead.
 func (*AllowlistedImage) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{37}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *AllowlistedImage) GetEngine() Engine {
@@ -3112,11 +3812,55 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x14FetchHostKeyResponse\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12-\n" +
 	"\x12fingerprint_sha256\x18\x02 \x01(\tR\x11fingerprintSha256\x12%\n" +
-	"\x0eauthorized_key\x18\x03 \x01(\tR\rauthorizedKey\"}\n" +
+	"\x0eauthorized_key\x18\x03 \x01(\tR\rauthorizedKey\"\xac\x01\n" +
 	"\vDumpRequest\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
 	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\x12\x1a\n" +
-	"\bdatabase\x18\x03 \x01(\tR\bdatabase\"\xdb\x01\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12-\n" +
+	"\x05stats\x18\x04 \x01(\v2\x17.runner.v1.StatsOptionsR\x05stats\"\xa3\x01\n" +
+	"\fStatsOptions\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12+\n" +
+	"\x05level\x18\x02 \x01(\x0e2\x15.runner.v1.StatsLevelR\x05level\x12/\n" +
+	"\x14per_table_timeout_ms\x18\x03 \x01(\rR\x11perTableTimeoutMs\x12\x1b\n" +
+	"\tbudget_ms\x18\x04 \x01(\rR\bbudgetMs\"\x99\x01\n" +
+	"\n" +
+	"TableStats\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04rows\x18\x03 \x01(\x03R\x04rows\x12)\n" +
+	"\x05count\x18\x04 \x01(\x0e2\x13.runner.v1.RowCountR\x05count\x12 \n" +
+	"\vapproximate\x18\x05 \x01(\bR\vapproximate\"\xed\x02\n" +
+	"\fObjectCounts\x12\x18\n" +
+	"\aschemas\x18\x01 \x01(\rR\aschemas\x12\x16\n" +
+	"\x06tables\x18\x02 \x01(\rR\x06tables\x12\x14\n" +
+	"\x05views\x18\x03 \x01(\rR\x05views\x12-\n" +
+	"\x12materialized_views\x18\x04 \x01(\rR\x11materializedViews\x12\x1c\n" +
+	"\tsequences\x18\x05 \x01(\rR\tsequences\x12\x1c\n" +
+	"\tfunctions\x18\x06 \x01(\rR\tfunctions\x12\x1e\n" +
+	"\n" +
+	"procedures\x18\a \x01(\rR\n" +
+	"procedures\x12\x1a\n" +
+	"\btriggers\x18\b \x01(\rR\btriggers\x12\x1e\n" +
+	"\n" +
+	"extensions\x18\t \x01(\rR\n" +
+	"extensions\x12\x16\n" +
+	"\x06events\x18\n" +
+	" \x01(\rR\x06events\x12\x14\n" +
+	"\x05roles\x18\v \x01(\rR\x05roles\x12 \n" +
+	"\vtablespaces\x18\f \x01(\rR\vtablespaces\"\x7f\n" +
+	"\fStatsWarning\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
+	"\x05count\x18\x02 \x01(\rR\x05count\x12\x18\n" +
+	"\aobjects\x18\x03 \x03(\tR\aobjects\x12+\n" +
+	"\x11objects_truncated\x18\x04 \x01(\bR\x10objectsTruncated\"\xc2\x02\n" +
+	"\tDumpStats\x12+\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x15.runner.v1.StatsLevelR\x05level\x12#\n" +
+	"\rsame_snapshot\x18\x02 \x01(\bR\fsameSnapshot\x121\n" +
+	"\aobjects\x18\x03 \x01(\v2\x17.runner.v1.ObjectCountsR\aobjects\x12-\n" +
+	"\x06tables\x18\x04 \x03(\v2\x15.runner.v1.TableStatsR\x06tables\x12!\n" +
+	"\ftables_total\x18\x05 \x01(\rR\vtablesTotal\x12)\n" +
+	"\x10tables_truncated\x18\x06 \x01(\bR\x0ftablesTruncated\x123\n" +
+	"\bwarnings\x18\a \x03(\v2\x17.runner.v1.StatsWarningR\bwarnings\"\xdb\x01\n" +
 	"\n" +
 	"DumpResult\x12\x14\n" +
 	"\x05bytes\x18\x01 \x01(\x04R\x05bytes\x12\x1b\n" +
@@ -3124,19 +3868,22 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\bverified\x18\x03 \x01(\bR\bverified\x12\x1a\n" +
 	"\bwarnings\x18\x04 \x03(\tR\bwarnings\x12*\n" +
 	"\x11dropped_log_lines\x18\x05 \x01(\x04R\x0fdroppedLogLines\x126\n" +
-	"\x17roles_without_passwords\x18\x06 \x01(\bR\x15rolesWithoutPasswords\"\x9c\x01\n" +
+	"\x17roles_without_passwords\x18\x06 \x01(\bR\x15rolesWithoutPasswords\"\xca\x01\n" +
 	"\fDumpResponse\x12,\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x14.runner.v1.DataChunkH\x00R\x05chunk\x12&\n" +
 	"\x03log\x18\x02 \x01(\v2\x12.runner.v1.LogLineH\x00R\x03log\x12/\n" +
-	"\x06result\x18\x03 \x01(\v2\x15.runner.v1.DumpResultH\x00R\x06resultB\x05\n" +
-	"\x03msg\"h\n" +
+	"\x06result\x18\x03 \x01(\v2\x15.runner.v1.DumpResultH\x00R\x06result\x12,\n" +
+	"\x05stats\x18\x04 \x01(\v2\x14.runner.v1.DumpStatsH\x00R\x05statsB\x05\n" +
+	"\x03msg\"\x97\x01\n" +
 	"\x12DumpGlobalsRequest\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
-	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\"\xa3\x01\n" +
+	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\x12-\n" +
+	"\x05stats\x18\x03 \x01(\v2\x17.runner.v1.StatsOptionsR\x05stats\"\xd1\x01\n" +
 	"\x13DumpGlobalsResponse\x12,\n" +
 	"\x05chunk\x18\x01 \x01(\v2\x14.runner.v1.DataChunkH\x00R\x05chunk\x12&\n" +
 	"\x03log\x18\x02 \x01(\v2\x12.runner.v1.LogLineH\x00R\x03log\x12/\n" +
-	"\x06result\x18\x03 \x01(\v2\x15.runner.v1.DumpResultH\x00R\x06resultB\x05\n" +
+	"\x06result\x18\x03 \x01(\v2\x15.runner.v1.DumpResultH\x00R\x06result\x12,\n" +
+	"\x05stats\x18\x04 \x01(\v2\x14.runner.v1.DumpStatsH\x00R\x05statsB\x05\n" +
 	"\x03msg\"\xd1\x01\n" +
 	"\x10VerifyDumpHeader\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
@@ -3145,10 +3892,14 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"versionKey\x12'\n" +
 	"\x04kind\x18\x04 \x01(\x0e2\x13.runner.v1.DumpKindR\x04kind\x12\x1f\n" +
 	"\vtotal_bytes\x18\x05 \x01(\x04R\n" +
-	"totalBytes\"\x7f\n" +
+	"totalBytes\"4\n" +
+	"\x11VerifyDumpTrailer\x12\x1f\n" +
+	"\vtotal_bytes\x18\x01 \x01(\x04R\n" +
+	"totalBytes\"\xb9\x01\n" +
 	"\x11VerifyDumpRequest\x125\n" +
 	"\x06header\x18\x01 \x01(\v2\x1b.runner.v1.VerifyDumpHeaderH\x00R\x06header\x12,\n" +
-	"\x05chunk\x18\x02 \x01(\v2\x14.runner.v1.DataChunkH\x00R\x05chunkB\x05\n" +
+	"\x05chunk\x18\x02 \x01(\v2\x14.runner.v1.DataChunkH\x00R\x05chunk\x128\n" +
+	"\atrailer\x18\x03 \x01(\v2\x1c.runner.v1.VerifyDumpTrailerH\x00R\atrailerB\x05\n" +
 	"\x03msg\"\xbd\x01\n" +
 	"\x12VerifyDumpResponse\x12\x1a\n" +
 	"\bverified\x18\x01 \x01(\bR\bverified\x12\x1b\n" +
@@ -3230,7 +3981,17 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x16LOG_STREAM_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11LOG_STREAM_STDOUT\x10\x01\x12\x15\n" +
 	"\x11LOG_STREAM_STDERR\x10\x02\x12\x15\n" +
-	"\x11LOG_STREAM_RUNNER\x10\x032\xaf\a\n" +
+	"\x11LOG_STREAM_RUNNER\x10\x03*Y\n" +
+	"\n" +
+	"StatsLevel\x12\x1b\n" +
+	"\x17STATS_LEVEL_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14STATS_LEVEL_STANDARD\x10\x01\x12\x14\n" +
+	"\x10STATS_LEVEL_DEEP\x10\x02*i\n" +
+	"\bRowCount\x12\x19\n" +
+	"\x15ROW_COUNT_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fROW_COUNT_EXACT\x10\x01\x12\x16\n" +
+	"\x12ROW_COUNT_ESTIMATE\x10\x02\x12\x15\n" +
+	"\x11ROW_COUNT_UNKNOWN\x10\x032\xaf\a\n" +
 	"\rRunnerService\x12=\n" +
 	"\x06Health\x12\x18.runner.v1.HealthRequest\x1a\x19.runner.v1.HealthResponse\x12:\n" +
 	"\x05Probe\x12\x17.runner.v1.ProbeRequest\x1a\x18.runner.v1.ProbeResponse\x12m\n" +
@@ -3260,135 +4021,154 @@ func file_runner_v1_runner_proto_rawDescGZIP() []byte {
 	return file_runner_v1_runner_proto_rawDescData
 }
 
-var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_runner_v1_runner_proto_goTypes = []any{
 	(Engine)(0),                            // 0: runner.v1.Engine
 	(TlsMode)(0),                           // 1: runner.v1.TlsMode
 	(DumpKind)(0),                          // 2: runner.v1.DumpKind
 	(DockerStatus)(0),                      // 3: runner.v1.DockerStatus
 	(LogStream)(0),                         // 4: runner.v1.LogStream
-	(*RunContext)(nil),                     // 5: runner.v1.RunContext
-	(*CertificatePin)(nil),                 // 6: runner.v1.CertificatePin
-	(*ClientCertificate)(nil),              // 7: runner.v1.ClientCertificate
-	(*HostKeyPin)(nil),                     // 8: runner.v1.HostKeyPin
-	(*SshTunnel)(nil),                      // 9: runner.v1.SshTunnel
-	(*Target)(nil),                         // 10: runner.v1.Target
-	(*DataChunk)(nil),                      // 11: runner.v1.DataChunk
-	(*LogLine)(nil),                        // 12: runner.v1.LogLine
-	(*PeerCertificate)(nil),                // 13: runner.v1.PeerCertificate
-	(*HealthRequest)(nil),                  // 14: runner.v1.HealthRequest
-	(*HealthResponse)(nil),                 // 15: runner.v1.HealthResponse
-	(*ProbeRequest)(nil),                   // 16: runner.v1.ProbeRequest
-	(*ProbeResponse)(nil),                  // 17: runner.v1.ProbeResponse
-	(*FetchServerCertificateRequest)(nil),  // 18: runner.v1.FetchServerCertificateRequest
-	(*FetchServerCertificateResponse)(nil), // 19: runner.v1.FetchServerCertificateResponse
-	(*FetchHostKeyRequest)(nil),            // 20: runner.v1.FetchHostKeyRequest
-	(*FetchHostKeyResponse)(nil),           // 21: runner.v1.FetchHostKeyResponse
-	(*DumpRequest)(nil),                    // 22: runner.v1.DumpRequest
-	(*DumpResult)(nil),                     // 23: runner.v1.DumpResult
-	(*DumpResponse)(nil),                   // 24: runner.v1.DumpResponse
-	(*DumpGlobalsRequest)(nil),             // 25: runner.v1.DumpGlobalsRequest
-	(*DumpGlobalsResponse)(nil),            // 26: runner.v1.DumpGlobalsResponse
-	(*VerifyDumpHeader)(nil),               // 27: runner.v1.VerifyDumpHeader
-	(*VerifyDumpRequest)(nil),              // 28: runner.v1.VerifyDumpRequest
-	(*VerifyDumpResponse)(nil),             // 29: runner.v1.VerifyDumpResponse
-	(*RestoreHeader)(nil),                  // 30: runner.v1.RestoreHeader
-	(*RestoreRequest)(nil),                 // 31: runner.v1.RestoreRequest
-	(*RestoreResult)(nil),                  // 32: runner.v1.RestoreResult
-	(*RestoreResponse)(nil),                // 33: runner.v1.RestoreResponse
-	(*CreateDatabaseRequest)(nil),          // 34: runner.v1.CreateDatabaseRequest
-	(*CreateDatabaseResponse)(nil),         // 35: runner.v1.CreateDatabaseResponse
-	(*RenameSwapDatabaseRequest)(nil),      // 36: runner.v1.RenameSwapDatabaseRequest
-	(*RenameSwapDatabaseResponse)(nil),     // 37: runner.v1.RenameSwapDatabaseResponse
-	(*PrePullRequest)(nil),                 // 38: runner.v1.PrePullRequest
-	(*PrePullResponse)(nil),                // 39: runner.v1.PrePullResponse
-	(*ListImagesRequest)(nil),              // 40: runner.v1.ListImagesRequest
-	(*ListImagesResponse)(nil),             // 41: runner.v1.ListImagesResponse
-	(*AllowlistedImage)(nil),               // 42: runner.v1.AllowlistedImage
-	(*timestamppb.Timestamp)(nil),          // 43: google.protobuf.Timestamp
-	(*descriptorpb.FieldOptions)(nil),      // 44: google.protobuf.FieldOptions
+	(StatsLevel)(0),                        // 5: runner.v1.StatsLevel
+	(RowCount)(0),                          // 6: runner.v1.RowCount
+	(*RunContext)(nil),                     // 7: runner.v1.RunContext
+	(*CertificatePin)(nil),                 // 8: runner.v1.CertificatePin
+	(*ClientCertificate)(nil),              // 9: runner.v1.ClientCertificate
+	(*HostKeyPin)(nil),                     // 10: runner.v1.HostKeyPin
+	(*SshTunnel)(nil),                      // 11: runner.v1.SshTunnel
+	(*Target)(nil),                         // 12: runner.v1.Target
+	(*DataChunk)(nil),                      // 13: runner.v1.DataChunk
+	(*LogLine)(nil),                        // 14: runner.v1.LogLine
+	(*PeerCertificate)(nil),                // 15: runner.v1.PeerCertificate
+	(*HealthRequest)(nil),                  // 16: runner.v1.HealthRequest
+	(*HealthResponse)(nil),                 // 17: runner.v1.HealthResponse
+	(*ProbeRequest)(nil),                   // 18: runner.v1.ProbeRequest
+	(*ProbeResponse)(nil),                  // 19: runner.v1.ProbeResponse
+	(*FetchServerCertificateRequest)(nil),  // 20: runner.v1.FetchServerCertificateRequest
+	(*FetchServerCertificateResponse)(nil), // 21: runner.v1.FetchServerCertificateResponse
+	(*FetchHostKeyRequest)(nil),            // 22: runner.v1.FetchHostKeyRequest
+	(*FetchHostKeyResponse)(nil),           // 23: runner.v1.FetchHostKeyResponse
+	(*DumpRequest)(nil),                    // 24: runner.v1.DumpRequest
+	(*StatsOptions)(nil),                   // 25: runner.v1.StatsOptions
+	(*TableStats)(nil),                     // 26: runner.v1.TableStats
+	(*ObjectCounts)(nil),                   // 27: runner.v1.ObjectCounts
+	(*StatsWarning)(nil),                   // 28: runner.v1.StatsWarning
+	(*DumpStats)(nil),                      // 29: runner.v1.DumpStats
+	(*DumpResult)(nil),                     // 30: runner.v1.DumpResult
+	(*DumpResponse)(nil),                   // 31: runner.v1.DumpResponse
+	(*DumpGlobalsRequest)(nil),             // 32: runner.v1.DumpGlobalsRequest
+	(*DumpGlobalsResponse)(nil),            // 33: runner.v1.DumpGlobalsResponse
+	(*VerifyDumpHeader)(nil),               // 34: runner.v1.VerifyDumpHeader
+	(*VerifyDumpTrailer)(nil),              // 35: runner.v1.VerifyDumpTrailer
+	(*VerifyDumpRequest)(nil),              // 36: runner.v1.VerifyDumpRequest
+	(*VerifyDumpResponse)(nil),             // 37: runner.v1.VerifyDumpResponse
+	(*RestoreHeader)(nil),                  // 38: runner.v1.RestoreHeader
+	(*RestoreRequest)(nil),                 // 39: runner.v1.RestoreRequest
+	(*RestoreResult)(nil),                  // 40: runner.v1.RestoreResult
+	(*RestoreResponse)(nil),                // 41: runner.v1.RestoreResponse
+	(*CreateDatabaseRequest)(nil),          // 42: runner.v1.CreateDatabaseRequest
+	(*CreateDatabaseResponse)(nil),         // 43: runner.v1.CreateDatabaseResponse
+	(*RenameSwapDatabaseRequest)(nil),      // 44: runner.v1.RenameSwapDatabaseRequest
+	(*RenameSwapDatabaseResponse)(nil),     // 45: runner.v1.RenameSwapDatabaseResponse
+	(*PrePullRequest)(nil),                 // 46: runner.v1.PrePullRequest
+	(*PrePullResponse)(nil),                // 47: runner.v1.PrePullResponse
+	(*ListImagesRequest)(nil),              // 48: runner.v1.ListImagesRequest
+	(*ListImagesResponse)(nil),             // 49: runner.v1.ListImagesResponse
+	(*AllowlistedImage)(nil),               // 50: runner.v1.AllowlistedImage
+	(*timestamppb.Timestamp)(nil),          // 51: google.protobuf.Timestamp
+	(*descriptorpb.FieldOptions)(nil),      // 52: google.protobuf.FieldOptions
 }
 var file_runner_v1_runner_proto_depIdxs = []int32{
-	8,  // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
+	10, // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
 	0,  // 1: runner.v1.Target.engine:type_name -> runner.v1.Engine
 	1,  // 2: runner.v1.Target.tls_mode:type_name -> runner.v1.TlsMode
-	6,  // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
-	7,  // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
-	9,  // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	43, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
+	8,  // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
+	9,  // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
+	11, // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	51, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
 	4,  // 7: runner.v1.LogLine.stream:type_name -> runner.v1.LogStream
-	43, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
-	43, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
+	51, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
+	51, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
 	3,  // 10: runner.v1.HealthResponse.docker_status:type_name -> runner.v1.DockerStatus
-	43, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
-	5,  // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
-	5,  // 14: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
+	51, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
+	7,  // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
+	12, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
+	7,  // 14: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
 	0,  // 15: runner.v1.FetchServerCertificateRequest.engine:type_name -> runner.v1.Engine
-	9,  // 16: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	13, // 17: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
-	5,  // 18: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
-	5,  // 19: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 20: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
-	11, // 21: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
-	12, // 22: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
-	23, // 23: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
-	5,  // 24: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 25: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
-	11, // 26: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
-	12, // 27: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
-	23, // 28: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
-	5,  // 29: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
-	0,  // 30: runner.v1.VerifyDumpHeader.engine:type_name -> runner.v1.Engine
-	2,  // 31: runner.v1.VerifyDumpHeader.kind:type_name -> runner.v1.DumpKind
-	27, // 32: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
-	11, // 33: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
-	12, // 34: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
-	5,  // 35: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
-	10, // 36: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
-	2,  // 37: runner.v1.RestoreHeader.kind:type_name -> runner.v1.DumpKind
-	30, // 38: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
-	11, // 39: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
-	12, // 40: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
-	32, // 41: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
-	5,  // 42: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 43: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
-	5,  // 44: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 45: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
-	0,  // 46: runner.v1.PrePullRequest.engine:type_name -> runner.v1.Engine
-	42, // 47: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
-	0,  // 48: runner.v1.AllowlistedImage.engine:type_name -> runner.v1.Engine
-	44, // 49: runner.v1.secret:extendee -> google.protobuf.FieldOptions
-	14, // 50: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
-	16, // 51: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
-	18, // 52: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
-	20, // 53: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
-	22, // 54: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
-	25, // 55: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
-	28, // 56: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
-	31, // 57: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
-	34, // 58: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
-	36, // 59: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
-	38, // 60: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
-	40, // 61: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
-	15, // 62: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
-	17, // 63: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
-	19, // 64: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
-	21, // 65: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
-	24, // 66: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
-	26, // 67: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
-	29, // 68: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
-	33, // 69: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
-	35, // 70: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
-	37, // 71: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
-	39, // 72: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
-	41, // 73: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
-	62, // [62:74] is the sub-list for method output_type
-	50, // [50:62] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	49, // [49:50] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	11, // 16: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	15, // 17: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
+	7,  // 18: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
+	7,  // 19: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
+	12, // 20: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
+	25, // 21: runner.v1.DumpRequest.stats:type_name -> runner.v1.StatsOptions
+	5,  // 22: runner.v1.StatsOptions.level:type_name -> runner.v1.StatsLevel
+	6,  // 23: runner.v1.TableStats.count:type_name -> runner.v1.RowCount
+	5,  // 24: runner.v1.DumpStats.level:type_name -> runner.v1.StatsLevel
+	27, // 25: runner.v1.DumpStats.objects:type_name -> runner.v1.ObjectCounts
+	26, // 26: runner.v1.DumpStats.tables:type_name -> runner.v1.TableStats
+	28, // 27: runner.v1.DumpStats.warnings:type_name -> runner.v1.StatsWarning
+	13, // 28: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
+	14, // 29: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
+	30, // 30: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
+	29, // 31: runner.v1.DumpResponse.stats:type_name -> runner.v1.DumpStats
+	7,  // 32: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
+	12, // 33: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
+	25, // 34: runner.v1.DumpGlobalsRequest.stats:type_name -> runner.v1.StatsOptions
+	13, // 35: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
+	14, // 36: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
+	30, // 37: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
+	29, // 38: runner.v1.DumpGlobalsResponse.stats:type_name -> runner.v1.DumpStats
+	7,  // 39: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
+	0,  // 40: runner.v1.VerifyDumpHeader.engine:type_name -> runner.v1.Engine
+	2,  // 41: runner.v1.VerifyDumpHeader.kind:type_name -> runner.v1.DumpKind
+	34, // 42: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
+	13, // 43: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
+	35, // 44: runner.v1.VerifyDumpRequest.trailer:type_name -> runner.v1.VerifyDumpTrailer
+	14, // 45: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
+	7,  // 46: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
+	12, // 47: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
+	2,  // 48: runner.v1.RestoreHeader.kind:type_name -> runner.v1.DumpKind
+	38, // 49: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
+	13, // 50: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
+	14, // 51: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
+	40, // 52: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
+	7,  // 53: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	12, // 54: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
+	7,  // 55: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	12, // 56: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
+	0,  // 57: runner.v1.PrePullRequest.engine:type_name -> runner.v1.Engine
+	50, // 58: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
+	0,  // 59: runner.v1.AllowlistedImage.engine:type_name -> runner.v1.Engine
+	52, // 60: runner.v1.secret:extendee -> google.protobuf.FieldOptions
+	16, // 61: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
+	18, // 62: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
+	20, // 63: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
+	22, // 64: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
+	24, // 65: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
+	32, // 66: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
+	36, // 67: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
+	39, // 68: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
+	42, // 69: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
+	44, // 70: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
+	46, // 71: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
+	48, // 72: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
+	17, // 73: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
+	19, // 74: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
+	21, // 75: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
+	23, // 76: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
+	31, // 77: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
+	33, // 78: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
+	37, // 79: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
+	41, // 80: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
+	43, // 81: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
+	45, // 82: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
+	47, // 83: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
+	49, // 84: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
+	73, // [73:85] is the sub-list for method output_type
+	61, // [61:73] is the sub-list for method input_type
+	61, // [61:61] is the sub-list for extension type_name
+	60, // [60:61] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_runner_v1_runner_proto_init() }
@@ -3396,25 +4176,28 @@ func file_runner_v1_runner_proto_init() {
 	if File_runner_v1_runner_proto != nil {
 		return
 	}
-	file_runner_v1_runner_proto_msgTypes[19].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[24].OneofWrappers = []any{
 		(*DumpResponse_Chunk)(nil),
 		(*DumpResponse_Log)(nil),
 		(*DumpResponse_Result)(nil),
+		(*DumpResponse_Stats)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[21].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[26].OneofWrappers = []any{
 		(*DumpGlobalsResponse_Chunk)(nil),
 		(*DumpGlobalsResponse_Log)(nil),
 		(*DumpGlobalsResponse_Result)(nil),
+		(*DumpGlobalsResponse_Stats)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[23].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[29].OneofWrappers = []any{
 		(*VerifyDumpRequest_Header)(nil),
 		(*VerifyDumpRequest_Chunk)(nil),
+		(*VerifyDumpRequest_Trailer)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[26].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[32].OneofWrappers = []any{
 		(*RestoreRequest_Header)(nil),
 		(*RestoreRequest_Chunk)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[28].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[34].OneofWrappers = []any{
 		(*RestoreResponse_Log)(nil),
 		(*RestoreResponse_Result)(nil),
 	}
@@ -3423,8 +4206,8 @@ func file_runner_v1_runner_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runner_v1_runner_proto_rawDesc), len(file_runner_v1_runner_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   38,
+			NumEnums:      7,
+			NumMessages:   44,
 			NumExtensions: 1,
 			NumServices:   1,
 		},

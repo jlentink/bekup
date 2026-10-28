@@ -1,6 +1,6 @@
 # Upgrades
 
-> **Status:** partial (end of M2). The migration mechanics are implemented
+> **Status:** partial (end of M3). The migration mechanics are implemented
 > (task 0.4), the compose `migrate` service exists (task 0.7), `serve`
 > refuses to start on an outdated schema (task 1.1), the postgres
 > certificate rotation is described below (task 1.0, D-104), and so are

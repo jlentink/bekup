@@ -18,7 +18,14 @@ type TxBeginner interface {
 // Tx runs fn in a transaction. It commits when fn returns nil and rolls back
 // when fn returns an error or panics (the panic is re-raised after the
 // rollback).
-func Tx(ctx context.Context, db TxBeginner, fn func(q *sqlc.Queries) error) (err error) {
+func Tx(ctx context.Context, db TxBeginner, fn func(q *sqlc.Queries) error) error {
+	return TxWith(ctx, db, func(_ pgx.Tx, q *sqlc.Queries) error { return fn(q) })
+}
+
+// TxWith is Tx for callers that also need the transaction itself, e.g. to
+// insert River jobs atomically with their own writes (River's InsertTx).
+// The pgx.Tx must not be committed or rolled back by fn.
+func TxWith(ctx context.Context, db TxBeginner, fn func(tx pgx.Tx, q *sqlc.Queries) error) (err error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)
@@ -37,7 +44,7 @@ func Tx(ctx context.Context, db TxBeginner, fn func(q *sqlc.Queries) error) (err
 			err = errors.Join(err, fmt.Errorf("roll back transaction: %w", rbErr))
 		}
 	}()
-	if err := fn(sqlc.New(tx)); err != nil {
+	if err := fn(tx, sqlc.New(tx)); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

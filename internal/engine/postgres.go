@@ -110,24 +110,36 @@ func (e postgresEngine) pgUserDB(t Target, db string) error {
 	return nil
 }
 
-func (postgresEngine) Dump(c Entry, t Target, db string) (Command, error) {
+func (e postgresEngine) Dump(c Entry, t Target, db string) (Command, error) {
+	return e.DumpSnapshot(c, t, db, "")
+}
+
+// DumpSnapshot is Dump inside an exported snapshot (pg_dump --snapshot,
+// task 3.10): snapshot is the pg_export_snapshot() id of a transaction the
+// caller keeps open until pg_dump has imported it ("" = none). pg_dump
+// must connect to the same database; the snapshot can only be imported
+// while the exporting transaction is open.
+func (postgresEngine) DumpSnapshot(c Entry, t Target, db, snapshot string) (Command, error) {
 	if err := pgPrepare(c, t); err != nil {
 		return Command{}, err
 	}
 	if err := ValidateDBName(db); err != nil {
 		return Command{}, err
 	}
-	return Command{
-		Image: c.image,
-		Argv: []string{
-			c.binaries.Dump,
-			"--format=custom",
-			"--compress=0",
-			"--no-password",
-			"--dbname=" + pgConninfo(t, db),
-		},
-		Files: pgFiles(t),
-	}, nil
+	argv := []string{
+		c.binaries.Dump,
+		"--format=custom",
+		"--compress=0",
+		"--no-password",
+	}
+	if snapshot != "" {
+		if err := ValidateSnapshotID(snapshot); err != nil {
+			return Command{}, err
+		}
+		argv = append(argv, "--snapshot="+snapshot)
+	}
+	argv = append(argv, "--dbname="+pgConninfo(t, db))
+	return Command{Image: c.image, Argv: argv, Files: pgFiles(t)}, nil
 }
 
 func (postgresEngine) DumpGlobals(c Entry, t Target) (primary, fallback Command, err error) {

@@ -1,18 +1,19 @@
 # Getting started
 
-> **Status:** partial (end of M2). The development quick start and the
+> **Status:** partial (end of M3). The development quick start and the
 > production outline below match the current files. `bekup serve` runs with
 > the HTTP layer, the GraphQL API (incl. subscriptions as Server-Sent
-> Events), sign-in, sessions, second factors and step-up, and the
-> connection and destination APIs (tasks 2.11, 2.12); the web UI is still a
-> placeholder shell until M6 (task 6.1 onwards). `bekup runner` serves its
-> complete mTLS gRPC API (probe, certificate and host-key capture, dump,
-> verify, restore; tasks 2.4–2.7a), but nothing schedules backups yet:
-> jobs, the backup pipeline and runs follow in M3 (tasks 3.1–3.6).
+> Events), sign-in, sessions, second factors and step-up, the connection
+> and destination APIs (tasks 2.11, 2.12), backup jobs and schedules
+> (3.3–3.5), scheduled and manual backup runs with completeness evidence
+> (3.6, 3.10), run history and live run events (3.7), retention (3.8) and
+> backup downloads (3.9). `bekup runner` serves its complete mTLS gRPC API
+> (tasks 2.4–2.7a). The web UI is still a placeholder shell with the
+> sign-in page until M6 (task 6.1 onwards), so connections, destinations
+> and jobs are created through the GraphQL API for now
+> ([first backup job](#first-backup-job-graphql)). Restores follow in M4.
 > Creating the first admin (CLI only, D-113) and enrolling a second factor
-> (tasks 1.7–1.9) are described below; connections and destinations exist
-> in the API (UI in M6), backup jobs follow in task 3.5, and the page is
-> completed in task 7.5.
+> (tasks 1.7–1.9) are described below; the page is completed in task 7.5.
 
 There are two ways to run bekup with Docker Compose:
 
@@ -118,8 +119,8 @@ and [installation/reverse-proxy.md](installation/reverse-proxy.md):
    `migrate` applies the database migrations before `serve` starts.
 5. Create the first admin on the host with `bekup admin create`
    ([first admin](#first-admin)), sign in, enroll a passkey or TOTP, then add
-   a connection and a destination (API since tasks 2.11/2.12) and, from M3
-   on, a backup job (task 3.5; UI in M6).
+   a connection, a destination and a backup job (GraphQL API for now, see
+   [first backup job](#first-backup-job-graphql); UI in M6).
 
 Running production without a proxy over plain HTTP requires an explicit
 `server.allow_insecure_http = true` and raises a startup warning, a UI
@@ -168,3 +169,60 @@ reset by another admin (`resetUserSecondFactors`) or on the host with
 Admins then create further accounts (users admin UI in task 6.8): each new
 account gets a generated **temporary password** that is shown to the admin
 once, expires after 72 hours and must be changed at the first login.
+
+## First backup job (GraphQL)
+
+Until the jobs editor arrives in M6 (task 6.5), connections, destinations
+and jobs are managed through the GraphQL API. The simplest client is the
+browser itself: sign in on the bekup page (the sign-in page exists), open
+the developer console **on that same page** and send POST + JSON requests
+to `/graphql`. The browser adds the session cookie and the `Origin` /
+`Sec-Fetch-Site` headers the server requires (D-050, D-102); requests from
+other origins or tools without the session cookie are refused.
+
+```js
+const gql = (query, variables = {}) =>
+  fetch("/graphql", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  }).then((r) => r.json());
+```
+
+1. Create a connection and a destination as an admin
+   ([connections](guides/connections.md),
+   [destinations](guides/destinations.md)). Both need a fresh step-up
+   first, e.g.
+   `gql('mutation { completeStepUp(method: TOTP, code: "123456") { stepUpAt } }')`.
+2. Look up their IDs:
+   `gql("{ connections { id name } destinations { id name } }")`.
+3. Create the job (admin or maintainer). A daily 03:00 UTC backup of every
+   database, keeping the newest 14 backups:
+
+   ```graphql
+   mutation {
+     createJob(input: {
+       name: "Production DB"
+       connectionId: "<connection id>"
+       schedule: {kind: CRON, cron: "0 3 * * *", timezone: "UTC"}
+       retention: {keepLast: 14}
+       destinationIds: ["<destination id>"]
+     }) {
+       job { id slug nextRunAt scheduleDescription }
+       generatedPassphrase   # shown once: store it offline
+     }
+   }
+   ```
+
+   Encryption is always on at creation: without an `encryption` input the
+   job gets a generated passphrase, returned **once** in
+   `generatedPassphrase`. Store it offline; it is needed to decrypt the
+   backups ([encryption](guides/encryption.md)).
+4. Optionally start a run at once with
+   `mutation { runJobNow(id: "<job id>") { queuedAt } }` and follow it with
+   `{ runs(filter: {jobId: "<job id>"}, first: 5) { edges { node { id status warnings { code } } } } }`.
+
+All job fields, schedule kinds, retention, verification levels and runs
+are described in [jobs and schedules](guides/jobs-and-schedules.md);
+downloading a finished backup in [downloads](guides/downloads.md).

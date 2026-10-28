@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jlentink/bekup/internal/hostname"
 )
@@ -24,7 +25,50 @@ var (
 	restoreIDRe = regexp.MustCompile(`^[a-z0-9]{1,26}$`)
 	// bekupTempRe matches TempDatabaseName / OldDatabaseName results.
 	bekupTempRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_$.-]*__bekup_(?:restore|old)_[a-z0-9]{1,26}$`)
+	// snapshotRe is a pg_export_snapshot() id: upper-case hex groups
+	// separated by "-" ("00000003-0000001B-1"; older servers
+	// "000003A1-1"). It can never be read as an option or carry quotes.
+	snapshotRe = regexp.MustCompile(`^[0-9A-F]{1,16}(?:-[0-9A-F]{1,16}){1,3}$`)
 )
+
+// Object identifier limits (task 3.10 statistics): PostgreSQL truncates
+// identifiers to NAMEDATALEN-1 bytes, MySQL/MariaDB allow 64 characters.
+const (
+	MaxPGObjectNameBytes    = 63
+	MaxMySQLObjectNameChars = 64
+)
+
+// ValidateSnapshotID checks a pg_export_snapshot() id for pg_dump
+// --snapshot.
+func ValidateSnapshotID(id string) error {
+	if !snapshotRe.MatchString(id) {
+		return fmt.Errorf("%w: snapshot id %q", ErrInvalidName, truncate(id))
+	}
+	return nil
+}
+
+// QuotePGObject quotes a schema, table or other object name as reported by
+// the server catalog (any valid UTF-8 without NUL, at most
+// MaxPGObjectNameBytes) as a PostgreSQL identifier. Unlike QuotePGIdent it
+// does not restrict the charset: the name is not user input but a catalog
+// value, and doubling the quotes is the complete escaping rule.
+func QuotePGObject(name string) (string, error) {
+	if name == "" || len(name) > MaxPGObjectNameBytes || !utf8.ValidString(name) || strings.ContainsRune(name, 0) {
+		return "", fmt.Errorf("%w: object name %q", ErrInvalidName, truncate(name))
+	}
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`, nil
+}
+
+// QuoteMySQLObject quotes a catalog object name (valid UTF-8 without NUL,
+// at most MaxMySQLObjectNameChars characters) as a MySQL/MariaDB
+// identifier (backticks doubled; the same under every sql_mode, since
+// ANSI_QUOTES only adds double quotes).
+func QuoteMySQLObject(name string) (string, error) {
+	if name == "" || utf8.RuneCountInString(name) > MaxMySQLObjectNameChars || !utf8.ValidString(name) || strings.ContainsRune(name, 0) {
+		return "", fmt.Errorf("%w: object name %q", ErrInvalidName, truncate(name))
+	}
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`", nil
+}
 
 // ValidateDBName checks a database name against the strict charset.
 // Callers must additionally check that the name is in the server-reported

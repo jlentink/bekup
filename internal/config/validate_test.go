@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -60,6 +61,9 @@ func TestValidationReportsAllErrors(t *testing.T) {
 	c.Storage.ScratchDir = "/var/lib/../tmp"
 	c.Workers.MaxConcurrentRuns = 0
 	c.Scheduler.TickInterval = 0
+	c.Scheduler.MinInterval = Duration(30 * time.Second)
+	c.Retention.MaxDeletionsPerSweep = 0
+	c.Retention.PartialCleanupAge = Duration(time.Minute)
 	c.Netguard.AllowHosts = []string{"https://evil"}
 	c.Metrics.Listen = c.Server.Listen
 	c.Log.Level = "verbose"
@@ -82,6 +86,9 @@ func TestValidationReportsAllErrors(t *testing.T) {
 		"storage.scratch_dir: must be a clean path",
 		"workers.max_concurrent_runs: must be greater than 0",
 		"scheduler.tick_interval: must be at least 1s",
+		"scheduler.min_interval: must be at least 1m0s",
+		"retention.max_deletions_per_sweep: must be 1..100000 (got 0)",
+		"retention.partial_cleanup_age: must be at least 1h0m0s",
 		`netguard.allow_hosts: invalid host name "https://evil"`,
 		"metrics.listen: must be host:port",
 		"log.level: must be one of",
@@ -341,4 +348,15 @@ func TestHostPatterns(t *testing.T) {
 			t.Errorf("hostPatterns(%q) errors = %v, want ok=%v", tc.host, v.errs, tc.ok)
 		}
 	}
+}
+
+func TestDownloadLimits(t *testing.T) {
+	c := DefaultBekup()
+	c.Workers.MaxConcurrentDownloads = 65
+	c.Workers.MaxDownloadsPerUser = 66
+	requireErrContains(t, errors.Join(validateBekup(&c, true)...),
+		"workers.max_concurrent_downloads: must be at most 64",
+		"workers.max_downloads_per_user: must be <= workers.max_concurrent_downloads")
+	c.Workers.MaxConcurrentDownloads, c.Workers.MaxDownloadsPerUser = 4, 0
+	requireErrContains(t, errors.Join(validateBekup(&c, true)...), "workers.max_downloads_per_user")
 }

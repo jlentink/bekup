@@ -184,10 +184,31 @@ func TestNoPortScanning(t *testing.T) {
 	}
 }
 
+// fakePGOpts configure fakePGWith.
+type fakePGOpts struct {
+	want string
+	dbs  []string
+	// reportPath is the search_path the server reports after the startup
+	// (default pgSearchPath).
+	reportPath string
+	// noRestrict: the server lacks restrict_nonsystem_relation_kind.
+	noRestrict bool
+	// queries receives every statement (optional).
+	queries chan<- string
+}
+
 // fakePG is a minimal PostgreSQL server: password authentication (the
 // password must equal want) and answers to the probe queries.
 func fakePG(t *testing.T, want string, dbs []string) string {
 	t.Helper()
+	return fakePGWith(t, fakePGOpts{want: want, dbs: dbs})
+}
+
+func fakePGWith(t *testing.T, o fakePGOpts) string {
+	t.Helper()
+	if o.reportPath == "" {
+		o.reportPath = pgSearchPath
+	}
 	return listen(t, func(c net.Conn) {
 		be := pgproto3.NewBackend(c, c)
 		msg, err := be.ReceiveStartupMessage()
@@ -196,9 +217,16 @@ func fakePG(t *testing.T, want string, dbs []string) string {
 		}
 		if _, ok := msg.(*pgproto3.SSLRequest); ok {
 			discardResult(c.Write([]byte("N")))
-			if _, err := be.ReceiveStartupMessage(); err != nil {
+			if msg, err = be.ReceiveStartupMessage(); err != nil {
 				return
 			}
+		}
+		// The session pins must travel in the startup packet.
+		sm, ok := msg.(*pgproto3.StartupMessage)
+		if !ok || sm.Parameters["search_path"] != "pg_catalog, pg_temp" || sm.Parameters["row_security"] != "off" {
+			be.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "XX000", Message: "missing session pins"})
+			discardErr(be.Flush())
+			return
 		}
 		be.Send(&pgproto3.AuthenticationCleartextPassword{})
 		if be.Flush() != nil {
@@ -211,7 +239,7 @@ func fakePG(t *testing.T, want string, dbs []string) string {
 		if err != nil {
 			return
 		}
-		if p, ok := pm.(*pgproto3.PasswordMessage); !ok || p.Password != want {
+		if p, ok := pm.(*pgproto3.PasswordMessage); !ok || p.Password != o.want {
 			be.Send(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "28P01", Message: "password authentication failed for user \"backup\""})
 			discardErr(be.Flush())
 			return
@@ -231,16 +259,44 @@ func fakePG(t *testing.T, want string, dbs []string) string {
 			switch m := m.(type) {
 			case *pgproto3.Parse:
 				query = m.Query
+				if o.queries != nil {
+					o.queries <- query
+				}
 			case *pgproto3.Sync:
+				var rows [][]string
+				switch {
+				case strings.Contains(query, "current_setting('search_path')"):
+					rows = [][]string{{o.reportPath, "off"}}
+				case strings.Contains(query, "set_config('search_path'"):
+					rows = [][]string{{"pg_catalog, pg_temp", "off"}}
+				case strings.Contains(query, "restrict_nonsystem_relation_kind"):
+					if !o.noRestrict {
+						rows = [][]string{{"view, foreign-table"}}
+					}
+				case strings.Contains(query, "server_version_num"):
+					rows = [][]string{{"160004"}}
+				default:
+					for _, d := range o.dbs {
+						rows = append(rows, []string{d})
+					}
+				}
+				cols := 1
+				if len(rows) > 0 {
+					cols = len(rows[0])
+				}
+				fields := make([]pgproto3.FieldDescription, cols)
+				for i := range fields {
+					fields[i] = pgproto3.FieldDescription{Name: []byte(fmt.Sprintf("c%d", i)), DataTypeOID: 25, Format: 0}
+				}
 				be.Send(&pgproto3.ParseComplete{})
 				be.Send(&pgproto3.BindComplete{})
-				be.Send(&pgproto3.RowDescription{Fields: []pgproto3.FieldDescription{{Name: []byte("v"), DataTypeOID: 25, Format: 0}}})
-				rows := dbs
-				if strings.Contains(query, "server_version_num") {
-					rows = []string{"160004"}
-				}
+				be.Send(&pgproto3.RowDescription{Fields: fields})
 				for _, r := range rows {
-					be.Send(&pgproto3.DataRow{Values: [][]byte{[]byte(r)}})
+					vals := make([][]byte, len(r))
+					for i, v := range r {
+						vals[i] = []byte(v)
+					}
+					be.Send(&pgproto3.DataRow{Values: vals})
 				}
 				be.Send(&pgproto3.CommandComplete{CommandTag: []byte("SELECT 1")})
 				be.Send(&pgproto3.ReadyForQuery{TxStatus: 'I'})
@@ -252,6 +308,68 @@ func fakePG(t *testing.T, want string, dbs []string) string {
 			}
 		}
 	})
+}
+
+// The session pins are sent at startup, verified, set again and the
+// relation-kind restriction is requested before any probe query.
+func TestPostgresSessionHardening(t *testing.T) {
+	q := make(chan string, 16)
+	addr := fakePGWith(t, fakePGOpts{want: testPassword, dbs: []string{"app"}, queries: q})
+	c, err := Open(t.Context(), params(engine.KindPostgres, dialTo(addr)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { discardErr(c.Close()) }()
+	got := []string{<-q, <-q, <-q}
+	if got[0] != pgCheckSettings || got[1] != pgPinSettings || got[2] != pgRestrictKinds {
+		t.Fatalf("hardening statements %q", got)
+	}
+	if src, ok := c.(StatsSource); !ok || !src.SafeRowCounts() {
+		t.Fatal("restricted server not recognized")
+	}
+}
+
+// A session whose search_path is not the pinned one (a server or pooler
+// that does not honor the startup parameter) is refused.
+func TestPostgresSessionPinNotInEffect(t *testing.T) {
+	for _, path := range []string{"evil, pg_catalog", "pg_catalog", "pg_temp, pg_catalog"} {
+		addr := fakePGWith(t, fakePGOpts{want: testPassword, reportPath: path})
+		c, err := Open(t.Context(), params(engine.KindPostgres, dialTo(addr)))
+		if err == nil {
+			discardErr(c.Close())
+			t.Fatalf("%q: session accepted", path)
+		}
+		if ReasonOf(err) != runnerpb.ReasonFailed {
+			t.Fatalf("%q: %v", path, err)
+		}
+	}
+	if !sameSearchPath("pg_catalog,pg_temp") || sameSearchPath("pg_catalog, pg_temp, evil") {
+		t.Fatal("sameSearchPath")
+	}
+}
+
+// Without restrict_nonsystem_relation_kind the connection refuses counts
+// before sending anything.
+func TestPostgresCountsRefusedWithoutRestriction(t *testing.T) {
+	q := make(chan string, 16)
+	addr := fakePGWith(t, fakePGOpts{want: testPassword, noRestrict: true, queries: q})
+	c, err := Open(t.Context(), params(engine.KindPostgres, dialTo(addr)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { discardErr(c.Close()) }()
+	src, ok := c.(StatsSource)
+	if !ok || src.SafeRowCounts() {
+		t.Fatal("unrestricted server reported safe")
+	}
+	if _, err := src.CountRows(t.Context(), "", Table{Schema: "public", Name: "t"}, time.Second); !errors.Is(err, ErrCountUnsafe) {
+		t.Fatalf("count: %v", err)
+	}
+	for len(q) > 0 {
+		if s := <-q; strings.Contains(s, "FROM ONLY") {
+			t.Fatalf("count sent: %q", s)
+		}
+	}
 }
 
 func TestPostgresProbe(t *testing.T) {

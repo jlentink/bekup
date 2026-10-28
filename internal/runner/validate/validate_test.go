@@ -469,6 +469,61 @@ func verifyChunk(d []byte) *runnerpb.VerifyDumpRequest {
 	return &runnerpb.VerifyDumpRequest{Msg: &runnerpb.VerifyDumpRequest_Chunk{Chunk: &runnerpb.DataChunk{Data: d}}}
 }
 
+func verifyTrailer(total uint64) *runnerpb.VerifyDumpRequest {
+	return &runnerpb.VerifyDumpRequest{Msg: &runnerpb.VerifyDumpRequest_Trailer{Trailer: &runnerpb.VerifyDumpTrailer{TotalBytes: total}}}
+}
+
+// TestVerifyStreamedTrailer covers the streamed mode of task 3.6: header
+// total_bytes 0, chunks, then exactly one trailer with the exact total.
+func TestVerifyStreamedTrailer(t *testing.T) {
+	v := newTestValidator(t)
+	hdr, s, err := v.VerifyHeader(verifyHeader(0))
+	if err != nil || !hdr.Streamed || hdr.Total != 0 {
+		t.Fatalf("%+v %v", hdr, err)
+	}
+	if err := s.Complete(); code(err) != codes.InvalidArgument {
+		t.Fatalf("complete without trailer: %v", err)
+	}
+	for _, d := range []string{"abc", "de"} {
+		if got, err := s.VerifyChunk(verifyChunk([]byte(d))); err != nil || string(got) != d {
+			t.Fatalf("chunk %q: %q %v", d, got, err)
+		}
+	}
+	if err := s.Complete(); code(err) != codes.InvalidArgument {
+		t.Fatalf("complete before trailer: %v", err)
+	}
+	if _, err := s.VerifyChunk(verifyTrailer(4)); code(err) != codes.InvalidArgument {
+		t.Fatalf("wrong trailer total: %v", err)
+	}
+	if d, err := s.VerifyChunk(verifyTrailer(5)); err != nil || d != nil {
+		t.Fatalf("trailer: %q %v", d, err)
+	}
+	if err := s.Complete(); err != nil || s.Received() != 5 {
+		t.Fatalf("complete: %v (%d)", err, s.Received())
+	}
+	for _, m := range []*runnerpb.VerifyDumpRequest{verifyChunk([]byte("x")), verifyTrailer(5)} {
+		if _, err := s.VerifyChunk(m); code(err) != codes.InvalidArgument {
+			t.Fatalf("after trailer: %v", err)
+		}
+	}
+
+	// A sized stream refuses a trailer.
+	_, sized, err := v.VerifyHeader(verifyHeader(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sized.VerifyChunk(verifyChunk([]byte("abc"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sized.VerifyChunk(verifyTrailer(3)); code(err) != codes.InvalidArgument {
+		t.Fatalf("trailer on a sized stream: %v", err)
+	}
+	// Restore streams have no trailer and still need a size.
+	if _, _, err := v.VerifyHeader(verifyHeader(MaxDumpBytes)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVerifyStream(t *testing.T) {
 	v := newTestValidator(t)
 	hdr, s, err := v.VerifyHeader(verifyHeader(5))
@@ -513,7 +568,6 @@ func TestVerifyStream(t *testing.T) {
 	}
 
 	bad := []func(*runnerpb.VerifyDumpHeader){
-		func(h *runnerpb.VerifyDumpHeader) { h.TotalBytes = 0 },
 		func(h *runnerpb.VerifyDumpHeader) { h.TotalBytes = MaxDumpBytes + 1 },
 		func(h *runnerpb.VerifyDumpHeader) { h.Kind = 0 },
 		func(h *runnerpb.VerifyDumpHeader) {

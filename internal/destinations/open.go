@@ -211,11 +211,38 @@ func (s *Service) hostKeyMismatch(ctx context.Context, actor Actor, r *record) e
 	}
 	s.o.Logger.WarnContext(ctx, "destination_ssh_host_key_mismatch",
 		slog.String("destination_id", r.row.ID.String()), slog.String("host", r.sftp.Host), slog.Int("port", r.sftp.Port))
+	ev := audit.UserActor(actor.UserID)
+	if actor.UserID == uuid.Nil {
+		ev = audit.SystemActor() // a worker's run (RecordRunFailure)
+	}
 	_, err := s.o.Auditor.Record(ctx, audit.Event{
-		Actor: audit.UserActor(actor.UserID), Action: audit.ActionDestinationHostKeyMismatch, TargetType: "destination",
+		Actor: ev, Action: audit.ActionDestinationHostKeyMismatch, TargetType: "destination",
 		TargetID: r.row.ID.String(), IP: actor.IP, Details: details,
 	})
 	return err
+}
+
+// RecordRunFailure handles the security event of a destination failure a
+// worker saw (backup runs, task 3.6): an SFTP host-key mismatch is audited
+// with the system actor (fail closed) and logged, as in Test. Other codes
+// are ignored.
+func (s *Service) RecordRunFailure(ctx context.Context, id uuid.UUID, code storage.ErrorCode) error {
+	if code != storage.CodeHostKeyMismatch {
+		return nil
+	}
+	ctx = context.WithoutCancel(ctx)
+	row, err := sqlc.New(s.o.DB).GetDestinationIncludingDeleted(ctx, id)
+	if err != nil {
+		return fmt.Errorf("destinations: load: %w", err)
+	}
+	r, err := decode(row)
+	if err != nil {
+		return err
+	}
+	if r.sftp == nil {
+		return nil
+	}
+	return s.hostKeyMismatch(ctx, Actor{}, r)
 }
 
 // acquire applies the per-user rate limit and the concurrency bound of

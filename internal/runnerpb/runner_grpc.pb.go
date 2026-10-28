@@ -71,13 +71,17 @@ type RunnerServiceClient interface {
 	// FetchHostKey captures an SSH bastion's host key for TOFU confirmation.
 	FetchHostKey(ctx context.Context, in *FetchHostKeyRequest, opts ...grpc.CallOption) (*FetchHostKeyResponse, error)
 	// Dump streams a single-database dump (data chunks interleaved with log
-	// lines) and ends with exactly one result.
+	// lines) and ends with exactly one result. With stats enabled, one
+	// DumpStats message precedes the first chunk (task 3.10).
 	Dump(ctx context.Context, in *DumpRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DumpResponse], error)
 	// DumpGlobals streams the cluster globals (roles, tablespaces; PostgreSQL
-	// only) and ends with exactly one result.
+	// only) and ends with exactly one result (optionally preceded by one
+	// DumpStats message).
 	DumpGlobals(ctx context.Context, in *DumpGlobalsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DumpGlobalsResponse], error)
 	// VerifyDump checks a dump with the engine's native tool. The first
-	// message is the header, every further message a chunk.
+	// message is the header, every further message a chunk. A header without
+	// total_bytes announces a streamed dump of unknown size: its chunks must
+	// be followed by exactly one trailer carrying the total (task 3.6).
 	VerifyDump(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[VerifyDumpRequest, VerifyDumpResponse], error)
 	// Restore feeds a dump into a target. The first message is the header,
 	// every further message a chunk; the runner streams log lines and ends
@@ -269,13 +273,17 @@ type RunnerServiceServer interface {
 	// FetchHostKey captures an SSH bastion's host key for TOFU confirmation.
 	FetchHostKey(context.Context, *FetchHostKeyRequest) (*FetchHostKeyResponse, error)
 	// Dump streams a single-database dump (data chunks interleaved with log
-	// lines) and ends with exactly one result.
+	// lines) and ends with exactly one result. With stats enabled, one
+	// DumpStats message precedes the first chunk (task 3.10).
 	Dump(*DumpRequest, grpc.ServerStreamingServer[DumpResponse]) error
 	// DumpGlobals streams the cluster globals (roles, tablespaces; PostgreSQL
-	// only) and ends with exactly one result.
+	// only) and ends with exactly one result (optionally preceded by one
+	// DumpStats message).
 	DumpGlobals(*DumpGlobalsRequest, grpc.ServerStreamingServer[DumpGlobalsResponse]) error
 	// VerifyDump checks a dump with the engine's native tool. The first
-	// message is the header, every further message a chunk.
+	// message is the header, every further message a chunk. A header without
+	// total_bytes announces a streamed dump of unknown size: its chunks must
+	// be followed by exactly one trailer carrying the total (task 3.6).
 	VerifyDump(grpc.ClientStreamingServer[VerifyDumpRequest, VerifyDumpResponse]) error
 	// Restore feeds a dump into a target. The first message is the header,
 	// every further message a chunk; the runner streams log lines and ends

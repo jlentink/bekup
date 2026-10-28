@@ -1,0 +1,433 @@
+# Backup jobs (task 3.5; D-106, D-142, D-143, D-146). Admins and
+# maintainers manage every job; backup owners (role user, listed in a job's
+# owners) see and run their own jobs only. Owner assignment and key changes
+# need a fresh step-up; the encryption opt-out and the passphrase export are
+# admin only. Jobs are soft deleted.
+
+"Which databases of the connection a job backs up."
+enum JobDbMode {
+  "Every database on the server except `exclude` (one file per database)."
+  ALL
+  "Exactly the listed `databases`."
+  SELECTED
+}
+
+"Completeness evidence level of a job (task 3.10)."
+enum JobVerification {
+  "Object counts and row estimates (cheap for huge databases)."
+  STANDARD
+  "Exact per-table row counts."
+  DEEP
+}
+
+"Schedule kinds (D-143)."
+enum ScheduleKind {
+  "Never runs on its own; only runJobNow."
+  MANUAL
+  "Every N minutes/hours/days/weeks/months from an anchor."
+  INTERVAL
+  "A 5-field cron expression."
+  CRON
+}
+
+"Units of interval schedules."
+enum ScheduleUnit {
+  MINUTES
+  HOURS
+  DAYS
+  WEEKS
+  MONTHS
+}
+
+"""
+A schedule in its canonical form (D-143). Interval: every, unit, anchor
+(local YYYY-MM-DDTHH:MM in the zone), weekday (weeks), dayOfMonth (months)
+and timezone; cron: cron and timezone; manual: nothing else.
+"""
+type Schedule {
+  kind: ScheduleKind!
+  every: Int
+  unit: ScheduleUnit
+  anchor: String
+  "Lower-case English weekday name (weeks only)."
+  weekday: String
+  "1-31 (months only); shorter months use their last day."
+  dayOfMonth: Int
+  cron: String
+  "IANA zone name, e.g. Europe/Amsterdam."
+  timezone: String
+}
+
+input ScheduleInput {
+  kind: ScheduleKind!
+  every: Int
+  unit: ScheduleUnit
+  anchor: String
+  weekday: String
+  dayOfMonth: Int
+  cron: String
+  timezone: String
+}
+
+"The next occurrences of a schedule (nothing is stored)."
+type SchedulePreview {
+  "The canonical schedule (defaults filled in)."
+  schedule: Schedule!
+  "A short English summary, e.g. `Every 2 days at 03:00 (Europe/Amsterdam)`."
+  description: String!
+  "The next occurrences after now (empty for MANUAL)."
+  next: [Time!]!
+}
+
+"How many backups a job keeps per destination; at least one limit is set."
+type JobRetention {
+  "Keep the newest N backups."
+  keepLast: Int
+  "Keep backups younger than N days."
+  keepDays: Int
+}
+
+input JobRetentionInput {
+  keepLast: Int
+  keepDays: Int
+}
+
+"The connection a job backs up (non-secret identity only)."
+type JobConnectionRef {
+  id: UUID!
+  name: String!
+  engine: DatabaseEngine!
+  versionKey: String!
+  deleted: Boolean!
+}
+
+"One destination of a job (non-secret identity only), in fan-out order."
+type JobDestinationRef {
+  id: UUID!
+  name: String!
+  type: DestinationType!
+  position: Int!
+  deleted: Boolean!
+}
+
+"A backup owner of a job. Only owners with role USER gain rights (D-067)."
+type JobOwner {
+  userId: UUID!
+  email: String!
+  displayName: String!
+  role: Role!
+  disabled: Boolean!
+  addedAt: Time!
+}
+
+"Encryption modes of backup files (D-008, D-142)."
+enum JobEncryptionMode {
+  "age with the job's versioned passphrase (stored encrypted)."
+  PASSPHRASE
+  "age to a public X25519 recipient; the private key is supplied at restore time."
+  RECIPIENT
+  "Opted out by an admin: backups are not encrypted (badge)."
+  NONE
+}
+
+"The key modes a job can encrypt with."
+enum JobKeyMode {
+  PASSPHRASE
+  RECIPIENT
+}
+
+"The active passphrase version (never the passphrase)."
+type JobPassphraseInfo {
+  version: Int!
+  createdAt: Time!
+}
+
+"The active recipient version (public data)."
+type JobRecipientInfo {
+  version: Int!
+  "The age1... public key."
+  recipient: String!
+  "Lowercase hex SHA-256 of the recipient (as in the manifest)."
+  fingerprint: String!
+  label: String!
+  "bekup generated the keypair (its identity was shown once)."
+  generated: Boolean!
+  createdAt: Time!
+}
+
+"The encryption status of a job. It never contains key material."
+type JobEncryption {
+  "False only for a job without an encryption configuration (backups refuse to run)."
+  configured: Boolean!
+  mode: JobEncryptionMode
+  "Badge: an admin turned encryption off."
+  optedOut: Boolean!
+  optedOutAt: Time
+  optOutReason: String
+  passphrase: JobPassphraseInfo
+  recipient: JobRecipientInfo
+  updatedAt: Time
+}
+
+"A backup job."
+type Job {
+  id: UUID!
+  name: String!
+  "Names the job's directory in every destination; never changes."
+  slug: String!
+  description: String!
+  connection: JobConnectionRef!
+  dbMode: JobDbMode!
+  "SELECTED: the databases backed up."
+  databases: [String!]!
+  "ALL: databases skipped."
+  exclude: [String!]!
+  "PostgreSQL: also dump the cluster globals (roles, tablespaces)."
+  includeGlobals: Boolean!
+  schedule: Schedule!
+  scheduleDescription: String!
+  enabled: Boolean!
+  "The next scheduled run (null: manual, disabled or unschedulable)."
+  nextRunAt: Time
+  lastScheduledAt: Time
+  retention: JobRetention!
+  "The job's run timeout; null means workers.backup_timeout."
+  timeoutSeconds: Int
+  "Missed-backup alert window; null means derived from the schedule."
+  expectedWindowSeconds: Int
+  verification: JobVerification!
+  destinations: [JobDestinationRef!]!
+  encryption: JobEncryption!
+  "Admins and maintainers only (null for backup owners)."
+  owners: [JobOwner!]
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+"A page of jobs."
+type JobConnection {
+  edges: [JobEdge!]!
+  pageInfo: PageInfo!
+}
+
+type JobEdge {
+  cursor: String!
+  node: Job!
+}
+
+"Filters for jobs; unset fields do not filter."
+input JobFilter {
+  enabled: Boolean
+  connectionId: UUID
+  "Substring of the name or slug (case-insensitive)."
+  search: String
+}
+
+"""
+The initial encryption of a new job (always on; an admin may opt out
+afterwards). Without a passphrase or recipient bekup generates the key and
+returns it once in CreateJobResult. The default (a generated passphrase) is
+available to everyone who may create jobs; choosing the key (a passphrase,
+RECIPIENT mode or a recipient) is a key change and needs an admin with a
+fresh step-up (FORBIDDEN / STEP_UP_REQUIRED otherwise).
+"""
+input JobEncryptionInput {
+  "Default PASSPHRASE."
+  mode: JobKeyMode
+  "Write-only; at least 20 characters and very strong. Prefer a generated one."
+  passphrase: String
+  "An age1... X25519 recipient (RECIPIENT mode)."
+  recipient: String
+  label: String
+}
+
+input CreateJobInput {
+  name: String!
+  "Optional; derived from the name. Lower-case letters, digits and inner hyphens; never changes."
+  slug: String
+  description: String
+  connectionId: UUID!
+  "Default ALL."
+  dbMode: JobDbMode
+  databases: [String!]
+  exclude: [String!]
+  "Default true for PostgreSQL; MySQL/MariaDB have no globals."
+  includeGlobals: Boolean
+  schedule: ScheduleInput!
+  "Default true."
+  enabled: Boolean
+  retention: JobRetentionInput!
+  "60 seconds up to workers.backup_timeout; omit for the default."
+  timeoutSeconds: Int
+  expectedWindowSeconds: Int
+  "Default STANDARD."
+  verification: JobVerification
+  "1-16 destinations in fan-out order."
+  destinationIds: [UUID!]!
+  encryption: JobEncryptionInput
+}
+
+"Fields to change; unset fields stay unchanged. The slug cannot change."
+input UpdateJobInput {
+  name: String
+  description: String
+  connectionId: UUID
+  dbMode: JobDbMode
+  databases: [String!]
+  exclude: [String!]
+  includeGlobals: Boolean
+  "A changed schedule is re-planned from now."
+  schedule: ScheduleInput
+  "Replaces both limits."
+  retention: JobRetentionInput
+  timeoutSeconds: Int
+  "Reset the timeout to workers.backup_timeout."
+  clearTimeout: Boolean
+  expectedWindowSeconds: Int
+  clearExpectedWindow: Boolean
+  verification: JobVerification
+  "Replaces the destinations (1-16, fan-out order)."
+  destinationIds: [UUID!]
+}
+
+"A generated age keypair. The identity is shown once and never stored."
+type GeneratedAgeKeypair {
+  encryption: JobEncryption!
+  version: Int!
+  recipient: String!
+  fingerprint: String!
+  "The AGE-SECRET-KEY-1... identity. Store it offline now: bekup cannot show it again."
+  identity: String!
+  "The identity as an age-keygen file (for age -d -i and bekup decrypt)."
+  identityFile: String!
+  fileName: String!
+}
+
+"A generated passphrase, shown once."
+type GeneratedJobPassphrase {
+  encryption: JobEncryption!
+  version: Int!
+  passphrase: String!
+}
+
+"The result of createJob: the job and a generated key, shown once."
+type CreateJobResult {
+  job: Job!
+  "Set when bekup generated the job's passphrase."
+  generatedPassphrase: String
+  "Set when bekup generated the job's age keypair."
+  generatedKeypair: GeneratedAgeKeypair
+}
+
+"Every passphrase version of a job for offline recovery (docs/guides/encryption.md)."
+type JobPassphraseExport {
+  fileName: String!
+  "The export file. SECRET: anyone with it can decrypt the job's passphrase-encrypted backups."
+  content: String!
+  versions: [Int!]!
+}
+
+"An accepted runJobNow or startNextRunEarly."
+type RunJobNowResult {
+  job: Job!
+  "The queued run (see cancelRun)."
+  runId: UUID!
+  queuedAt: Time!
+}
+
+extend type Query {
+  """
+  Jobs that are not deleted, ordered by name; backup owners see only their
+  own jobs. `first` is 1..200 (default 50); `after` is the `endCursor` of
+  the previous page.
+  """
+  jobs(filter: JobFilter, first: Int, after: String): JobConnection! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  One job; null when it does not exist or was deleted. Backup owners may
+  view only their own jobs (FORBIDDEN otherwise).
+  """
+  job(id: UUID!): Job @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  "Validates a schedule and returns its next `count` occurrences (1-50, default 5)."
+  previewSchedule(input: ScheduleInput!, count: Int): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Creates a job with encryption on (a generated passphrase unless a key is
+  given). A name or slug already in use answers CONFLICT.
+  """
+  createJob(input: CreateJobInput!): CreateJobResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Changes a job. A changed schedule is re-planned from now."
+  updateJob(id: UUID!, input: UpdateJobInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Soft deletes a job: its schedule stops at once, a run in progress
+  finishes, artifacts and keys stay.
+  """
+  deleteJob(id: UUID!): Boolean! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Enables a job and plans its next run from now (missed periods are not caught up)."
+  enableJob(id: UUID!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  "Disables a job: no scheduled or manual runs."
+  disableJob(id: UUID!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Adds backup owners (`users`: user ids; audited, alerted). A maintainer
+  cannot add themselves. Returns the job's owners.
+  """
+  assignJobOwners(jobId: UUID!, users: [UUID!]!): [JobOwner!]! @hasRole(roles: [ADMIN, MAINTAINER]) @stepUp
+
+  "Removes a backup owner (audited, alerted). Returns the job's owners."
+  removeJobOwner(jobId: UUID!, userId: UUID!): [JobOwner!]! @hasRole(roles: [ADMIN, MAINTAINER]) @stepUp
+
+  """
+  Enqueues a manual backup run (admins, maintainers and the job's owners).
+  CONFLICT when a run of the job is already queued or running, or the job
+  is disabled (note: startNextRunEarly reports a disabled job as
+  VALIDATION instead; clients should handle both codes).
+  """
+  runJobNow(id: UUID!): RunJobNowResult! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Starts the job's next planned run now (trigger EARLY, scheduledFor = the
+  planned time) and skips it at its planned time: the schedule continues
+  with the following occurrence (`job.nextRunAt`). Admins, maintainers and
+  the job's owners. Only the occurrence that is genuinely next can be
+  pulled forward: once it was started early, the following one is refused
+  until the original time has passed, so the planned schedule is never more
+  than one occurrence ahead. VALIDATION for a disabled job (unlike
+  runJobNow, which reports CONFLICT), one without a planned run (manual
+  schedule), or one whose next planned run was already started early;
+  CONFLICT, with nothing changed, when a run of the job is already queued
+  or running. runJobNow adds an extra run instead.
+  """
+  startNextRunEarly(id: UUID!): RunJobNowResult! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  "Sets a new passphrase version (switches the job to PASSPHRASE mode and opts back in). Admin only."
+  setJobPassphrase(jobId: UUID!, passphrase: String!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Generates a new passphrase version and returns it once. Admin only."
+  generateJobPassphrase(jobId: UUID!): GeneratedJobPassphrase! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Sets a new age recipient version (switches the job to RECIPIENT mode and opts back in). Admin only."
+  setJobRecipient(jobId: UUID!, recipient: String!, label: String): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Generates an age keypair; only the recipient is stored, the identity is returned once. Admin only."
+  generateAgeKeypair(jobId: UUID!, label: String): GeneratedAgeKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Opts an opted-out job back in with an existing key of `mode`. Admin only."
+  enableJobEncryption(jobId: UUID!, mode: JobKeyMode!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Turns a job's encryption off (admin; audited as security.opt_out,
+  alerted, permanent badge). Keys are kept.
+  """
+  disableJobEncryption(jobId: UUID!, reason: String!): JobEncryption! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Exports every passphrase version of a job for offline recovery (admin; audited, alerted)."
+  exportJobPassphrases(jobId: UUID!): JobPassphraseExport! @hasRole(roles: [ADMIN]) @stepUp
+}

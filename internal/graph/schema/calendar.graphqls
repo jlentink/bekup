@@ -1,0 +1,82 @@
+# Job calendar (task 3.14, D-156). Read only. Admins and maintainers see
+# every job; backup owners see the jobs they own only (requested job ids
+# that are not visible are dropped silently). The range is at most 93 days
+# and the result is bounded (see Calendar.truncated).
+
+"What a calendar event shows."
+enum CalendarEventKind {
+  "A planned occurrence (paused for a disabled job, or started early)."
+  PLANNED
+  "A run, by status."
+  RUN
+  "A skipped occurrence (the reason is in `detail`)."
+  SKIPPED
+  """
+  The earliest time retention may remove a run's copy on one destination
+  (the next retention sweep at or after it removes it).
+  """
+  EXPIRY
+}
+
+"One calendar entry. Times are UTC."
+type CalendarEvent {
+  jobId: UUID!
+  jobName: String!
+  kind: CalendarEventKind!
+  start: Time!
+  "The end of a finished run (null otherwise)."
+  end: Time
+  "The run's status (RUN only)."
+  status: RunStatus
+  "What started the run (RUN only)."
+  trigger: RunTrigger
+  "The run (RUN, EXPIRY, and PLANNED when started early)."
+  runId: UUID
+  "The destination of the copy (EXPIRY only)."
+  destinationId: UUID
+  """
+  EXPIRY only: the time depends on future runs (keep-last or the newest
+  complete run, which is kept until a newer complete run exists) and
+  assumes every planned run succeeds. False: exact (keep-days or Object
+  Lock).
+  """
+  projected: Boolean!
+  "PLANNED only: the job is disabled; the occurrence will not run."
+  paused: Boolean!
+  "PLANNED only: this occurrence was pulled forward (startNextRunEarly); `runId` is the early run."
+  startedEarly: Boolean!
+  """
+  PLANNED only: the pending catch-up run of an enabled job whose planned time
+  has passed (the scheduler runs it at its next tick, missed occurrences
+  collapse into this one run); shown at the time of the query.
+  """
+  overdue: Boolean!
+  "A fixed, bekup-chosen text (skip reason, run error code, expiry rule)."
+  detail: String
+}
+
+"A calendar range."
+type Calendar {
+  "Events ordered by start time."
+  events: [CalendarEvent!]!
+  """
+  A bound was hit (at most 5,000 events, 500 planned occurrences per job,
+  500 jobs, and bounded loads): some events are missing. When the event cap
+  is hit, the earliest 5,000 events are kept (a time prefix of the range).
+  Narrow the range or the jobs.
+  """
+  truncated: Boolean!
+  from: Time!
+  to: Time!
+  "The requested IANA zone, echoed for day bucketing (times stay UTC)."
+  timezone: String!
+}
+
+extend type Query {
+  """
+  The job calendar for [from, to): at most 93 days, `timezone` an IANA
+  zone name, `jobIds` (at most 500; null: every visible job) narrows the
+  jobs. Planned occurrences start at the later of `from` and now.
+  """
+  calendar(from: Time!, to: Time!, timezone: String!, jobIds: [UUID!]): Calendar! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}

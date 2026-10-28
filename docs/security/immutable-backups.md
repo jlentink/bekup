@@ -1,8 +1,9 @@
 # Immutable backups
 
 > **Status:** partial. S3 Object Lock, versioning and no-delete mode exist
-> (task 2.9). How retention applies them follows in task 3.8, the alerts on
-> unexpected deletions in task 5.5.
+> (task 2.9); retention applies them (task 3.8, D-148). Delivery of the
+> alerts on unexpected deletions follows in task 5.5 (until then they are
+> logged at WARN and audited).
 
 Ransomware and stolen credentials go after backups first. bekup's answer
 (D-007) is to make deletion impossible for bekup itself, so a compromised
@@ -54,7 +55,7 @@ opens a destination and reports it in the destination's capabilities.
 ## No-delete mode
 
 A destination in no-delete mode refuses every delete inside bekup
-(retention skips it, task 3.8), and the destination test leaves its probe
+(retention skips it without contacting it, D-148), and the destination test leaves its probe
 in place. The real protection comes from the storage side: give bekup's
 key **no** delete permission (`s3:DeleteObject`, `s3:DeleteObjectVersion`)
 and no permission to change the bucket's lifecycle, versioning or policy.
@@ -77,5 +78,33 @@ that slipped through.
 - Lifecycle expiry does not know bekup's "always keep the newest successful
   backup" rule; pick an expiry well above the backup interval.
 
-Unexpected deletions (an artifact the database knows is gone from its
-destination) raise a security alert (task 5.5).
+## How retention treats protected backups (task 3.8)
+
+- Runs with a recorded, unexpired lock are never even planned for
+  deletion. A delete refused by the store (a lock bekup did not record, a
+  bucket default retention, a legal hold) leaves the artifact `present`;
+  the sweep summary (`retention.swept`) records the count and the latest
+  retain-until date, and later sweeps retry after the lock expires.
+- No-delete destinations are skipped entirely; lifecycle rules expire
+  their objects.
+- On every destination the newest complete backup is never deleted, and a
+  destination without a complete backup is never pruned at all.
+
+## Unexpected deletions
+
+bekup checks an object before deleting it and checks the newest complete
+backup on a destination before deleting anything there. An object that is
+gone although the database lists it as present was deleted outside bekup:
+
+- its artifact is marked `missing` (never `deleted`) and
+  `retention.artifact_missing` is audited in the same transaction;
+- the `retention_artifact_missing` alert is raised (delivered by task 5.5;
+  logged at WARN until then);
+- if it belongs to the newest complete backup, nothing is deleted on that
+  destination in this sweep (`retention.aborted`, alerted as well), so
+  retention can never finish off a destination an attacker has already
+  thinned out.
+
+Kept backups that retention does not touch are only checked when they
+become the newest complete backup or eligible for deletion; full periodic
+verification of all stored objects is a later task.

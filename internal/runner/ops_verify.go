@@ -45,6 +45,10 @@ func (c *logCollector) result() ([]*runnerpb.LogLine, uint64) {
 	return c.lines, c.dropped
 }
 
+// verifyStep names the offline verify container of a run
+// (bekup-run-<run id>-verify).
+const verifyStep = "verify"
+
 // verifyStream is the receiving side of a VerifyDump call.
 type verifyStream interface {
 	Context() context.Context
@@ -54,7 +58,9 @@ type verifyStream interface {
 // verifyDump implements VerifyDump: PostgreSQL archives are listed with
 // pg_restore --list in an offline container (no network, no credentials);
 // MySQL/MariaDB dumps and PostgreSQL globals are checked in Go on the
-// streamed tail (completion trailer). Exactly total_bytes must arrive.
+// streamed tail (completion trailer). Exactly total_bytes must arrive; a
+// streamed dump (total_bytes 0, task 3.6) must end with a trailer whose
+// total matches the received bytes.
 func (o *operations) verifyDump(stream verifyStream) (resp *runnerpb.VerifyDumpResponse, err error) {
 	ctx := stream.Context()
 	a := newAudit("VerifyDump", "")
@@ -109,7 +115,10 @@ func (o *operations) verifyDump(stream verifyStream) (resp *runnerpb.VerifyDumpR
 	p := startPump(ctx, recv, st.Complete)
 	var stdoutBytes uint64
 	res, err := o.exec.Run(ctx, executor.RunSpec{
-		RunID:   runID,
+		RunID: runID,
+		// A streamed verify runs next to the run's Dump container (task
+		// 3.6): its own step name keeps the two from colliding.
+		Step:    verifyStep,
 		Entry:   v.Entry,
 		Offline: true,
 		Command: func(executor.ClientEndpoint) (engine.Command, error) { return eng.VerifyDump(v.Entry) },

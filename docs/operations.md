@@ -69,9 +69,10 @@ It logs a warning when its certificate expires within 30 days. On SIGINT /
 SIGTERM it stops accepting calls and gives in-flight calls 45 seconds
 before cancelling them (compose `stop_grace_period` is 60s).
 
-## Startup checks of `bekup serve`
+## Startup checks of `bekup serve` and `bekup worker`
 
-`serve` refuses to start, with a clear error and exit code 1, when:
+`serve` (and `bekup worker`, which runs the same checks without binding a
+listen address) refuses to start, with a clear error and exit code 1, when:
 
 - the configuration is invalid (`bekup config validate` shows the same
   errors);
@@ -85,8 +86,8 @@ before cancelling them (compose `stop_grace_period` is 60s).
   migrated it. Run that release or a newer one; downgrades are not
   supported (migrations are forward-only);
 - the master keyring (`security.master_key_file`) cannot be read or parsed,
-  or does not open the instance signing key stored in the database (wrong
-  keyring);
+  does not match the key-check values stored in the database, or does not
+  open the instance signing key stored in the database (wrong keyring);
 - `server.listen` cannot be bound.
 
 At every start `serve` logs each configuration warning at WARN, for example
@@ -127,9 +128,92 @@ docker compose run --rm admin reset-password --email admin@example.com
 Review `cli.admin.*` entries in the audit log regularly: these commands
 bypass step-up by design. Reference: [CLI](reference/cli/bekup_admin.md).
 
+## Scaling background work
+
+Background jobs (backups, restores, retention, notifications,
+housekeeping) run on River queues in the app database (D-043, D-145).
+
+- **Default:** `bekup serve` runs the HTTP server, the scheduler loop and
+  the workers in one process.
+- **Scale out:** run `bekup serve --no-worker` for the UI/API and one or
+  more `bekup worker` processes for the jobs. Workers use the same
+  `bekup.toml`, connect as `bekup_app` and run the same startup checks;
+  they bind no port. Give worker processes their own runner client
+  certificate (`bekup certs`, component `worker`).
+- **Scheduler:** safe on every `serve` instance (`FOR UPDATE SKIP LOCKED` +
+  unique River inserts), so several `serve` replicas never enqueue a run
+  twice. Turn it off per instance with `scheduler.enabled = false`; it never
+  runs in `bekup worker`. At least one `serve` must have it on.
+- **Concurrency:** `[workers] backup_queue_workers`,
+  `restore_queue_workers`, `retention_queue_workers`, `notify_queue_workers`
+  and `maintenance_queue_workers` are per process. Size
+  `database.max_conns` to at least their sum plus 4 (a WARN at startup says
+  so otherwise). The global limits (`max_concurrent_runs`, default 4,
+  backups and restores together; `max_runs_per_connection`, default 1)
+  apply across all processes: every running backup holds a row in
+  `run_slots` (taken under a transaction-scoped advisory lock, refreshed
+  every 30 s, reclaimed after 2 min without a heartbeat). A run that finds
+  no free slot stays `queued` and its River job is snoozed for about 15 s,
+  so it does not occupy a queue worker while it waits. Every process
+  applies its own configured limits to the shared table: keep them equal
+  on all instances. `backup_queue_workers` above `max_concurrent_runs`
+  only adds waiting.
+- **Per-connection limit:** an admin can give a connection its own
+  `maxConcurrentRuns` (1-64, at most `max_concurrent_runs`; task 3.13,
+  D-158); it replaces `max_runs_per_connection` for that connection only
+  and is stored in the database, so every process applies the same value.
+  `max_concurrent_runs` still caps the total. Lowering either limit never
+  stops active runs: new runs wait until the count drops below it. If you
+  lower `max_concurrent_runs` below a connection's own limit, the
+  connection is simply capped by the global limit (its
+  `effectiveMaxConcurrentRuns` shows the clamped value); saving a new,
+  higher value is refused. Restores take slots from the same per-connection
+  pool as backups: with a limit of 1, a restore waits until a running backup
+  of that connection has finished. See
+  [Connections](guides/connections.md#concurrent-runs-per-connection).
+- **Run logs:** `run_log_max_lines` (default 10000) and
+  `run_log_max_line_bytes` (default 4096) cap what one backup run stores in
+  `run_logs`; the run records how many lines were dropped. The run tables
+  have no DELETE path for `bekup_app` (history); plan database space
+  accordingly.
+- **Timeouts:** an attempt never runs longer than its queue's timeout
+  (`backup_timeout`, `restore_timeout`, `retention_timeout`,
+  `notify_timeout`; housekeeping 15 min). `workers.backup_timeout`
+  (default 6h) is also the default and the upper bound of every job's own
+  `timeoutSeconds` (60 s up to `backup_timeout`): lowering it makes saving
+  a job with a longer timeout fail validation, and a stored longer job
+  timeout is still cut off at the queue timeout. A job still marked running after
+  the longest of them plus one hour (a crashed worker) is rescued: retried
+  if attempts remain (backups: 2 attempts, restores: never retried,
+  notifications: 10), otherwise discarded.
+- **Retention:** sweeps run after every successful/partial run and daily
+  (River periodic job on the elected leader; like every periodic job it
+  also runs once whenever a process becomes leader, e.g. on every start). `[retention]
+  max_deletions_per_sweep` (default 500) caps deletions per job sweep;
+  `dry_run = true` only logs plans (a startup WARN reminds you);
+  `partial_cleanup_age` (default 24h) controls the daily removal of crash
+  leftovers on disk/SFTP. Watch for `retention alert` WARN lines
+  (`retention_artifact_missing`, `retention_sweep_aborted`) until alert
+  delivery (task 5.5) exists. See [Retention](guides/retention.md).
+- **Housekeeping:** besides the daily retention fan-out, the leader runs
+  `schedule_skip_cleanup` (maintenance queue) every 6 hours and once at
+  start; it deletes `schedule_skips` rows (scheduled occurrences that were
+  not enqueued because a run was still active or the job could not be
+  scheduled) older than 90 days. Every `serve` process deletes
+  expired download tickets, including the sealed age identity of an unused
+  one, every 30 seconds (a minute after their 60-second lifetime ends), and
+  expired sessions periodically. None of them needs configuration.
+- **Maintenance:** River's own reindexer is disabled because `bekup_app`
+  does not own River's indexes. Run `REINDEX TABLE CONCURRENTLY river_job`
+  as `bekup_owner` during maintenance if the table ever bloats.
+
 ## Shutdown
 
 On SIGINT or SIGTERM `serve` stops accepting connections and lets in-flight
 requests finish for up to `server.shutdown_timeout` (default 30s), then
-closes the remaining connections. Keep the container's stop grace period
-longer than that (compose uses `stop_grace_period: 60s`).
+closes the remaining connections. In parallel the workers (in `serve` and in
+`bekup worker`) stop fetching jobs and let running jobs finish for up to
+`workers.shutdown_timeout` (default 2m); after that the jobs are canceled
+(a canceled backup is retried once later; restores are not) and the process
+waits at most 30s more. Keep the container's stop grace period longer than
+the larger of the two plus 30s (compose gives `serve` `stop_grace_period: 180s`).

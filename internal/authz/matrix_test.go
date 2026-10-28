@@ -113,22 +113,29 @@ var matrix = map[authz.Operation]expect{
 	authz.OpJobDelete:             {"YYYFFU", "-"},
 	authz.OpJobSchedulePreview:    {"YYYFFU", "-"},
 	authz.OpJobOwnersAssign:       {"YYYFFU", "S"},
+	authz.OpJobOwnersView:         {"YYYFFU", "-"},
 	authz.OpJobRetentionUpdate:    {"YYYFFU", "-"},
-	authz.OpJobEncryptionKeysEdit: {"YYYFFU", "S"},
+	authz.OpJobEncryptionKeysEdit: {"YFFFFU", "S"},
 	authz.OpJobEncryptionOptOut:   {"YFFFFU", "S"},
 	authz.OpJobPassphraseExport:   {"YFFFFU", "S"},
 	authz.OpJobTestRestoreEdit:    {"YYYFFU", "-"},
 	authz.OpJobSharedChannelsEdit: {"YFFFFU", "-"},
 
-	authz.OpRunList:     {"YYYYYU", "-"},
-	authz.OpRunView:     {"YYYYFU", "-"},
-	authz.OpRunLogsView: {"YYYYFU", "-"},
-	authz.OpRunNow:      {"YYYYFU", "-"},
-	authz.OpRunCancel:   {"YYYFFU", "-"},
+	authz.OpRunList:       {"YYYYYU", "-"},
+	authz.OpRunView:       {"YYYYFU", "-"},
+	authz.OpRunLogsView:   {"YYYYFU", "-"},
+	authz.OpRunNow:        {"YYYYFU", "-"},
+	authz.OpRunStartEarly: {"YYYYFU", "-"},
+	authz.OpRunCancel:     {"YYYFFU", "-"},
+	authz.OpRunActorView:  {"YYYFFU", "-"},
+
+	authz.OpCalendarView: {"YYYYYU", "-"},
 
 	authz.OpArtifactList:     {"YYYYYU", "-"},
 	authz.OpArtifactView:     {"YYYYFU", "-"},
 	authz.OpArtifactDownload: {"YFFYFU", "S"},
+	// D-150: the ticket redemption re-checks role and ownership.
+	authz.OpArtifactDownloadRedeem: {"YFFYFU", "-"},
 
 	authz.OpRestoreTargetsList: {"YYYYFU", "-"},
 	authz.OpRestoreArtifact:    {"YYYYFU", "2"},
@@ -368,7 +375,7 @@ func TestMatrixInvariants(t *testing.T) {
 			t.Errorf("%s: maintainer-owner differs from maintainer (D-067)", op)
 		}
 	}
-	if matrix[authz.OpArtifactDownload].who[1] != 'F' {
+	if matrix[authz.OpArtifactDownload].who[1] != 'F' || matrix[authz.OpArtifactDownloadRedeem].who[1] != 'F' {
 		t.Error("maintainers must never download (D-012, D-067)")
 	}
 }

@@ -30,6 +30,30 @@ ALTER SCHEMA public OWNER TO bekup_owner;
 CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
 
 --
+-- Name: artifact_kind; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.artifact_kind AS ENUM (
+    'database',
+    'globals',
+    'manifest'
+);
+
+ALTER TYPE public.artifact_kind OWNER TO bekup_owner;
+
+--
+-- Name: artifact_state; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.artifact_state AS ENUM (
+    'present',
+    'deleted',
+    'missing'
+);
+
+ALTER TYPE public.artifact_state OWNER TO bekup_owner;
+
+--
 -- Name: connection_engine; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -78,6 +102,51 @@ CREATE TYPE public.destination_type AS ENUM (
 ALTER TYPE public.destination_type OWNER TO bekup_owner;
 
 --
+-- Name: download_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.download_mode AS ENUM (
+    'raw',
+    'plain'
+);
+
+ALTER TYPE public.download_mode OWNER TO bekup_owner;
+
+--
+-- Name: job_db_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.job_db_mode AS ENUM (
+    'all',
+    'selected'
+);
+
+ALTER TYPE public.job_db_mode OWNER TO bekup_owner;
+
+--
+-- Name: job_encryption_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.job_encryption_mode AS ENUM (
+    'passphrase',
+    'recipient',
+    'none'
+);
+
+ALTER TYPE public.job_encryption_mode OWNER TO bekup_owner;
+
+--
+-- Name: job_verification; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.job_verification AS ENUM (
+    'standard',
+    'deep'
+);
+
+ALTER TYPE public.job_verification OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -95,6 +164,85 @@ CREATE TYPE public.river_job_state AS ENUM (
 ALTER TYPE public.river_job_state OWNER TO bekup_owner;
 
 --
+-- Name: run_item_kind; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_item_kind AS ENUM (
+    'database',
+    'globals'
+);
+
+ALTER TYPE public.run_item_kind OWNER TO bekup_owner;
+
+--
+-- Name: run_item_status; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_item_status AS ENUM (
+    'running',
+    'success',
+    'partial',
+    'failed',
+    'canceled'
+);
+
+ALTER TYPE public.run_item_status OWNER TO bekup_owner;
+
+--
+-- Name: run_log_level; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_log_level AS ENUM (
+    'info',
+    'warn',
+    'error'
+);
+
+ALTER TYPE public.run_log_level OWNER TO bekup_owner;
+
+--
+-- Name: run_log_stream; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_log_stream AS ENUM (
+    'worker',
+    'runner',
+    'stdout',
+    'stderr'
+);
+
+ALTER TYPE public.run_log_stream OWNER TO bekup_owner;
+
+--
+-- Name: run_status; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_status AS ENUM (
+    'queued',
+    'running',
+    'success',
+    'partial',
+    'failed',
+    'canceled',
+    'skipped'
+);
+
+ALTER TYPE public.run_status OWNER TO bekup_owner;
+
+--
+-- Name: run_trigger; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.run_trigger AS ENUM (
+    'schedule',
+    'catch_up',
+    'manual',
+    'early'
+);
+
+ALTER TYPE public.run_trigger OWNER TO bekup_owner;
+
+--
 -- Name: user_role; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -105,6 +253,29 @@ CREATE TYPE public.user_role AS ENUM (
 );
 
 ALTER TYPE public.user_role OWNER TO bekup_owner;
+
+--
+-- Name: artifacts_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.artifacts_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.state = 'deleted' AND NEW.state IS DISTINCT FROM OLD.state THEN
+        RAISE EXCEPTION 'artifacts: artifact % is deleted', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.signing_key_id IS NOT NULL AND NEW.signing_key_id IS DISTINCT FROM OLD.signing_key_id THEN
+        RAISE EXCEPTION 'artifacts: the signing key of artifact % is already set', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.artifacts_guard() OWNER TO bekup_owner;
 
 --
 -- Name: audit_log_append_only(); Type: FUNCTION; Schema: public; Owner: bekup_owner
@@ -210,6 +381,75 @@ $$;
 ALTER FUNCTION public.bekup_schema_version() OWNER TO bekup_owner;
 
 --
+-- Name: download_tickets_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.download_tickets_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.used_at IS NOT NULL AND NEW.used_at IS DISTINCT FROM OLD.used_at THEN
+        RAISE EXCEPTION 'download_tickets: ticket % is already used', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.sealed_identity IS NOT NULL AND NEW.sealed_identity IS DISTINCT FROM OLD.sealed_identity THEN
+        RAISE EXCEPTION 'download_tickets: the identity of ticket % can only be cleared', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.download_tickets_guard() OWNER TO bekup_owner;
+
+--
+-- Name: job_keys_retire_only(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.job_keys_retire_only() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.retired_at IS NOT NULL THEN
+        RAISE EXCEPTION '%: version % of job % is already retired', TG_TABLE_NAME, OLD.version, OLD.job_id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.retired_at IS NULL THEN
+        RAISE EXCEPTION '%: only retiring a key is allowed', TG_TABLE_NAME
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.job_keys_retire_only() OWNER TO bekup_owner;
+
+--
+-- Name: jobs_slug_immutable(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.jobs_slug_immutable() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.slug IS DISTINCT FROM OLD.slug THEN
+        RAISE EXCEPTION 'jobs: the slug of job % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
+        RAISE EXCEPTION 'jobs: job % is deleted', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.jobs_slug_immutable() OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state_in_bitmask(bit, public.river_job_state); Type: FUNCTION; Schema: public; Owner: bekup_owner
 --
 
@@ -232,6 +472,30 @@ $$;
 ALTER FUNCTION public.river_job_state_in_bitmask(bitmask bit, state public.river_job_state) OWNER TO bekup_owner;
 
 --
+-- Name: runs_terminal_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.runs_terminal_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF OLD.status NOT IN ('queued', 'running') AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'runs: run % is already finished', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.job_id IS DISTINCT FROM OLD.job_id OR NEW.trigger IS DISTINCT FROM OLD.trigger
+       OR NEW.river_job_id IS DISTINCT FROM OLD.river_job_id THEN
+        RAISE EXCEPTION 'runs: the identity of run % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.runs_terminal_guard() OWNER TO bekup_owner;
+
+--
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: bekup_owner
 --
 
@@ -250,6 +514,60 @@ ALTER FUNCTION public.set_updated_at() OWNER TO bekup_owner;
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: artifact_holds; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.artifact_holds (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    artifact_id uuid NOT NULL,
+    kind text NOT NULL,
+    holder_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT artifact_holds_expiry CHECK (((expires_at > created_at) AND (expires_at <= (now() + '01:00:00'::interval)))),
+    CONSTRAINT artifact_holds_kind CHECK ((kind = ANY (ARRAY['download'::text, 'restore'::text])))
+);
+
+ALTER TABLE public.artifact_holds OWNER TO bekup_owner;
+
+--
+-- Name: artifacts; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.artifacts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    run_id uuid NOT NULL,
+    run_item_id uuid,
+    job_id uuid NOT NULL,
+    destination_id uuid NOT NULL,
+    kind public.artifact_kind NOT NULL,
+    object_key text NOT NULL,
+    size bigint NOT NULL,
+    sha256 bytea NOT NULL,
+    version_id text,
+    encryption_mode text,
+    passphrase_version integer,
+    recipient_version integer,
+    signing_key_id text,
+    verified boolean DEFAULT false NOT NULL,
+    lock_until timestamp with time zone,
+    state public.artifact_state DEFAULT 'present'::public.artifact_state NOT NULL,
+    state_changed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    CONSTRAINT artifacts_deleted CHECK (((state = 'deleted'::public.artifact_state) = (deleted_at IS NOT NULL))),
+    CONSTRAINT artifacts_encryption CHECK ((((kind = 'manifest'::public.artifact_kind) AND (encryption_mode IS NULL) AND (passphrase_version IS NULL) AND (recipient_version IS NULL)) OR ((kind <> 'manifest'::public.artifact_kind) AND (((encryption_mode = 'passphrase'::text) AND (passphrase_version >= 1) AND (recipient_version IS NULL)) OR ((encryption_mode = 'recipients'::text) AND (recipient_version >= 1) AND (passphrase_version IS NULL)) OR ((encryption_mode = 'none'::text) AND (passphrase_version IS NULL) AND (recipient_version IS NULL)))))),
+    CONSTRAINT artifacts_item_kind CHECK (((kind = 'manifest'::public.artifact_kind) = (run_item_id IS NULL))),
+    CONSTRAINT artifacts_key_length CHECK (((octet_length(object_key) >= 1) AND (octet_length(object_key) <= 1024))),
+    CONSTRAINT artifacts_sha256_length CHECK ((octet_length(sha256) = 32)),
+    CONSTRAINT artifacts_signing_key_format CHECK (((signing_key_id IS NULL) OR (signing_key_id ~ '^[0-9a-f]{16}$'::text))),
+    CONSTRAINT artifacts_size_positive CHECK ((size >= 0)),
+    CONSTRAINT artifacts_version_id_length CHECK (((version_id IS NULL) OR (octet_length(version_id) <= 1024)))
+);
+
+ALTER TABLE public.artifacts OWNER TO bekup_owner;
 
 --
 -- Name: audit_chain_heads; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -334,6 +652,27 @@ ALTER SEQUENCE public.audit_log_id_seq OWNER TO bekup_owner;
 ALTER SEQUENCE public.audit_log_id_seq OWNED BY public.audit_log.id;
 
 --
+-- Name: backup_stats; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.backup_stats (
+    run_item_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    level public.job_verification NOT NULL,
+    consistency text NOT NULL,
+    tables_total integer DEFAULT 0 NOT NULL,
+    warning_count integer DEFAULT 0 NOT NULL,
+    stats jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT backup_stats_consistency CHECK ((consistency = ANY (ARRAY['snapshot'::text, 'approximate'::text]))),
+    CONSTRAINT backup_stats_counts CHECK (((tables_total >= 0) AND (warning_count >= 0))),
+    CONSTRAINT backup_stats_object CHECK (((jsonb_typeof(stats) = 'object'::text) AND (octet_length((stats)::text) <= 4194304)))
+);
+
+ALTER TABLE public.backup_stats OWNER TO bekup_owner;
+
+--
 -- Name: connections; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -379,12 +718,14 @@ CREATE TABLE public.connections (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
+    max_concurrent_runs integer,
     CONSTRAINT connections_backup_pin_complete CHECK ((((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pin_not_after IS NULL)) AND ((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pinned_at IS NULL)) AND ((tls_backup_pin_spki IS NULL) OR (tls_backup_pin_cert_pem IS NOT NULL)))),
     CONSTRAINT connections_client_cert_size CHECK ((octet_length(client_cert_pem) <= 32768)),
     CONSTRAINT connections_host_key_complete CHECK ((((ssh_host_key_type IS NULL) = (ssh_host_key_fingerprint IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_authorized_key IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_confirmed_at IS NULL)))),
     CONSTRAINT connections_host_key_fingerprint_format CHECK (((ssh_host_key_fingerprint IS NULL) OR (ssh_host_key_fingerprint ~ '^SHA256:[A-Za-z0-9+/]{43}$'::text))),
     CONSTRAINT connections_host_length CHECK (((char_length(host) >= 1) AND (char_length(host) <= 253))),
     CONSTRAINT connections_key_length CHECK ((((char_length(version_key) >= 1) AND (char_length(version_key) <= 16)) AND ((char_length(image_key) >= 1) AND (char_length(image_key) <= 16)))),
+    CONSTRAINT connections_max_concurrent_runs_range CHECK (((max_concurrent_runs IS NULL) OR ((max_concurrent_runs >= 1) AND (max_concurrent_runs <= 64)))),
     CONSTRAINT connections_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT connections_pin_complete CHECK ((((tls_pin_cert_pem IS NULL) = (tls_pin_not_after IS NULL)) AND ((tls_pin_cert_pem IS NULL) = (tls_pinned_at IS NULL)) AND ((tls_pin_spki IS NULL) OR (tls_pin_cert_pem IS NOT NULL)))),
     CONSTRAINT connections_pin_size CHECK (((octet_length(tls_pin_cert_pem) <= 32768) AND (octet_length(tls_backup_pin_cert_pem) <= 32768))),
@@ -440,6 +781,30 @@ CREATE TABLE public.destinations (
 ALTER TABLE public.destinations OWNER TO bekup_owner;
 
 --
+-- Name: download_tickets; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.download_tickets (
+    id uuid NOT NULL,
+    ticket_hash bytea NOT NULL,
+    session_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    artifact_id uuid NOT NULL,
+    mode public.download_mode NOT NULL,
+    sealed_identity bytea,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone,
+    CONSTRAINT download_tickets_expiry CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '00:05:00'::interval)))),
+    CONSTRAINT download_tickets_hash_length CHECK ((octet_length(ticket_hash) = 32)),
+    CONSTRAINT download_tickets_identity_length CHECK (((sealed_identity IS NULL) OR ((octet_length(sealed_identity) >= 1) AND (octet_length(sealed_identity) <= 16384)))),
+    CONSTRAINT download_tickets_identity_plain CHECK (((sealed_identity IS NULL) OR (mode = 'plain'::public.download_mode))),
+    CONSTRAINT download_tickets_used_cleared CHECK (((used_at IS NULL) OR (sealed_identity IS NULL)))
+);
+
+ALTER TABLE public.download_tickets OWNER TO bekup_owner;
+
+--
 -- Name: goose_db_version; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -483,6 +848,134 @@ CREATE TABLE public.instance_keys (
 );
 
 ALTER TABLE public.instance_keys OWNER TO bekup_owner;
+
+--
+-- Name: job_destinations; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_destinations (
+    job_id uuid NOT NULL,
+    destination_id uuid NOT NULL,
+    "position" integer NOT NULL,
+    CONSTRAINT job_destinations_position_range CHECK ((("position" >= 0) AND ("position" <= 15)))
+);
+
+ALTER TABLE public.job_destinations OWNER TO bekup_owner;
+
+--
+-- Name: job_encryption; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_encryption (
+    job_id uuid NOT NULL,
+    mode public.job_encryption_mode NOT NULL,
+    opted_out_by uuid,
+    opted_out_at timestamp with time zone,
+    opt_out_reason text,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT job_encryption_opt_out_complete CHECK ((((mode = 'none'::public.job_encryption_mode) = (opted_out_at IS NOT NULL)) AND ((mode = 'none'::public.job_encryption_mode) = (opt_out_reason IS NOT NULL)) AND ((opted_out_by IS NULL) OR (mode = 'none'::public.job_encryption_mode)))),
+    CONSTRAINT job_encryption_reason_length CHECK (((opt_out_reason IS NULL) OR ((char_length(opt_out_reason) >= 1) AND (char_length(opt_out_reason) <= 500))))
+);
+
+ALTER TABLE public.job_encryption OWNER TO bekup_owner;
+
+--
+-- Name: job_owners; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_owners (
+    job_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.job_owners OWNER TO bekup_owner;
+
+--
+-- Name: job_passphrases; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_passphrases (
+    job_id uuid NOT NULL,
+    version integer NOT NULL,
+    sealed_passphrase bytea NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    retired_at timestamp with time zone,
+    CONSTRAINT job_passphrases_retired_after_created CHECK (((retired_at IS NULL) OR (retired_at >= created_at))),
+    CONSTRAINT job_passphrases_sealed_length CHECK (((octet_length(sealed_passphrase) >= 1) AND (octet_length(sealed_passphrase) <= 8192))),
+    CONSTRAINT job_passphrases_version_range CHECK (((version >= 1) AND (version <= 1000000)))
+);
+
+ALTER TABLE public.job_passphrases OWNER TO bekup_owner;
+
+--
+-- Name: job_recipients; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_recipients (
+    job_id uuid NOT NULL,
+    version integer NOT NULL,
+    recipient text NOT NULL,
+    fingerprint text NOT NULL,
+    label text DEFAULT ''::text NOT NULL,
+    generated boolean DEFAULT false NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    retired_at timestamp with time zone,
+    CONSTRAINT job_recipients_fingerprint_format CHECK ((fingerprint ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT job_recipients_label_length CHECK ((char_length(label) <= 100)),
+    CONSTRAINT job_recipients_recipient_format CHECK ((recipient ~ '^age1[02-9ac-hj-np-z]{58}$'::text)),
+    CONSTRAINT job_recipients_retired_after_created CHECK (((retired_at IS NULL) OR (retired_at >= created_at))),
+    CONSTRAINT job_recipients_version_range CHECK (((version >= 1) AND (version <= 1000000)))
+);
+
+ALTER TABLE public.job_recipients OWNER TO bekup_owner;
+
+--
+-- Name: jobs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.jobs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    enabled boolean DEFAULT false NOT NULL,
+    schedule jsonb DEFAULT '{"kind": "manual"}'::jsonb NOT NULL,
+    next_run_at timestamp with time zone,
+    last_scheduled_at timestamp with time zone,
+    deleted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    connection_id uuid NOT NULL,
+    db_mode public.job_db_mode DEFAULT 'all'::public.job_db_mode NOT NULL,
+    databases text[] DEFAULT '{}'::text[] NOT NULL,
+    exclude text[] DEFAULT '{}'::text[] NOT NULL,
+    include_globals boolean DEFAULT false NOT NULL,
+    retention_keep_last integer,
+    retention_keep_days integer,
+    timeout_seconds integer,
+    verification public.job_verification DEFAULT 'standard'::public.job_verification NOT NULL,
+    expected_window_seconds integer,
+    created_by uuid,
+    updated_by uuid,
+    CONSTRAINT jobs_databases_mode CHECK ((((db_mode = 'all'::public.job_db_mode) AND (cardinality(databases) = 0)) OR ((db_mode = 'selected'::public.job_db_mode) AND ((cardinality(databases) >= 1) AND (cardinality(databases) <= 256)) AND (cardinality(exclude) = 0)))),
+    CONSTRAINT jobs_description_length CHECK ((char_length(description) <= 1000)),
+    CONSTRAINT jobs_exclude_count CHECK ((cardinality(exclude) <= 256)),
+    CONSTRAINT jobs_expected_window_range CHECK (((expected_window_seconds IS NULL) OR ((expected_window_seconds >= 60) AND (expected_window_seconds <= 31622400)))),
+    CONSTRAINT jobs_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT jobs_retention_range CHECK ((((retention_keep_last IS NULL) OR ((retention_keep_last >= 1) AND (retention_keep_last <= 10000))) AND ((retention_keep_days IS NULL) OR ((retention_keep_days >= 1) AND (retention_keep_days <= 36500))))),
+    CONSTRAINT jobs_retention_required CHECK (((retention_keep_last IS NOT NULL) OR (retention_keep_days IS NOT NULL))),
+    CONSTRAINT jobs_schedule_object CHECK (((jsonb_typeof(schedule) = 'object'::text) AND (octet_length((schedule)::text) <= 1024))),
+    CONSTRAINT jobs_slug_format CHECK ((slug ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)),
+    CONSTRAINT jobs_timeout_range CHECK (((timeout_seconds IS NULL) OR ((timeout_seconds >= 60) AND (timeout_seconds <= 604800))))
+);
+
+ALTER TABLE public.jobs OWNER TO bekup_owner;
 
 --
 -- Name: recovery_codes; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -613,6 +1106,154 @@ CREATE TABLE public.river_queue (
 );
 
 ALTER TABLE public.river_queue OWNER TO bekup_owner;
+
+--
+-- Name: run_items; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.run_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    run_id uuid NOT NULL,
+    kind public.run_item_kind NOT NULL,
+    db_name text,
+    "position" integer NOT NULL,
+    status public.run_item_status DEFAULT 'running'::public.run_item_status NOT NULL,
+    raw_size bigint DEFAULT 0 NOT NULL,
+    stored_size bigint DEFAULT 0 NOT NULL,
+    raw_sha256 bytea,
+    sha256 bytea,
+    verified boolean DEFAULT false NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    error_code text,
+    error_message text,
+    warnings jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT run_items_db_name CHECK ((((kind = 'globals'::public.run_item_kind) AND (db_name IS NULL)) OR ((kind = 'database'::public.run_item_kind) AND (db_name IS NOT NULL) AND ((octet_length(db_name) >= 1) AND (octet_length(db_name) <= 255))))),
+    CONSTRAINT run_items_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT run_items_error_message_length CHECK (((error_message IS NULL) OR (char_length(error_message) <= 1000))),
+    CONSTRAINT run_items_finished CHECK (((status = 'running'::public.run_item_status) = (finished_at IS NULL))),
+    CONSTRAINT run_items_hashes CHECK ((((raw_sha256 IS NULL) OR (octet_length(raw_sha256) = 32)) AND ((sha256 IS NULL) OR (octet_length(sha256) = 32)))),
+    CONSTRAINT run_items_position_range CHECK ((("position" >= 0) AND ("position" <= 100000))),
+    CONSTRAINT run_items_sizes CHECK (((raw_size >= 0) AND (stored_size >= 0))),
+    CONSTRAINT run_items_warnings_array CHECK (((jsonb_typeof(warnings) = 'array'::text) AND (octet_length((warnings)::text) <= 65536)))
+);
+
+ALTER TABLE public.run_items OWNER TO bekup_owner;
+
+--
+-- Name: run_logs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.run_logs (
+    id bigint NOT NULL,
+    run_id uuid NOT NULL,
+    ts timestamp with time zone NOT NULL,
+    level public.run_log_level NOT NULL,
+    stream public.run_log_stream NOT NULL,
+    line text NOT NULL,
+    CONSTRAINT run_logs_line_length CHECK ((octet_length(line) <= 16384))
+);
+
+ALTER TABLE public.run_logs OWNER TO bekup_owner;
+
+--
+-- Name: run_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE public.run_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.run_logs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+--
+-- Name: run_slots; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.run_slots (
+    holder_id uuid NOT NULL,
+    kind text NOT NULL,
+    connection_id uuid NOT NULL,
+    acquired_at timestamp with time zone DEFAULT now() NOT NULL,
+    heartbeat_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT run_slots_kind CHECK ((kind = ANY (ARRAY['backup'::text, 'restore'::text])))
+);
+
+ALTER TABLE public.run_slots OWNER TO bekup_owner;
+
+--
+-- Name: runs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.runs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    job_id uuid NOT NULL,
+    trigger public.run_trigger NOT NULL,
+    triggered_by uuid,
+    scheduled_for timestamp with time zone,
+    status public.run_status DEFAULT 'queued'::public.run_status NOT NULL,
+    river_job_id bigint,
+    attempt integer DEFAULT 1 NOT NULL,
+    queued_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    storage_timestamp timestamp with time zone,
+    error_code text,
+    error_message text,
+    warnings jsonb DEFAULT '[]'::jsonb NOT NULL,
+    bytes_raw bigint DEFAULT 0 NOT NULL,
+    bytes_stored bigint DEFAULT 0 NOT NULL,
+    cancel_requested_at timestamp with time zone,
+    cancel_requested_by uuid,
+    log_lines integer DEFAULT 0 NOT NULL,
+    log_lines_dropped integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    has_warnings boolean GENERATED ALWAYS AS ((jsonb_array_length(warnings) > 0)) STORED NOT NULL,
+    notices jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT runs_attempt_range CHECK (((attempt >= 1) AND (attempt <= 1000))),
+    CONSTRAINT runs_bytes_positive CHECK (((bytes_raw >= 0) AND (bytes_stored >= 0))),
+    CONSTRAINT runs_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT runs_error_message_length CHECK (((error_message IS NULL) OR (char_length(error_message) <= 1000))),
+    CONSTRAINT runs_finished CHECK (((status = ANY (ARRAY['queued'::public.run_status, 'running'::public.run_status])) = (finished_at IS NULL))),
+    CONSTRAINT runs_log_counts CHECK (((log_lines >= 0) AND (log_lines_dropped >= 0))),
+    CONSTRAINT runs_notices_array CHECK (((jsonb_typeof(notices) = 'array'::text) AND (octet_length((notices)::text) <= 65536))),
+    CONSTRAINT runs_storage_timestamp_seconds CHECK (((storage_timestamp IS NULL) OR (storage_timestamp = date_trunc('second'::text, storage_timestamp)))),
+    CONSTRAINT runs_warnings_array CHECK (((jsonb_typeof(warnings) = 'array'::text) AND (octet_length((warnings)::text) <= 262144)))
+);
+
+ALTER TABLE public.runs OWNER TO bekup_owner;
+
+--
+-- Name: schedule_skips; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.schedule_skips (
+    id bigint NOT NULL,
+    job_id uuid NOT NULL,
+    scheduled_for timestamp with time zone,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT schedule_skips_reason CHECK ((reason = ANY (ARRAY['still_running'::text, 'unschedulable'::text])))
+);
+
+ALTER TABLE public.schedule_skips OWNER TO bekup_owner;
+
+--
+-- Name: schedule_skips_id_seq; Type: SEQUENCE; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE public.schedule_skips ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.schedule_skips_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 --
 -- Name: sessions; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -766,6 +1407,20 @@ ALTER TABLE ONLY public.river_job ALTER COLUMN id SET DEFAULT nextval('public.ri
 ALTER TABLE ONLY public.river_notification ALTER COLUMN id SET DEFAULT nextval('public.river_notification_id_seq'::regclass);
 
 --
+-- Name: artifact_holds artifact_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifact_holds
+    ADD CONSTRAINT artifact_holds_pkey PRIMARY KEY (id);
+
+--
+-- Name: artifacts artifacts_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifacts
+    ADD CONSTRAINT artifacts_pkey PRIMARY KEY (id);
+
+--
 -- Name: audit_chain_heads audit_chain_heads_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -794,6 +1449,13 @@ ALTER TABLE ONLY public.audit_log
     ADD CONSTRAINT audit_log_prev_hash_key UNIQUE (prev_hash);
 
 --
+-- Name: backup_stats backup_stats_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.backup_stats
+    ADD CONSTRAINT backup_stats_pkey PRIMARY KEY (run_item_id);
+
+--
 -- Name: connections connections_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -806,6 +1468,20 @@ ALTER TABLE ONLY public.connections
 
 ALTER TABLE ONLY public.destinations
     ADD CONSTRAINT destinations_pkey PRIMARY KEY (id);
+
+--
+-- Name: download_tickets download_tickets_hash_key; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.download_tickets
+    ADD CONSTRAINT download_tickets_hash_key UNIQUE (ticket_hash);
+
+--
+-- Name: download_tickets download_tickets_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.download_tickets
+    ADD CONSTRAINT download_tickets_pkey PRIMARY KEY (id);
 
 --
 -- Name: goose_db_version goose_db_version_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -827,6 +1503,55 @@ ALTER TABLE ONLY public.instance_keys
 
 ALTER TABLE ONLY public.instance_keys
     ADD CONSTRAINT instance_keys_public_key_key UNIQUE (public_key);
+
+--
+-- Name: job_destinations job_destinations_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_destinations
+    ADD CONSTRAINT job_destinations_pkey PRIMARY KEY (job_id, destination_id);
+
+--
+-- Name: job_destinations job_destinations_position_unique; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_destinations
+    ADD CONSTRAINT job_destinations_position_unique UNIQUE (job_id, "position");
+
+--
+-- Name: job_encryption job_encryption_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_encryption
+    ADD CONSTRAINT job_encryption_pkey PRIMARY KEY (job_id);
+
+--
+-- Name: job_owners job_owners_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_owners
+    ADD CONSTRAINT job_owners_pkey PRIMARY KEY (job_id, user_id);
+
+--
+-- Name: job_passphrases job_passphrases_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_passphrases
+    ADD CONSTRAINT job_passphrases_pkey PRIMARY KEY (job_id, version);
+
+--
+-- Name: job_recipients job_recipients_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_recipients
+    ADD CONSTRAINT job_recipients_pkey PRIMARY KEY (job_id, version);
+
+--
+-- Name: jobs jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_pkey PRIMARY KEY (id);
 
 --
 -- Name: recovery_codes recovery_codes_code_mac_key; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -869,6 +1594,41 @@ ALTER TABLE ONLY public.river_notification
 
 ALTER TABLE ONLY public.river_queue
     ADD CONSTRAINT river_queue_pkey PRIMARY KEY (name);
+
+--
+-- Name: run_items run_items_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_items
+    ADD CONSTRAINT run_items_pkey PRIMARY KEY (id);
+
+--
+-- Name: run_logs run_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_logs
+    ADD CONSTRAINT run_logs_pkey PRIMARY KEY (id);
+
+--
+-- Name: run_slots run_slots_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_slots
+    ADD CONSTRAINT run_slots_pkey PRIMARY KEY (holder_id);
+
+--
+-- Name: runs runs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.runs
+    ADD CONSTRAINT runs_pkey PRIMARY KEY (id);
+
+--
+-- Name: schedule_skips schedule_skips_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.schedule_skips
+    ADD CONSTRAINT schedule_skips_pkey PRIMARY KEY (id);
 
 --
 -- Name: sessions sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -927,6 +1687,48 @@ ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_pkey PRIMARY KEY (id);
 
 --
+-- Name: artifact_holds_artifact_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifact_holds_artifact_idx ON public.artifact_holds USING btree (artifact_id, expires_at);
+
+--
+-- Name: artifact_holds_expires_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifact_holds_expires_idx ON public.artifact_holds USING btree (expires_at);
+
+--
+-- Name: artifact_holds_holder_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX artifact_holds_holder_idx ON public.artifact_holds USING btree (artifact_id, kind, holder_id);
+
+--
+-- Name: artifacts_destination_key_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX artifacts_destination_key_idx ON public.artifacts USING btree (destination_id, object_key);
+
+--
+-- Name: artifacts_item_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifacts_item_idx ON public.artifacts USING btree (run_item_id) WHERE (run_item_id IS NOT NULL);
+
+--
+-- Name: artifacts_job_destination_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifacts_job_destination_idx ON public.artifacts USING btree (job_id, destination_id, created_at DESC) WHERE (state = 'present'::public.artifact_state);
+
+--
+-- Name: artifacts_run_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifacts_run_idx ON public.artifacts USING btree (run_id);
+
+--
 -- Name: audit_chain_heads_chain_id_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -957,6 +1759,18 @@ CREATE INDEX audit_log_target_id_idx ON public.audit_log USING btree (target_typ
 CREATE INDEX audit_log_ts_idx ON public.audit_log USING btree (ts);
 
 --
+-- Name: backup_stats_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX backup_stats_job_idx ON public.backup_stats USING btree (job_id, created_at DESC);
+
+--
+-- Name: backup_stats_run_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX backup_stats_run_idx ON public.backup_stats USING btree (run_id);
+
+--
 -- Name: connections_name_active_key; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -975,10 +1789,82 @@ CREATE INDEX connections_temporary_expiry_idx ON public.connections USING btree 
 CREATE UNIQUE INDEX destinations_name_active_key ON public.destinations USING btree (lower(name)) WHERE (deleted_at IS NULL);
 
 --
+-- Name: download_tickets_artifact_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX download_tickets_artifact_idx ON public.download_tickets USING btree (artifact_id);
+
+--
+-- Name: download_tickets_expires_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX download_tickets_expires_idx ON public.download_tickets USING btree (expires_at);
+
+--
+-- Name: download_tickets_user_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX download_tickets_user_idx ON public.download_tickets USING btree (user_id, expires_at);
+
+--
 -- Name: instance_keys_one_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
 CREATE UNIQUE INDEX instance_keys_one_active_idx ON public.instance_keys USING btree ((true)) WHERE (retired_at IS NULL);
+
+--
+-- Name: job_destinations_destination_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX job_destinations_destination_idx ON public.job_destinations USING btree (destination_id);
+
+--
+-- Name: job_owners_user_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX job_owners_user_idx ON public.job_owners USING btree (user_id);
+
+--
+-- Name: job_passphrases_one_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX job_passphrases_one_active_idx ON public.job_passphrases USING btree (job_id) WHERE (retired_at IS NULL);
+
+--
+-- Name: job_recipients_one_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX job_recipients_one_active_idx ON public.job_recipients USING btree (job_id) WHERE (retired_at IS NULL);
+
+--
+-- Name: jobs_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX jobs_connection_idx ON public.jobs USING btree (connection_id) WHERE (deleted_at IS NULL);
+
+--
+-- Name: jobs_due_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX jobs_due_idx ON public.jobs USING btree (next_run_at) WHERE (enabled AND (deleted_at IS NULL) AND (next_run_at IS NOT NULL));
+
+--
+-- Name: jobs_list_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX jobs_list_idx ON public.jobs USING btree (lower(name), id) WHERE (deleted_at IS NULL);
+
+--
+-- Name: jobs_name_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX jobs_name_active_idx ON public.jobs USING btree (lower(name)) WHERE (deleted_at IS NULL);
+
+--
+-- Name: jobs_slug_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX jobs_slug_idx ON public.jobs USING btree (slug);
 
 --
 -- Name: recovery_codes_user_id_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -1035,6 +1921,78 @@ CREATE INDEX river_notification_created_at_idx ON public.river_notification USIN
 CREATE INDEX river_notification_topic_id_idx ON public.river_notification USING btree (topic, id);
 
 --
+-- Name: run_items_run_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_items_run_idx ON public.run_items USING btree (run_id, "position");
+
+--
+-- Name: run_items_unique_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX run_items_unique_idx ON public.run_items USING btree (run_id, kind, COALESCE(db_name, ''::text));
+
+--
+-- Name: run_logs_run_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_logs_run_idx ON public.run_logs USING btree (run_id, id);
+
+--
+-- Name: run_slots_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_slots_connection_idx ON public.run_slots USING btree (connection_id);
+
+--
+-- Name: runs_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_active_idx ON public.runs USING btree (status) WHERE (status = ANY (ARRAY['queued'::public.run_status, 'running'::public.run_status]));
+
+--
+-- Name: runs_job_early_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_job_early_idx ON public.runs USING btree (job_id, scheduled_for) WHERE (trigger = 'early'::public.run_trigger);
+
+--
+-- Name: runs_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_job_idx ON public.runs USING btree (job_id, queued_at DESC, id DESC);
+
+--
+-- Name: runs_job_start_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_job_start_idx ON public.runs USING btree (job_id, COALESCE(started_at, queued_at));
+
+--
+-- Name: runs_queued_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_queued_at_idx ON public.runs USING btree (queued_at DESC, id DESC);
+
+--
+-- Name: runs_river_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_river_job_idx ON public.runs USING btree (river_job_id, created_at DESC) WHERE (river_job_id IS NOT NULL);
+
+--
+-- Name: schedule_skips_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX schedule_skips_created_idx ON public.schedule_skips USING btree (created_at);
+
+--
+-- Name: schedule_skips_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX schedule_skips_job_idx ON public.schedule_skips USING btree (job_id, created_at DESC);
+
+--
 -- Name: sessions_absolute_expires_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -1077,6 +2035,12 @@ CREATE INDEX webauthn_ceremonies_user_id_idx ON public.webauthn_ceremonies USING
 CREATE INDEX webauthn_credentials_user_id_idx ON public.webauthn_credentials USING btree (user_id);
 
 --
+-- Name: artifacts artifacts_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER artifacts_guard BEFORE UPDATE ON public.artifacts FOR EACH ROW EXECUTE FUNCTION public.artifacts_guard();
+
+--
 -- Name: audit_log audit_log_chain; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -1107,6 +2071,54 @@ CREATE TRIGGER connections_set_updated_at BEFORE UPDATE ON public.connections FO
 CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
+-- Name: download_tickets download_tickets_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER download_tickets_guard BEFORE UPDATE ON public.download_tickets FOR EACH ROW EXECUTE FUNCTION public.download_tickets_guard();
+
+--
+-- Name: job_encryption job_encryption_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER job_encryption_set_updated_at BEFORE UPDATE ON public.job_encryption FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: job_passphrases job_passphrases_retire_only; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER job_passphrases_retire_only BEFORE UPDATE ON public.job_passphrases FOR EACH ROW EXECUTE FUNCTION public.job_keys_retire_only();
+
+--
+-- Name: job_recipients job_recipients_retire_only; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER job_recipients_retire_only BEFORE UPDATE ON public.job_recipients FOR EACH ROW EXECUTE FUNCTION public.job_keys_retire_only();
+
+--
+-- Name: jobs jobs_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: jobs jobs_slug_immutable; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER jobs_slug_immutable BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.jobs_slug_immutable();
+
+--
+-- Name: runs runs_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER runs_set_updated_at BEFORE UPDATE ON public.runs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: runs runs_terminal_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER runs_terminal_guard BEFORE UPDATE ON public.runs FOR EACH ROW EXECUTE FUNCTION public.runs_terminal_guard();
+
+--
 -- Name: settings settings_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -1119,11 +2131,67 @@ CREATE TRIGGER settings_set_updated_at BEFORE UPDATE ON public.settings FOR EACH
 CREATE TRIGGER users_set_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
+-- Name: artifact_holds artifact_holds_artifact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifact_holds
+    ADD CONSTRAINT artifact_holds_artifact_id_fkey FOREIGN KEY (artifact_id) REFERENCES public.artifacts(id);
+
+--
+-- Name: artifacts artifacts_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifacts
+    ADD CONSTRAINT artifacts_destination_id_fkey FOREIGN KEY (destination_id) REFERENCES public.destinations(id);
+
+--
+-- Name: artifacts artifacts_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifacts
+    ADD CONSTRAINT artifacts_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: artifacts artifacts_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifacts
+    ADD CONSTRAINT artifacts_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: artifacts artifacts_run_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.artifacts
+    ADD CONSTRAINT artifacts_run_item_id_fkey FOREIGN KEY (run_item_id) REFERENCES public.run_items(id);
+
+--
 -- Name: audit_chain_heads audit_chain_heads_key_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
 ALTER TABLE ONLY public.audit_chain_heads
     ADD CONSTRAINT audit_chain_heads_key_id_fkey FOREIGN KEY (key_id) REFERENCES public.instance_keys(id);
+
+--
+-- Name: backup_stats backup_stats_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.backup_stats
+    ADD CONSTRAINT backup_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: backup_stats backup_stats_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.backup_stats
+    ADD CONSTRAINT backup_stats_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: backup_stats backup_stats_run_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.backup_stats
+    ADD CONSTRAINT backup_stats_run_item_id_fkey FOREIGN KEY (run_item_id) REFERENCES public.run_items(id);
 
 --
 -- Name: connections connections_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1168,11 +2236,179 @@ ALTER TABLE ONLY public.destinations
     ADD CONSTRAINT destinations_host_key_confirmed_by_fkey FOREIGN KEY (host_key_confirmed_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 --
+-- Name: download_tickets download_tickets_artifact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.download_tickets
+    ADD CONSTRAINT download_tickets_artifact_id_fkey FOREIGN KEY (artifact_id) REFERENCES public.artifacts(id);
+
+--
+-- Name: download_tickets download_tickets_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.download_tickets
+    ADD CONSTRAINT download_tickets_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE;
+
+--
+-- Name: download_tickets download_tickets_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.download_tickets
+    ADD CONSTRAINT download_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: job_destinations job_destinations_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_destinations
+    ADD CONSTRAINT job_destinations_destination_id_fkey FOREIGN KEY (destination_id) REFERENCES public.destinations(id);
+
+--
+-- Name: job_destinations job_destinations_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_destinations
+    ADD CONSTRAINT job_destinations_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: job_encryption job_encryption_job_fk; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_encryption
+    ADD CONSTRAINT job_encryption_job_fk FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: job_encryption job_encryption_opted_out_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_encryption
+    ADD CONSTRAINT job_encryption_opted_out_by_fkey FOREIGN KEY (opted_out_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_encryption job_encryption_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_encryption
+    ADD CONSTRAINT job_encryption_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_owners job_owners_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_owners
+    ADD CONSTRAINT job_owners_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_owners job_owners_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_owners
+    ADD CONSTRAINT job_owners_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: job_owners job_owners_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_owners
+    ADD CONSTRAINT job_owners_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+--
+-- Name: job_passphrases job_passphrases_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_passphrases
+    ADD CONSTRAINT job_passphrases_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_passphrases job_passphrases_job_fk; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_passphrases
+    ADD CONSTRAINT job_passphrases_job_fk FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: job_recipients job_recipients_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_recipients
+    ADD CONSTRAINT job_recipients_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_recipients job_recipients_job_fk; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_recipients
+    ADD CONSTRAINT job_recipients_job_fk FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: jobs jobs_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id);
+
+--
+-- Name: jobs jobs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: jobs jobs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.jobs
+    ADD CONSTRAINT jobs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
 -- Name: recovery_codes recovery_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
 ALTER TABLE ONLY public.recovery_codes
     ADD CONSTRAINT recovery_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: run_items run_items_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_items
+    ADD CONSTRAINT run_items_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: run_logs run_logs_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_logs
+    ADD CONSTRAINT run_logs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: runs runs_cancel_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.runs
+    ADD CONSTRAINT runs_cancel_requested_by_fkey FOREIGN KEY (cancel_requested_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: runs runs_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.runs
+    ADD CONSTRAINT runs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: runs runs_triggered_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.runs
+    ADD CONSTRAINT runs_triggered_by_fkey FOREIGN KEY (triggered_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: schedule_skips schedule_skips_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.schedule_skips
+    ADD CONSTRAINT schedule_skips_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
 
 --
 -- Name: sessions sessions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1217,6 +2453,12 @@ REVOKE USAGE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO bekup_app;
 
 --
+-- Name: FUNCTION artifacts_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.artifacts_guard() FROM PUBLIC;
+
+--
 -- Name: FUNCTION audit_log_append_only(); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -1250,6 +2492,24 @@ REVOKE ALL ON FUNCTION public.bekup_schema_version() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.bekup_schema_version() TO bekup_app;
 
 --
+-- Name: FUNCTION download_tickets_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.download_tickets_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION job_keys_retire_only(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.job_keys_retire_only() FROM PUBLIC;
+
+--
+-- Name: FUNCTION jobs_slug_immutable(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.jobs_slug_immutable() FROM PUBLIC;
+
+--
 -- Name: FUNCTION river_job_state_in_bitmask(bitmask bit, state public.river_job_state); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -1257,10 +2517,58 @@ REVOKE ALL ON FUNCTION public.river_job_state_in_bitmask(bitmask bit, state publ
 GRANT ALL ON FUNCTION public.river_job_state_in_bitmask(bitmask bit, state public.river_job_state) TO bekup_app;
 
 --
+-- Name: FUNCTION runs_terminal_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.runs_terminal_guard() FROM PUBLIC;
+
+--
 -- Name: FUNCTION set_updated_at(); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
 REVOKE ALL ON FUNCTION public.set_updated_at() FROM PUBLIC;
+
+--
+-- Name: TABLE artifact_holds; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.artifact_holds TO bekup_app;
+
+--
+-- Name: COLUMN artifact_holds.expires_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(expires_at) ON TABLE public.artifact_holds TO bekup_app;
+
+--
+-- Name: TABLE artifacts; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.artifacts TO bekup_app;
+
+--
+-- Name: COLUMN artifacts.signing_key_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(signing_key_id) ON TABLE public.artifacts TO bekup_app;
+
+--
+-- Name: COLUMN artifacts.state; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(state) ON TABLE public.artifacts TO bekup_app;
+
+--
+-- Name: COLUMN artifacts.state_changed_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(state_changed_at) ON TABLE public.artifacts TO bekup_app;
+
+--
+-- Name: COLUMN artifacts.deleted_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(deleted_at) ON TABLE public.artifacts TO bekup_app;
 
 --
 -- Name: TABLE audit_chain_heads; Type: ACL; Schema: public; Owner: bekup_owner
@@ -1281,6 +2589,12 @@ GRANT SELECT,USAGE ON SEQUENCE public.audit_chain_heads_id_seq TO bekup_app;
 GRANT SELECT,INSERT ON TABLE public.audit_log TO bekup_app;
 
 --
+-- Name: TABLE backup_stats; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.backup_stats TO bekup_app;
+
+--
 -- Name: TABLE connections; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -1293,6 +2607,24 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.connections TO bekup_app;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.destinations TO bekup_app;
 
 --
+-- Name: TABLE download_tickets; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.download_tickets TO bekup_app;
+
+--
+-- Name: COLUMN download_tickets.sealed_identity; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(sealed_identity) ON TABLE public.download_tickets TO bekup_app;
+
+--
+-- Name: COLUMN download_tickets.used_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(used_at) ON TABLE public.download_tickets TO bekup_app;
+
+--
 -- Name: TABLE instance_keys; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -1303,6 +2635,54 @@ GRANT SELECT,INSERT ON TABLE public.instance_keys TO bekup_app;
 --
 
 GRANT UPDATE(retired_at) ON TABLE public.instance_keys TO bekup_app;
+
+--
+-- Name: TABLE job_destinations; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.job_destinations TO bekup_app;
+
+--
+-- Name: TABLE job_encryption; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.job_encryption TO bekup_app;
+
+--
+-- Name: TABLE job_owners; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.job_owners TO bekup_app;
+
+--
+-- Name: TABLE job_passphrases; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.job_passphrases TO bekup_app;
+
+--
+-- Name: COLUMN job_passphrases.retired_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(retired_at) ON TABLE public.job_passphrases TO bekup_app;
+
+--
+-- Name: TABLE job_recipients; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.job_recipients TO bekup_app;
+
+--
+-- Name: COLUMN job_recipients.retired_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(retired_at) ON TABLE public.job_recipients TO bekup_app;
+
+--
+-- Name: TABLE jobs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.jobs TO bekup_app;
 
 --
 -- Name: TABLE recovery_codes; Type: ACL; Schema: public; Owner: bekup_owner
@@ -1345,6 +2725,48 @@ GRANT SELECT,USAGE ON SEQUENCE public.river_notification_id_seq TO bekup_app;
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.river_queue TO bekup_app;
+
+--
+-- Name: TABLE run_items; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.run_items TO bekup_app;
+
+--
+-- Name: TABLE run_logs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.run_logs TO bekup_app;
+
+--
+-- Name: SEQUENCE run_logs_id_seq; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.run_logs_id_seq TO bekup_app;
+
+--
+-- Name: TABLE run_slots; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.run_slots TO bekup_app;
+
+--
+-- Name: TABLE runs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,UPDATE ON TABLE public.runs TO bekup_app;
+
+--
+-- Name: TABLE schedule_skips; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.schedule_skips TO bekup_app;
+
+--
+-- Name: SEQUENCE schedule_skips_id_seq; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.schedule_skips_id_seq TO bekup_app;
 
 --
 -- Name: TABLE sessions; Type: ACL; Schema: public; Owner: bekup_owner

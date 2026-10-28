@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -20,9 +21,46 @@ import (
 const pgConninfo = "host=bekup.invalid port=5432 dbname=postgres user=bekup sslmode=disable " +
 	"passfile=/dev/null servicefile=/dev/null"
 
+// Session hardening (D-152). A target database's owner is not trusted:
+// it can create functions, aggregates and operators that shadow the
+// built-ins (CREATE AGGREGATE evil.count(*)) and point the database's
+// search_path at them (ALTER DATABASE ... SET search_path = evil,
+// pg_catalog), and it can attach row-level security policies calling its
+// functions. Code reached that way would run as the backup role, which is
+// often a superuser. Every session therefore
+//   - sends search_path and row_security as startup parameters (they take
+//     precedence over ALTER DATABASE / ALTER ROLE settings) and verifies
+//     after authentication that they are in effect;
+//   - sets both again with pg_catalog.set_config (belt and braces);
+//   - sets restrict_nonsystem_relation_kind = 'view, foreign-table' where
+//     the server has it (CVE-2024-7348 fix: 12.20, 13.16, 14.13, 15.8,
+//     16.4, 17+), so a table swapped for a view or foreign table between
+//     the catalog read and a row count cannot run code; without it the
+//     connection refuses row counts (SafeRowCounts);
+//   - runs only schema-qualified SQL (pg_catalog functions, OPERATOR(
+//     pg_catalog.op), pg_catalog types and collations).
+//
+// pg_temp is listed last: temporary objects never shadow pg_catalog, and
+// functions and operators are never looked up in pg_temp.
+const (
+	pgSearchPath  = "pg_catalog, pg_temp"
+	pgRowSecurity = "off"
+	// pgCheckSettings reads the settings that the startup parameters set.
+	pgCheckSettings = `SELECT pg_catalog.current_setting('search_path'), pg_catalog.current_setting('row_security')`
+	// pgPinSettings sets them again for the session.
+	pgPinSettings = `SELECT pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', false), ` +
+		`pg_catalog.set_config('row_security', 'off', false)`
+	// pgRestrictKinds blocks non-system views and foreign tables where the
+	// server knows the setting (no row otherwise), like pg_dump does.
+	pgRestrictKinds = `SELECT pg_catalog.set_config(s.name, 'view, foreign-table', false) FROM pg_catalog.pg_settings s ` +
+		`WHERE s.name OPERATOR(pg_catalog.=) 'restrict_nonsystem_relation_kind'`
+)
+
 type pgConn struct {
 	c   *pgconn.PgConn
 	eng engine.Engine
+	// restricted: restrict_nonsystem_relation_kind is in effect.
+	restricted bool
 }
 
 func openPG(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, error) {
@@ -44,7 +82,12 @@ func openPG(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, error
 	cfg.SSLNegotiation = "postgres"
 	cfg.KerberosSrvName, cfg.KerberosSpn = "", ""
 	cfg.ConnectTimeout = 0 // the context bounds the connect
-	cfg.RuntimeParams = map[string]string{"application_name": "bekup-probe"}
+	// Startup parameters beat per-database and per-role settings.
+	cfg.RuntimeParams = map[string]string{
+		"application_name": "bekup-probe",
+		"search_path":      pgSearchPath,
+		"row_security":     pgRowSecurity,
+	}
 	cfg.LookupFunc = func(_ context.Context, host string) ([]string, error) {
 		return []string{host}, nil // the caller's dialer resolves (guard / tunnel)
 	}
@@ -59,7 +102,48 @@ func openPG(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, error
 	if err != nil {
 		return nil, connectFailure(ctx, err, pgReason)
 	}
-	return &pgConn{c: c, eng: eng}, nil
+	pc := &pgConn{c: c, eng: eng}
+	if err := pc.harden(cctx); err != nil {
+		ectx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
+		discardErr(c.Close(ectx))
+		cancel()
+		return nil, err
+	}
+	return pc, nil
+}
+
+// harden verifies and pins the session settings (see pgSearchPath). It
+// fails closed: a session whose settings cannot be confirmed is closed.
+func (c *pgConn) harden(ctx context.Context) error {
+	for _, q := range []string{pgCheckSettings, pgPinSettings} {
+		r, err := c.rows(ctx, q, 1)
+		if err != nil {
+			return err
+		}
+		if len(r) != 1 || len(r[0]) != 2 || !sameSearchPath(r[0][0]) || r[0][1] != pgRowSecurity {
+			return newError(runnerpb.ReasonFailed, "session settings", nil)
+		}
+	}
+	r, err := c.rows(ctx, pgRestrictKinds, 1)
+	if err != nil {
+		return err
+	}
+	switch {
+	case len(r) == 0:
+		// Unpatched server: catalog reads stay safe (pg_catalog only),
+		// row counts are refused.
+	case len(r[0]) == 1 && strings.Contains(r[0][0], "view") && strings.Contains(r[0][0], "foreign-table"):
+		c.restricted = true
+	default:
+		return newError(runnerpb.ReasonFailed, "session settings", nil)
+	}
+	return nil
+}
+
+// sameSearchPath reports whether a reported search_path is pgSearchPath
+// (the server may re-format the list's spacing).
+func sameSearchPath(s string) bool {
+	return strings.ReplaceAll(s, " ", "") == strings.ReplaceAll(pgSearchPath, " ", "")
 }
 
 // pgReason maps PostgreSQL error responses.

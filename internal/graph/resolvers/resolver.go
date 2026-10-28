@@ -17,9 +17,15 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
+	"github.com/jlentink/bekup/internal/calendar"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/destinations"
+	"github.com/jlentink/bekup/internal/downloads"
 	"github.com/jlentink/bekup/internal/graph/model"
+	"github.com/jlentink/bekup/internal/jobkeys"
+	"github.com/jlentink/bekup/internal/jobs"
+	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/runstate"
 )
 
 // Resolver is the root resolver and holds the dependencies of all
@@ -57,4 +63,19 @@ type Resolver struct {
 	// Connections backs the connection fields (task 2.11; nil: those
 	// fields fail with an internal error).
 	Connections *connections.Service
+	// Jobs and JobKeys back the job fields and the job encryption fields
+	// (tasks 3.5 and 3.2; nil: those fields fail with an internal error).
+	Jobs    *jobs.Service
+	JobKeys *jobkeys.Service
+	// Runs backs the run history fields and Bus the run event
+	// subscriptions (task 3.7; nil: those fields fail with an internal
+	// error).
+	Runs *runstate.Reader
+	Bus  *pubsub.Bus
+	// Downloads backs createDownloadTicket (task 3.9; nil: the field
+	// fails with an internal error).
+	Downloads *downloads.Service
+	// Calendar backs Query.calendar (task 3.14; nil: the field fails
+	// with an internal error).
+	Calendar *calendar.Service
 }

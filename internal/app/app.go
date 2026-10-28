@@ -17,20 +17,42 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
+	"github.com/jlentink/bekup/internal/calendar"
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/destinations"
+	"github.com/jlentink/bekup/internal/downloads"
 	"github.com/jlentink/bekup/internal/graph"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/jobkeys"
+	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/pubsub"
+	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/runnerclient"
+	"github.com/jlentink/bekup/internal/runstate"
 )
 
-// ApplicationName is reported to Postgres by serve's pool.
-const ApplicationName = "bekup-serve"
+// ApplicationName is reported to Postgres by serve's pool,
+// WorkerApplicationName by the pool of `bekup worker`.
+const (
+	ApplicationName       = "bekup-serve"
+	WorkerApplicationName = "bekup-worker"
+)
+
+// Mode selects what a process runs.
+type Mode int
+
+const (
+	// ModeServe runs the HTTP server, the scheduler (scheduler.enabled)
+	// and, unless Options.NoWorker, the River workers.
+	ModeServe Mode = iota
+	// ModeWorker (`bekup worker`) runs only the River workers: no HTTP, no
+	// scheduler, same startup checks.
+	ModeWorker
+)
 
 // Component is a long-running part of serve (HTTP server, later River
 // workers and the scheduler).
@@ -56,6 +78,13 @@ type Options struct {
 	Listener net.Listener
 	// Version is the bekup version reported by Query.serverInfo.
 	Version string
+	// Mode is ModeServe (default) or ModeWorker.
+	Mode Mode
+	// NoWorker (serve --no-worker) runs serve without River workers; jobs
+	// are still inserted and the scheduler still runs.
+	NoWorker bool
+	// QueueFetchPollInterval overrides River's poll interval (tests).
+	QueueFetchPollInterval time.Duration
 }
 
 // App is a started-up serve instance.
@@ -83,6 +112,18 @@ type App struct {
 	// service on top of it (task 2.11).
 	runner      *runnerclient.Client
 	connections *connections.Service
+	// queue is the River client (task 3.4): workers unless NoWorker,
+	// insert-only otherwise.
+	queue *queue.Client
+	// policy is the central authz policy (tasks 1.4, 3.5), shared by the
+	// GraphQL layer and the services that re-check their caller.
+	policy *authz.Policy
+	// jobKeys and jobs are the job encryption and job services (tasks
+	// 3.2, 3.5).
+	jobKeys *jobkeys.Service
+	jobs    *jobs.Service
+	// downloads serves download tickets (task 3.9, serve only).
+	downloads *downloads.Service
 	// subs is the subscription machinery (tasks 1.10, 2.13).
 	subs       subscriptions
 	addr       net.Addr
@@ -101,10 +142,19 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 			a.Close()
 		}
 	}()
+	if opts.Mode == ModeWorker && opts.NoWorker {
+		return nil, errors.New("app: a worker process cannot disable its workers")
+	}
 	if err := a.openDB(ctx); err != nil {
 		return nil, err
 	}
 	a.auditor = audit.New(a.pool, audit.Options{})
+	if opts.Mode == ModeWorker {
+		if err := a.newWorkerMode(ctx); err != nil {
+			return nil, err
+		}
+		return a, nil
+	}
 	if err := a.auditInsecureTransport(ctx); err != nil {
 		return nil, err
 	}
@@ -145,19 +195,66 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if a.connections, err = a.newConnections(); err != nil {
 		return nil, err
 	}
+	a.policy = a.newPolicy()
+	// The job keys come before the queue (the backup worker reads them),
+	// the queue before the job service (runJobNow inserts runs).
+	if err := a.newJobKeys(); err != nil {
+		return nil, err
+	}
+	if err := a.newQueue(!opts.NoWorker); err != nil {
+		return nil, err
+	}
+	if err := a.newJobs(); err != nil {
+		return nil, err
+	}
+	if err := a.newDownloads(); err != nil {
+		return nil, err
+	}
 	h, err := a.newHTTP(ctx)
 	if err != nil {
 		return nil, err
 	}
-	a.components = append(a.components, h, signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger})
+	a.components = append(a.components, h, signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger},
+		downloadCleanupComponent{a.downloads})
+	if err := a.newScheduler(); err != nil {
+		return nil, err
+	}
 	return a, nil
+}
+
+// newWorkerMode prepares `bekup worker`: the same database and keyring
+// checks as serve, the services the workers need (destinations, the runner
+// client and connections, job keys), then only the River workers.
+func (a *App) newWorkerMode(ctx context.Context) error {
+	if err := a.auditInsecureDBTLS(ctx); err != nil {
+		return err
+	}
+	if err := a.loadKeyring(ctx); err != nil {
+		return err
+	}
+	var err error
+	if a.destinations, err = a.newDestinations(); err != nil {
+		return err
+	}
+	if a.connections, err = a.newConnections(); err != nil {
+		return err
+	}
+	a.policy = a.newPolicy()
+	if err := a.newJobKeys(); err != nil {
+		return err
+	}
+	return a.newQueue(true)
 }
 
 // openDB connects as bekup_app and refuses to continue unless the role is
 // least-privileged (D-099) and the schema matches this binary (D-078).
 func (a *App) openDB(ctx context.Context) error {
 	cfg := a.opts.Config
-	poolOpts, err := db.PoolOptionsFromConfig(cfg, ApplicationName)
+	appName := ApplicationName
+	if a.opts.Mode == ModeWorker {
+		appName = WorkerApplicationName
+	}
+	poolOpts, err := db.PoolOptionsFromConfig(cfg, appName)
 	if err != nil {
 		return err
 	}
@@ -212,7 +309,11 @@ func (a *App) Run(ctx context.Context) error {
 		})
 	}
 	err := g.Wait()
-	a.opts.Logger.InfoContext(context.WithoutCancel(ctx), "bekup serve stopped")
+	if a.opts.Mode == ModeWorker {
+		a.opts.Logger.InfoContext(context.WithoutCancel(ctx), "bekup worker stopped")
+	} else {
+		a.opts.Logger.InfoContext(context.WithoutCancel(ctx), "bekup serve stopped")
+	}
 	return err
 }
 
@@ -275,6 +376,8 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 		return nil, err
 	}
 	hopts.GraphQL = gql
+	// GET /api/download/{ticket} (task 3.9).
+	hopts.Download = a.downloads
 	// Every principal passes the 2FA policy's enrollment check (task 1.9).
 	hopts.Sessions.Resolver = httpserver.SessionsResolver{Sessions: a.auth.Sessions(), Enrollment: a.twoFactorPolicy}
 	// Mount point: /api (later tasks) stays 404 until its handler is set here.
@@ -302,13 +405,12 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 }
 
 // newGraphQL builds the /graphql handler (task 1.2) with the central authz
-// policy (task 1.4) and the auth service (task 1.5); the session middleware
-// of internal/httpserver attaches the principal. Job ownership (task 3.5)
-// uses the deny-by-default placeholder of internal/authz until then;
-// enrolled second factors come from secondFactors (tasks 1.7/1.8).
+// policy (task 1.4, with the DB-backed job ownership of task 3.5) and the
+// auth service (task 1.5); the session middleware of internal/httpserver
+// attaches the principal.
 func (a *App) newGraphQL() (*graph.Handler, error) {
 	cfg := a.opts.Config
-	policy := authz.New(authz.Options{StepUpWindow: cfg.Security.StepUpMaxAge.D(), SecondFactors: a.secondFactors()})
+	policy := a.policy
 	return graph.New(graph.Options{
 		Access:   graph.NewPolicyAccess(policy),
 		Policy:   policy,
@@ -323,6 +425,10 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		TwoFactorPolicy: a.twoFactorPolicy,
 		Destinations:    a.destinations,
 		Connections:     a.connections,
+		Jobs:            a.jobs,
+		JobKeys:         a.jobKeys,
+		Runs:            runstate.NewReader(a.pool),
+		Bus:             a.subs.bus,
 		Dev:             a.opts.Dev,
 		ServerInfo: model.ServerInfo{
 			Version:           a.opts.Version,
@@ -333,6 +439,8 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		MaxDepth:      cfg.GraphQL.MaxDepth,
 		MaxBodyBytes:  cfg.GraphQL.MaxBodyBytes,
 		Streams:       a.subs.streams,
+		Downloads:     a.downloads,
+		Calendar:      calendar.New(a.pool),
 	})
 }
 

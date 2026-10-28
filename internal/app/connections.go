@@ -24,5 +24,8 @@ func (a *App) newConnections() (*connections.Service, error) {
 		Auditor: a.auditor,
 		Runner:  rc.RPC(),
 		Logger:  a.opts.Logger,
+		// Per-connection run limits (task 3.13, D-156).
+		MaxConcurrentRuns:        a.opts.Config.Workers.MaxConcurrentRuns,
+		DefaultRunsPerConnection: a.opts.Config.Workers.MaxRunsPerConnection,
 	})
 }

@@ -8,20 +8,40 @@ import (
 // header: every further message must be a non-empty chunk of at most
 // runnerpb.MaxChunkBytes, the running total must never exceed the
 // header's total_bytes, and Complete checks that exactly total_bytes
-// arrived. A Stream is used by one goroutine.
+// arrived. A streamed VerifyDump (header total_bytes 0) instead ends with
+// exactly one trailer whose total must equal the received bytes; nothing
+// may follow it, and Complete fails without it. A Stream is used by one
+// goroutine.
 type Stream struct {
 	total    uint64
 	received uint64
+	// streamed: the size comes with the trailer; ended: it arrived.
+	streamed bool
+	ended    bool
 }
 
 // maxChunkMessageBytes bounds one chunk message (chunk + envelope).
 const maxChunkMessageBytes = runnerpb.MaxMessageBytes
 
 // VerifyChunk validates a VerifyDump message after the header and returns
-// its data.
+// its data. A valid trailer of a streamed dump returns no data; any message
+// after it is an error.
 func (s *Stream) VerifyChunk(req *runnerpb.VerifyDumpRequest) ([]byte, error) {
 	if err := checkEnvelope(req, maxChunkMessageBytes); err != nil {
 		return nil, err
+	}
+	if s.ended {
+		return nil, fieldError("trailer", "nothing may follow the trailer")
+	}
+	if tr := req.GetTrailer(); tr != nil {
+		if !s.streamed {
+			return nil, fieldError("trailer", "only a streamed dump (header total_bytes 0) ends with a trailer")
+		}
+		if tr.GetTotalBytes() != s.received {
+			return nil, fieldError("trailer.total_bytes", "does not match the bytes received")
+		}
+		s.ended = true
+		return nil, nil
 	}
 	if req.GetHeader() != nil || req.GetChunk() == nil {
 		return nil, fieldError("chunk", "only chunks may follow the header")
@@ -59,6 +79,12 @@ func (s *Stream) Received() uint64 { return s.received }
 // Complete reports whether exactly total_bytes have been received; call it
 // when the client closes its side of the stream.
 func (s *Stream) Complete() error {
+	if s.streamed {
+		if !s.ended {
+			return fieldError("trailer", "the streamed dump ended without its trailer")
+		}
+		return nil
+	}
 	if s.received != s.total {
 		return fieldError("chunk", "stream ended before total_bytes")
 	}

@@ -67,6 +67,10 @@ type Options struct {
 	GraphQL http.Handler
 	// API is mounted at /api (later tasks); nil: 404 placeholder.
 	API http.Handler
+	// Download serves GET /api/download/{ticket} (task 3.9, D-150) behind
+	// the session middleware; nil: 404. The access log never shows the
+	// ticket (DefaultRedactedPathPrefixes).
+	Download DownloadHandler
 	// Sessions enables the session middleware on /graphql and /api (task
 	// 1.5); nil: every request there is anonymous and cannot set cookies.
 	Sessions *SessionOptions
@@ -116,6 +120,13 @@ func OptionsFromConfig(c *config.Server, dev bool) (Options, error) {
 		IdleTimeout:       c.IdleTimeout.D(),
 		MaxHeaderBytes:    c.MaxHeaderBytes,
 	}, nil
+}
+
+// DownloadHandler serves one download ticket (internal/downloads). The
+// handler owns the response, including lifting the write deadline for the
+// stream (LiftDeadlines).
+type DownloadHandler interface {
+	ServeDownload(w http.ResponseWriter, r *http.Request, ticket string)
 }
 
 // Server is the assembled HTTP handler.
@@ -189,7 +200,15 @@ func New(opts Options) (*Server, error) {
 	}
 	r.Handle("/graphql", withSession(orNotFound(opts.GraphQL)))
 	r.Handle("/graphql/*", orNotFound(nil))
-	r.Mount("/api", withSession(orNotFound(opts.API)))
+	api := chi.NewRouter()
+	if opts.Download != nil {
+		dl := opts.Download
+		api.Get("/download/{ticket}", func(w http.ResponseWriter, r *http.Request) {
+			dl.ServeDownload(w, r, chi.URLParam(r, "ticket"))
+		})
+	}
+	api.Mount("/", orNotFound(opts.API))
+	r.Mount("/api", withSession(api))
 	r.NotFound(spa.ServeHTTP)
 	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed)

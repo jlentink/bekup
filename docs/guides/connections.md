@@ -10,7 +10,7 @@ and host-key capture runs on the runner over its mTLS API.
 
 | Action | Admin | Maintainer | Backup owner / user |
 |---|---|---|---|
-| List / view (name, engine, version, host, port, TLS mode, pin status and expiry, SSH enabled) | yes | yes (metadata only) | no |
+| List / view (name, engine, version, host, port, TLS mode, pin status and expiry, SSH enabled, run limit) | yes | yes (metadata only) | no |
 | Full settings (image key, user, credential flags, pins, SSH settings) | yes | no | no |
 | `testConnection`, `detectVersion`, `listDatabases`, `prePullImage` | yes | yes | no |
 | `fetchCertificate`, `fetchSshHostKey` | yes | no | no |
@@ -75,6 +75,41 @@ the update fails with `VALIDATION`. Private keys and the TLS client key
 stay. The audit entry lists the re-entered fields
 (`reentered_for_new_endpoint`). Runner calls are rate limited per user (10 per minute) and
 each must be the only field of its GraphQL operation.
+
+## Concurrent runs per connection
+
+Each connection limits how many backup and restore runs work against it at
+the same time (task 3.13, D-156, D-158). By default the global
+`[workers] max_runs_per_connection` (default 1) applies; set
+`maxConcurrentRuns` on `createConnection` or `updateConnection` to give one
+server its own limit, and `clearMaxConcurrentRuns: true` to return to the
+default. Changing it is admin only with a fresh step-up, like every
+connection change, and is audited (`connection.updated` lists
+`max_concurrent_runs` with the old and new value).
+
+- Allowed values: 1 to 64, and never more than `[workers]
+  max_concurrent_runs` (the global cap); anything else answers
+  `VALIDATION`.
+- `maxConcurrentRuns` is the connection's own value (null = default);
+  `effectiveMaxConcurrentRuns` is the limit that applies. Admins and
+  maintainers see both.
+- A run that finds the limit reached stays `queued` and retries about
+  every 15 seconds until a slot frees up; it never fails because of the
+  limit.
+- **Backups and restores share the limit.** Both take a run slot on the
+  connection, so with a limit of 1 a restore waits behind a running backup
+  of the same connection (and a backup behind a restore). Raise the limit,
+  or cancel the backup, if a restore must start at once.
+- A stored limit above a since lowered `[workers] max_concurrent_runs` is
+  kept but clamped: `effectiveMaxConcurrentRuns` shows the lower value, and
+  the global cap is always enforced when a run takes its slot.
+- **Lowering the limit never stops running backups.** New runs wait until
+  fewer runs than the new limit are active on the connection.
+
+Raise the limit only if the database server can take several dumps at
+once (CPU, I/O and connection slots on the server). See
+[Operations](../operations.md#scaling-background-work) for how it relates
+to the global settings.
 
 ### Errors
 

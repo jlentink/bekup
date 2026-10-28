@@ -9,3 +9,6 @@ SELECT pg_notify(@channel::text, @payload::text);
 
 -- name: ListenSessionEvents :exec
 LISTEN bekup_session_events;
+
+-- name: ListenRunEvents :exec
+LISTEN bekup_run_events;

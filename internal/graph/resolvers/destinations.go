@@ -3,6 +3,7 @@ package resolvers
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -30,6 +31,7 @@ var (
 
 // destinationError maps service errors to API errors.
 func destinationError(err error) error {
+	var inUse *destinations.InUseError
 	var (
 		fe *destinations.FieldError
 		nr *destinations.NotReadyError
@@ -56,6 +58,8 @@ func destinationError(err error) error {
 		return apierror.New(apierror.Conflict, "another destination already uses this name")
 	case errors.Is(err, destinations.ErrConflict):
 		return apierror.New(apierror.Conflict, "the destination was changed in the meantime; reload and try again")
+	case errors.As(err, &inUse):
+		return apierror.New(apierror.Conflict, "the destination is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
 	case errors.Is(err, destinations.ErrInUse):
 		return apierror.New(apierror.Conflict, "the destination is still used by a job")
 	case errors.Is(err, destinations.ErrWrongType):

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	_ "time/tzdata" // embedded IANA zone database for schedules (D-044)
 
 	"github.com/jlentink/bekup/internal/logging"
 )

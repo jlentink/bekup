@@ -88,6 +88,8 @@ func (v *Validator) FetchHostKey(ctx context.Context, req *runnerpb.FetchHostKey
 type DatabaseOp struct {
 	*Target
 	Database string
+	// Stats is set for a Dump with statistics enabled (task 3.10).
+	Stats *Stats
 }
 
 // database validates a database name; write operations additionally
@@ -122,7 +124,11 @@ func (v *Validator) Dump(ctx context.Context, req *runnerpb.DumpRequest) (*Datab
 	if err := database(t, req.GetDatabase(), false); err != nil {
 		return nil, err
 	}
-	return &DatabaseOp{Target: t, Database: req.GetDatabase()}, nil
+	st, err := StatsOptions(req.GetStats())
+	if err != nil {
+		return nil, err
+	}
+	return &DatabaseOp{Target: t, Database: req.GetDatabase(), Stats: st}, nil
 }
 
 // DumpGlobals validates a DumpGlobalsRequest (PostgreSQL only).
@@ -238,11 +244,15 @@ type Verify struct {
 	Kind  engine.Kind
 	Entry engine.Entry
 	Dump  runnerpb.DumpKind
+	// Total is the announced size (0 for a streamed dump).
 	Total uint64
+	// Streamed: the header announced no size; a trailer ends the stream.
+	Streamed bool
 }
 
 // VerifyHeader validates the first message of a VerifyDump stream; it
-// must be a header.
+// must be a header. total_bytes 0 announces a streamed dump whose chunks
+// end with a VerifyDumpTrailer (at most MaxDumpBytes in total).
 func (v *Validator) VerifyHeader(req *runnerpb.VerifyDumpRequest) (*Verify, *Stream, error) {
 	if err := checkEnvelope(req, MaxRequestBytes); err != nil {
 		return nil, nil, err
@@ -260,6 +270,12 @@ func (v *Validator) VerifyHeader(req *runnerpb.VerifyDumpRequest) (*Verify, *Str
 	}
 	if err := dumpKind("header.kind", k, h.GetKind()); err != nil {
 		return nil, nil, err
+	}
+	// total_bytes 0 announces a streamed dump (task 3.6): its size is
+	// checked against the trailer that must end the stream.
+	if h.GetTotalBytes() == 0 {
+		return &Verify{Kind: k, Entry: ent, Dump: h.GetKind(), Streamed: true},
+			&Stream{total: MaxDumpBytes, streamed: true}, nil
 	}
 	if err := totalBytes("header.total_bytes", h.GetTotalBytes()); err != nil {
 		return nil, nil, err

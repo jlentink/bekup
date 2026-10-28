@@ -13,7 +13,7 @@ import (
 )
 
 const getConnection = `-- name: GetConnection :one
-SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary
 `
 
 func (q *Queries) GetConnection(ctx context.Context, id uuid.UUID) (Connection, error) {
@@ -61,12 +61,13 @@ func (q *Queries) GetConnection(ctx context.Context, id uuid.UUID) (Connection, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
 
 const getConnectionForUpdate = `-- name: GetConnectionForUpdate :one
-SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary FOR UPDATE
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections WHERE id = $1 AND deleted_at IS NULL AND NOT temporary FOR UPDATE
 `
 
 // GetConnectionForUpdate locks a connection that is not deleted.
@@ -115,6 +116,7 @@ func (q *Queries) GetConnectionForUpdate(ctx context.Context, id uuid.UUID) (Con
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -122,34 +124,35 @@ func (q *Queries) GetConnectionForUpdate(ctx context.Context, id uuid.UUID) (Con
 const insertConnection = `-- name: InsertConnection :one
 INSERT INTO connections (id, name, engine, version_key, image_key, host, port, username,
                          has_password, client_cert_pem, tls_mode, ssh_enabled, ssh_host, ssh_port, ssh_user,
-                         ssh_auth, ssh_has_passphrase, ssh_public_key, secret_enc, created_by)
+                         ssh_auth, ssh_has_passphrase, ssh_public_key, secret_enc, created_by, max_concurrent_runs)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15,
-        $16, $17, $18, $19, $20)
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+        $16, $17, $18, $19, $20, $21)
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type InsertConnectionParams struct {
-	ID               uuid.UUID         `json:"id"`
-	Name             string            `json:"name"`
-	Engine           ConnectionEngine  `json:"engine"`
-	VersionKey       string            `json:"versionKey"`
-	ImageKey         string            `json:"imageKey"`
-	Host             string            `json:"host"`
-	Port             int32             `json:"port"`
-	Username         string            `json:"username"`
-	HasPassword      bool              `json:"hasPassword"`
-	ClientCertPem    *string           `json:"clientCertPem"`
-	TlsMode          ConnectionTlsMode `json:"tlsMode"`
-	SshEnabled       bool              `json:"sshEnabled"`
-	SshHost          *string           `json:"sshHost"`
-	SshPort          *int32            `json:"sshPort"`
-	SshUser          *string           `json:"sshUser"`
-	SshAuth          ConnectionSshAuth `json:"sshAuth"`
-	SshHasPassphrase bool              `json:"sshHasPassphrase"`
-	SshPublicKey     *string           `json:"sshPublicKey"`
-	SecretEnc        []byte            `json:"secretEnc"`
-	CreatedBy        *uuid.UUID        `json:"createdBy"`
+	ID                uuid.UUID         `json:"id"`
+	Name              string            `json:"name"`
+	Engine            ConnectionEngine  `json:"engine"`
+	VersionKey        string            `json:"versionKey"`
+	ImageKey          string            `json:"imageKey"`
+	Host              string            `json:"host"`
+	Port              int32             `json:"port"`
+	Username          string            `json:"username"`
+	HasPassword       bool              `json:"hasPassword"`
+	ClientCertPem     *string           `json:"clientCertPem"`
+	TlsMode           ConnectionTlsMode `json:"tlsMode"`
+	SshEnabled        bool              `json:"sshEnabled"`
+	SshHost           *string           `json:"sshHost"`
+	SshPort           *int32            `json:"sshPort"`
+	SshUser           *string           `json:"sshUser"`
+	SshAuth           ConnectionSshAuth `json:"sshAuth"`
+	SshHasPassphrase  bool              `json:"sshHasPassphrase"`
+	SshPublicKey      *string           `json:"sshPublicKey"`
+	SecretEnc         []byte            `json:"secretEnc"`
+	CreatedBy         *uuid.UUID        `json:"createdBy"`
+	MaxConcurrentRuns *int32            `json:"maxConcurrentRuns"`
 }
 
 // InsertConnection creates the row with an id chosen by the application,
@@ -176,6 +179,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		arg.SshPublicKey,
 		arg.SecretEnc,
 		arg.CreatedBy,
+		arg.MaxConcurrentRuns,
 	)
 	var i Connection
 	err := row.Scan(
@@ -220,13 +224,14 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
 
 const listConnections = `-- name: ListConnections :many
 
-SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at FROM connections
+SELECT id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs FROM connections
 WHERE deleted_at IS NULL AND NOT temporary
 ORDER BY lower(name), id
 `
@@ -286,6 +291,7 @@ func (q *Queries) ListConnections(ctx context.Context) ([]Connection, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.MaxConcurrentRuns,
 		); err != nil {
 			return nil, err
 		}
@@ -305,7 +311,7 @@ SET tls_backup_pin_cert_pem = $1,
     tls_backup_pinned_at = now(),
     tls_backup_pinned_by = $4
 WHERE id = $5 AND deleted_at IS NULL AND NOT temporary
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionBackupPinParams struct {
@@ -367,6 +373,7 @@ func (q *Queries) SetConnectionBackupPin(ctx context.Context, arg SetConnectionB
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -379,7 +386,7 @@ SET ssh_host_key_type = $1,
     ssh_host_key_confirmed_at = now(),
     ssh_host_key_confirmed_by = $4
 WHERE id = $5 AND deleted_at IS NULL AND NOT temporary AND ssh_enabled
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionHostKeyParams struct {
@@ -441,6 +448,7 @@ func (q *Queries) SetConnectionHostKey(ctx context.Context, arg SetConnectionHos
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -458,7 +466,7 @@ SET tls_pin_cert_pem = $1,
     tls_backup_pinned_at = CASE WHEN $5::boolean THEN NULL ELSE tls_backup_pinned_at END,
     tls_backup_pinned_by = CASE WHEN $5::boolean THEN NULL ELSE tls_backup_pinned_by END
 WHERE id = $6 AND deleted_at IS NULL AND NOT temporary
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionPinParams struct {
@@ -524,6 +532,7 @@ func (q *Queries) SetConnectionPin(ctx context.Context, arg SetConnectionPinPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -535,7 +544,7 @@ SET ssh_auth = $1,
     ssh_public_key = $3,
     secret_enc = $4
 WHERE id = $5 AND deleted_at IS NULL AND NOT temporary AND ssh_enabled
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionSSHAuthParams struct {
@@ -597,6 +606,7 @@ func (q *Queries) SetConnectionSSHAuth(ctx context.Context, arg SetConnectionSSH
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -604,7 +614,7 @@ func (q *Queries) SetConnectionSSHAuth(ctx context.Context, arg SetConnectionSSH
 const setConnectionTLSMode = `-- name: SetConnectionTLSMode :one
 UPDATE connections SET tls_mode = $1
 WHERE id = $2 AND deleted_at IS NULL AND NOT temporary
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type SetConnectionTLSModeParams struct {
@@ -657,6 +667,7 @@ func (q *Queries) SetConnectionTLSMode(ctx context.Context, arg SetConnectionTLS
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }
@@ -693,46 +704,48 @@ SET name = $1,
     ssh_has_passphrase = $15,
     ssh_public_key = $16,
     secret_enc = $17,
-    tls_pin_cert_pem = CASE WHEN $18::boolean THEN NULL ELSE tls_pin_cert_pem END,
-    tls_pin_spki = CASE WHEN $18::boolean THEN NULL ELSE tls_pin_spki END,
-    tls_pin_not_after = CASE WHEN $18::boolean THEN NULL ELSE tls_pin_not_after END,
-    tls_pinned_at = CASE WHEN $18::boolean THEN NULL ELSE tls_pinned_at END,
-    tls_pinned_by = CASE WHEN $18::boolean THEN NULL ELSE tls_pinned_by END,
-    tls_backup_pin_cert_pem = CASE WHEN $18::boolean THEN NULL ELSE tls_backup_pin_cert_pem END,
-    tls_backup_pin_spki = CASE WHEN $18::boolean THEN NULL ELSE tls_backup_pin_spki END,
-    tls_backup_pin_not_after = CASE WHEN $18::boolean THEN NULL ELSE tls_backup_pin_not_after END,
-    tls_backup_pinned_at = CASE WHEN $18::boolean THEN NULL ELSE tls_backup_pinned_at END,
-    tls_backup_pinned_by = CASE WHEN $18::boolean THEN NULL ELSE tls_backup_pinned_by END,
-    ssh_host_key_type = CASE WHEN $19::boolean THEN NULL ELSE ssh_host_key_type END,
-    ssh_host_key_fingerprint = CASE WHEN $19::boolean THEN NULL ELSE ssh_host_key_fingerprint END,
-    ssh_host_key_authorized_key = CASE WHEN $19::boolean THEN NULL ELSE ssh_host_key_authorized_key END,
-    ssh_host_key_confirmed_at = CASE WHEN $19::boolean THEN NULL ELSE ssh_host_key_confirmed_at END,
-    ssh_host_key_confirmed_by = CASE WHEN $19::boolean THEN NULL ELSE ssh_host_key_confirmed_by END
-WHERE id = $20 AND deleted_at IS NULL AND NOT temporary
-RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at
+    max_concurrent_runs = $18,
+    tls_pin_cert_pem = CASE WHEN $19::boolean THEN NULL ELSE tls_pin_cert_pem END,
+    tls_pin_spki = CASE WHEN $19::boolean THEN NULL ELSE tls_pin_spki END,
+    tls_pin_not_after = CASE WHEN $19::boolean THEN NULL ELSE tls_pin_not_after END,
+    tls_pinned_at = CASE WHEN $19::boolean THEN NULL ELSE tls_pinned_at END,
+    tls_pinned_by = CASE WHEN $19::boolean THEN NULL ELSE tls_pinned_by END,
+    tls_backup_pin_cert_pem = CASE WHEN $19::boolean THEN NULL ELSE tls_backup_pin_cert_pem END,
+    tls_backup_pin_spki = CASE WHEN $19::boolean THEN NULL ELSE tls_backup_pin_spki END,
+    tls_backup_pin_not_after = CASE WHEN $19::boolean THEN NULL ELSE tls_backup_pin_not_after END,
+    tls_backup_pinned_at = CASE WHEN $19::boolean THEN NULL ELSE tls_backup_pinned_at END,
+    tls_backup_pinned_by = CASE WHEN $19::boolean THEN NULL ELSE tls_backup_pinned_by END,
+    ssh_host_key_type = CASE WHEN $20::boolean THEN NULL ELSE ssh_host_key_type END,
+    ssh_host_key_fingerprint = CASE WHEN $20::boolean THEN NULL ELSE ssh_host_key_fingerprint END,
+    ssh_host_key_authorized_key = CASE WHEN $20::boolean THEN NULL ELSE ssh_host_key_authorized_key END,
+    ssh_host_key_confirmed_at = CASE WHEN $20::boolean THEN NULL ELSE ssh_host_key_confirmed_at END,
+    ssh_host_key_confirmed_by = CASE WHEN $20::boolean THEN NULL ELSE ssh_host_key_confirmed_by END
+WHERE id = $21 AND deleted_at IS NULL AND NOT temporary
+RETURNING id, name, engine, version_key, image_key, host, port, username, has_password, client_cert_pem, tls_mode, tls_pin_cert_pem, tls_pin_spki, tls_pin_not_after, tls_pinned_at, tls_pinned_by, tls_backup_pin_cert_pem, tls_backup_pin_spki, tls_backup_pin_not_after, tls_backup_pinned_at, tls_backup_pinned_by, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_auth, ssh_has_passphrase, ssh_public_key, ssh_host_key_type, ssh_host_key_fingerprint, ssh_host_key_authorized_key, ssh_host_key_confirmed_at, ssh_host_key_confirmed_by, secret_enc, temporary, expires_at, created_for_restore_id, created_by, created_at, updated_at, deleted_at, max_concurrent_runs
 `
 
 type UpdateConnectionParams struct {
-	Name             string            `json:"name"`
-	Engine           ConnectionEngine  `json:"engine"`
-	VersionKey       string            `json:"versionKey"`
-	ImageKey         string            `json:"imageKey"`
-	Host             string            `json:"host"`
-	Port             int32             `json:"port"`
-	Username         string            `json:"username"`
-	HasPassword      bool              `json:"hasPassword"`
-	ClientCertPem    *string           `json:"clientCertPem"`
-	SshEnabled       bool              `json:"sshEnabled"`
-	SshHost          *string           `json:"sshHost"`
-	SshPort          *int32            `json:"sshPort"`
-	SshUser          *string           `json:"sshUser"`
-	SshAuth          ConnectionSshAuth `json:"sshAuth"`
-	SshHasPassphrase bool              `json:"sshHasPassphrase"`
-	SshPublicKey     *string           `json:"sshPublicKey"`
-	SecretEnc        []byte            `json:"secretEnc"`
-	ClearPins        bool              `json:"clearPins"`
-	ClearHostKey     bool              `json:"clearHostKey"`
-	ID               uuid.UUID         `json:"id"`
+	Name              string            `json:"name"`
+	Engine            ConnectionEngine  `json:"engine"`
+	VersionKey        string            `json:"versionKey"`
+	ImageKey          string            `json:"imageKey"`
+	Host              string            `json:"host"`
+	Port              int32             `json:"port"`
+	Username          string            `json:"username"`
+	HasPassword       bool              `json:"hasPassword"`
+	ClientCertPem     *string           `json:"clientCertPem"`
+	SshEnabled        bool              `json:"sshEnabled"`
+	SshHost           *string           `json:"sshHost"`
+	SshPort           *int32            `json:"sshPort"`
+	SshUser           *string           `json:"sshUser"`
+	SshAuth           ConnectionSshAuth `json:"sshAuth"`
+	SshHasPassphrase  bool              `json:"sshHasPassphrase"`
+	SshPublicKey      *string           `json:"sshPublicKey"`
+	SecretEnc         []byte            `json:"secretEnc"`
+	MaxConcurrentRuns *int32            `json:"maxConcurrentRuns"`
+	ClearPins         bool              `json:"clearPins"`
+	ClearHostKey      bool              `json:"clearHostKey"`
+	ID                uuid.UUID         `json:"id"`
 }
 
 // UpdateConnection replaces the mutable fields (not the TLS mode, which
@@ -758,6 +771,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		arg.SshHasPassphrase,
 		arg.SshPublicKey,
 		arg.SecretEnc,
+		arg.MaxConcurrentRuns,
 		arg.ClearPins,
 		arg.ClearHostKey,
 		arg.ID,
@@ -805,6 +819,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.MaxConcurrentRuns,
 	)
 	return i, err
 }

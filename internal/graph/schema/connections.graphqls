@@ -72,6 +72,20 @@ type Connection {
   ready: Boolean!
   "What is missing when not ready."
   notReadyReason: String
+  """
+  The connection's own limit of concurrent runs; null uses the global
+  workers.max_runs_per_connection (task 3.13). Backups and restores share
+  this limit (a limit of 1 makes a restore wait behind a running backup).
+  The stored value may exceed a since lowered workers.max_concurrent_runs;
+  effectiveMaxConcurrentRuns shows the clamped value, and the global cap is
+  always enforced when a run takes its slot.
+  """
+  maxConcurrentRuns: Int
+  """
+  The limit that applies: maxConcurrentRuns or the global default, clamped
+  to workers.max_concurrent_runs. Runs beyond it wait for a slot.
+  """
+  effectiveMaxConcurrentRuns: Int!
   createdAt: Time!
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
@@ -313,6 +327,8 @@ input CreateConnectionInput {
   "Write-only; required together with clientCertificatePem."
   clientKeyPem: String
   ssh: ConnectionSshInput
+  "Concurrent run limit, 1..64 and at most workers.max_concurrent_runs; omit for the global default."
+  maxConcurrentRuns: Int
 }
 
 "Fields to change; unset fields stay unchanged. The engine and TLS mode cannot change here."
@@ -339,6 +355,13 @@ input UpdateConnectionInput {
   ssh: ConnectionSshInput
   "Removes the SSH tunnel with its credentials and host-key pin."
   disableSsh: Boolean
+  """
+  Concurrent run limit, 1..64 and at most workers.max_concurrent_runs.
+  Lowering it never stops active runs; new runs wait until fewer run.
+  """
+  maxConcurrentRuns: Int
+  "Returns to the global workers.max_runs_per_connection."
+  clearMaxConcurrentRuns: Boolean
 }
 
 input ConnectionSshInput {

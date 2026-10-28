@@ -83,6 +83,12 @@ type Options struct {
 	Limiter func(key string) (bool, time.Duration)
 	// MaxConcurrent bounds concurrent runner operations (default 4).
 	MaxConcurrent int
+	// MaxConcurrentRuns is workers.max_concurrent_runs, the global cap a
+	// connection's own run limit may not exceed (default 4; task 3.13).
+	MaxConcurrentRuns int
+	// DefaultRunsPerConnection is workers.max_runs_per_connection, the run
+	// limit of a connection without its own (default 1).
+	DefaultRunsPerConnection int
 	// OperationTimeout bounds one runner operation (default 60s).
 	OperationTimeout time.Duration
 	// Now overrides the clock (tests).
@@ -120,6 +126,12 @@ func New(o Options) (*Service, error) {
 	}
 	if o.OperationTimeout <= 0 {
 		o.OperationTimeout = 60 * time.Second
+	}
+	if o.MaxConcurrentRuns <= 0 {
+		o.MaxConcurrentRuns = 4
+	}
+	if o.DefaultRunsPerConnection <= 0 {
+		o.DefaultRunsPerConnection = 1
 	}
 	if o.Now == nil {
 		o.Now = time.Now
@@ -175,6 +187,7 @@ func (s *Service) view(row *sqlc.Connection) Connection {
 		ClientCertPEM: deref(row.ClientCertPem), TLSMode: TLSMode(row.TlsMode),
 		CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
+	c.MaxConcurrentRuns, c.EffectiveMaxConcurrentRuns = s.runLimits(row.MaxConcurrentRuns)
 	for _, k := range []string{row.VersionKey, row.ImageKey} {
 		if e, ok := s.o.Catalog.Lookup(c.Engine, k); ok && e.Legacy() {
 			c.Legacy = true
@@ -301,7 +314,9 @@ type state struct {
 	sshAuth       SSHAuth
 	sshPass       bool
 	sshPublicKey  string
-	creds         *Credentials
+	// maxRuns is the connection's own run limit (nil = the global default).
+	maxRuns *int
+	creds   *Credentials
 	// credsChanged names the credential fields that were set or removed.
 	credsChanged []string
 	clearPins    bool
@@ -315,6 +330,7 @@ func stateOf(row *sqlc.Connection, creds *Credentials) *state {
 		clientCertPEM: deref(row.ClientCertPem), ssh: row.SshEnabled, sshHost: deref(row.SshHost),
 		sshPort: int(deref(row.SshPort)), sshUser: deref(row.SshUser), sshAuth: SSHAuth(row.SshAuth),
 		sshPass: row.SshHasPassphrase, sshPublicKey: deref(row.SshPublicKey), creds: creds,
+		maxRuns: intPtr(row.MaxConcurrentRuns),
 	}
 }
 
@@ -527,6 +543,13 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 			return Connection{}, err
 		}
 	}
+	if in.MaxConcurrentRuns != nil {
+		if err := s.checkRunLimit(*in.MaxConcurrentRuns); err != nil {
+			return Connection{}, err
+		}
+		n := *in.MaxConcurrentRuns
+		st.maxRuns = &n
+	}
 	if err := s.validate(st); err != nil {
 		return Connection{}, err
 	}
@@ -545,7 +568,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Conn
 			ClientCertPem: optString(st.clientCertPEM), TlsMode: sqlc.ConnectionTlsMode(st.tlsMode),
 			SshEnabled: st.ssh, SshHost: optString(st.sshHost), SshPort: optInt32(st.sshPort, st.ssh), SshUser: optString(st.sshUser),
 			SshAuth: sqlc.ConnectionSshAuth(st.sshAuth), SshHasPassphrase: st.sshPass, SshPublicKey: optString(st.sshPublicKey),
-			SecretEnc: sealed, CreatedBy: &actor.UserID,
+			SecretEnc: sealed, CreatedBy: &actor.UserID, MaxConcurrentRuns: int32Ptr(st.maxRuns),
 		})
 		if serviceutil.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -595,6 +618,9 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 	if err := applyUpdate(st, &in); err != nil {
 		return Connection{}, err
 	}
+	if err := s.applyRunLimit(st, &in); err != nil {
+		return Connection{}, err
+	}
 	if st.host != cur.Host || st.port != int(cur.Port) {
 		st.clearPins = true
 	}
@@ -633,6 +659,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 			SshEnabled:    st.ssh, SshHost: optString(st.sshHost), SshPort: optInt32(st.sshPort, st.ssh), SshUser: optString(st.sshUser),
 			SshAuth: sqlc.ConnectionSshAuth(st.sshAuth), SshHasPassphrase: st.sshPass, SshPublicKey: optString(st.sshPublicKey),
 			SecretEnc: sealed, ClearPins: st.clearPins, ClearHostKey: st.clearHostKey,
+			MaxConcurrentRuns: int32Ptr(st.maxRuns),
 		})
 		if serviceutil.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -784,12 +811,33 @@ func (s *Service) Delete(ctx context.Context, actor Actor, id uuid.UUID) error {
 	})
 }
 
-// checkUnused is the hook that refuses deleting a connection that is still
-// in use. Jobs (task 3.5) must refuse it while a job backs up the
-// connection; artifacts (tasks 3.6+) keep referencing a soft-deleted row.
-// Until those tables exist nothing references connections.
-func (s *Service) checkUnused(context.Context, *sqlc.Queries, uuid.UUID) error {
-	return nil
+// InUseError reports the (up to five) non-deleted jobs that still back up
+// the connection; it matches ErrInUse with errors.Is. Job names are shown only
+// to admins (the only role that may delete).
+type InUseError struct{ Jobs []string }
+
+func (e *InUseError) Error() string { return ErrInUse.Error() + ": " + strings.Join(e.Jobs, ", ") }
+
+// Is matches ErrInUse.
+func (e *InUseError) Is(target error) bool { return target == ErrInUse }
+
+// checkUnused refuses deleting a connection that a non-deleted job still uses
+// (task 3.5). The job side share-locks the connection row when it saves a job,
+// and Delete holds the row lock here, so the two cannot race. Artifacts
+// (tasks 3.6+) keep referencing a soft-deleted row and never block.
+func (s *Service) checkUnused(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
+	rows, err := q.JobsUsingConnection(ctx, id)
+	if err != nil {
+		return fmt.Errorf("connections: in-use check: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	names := make([]string, len(rows))
+	for i, r := range rows {
+		names[i] = r.Name
+	}
+	return &InUseError{Jobs: names}
 }
 
 // SetTLSMode changes the TLS mode. A downgrade (pinned → unverified →
@@ -882,6 +930,7 @@ func auditSettings(st *state) map[string]any {
 		"engine": string(st.engine), "version_key": st.versionKey, "image_key": st.imageKey,
 		"host": st.host, "port": st.port, "username": st.username, "tls_mode": string(st.tlsMode),
 		"client_certificate": st.clientCertPEM != "", "ssh_enabled": st.ssh,
+		"max_concurrent_runs": optValue(st.maxRuns),
 	}
 	if st.ssh {
 		m["ssh_host"], m["ssh_port"], m["ssh_user"], m["ssh_auth"] = st.sshHost, st.sshPort, st.sshUser, string(st.sshAuth)
@@ -917,6 +966,7 @@ func diff(cur *sqlc.Connection, st *state) ([]string, map[string]any) {
 	cmp("ssh_user", deref(cur.SshUser), st.sshUser, true)
 	cmp("ssh_auth", string(cur.SshAuth), string(st.sshAuth), true)
 	cmp("ssh_public_key", deref(cur.SshPublicKey), st.sshPublicKey, false)
+	cmp("max_concurrent_runs", optValue(intPtr(cur.MaxConcurrentRuns)), optValue(st.maxRuns), true)
 	changed = append(changed, st.credsChanged...)
 	if st.clearPins && (cur.TlsPinCertPem != nil || cur.TlsBackupPinCertPem != nil) {
 		changed = append(changed, "tls_pins")
@@ -931,4 +981,79 @@ func diff(cur *sqlc.Connection, st *state) ([]string, map[string]any) {
 func certFingerprint(der []byte) string {
 	sum := sha256.Sum256(der)
 	return hex.EncodeToString(sum[:])
+}
+
+// --- run limit (task 3.13, D-156) -------------------------------------------
+
+// MaxRunLimit is the largest per-connection run limit (the column's CHECK).
+const MaxRunLimit = 64
+
+// checkRunLimit validates a connection's own run limit: 1..MaxRunLimit and
+// not above workers.max_concurrent_runs.
+func (s *Service) checkRunLimit(n int) error {
+	if n < 1 || n > MaxRunLimit {
+		return fieldErr("maxConcurrentRuns", "must be between 1 and %d", MaxRunLimit)
+	}
+	if n > s.o.MaxConcurrentRuns {
+		return fieldErr("maxConcurrentRuns", "must not exceed workers.max_concurrent_runs (%d)", s.o.MaxConcurrentRuns)
+	}
+	return nil
+}
+
+// applyRunLimit applies the run-limit fields of in to st. Only a value
+// that is set is checked against the global cap: a stored value above a
+// since lowered cap does not block unrelated updates. Such a value is not
+// rewritten; runLimits reports it clamped, and TryInsertRunSlot never lets
+// more runs hold slots than workers.max_concurrent_runs in total, so the
+// connection never sees more runs than the global cap.
+func (s *Service) applyRunLimit(st *state, in *UpdateInput) error {
+	switch {
+	case in.ClearMaxConcurrentRuns && in.MaxConcurrentRuns != nil:
+		return fieldErr("maxConcurrentRuns", "set either maxConcurrentRuns or clearMaxConcurrentRuns")
+	case in.ClearMaxConcurrentRuns:
+		st.maxRuns = nil
+	case in.MaxConcurrentRuns != nil:
+		if err := s.checkRunLimit(*in.MaxConcurrentRuns); err != nil {
+			return err
+		}
+		n := *in.MaxConcurrentRuns
+		st.maxRuns = &n
+	}
+	return nil
+}
+
+// runLimits returns a connection's own run limit and the limit that
+// applies: the own limit or workers.max_runs_per_connection, never above
+// workers.max_concurrent_runs.
+func (s *Service) runLimits(v *int32) (*int, int) {
+	own := intPtr(v)
+	eff := s.o.DefaultRunsPerConnection
+	if own != nil {
+		eff = *own
+	}
+	return own, min(eff, s.o.MaxConcurrentRuns)
+}
+
+func intPtr(v *int32) *int {
+	if v == nil {
+		return nil
+	}
+	n := int(*v)
+	return &n
+}
+
+func int32Ptr(v *int) *int32 {
+	if v == nil {
+		return nil
+	}
+	n := int32(*v) //nolint:gosec // G115: validated 1..MaxRunLimit
+	return &n
+}
+
+// optValue is v's value, or nil (audit details, diff).
+func optValue(v *int) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }

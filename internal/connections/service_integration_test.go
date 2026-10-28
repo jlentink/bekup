@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
@@ -82,6 +84,7 @@ type svcEnv struct {
 	runner  *fakeRunner
 	auditor *audit.Auditor
 	q       *sqlc.Queries
+	pool    *pgxpool.Pool
 	actor   Actor
 	alerts  []Alert
 	mu      sync.Mutex
@@ -91,7 +94,7 @@ func newSvcEnv(t *testing.T) *svcEnv {
 	t.Helper()
 	d := dbtest.Migrated(t)
 	pool := d.AppPool(t)
-	e := &svcEnv{runner: &fakeRunner{}, auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool)}
+	e := &svcEnv{runner: &fakeRunner{}, auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool), pool: pool}
 	var err error
 	e.svc, err = New(Options{
 		DB: pool, Keyring: testKeyring(t), Auditor: e.auditor, Runner: e.runner,
@@ -380,6 +383,19 @@ func TestServiceLifecycle(t *testing.T) {
 		t.Fatal("secret.changed entries missing")
 	}
 
+	// A connection backed up by a (non-deleted) job cannot be deleted
+	// (task 3.5); once the job is deleted it can.
+	jobID, err := dbtest.InsertJob(ctx, e.pool, dbtest.JobRow{ConnectionID: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inUse *InUseError
+	if err := e.svc.Delete(ctx, e.actor, c.ID); !errors.Is(err, ErrInUse) || !errors.As(err, &inUse) || len(inUse.Jobs) != 1 {
+		t.Fatalf("delete while in use: %v", err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE jobs SET deleted_at = now() WHERE id = $1", jobID); err != nil {
+		t.Fatal(err)
+	}
 	if err := e.svc.Delete(ctx, e.actor, c.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -436,5 +452,80 @@ func TestCreateUnpinnedIsOptOut(t *testing.T) {
 	var fe *FieldError
 	if _, err := e.svc.SetTLSMode(t.Context(), e.actor, c.ID, TLSPinned); !errors.As(err, &fe) {
 		t.Fatalf("upgrade on ip literal: %v", err)
+	}
+}
+
+// TestRunLimit covers the per-connection run limit (task 3.13, D-156):
+// bounds against the column range and workers.max_concurrent_runs (default
+// 4 here), the effective value, clearing, and the audit by field name.
+func TestRunLimit(t *testing.T) {
+	e := newSvcEnv(t)
+	ctx := t.Context()
+	var fe *FieldError
+	for _, bad := range []int{0, 65, 5} {
+		n := bad
+		_, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "bad", Engine: engine.KindPostgres, VersionKey: "16", Host: "db.example.com", Username: "u", MaxConcurrentRuns: &n})
+		if !errors.As(err, &fe) || fe.Field != "maxConcurrentRuns" {
+			t.Fatalf("create with %d: %v", bad, err)
+		}
+	}
+	two := 2
+	c, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "limited", Engine: engine.KindPostgres, VersionKey: "16", Host: "db.example.com", Username: "u", MaxConcurrentRuns: &two})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.MaxConcurrentRuns == nil || *c.MaxConcurrentRuns != 2 || c.EffectiveMaxConcurrentRuns != 2 {
+		t.Fatalf("created: %v %d", c.MaxConcurrentRuns, c.EffectiveMaxConcurrentRuns)
+	}
+	got := e.auditEntries(t, audit.ActionConnectionCreated)
+	if len(got) != 1 {
+		t.Fatalf("create audit: %v", got)
+	}
+	if settings, ok := got[0]["settings"].(map[string]any); !ok || settings["max_concurrent_runs"] != float64(2) {
+		t.Fatalf("create audit: %v", got)
+	}
+	for _, bad := range []int{0, 65, 5} {
+		n := bad
+		if _, err := e.svc.Update(ctx, e.actor, c.ID, UpdateInput{MaxConcurrentRuns: &n}); !errors.As(err, &fe) || fe.Field != "maxConcurrentRuns" {
+			t.Fatalf("update with %d: %v", bad, err)
+		}
+	}
+	one := 1
+	if _, err := e.svc.Update(ctx, e.actor, c.ID, UpdateInput{MaxConcurrentRuns: &one, ClearMaxConcurrentRuns: true}); !errors.As(err, &fe) {
+		t.Fatalf("set and clear: %v", err)
+	}
+	c, err = e.svc.Update(ctx, e.actor, c.ID, UpdateInput{MaxConcurrentRuns: &one})
+	if err != nil || c.MaxConcurrentRuns == nil || *c.MaxConcurrentRuns != 1 || c.EffectiveMaxConcurrentRuns != 1 {
+		t.Fatalf("update: %v %v", c.MaxConcurrentRuns, err)
+	}
+	upd := e.auditEntries(t, audit.ActionConnectionUpdated)
+	if len(upd) != 1 || !strings.Contains(fmt.Sprint(upd[0]["changed"]), "max_concurrent_runs") {
+		t.Fatalf("update audit: %v", upd)
+	}
+	values, ok := upd[0]["values"].(map[string]any)
+	if !ok {
+		t.Fatalf("update audit values: %v", upd[0])
+	}
+	if v, ok := values["max_concurrent_runs"].(map[string]any); !ok || v["old"] != float64(2) || v["new"] != float64(1) {
+		t.Fatalf("update audit values: %v", upd[0]["values"])
+	}
+	c, err = e.svc.Update(ctx, e.actor, c.ID, UpdateInput{ClearMaxConcurrentRuns: true})
+	if err != nil || c.MaxConcurrentRuns != nil || c.EffectiveMaxConcurrentRuns != 1 {
+		t.Fatalf("clear: %v %v", c.MaxConcurrentRuns, err)
+	}
+	row, err := e.q.GetConnection(ctx, c.ID)
+	if err != nil || row.MaxConcurrentRuns != nil {
+		t.Fatalf("stored: %v %v", row.MaxConcurrentRuns, err)
+	}
+	// An unrelated update with no limit change is not audited as one.
+	name := "renamed"
+	if _, err := e.svc.Update(ctx, e.actor, c.ID, UpdateInput{Name: &name}); err != nil {
+		t.Fatal(err)
+	}
+	upd = e.auditEntries(t, audit.ActionConnectionUpdated)
+	for _, u := range upd {
+		if u["name"] == "renamed" && strings.Contains(fmt.Sprint(u["changed"]), "max_concurrent_runs") {
+			t.Fatalf("rename audited a limit change: %v", u)
+		}
 	}
 }

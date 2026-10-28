@@ -662,3 +662,49 @@ func TestRequireReentry(t *testing.T) {
 		t.Fatalf("no stored passwords: %v %v", got, err)
 	}
 }
+
+func TestRunLimitRules(t *testing.T) {
+	s := &Service{o: Options{MaxConcurrentRuns: 8, DefaultRunsPerConnection: 2}}
+	for _, tc := range []struct {
+		n  int
+		ok bool
+	}{{0, false}, {-1, false}, {1, true}, {8, true}, {9, false}, {64, false}, {65, false}} {
+		if err := s.checkRunLimit(tc.n); (err == nil) != tc.ok {
+			t.Errorf("checkRunLimit(%d) = %v", tc.n, err)
+		}
+	}
+	wide := &Service{o: Options{MaxConcurrentRuns: 100, DefaultRunsPerConnection: 1}}
+	if wide.checkRunLimit(64) != nil || wide.checkRunLimit(65) == nil {
+		t.Error("column range not applied with a large global cap")
+	}
+	for _, tc := range []struct {
+		v        *int32
+		own, eff int
+	}{{nil, -1, 2}, {ptr[int32](5), 5, 5}, {ptr[int32](20), 20, 8}} {
+		own, eff := s.runLimits(tc.v)
+		if eff != tc.eff || (tc.own < 0) != (own == nil) || (own != nil && *own != tc.own) {
+			t.Errorf("runLimits(%v) = %v, %d", tc.v, own, eff)
+		}
+	}
+	st := &state{maxRuns: ptr(3)}
+	if err := s.applyRunLimit(st, &UpdateInput{}); err != nil || st.maxRuns == nil || *st.maxRuns != 3 {
+		t.Fatalf("unchanged: %v %v", st.maxRuns, err)
+	}
+	// A stored value above a since lowered cap does not block other changes.
+	st.maxRuns = ptr(20)
+	if err := s.applyRunLimit(st, &UpdateInput{}); err != nil {
+		t.Fatalf("stored value re-checked: %v", err)
+	}
+	if err := s.applyRunLimit(st, &UpdateInput{MaxConcurrentRuns: ptr(9)}); err == nil {
+		t.Fatal("value above the global cap accepted")
+	}
+	if err := s.applyRunLimit(st, &UpdateInput{MaxConcurrentRuns: ptr(1), ClearMaxConcurrentRuns: true}); err == nil {
+		t.Fatal("set and clear accepted")
+	}
+	if err := s.applyRunLimit(st, &UpdateInput{ClearMaxConcurrentRuns: true}); err != nil || st.maxRuns != nil {
+		t.Fatalf("clear: %v %v", st.maxRuns, err)
+	}
+	if _, v := diff(&sqlc.Connection{MaxConcurrentRuns: ptr[int32](2)}, &state{maxRuns: ptr(3)}); v["max_concurrent_runs"] == nil {
+		t.Fatalf("diff: %v", v)
+	}
+}

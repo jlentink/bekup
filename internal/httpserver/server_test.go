@@ -594,3 +594,51 @@ func TestOriginOf(t *testing.T) {
 		}
 	}
 }
+
+type downloadRecorder struct {
+	mu      sync.Mutex
+	tickets []string
+}
+
+func (d *downloadRecorder) ServeDownload(w http.ResponseWriter, _ *http.Request, ticket string) {
+	d.mu.Lock()
+	d.tickets = append(d.tickets, ticket)
+	d.mu.Unlock()
+	writeText(w, http.StatusOK, "file")
+}
+
+// The download route (task 3.9, D-150): GET only, the ticket from the
+// path, the rest of /api untouched, the ticket never in the access log.
+func TestDownloadRoute(t *testing.T) {
+	dl := &downloadRecorder{}
+	env := newEnv(t, func(o *Options) { o.Download = dl })
+	const ticket = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde"
+	if w := env.do(req(http.MethodGet, "/api/download/"+ticket)); w.Code != http.StatusOK || w.Body.String() != "file" {
+		t.Fatalf("download: %d %q", w.Code, w.Body.String())
+	}
+	// Other methods never reach the download handler (and a HEAD can
+	// never redeem a ticket).
+	env.do(req(http.MethodPost, "/api/download/"+ticket, "Origin", sameOrigin))
+	env.do(req(http.MethodHead, "/api/download/"+ticket))
+	if w := env.do(req(http.MethodGet, "/api/download/"+ticket+"/more")); w.Code != http.StatusOK || w.Body.String() != "ok" {
+		t.Errorf("sub-path must fall through to the API handler: %d %q", w.Code, w.Body.String())
+	}
+	if w := env.do(req(http.MethodGet, "/api/other")); w.Code != http.StatusOK || w.Body.String() != "ok" {
+		t.Errorf("API handler: %d", w.Code)
+	}
+	dl.mu.Lock()
+	got := dl.tickets
+	dl.mu.Unlock()
+	if len(got) != 1 || got[0] != ticket {
+		t.Fatalf("tickets seen: %q", got)
+	}
+	logs := env.logText()
+	if strings.Contains(logs, ticket) || !strings.Contains(logs, `"path":"/api/download/[redacted]"`) {
+		t.Errorf("access log: %s", logs)
+	}
+	// Without a Download handler the route is a 404 from the API mount.
+	env2 := newEnv(t, func(o *Options) { o.API = nil })
+	if w := env2.do(req(http.MethodGet, "/api/download/"+ticket)); w.Code != http.StatusNotFound {
+		t.Errorf("no handler: %d", w.Code)
+	}
+}

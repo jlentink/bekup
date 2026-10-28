@@ -183,6 +183,10 @@ type Engine interface {
 	ParseServerVersion(s string) (Version, error)
 
 	Dump(c Entry, t Target, db string) (Command, error)
+	// DumpSnapshot is Dump inside an exported snapshot (PostgreSQL
+	// pg_dump --snapshot, validated with ValidateSnapshotID; "" = Dump).
+	// MySQL and MariaDB refuse a non-empty snapshot.
+	DumpSnapshot(c Entry, t Target, db, snapshot string) (Command, error)
 	// DumpGlobals returns the primary invocation and the fallback for
 	// non-superusers (PostgreSQL only).
 	DumpGlobals(c Entry, t Target) (primary, fallback Command, err error)

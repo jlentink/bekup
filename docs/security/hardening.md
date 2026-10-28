@@ -1,6 +1,6 @@
 # Hardening guide
 
-> **Status:** partial (end of M2). The controls below exist in the shipped
+> **Status:** partial (end of M3). The controls below exist in the shipped
 > compose files, the implemented CLI/config code, `serve` and the runner:
 > HTTP headers, Origin checks and the plain-HTTP warning (1.1), app-DB TLS
 > with channel binding (1.0), passwords and sessions (1.5), second
@@ -9,9 +9,12 @@
 > allowlists, hardened dump containers on per-run internal networks,
 > target-DB certificate pinning), the SSRF guard (2.3) on the S3 and SFTP
 > destinations (2.9, 2.10) and Object Lock / no-delete support in the S3
-> backend (2.9). Still to come with their tasks: SSRF guard for SMTP and
-> webhooks (5.1, 5.2), retention honouring immutability (3.8), monitoring
-> (5.6), signed release images (7.4). Completed in task 7.5.
+> backend (2.9), backup jobs with encryption on by default (3.2, 3.5),
+> verified and signed backups with completeness evidence (3.1, 3.6, 3.10),
+> retention honouring Object Lock and no-delete mode (3.8) and step-up
+> download tickets (3.9). Still to come with their tasks: hardened restores
+> (M4), SSRF guard for SMTP and webhooks (5.1, 5.2), monitoring (5.6),
+> signed release images (7.4). Completed in task 7.5.
 
 A checklist for running bekup securely. The threat model behind it is
 [`SECURITY.md`](../../SECURITY.md); deployment details are in

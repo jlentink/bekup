@@ -14,13 +14,16 @@ import (
 )
 
 func newServeCmd(g *globalFlags) *cobra.Command {
-	return &cobra.Command{
+	var noWorker bool
+	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Run the web UI, GraphQL API and scheduler",
-		Long: "Run the HTTP server (embedded web UI, GraphQL API, health endpoints; workers and the\n" +
-			"scheduler follow in later releases) as bekup_app. Refuses to start when the database role is\n" +
-			"privileged or the schema version differs from this binary (run `bekup migrate` first).\n" +
-			"SIGINT/SIGTERM drain in-flight requests within server.shutdown_timeout.",
+		Short: "Run the web UI, GraphQL API, scheduler and background workers",
+		Long: "Run the HTTP server (embedded web UI, GraphQL API, health endpoints), the scheduler loop\n" +
+			"(scheduler.enabled) and the River background workers as bekup_app. --no-worker runs serve\n" +
+			"without workers (scale them out with `bekup worker`). Refuses to start when the database role\n" +
+			"is privileged, the schema version differs from this binary (run `bekup migrate` first) or the\n" +
+			"master keyring does not match. SIGINT/SIGTERM drain in-flight requests within\n" +
+			"server.shutdown_timeout and running jobs within workers.shutdown_timeout.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			res, err := config.LoadBekup(g.options(c))
@@ -37,11 +40,47 @@ func newServeCmd(g *globalFlags) *cobra.Command {
 			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return app.Run(ctx, app.Options{
+				Config:   res.Config,
+				Dev:      res.Dev,
+				Logger:   logger,
+				UI:       web.DistFS(),
+				Version:  version,
+				NoWorker: noWorker,
+			})
+		},
+	}
+	cmd.Flags().BoolVar(&noWorker, "no-worker", false, "do not run background workers in this process (run `bekup worker` instead)")
+	return cmd
+}
+
+func newWorkerCmd(g *globalFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "worker",
+		Short: "Run background workers only",
+		Long: "Run only the River background workers (backups, restores, retention, notifications,\n" +
+			"housekeeping) as bekup_app, without HTTP and without the scheduler, to scale work out next to\n" +
+			"`bekup serve --no-worker`. Same startup checks as serve (database role, schema version,\n" +
+			"master keyring). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within\n" +
+			"workers.shutdown_timeout, then cancel them.",
+		Args: cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			res, err := config.LoadBekup(g.options(c))
+			if err != nil {
+				return fmt.Errorf("invalid configuration:\n%w", err)
+			}
+			logger, err := newLogger(c.ErrOrStderr(), res)
+			if err != nil {
+				return err
+			}
+			logLoaded(c, logger, res.Path, res.Warnings)
+			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return app.Run(ctx, app.Options{
 				Config:  res.Config,
 				Dev:     res.Dev,
 				Logger:  logger,
-				UI:      web.DistFS(),
 				Version: version,
+				Mode:    app.ModeWorker,
 			})
 		},
 	}

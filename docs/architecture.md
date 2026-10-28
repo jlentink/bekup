@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** partial (end of M2). Components, networks, trust boundaries and
+> **Status:** partial (end of M3). Components, networks, trust boundaries and
 > data flows below describe the design and the compose topology that exist
 > today. Implemented: the CLI parts (`config`, `migrate`, `keys`, `certs`,
 > `audit`, `admin`, `healthcheck`), `internal/config`, `internal/logging`,
@@ -13,9 +13,12 @@
 > chain heads (1.3), the pubsub bridge (1.10), and the connections and
 > destinations APIs (2.11, 2.12); the SSRF guard (2.3), the engine catalog
 > (2.1), the SSH tunnel (2.2), the storage backends disk, S3 and SFTP
-> (2.8–2.10) and the complete runner (2.4–2.7a, design section below).
-> Still to come: backup execution in M3, restore and the download and
-> offline recovery flows in M4, notifications and monitoring in M5, the web
+> (2.8–2.10) and the complete runner (2.4–2.7a, design section below);
+> backup execution (M3): the pipeline and signed manifest (3.1), job keys
+> (3.2), the scheduler and River queue (3.3, 3.4), the jobs API (3.5), the
+> backup worker (3.6), run history and live run events (3.7), retention
+> (3.8), downloads (3.9) and completeness evidence (3.10). Still to come:
+> restore and the offline recovery flows in M4, notifications and monitoring in M5, the web
 > UI in M6. The page is completed in task 7.5.
 
 bekup is one Go binary with several subcommands (D-025) and one container
@@ -29,7 +32,8 @@ section 6: STRIDE per component). This page summarizes it. Decisions are in
 | Component | Role | Status |
 |---|---|---|
 | Reverse proxy (`traefik` or `nginx` profile, opt-in) | Terminates TLS for the UI, HSTS, HTTP→HTTPS redirect, size and rate limits, unbuffered event streams (D-017, D-048, D-124). Traefik uses only its file provider; nginx is the unprivileged image plus a certbot companion. Neither mounts the Docker socket (D-093, D-094). | shipped (task 0.7b) |
-| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and SSE subscriptions (1.2, 1.10, 2.13), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3); scheduler, workers and pipeline in M3–M5 |
+| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and SSE subscriptions (1.2, 1.10, 2.13), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3), scheduler loop and River queue (3.4), pipeline (3.1), backup run worker and `cancelRun` (3.6), retention worker (3.8); further workers in M3–M5 |
+| `bekup worker` | Optional scale-out process: only the River workers (no HTTP, no scheduler), same startup checks as `serve`, connects as `bekup_app` (task 3.4, D-145); builds the destination, runner-client, connection and job-key services the backup worker needs (D-147). | implemented (task 3.4); backup worker (3.6) |
 | `bekup migrate` | One-shot: applies the embedded goose migrations as `bekup_owner`, under an advisory lock (D-042, D-078). The only process that holds the owner credentials. | implemented (task 0.4) |
 | `bekup runner` | The **only** component with Docker access (D-003). Small typed mTLS gRPC API, image and target allowlists from its own `runner.toml`, builds the hardened dump-container spec itself (D-029–D-033). | implemented (tasks 2.4–2.7a) |
 | Dump containers | Short-lived official, digest-pinned DB images (`pg_dump`, `mysqldump`, `mariadb-dump`, restore clients). Alone on a per-run `internal` network, reaching exactly one target through the runner's proxy or SSH tunnel; secrets only through a stdin preamble (D-032). | implemented (tasks 2.5, 2.6) |
@@ -101,15 +105,21 @@ Summaries; the step-by-step flows are in
   `bekup_owner` and exits; `serve` then starts with the `bekup_app` URL only,
   checks its role (D-099) and refuses to run unless the schema version equals
   the newest embedded migration (D-078, D-102). See "HTTP layer" below.
-- **Backup (task 3.6):** scheduler → River job (IDs only) → worker decrypts
-  the connection secret → runner `Dump` over mTLS → per-run network +
-  proxy/tunnel → dump stream → zstd → age → sha256 → fan-out to destinations
-  → signed manifest.
+- **Backup (task 3.6, implemented):** scheduler / `runJobNow` → River job
+  (IDs only) + queued run → worker takes a concurrency slot, decrypts the
+  connection secret → runner `Dump` over mTLS → per-run network +
+  proxy/tunnel → dump stream → zstd → age → sha256 → fan-out to destinations,
+  while the raw stream is verified (`VerifyDump`) → signed manifest. See
+  "Backup runs" below.
 - **Restore (tasks 4.1–4.5):** fresh 2FA check → stage the encrypted
   artifact → verify hash, signature and DB cross-check → decrypt → runner
   `Restore` (PG temp DB + swap; MySQL/MariaDB in place after a warning).
-- **Download (task 3.9):** step-up → single-use, 60 s, session-bound ticket
-  → streamed raw or plain file with `no-store`.
+- **Download (task 3.9, D-150):** step-up → `createDownloadTicket`
+  (single-use, 60 s, session-bound; sha256 only in `download_tickets`; an
+  age identity for plain recipient downloads sealed into the row) →
+  same-origin `GET /api/download/{ticket}` (role/ownership re-checked,
+  manifest re-verified) → streamed raw or plain file with `no-store`, the
+  last 64 KiB held back until the digests match (`internal/downloads`).
 - **Notifications (tasks 5.1–5.3):** event → recipient resolver (authz at
   delivery) → inbox / SMTP / HMAC webhooks through the SSRF guard.
 - **Offline recovery (task 4.7):** `bekup verify` / `bekup decrypt` on an
@@ -284,8 +294,8 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
   dedicated LISTEN connection per instance (reconnect with backoff and
   jitter, resync after reconnect) feeds the bus. Payloads are IDs only
   (`kind:user_id:session_id`); receivers always re-check the database.
-  Run events (3.7) and in-app notifications (5.3b) reuse the bridge with
-  their own channels.
+  Run events (`bekup_run_events`, 3.7) and in-app notifications (5.3b)
+  reuse the bridge with their own channels.
 - **Delivery-time authz.** Subscription resolvers send through
   `streams.Deliver` + `streams.Authorize(policy, op, ...)`: the session check
   and `Policy.Authorize` run for every event, so a caller who loses access
@@ -551,6 +561,204 @@ written as `.<random>.partial`, fsynced and published with an exclusive
 hard link. Crash leftovers are removed by `CleanupPartials`. S3 (task 2.9)
 and SFTP (task 2.10) run the same conformance suite
 (`internal/storage/storagetest`).
+
+## Backup pipeline (`internal/pipeline`, task 3.1, D-144)
+
+`pipeline.Run(ctx, src, spec)` streams one dump (one database or the
+globals) from the runner to every destination of the job:
+
+```
+runner stream ─▶ count + SHA-256 (raw) ─▶ zstd ─▶ age ─▶ count + SHA-256 (stored)
+                                                           │ immutable chunks (1 MiB)
+                                       ┌───────────────────┼───────────────────┐
+                                  [8 chunks]          [8 chunks]          [8 chunks]
+                                  Put (disk)           Put (S3)           Put (SFTP)
+```
+
+- **Compression:** zstd level 1–22 (default 3) with 1–8 encoder goroutines
+  (default 2). **Encryption:** age with the job's versioned passphrase
+  (scrypt work factor 18, bounded at 20) or its X25519 recipients; `none`
+  only with the admin opt-out flag. The configuration comes from
+  `jobkeys` through `pipeline.Encryptor` (task 3.2).
+- **Fan-out:** every destination has its own bounded buffer; chunks are
+  shared, so memory is at most (buffer + 2) × chunk per artifact. A
+  destination whose `Put` fails, or whose buffer stays full for the lag
+  threshold (default 2 min), is **dropped**: its `Put` is canceled and,
+  because the reader only returns EOF for a completed stream, the
+  backend's atomic finalize leaves no object. The others continue and the
+  run becomes `partial`; when every destination is dropped the artifact
+  fails. A slow but live destination slows the source (backpressure).
+- **Result:** raw and stored sizes and SHA-256s, the per-destination
+  outcome (ok, or dropped with a reason and a normalized error code), the
+  peak buffered bytes and the duration.
+- **Manifest:** after all artifacts of a run are finalized,
+  `WriteManifest` signs a canonical-JSON manifest with the active instance
+  key (purpose `manifest`) and writes `manifest.json` next to them. Restores
+  call `pipeline.Verify` with the run's database records: signature by key
+  ID (retired keys included), then job/run binding (replay) and the exact
+  entries (paths, sizes, hashes). The file format is documented in
+  [reference/artifact-format.md](reference/artifact-format.md).
+- **Reading back:** `pipeline.OpenArtifact` decrypts with the bounded
+  helpers (scrypt work-factor cap, X25519 identities only) and decompresses
+  with a single-goroutine zstd decoder capped at a 64 MiB window.
+
+## Scheduler and job queue (`internal/scheduler`, `internal/queue`, task 3.4, D-145)
+
+```
+serve ─ scheduler loop (every scheduler.tick_interval, default 15s, on every instance)
+          BEGIN
+            SELECT id, schedule, next_run_at FROM jobs
+              WHERE enabled AND deleted_at IS NULL AND next_run_at <= now AND kind <> manual
+              LIMIT batch FOR UPDATE SKIP LOCKED
+            per job: scheduler.Due → River unique insert backup_run {job_id, scheduled_for, trigger}
+                     duplicate (previous run still active) → schedule_skips 'still_running'
+                     next_run_at = next occurrence after now, last_scheduled_at = now
+          COMMIT
+River (river_job in the app DB) ─▶ workers in serve and/or `bekup worker`
+```
+
+- **Multi-instance safety:** `FOR UPDATE SKIP LOCKED` hands every due job to
+  one transaction; a job advanced by another instance no longer matches.
+  The River insert, the skip record and the `next_run_at` update commit
+  together, so a crash or shutdown mid-tick rolls back and the next tick of
+  any instance redoes it. No session advisory locks (D-044).
+- **One run per job at a time:** `backup_run` is unique by `job_id` in the
+  states available, pending, scheduled, running and retryable (not
+  completed). An occurrence that meets an active run is skipped and
+  recorded; missed occurrences collapse into one `catch_up` run (D-143).
+  Manual schedules are never selected. A schedule that no longer compiles
+  resets `next_run_at` to NULL (recorded as `unschedulable`).
+- **Queues** (per-process concurrency `[workers] *_queue_workers`): `backup`
+  (timeout `workers.backup_timeout`, the cap of the per-job timeout; 2
+  attempts), `restore` (`restore_timeout`; 1 attempt, never retried),
+  `retention` (`retention_timeout`; 3), `notify` (`notify_timeout`; 10),
+  `maintenance` (15 min; 3). Every worker's attempt timeout is bound to its
+  queue's; `RescueStuckJobsAfter` = longest queue timeout + 1h, so a job is
+  never rescued while it may still run. Completed River rows are kept 24h,
+  canceled/discarded 7 days (the run history lives in bekup's own tables).
+  River's reindexer is off (`bekup_app` does not own the indexes).
+- **Retention** (task 3.8, D-148): `retention_sweep` (retention queue,
+  unique per job) is enqueued by the run finish hook of `runstate.Store`
+  (success/partial, same transaction, under a savepoint) and by a daily
+  River periodic fan-out that enqueues one sweep per job with present
+  artifacts and cleans old temporary upload files on disk/SFTP. The pure
+  `retention.Plan` decides per destination; the worker re-checks the
+  newest complete run on the backend, Stats before every delete (vanished
+  objects become `missing`, audited and alerted), skips no-delete
+  destinations, keeps Object-Lock-refused artifacts and caps deletes per
+  sweep. See [Retention](guides/retention.md).
+- **Kinds and args:** every kind is declared in `internal/queue/kinds.go`
+  (queue, attempts, uniqueness, args type); `Client.InsertTx` is the only
+  insert path and applies these options, so `serve --no-worker` inserts
+  exactly as a worker would. Args carry IDs only: `queue.CheckArgs` (run by
+  `queue.New` at startup and by a test over the catalog) rejects plain
+  strings, bytes, maps, interfaces, floats and secret-looking names.
+- **Processes:** `serve` runs the scheduler (`scheduler.enabled`) and the
+  workers (unless `--no-worker`); `bekup worker` runs only the workers.
+  Workers fetch only kinds they have registered, so a kind whose worker is
+  not deployed yet waits instead of failing.
+- **Shutdown:** stop fetching, let running jobs finish for
+  `workers.shutdown_timeout`, then cancel their contexts and wait at most
+  30s more.
+- **Metrics:** the loop reports ticks, enqueued runs and skips through
+  `scheduler.Metrics` (no-op until task 5.6).
+
+## Backup runs (`internal/jobs` backup worker, `internal/runstate`, task 3.6, D-147)
+
+```
+scheduler tick / runJobNow ── one tx: River backup_run {job_id, ...} + runs row 'queued' + NOTIFY
+worker (River backup queue, serve or `bekup worker`)
+  Begin: take the queued run (a retry gets a new run; a stale 'running' one → failed 'interrupted')
+  job missing / deleted / disabled → 'skipped'      cancel requested → 'canceled'
+  run_slots: global + per-connection limit free?   no → JobSnooze(15s), run stays 'queued'
+  'running' (directory timestamp = start, timeout = min(job timeout, workers.backup_timeout))
+  open destinations · runner Probe (server version, databases) · resolve the selection
+  per database (sequential), then the PostgreSQL globals:
+     runner Dump ──chunks──▶ relay ──▶ pipeline (zstd → age → sha256 → fan-out, D-144)
+                               └────▶ VerifyDump (PostgreSQL archives: streamed, trailer = total)
+     EOF to the pipeline only after a complete DumpResult (exit 0, byte count)
+     → item + one artifact row per destination that stored the object
+  manifest.json (instance key, purpose "manifest") → every destination holding all complete items
+  terminal status + warnings + log counters; release the slot
+```
+
+- **Statuses:** `success` = every item stored and verified on every job
+  destination and the manifest on all of them; `partial` = at least one
+  complete, verified artifact but something missing (a dropped
+  destination, a failed or missing database, a manifest, a timeout after
+  some items); `failed` = nothing usable; `canceled`; `skipped`. Items:
+  `success`, `partial` (not on every destination), `failed`, `canceled`.
+- **Verification without a second download:** the runner's raw stream is
+  teed into a streamed `VerifyDump` (header `total_bytes` 0, then a
+  `VerifyDumpTrailer` with the exact total; an offline container named
+  `bekup-run-<run id>-verify`). MySQL/MariaDB dumps and the globals rely on
+  the trailer check in `DumpResult.verified`. A verify failure fails the
+  item; its objects stay as artifacts with `verified = false`, unsigned and
+  outside the manifest.
+- **Destinations:** a destination that cannot be opened, or whose Put fails,
+  lags or mis-stores, is dropped for the rest of the run. Disk/SFTP/S3
+  finalize atomically, so a dropped, failed or canceled upload leaves no
+  object (S3 multipart aborted).
+- **Failures:** target-level failures (unreachable, auth, TLS, pin mismatch,
+  SSH, runner down, not allowlisted) stop the run; database-level ones fail
+  only their item. Pin and SSH host-key mismatches are audited (system
+  actor) and alerted; so is an SFTP host-key mismatch of a destination.
+  Stored error texts are fixed messages per code, never server output.
+- **River:** canceled → `JobCancel`; shutdown or runner unavailable/busy
+  with nothing stored → error (one retry); everything else (incl. a
+  timeout) completes the River job; the runs table is the history.
+- **Concurrency:** `run_slots` rows under `pg_advisory_xact_lock` (no
+  session locks): `workers.max_concurrent_runs` globally,
+  `workers.max_runs_per_connection` per connection, across every process;
+  heartbeat 30 s, a slot without heartbeat for 2 min is reclaimed (the
+  holder stops, `slot_lost`).
+- **Cancel:** `cancelRun` (admin, maintainer) marks the run, cancels the
+  River job (same transaction, audited `run.cancel_requested`); a queued
+  run ends at once, a running one stops on River's signal or the worker's
+  2 s poll: runner calls are canceled (container killed), every Put aborted.
+- **Run logs:** runner lines and worker events, sanitized, scrubbed of
+  registered secrets and credentials before truncation, capped per run
+  (`workers.run_log_max_lines`, `run_log_max_line_bytes`), batched (500 ms /
+  100 lines) without ever blocking the dump.
+- **Events:** each write publishes `run:<run id>:<job id>` or
+  `log:<run id>:<job id>` on `bekup_run_events` in its transaction (task
+  3.7 subscriptions, below).
+
+### Run history and live run events (task 3.7, D-149)
+
+- **Reads** go through `runstate.Reader` (read-only sqlc queries in
+  `run_reads.sql`): `runs` and `artifacts` (cursor pages, newest first,
+  filtered in SQL by `Policy.JobScope`), `run(id)` (items, per-destination
+  artifacts with state/verified/signed, warnings, sanitized error, sizes,
+  durations, the manifest summary), `runLogs(runId, afterId, first)` and
+  `Job.lastRun` / `Job.recentRuns`. Single runs are authorized with the job
+  stored on the row; owners get FORBIDDEN for foreign and unknown ids.
+  `Run.triggeredBy` is staff only (`run.actor_view`).
+- **Batching:** a per-operation `runLoader` (queries and mutations only)
+  loads the items and artifacts of a whole page of runs, and the recent
+  runs of a whole page of jobs, in one query each.
+- **`runUpdated(jobId, runId)`:** every stream subscribes to
+  `bekup_run_events` on the in-process bus (fed by the LISTEN bridge). The
+  payload only pre-filters; each event is re-loaded by run id and
+  authorized (`run.view` with the stored job) at delivery, then sent. After
+  possibly lost notifications the stream re-sends the runs changed since
+  the last resync (at most 100).
+- **`runLogAppended(runId, afterId)`:** coalesced batches of at most 200
+  new lines, authorized per batch (`run.logs_view`); a final `done` batch
+  completes the stream once the run finished and every line was sent.
+- **Stream budget:** both count against `graphql.stream_max_per_session`
+  (default 4). The UI keeps one `runUpdated` stream per page (filter on the
+  client) plus at most one `runLogAppended` on a run page.
+- **Completeness evidence (task 3.10, D-141, D-151):** `jobs.StatsCollector`
+  brackets each dump. The worker's `jobs.RunnerStats` sets `StatsOptions`
+  (level from the job's `verification`) on the `Dump`/`DumpGlobals`
+  request; the runner captures the stats inside that call (PostgreSQL: in
+  the exported snapshot `pg_dump --snapshot` reuses) and returns them with
+  the dump result. The worker re-validates them, records warnings on the
+  item and the run (`runs.has_warnings`), signs the canonical stats into
+  the manifest's `stats` object and stores them insert-only in
+  `backup_stats`. A stats failure only adds `stats_unavailable`; the dump
+  still counts.
 
 ## Engines (`internal/engine`, task 2.1)
 

@@ -1,13 +1,15 @@
 ## bekup serve
 
-Run the web UI, GraphQL API and scheduler
+Run the web UI, GraphQL API, scheduler and background workers
 
 ### Synopsis
 
-Run the HTTP server (embedded web UI, GraphQL API, health endpoints; workers and the
-scheduler follow in later releases) as bekup_app. Refuses to start when the database role is
-privileged or the schema version differs from this binary (run `bekup migrate` first).
-SIGINT/SIGTERM drain in-flight requests within server.shutdown_timeout.
+Run the HTTP server (embedded web UI, GraphQL API, health endpoints), the scheduler loop
+(scheduler.enabled) and the River background workers as bekup_app. --no-worker runs serve
+without workers (scale them out with `bekup worker`). Refuses to start when the database role
+is privileged, the schema version differs from this binary (run `bekup migrate` first) or the
+master keyring does not match. SIGINT/SIGTERM drain in-flight requests within
+server.shutdown_timeout and running jobs within workers.shutdown_timeout.
 
 ```
 bekup serve [flags]
@@ -16,7 +18,8 @@ bekup serve [flags]
 ### Options
 
 ```
-  -h, --help   help for serve
+  -h, --help                     help for serve
+      --no-worker bekup worker   do not run background workers in this process (run bekup worker instead)
 ```
 
 ### Options inherited from parent commands

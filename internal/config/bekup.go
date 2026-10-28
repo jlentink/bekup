@@ -18,6 +18,7 @@ type Bekup struct {
 	Storage       Storage       `toml:"storage"`
 	Workers       Workers       `toml:"workers"`
 	Scheduler     Scheduler     `toml:"scheduler"`
+	Retention     Retention     `toml:"retention"`
 	Notifications Notifications `toml:"notifications"`
 	Netguard      Netguard      `toml:"netguard"`
 	Metrics       Metrics       `toml:"metrics"`
@@ -67,7 +68,7 @@ type Database struct {
 	URL               string   `toml:"url" secret:"inline" doc:"Inline connection URL. Dev mode only; rejected otherwise. Use url_file instead."`
 	OwnerURLFile      string   `toml:"owner_url_file" secret:"file" doc:"Path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate."`
 	OwnerURL          string   `toml:"owner_url" secret:"inline" doc:"Inline bekup_owner connection URL. Dev mode only; rejected otherwise. Use owner_url_file instead."`
-	MaxConns          int      `toml:"max_conns" doc:"Maximum number of pooled connections."`
+	MaxConns          int      `toml:"max_conns" doc:"Maximum number of pooled connections (worker processes: at least the sum of the [workers] *_queue_workers plus 4)."`
 	MinConns          int      `toml:"min_conns" doc:"Minimum number of idle pooled connections."`
 	ConnMaxLifetime   Duration `toml:"conn_max_lifetime" doc:"Maximum lifetime of a pooled connection."`
 	ConnMaxIdleTime   Duration `toml:"conn_max_idle_time" doc:"Maximum idle time of a pooled connection."`
@@ -130,18 +131,38 @@ type Storage struct {
 
 // Workers configures concurrency limits and timeouts of background work.
 type Workers struct {
-	MaxConcurrentRuns      int      `toml:"max_concurrent_runs" doc:"Maximum backup/restore runs at the same time (global)."`
-	MaxRunsPerConnection   int      `toml:"max_runs_per_connection" doc:"Maximum concurrent runs against one connection."`
-	MaxConcurrentDownloads int      `toml:"max_concurrent_downloads" doc:"Maximum concurrent artifact downloads."`
-	BackupTimeout          Duration `toml:"backup_timeout" doc:"Default timeout of a backup run."`
-	RestoreTimeout         Duration `toml:"restore_timeout" doc:"Timeout of a restore run."`
-	NotifyTimeout          Duration `toml:"notify_timeout" doc:"Timeout of a single notification delivery."`
+	MaxConcurrentRuns       int      `toml:"max_concurrent_runs" doc:"Maximum backup/restore runs at the same time (global)."`
+	MaxRunsPerConnection    int      `toml:"max_runs_per_connection" doc:"Maximum concurrent runs against one connection."`
+	MaxConcurrentDownloads  int      `toml:"max_concurrent_downloads" doc:"Maximum concurrent artifact downloads served by this process (1-64; a plain download of a passphrase-encrypted artifact needs up to 256 MiB for scrypt)."`
+	MaxDownloadsPerUser     int      `toml:"max_downloads_per_user" doc:"Maximum concurrent artifact downloads of one user in this process (1..max_concurrent_downloads)."`
+	BackupTimeout           Duration `toml:"backup_timeout" doc:"Default timeout of a backup run and the cap on each job's timeoutSeconds."`
+	RestoreTimeout          Duration `toml:"restore_timeout" doc:"Timeout of a restore run."`
+	NotifyTimeout           Duration `toml:"notify_timeout" doc:"Timeout of a single notification delivery."`
+	RetentionTimeout        Duration `toml:"retention_timeout" doc:"Timeout of a single retention pass of one job."`
+	ShutdownTimeout         Duration `toml:"shutdown_timeout" doc:"On shutdown, how long running jobs may finish before they are canceled (River soft stop, then hard stop)."`
+	BackupQueueWorkers      int      `toml:"backup_queue_workers" doc:"Backup jobs this process works at the same time (River queue backup, 1-10000)."`
+	RestoreQueueWorkers     int      `toml:"restore_queue_workers" doc:"Restore jobs this process works at the same time (River queue restore, 1-10000)."`
+	RetentionQueueWorkers   int      `toml:"retention_queue_workers" doc:"Retention jobs this process works at the same time (River queue retention, 1-10000)."`
+	NotifyQueueWorkers      int      `toml:"notify_queue_workers" doc:"Notification deliveries this process works at the same time (River queue notify, 1-10000)."`
+	MaintenanceQueueWorkers int      `toml:"maintenance_queue_workers" doc:"Housekeeping jobs this process works at the same time (River queue maintenance, 1-10000)."`
+	RunLogMaxLines          int      `toml:"run_log_max_lines" doc:"Log lines stored per backup run (runner output and worker events, 100-1000000); further lines are counted and dropped."`
+	RunLogMaxLineBytes      int      `toml:"run_log_max_line_bytes" doc:"Maximum bytes of one stored run-log line (128-16384); longer lines are truncated after redaction."`
 }
 
 // Scheduler configures the job scheduler loop.
 type Scheduler struct {
 	Enabled      bool     `toml:"enabled" doc:"Run the scheduler loop in this process."`
 	TickInterval Duration `toml:"tick_interval" doc:"How often due jobs are enqueued (>= 1s)."`
+	MinInterval  Duration `toml:"min_interval" doc:"Shortest allowed schedule interval for new or changed jobs, incl. the gap between cron occurrences (1m to 24h)."`
+	BatchSize    int      `toml:"batch_size" doc:"Due jobs locked and enqueued per scheduler transaction (1-1000)."`
+}
+
+// Retention configures the retention worker (task 3.8). The policy itself
+// (keep last N / keep N days) is set per job.
+type Retention struct {
+	DryRun               bool     `toml:"dry_run" doc:"Compute and log every retention plan without deleting anything (instance-wide dry run)."`
+	MaxDeletionsPerSweep int      `toml:"max_deletions_per_sweep" doc:"Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep."`
+	PartialCleanupAge    Duration `toml:"partial_cleanup_age" doc:"The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days)."`
 }
 
 // Notifications configures delivery rate limits.
@@ -213,7 +234,7 @@ func DefaultBekup() Bekup {
 		Database: Database{
 			URLFile:          "/run/secrets/bekup_database_url",
 			OwnerURLFile:     "/run/secrets/bekup_database_owner_url",
-			MaxConns:         10,
+			MaxConns:         25,
 			MinConns:         0,
 			ConnMaxLifetime:  Duration(time.Hour),
 			ConnMaxIdleTime:  Duration(30 * time.Minute),
@@ -254,16 +275,33 @@ func DefaultBekup() Bekup {
 			ScratchDir: "/var/lib/bekup/scratch",
 		},
 		Workers: Workers{
-			MaxConcurrentRuns:      4,
-			MaxRunsPerConnection:   1,
-			MaxConcurrentDownloads: 4,
-			BackupTimeout:          Duration(6 * time.Hour),
-			RestoreTimeout:         Duration(12 * time.Hour),
-			NotifyTimeout:          Duration(30 * time.Second),
+			MaxConcurrentRuns:       4,
+			MaxRunsPerConnection:    1,
+			MaxConcurrentDownloads:  4,
+			MaxDownloadsPerUser:     2,
+			BackupTimeout:           Duration(6 * time.Hour),
+			RestoreTimeout:          Duration(12 * time.Hour),
+			NotifyTimeout:           Duration(30 * time.Second),
+			RetentionTimeout:        Duration(time.Hour),
+			ShutdownTimeout:         Duration(2 * time.Minute),
+			BackupQueueWorkers:      4,
+			RestoreQueueWorkers:     2,
+			RetentionQueueWorkers:   2,
+			NotifyQueueWorkers:      8,
+			MaintenanceQueueWorkers: 1,
+			RunLogMaxLines:          10000,
+			RunLogMaxLineBytes:      4096,
 		},
 		Scheduler: Scheduler{
 			Enabled:      true,
 			TickInterval: Duration(15 * time.Second),
+			MinInterval:  Duration(5 * time.Minute),
+			BatchSize:    100,
+		},
+		Retention: Retention{
+			DryRun:               false,
+			MaxDeletionsPerSweep: 500,
+			PartialCleanupAge:    Duration(24 * time.Hour),
 		},
 		Notifications: Notifications{
 			MaxPerUserPerHour:       30,

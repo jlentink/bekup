@@ -100,7 +100,62 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   unknown actions are rejected. Areas: `auth.*`, `user.*`, `session.*`,
   `secret.changed`, `setting.changed`, `security.*`, `system.*`,
   `cli.admin.*`, `keys.*` (incl. `keys.check_value_stored`), `certs.rotated`, `audit.*`,
-  `download.*`, `connection.*`, `destination.*`, `mfa_policy.*`.
+  `download.*`, `connection.*`, `destination.*`, `job.*`, `mfa_policy.*`.
+- Job encryption (task 3.2, D-142; target type `job`, target id the job
+  id): `job.encryption_passphrase_set` (`version`, `previous_version`,
+  `generated`, `via` set/generate/create; also `secret.changed` with
+  `fields: [job_passphrase]`), `job.encryption_recipient_set` (`version`,
+  public `recipient`, `fingerprint`, `label`, `generated`, `via`),
+  `job.encryption_opted_out` (`from`, `reason`; also `security.opt_out`
+  with `setting: job.encryption`), `job.encryption_opted_in` (`mode`) and
+  `job.passphrases_exported` (`versions`). Passphrases and identities are
+  never recorded.
+- Jobs (task 3.5, D-146; target type `job`, target id the job id):
+  `job.created` (name, slug, connection id, selection, schedule JSON,
+  retention, timeout, window, verification, destination ids, encryption
+  mode), `job.updated` (`fields` and `changes` with old/new values; the
+  description only as changed), `job.deleted` (name, slug), `job.enabled`,
+  `job.disabled`, `job.owner_added` / `job.owner_removed` (`user_id`,
+  `role`; both also raise a security alert to admins, D-067) and
+  `job.run_requested` (River `queue_job_id`; the actor is the requesting
+  user; the queued `run_id`) and `job.run_started_early`
+  (`startNextRunEarly`, task 3.12, D-157: `queue_job_id`, `run_id`,
+  `scheduled_for` = the planned occurrence that runs now, `next_run_at` =
+  the job's new next run). A refused run request (already active,
+  disabled, manual schedule) records nothing.
+- Runs (task 3.6, D-147; target type `run`, target id the run id):
+  `run.cancel_requested` (`job_id`, `status` of the run at the request,
+  `river_state` of its River job; `retry_canceled` when the run had
+  finished and its pending retry was canceled, D-155). The run history itself (statuses,
+  items, artifacts, logs) lives in the run tables, not in the audit log.
+- Downloads (task 3.9, D-150; target type `artifact`, target id the
+  artifact id; details `ticket_id`, `mode`, `job_id`, `run_id`,
+  `destination_id`, `encryption`, `kind`, never the ticket value or an age
+  identity): `download.ticket_created` (step-up mutation, written in the
+  ticket's transaction), `download.ticket_rejected` (`reason` reused,
+  expired, session_mismatch or forbidden, `ticket_user_id`, `anonymous`;
+  the actor is the presenting user, or the system for a request without a
+  session; written in the transaction that burns the ticket),
+  `download.started` (before the response headers; a failure fails the
+  download), then `download.completed` or `download.failed` (`reason`:
+  artifact_unavailable, key_unavailable, destination_unavailable,
+  manifest_invalid, integrity_mismatch, decrypt_failed, client_aborted,
+  artifact_hold_lost, internal). An unknown or malformed ticket records nothing.
+- Retention (task 3.8, D-148; system actor, target type `job`, target id
+  the job id): `retention.deletion_planned` before the first delete on a
+  destination (`destination_id`, `reason` post_run/daily,
+  `newest_complete_run`, `kept_runs`, up to 50 `eligible_runs` +
+  `eligible_runs_more`, `eligible_objects`, `max_deletions`; if it cannot be
+  written nothing is deleted), `retention.swept` afterwards (`deleted`,
+  `deleted_runs` (≤ 50) + `deleted_runs_more`, `missing`, `locked`, `held` (in use by a
+  download or restore, D-155), `locked_until_max`, `failed`, `capped`, `aborted`), `retention.aborted`
+  when a safety check stopped retention on a destination (`aborted`:
+  `newest_complete_missing`, `newest_complete_changed`,
+  `plan_invariant_violated`) and `retention.artifact_missing` (target type
+  `artifact`, the artifact id; `job_id`, `run_id`, `destination_id`,
+  `object_key`, `newest_complete`) for an object that vanished without
+  bekup deleting it. Dry runs and sweeps with nothing to delete record
+  nothing; per-object outcomes are the artifact rows' state.
 - Destinations (task 2.12, D-131): `destination.created` (settings
   without credentials, `credentials_set` names), `destination.updated`
   (`changed` field names, `values` with old/new for short non-secret
@@ -186,8 +241,7 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   records them: `secret.changed` (tasks 2.11, 5.1; recorded by 2.12),
   `setting.changed` (2.3, 5.1, 6.9), `security.opt_out` (2.11, 2.12;
   alert 5.5), `security.insecure_http` (5.5), `audit.verify.failed`
-  (5.6), `download.ticket_created` (3.9) and `connection.pin_confirmed`
-  (2.7a, 2.11).
+  (5.6) and `connection.pin_confirmed` (2.7a, 2.11).
 - **Details never hold secrets.** They are normalized through JSON, then
   values under secret-looking keys (`password`, `token`, `key`,
   `newPassword`, ...; not `key_id`, `master_key_file`) become

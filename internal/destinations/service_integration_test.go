@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db/dbtest"
@@ -28,6 +29,7 @@ type svcEnv struct {
 	auditor *audit.Auditor
 	q       *sqlc.Queries
 	d       dbtest.DB
+	pool    *pgxpool.Pool
 	actor   Actor
 	root    string
 }
@@ -40,7 +42,7 @@ func newSvcEnv(t *testing.T, opts ...func(*Options)) *svcEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &svcEnv{auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool), d: d, root: t.TempDir()}
+	e := &svcEnv{auditor: audit.New(pool, audit.Options{Registry: logging.NewRegistry()}), q: sqlc.New(pool), pool: pool, d: d, root: t.TempDir()}
 	o := Options{DB: pool, Keyring: testKeyring(t), Auditor: e.auditor, Guard: g, DiskRoot: e.root}
 	for _, f := range opts {
 		f(&o)
@@ -187,6 +189,20 @@ func TestServiceCRUD(t *testing.T) {
 	}
 	if _, err := e.svc.Open(ctx, other.ID); err == nil || !strings.Contains(err.Error(), "open credentials") {
 		t.Fatalf("swapped blob opened: %v", err)
+	}
+
+	// A destination used by a (non-deleted) job cannot be deleted (task
+	// 3.5); once the job is deleted it can.
+	jobID, err := dbtest.InsertJob(ctx, e.pool, dbtest.JobRow{DestinationIDs: []uuid.UUID{d.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inUse *InUseError
+	if err := e.svc.Delete(ctx, e.actor, d.ID); !errors.Is(err, ErrInUse) || !errors.As(err, &inUse) || len(inUse.Jobs) != 1 {
+		t.Fatalf("delete while in use: %v", err)
+	}
+	if _, err := e.pool.Exec(ctx, "UPDATE jobs SET deleted_at = now() WHERE id = $1", jobID); err != nil {
+		t.Fatal(err)
 	}
 
 	// Delete: soft, then gone; the name is reusable.

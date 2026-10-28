@@ -1,0 +1,46 @@
+# Backup downloads (task 3.9, D-150): admins and the backup owners of the
+# artifact's job (role user), never maintainers (D-012, D-067).
+
+"What a download delivers."
+enum DownloadMode {
+  "The stored artifact unchanged (zstd-compressed, normally age-encrypted)."
+  RAW
+  """
+  The decrypted and decompressed dump, ready for `pg_restore` (`.dump`) or
+  `psql`/`mysql` (`.sql`).
+  """
+  PLAIN
+}
+
+"A single-use download ticket."
+type DownloadTicket {
+  """
+  Relative URL of the download (`/api/download/<ticket>`). GET it once,
+  from the same browser session, before `expiresAt`. Never log or share it.
+  """
+  url: String!
+  "The ticket expires 60 seconds after creation."
+  expiresAt: Time!
+  mode: DownloadMode!
+  "The (sanitized) file name the download is saved under."
+  fileName: String!
+  "`dump` (PostgreSQL custom archive) or `sql` (plain SQL script)."
+  format: String!
+  """
+  A shell command template to restore or unpack the file; placeholders in
+  angle brackets (`<database>`, `<key-file>`, `<dump-file>`).
+  """
+  restoreCommand: String!
+}
+
+extend type Mutation {
+  """
+  Creates a single-use download ticket for an artifact (admins, and owners
+  of the artifact's job with role user; fresh step-up; audited). The
+  artifact must be present, verified and covered by a signed manifest.
+  `ageIdentity` (an `AGE-SECRET-KEY-1...` identity) is required for, and
+  only accepted by, PLAIN downloads of recipient-encrypted artifacts; it is
+  stored sealed with the ticket only until the download starts.
+  """
+  createDownloadTicket(artifactId: UUID!, mode: DownloadMode!, ageIdentity: String): DownloadTicket! @stepUp
+}
