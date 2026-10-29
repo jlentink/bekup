@@ -45,6 +45,7 @@ import (
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/restore/restoretest"
 	"github.com/jlentink/bekup/internal/runnerpb"
+	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/storage"
 )
 
@@ -210,6 +211,7 @@ func newRestoreEnv(t *testing.T) *restoreEnv {
 		Logger: logger, MaxComplexity: 5000, MaxDepth: 12, MaxBodyBytes: 1 << 16,
 		Access: graph.NewPolicyAccess(pol), Policy: pol, AuditLog: e.auditor, Auth: authSvc,
 		Restores: api, Bus: bus, Streams: &graph.StreamOptions{Hub: hub, AllowedOrigins: []string{testBaseURL}},
+		Runs: runstate.NewReader(e.pool),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +239,7 @@ func newRestoreEnv(t *testing.T) *restoreEnv {
 	t.Cleanup(func() { cancel(); <-done; ts.Close() })
 
 	re := &restoreEnv{
-		runEnv: &runEnv{destEnv: &destEnv{authEnv: e}, events: bus, url: ts.URL + "/graphql"},
+		runEnv: &runEnv{destEnv: &destEnv{authEnv: e}, events: bus, url: ts.URL + "/graphql", store: runstate.NewStore(e.pool, pub, nil)},
 		svc:    svc, factors: factors, keys: keys, kr: kr, destID: destID, disk: disk, priv: priv,
 	}
 	// A passphrase job backing up only "app", with a database and a

@@ -9,14 +9,49 @@
 # later), then the complete event. Every event is re-authorized when it is
 # delivered.
 
+#
+# Stream budget (D-197): a session may hold graphql.stream_max_per_session
+# streams (default 4). The web client keeps one accountEvents stream per
+# browser (shared across tabs) and at most one page stream per tab.
+
 type Subscription {
   """
-  Changes to your own sessions (one revoked or rotated, or all of them
-  revoked), e.g. to refresh the session list. When the change ends the
-  session of this stream, the stream ends with its final error event (see
-  above) and the notice may not arrive first.
+  The account stream: changes to your own sessions (one revoked or
+  rotated, or all of them revoked) and new notifications of your own
+  inbox, in one stream. Each event sets exactly one of its fields and is
+  re-loaded for this stream's account and re-authorized when it is
+  delivered. When a session change ends the session of this stream, the
+  stream ends with its final error event (see above) and the notice may
+  not arrive first. Without the notification service only session events
+  arrive.
   """
-  sessionEvents: SessionEvent! @authenticated
+  accountEvents: AccountEvent! @authenticated
+
+  """
+  The dashboard stream: changes of every run you may view (like
+  runUpdated without a filter) and of every restore you may view (like
+  restoresUpdated), in one stream. Each event sets exactly one of its
+  fields and is re-loaded and re-authorized when it is delivered (backup
+  owners receive their jobs' runs and restores at that moment only).
+  Events are coalesced per run and per restore, as in the single streams.
+  """
+  activityUpdated: ActivityEvent! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+"One event of accountEvents: exactly one field is set."
+type AccountEvent {
+  "A change to one or all of your sessions."
+  session: SessionEvent
+  "A new notification of your inbox."
+  notification: Notification
+}
+
+"One event of activityUpdated: exactly one field is set."
+type ActivityEvent {
+  "A run changed (its state at delivery)."
+  run: Run
+  "A restore changed or was created (its state at delivery)."
+  restore: Restore
 }
 
 "What happened to a session."

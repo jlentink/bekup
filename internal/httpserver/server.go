@@ -3,7 +3,6 @@ package httpserver
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/config"
@@ -88,13 +88,9 @@ type Options struct {
 // Sessions.Resolver (Sessions comes back with the cookie policy and the
 // per-user limit filled in).
 func OptionsFromConfig(c *config.Server, dev bool) (Options, error) {
-	proxies := make([]netip.Prefix, 0, len(c.TrustedProxies))
-	for _, s := range c.TrustedProxies {
-		p, err := netip.ParsePrefix(strings.TrimSpace(s))
-		if err != nil {
-			return Options{}, fmt.Errorf("server.trusted_proxies: invalid CIDR %q", s)
-		}
-		proxies = append(proxies, p.Masked())
+	proxies, err := parseProxies(c.TrustedProxies)
+	if err != nil {
+		return Options{}, err
 	}
 	return Options{
 		BaseURL:        c.BaseURL,
@@ -133,6 +129,7 @@ type DownloadHandler interface {
 type Server struct {
 	opts    Options
 	handler http.Handler
+	live    *Live
 }
 
 // New validates opts and builds the router with the middleware chain
@@ -165,6 +162,13 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	var users *RateLimiter[uuid.UUID]
+	if opts.Sessions != nil && opts.Sessions.UserLimit.PerSecond > 0 {
+		if users, err = NewRateLimiter[uuid.UUID](opts.Sessions.UserLimit); err != nil {
+			return nil, err
+		}
+	}
+	live := newLive(opts.TrustedProxies, opts.MaxBodyBytes, limiter, users)
 	spa, err := newSPA(opts.UI)
 	if err != nil {
 		return nil, err
@@ -173,13 +177,13 @@ func New(opts Options) (*Server, error) {
 	r := chi.NewRouter()
 	r.Use(
 		requestID,
-		clientIP(opts.TrustedProxies, &xffWarner{logger: opts.Logger, now: time.Now}),
+		clientIP(live.trustedProxies, &xffWarner{logger: opts.Logger, now: time.Now}),
 		accessLog(opts.Logger, opts.RedactedPathPrefixes),
 		recoverer(opts.Logger),
 		securityHeaders(strings.EqualFold(base.Scheme, "https")),
 		rateLimit(limiter),
 		originCheck(origins),
-		bodyLimit(opts.MaxBodyBytes),
+		bodyLimit(live.bodyLimit.Load),
 	)
 	r.Get("/healthz", healthz)
 	r.Head("/healthz", healthz)
@@ -192,7 +196,7 @@ func New(opts Options) (*Server, error) {
 	// health checks and 404s never cost a session lookup.
 	withSession := func(h http.Handler) http.Handler { return h }
 	if opts.Sessions != nil {
-		mw, err := sessionMiddleware(*opts.Sessions, opts.Logger)
+		mw, err := sessionMiddleware(*opts.Sessions, users, opts.Logger)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +217,7 @@ func New(opts Options) (*Server, error) {
 	r.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed)
 	})
-	return &Server{opts: opts, handler: r}, nil
+	return &Server{opts: opts, handler: r, live: live}, nil
 }
 
 // Handler returns the root handler.

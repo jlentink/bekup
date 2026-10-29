@@ -197,6 +197,94 @@ type RunItem {
   warnings: [RunWarning!]!
   "The objects of this item, one per destination."
   artifacts: [Artifact!]!
+  """
+  The completeness evidence of a complete, verified dump (D-141, D-151):
+  the source statistics taken for it. Null when none was recorded (failed
+  or unverified dumps, statistics unavailable).
+  """
+  stats: RunItemStats
+}
+
+"How the statistics of a dump were taken (D-151)."
+enum StatsLevel {
+  "Planner estimates (PostgreSQL) or information_schema (MySQL/MariaDB)."
+  STANDARD
+  "Exact row counts where the engine allows them (PostgreSQL)."
+  DEEP
+}
+
+"Whether the statistics describe exactly what was dumped."
+enum StatsConsistency {
+  "PostgreSQL: taken inside the snapshot the dump used; exact counts match the dump."
+  SNAPSHOT
+  "Taken right before the dump (MySQL/MariaDB, globals); rows may have changed since."
+  APPROXIMATE
+}
+
+"How a table's row count was obtained."
+enum RowCountKind {
+  EXACT
+  ESTIMATE
+  "Not counted (time limit, budget or failure); rows is null."
+  UNKNOWN
+}
+
+"The number of objects of one kind (e.g. tables, views, roles)."
+type StatsObjectCount {
+  "The object kind: schemas, tables, views, materialized_views, sequences, functions, procedures, triggers, extensions, events, roles or tablespaces."
+  kind: String!
+  count: Float!
+}
+
+"The row count of one table (names and counts only, never data)."
+type TableStats {
+  "Schema-qualified on PostgreSQL (schema.table); the table name on MySQL/MariaDB."
+  name: String!
+  "Null when the count is UNKNOWN."
+  rows: Float
+  count: RowCountKind!
+  "count is EXACT."
+  exact: Boolean!
+  "count is ESTIMATE."
+  estimate: Boolean!
+  "count is UNKNOWN."
+  unknown: Boolean!
+  "Taken outside the dump's snapshot (MySQL/MariaDB)."
+  approximate: Boolean!
+}
+
+"A completeness warning or notice of the statistics (codes and object names only)."
+type StatsFinding {
+  code: String!
+  "The number of affected objects."
+  count: Float!
+  "Some affected object names (at most 50)."
+  objects: [String!]!
+  "More objects are affected than listed."
+  truncated: Boolean!
+}
+
+"""
+The completeness evidence of one run item (backup_stats, D-141/D-151/D-153).
+Bounded by what is stored: at most 10000 tables (tablesTruncated beyond
+that) and 32 findings of 50 objects each.
+"""
+type RunItemStats {
+  level: StatsLevel!
+  consistency: StatsConsistency!
+  "Object counts by kind, ordered by kind."
+  objects: [StatsObjectCount!]!
+  "Per-table row counts, ordered by name (empty for the globals)."
+  tables: [TableStats!]!
+  "The number of tables in the database (may exceed the listed tables)."
+  tablesTotal: Int!
+  "Not every table is listed (the statistics table limit)."
+  tablesTruncated: Boolean!
+  "Completeness warnings (privileges, non-transactional tables, timeouts, ...)."
+  warnings: [StatsFinding!]!
+  "Informational findings that are not warnings."
+  notices: [StatsFinding!]!
+  recordedAt: Time!
 }
 
 "The signed manifests of a run."
@@ -389,4 +477,23 @@ extend type Subscription {
   `runLogs`, checked again for every batch.
   """
   runLogAppended(runId: UUID!, afterId: ID): RunLogBatch! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The run page stream (D-197): changes of one run (as runUpdated with
+  `runId`) and its new log lines after `afterLogId` (as runLogAppended),
+  in one stream. Each event sets exactly one of its fields and is
+  re-loaded and re-authorized when it is delivered (run.view for `run`,
+  run.logs_view for `logs`). After the `done` log batch the stream sends
+  the run's final state once more and completes. Needs access to both
+  the run and its logs.
+  """
+  runActivity(runId: UUID!, afterLogId: ID): RunActivity! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+"One event of runActivity: exactly one field is set."
+type RunActivity {
+  "The run changed (its state at delivery)."
+  run: Run
+  "New log lines (the last batch has done set)."
+  logs: RunLogBatch
 }

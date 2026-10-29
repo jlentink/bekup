@@ -1,9 +1,8 @@
 # Immutable backups
 
-> **Status:** partial. S3 Object Lock, versioning and no-delete mode exist
-> (task 2.9); retention applies them (task 3.8, D-148). Delivery of the
-> alerts on unexpected deletions follows in task 5.5 (until then they are
-> logged at WARN and audited).
+> **Status:** implemented. S3 Object Lock, versioning and no-delete mode
+> exist (task 2.9); retention applies them (task 3.8, D-148); unexpected
+> deletions are audited, logged at WARN and alerted (task 5.5, D-190).
 
 Ransomware and stolen credentials go after backups first. bekup's answer
 (D-007) is to make deletion impossible for bekup itself, so a compromised
@@ -71,7 +70,8 @@ that slipped through.
 ## What bekup still needs to be trusted for
 
 - Writing new backups: a compromised bekup can stop producing backups or
-  write garbage. Missed-run monitoring (task 5.6) and the signed manifest
+  write garbage. Missed-backup alerts (`backup.missed`, D-188), the
+  metrics ([operations](../operations.md#metrics)) and the signed manifest
   (task 3.1) detect this.
 - Confidentiality: Object Lock does not encrypt. Backups are age-encrypted
   by default (D-008).
@@ -98,10 +98,12 @@ gone although the database lists it as present was deleted outside bekup:
 
 - its artifact is marked `missing` (never `deleted`) and
   `retention.artifact_missing` is audited in the same transaction;
-- the `retention_artifact_missing` alert is raised (delivered by task 5.5;
-  logged at WARN until then);
+- the job's audience gets the `artifact.missing` notification and every
+  admin a mandatory security alert ("a backup file disappeared from its
+  destination", [notifications](../guides/notifications.md#security-alerts)); the
+  retention worker also logs a `retention alert` WARN line;
 - if it belongs to the newest complete backup, nothing is deleted on that
-  destination in this sweep (`retention.aborted`, alerted as well), so
+  destination in this sweep (`retention.aborted`, also a security alert), so
   retention can never finish off a destination an attacker has already
   thinned out.
 

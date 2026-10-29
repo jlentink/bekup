@@ -17,7 +17,7 @@ import (
 // changed, check failed, shutdown, client gone).
 var ErrClosed = errors.New("streams: stream closed")
 
-// SessionNotice tells a sessionEvents subscriber that one of its user's
+// SessionNotice tells an accountEvents subscriber that one of its user's
 // sessions changed (SessionID is uuid.Nil when all of them were revoked).
 type SessionNotice struct {
 	Kind      auth.SessionEventKind
@@ -175,7 +175,7 @@ func (c *Conn) fresh() bool {
 }
 
 // WatchSessions returns the notices about the user's sessions until ctx
-// ends (sessionEvents). Notices that do not fit the buffer are dropped
+// ends (accountEvents). Notices that do not fit the buffer are dropped
 // (they are hints to reload the session list).
 func (c *Conn) WatchSessions(ctx context.Context) <-chan SessionNotice {
 	ch := make(chan SessionNotice, sessionNoticeBuffer)

@@ -8,12 +8,65 @@ package sqlc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const destinationUsage = `-- name: DestinationUsage :many
+SELECT d.id, d.name, d.type,
+       COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,
+       COALESCE(u.artifact_count, 0)::bigint AS artifact_count
+FROM destinations d
+LEFT JOIN (
+    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count
+    FROM artifacts a
+    WHERE a.state = 'present'
+    GROUP BY a.destination_id
+) u ON u.destination_id = d.id
+WHERE d.deleted_at IS NULL
+ORDER BY lower(d.name), d.id
+`
+
+type DestinationUsageRow struct {
+	ID            uuid.UUID       `json:"id"`
+	Name          string          `json:"name"`
+	Type          DestinationType `json:"type"`
+	StoredBytes   int64           `json:"storedBytes"`
+	ArtifactCount int64           `json:"artifactCount"`
+}
+
+// DestinationUsage returns, per destination that is not deleted, the
+// bytes and number of the present artifacts stored on it (one grouped
+// query; D-196).
+func (q *Queries) DestinationUsage(ctx context.Context) ([]DestinationUsageRow, error) {
+	rows, err := q.db.Query(ctx, destinationUsage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DestinationUsageRow
+	for rows.Next() {
+		var i DestinationUsageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Type,
+			&i.StoredBytes,
+			&i.ArtifactCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDestination = `-- name: GetDestination :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at FROM destinations WHERE id = $1 AND deleted_at IS NULL
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination, error) {
@@ -37,12 +90,16 @@ func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
 
 const getDestinationForUpdate = `-- name: GetDestinationForUpdate :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetDestinationForUpdate locks a destination that is not deleted.
@@ -67,12 +124,16 @@ func (q *Queries) GetDestinationForUpdate(ctx context.Context, id uuid.UUID) (De
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
 
 const getDestinationIncludingDeleted = `-- name: GetDestinationIncludingDeleted :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at FROM destinations WHERE id = $1
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1
 `
 
 // GetDestinationIncludingDeleted is for the workers only (backup,
@@ -100,6 +161,10 @@ func (q *Queries) GetDestinationIncludingDeleted(ctx context.Context, id uuid.UU
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
@@ -109,7 +174,7 @@ INSERT INTO destinations (id, name, type, config, secret_enc, no_delete,
                           object_lock_mode, object_lock_retention_days, created_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9)
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
 `
 
 type InsertDestinationParams struct {
@@ -157,13 +222,17 @@ func (q *Queries) InsertDestination(ctx context.Context, arg InsertDestinationPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
 
 const listDestinations = `-- name: ListDestinations :many
 
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at FROM destinations
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations
 WHERE deleted_at IS NULL
 ORDER BY lower(name), id
 `
@@ -197,6 +266,10 @@ func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.LastTestedAt,
+			&i.LastTestOk,
+			&i.LastTestCode,
+			&i.LastTestSettingsAt,
 		); err != nil {
 			return nil, err
 		}
@@ -208,12 +281,45 @@ func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 	return items, nil
 }
 
+const recordDestinationTest = `-- name: RecordDestinationTest :execrows
+UPDATE destinations
+SET last_tested_at = now(),
+    last_test_ok = $1,
+    last_test_code = $2,
+    last_test_settings_at = updated_at
+WHERE id = $3 AND deleted_at IS NULL AND updated_at = $4
+`
+
+type RecordDestinationTestParams struct {
+	Ok         *bool     `json:"ok"`
+	Code       *string   `json:"code"`
+	ID         uuid.UUID `json:"id"`
+	SettingsAt time.Time `json:"settingsAt"`
+}
+
+// RecordDestinationTest stores the outcome of a test (D-187) when the row
+// is unchanged since the test loaded it (settings_at = its updated_at); 0
+// rows: changed or deleted meanwhile, the result is not stored. The
+// trigger leaves updated_at alone for this update.
+func (q *Queries) RecordDestinationTest(ctx context.Context, arg RecordDestinationTestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordDestinationTest,
+		arg.Ok,
+		arg.Code,
+		arg.ID,
+		arg.SettingsAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setDestinationAuth = `-- name: SetDestinationAuth :one
 UPDATE destinations
 SET config = $1,
     secret_enc = $2
 WHERE id = $3 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
 `
 
 type SetDestinationAuthParams struct {
@@ -243,6 +349,10 @@ func (q *Queries) SetDestinationAuth(ctx context.Context, arg SetDestinationAuth
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
@@ -255,7 +365,7 @@ SET host_key_type = $1,
     host_key_confirmed_at = now(),
     host_key_confirmed_by = $4
 WHERE id = $5 AND deleted_at IS NULL AND type = 'sftp'
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
 `
 
 type SetDestinationHostKeyParams struct {
@@ -293,6 +403,10 @@ func (q *Queries) SetDestinationHostKey(ctx context.Context, arg SetDestinationH
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }
@@ -323,7 +437,7 @@ SET name = $1,
     host_key_confirmed_at = CASE WHEN $7::boolean THEN NULL ELSE host_key_confirmed_at END,
     host_key_confirmed_by = CASE WHEN $7::boolean THEN NULL ELSE host_key_confirmed_by END
 WHERE id = $8 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
 `
 
 type UpdateDestinationParams struct {
@@ -369,6 +483,10 @@ func (q *Queries) UpdateDestination(ctx context.Context, arg UpdateDestinationPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
 	)
 	return i, err
 }

@@ -119,11 +119,15 @@ dev_keys_ready() {
 	l="$k/local"
 	for f in "$k/postgres_password" "$k/bekup_owner_password" "$k/bekup_app_password" \
 		"$k/certs/postgres/postgres.crt" "$k/certs/postgres/postgres.key" "$k/certs/postgres/ca.crt" \
-		"$l/bekup_database_url" "$l/bekup_database_owner_url" "$l/bekup_master_key" "$l/postgres_ca.crt"; do
+		"$k/certs/serve/serve.crt" "$k/certs/serve/serve.key" "$k/certs/serve/ca.crt" \
+		"$l/bekup_database_url" "$l/bekup_database_owner_url" "$l/bekup_master_key" "$l/postgres_ca.crt" \
+		"$l/bekup_client.crt" "$l/bekup_client.key" "$l/bekup_ca.crt"; do
 		[[ -e $f ]] || return 1
 	done
 	grep -q "@127\.0\.0\.1:${BEKUP_DEV_PG_PORT:-5432}/bekup\$" "$l/bekup_database_url" || return 1
 	cmp -s "$k/certs/postgres/ca.crt" "$l/postgres_ca.crt" || return 1
+	cmp -s "$k/certs/serve/serve.crt" "$l/bekup_client.crt" || return 1
+	cmp -s "$k/certs/serve/ca.crt" "$l/bekup_ca.crt" || return 1
 	openssl x509 -in "$k/certs/postgres/postgres.crt" -noout -ext subjectAltName 2>/dev/null |
 		grep -q 'IP Address:127.0.0.1'
 }
@@ -150,12 +154,24 @@ dev_keys() {
 dev_native_env() {
 	local l
 	l="$(dev_keys_dir)/local"
-	[[ -e "$l/bekup_database_url" && -e "$l/bekup_master_key" && -e "$l/postgres_ca.crt" ]] ||
+	[[ -e "$l/bekup_database_url" && -e "$l/bekup_master_key" && -e "$l/postgres_ca.crt" &&
+		-e "$l/bekup_client.crt" && -e "$l/bekup_client.key" && -e "$l/bekup_ca.crt" ]] ||
 		die "no dev keys for native use in ${l#"$PWD"/}: run 'just dev' first"
 	export BEKUP_CONFIG="$PWD/deploy/dev/bekup.local.toml"
 	export BEKUP_DATABASE_URL_FILE="$l/bekup_database_url"
 	export BEKUP_DATABASE_TLS_CA_FILE="$l/postgres_ca.crt"
 	export BEKUP_SECURITY_MASTER_KEY_FILE="$l/bekup_master_key"
+	export BEKUP_RUNNER_CERT_FILE="$l/bekup_client.crt"
+	export BEKUP_RUNNER_KEY_FILE="$l/bekup_client.key"
+	export BEKUP_RUNNER_CA_FILE="$l/bekup_ca.crt"
+	# `just dev-runner` publishes the runner on this loopback port (D-201).
+	export BEKUP_RUNNER_ADDRESS="127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}"
+	# Disk destinations and restore staging in the gitignored .dev-data/
+	# (bekup creates nothing outside them; disk_root must exist).
+	mkdir -p "$PWD/.dev-data/backups" "$PWD/.dev-data/scratch"
+	chmod 0700 "$PWD/.dev-data" "$PWD/.dev-data/backups" "$PWD/.dev-data/scratch"
+	export BEKUP_STORAGE_DISK_ROOT="$PWD/.dev-data/backups"
+	export BEKUP_STORAGE_SCRATCH_DIR="$PWD/.dev-data/scratch"
 	unset BEKUP_DATABASE_OWNER_URL_FILE BEKUP_DATABASE_OWNER_URL BEKUP_DATABASE_URL BEKUP_SECURITY_MASTER_KEY
 	# The BEKUP_DEV_* compose/script variables (ports, keys dir) are no bekup
 	# configuration keys: keep their values in this shell but do not pass
@@ -180,4 +196,59 @@ dev_build() {
 dev_migrate() {
 	info "bekup migrate up (bekup_owner, verify-full via 127.0.0.1:${BEKUP_DEV_PG_PORT:-5432})"
 	BEKUP_DATABASE_OWNER_URL_FILE="$(dev_keys_dir)/local/bekup_database_owner_url" bin/bekup-dev migrate up
+}
+
+# --- local, never-committed settings (`.just.env`, D-202) --------------------
+
+# LOCAL_ENV_KEYS: the only keys load_local_env accepts.
+LOCAL_ENV_KEYS=(BEKUP_IMAGE_REPO BEKUP_PLATFORMS)
+
+# load_local_env [file]: read KEY=value lines for the LOCAL_ENV_KEYS from the
+# gitignored .just.env (default) and export each key that is not already set
+# in the environment (the environment wins). The file is parsed, never
+# sourced or evaluated: no expansion, no command substitution, optional
+# matching single or double quotes are stripped literally. Refuses a file
+# that is a symlink, not a regular file, not owned by the current user,
+# group- or world-writable, or larger than 4 KiB, and malformed lines.
+# Unknown keys are ignored with a warning naming only the key. Values are
+# never printed.
+load_local_env() {
+	local f=${1:-.just.env} line n=0 key val k known
+	[[ -e $f || -L $f ]] || return 0
+	[[ ! -L $f ]] || die "$f is a symlink; refusing to read it"
+	[[ -f $f ]] || die "$f is not a regular file"
+	[[ -O $f ]] || die "$f is not owned by you; refusing to read it"
+	if [[ -n $(find "$f" -prune \( -perm -g+w -o -perm -o+w \) -print) ]]; then
+		die "$f is group- or world-writable; fix it with: chmod 0600 $f"
+	fi
+	(($(wc -c <"$f") <= 4096)) || die "$f is larger than 4 KiB"
+	while IFS= read -r line || [[ -n $line ]]; do
+		n=$((n + 1))
+		line=${line%$'\r'}
+		[[ $line =~ ^[[:space:]]*(#.*)?$ ]] && continue
+		if [[ ! $line =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+			die "$f:$n: not a KEY=value line"
+		fi
+		key=${BASH_REMATCH[2]}
+		val=${BASH_REMATCH[3]}
+		# Trim surrounding whitespace, then one pair of matching quotes.
+		val=${val#"${val%%[![:space:]]*}"}
+		val=${val%"${val##*[![:space:]]}"}
+		if [[ ${#val} -ge 2 && ($val == \"*\" || $val == \'*\') ]]; then
+			val=${val:1:${#val}-2}
+		fi
+		known=0
+		for k in "${LOCAL_ENV_KEYS[@]}"; do
+			[[ $k == "$key" ]] && known=1
+		done
+		if ((!known)); then
+			warn "$f:$n: ignoring unknown key $key (allowed: ${LOCAL_ENV_KEYS[*]})"
+			continue
+		fi
+		[[ $val != *[[:cntrl:]]* ]] || die "$f:$n: $key contains control characters"
+		if [[ -z ${!key:-} ]]; then
+			printf -v "$key" '%s' "$val"
+			export "${key?}"
+		fi
+	done <"$f"
 }

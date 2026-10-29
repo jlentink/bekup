@@ -1,10 +1,38 @@
 # Connections
 
 A connection is a PostgreSQL, MySQL or MariaDB server that bekup backs up.
-Admins manage connections through the GraphQL API (task 2.11, D-135; the UI
-follows in task 6.3). serve never connects to a database or bastion itself:
-every test, version check, database list, image pull, certificate capture
-and host-key capture runs on the runner over its mTLS API.
+Admins manage connections on the **Connections** page of the web UI
+(D-182) or through the GraphQL API (D-135). serve never
+connects to a database or bastion itself: every test, version check,
+database list, image pull, certificate capture and host-key capture runs on
+the runner over its mTLS API.
+
+## In the web UI
+
+- **Connections** lists every connection with its engine and version,
+  host, TLS mode and pin state (expiry warnings at 30 and 7 days), SSH
+  tunnel, the role's privilege verdict from the last test, and the
+  concurrent-run limit (effective / configured). Maintainers
+  see the same list read only.
+- A connection's page runs **Test connection** (version, client
+  compatibility, warnings and the privilege verdict with its reasons),
+  **Detect version**, **List databases** and **Pre-pull image**, each as its
+  own request.
+- **Pin certificate** captures the chain, shows every certificate (subject,
+  issuer, names, validity, SPKI and certificate fingerprints) with the
+  suggested anchor marked, and pins it only after you tick that you compared
+  the leaf's SPKI fingerprint out of band and confirm your identity. A root
+  CA the server does not send can be pasted as PEM. **Stage backup pin**
+  prepares a planned rotation. Public CAs are refused (D-139).
+- **Change TLS mode** asks you to type the connection name before any
+  weakening; the opt-out is audited, alerts every admin and adds the
+  permanent *Insecure transport* badge.
+- For a tunnel, **Fetch and confirm host key** shows the bastion's key type,
+  fingerprint and key line for comparison; **Generate keypair** stores a new
+  ed25519 key encrypted and shows the public line to install.
+- Passwords and keys are write-only: the form only shows that one is
+  stored. When you change the host, port or tunnel (or the bastion or its
+  user), the form asks for the stored password again before saving.
 
 ## Who may do what
 
@@ -53,7 +81,13 @@ are stored envelope-encrypted per connection.
    server version, the detected catalog key, whether the client image fits
    (`compatible`), a legacy flag and warning codes. Ordinary failures
    (unreachable, wrong password, TLS refused, ...) come back as `ok: false`
-   with a fixed `code` and `message`.
+   with a fixed `code` and `message`. The outcome is stored on the
+   connection as `lastTest { at ok code stale privileges { status reasons } }`
+   (D-187; admins and maintainers): the normalized code only (plus
+   `TLS_PIN_MISMATCH` / `SSH_HOST_KEY_MISMATCH` for those security events),
+   never a raw error. `stale` turns true once the connection's settings
+   change; a test that races such a change, or one the runner could not
+   take (busy, unavailable), stores nothing.
 5. Optionally `detectVersion` (suggests the catalog key to use),
    `listDatabases` (for job building) and `prePullImage` (pulls the client
    image by digest on the runner ahead of the first run).
@@ -82,7 +116,7 @@ each must be the only field of its GraphQL operation.
 A temporary restore connection points a restore at a server that bekup does
 not back up (task 4.4, D-163). It is **admin only** and is meant to be
 created from the restore wizard; see
-[Restore: temporary restore connections](restore.md#temporary-restore-connections).
+[Restore: requesting a restore](restore.md#requesting-a-restore).
 In short: it is validated like any connection (TLS `PINNED` by default,
 D-132), never appears in `connections` or `connection`, cannot be used by a
 job or edited with `updateConnection`/`setTlsMode`/`deleteConnection`, and

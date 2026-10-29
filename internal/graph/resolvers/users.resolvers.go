@@ -7,6 +7,7 @@ package resolvers
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jlentink/bekup/internal/graph/model"
@@ -56,6 +57,18 @@ func (r *queryResolver) User(ctx context.Context, id uuid.UUID) (*model.User, er
 	return r.user(ctx, id)
 }
 
+func (r *queryResolver) UserDirectory(ctx context.Context, search *string, first *int, after *string) (*model.UserDirectoryConnection, error) {
+	return r.userDirectory(ctx, search, first, after)
+}
+
 func (r *queryResolver) UserSessions(ctx context.Context, userID uuid.UUID) ([]model.Session, error) {
 	return r.userSessions(ctx, userID)
+}
+
+func (r *userResolver) LastSeenAt(ctx context.Context, obj *model.User) (*time.Time, error) {
+	return r.userLastSeenAt(ctx, obj)
+}
+
+func (r *userResolver) TwoFactorEnrolled(ctx context.Context, obj *model.User) (bool, error) {
+	return r.userTwoFactorEnrolled(ctx, obj)
 }

@@ -47,6 +47,7 @@ func (a *App) newAuth() (*auth.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("account rate limiter: %w", err)
 	}
+	a.loginLimiter, a.accountLimiter = limiter, accounts
 	return auth.NewService(auth.ServiceOptions{
 		DB:       a.pool,
 		Hasher:   hasher,

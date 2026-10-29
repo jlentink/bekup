@@ -165,3 +165,17 @@ SELECT EXISTS (
       AND target_db_name IS NOT DISTINCT FROM sqlc.narg(target_db_name)::text
       AND status IN ('queued', 'staging', 'verifying', 'restoring')
 )::boolean;
+
+-- ListRestoreIDsUpdatedSince returns the restores changed at or after
+-- @since that the caller may see (scope as in ListRestoresPage), newest
+-- change first: the resync of the restoresUpdated stream after possibly
+-- lost events (D-196). Delivery re-loads and re-authorizes every one.
+-- name: ListRestoreIDsUpdatedSince :many
+SELECT restores.id
+FROM restores
+WHERE restores.updated_at >= @since::timestamptz
+  AND (@scope_all::boolean OR EXISTS (
+        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+        WHERE o.job_id = restores.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
+ORDER BY restores.updated_at DESC, restores.id
+LIMIT @max_rows::int;

@@ -560,20 +560,23 @@ SELECT j.id, j.enabled, j.schedule, j.next_run_at, j.last_scheduled_at, j.delete
 WHERE j.deleted_at IS NULL
   AND ($1::boolean OR EXISTS (
         SELECT 1 FROM job_owners o WHERE o.job_id = j.id AND o.user_id = $2::uuid))
-  AND ($3::boolean IS NULL OR j.enabled = $3::boolean)
-  AND ($4::uuid IS NULL OR j.connection_id = $4::uuid)
-  AND ($5::text IS NULL
-       OR strpos(lower(j.name), lower($5::text)) > 0
-       OR strpos(j.slug, lower($5::text)) > 0)
+  AND ($3::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM job_owners fo WHERE fo.job_id = j.id AND fo.user_id = $3::uuid))
+  AND ($4::boolean IS NULL OR j.enabled = $4::boolean)
+  AND ($5::uuid IS NULL OR j.connection_id = $5::uuid)
   AND ($6::text IS NULL
-       OR (lower(j.name), j.id) > ($6::text, $7::uuid))
+       OR strpos(lower(j.name), lower($6::text)) > 0
+       OR strpos(j.slug, lower($6::text)) > 0)
+  AND ($7::text IS NULL
+       OR (lower(j.name), j.id) > ($7::text, $8::uuid))
 ORDER BY lower(j.name), j.id
-LIMIT $8::int
+LIMIT $9::int
 `
 
 type ListJobsParams struct {
 	ScopeAll     bool       `json:"scopeAll"`
 	UserID       uuid.UUID  `json:"userId"`
+	OwnerID      *uuid.UUID `json:"ownerId"`
 	Enabled      *bool      `json:"enabled"`
 	ConnectionID *uuid.UUID `json:"connectionId"`
 	Search       *string    `json:"search"`
@@ -584,11 +587,13 @@ type ListJobsParams struct {
 
 // ListJobs returns one page of non-deleted jobs ordered by (lower(name),
 // id) after the cursor. scope_all = false limits the page to the jobs
-// @user_id owns (authz.JobScope).
+// @user_id owns (authz.JobScope). owner_id (staff only, checked by the
+// service) narrows the page to the jobs that user owns.
 func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, error) {
 	rows, err := q.db.Query(ctx, listJobs,
 		arg.ScopeAll,
 		arg.UserID,
+		arg.OwnerID,
 		arg.Enabled,
 		arg.ConnectionID,
 		arg.Search,

@@ -57,31 +57,43 @@ func (r *Resolver) runUpdated(ctx context.Context, jobID, runID *uuid.UUID) (<-c
 	if streams.FromContext(ctx) == nil {
 		return nil, errNotStream
 	}
-	rd, bus, err := r.runEventSources()
+	f, err := r.runUpdatesFeed(ctx, jobID, runID)
 	if err != nil {
 		return nil, err
+	}
+	return f.Deliver(ctx), nil
+}
+
+// runUpdatesFeed checks access to the filter and starts the run event
+// source of runUpdated (and of the combined runActivity/activityUpdated
+// streams): the source runs until ctx ends.
+func (r *Resolver) runUpdatesFeed(ctx context.Context, jobID, runID *uuid.UUID) (streams.Feed[*runEvent, *model.Run], error) {
+	var none streams.Feed[*runEvent, *model.Run]
+	rd, bus, err := r.runEventSources()
+	if err != nil {
+		return none, err
 	}
 	if runID != nil {
 		v, err := rd.Run(ctx, *runID)
 		switch {
 		case errors.Is(err, runstate.ErrRunNotFound):
 			if err := r.authorizeRun(ctx, authz.OpRunView, uuid.Nil, false); err != nil {
-				return nil, err
+				return none, err
 			}
-			return nil, apierror.New(apierror.NotFound, "run not found")
+			return none, apierror.New(apierror.NotFound, "run not found")
 		case err != nil:
-			return nil, err
+			return none, err
 		}
 		if err := r.authorizeRun(ctx, authz.OpRunView, v.JobID, true); err != nil {
-			return nil, err
+			return none, err
 		}
 		if jobID != nil && *jobID != v.JobID {
-			return nil, apierror.Invalid("jobId", "the run belongs to another job")
+			return none, apierror.Invalid("jobId", "the run belongs to another job")
 		}
 	}
 	if jobID != nil {
 		if err := r.Authz.Authorize(ctx, authz.OpRunView, authz.Job{ID: *jobID}); err != nil {
-			return nil, err
+			return none, err
 		}
 	}
 	sub := bus.Subscribe(pubsub.RunEvents.Name, runEventBuffer)
@@ -95,12 +107,13 @@ func (r *Resolver) runUpdated(ctx context.Context, jobID, runID *uuid.UUID) (<-c
 		ev.view = &v
 		return []authz.Resource{authz.Job{ID: v.JobID}}, nil
 	})
-	return streams.Deliver(ctx, src, check, func(ctx context.Context, ev *runEvent) (*model.Run, bool) {
+	conv := func(ctx context.Context, ev *runEvent) (*model.Run, bool) {
 		if ev.view == nil || (jobID != nil && ev.view.JobID != *jobID) {
 			return nil, false
 		}
 		return runModel(ev.view, r.showActor(ctx)), true
-	}), nil
+	}
+	return streams.Feed[*runEvent, *model.Run]{Src: src, Check: check, Conv: conv}, nil
 }
 
 // runIDSource lists the runs changed since a time (resync after possibly
@@ -205,26 +218,38 @@ func (r *Resolver) runLogAppended(ctx context.Context, runID uuid.UUID, afterID 
 	if streams.FromContext(ctx) == nil {
 		return nil, errNotStream
 	}
-	rd, bus, err := r.runEventSources()
+	f, err := r.runLogsFeed(ctx, runID, afterID)
 	if err != nil {
 		return nil, err
 	}
+	return f.Deliver(ctx), nil
+}
+
+// runLogsFeed checks access to the run's logs and starts the log source
+// of runLogAppended (and runActivity): it closes after the batch with
+// done was converted, or when ctx ends.
+func (r *Resolver) runLogsFeed(ctx context.Context, runID uuid.UUID, afterID *string) (streams.Feed[struct{}, *model.RunLogBatch], error) {
+	var none streams.Feed[struct{}, *model.RunLogBatch]
+	rd, bus, err := r.runEventSources()
+	if err != nil {
+		return none, err
+	}
 	after, err := parseLogID(afterID)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	st, err := rd.LogState(ctx, runID)
 	switch {
 	case errors.Is(err, runstate.ErrRunNotFound):
 		if err := r.authorizeRun(ctx, authz.OpRunLogsView, uuid.Nil, false); err != nil {
-			return nil, err
+			return none, err
 		}
-		return nil, apierror.New(apierror.NotFound, "run not found")
+		return none, apierror.New(apierror.NotFound, "run not found")
 	case err != nil:
-		return nil, err
+		return none, err
 	}
 	if err := r.authorizeRun(ctx, authz.OpRunLogsView, st.JobID, true); err != nil {
-		return nil, err
+		return none, err
 	}
 	// The run's job never changes (runs_terminal_guard), so the job loaded
 	// above is the one every batch is authorized against; ownership itself
@@ -281,7 +306,7 @@ func (r *Resolver) runLogAppended(ctx context.Context, runID uuid.UUID, afterID 
 		}
 		return &model.RunLogBatch{RunID: runID, Lines: logLinesModel(lines), EndID: endID(lines, prev), Done: end}, true
 	}
-	return streams.Deliver(ctx, src, check, conv), nil
+	return streams.Feed[struct{}, *model.RunLogBatch]{Src: src, Check: check, Conv: conv}, nil
 }
 
 // pumpLogTicks sends a tick (coalesced) at the start, for every run event

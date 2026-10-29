@@ -14,6 +14,10 @@
 # world-readable (chmod 0400/0600). Every value below is the built-in default
 # unless marked "example".
 #
+# Reload: a few keys (marked "live" in docs/configuration.md, e.g. log.level,
+# rate limits, trusted_proxies, [netguard]) apply at runtime via Admin ->
+# Settings -> Configuration or SIGHUP; every other change needs a restart.
+#
 # Full reference: docs/configuration.md
 
 [server]
@@ -228,22 +232,43 @@ temp_connection_ttl = "24h"
 temp_connection_max_ttl = "168h"
 
 [notifications]
+# Per user and channel: after this many e-mails (or webhook calls) within an
+# hour, one summary is sent and further ones stay in the inbox (security
+# alerts are exempt).
 max_per_user_per_hour = 30
+# backup.started / restore.started of one job within this window collapse.
 collapse_window = "15m"
+# Permanent webhook failures (redirect, 4xx, refused address, TLS) before a
+# webhook is auto-disabled (10 failures over >= 24h also disable it).
 webhook_failure_threshold = 5
 
 [netguard]
-# Bootstrap SSRF allowlist for private destinations (S3/SMTP/SFTP/webhooks).
+# Bootstrap SSRF allowlist for private destinations (S3/SFTP/SMTP/shared
+# webhooks; never users' personal webhooks, D-198).
 # Empty = all private, loopback, link-local and metadata ranges are denied.
 # Loopback, link-local, metadata, multicast and reserved ranges can never be
-# allowlisted (loopback only in dev mode). Admins extend this list in the UI.
+# allowlisted (loopback only in dev mode). Admins extend this list in the UI
+# (per entry with scopes).
 allow_cidrs = []          # e.g. ["10.20.0.0/16"]
 allow_hosts = []          # e.g. ["minio.internal", "*.corp.example"]
 
 [metrics]
-# Prometheus /metrics on an internal address only.
+# Prometheus /metrics (and /healthz) on an internal address only; never
+# publish it (docs/operations.md#metrics).
 enabled = true
-listen = "127.0.0.1:9464"
+# Example; match your network: serve's fixed address on the internal
+# `metrics` network in docker-compose.yml (SERVE_METRICS_IP). The built-in
+# default is "127.0.0.1:9464" (loopback: only a Prometheus in the same
+# network namespace can scrape it).
+listen = "10.213.252.10:9464"
+# A wildcard listen address is refused outside dev mode unless this is set.
+allow_wildcard_listen = false
+# Optional bearer authentication (Prometheus: authorization.credentials_file).
+# A secret file with at least 32 random characters, e.g.
+# "/run/secrets/bekup_metrics_bearer". Empty = unauthenticated.
+auth_bearer_file = ""
+# Per-job series labelled with the job slug (more series; off by default).
+per_job_labels = false
 
 [log]
 # debug | info | warn | error

@@ -172,7 +172,7 @@ type reqOpts struct {
 	query  string // "" sessionEventsQuery
 }
 
-const sessionEventsQuery = `subscription { sessionEvents { kind sessionId current } }`
+const sessionEventsQuery = `subscription { accountEvents { session { kind sessionId current } } }`
 
 // streamResp is a response whose body the test cleanup closes.
 type streamResp struct {
@@ -356,17 +356,23 @@ wait:
 	}
 	var resp struct {
 		Data struct {
-			SessionEvents struct {
-				Kind      string  `json:"kind"`
-				SessionID *string `json:"sessionId"`
-				Current   bool    `json:"current"`
-			} `json:"sessionEvents"`
+			AccountEvents struct {
+				Session struct {
+					Kind      string  `json:"kind"`
+					SessionID *string `json:"sessionId"`
+					Current   bool    `json:"current"`
+				} `json:"session"`
+				Notification *struct{} `json:"notification"`
+			} `json:"accountEvents"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal([]byte(ev.data), &resp); err != nil {
 		t.Fatal(err)
 	}
-	se := resp.Data.SessionEvents
+	if resp.Data.AccountEvents.Notification != nil {
+		t.Fatalf("session event with a notification: %s", ev.data)
+	}
+	se := resp.Data.AccountEvents.Session
 	if se.Kind != "REVOKED" || se.SessionID == nil || *se.SessionID != other.String() || se.Current {
 		t.Fatalf("event %+v", se)
 	}
@@ -624,7 +630,7 @@ func TestPlainGETAndUpgradeHeaderOnPOST(t *testing.T) {
 
 func TestStreamsDisabled(t *testing.T) {
 	env := newEnv(t, nil)
-	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { sessionEvents { kind } }"}`))
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { accountEvents { session { kind } } }"}`))
 	r.RemoteAddr = "192.0.2.10:1234"
 	r.Header.Set("Origin", testOrigin)
 	r.Header.Set("Content-Type", "application/json")

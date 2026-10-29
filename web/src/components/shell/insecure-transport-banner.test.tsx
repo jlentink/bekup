@@ -1,6 +1,7 @@
-import type { MockLink } from "@apollo/client/testing";
-import { MockedProvider } from "@apollo/client/testing/react";
-import { render, screen } from "@testing-library/react";
+import { ApolloClient, InMemoryCache } from "@apollo/client";
+import { ApolloProvider } from "@apollo/client/react";
+import { MockLink } from "@apollo/client/testing";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { pageIsInsecure, ServerInfoQuery } from "@/lib/server-info";
@@ -24,11 +25,13 @@ function serverInfo(insecureTransport: boolean): MockLink.MockedResponse {
 }
 
 function renderBanner(mocks: MockLink.MockedResponse[]) {
-  return render(
-    <MockedProvider mocks={mocks}>
+  const client = new ApolloClient({ cache: new InMemoryCache(), link: new MockLink(mocks) });
+  render(
+    <ApolloProvider client={client}>
       <InsecureTransportBanner />
-    </MockedProvider>,
+    </ApolloProvider>,
   );
+  return client;
 }
 
 describe("pageIsInsecure", () => {
@@ -53,9 +56,14 @@ describe("InsecureTransportBanner", () => {
 
   it("stays hidden over https when the server is secure", async () => {
     vi.stubGlobal("location", { protocol: "https:" });
-    renderBanner([serverInfo(false)]);
-    // Let the mocked query resolve.
-    await new Promise((r) => setTimeout(r, 20));
+    const client = renderBanner([serverInfo(false)]);
+    // Wait until the answer is in the cache the banner reads (waitFor
+    // flushes the resulting render), instead of a fixed sleep.
+    await waitFor(() => {
+      expect(client.readQuery({ query: ServerInfoQuery })?.serverInfo.insecureTransport).toBe(
+        false,
+      );
+    });
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

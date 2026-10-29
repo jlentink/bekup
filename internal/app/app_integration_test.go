@@ -82,6 +82,7 @@ func options(t *testing.T, url string, logs *syncBuffer) app.Options {
 	t.Helper()
 	cfg := config.DefaultBekup()
 	cfg.Server.Listen = "127.0.0.1:0"
+	cfg.Metrics.Listen = "127.0.0.1:0"
 	cfg.Server.BaseURL = "http://127.0.0.1:8080"
 	cfg.Server.ShutdownTimeout = config.Duration(5 * time.Second)
 	cfg.Database.URL = url

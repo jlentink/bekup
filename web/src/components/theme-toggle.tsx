@@ -1,7 +1,8 @@
 import { Monitor, Moon, Sun, type LucideIcon } from "lucide-react";
 import { useId } from "react";
 
-import { useTheme, type ThemePreference } from "@/lib/theme";
+import { useTheme } from "@/lib/theme-context";
+import { type ThemePreference } from "@/lib/theme-model";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: readonly { value: ThemePreference; label: string; icon: LucideIcon }[] = [

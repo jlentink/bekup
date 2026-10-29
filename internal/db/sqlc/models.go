@@ -616,6 +616,134 @@ func AllJobVerificationValues() []JobVerification {
 	}
 }
 
+type NotificationChannel string
+
+const (
+	NotificationChannelInbox   NotificationChannel = "inbox"
+	NotificationChannelEmail   NotificationChannel = "email"
+	NotificationChannelWebhook NotificationChannel = "webhook"
+	NotificationChannelPush    NotificationChannel = "push"
+)
+
+func (e *NotificationChannel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationChannel(s)
+	case string:
+		*e = NotificationChannel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationChannel: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationChannel struct {
+	NotificationChannel NotificationChannel `json:"notificationChannel"`
+	Valid               bool                `json:"valid"` // Valid is true if NotificationChannel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationChannel) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationChannel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationChannel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationChannel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationChannel), nil
+}
+
+func (e NotificationChannel) Valid() bool {
+	switch e {
+	case NotificationChannelInbox,
+		NotificationChannelEmail,
+		NotificationChannelWebhook,
+		NotificationChannelPush:
+		return true
+	}
+	return false
+}
+
+func AllNotificationChannelValues() []NotificationChannel {
+	return []NotificationChannel{
+		NotificationChannelInbox,
+		NotificationChannelEmail,
+		NotificationChannelWebhook,
+		NotificationChannelPush,
+	}
+}
+
+type NotificationDeliveryStatus string
+
+const (
+	NotificationDeliveryStatusQueued  NotificationDeliveryStatus = "queued"
+	NotificationDeliveryStatusSent    NotificationDeliveryStatus = "sent"
+	NotificationDeliveryStatusFailed  NotificationDeliveryStatus = "failed"
+	NotificationDeliveryStatusSkipped NotificationDeliveryStatus = "skipped"
+)
+
+func (e *NotificationDeliveryStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = NotificationDeliveryStatus(s)
+	case string:
+		*e = NotificationDeliveryStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for NotificationDeliveryStatus: %T", src)
+	}
+	return nil
+}
+
+type NullNotificationDeliveryStatus struct {
+	NotificationDeliveryStatus NotificationDeliveryStatus `json:"notificationDeliveryStatus"`
+	Valid                      bool                       `json:"valid"` // Valid is true if NotificationDeliveryStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullNotificationDeliveryStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.NotificationDeliveryStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.NotificationDeliveryStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullNotificationDeliveryStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.NotificationDeliveryStatus), nil
+}
+
+func (e NotificationDeliveryStatus) Valid() bool {
+	switch e {
+	case NotificationDeliveryStatusQueued,
+		NotificationDeliveryStatusSent,
+		NotificationDeliveryStatusFailed,
+		NotificationDeliveryStatusSkipped:
+		return true
+	}
+	return false
+}
+
+func AllNotificationDeliveryStatusValues() []NotificationDeliveryStatus {
+	return []NotificationDeliveryStatus{
+		NotificationDeliveryStatusQueued,
+		NotificationDeliveryStatusSent,
+		NotificationDeliveryStatusFailed,
+		NotificationDeliveryStatusSkipped,
+	}
+}
+
 type RestoreMode string
 
 const (
@@ -1210,6 +1338,64 @@ func AllRunTriggerValues() []RunTrigger {
 	}
 }
 
+type SharedChannelType string
+
+const (
+	SharedChannelTypeEmailList SharedChannelType = "email_list"
+	SharedChannelTypeWebhook   SharedChannelType = "webhook"
+)
+
+func (e *SharedChannelType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SharedChannelType(s)
+	case string:
+		*e = SharedChannelType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SharedChannelType: %T", src)
+	}
+	return nil
+}
+
+type NullSharedChannelType struct {
+	SharedChannelType SharedChannelType `json:"sharedChannelType"`
+	Valid             bool              `json:"valid"` // Valid is true if SharedChannelType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSharedChannelType) Scan(value interface{}) error {
+	if value == nil {
+		ns.SharedChannelType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SharedChannelType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSharedChannelType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SharedChannelType), nil
+}
+
+func (e SharedChannelType) Valid() bool {
+	switch e {
+	case SharedChannelTypeEmailList,
+		SharedChannelTypeWebhook:
+		return true
+	}
+	return false
+}
+
+func AllSharedChannelTypeValues() []SharedChannelType {
+	return []SharedChannelType{
+		SharedChannelTypeEmailList,
+		SharedChannelTypeWebhook,
+	}
+}
+
 type TestRestoreStatus string
 
 const (
@@ -1341,6 +1527,64 @@ func AllTestRestoreTriggerValues() []TestRestoreTrigger {
 	}
 }
 
+type UserChannelType string
+
+const (
+	UserChannelTypeWebhook UserChannelType = "webhook"
+	UserChannelTypePush    UserChannelType = "push"
+)
+
+func (e *UserChannelType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserChannelType(s)
+	case string:
+		*e = UserChannelType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserChannelType: %T", src)
+	}
+	return nil
+}
+
+type NullUserChannelType struct {
+	UserChannelType UserChannelType `json:"userChannelType"`
+	Valid           bool            `json:"valid"` // Valid is true if UserChannelType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserChannelType) Scan(value interface{}) error {
+	if value == nil {
+		ns.UserChannelType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserChannelType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserChannelType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserChannelType), nil
+}
+
+func (e UserChannelType) Valid() bool {
+	switch e {
+	case UserChannelTypeWebhook,
+		UserChannelTypePush:
+		return true
+	}
+	return false
+}
+
+func AllUserChannelTypeValues() []UserChannelType {
+	return []UserChannelType{
+		UserChannelTypeWebhook,
+		UserChannelTypePush,
+	}
+}
+
 type UserRole string
 
 const (
@@ -1469,49 +1713,80 @@ type BackupStat struct {
 	CreatedAt    time.Time       `json:"createdAt"`
 }
 
+type ConfigReloadRequest struct {
+	ID          uuid.UUID  `json:"id"`
+	RequestedAt time.Time  `json:"requestedAt"`
+	RequestedBy *uuid.UUID `json:"requestedBy"`
+	Trigger     string     `json:"trigger"`
+	InstanceID  uuid.UUID  `json:"instanceId"`
+}
+
+type ConfigReloadResult struct {
+	ID               int64      `json:"id"`
+	RequestID        *uuid.UUID `json:"requestId"`
+	InstanceID       uuid.UUID  `json:"instanceId"`
+	ProcessKind      string     `json:"processKind"`
+	Hostname         string     `json:"hostname"`
+	Version          string     `json:"version"`
+	ProcessStartedAt time.Time  `json:"processStartedAt"`
+	FinishedAt       time.Time  `json:"finishedAt"`
+	Status           string     `json:"status"`
+	ErrorKind        *string    `json:"errorKind"`
+	AppliedKeys      []string   `json:"appliedKeys"`
+	RestartKeys      []string   `json:"restartKeys"`
+	ErrorKeys        []string   `json:"errorKeys"`
+	WeakenedKeys     []string   `json:"weakenedKeys"`
+}
+
 type Connection struct {
-	ID                      uuid.UUID         `json:"id"`
-	Name                    string            `json:"name"`
-	Engine                  ConnectionEngine  `json:"engine"`
-	VersionKey              string            `json:"versionKey"`
-	ImageKey                string            `json:"imageKey"`
-	Host                    string            `json:"host"`
-	Port                    int32             `json:"port"`
-	Username                string            `json:"username"`
-	HasPassword             bool              `json:"hasPassword"`
-	ClientCertPem           *string           `json:"clientCertPem"`
-	TlsMode                 ConnectionTlsMode `json:"tlsMode"`
-	TlsPinCertPem           *string           `json:"tlsPinCertPem"`
-	TlsPinSpki              []byte            `json:"tlsPinSpki"`
-	TlsPinNotAfter          *time.Time        `json:"tlsPinNotAfter"`
-	TlsPinnedAt             *time.Time        `json:"tlsPinnedAt"`
-	TlsPinnedBy             *uuid.UUID        `json:"tlsPinnedBy"`
-	TlsBackupPinCertPem     *string           `json:"tlsBackupPinCertPem"`
-	TlsBackupPinSpki        []byte            `json:"tlsBackupPinSpki"`
-	TlsBackupPinNotAfter    *time.Time        `json:"tlsBackupPinNotAfter"`
-	TlsBackupPinnedAt       *time.Time        `json:"tlsBackupPinnedAt"`
-	TlsBackupPinnedBy       *uuid.UUID        `json:"tlsBackupPinnedBy"`
-	SshEnabled              bool              `json:"sshEnabled"`
-	SshHost                 *string           `json:"sshHost"`
-	SshPort                 *int32            `json:"sshPort"`
-	SshUser                 *string           `json:"sshUser"`
-	SshAuth                 ConnectionSshAuth `json:"sshAuth"`
-	SshHasPassphrase        bool              `json:"sshHasPassphrase"`
-	SshPublicKey            *string           `json:"sshPublicKey"`
-	SshHostKeyType          *string           `json:"sshHostKeyType"`
-	SshHostKeyFingerprint   *string           `json:"sshHostKeyFingerprint"`
-	SshHostKeyAuthorizedKey *string           `json:"sshHostKeyAuthorizedKey"`
-	SshHostKeyConfirmedAt   *time.Time        `json:"sshHostKeyConfirmedAt"`
-	SshHostKeyConfirmedBy   *uuid.UUID        `json:"sshHostKeyConfirmedBy"`
-	SecretEnc               []byte            `json:"secretEnc"`
-	Temporary               bool              `json:"temporary"`
-	ExpiresAt               *time.Time        `json:"expiresAt"`
-	CreatedForRestoreID     *uuid.UUID        `json:"createdForRestoreId"`
-	CreatedBy               *uuid.UUID        `json:"createdBy"`
-	CreatedAt               time.Time         `json:"createdAt"`
-	UpdatedAt               time.Time         `json:"updatedAt"`
-	DeletedAt               *time.Time        `json:"deletedAt"`
-	MaxConcurrentRuns       *int32            `json:"maxConcurrentRuns"`
+	ID                       uuid.UUID         `json:"id"`
+	Name                     string            `json:"name"`
+	Engine                   ConnectionEngine  `json:"engine"`
+	VersionKey               string            `json:"versionKey"`
+	ImageKey                 string            `json:"imageKey"`
+	Host                     string            `json:"host"`
+	Port                     int32             `json:"port"`
+	Username                 string            `json:"username"`
+	HasPassword              bool              `json:"hasPassword"`
+	ClientCertPem            *string           `json:"clientCertPem"`
+	TlsMode                  ConnectionTlsMode `json:"tlsMode"`
+	TlsPinCertPem            *string           `json:"tlsPinCertPem"`
+	TlsPinSpki               []byte            `json:"tlsPinSpki"`
+	TlsPinNotAfter           *time.Time        `json:"tlsPinNotAfter"`
+	TlsPinnedAt              *time.Time        `json:"tlsPinnedAt"`
+	TlsPinnedBy              *uuid.UUID        `json:"tlsPinnedBy"`
+	TlsBackupPinCertPem      *string           `json:"tlsBackupPinCertPem"`
+	TlsBackupPinSpki         []byte            `json:"tlsBackupPinSpki"`
+	TlsBackupPinNotAfter     *time.Time        `json:"tlsBackupPinNotAfter"`
+	TlsBackupPinnedAt        *time.Time        `json:"tlsBackupPinnedAt"`
+	TlsBackupPinnedBy        *uuid.UUID        `json:"tlsBackupPinnedBy"`
+	SshEnabled               bool              `json:"sshEnabled"`
+	SshHost                  *string           `json:"sshHost"`
+	SshPort                  *int32            `json:"sshPort"`
+	SshUser                  *string           `json:"sshUser"`
+	SshAuth                  ConnectionSshAuth `json:"sshAuth"`
+	SshHasPassphrase         bool              `json:"sshHasPassphrase"`
+	SshPublicKey             *string           `json:"sshPublicKey"`
+	SshHostKeyType           *string           `json:"sshHostKeyType"`
+	SshHostKeyFingerprint    *string           `json:"sshHostKeyFingerprint"`
+	SshHostKeyAuthorizedKey  *string           `json:"sshHostKeyAuthorizedKey"`
+	SshHostKeyConfirmedAt    *time.Time        `json:"sshHostKeyConfirmedAt"`
+	SshHostKeyConfirmedBy    *uuid.UUID        `json:"sshHostKeyConfirmedBy"`
+	SecretEnc                []byte            `json:"secretEnc"`
+	Temporary                bool              `json:"temporary"`
+	ExpiresAt                *time.Time        `json:"expiresAt"`
+	CreatedForRestoreID      *uuid.UUID        `json:"createdForRestoreId"`
+	CreatedBy                *uuid.UUID        `json:"createdBy"`
+	CreatedAt                time.Time         `json:"createdAt"`
+	UpdatedAt                time.Time         `json:"updatedAt"`
+	DeletedAt                *time.Time        `json:"deletedAt"`
+	MaxConcurrentRuns        *int32            `json:"maxConcurrentRuns"`
+	LastTestedAt             *time.Time        `json:"lastTestedAt"`
+	LastTestOk               *bool             `json:"lastTestOk"`
+	LastTestCode             *string           `json:"lastTestCode"`
+	LastTestSettingsAt       *time.Time        `json:"lastTestSettingsAt"`
+	LastTestPrivileges       *string           `json:"lastTestPrivileges"`
+	LastTestPrivilegeReasons []string          `json:"lastTestPrivilegeReasons"`
 }
 
 type Destination struct {
@@ -1532,6 +1807,10 @@ type Destination struct {
 	CreatedAt               time.Time       `json:"createdAt"`
 	UpdatedAt               time.Time       `json:"updatedAt"`
 	DeletedAt               *time.Time      `json:"deletedAt"`
+	LastTestedAt            *time.Time      `json:"lastTestedAt"`
+	LastTestOk              *bool           `json:"lastTestOk"`
+	LastTestCode            *string         `json:"lastTestCode"`
+	LastTestSettingsAt      *time.Time      `json:"lastTestSettingsAt"`
 }
 
 type DownloadTicket struct {
@@ -1545,6 +1824,16 @@ type DownloadTicket struct {
 	CreatedAt      time.Time    `json:"createdAt"`
 	ExpiresAt      time.Time    `json:"expiresAt"`
 	UsedAt         *time.Time   `json:"usedAt"`
+}
+
+type EmailVerification struct {
+	UserID         uuid.UUID `json:"userId"`
+	Email          string    `json:"email"`
+	CodeMac        []byte    `json:"codeMac"`
+	MacKeyID       []byte    `json:"macKeyId"`
+	CreatedAt      time.Time `json:"createdAt"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+	FailedAttempts int32     `json:"failedAttempts"`
 }
 
 type InstanceKey struct {
@@ -1606,6 +1895,14 @@ type JobEncryption struct {
 	UpdatedAt    time.Time         `json:"updatedAt"`
 }
 
+type JobMissedState struct {
+	JobID        uuid.UUID `json:"jobId"`
+	MissedSince  time.Time `json:"missedSince"`
+	LastMissedAt time.Time `json:"lastMissedAt"`
+	Reason       string    `json:"reason"`
+	CheckedAt    time.Time `json:"checkedAt"`
+}
+
 type JobOwner struct {
 	JobID     uuid.UUID  `json:"jobId"`
 	UserID    uuid.UUID  `json:"userId"`
@@ -1632,6 +1929,68 @@ type JobRecipient struct {
 	CreatedBy   *uuid.UUID `json:"createdBy"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	RetiredAt   *time.Time `json:"retiredAt"`
+}
+
+type JobSharedChannel struct {
+	JobID     uuid.UUID  `json:"jobId"`
+	ChannelID uuid.UUID  `json:"channelId"`
+	Groups    []string   `json:"groups"`
+	Events    []string   `json:"events"`
+	CreatedBy *uuid.UUID `json:"createdBy"`
+	CreatedAt time.Time  `json:"createdAt"`
+}
+
+type Notification struct {
+	ID        uuid.UUID       `json:"id"`
+	UserID    uuid.UUID       `json:"userId"`
+	EventID   *uuid.UUID      `json:"eventId"`
+	Type      string          `json:"type"`
+	Severity  string          `json:"severity"`
+	Title     string          `json:"title"`
+	Body      string          `json:"body"`
+	Link      *string         `json:"link"`
+	Payload   json.RawMessage `json:"payload"`
+	CreatedAt time.Time       `json:"createdAt"`
+	ReadAt    *time.Time      `json:"readAt"`
+}
+
+type NotificationDelivery struct {
+	ID              uuid.UUID                  `json:"id"`
+	EventID         uuid.UUID                  `json:"eventId"`
+	UserID          *uuid.UUID                 `json:"userId"`
+	UserChannelID   *uuid.UUID                 `json:"userChannelId"`
+	SharedChannelID *uuid.UUID                 `json:"sharedChannelId"`
+	Channel         NotificationChannel        `json:"channel"`
+	Status          NotificationDeliveryStatus `json:"status"`
+	Summary         bool                       `json:"summary"`
+	Attempts        int32                      `json:"attempts"`
+	LastCode        *string                    `json:"lastCode"`
+	LastError       *string                    `json:"lastError"`
+	IdempotencyKey  string                     `json:"idempotencyKey"`
+	CreatedAt       time.Time                  `json:"createdAt"`
+	UpdatedAt       time.Time                  `json:"updatedAt"`
+	SentAt          *time.Time                 `json:"sentAt"`
+}
+
+type NotificationEvent struct {
+	ID             uuid.UUID       `json:"id"`
+	Type           string          `json:"type"`
+	Severity       string          `json:"severity"`
+	JobID          *uuid.UUID      `json:"jobId"`
+	RunID          *uuid.UUID      `json:"runId"`
+	RestoreID      *uuid.UUID      `json:"restoreId"`
+	TestRestoreID  *uuid.UUID      `json:"testRestoreId"`
+	ConnectionID   *uuid.UUID      `json:"connectionId"`
+	DestinationID  *uuid.UUID      `json:"destinationId"`
+	ArtifactID     *uuid.UUID      `json:"artifactId"`
+	UserID         *uuid.UUID      `json:"userId"`
+	Detail         json.RawMessage `json:"detail"`
+	DedupKey       *string         `json:"dedupKey"`
+	CollapsedInto  *uuid.UUID      `json:"collapsedInto"`
+	CollapsedCount int32           `json:"collapsedCount"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	DispatchedAt   *time.Time      `json:"dispatchedAt"`
+	FannedOutAt    *time.Time      `json:"fannedOutAt"`
 }
 
 type RecoveryCode struct {
@@ -1826,6 +2185,26 @@ type Setting struct {
 	UpdatedBy *uuid.UUID      `json:"updatedBy"`
 }
 
+type SharedChannel struct {
+	ID                  uuid.UUID         `json:"id"`
+	Name                string            `json:"name"`
+	Type                SharedChannelType `json:"type"`
+	Config              json.RawMessage   `json:"config"`
+	UrlEnc              []byte            `json:"urlEnc"`
+	HmacKeyEnc          []byte            `json:"hmacKeyEnc"`
+	Enabled             bool              `json:"enabled"`
+	DisabledAt          *time.Time        `json:"disabledAt"`
+	DisabledReason      *string           `json:"disabledReason"`
+	ConsecutiveFailures int32             `json:"consecutiveFailures"`
+	PermanentFailures   int32             `json:"permanentFailures"`
+	FirstFailureAt      *time.Time        `json:"firstFailureAt"`
+	LastFailureAt       *time.Time        `json:"lastFailureAt"`
+	LastFailureCode     *string           `json:"lastFailureCode"`
+	CreatedBy           *uuid.UUID        `json:"createdBy"`
+	CreatedAt           time.Time         `json:"createdAt"`
+	UpdatedAt           time.Time         `json:"updatedAt"`
+}
+
 type TestRestore struct {
 	ID                 uuid.UUID          `json:"id"`
 	JobID              uuid.UUID          `json:"jobId"`
@@ -1885,6 +2264,35 @@ type User struct {
 	DeletedAt              *time.Time `json:"deletedAt"`
 	PasswordTemporaryUntil *time.Time `json:"passwordTemporaryUntil"`
 	MfaResetAt             *time.Time `json:"mfaResetAt"`
+}
+
+type UserChannel struct {
+	ID                  uuid.UUID       `json:"id"`
+	UserID              uuid.UUID       `json:"userId"`
+	Type                UserChannelType `json:"type"`
+	Name                string          `json:"name"`
+	DisplayUrl          string          `json:"displayUrl"`
+	UrlEnc              []byte          `json:"urlEnc"`
+	HmacKeyEnc          []byte          `json:"hmacKeyEnc"`
+	Enabled             bool            `json:"enabled"`
+	DisabledAt          *time.Time      `json:"disabledAt"`
+	DisabledReason      *string         `json:"disabledReason"`
+	ConsecutiveFailures int32           `json:"consecutiveFailures"`
+	PermanentFailures   int32           `json:"permanentFailures"`
+	FirstFailureAt      *time.Time      `json:"firstFailureAt"`
+	LastFailureAt       *time.Time      `json:"lastFailureAt"`
+	LastFailureCode     *string         `json:"lastFailureCode"`
+	CreatedAt           time.Time       `json:"createdAt"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+}
+
+type UserNotificationPref struct {
+	UserID    uuid.UUID           `json:"userId"`
+	Event     string              `json:"event"`
+	JobID     *uuid.UUID          `json:"jobId"`
+	Channel   NotificationChannel `json:"channel"`
+	Enabled   bool                `json:"enabled"`
+	UpdatedAt time.Time           `json:"updatedAt"`
 }
 
 type WebauthnCeremony struct {

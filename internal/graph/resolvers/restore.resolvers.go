@@ -51,3 +51,7 @@ func (r *queryResolver) RestoreLogs(ctx context.Context, restoreID uuid.UUID, af
 func (r *subscriptionResolver) RestoreUpdated(ctx context.Context, restoreID uuid.UUID) (<-chan *model.Restore, error) {
 	return r.restoreUpdated(ctx, restoreID)
 }
+
+func (r *subscriptionResolver) RestoresUpdated(ctx context.Context) (<-chan *model.Restore, error) {
+	return r.restoresUpdated(ctx)
+}

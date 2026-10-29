@@ -1,0 +1,4 @@
+go test fuzz v1
+string("v1=82A462353B8A596C782A0e037AB0474f96BB68935A6eB9427795B6C106910A5d")
+string("1767225600")
+[]byte("{\"id\":\"evt_01\",\"type\":\"webhook.test\",\"created_at\":\"2026-01-01T00:00:00Z\",\"data\":{\"message\":\"This is a test delivery from bekup.\"}}")

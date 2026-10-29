@@ -1,25 +1,25 @@
 # Architecture
 
-> **Status:** partial (end of M3). Components, networks, trust boundaries and
+> **Status:** partial (end of M6). Components, networks, trust boundaries and
 > data flows below describe the design and the compose topology that exist
-> today. Implemented: the CLI parts (`config`, `migrate`, `keys`, `certs`,
-> `audit`, `admin`, `healthcheck`), `internal/config`, `internal/logging`,
-> `internal/db` (with app-DB TLS verify-full and SCRAM channel binding,
-> D-100, D-104), `internal/crypto` and `internal/certs`; in `serve`: the
-> HTTP layer (task 1.1), the GraphQL API including subscriptions as
-> Server-Sent Events (tasks 1.2, 1.10, 2.13), authorization (1.4),
-> authentication (passwords, sessions, TOTP and recovery codes, passkeys,
-> the 2FA policy and step-up; tasks 1.5–1.9), the audit log with signed
-> chain heads (1.3), the pubsub bridge (1.10), and the connections and
-> destinations APIs (2.11, 2.12); the SSRF guard (2.3), the engine catalog
-> (2.1), the SSH tunnel (2.2), the storage backends disk, S3 and SFTP
-> (2.8–2.10) and the complete runner (2.4–2.7a, design section below);
-> backup execution (M3): the pipeline and signed manifest (3.1), job keys
-> (3.2), the scheduler and River queue (3.3, 3.4), the jobs API (3.5), the
-> backup worker (3.6), run history and live run events (3.7), retention
-> (3.8), downloads (3.9) and completeness evidence (3.10). Still to come:
-> restore and the offline recovery flows in M4, notifications and monitoring in M5, the web
-> UI in M6. The page is completed in task 7.5.
+> today. Implemented: the CLI (`config`, `migrate`, `keys`, `certs`,
+> `audit`, `admin`, `healthcheck`, `verify`, `decrypt`, `reindex`), the
+> foundation (`internal/config`, `logging`, `db` with app-DB TLS
+> verify-full and SCRAM channel binding, `crypto`, `certs`); in `serve`:
+> the HTTP layer, the GraphQL API with subscriptions as Server-Sent Events,
+> authorization, authentication (passwords, sessions, TOTP and recovery
+> codes, passkeys, the 2FA policy and step-up), the audit log with signed
+> chain heads and the pubsub bridge (M1); the runner, engines, SSH tunnel,
+> SSRF guard, storage backends, connections and destinations (M2); the
+> backup pipeline, job keys, scheduler and River queue, jobs, backup runs,
+> run history, retention, downloads and the calendar (M3); restores,
+> temporary restore connections, scheduled test restores and the offline
+> recovery tools (M4); e-mail, webhooks, the notification outbox with
+> fan-out and delivery, missed-backup and security alerts, Prometheus
+> metrics and `systemHealth` (M5, data flow below); and the complete web
+> UI (M6, [below](#web-ui-web)). Still to come: hardening, release
+> artifacts and the remaining docs in M7. The page is completed in task
+> 7.5.
 
 bekup is one Go binary with several subcommands (D-025) and one container
 image. The authoritative threat model is
@@ -32,8 +32,8 @@ section 6: STRIDE per component). This page summarizes it. Decisions are in
 | Component | Role | Status |
 |---|---|---|
 | Reverse proxy (`traefik` or `nginx` profile, opt-in) | Terminates TLS for the UI, HSTS, HTTP→HTTPS redirect, size and rate limits, unbuffered event streams (D-017, D-048, D-124). Traefik uses only its file provider; nginx is the unprivileged image plus a certbot companion. Neither mounts the Docker socket (D-093, D-094). | shipped (task 0.7b) |
-| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and SSE subscriptions (1.2, 1.10, 2.13), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3), scheduler loop and River queue (3.4), pipeline (3.1), backup run worker and `cancelRun` (3.6), retention worker (3.8); further workers in M3–M5 |
-| `bekup worker` | Optional scale-out process: only the River workers (no HTTP, no scheduler), same startup checks as `serve`, connects as `bekup_app` (task 3.4, D-145); builds the destination, runner-client, connection and job-key services the backup worker needs (D-147). | implemented (task 3.4); backup worker (3.6) |
+| `bekup serve` | GraphQL API (POST + JSON), sessions, embedded React UI, scheduler, River workers (backup, restore, retention, notify), backup pipeline and uploads to destinations. Connects to Postgres as `bekup_app`. | HTTP layer, UI shell and health endpoints (task 1.1), GraphQL API and SSE subscriptions (1.2, 1.10, 2.13), authz (1.4), authentication incl. 2FA and step-up (1.5–1.9), audit with signed heads (1.3), scheduler loop and River queue (3.4), pipeline (3.1), backup run worker and `cancelRun` (3.6), retention worker (3.8), restore and test-restore workers (M4), notification dispatcher, fan-out and delivery workers, missed-backup and security checks, metrics listener (M5), the complete web UI (M6) |
+| `bekup worker` | Optional scale-out process: only the River workers (no HTTP, no scheduler), same startup checks as `serve`, connects as `bekup_app` (task 3.4, D-145); builds the destination, runner-client, connection and job-key services the backup worker needs (D-147). | implemented (task 3.4); runs every River worker (backup, restore, retention, notify, maintenance), the notification dispatcher and its own metrics listener |
 | `bekup migrate` | One-shot: applies the embedded goose migrations as `bekup_owner`, under an advisory lock (D-042, D-078). The only process that holds the owner credentials. | implemented (task 0.4) |
 | `bekup runner` | The **only** component with Docker access (D-003). Small typed mTLS gRPC API, image and target allowlists from its own `runner.toml`, builds the hardened dump-container spec itself (D-029–D-033). | implemented (tasks 2.4–2.7a) |
 | Dump containers | Short-lived official, digest-pinned DB images (`pg_dump`, `mysqldump`, `mariadb-dump`, restore clients). Alone on a per-run `internal` network, reaching exactly one target through the runner's proxy or SSH tunnel; secrets only through a stdin preamble (D-032). | implemented (tasks 2.5, 2.6) |
@@ -140,8 +140,33 @@ Summaries; the step-by-step flows are in
   same-origin `GET /api/download/{ticket}` (role/ownership re-checked,
   manifest re-verified) → streamed raw or plain file with `no-store`, the
   last 64 KiB held back until the digests match (`internal/downloads`).
-- **Notifications (tasks 5.1–5.3):** event → recipient resolver (authz at
-  delivery) → inbox / SMTP / HMAC webhooks through the SSRF guard.
+- **Notifications (tasks 5.1–5.3, D-161, D-183):** producers call
+  `notify.Emit` in the transaction of their state change (runstate for
+  backup runs; the `audit.Observer` maps audited job, connection and
+  security actions; restores, test restores, retention anomalies and
+  destination tests emit after commit) → `notification_events` outbox →
+  dispatcher (processes with workers, every 2 s) → River `notify_fanout`
+  (recipients = active accounts the authz policy allows to see the subject
+  now; preferences per-job > per-event > D-161 defaults; mandatory security
+  events; started-event collapse; per-user flood rule) → inbox rows +
+  `notification_deliveries` (idempotency key per event, recipient and
+  channel) → River `notify_deliver` (access re-checked, SMTP / HMAC
+  webhooks through the SSRF guard, retries, webhook auto-disable). Daily
+  `notify_retention_digest` and `notify_cleanup` on the maintenance queue;
+  `missed_backup_check` every 5 minutes emits `backup.missed` (dead-man,
+  `internal/notify/missed`, D-188). Security alerts (task 5.5, D-190):
+  audited security actions map to the mandatory `security.system` /
+  `security.account` events in the audit entry's transaction (also for
+  `bekup admin|certs|…` CLI entries, which only write the outbox); the
+  hourly `security_check` (maintenance queue) adds certificate/pin expiry,
+  audit chain verification and posture reminders.
+
+```
+producer tx ── state change + notification_events row (+ audit entry)
+   dispatcher ── one tx: River notify_fanout {event_id} + dispatched_at
+   fan-out ──── one tx: inbox rows + deliveries + River notify_deliver {delivery_id} + fanned_out_at
+   deliver ──── re-check access ── send (SMTP / webhook) ── record status, counters, auto-disable
+```
 - **Offline recovery (task 4.7, D-164):** `bekup verify` / `bekup decrypt`
   on an operator machine against escrowed instance public keys, no bekup DB
   or keyring needed; `bekup reindex` lists and verifies a destination
@@ -322,8 +347,8 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
 - **Delivery-time authz.** Subscription resolvers send through
   `streams.Deliver` + `streams.Authorize(policy, op, ...)`: the session check
   and `Policy.Authorize` run for every event, so a caller who loses access
-  stops receiving events. `Subscription.sessionEvents` (own sessions) is
-  the first field.
+  stops receiving events. `Subscription.accountEvents` (own sessions and
+  inbox notifications in one stream, D-197) is the account stream.
 - **CSP.** Streams are same-origin `fetch` requests covered by
   `connect-src 'self'`; `pnpm csp-check` verifies in Chrome that a
   same-origin stream opens and a cross-origin one is blocked.
@@ -393,7 +418,8 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
   running argon2id. Refusals while locked are audited once per lock window;
   the number of further refusals follows in the next entry
   (`refused_while_locked`).
-  Lockouts go to a `LockoutNotifier` hook (security alert in task 5.5).
+  Lockouts are audited; the security alert comes from the audit entry
+  (D-190).
 - **GraphQL.** `login(email, password): LoginResult` (public, returns the
   user (null while `secondFactorRequired`), `secondFactorRequired`, `availableFactors`,
   `passwordChangeRequired` and `twoFactorEnrollmentRequired`),
@@ -436,8 +462,8 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
   `mfa_locked_until` is in the future, TOTP, recovery-code and passkey
   checks are refused (`RATE_LIMITED`, audited once per lock window). All enrollment,
   verification, recovery-code and disable events are audited; recovery
-  code use, removal and locks go to a `SecondFactorNotifier` (alerts in
-  task 5.5). `auth.SecondFactors` aggregates the factor checkers (TOTP,
+  code use, removal and locks are audited and alerted through their audit
+  entries (D-190). `auth.SecondFactors` aggregates the factor checkers (TOTP,
   passkeys) for `authz.SecondFactors`, the login and the 2FA policy.
 - **Passkeys** (task 1.8, D-109; `internal/auth/passkey`,
   `github.com/go-webauthn/webauthn`). The relying party comes from
@@ -460,8 +486,7 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
   (`BeginAssertion` / `FinishAssertion` / `VerifyAssertion`, bound to a
   session) serves the two-step login and step-up; a signature counter that does not
   increase (unless always 0) is refused as a possible clone, recorded on
-  the passkey, audited and reported to the `passkey.Notifier` (alerts in
-  task 5.5). Every registration step, assertion outcome, rename and
+  the passkey, audited and alerted through the audit entry (D-190). Every registration step, assertion outcome, rename and
   removal is audited. GraphQL passes WebAuthn options and responses as the
   `JSON` scalar (objects of at most 32 KiB).
 - **Two-step login** (task 1.9, D-112; `auth.SecondFactorFlow`). For an
@@ -504,8 +529,8 @@ Bus ──▶ streams.Hub ──▶ Conn: re-check session ──▶ final error
   `resetUserSecondFactors(userId)` (admin, step-up, not the own account)
   or `bekup admin reset-2fa --email` removes TOTP, passkeys (and open
   ceremonies) and recovery codes, clears the second-factor lockout, sets
-  `mfa_reset_at` and revokes every session in one audited transaction; a
-  `FactorResetNotifier` hook raises the alert (task 5.5).
+  `mfa_reset_at` and revokes every session in one audited transaction; the
+  alert comes from the audit entry (D-190).
 - **First admin** (D-113): only `bekup admin create` on the host; there is
   no web setup flow. `serve` logs the command at WARN while no active admin
   exists and keeps running.
@@ -684,7 +709,7 @@ River (river_job in the app DB) ─▶ workers in serve and/or `bekup worker`
   `workers.shutdown_timeout`, then cancel their contexts and wait at most
   30s more.
 - **Metrics:** the loop reports ticks, enqueued runs and skips through
-  `scheduler.Metrics` (no-op until task 5.6).
+  `scheduler.Metrics` (Prometheus counters, task 5.6).
 
 ## Backup runs (`internal/jobs` backup worker, `internal/runstate`, task 3.6, D-147)
 
@@ -769,9 +794,16 @@ worker (River backup queue, serve or `bekup worker`)
 - **`runLogAppended(runId, afterId)`:** coalesced batches of at most 200
   new lines, authorized per batch (`run.logs_view`); a final `done` batch
   completes the stream once the run finished and every line was sent.
-- **Stream budget:** both count against `graphql.stream_max_per_session`
-  (default 4). The UI keeps one `runUpdated` stream per page (filter on the
-  client) plus at most one `runLogAppended` on a run page.
+- **Combined streams (D-197):** `runActivity(runId, afterLogId)` carries
+  one run's changes and its log batches in one stream (each kind
+  authorized with its own operation; after the `done` batch it sends the
+  final run state and completes); `activityUpdated` carries every run and
+  restore the caller may view (the dashboard).
+- **Stream budget:** every stream counts against
+  `graphql.stream_max_per_session` (default 4). The UI keeps one account
+  stream per browser (shared across tabs) plus at most one page stream per
+  tab: `activityUpdated` on the dashboard, `runActivity` on a run page,
+  one `runUpdated` (filtered on the client) on list pages.
 - **Completeness evidence (task 3.10, D-141, D-151):** `jobs.StatsCollector`
   brackets each dump. The worker's `jobs.RunnerStats` sets `StatsOptions`
   (level from the job's `verification`) on the `Dump`/`DumpGlobals`
@@ -782,6 +814,38 @@ worker (River backup queue, serve or `bekup worker`)
   the manifest's `stats` object and stores them insert-only in
   `backup_stats`. A stats failure only adds `stats_unavailable`; the dump
   still counts.
+
+## Web UI (`web/`)
+
+A React + TypeScript single-page app (D-026, D-084), built with Vite and
+embedded in the binary (`web/embed.go`); `serve` delivers it under the
+strict CSP with Trusted Types (D-082). It talks only to `serve`: GraphQL
+as POST + JSON on `/graphql`, subscriptions as Server-Sent Events on the
+same path (D-124), downloads as same-origin navigations to
+`/api/download/{ticket}` (D-150). There is no other backend.
+
+- **Shell and session gate (D-179).** `RequireSession` loads `me` and
+  renders the shell, the forced password change or the forced 2FA
+  enrollment; the role-based navigation only shapes the UI, the server
+  enforces every operation (authz matrix). One shared step-up dialog
+  (`useStepUp`) handles `STEP_UP_REQUIRED` and the proactive AAL2 check of
+  restores (D-185).
+- **Feature pages.** Dashboard (D-192, D-196), calendar (D-185), jobs and
+  runs with live logs, downloads and test restores (D-186, D-195), the
+  restore wizard and history (D-185), connections and destinations with
+  the pin and host-key confirmations (D-182), users (D-181, D-184), the
+  notification center (D-193) and the admin settings: SMTP, shared
+  channels, security alerts, audit log with chain status, SSRF allowlist,
+  recovery export (D-194, D-196).
+- **Live data.** Each tab keeps the event streams within the session's
+  cap (`graphql.stream_max_per_session`, default 4): one shared account
+  stream plus at most one page stream; every event is re-authorized on
+  the server.
+- **One-time material** (generated keys, signing keys, temporary
+  passwords, download tickets, age identities) never enters the Apollo
+  cache (`no-cache`) or browser storage and is dropped after use.
+
+Developer details: [development.md](development.md#web-ui-web).
 
 ## Engines (`internal/engine`, task 2.1)
 

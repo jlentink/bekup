@@ -147,6 +147,32 @@ CREATE TYPE public.job_verification AS ENUM (
 ALTER TYPE public.job_verification OWNER TO bekup_owner;
 
 --
+-- Name: notification_channel; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.notification_channel AS ENUM (
+    'inbox',
+    'email',
+    'webhook',
+    'push'
+);
+
+ALTER TYPE public.notification_channel OWNER TO bekup_owner;
+
+--
+-- Name: notification_delivery_status; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.notification_delivery_status AS ENUM (
+    'queued',
+    'sent',
+    'failed',
+    'skipped'
+);
+
+ALTER TYPE public.notification_delivery_status OWNER TO bekup_owner;
+
+--
 -- Name: restore_mode; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -270,6 +296,17 @@ CREATE TYPE public.run_trigger AS ENUM (
 ALTER TYPE public.run_trigger OWNER TO bekup_owner;
 
 --
+-- Name: shared_channel_type; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.shared_channel_type AS ENUM (
+    'email_list',
+    'webhook'
+);
+
+ALTER TYPE public.shared_channel_type OWNER TO bekup_owner;
+
+--
 -- Name: test_restore_status; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -295,6 +332,17 @@ CREATE TYPE public.test_restore_trigger AS ENUM (
 );
 
 ALTER TYPE public.test_restore_trigger OWNER TO bekup_owner;
+
+--
+-- Name: user_channel_type; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.user_channel_type AS ENUM (
+    'webhook',
+    'push'
+);
+
+ALTER TYPE public.user_channel_type OWNER TO bekup_owner;
 
 --
 -- Name: user_role; Type: TYPE; Schema: public; Owner: bekup_owner
@@ -675,6 +723,44 @@ $$;
 
 ALTER FUNCTION public.test_restores_guard() OWNER TO bekup_owner;
 
+--
+-- Name: user_channels_limit(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.user_channels_limit() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('bekup.user_channels:' || NEW.user_id::text, 0));
+    IF (SELECT count(*) FROM public.user_channels WHERE user_id = NEW.user_id AND type = NEW.type) >= 5 THEN
+        RAISE EXCEPTION 'a user may have at most 5 personal webhooks'
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'user_channels_max_per_user';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.user_channels_limit() OWNER TO bekup_owner;
+
+--
+-- Name: users_email_change_unverify(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.users_email_change_unverify() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.email IS DISTINCT FROM OLD.email THEN
+        NEW.email_verified_at := NULL;
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.users_email_change_unverify() OWNER TO bekup_owner;
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -837,6 +923,67 @@ CREATE TABLE public.backup_stats (
 ALTER TABLE public.backup_stats OWNER TO bekup_owner;
 
 --
+-- Name: config_reload_requests; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.config_reload_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    requested_by uuid,
+    trigger text NOT NULL,
+    instance_id uuid NOT NULL,
+    CONSTRAINT config_reload_requests_signal_actor CHECK (((trigger = 'ui'::text) OR (requested_by IS NULL))),
+    CONSTRAINT config_reload_requests_trigger CHECK ((trigger = ANY (ARRAY['ui'::text, 'signal'::text])))
+);
+
+ALTER TABLE public.config_reload_requests OWNER TO bekup_owner;
+
+--
+-- Name: config_reload_results; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.config_reload_results (
+    id bigint NOT NULL,
+    request_id uuid,
+    instance_id uuid NOT NULL,
+    process_kind text NOT NULL,
+    hostname text NOT NULL,
+    version text NOT NULL,
+    process_started_at timestamp with time zone NOT NULL,
+    finished_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text NOT NULL,
+    error_kind text,
+    applied_keys text[] DEFAULT '{}'::text[] NOT NULL,
+    restart_keys text[] DEFAULT '{}'::text[] NOT NULL,
+    error_keys text[] DEFAULT '{}'::text[] NOT NULL,
+    weakened_keys text[] DEFAULT '{}'::text[] NOT NULL,
+    CONSTRAINT config_reload_results_cardinality CHECK (((cardinality(applied_keys) <= 256) AND (cardinality(restart_keys) <= 256) AND (cardinality(error_keys) <= 256) AND (cardinality(weakened_keys) <= 256))),
+    CONSTRAINT config_reload_results_error_kind CHECK ((((status = 'rejected'::text) AND (error_kind = ANY (ARRAY['file'::text, 'syntax'::text, 'invalid'::text]))) OR ((status = 'failed'::text) AND (error_kind = 'apply'::text)) OR ((status <> ALL (ARRAY['rejected'::text, 'failed'::text])) AND (error_kind IS NULL)))),
+    CONSTRAINT config_reload_results_hostname CHECK ((hostname ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'::text)),
+    CONSTRAINT config_reload_results_key_names CHECK (((array_to_string(applied_keys, ','::text) ~ '^([a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}(,|$))*$'::text) AND (array_to_string(restart_keys, ','::text) ~ '^([a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}(,|$))*$'::text) AND (array_to_string(error_keys, ','::text) ~ '^([a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}(,|$))*$'::text) AND (array_to_string(weakened_keys, ','::text) ~ '^([a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}(,|$))*$'::text))),
+    CONSTRAINT config_reload_results_kind CHECK ((process_kind = ANY (ARRAY['serve'::text, 'worker'::text]))),
+    CONSTRAINT config_reload_results_loaded CHECK (((status = 'loaded'::text) = (request_id IS NULL))),
+    CONSTRAINT config_reload_results_no_nulls CHECK (((array_position(applied_keys, NULL::text) IS NULL) AND (array_position(restart_keys, NULL::text) IS NULL) AND (array_position(error_keys, NULL::text) IS NULL) AND (array_position(weakened_keys, NULL::text) IS NULL))),
+    CONSTRAINT config_reload_results_status CHECK ((status = ANY (ARRAY['loaded'::text, 'applied'::text, 'unchanged'::text, 'restart_required'::text, 'rejected'::text, 'failed'::text]))),
+    CONSTRAINT config_reload_results_version CHECK ((version ~ '^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$'::text))
+);
+
+ALTER TABLE public.config_reload_results OWNER TO bekup_owner;
+
+--
+-- Name: config_reload_results_id_seq; Type: SEQUENCE; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE public.config_reload_results ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.config_reload_results_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+--
 -- Name: connections; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -883,12 +1030,22 @@ CREATE TABLE public.connections (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
     max_concurrent_runs integer,
+    last_tested_at timestamp with time zone,
+    last_test_ok boolean,
+    last_test_code text,
+    last_test_settings_at timestamp with time zone,
+    last_test_privileges text,
+    last_test_privilege_reasons text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT connections_backup_pin_complete CHECK ((((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pin_not_after IS NULL)) AND ((tls_backup_pin_cert_pem IS NULL) = (tls_backup_pinned_at IS NULL)) AND ((tls_backup_pin_spki IS NULL) OR (tls_backup_pin_cert_pem IS NOT NULL)))),
     CONSTRAINT connections_client_cert_size CHECK ((octet_length(client_cert_pem) <= 32768)),
     CONSTRAINT connections_host_key_complete CHECK ((((ssh_host_key_type IS NULL) = (ssh_host_key_fingerprint IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_authorized_key IS NULL)) AND ((ssh_host_key_type IS NULL) = (ssh_host_key_confirmed_at IS NULL)))),
     CONSTRAINT connections_host_key_fingerprint_format CHECK (((ssh_host_key_fingerprint IS NULL) OR (ssh_host_key_fingerprint ~ '^SHA256:[A-Za-z0-9+/]{43}$'::text))),
     CONSTRAINT connections_host_length CHECK (((char_length(host) >= 1) AND (char_length(host) <= 253))),
     CONSTRAINT connections_key_length CHECK ((((char_length(version_key) >= 1) AND (char_length(version_key) <= 16)) AND ((char_length(image_key) >= 1) AND (char_length(image_key) <= 16)))),
+    CONSTRAINT connections_last_test_code_format CHECK (((last_test_code IS NULL) OR (last_test_code ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'::text))),
+    CONSTRAINT connections_last_test_complete CHECK ((((last_tested_at IS NULL) = (last_test_ok IS NULL)) AND ((last_tested_at IS NULL) = (last_test_settings_at IS NULL)))),
+    CONSTRAINT connections_last_test_privilege_reasons_bounded CHECK (((cardinality(last_test_privilege_reasons) <= 32) AND (octet_length(array_to_string(last_test_privilege_reasons, ''::text)) <= (32 * 64)))),
+    CONSTRAINT connections_last_test_privileges_value CHECK (((last_test_privileges IS NULL) OR (last_test_privileges = ANY (ARRAY['not_privileged'::text, 'privileged'::text, 'unknown'::text])))),
     CONSTRAINT connections_max_concurrent_runs_range CHECK (((max_concurrent_runs IS NULL) OR ((max_concurrent_runs >= 1) AND (max_concurrent_runs <= 64)))),
     CONSTRAINT connections_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT connections_pin_complete CHECK ((((tls_pin_cert_pem IS NULL) = (tls_pin_not_after IS NULL)) AND ((tls_pin_cert_pem IS NULL) = (tls_pinned_at IS NULL)) AND ((tls_pin_spki IS NULL) OR (tls_pin_cert_pem IS NOT NULL)))),
@@ -929,11 +1086,17 @@ CREATE TABLE public.destinations (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
+    last_tested_at timestamp with time zone,
+    last_test_ok boolean,
+    last_test_code text,
+    last_test_settings_at timestamp with time zone,
     CONSTRAINT destinations_config_object CHECK ((jsonb_typeof(config) = 'object'::text)),
     CONSTRAINT destinations_config_size CHECK ((octet_length((config)::text) <= 524288)),
     CONSTRAINT destinations_host_key_complete CHECK ((((host_key_type IS NULL) = (host_key_fingerprint IS NULL)) AND ((host_key_type IS NULL) = (host_key_authorized_key IS NULL)) AND ((host_key_type IS NULL) = (host_key_confirmed_at IS NULL)))),
     CONSTRAINT destinations_host_key_fingerprint_format CHECK (((host_key_fingerprint IS NULL) OR (host_key_fingerprint ~ '^SHA256:[A-Za-z0-9+/]{43}$'::text))),
     CONSTRAINT destinations_host_key_sftp_only CHECK (((host_key_type IS NULL) OR (type = 'sftp'::public.destination_type))),
+    CONSTRAINT destinations_last_test_code_format CHECK (((last_test_code IS NULL) OR (last_test_code ~ '^[A-Za-z][A-Za-z0-9_]{0,63}$'::text))),
+    CONSTRAINT destinations_last_test_complete CHECK ((((last_tested_at IS NULL) = (last_test_ok IS NULL)) AND ((last_tested_at IS NULL) = (last_test_settings_at IS NULL)))),
     CONSTRAINT destinations_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT destinations_object_lock_complete CHECK (((object_lock_mode IS NULL) = (object_lock_retention_days IS NULL))),
     CONSTRAINT destinations_object_lock_days CHECK (((object_lock_retention_days IS NULL) OR ((object_lock_retention_days >= 1) AND (object_lock_retention_days <= 36500)))),
@@ -967,6 +1130,27 @@ CREATE TABLE public.download_tickets (
 );
 
 ALTER TABLE public.download_tickets OWNER TO bekup_owner;
+
+--
+-- Name: email_verifications; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.email_verifications (
+    user_id uuid NOT NULL,
+    email public.citext NOT NULL,
+    code_mac bytea NOT NULL,
+    mac_key_id bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    failed_attempts integer DEFAULT 0 NOT NULL,
+    CONSTRAINT email_verifications_attempts CHECK (((failed_attempts >= 0) AND (failed_attempts <= 100))),
+    CONSTRAINT email_verifications_email_length CHECK (((length((email)::text) >= 3) AND (length((email)::text) <= 254))),
+    CONSTRAINT email_verifications_expiry CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '7 days'::interval)))),
+    CONSTRAINT email_verifications_key_id_length CHECK ((octet_length(mac_key_id) = 4)),
+    CONSTRAINT email_verifications_mac_length CHECK ((octet_length(code_mac) = 32))
+);
+
+ALTER TABLE public.email_verifications OWNER TO bekup_owner;
 
 --
 -- Name: goose_db_version; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -1046,6 +1230,22 @@ CREATE TABLE public.job_encryption (
 ALTER TABLE public.job_encryption OWNER TO bekup_owner;
 
 --
+-- Name: job_missed_state; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_missed_state (
+    job_id uuid NOT NULL,
+    missed_since timestamp with time zone NOT NULL,
+    last_missed_at timestamp with time zone NOT NULL,
+    reason text NOT NULL,
+    checked_at timestamp with time zone NOT NULL,
+    CONSTRAINT job_missed_state_order CHECK ((last_missed_at >= missed_since)),
+    CONSTRAINT job_missed_state_reason_format CHECK ((reason ~ '^[a-z][a-z_]{0,63}$'::text))
+);
+
+ALTER TABLE public.job_missed_state OWNER TO bekup_owner;
+
+--
 -- Name: job_owners; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -1098,6 +1298,22 @@ CREATE TABLE public.job_recipients (
 );
 
 ALTER TABLE public.job_recipients OWNER TO bekup_owner;
+
+--
+-- Name: job_shared_channels; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.job_shared_channels (
+    job_id uuid NOT NULL,
+    channel_id uuid NOT NULL,
+    groups text[] DEFAULT '{}'::text[] NOT NULL,
+    events text[] DEFAULT '{}'::text[] NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT job_shared_channels_filter_size CHECK (((cardinality(groups) <= 16) AND (cardinality(events) <= 64)))
+);
+
+ALTER TABLE public.job_shared_channels OWNER TO bekup_owner;
 
 --
 -- Name: jobs; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -1153,6 +1369,97 @@ CREATE TABLE public.jobs (
 );
 
 ALTER TABLE public.jobs OWNER TO bekup_owner;
+
+--
+-- Name: notification_deliveries; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.notification_deliveries (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    event_id uuid NOT NULL,
+    user_id uuid,
+    user_channel_id uuid,
+    shared_channel_id uuid,
+    channel public.notification_channel NOT NULL,
+    status public.notification_delivery_status DEFAULT 'queued'::public.notification_delivery_status NOT NULL,
+    summary boolean DEFAULT false NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    last_code text,
+    last_error text,
+    idempotency_key text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    sent_at timestamp with time zone,
+    CONSTRAINT notification_deliveries_attempts CHECK (((attempts >= 0) AND (attempts <= 100))),
+    CONSTRAINT notification_deliveries_channel CHECK ((channel = ANY (ARRAY['email'::public.notification_channel, 'webhook'::public.notification_channel]))),
+    CONSTRAINT notification_deliveries_code_length CHECK (((last_code IS NULL) OR (length(last_code) <= 64))),
+    CONSTRAINT notification_deliveries_error_length CHECK (((last_error IS NULL) OR (length(last_error) <= 300))),
+    CONSTRAINT notification_deliveries_key_length CHECK (((length(idempotency_key) >= 1) AND (length(idempotency_key) <= 200))),
+    CONSTRAINT notification_deliveries_recipient CHECK ((((user_id IS NOT NULL) AND (shared_channel_id IS NULL)) OR ((user_id IS NULL) AND (user_channel_id IS NULL) AND (shared_channel_id IS NOT NULL)))),
+    CONSTRAINT notification_deliveries_webhook_target CHECK (((channel <> 'webhook'::public.notification_channel) OR (user_channel_id IS NOT NULL) OR (shared_channel_id IS NOT NULL)))
+);
+
+ALTER TABLE public.notification_deliveries OWNER TO bekup_owner;
+
+--
+-- Name: notification_events; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.notification_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    type text NOT NULL,
+    severity text NOT NULL,
+    job_id uuid,
+    run_id uuid,
+    restore_id uuid,
+    test_restore_id uuid,
+    connection_id uuid,
+    destination_id uuid,
+    artifact_id uuid,
+    user_id uuid,
+    detail jsonb DEFAULT '{}'::jsonb NOT NULL,
+    dedup_key text,
+    collapsed_into uuid,
+    collapsed_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    dispatched_at timestamp with time zone,
+    fanned_out_at timestamp with time zone,
+    CONSTRAINT notification_events_collapsed_count CHECK ((collapsed_count >= 0)),
+    CONSTRAINT notification_events_dedup_length CHECK (((dedup_key IS NULL) OR ((length(dedup_key) >= 1) AND (length(dedup_key) <= 200)))),
+    CONSTRAINT notification_events_detail_object CHECK ((jsonb_typeof(detail) = 'object'::text)),
+    CONSTRAINT notification_events_detail_size CHECK ((octet_length((detail)::text) <= 4096)),
+    CONSTRAINT notification_events_severity CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text]))),
+    CONSTRAINT notification_events_type_format CHECK (((type ~ '^[a-z][a-z_]*\.[a-z][a-z_]*$'::text) AND (length(type) <= 64)))
+);
+
+ALTER TABLE public.notification_events OWNER TO bekup_owner;
+
+--
+-- Name: notifications; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.notifications (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    event_id uuid,
+    type text NOT NULL,
+    severity text NOT NULL,
+    title text NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    link text,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    read_at timestamp with time zone,
+    CONSTRAINT notifications_body_length CHECK ((char_length(body) <= 1000)),
+    CONSTRAINT notifications_link_length CHECK (((link IS NULL) OR (char_length(link) <= 2048))),
+    CONSTRAINT notifications_payload_object CHECK ((jsonb_typeof(payload) = 'object'::text)),
+    CONSTRAINT notifications_payload_size CHECK ((octet_length((payload)::text) <= 8192)),
+    CONSTRAINT notifications_severity CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text]))),
+    CONSTRAINT notifications_title_length CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
+    CONSTRAINT notifications_type_format CHECK (((type ~ '^[a-z][a-z_]*\.[a-z][a-z_]*$'::text) AND (length(type) <= 64)))
+);
+
+ALTER TABLE public.notifications OWNER TO bekup_owner;
 
 --
 -- Name: recovery_codes; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -1564,6 +1871,40 @@ CREATE TABLE public.settings (
 ALTER TABLE public.settings OWNER TO bekup_owner;
 
 --
+-- Name: shared_channels; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.shared_channels (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    type public.shared_channel_type NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    url_enc bytea,
+    hmac_key_enc bytea,
+    enabled boolean DEFAULT true NOT NULL,
+    disabled_at timestamp with time zone,
+    disabled_reason text,
+    consecutive_failures integer DEFAULT 0 NOT NULL,
+    permanent_failures integer DEFAULT 0 NOT NULL,
+    first_failure_at timestamp with time zone,
+    last_failure_at timestamp with time zone,
+    last_failure_code text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT shared_channels_config_object CHECK ((jsonb_typeof(config) = 'object'::text)),
+    CONSTRAINT shared_channels_config_size CHECK ((octet_length((config)::text) <= 16384)),
+    CONSTRAINT shared_channels_counters CHECK (((consecutive_failures >= 0) AND (permanent_failures >= 0))),
+    CONSTRAINT shared_channels_disabled_reason_length CHECK (((disabled_reason IS NULL) OR (length(disabled_reason) <= 64))),
+    CONSTRAINT shared_channels_failure_code_length CHECK (((last_failure_code IS NULL) OR (length(last_failure_code) <= 64))),
+    CONSTRAINT shared_channels_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT shared_channels_sealed CHECK ((((type = 'webhook'::public.shared_channel_type) AND (url_enc IS NOT NULL) AND (hmac_key_enc IS NOT NULL)) OR ((type = 'email_list'::public.shared_channel_type) AND (url_enc IS NULL) AND (hmac_key_enc IS NULL)))),
+    CONSTRAINT shared_channels_sealed_size CHECK (((octet_length(url_enc) <= 8192) AND (octet_length(hmac_key_enc) <= 1024)))
+);
+
+ALTER TABLE public.shared_channels OWNER TO bekup_owner;
+
+--
 -- Name: test_restore_items; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -1621,6 +1962,55 @@ CREATE TABLE public.test_restores (
 );
 
 ALTER TABLE public.test_restores OWNER TO bekup_owner;
+
+--
+-- Name: user_channels; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.user_channels (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    type public.user_channel_type NOT NULL,
+    name text NOT NULL,
+    display_url text NOT NULL,
+    url_enc bytea NOT NULL,
+    hmac_key_enc bytea NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    disabled_at timestamp with time zone,
+    disabled_reason text,
+    consecutive_failures integer DEFAULT 0 NOT NULL,
+    permanent_failures integer DEFAULT 0 NOT NULL,
+    first_failure_at timestamp with time zone,
+    last_failure_at timestamp with time zone,
+    last_failure_code text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_channels_counters CHECK (((consecutive_failures >= 0) AND (permanent_failures >= 0))),
+    CONSTRAINT user_channels_disabled_reason_length CHECK (((disabled_reason IS NULL) OR (length(disabled_reason) <= 64))),
+    CONSTRAINT user_channels_display_url_length CHECK (((char_length(display_url) >= 1) AND (char_length(display_url) <= 300))),
+    CONSTRAINT user_channels_failure_code_length CHECK (((last_failure_code IS NULL) OR (length(last_failure_code) <= 64))),
+    CONSTRAINT user_channels_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT user_channels_sealed_size CHECK (((octet_length(url_enc) <= 8192) AND (octet_length(hmac_key_enc) <= 1024))),
+    CONSTRAINT user_channels_webhook_only CHECK ((type = 'webhook'::public.user_channel_type))
+);
+
+ALTER TABLE public.user_channels OWNER TO bekup_owner;
+
+--
+-- Name: user_notification_prefs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.user_notification_prefs (
+    user_id uuid NOT NULL,
+    event text NOT NULL,
+    job_id uuid,
+    channel public.notification_channel NOT NULL,
+    enabled boolean NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_notification_prefs_event_format CHECK (((event ~ '^[a-z][a-z_]*\.[a-z][a-z_]*$'::text) AND (length(event) <= 64)))
+);
+
+ALTER TABLE public.user_notification_prefs OWNER TO bekup_owner;
 
 --
 -- Name: users; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -1780,6 +2170,27 @@ ALTER TABLE ONLY public.backup_stats
     ADD CONSTRAINT backup_stats_pkey PRIMARY KEY (run_item_id);
 
 --
+-- Name: config_reload_requests config_reload_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.config_reload_requests
+    ADD CONSTRAINT config_reload_requests_pkey PRIMARY KEY (id);
+
+--
+-- Name: config_reload_results config_reload_results_once; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.config_reload_results
+    ADD CONSTRAINT config_reload_results_once UNIQUE (request_id, instance_id);
+
+--
+-- Name: config_reload_results config_reload_results_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.config_reload_results
+    ADD CONSTRAINT config_reload_results_pkey PRIMARY KEY (id);
+
+--
 -- Name: connections connections_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -1806,6 +2217,13 @@ ALTER TABLE ONLY public.download_tickets
 
 ALTER TABLE ONLY public.download_tickets
     ADD CONSTRAINT download_tickets_pkey PRIMARY KEY (id);
+
+--
+-- Name: email_verifications email_verifications_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.email_verifications
+    ADD CONSTRAINT email_verifications_pkey PRIMARY KEY (user_id);
 
 --
 -- Name: goose_db_version goose_db_version_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1850,6 +2268,13 @@ ALTER TABLE ONLY public.job_encryption
     ADD CONSTRAINT job_encryption_pkey PRIMARY KEY (job_id);
 
 --
+-- Name: job_missed_state job_missed_state_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_missed_state
+    ADD CONSTRAINT job_missed_state_pkey PRIMARY KEY (job_id);
+
+--
 -- Name: job_owners job_owners_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -1871,11 +2296,39 @@ ALTER TABLE ONLY public.job_recipients
     ADD CONSTRAINT job_recipients_pkey PRIMARY KEY (job_id, version);
 
 --
+-- Name: job_shared_channels job_shared_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_shared_channels
+    ADD CONSTRAINT job_shared_channels_pkey PRIMARY KEY (job_id, channel_id);
+
+--
 -- Name: jobs jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_pkey PRIMARY KEY (id);
+
+--
+-- Name: notification_deliveries notification_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_deliveries
+    ADD CONSTRAINT notification_deliveries_pkey PRIMARY KEY (id);
+
+--
+-- Name: notification_events notification_events_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_events
+    ADD CONSTRAINT notification_events_pkey PRIMARY KEY (id);
+
+--
+-- Name: notifications notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
 
 --
 -- Name: recovery_codes recovery_codes_code_mac_key; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -1997,6 +2450,13 @@ ALTER TABLE ONLY public.settings
     ADD CONSTRAINT settings_pkey PRIMARY KEY (key);
 
 --
+-- Name: shared_channels shared_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.shared_channels
+    ADD CONSTRAINT shared_channels_pkey PRIMARY KEY (id);
+
+--
 -- Name: test_restore_items test_restore_items_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2009,6 +2469,13 @@ ALTER TABLE ONLY public.test_restore_items
 
 ALTER TABLE ONLY public.test_restores
     ADD CONSTRAINT test_restores_pkey PRIMARY KEY (id);
+
+--
+-- Name: user_channels user_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_channels
+    ADD CONSTRAINT user_channels_pkey PRIMARY KEY (id);
 
 --
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -2070,6 +2537,12 @@ CREATE UNIQUE INDEX artifact_holds_holder_idx ON public.artifact_holds USING btr
 CREATE UNIQUE INDEX artifacts_destination_key_idx ON public.artifacts USING btree (destination_id, object_key);
 
 --
+-- Name: artifacts_destination_present_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifacts_destination_present_idx ON public.artifacts USING btree (destination_id) INCLUDE (size) WHERE (state = 'present'::public.artifact_state);
+
+--
 -- Name: artifacts_item_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -2106,6 +2579,12 @@ CREATE INDEX audit_log_action_id_idx ON public.audit_log USING btree (action, id
 CREATE INDEX audit_log_actor_user_id_id_idx ON public.audit_log USING btree (actor_user_id, id) WHERE (actor_user_id IS NOT NULL);
 
 --
+-- Name: audit_log_login_failed_ts_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX audit_log_login_failed_ts_idx ON public.audit_log USING btree (ts) WHERE (action = 'auth.login.failed'::text);
+
+--
 -- Name: audit_log_target_id_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -2128,6 +2607,24 @@ CREATE INDEX backup_stats_job_idx ON public.backup_stats USING btree (job_id, cr
 --
 
 CREATE INDEX backup_stats_run_idx ON public.backup_stats USING btree (run_id);
+
+--
+-- Name: config_reload_requests_requested_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX config_reload_requests_requested_at_idx ON public.config_reload_requests USING btree (requested_at);
+
+--
+-- Name: config_reload_results_finished_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX config_reload_results_finished_at_idx ON public.config_reload_results USING btree (finished_at);
+
+--
+-- Name: config_reload_results_instance_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX config_reload_results_instance_idx ON public.config_reload_results USING btree (instance_id, finished_at DESC);
 
 --
 -- Name: connections_name_active_key; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -2166,6 +2663,12 @@ CREATE INDEX download_tickets_expires_idx ON public.download_tickets USING btree
 CREATE INDEX download_tickets_user_idx ON public.download_tickets USING btree (user_id, expires_at);
 
 --
+-- Name: email_verifications_expires_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX email_verifications_expires_idx ON public.email_verifications USING btree (expires_at);
+
+--
 -- Name: instance_keys_one_active_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -2194,6 +2697,12 @@ CREATE UNIQUE INDEX job_passphrases_one_active_idx ON public.job_passphrases USI
 --
 
 CREATE UNIQUE INDEX job_recipients_one_active_idx ON public.job_recipients USING btree (job_id) WHERE (retired_at IS NULL);
+
+--
+-- Name: job_shared_channels_channel_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX job_shared_channels_channel_idx ON public.job_shared_channels USING btree (channel_id);
 
 --
 -- Name: jobs_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -2236,6 +2745,78 @@ CREATE INDEX jobs_test_restore_connection_idx ON public.jobs USING btree (test_r
 --
 
 CREATE INDEX jobs_test_restore_due_idx ON public.jobs USING btree (test_restore_next_at) WHERE (test_restore_enabled AND (deleted_at IS NULL) AND (test_restore_next_at IS NOT NULL));
+
+--
+-- Name: notification_deliveries_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_deliveries_created_idx ON public.notification_deliveries USING btree (created_at);
+
+--
+-- Name: notification_deliveries_event_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_deliveries_event_idx ON public.notification_deliveries USING btree (event_id);
+
+--
+-- Name: notification_deliveries_flood_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_deliveries_flood_idx ON public.notification_deliveries USING btree (user_id, channel, created_at) WHERE (user_id IS NOT NULL);
+
+--
+-- Name: notification_deliveries_idempotency_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX notification_deliveries_idempotency_key ON public.notification_deliveries USING btree (idempotency_key);
+
+--
+-- Name: notification_events_collapse_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_events_collapse_idx ON public.notification_events USING btree (type, job_id, created_at DESC);
+
+--
+-- Name: notification_events_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_events_created_idx ON public.notification_events USING btree (created_at);
+
+--
+-- Name: notification_events_dedup_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX notification_events_dedup_key ON public.notification_events USING btree (dedup_key) WHERE (dedup_key IS NOT NULL);
+
+--
+-- Name: notification_events_undispatched_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notification_events_undispatched_idx ON public.notification_events USING btree (created_at) WHERE (dispatched_at IS NULL);
+
+--
+-- Name: notifications_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notifications_created_idx ON public.notifications USING btree (created_at);
+
+--
+-- Name: notifications_event_user_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX notifications_event_user_key ON public.notifications USING btree (event_id, user_id) WHERE (event_id IS NOT NULL);
+
+--
+-- Name: notifications_unread_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notifications_unread_idx ON public.notifications USING btree (user_id) WHERE (read_at IS NULL);
+
+--
+-- Name: notifications_user_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX notifications_user_idx ON public.notifications USING btree (user_id, created_at DESC);
 
 --
 -- Name: recovery_codes_user_id_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -2412,6 +2993,12 @@ CREATE INDEX sessions_absolute_expires_at_idx ON public.sessions USING btree (ab
 CREATE INDEX sessions_user_id_idx ON public.sessions USING btree (user_id);
 
 --
+-- Name: shared_channels_name_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX shared_channels_name_key ON public.shared_channels USING btree (lower(name));
+
+--
 -- Name: test_restore_items_scratch_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -2434,6 +3021,18 @@ CREATE UNIQUE INDEX test_restores_active_idx ON public.test_restores USING btree
 --
 
 CREATE INDEX test_restores_job_idx ON public.test_restores USING btree (job_id, created_at DESC, id DESC);
+
+--
+-- Name: user_channels_user_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX user_channels_user_idx ON public.user_channels USING btree (user_id);
+
+--
+-- Name: user_notification_prefs_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX user_notification_prefs_key ON public.user_notification_prefs USING btree (user_id, event, job_id, channel) NULLS NOT DISTINCT;
 
 --
 -- Name: users_active_admins_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -2493,13 +3092,13 @@ CREATE TRIGGER audit_log_no_update_delete BEFORE DELETE OR UPDATE ON public.audi
 -- Name: connections connections_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
-CREATE TRIGGER connections_set_updated_at BEFORE UPDATE ON public.connections FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER connections_set_updated_at BEFORE UPDATE ON public.connections FOR EACH ROW WHEN (((NOT (new.last_tested_at IS DISTINCT FROM old.last_tested_at)) OR ((to_jsonb(new.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text, 'last_test_privileges'::text, 'last_test_privilege_reasons'::text]) IS DISTINCT FROM (to_jsonb(old.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text, 'last_test_privileges'::text, 'last_test_privilege_reasons'::text])))) EXECUTE FUNCTION public.set_updated_at();
 
 --
 -- Name: destinations destinations_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
-CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW WHEN (((NOT (new.last_tested_at IS DISTINCT FROM old.last_tested_at)) OR ((to_jsonb(new.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text]) IS DISTINCT FROM (to_jsonb(old.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text])))) EXECUTE FUNCTION public.set_updated_at();
 
 --
 -- Name: download_tickets download_tickets_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
@@ -2538,6 +3137,12 @@ CREATE TRIGGER jobs_set_updated_at BEFORE UPDATE ON public.jobs FOR EACH ROW EXE
 CREATE TRIGGER jobs_slug_immutable BEFORE UPDATE ON public.jobs FOR EACH ROW EXECUTE FUNCTION public.jobs_slug_immutable();
 
 --
+-- Name: notification_deliveries notification_deliveries_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER notification_deliveries_set_updated_at BEFORE UPDATE ON public.notification_deliveries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
 -- Name: restore_identity_handoff restore_identity_handoff_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -2574,6 +3179,12 @@ CREATE TRIGGER runs_terminal_guard BEFORE UPDATE ON public.runs FOR EACH ROW EXE
 CREATE TRIGGER settings_set_updated_at BEFORE UPDATE ON public.settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
+-- Name: shared_channels shared_channels_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER shared_channels_set_updated_at BEFORE UPDATE ON public.shared_channels FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
 -- Name: test_restore_items test_restore_items_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -2590,6 +3201,24 @@ CREATE TRIGGER test_restores_guard BEFORE UPDATE ON public.test_restores FOR EAC
 --
 
 CREATE TRIGGER test_restores_set_updated_at BEFORE UPDATE ON public.test_restores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: user_channels user_channels_limit; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER user_channels_limit BEFORE INSERT ON public.user_channels FOR EACH ROW EXECUTE FUNCTION public.user_channels_limit();
+
+--
+-- Name: user_channels user_channels_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER user_channels_set_updated_at BEFORE UPDATE ON public.user_channels FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: users users_email_change_unverify; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER users_email_change_unverify BEFORE UPDATE OF email ON public.users FOR EACH ROW EXECUTE FUNCTION public.users_email_change_unverify();
 
 --
 -- Name: users users_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
@@ -2661,6 +3290,20 @@ ALTER TABLE ONLY public.backup_stats
     ADD CONSTRAINT backup_stats_run_item_id_fkey FOREIGN KEY (run_item_id) REFERENCES public.run_items(id);
 
 --
+-- Name: config_reload_requests config_reload_requests_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.config_reload_requests
+    ADD CONSTRAINT config_reload_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: config_reload_results config_reload_results_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.config_reload_results
+    ADD CONSTRAINT config_reload_results_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.config_reload_requests(id) ON DELETE CASCADE;
+
+--
 -- Name: connections connections_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2724,6 +3367,13 @@ ALTER TABLE ONLY public.download_tickets
     ADD CONSTRAINT download_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 --
+-- Name: email_verifications email_verifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.email_verifications
+    ADD CONSTRAINT email_verifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
 -- Name: job_destinations job_destinations_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2757,6 +3407,13 @@ ALTER TABLE ONLY public.job_encryption
 
 ALTER TABLE ONLY public.job_encryption
     ADD CONSTRAINT job_encryption_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_missed_state job_missed_state_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_missed_state
+    ADD CONSTRAINT job_missed_state_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
 
 --
 -- Name: job_owners job_owners_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -2808,6 +3465,27 @@ ALTER TABLE ONLY public.job_recipients
     ADD CONSTRAINT job_recipients_job_fk FOREIGN KEY (job_id) REFERENCES public.jobs(id);
 
 --
+-- Name: job_shared_channels job_shared_channels_channel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_shared_channels
+    ADD CONSTRAINT job_shared_channels_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES public.shared_channels(id) ON DELETE CASCADE;
+
+--
+-- Name: job_shared_channels job_shared_channels_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_shared_channels
+    ADD CONSTRAINT job_shared_channels_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: job_shared_channels job_shared_channels_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.job_shared_channels
+    ADD CONSTRAINT job_shared_channels_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+--
 -- Name: jobs jobs_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2841,6 +3519,62 @@ ALTER TABLE ONLY public.jobs
 
 ALTER TABLE ONLY public.jobs
     ADD CONSTRAINT jobs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: notification_deliveries notification_deliveries_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_deliveries
+    ADD CONSTRAINT notification_deliveries_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.notification_events(id) ON DELETE CASCADE;
+
+--
+-- Name: notification_deliveries notification_deliveries_shared_channel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_deliveries
+    ADD CONSTRAINT notification_deliveries_shared_channel_id_fkey FOREIGN KEY (shared_channel_id) REFERENCES public.shared_channels(id) ON DELETE CASCADE;
+
+--
+-- Name: notification_deliveries notification_deliveries_user_channel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_deliveries
+    ADD CONSTRAINT notification_deliveries_user_channel_id_fkey FOREIGN KEY (user_channel_id) REFERENCES public.user_channels(id) ON DELETE CASCADE;
+
+--
+-- Name: notification_deliveries notification_deliveries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_deliveries
+    ADD CONSTRAINT notification_deliveries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: notification_events notification_events_collapsed_into_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_events
+    ADD CONSTRAINT notification_events_collapsed_into_fkey FOREIGN KEY (collapsed_into) REFERENCES public.notification_events(id) ON DELETE SET NULL;
+
+--
+-- Name: notification_events notification_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notification_events
+    ADD CONSTRAINT notification_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: notifications notifications_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.notification_events(id) ON DELETE SET NULL;
+
+--
+-- Name: notifications notifications_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.notifications
+    ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 --
 -- Name: recovery_codes recovery_codes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -2955,6 +3689,13 @@ ALTER TABLE ONLY public.settings
     ADD CONSTRAINT settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 --
+-- Name: shared_channels shared_channels_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.shared_channels
+    ADD CONSTRAINT shared_channels_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
 -- Name: test_restore_items test_restore_items_restore_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -3002,6 +3743,27 @@ ALTER TABLE ONLY public.test_restores
 
 ALTER TABLE ONLY public.test_restores
     ADD CONSTRAINT test_restores_target_connection_id_fkey FOREIGN KEY (target_connection_id) REFERENCES public.connections(id);
+
+--
+-- Name: user_channels user_channels_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_channels
+    ADD CONSTRAINT user_channels_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: user_notification_prefs user_notification_prefs_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_notification_prefs
+    ADD CONSTRAINT user_notification_prefs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+--
+-- Name: user_notification_prefs user_notification_prefs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_notification_prefs
+    ADD CONSTRAINT user_notification_prefs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 --
 -- Name: webauthn_ceremonies webauthn_ceremonies_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -3132,6 +3894,18 @@ REVOKE ALL ON FUNCTION public.test_restore_items_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.test_restores_guard() FROM PUBLIC;
 
 --
+-- Name: FUNCTION user_channels_limit(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.user_channels_limit() FROM PUBLIC;
+
+--
+-- Name: FUNCTION users_email_change_unverify(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.users_email_change_unverify() FROM PUBLIC;
+
+--
 -- Name: TABLE artifact_holds; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -3198,6 +3972,24 @@ GRANT SELECT,INSERT ON TABLE public.audit_log TO bekup_app;
 GRANT SELECT,INSERT ON TABLE public.backup_stats TO bekup_app;
 
 --
+-- Name: TABLE config_reload_requests; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.config_reload_requests TO bekup_app;
+
+--
+-- Name: TABLE config_reload_results; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.config_reload_results TO bekup_app;
+
+--
+-- Name: SEQUENCE config_reload_results_id_seq; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.config_reload_results_id_seq TO bekup_app;
+
+--
 -- Name: TABLE connections; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -3228,6 +4020,18 @@ GRANT UPDATE(sealed_identity) ON TABLE public.download_tickets TO bekup_app;
 GRANT UPDATE(used_at) ON TABLE public.download_tickets TO bekup_app;
 
 --
+-- Name: TABLE email_verifications; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.email_verifications TO bekup_app;
+
+--
+-- Name: COLUMN email_verifications.failed_attempts; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(failed_attempts) ON TABLE public.email_verifications TO bekup_app;
+
+--
 -- Name: TABLE instance_keys; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -3250,6 +4054,36 @@ GRANT SELECT,INSERT,DELETE ON TABLE public.job_destinations TO bekup_app;
 --
 
 GRANT SELECT,INSERT,UPDATE ON TABLE public.job_encryption TO bekup_app;
+
+--
+-- Name: TABLE job_missed_state; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.job_missed_state TO bekup_app;
+
+--
+-- Name: COLUMN job_missed_state.missed_since; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(missed_since) ON TABLE public.job_missed_state TO bekup_app;
+
+--
+-- Name: COLUMN job_missed_state.last_missed_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_missed_at) ON TABLE public.job_missed_state TO bekup_app;
+
+--
+-- Name: COLUMN job_missed_state.reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(reason) ON TABLE public.job_missed_state TO bekup_app;
+
+--
+-- Name: COLUMN job_missed_state.checked_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(checked_at) ON TABLE public.job_missed_state TO bekup_app;
 
 --
 -- Name: TABLE job_owners; Type: ACL; Schema: public; Owner: bekup_owner
@@ -3282,10 +4116,118 @@ GRANT SELECT,INSERT ON TABLE public.job_recipients TO bekup_app;
 GRANT UPDATE(retired_at) ON TABLE public.job_recipients TO bekup_app;
 
 --
+-- Name: TABLE job_shared_channels; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.job_shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN job_shared_channels.groups; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(groups) ON TABLE public.job_shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN job_shared_channels.events; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(events) ON TABLE public.job_shared_channels TO bekup_app;
+
+--
 -- Name: TABLE jobs; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
 GRANT SELECT,INSERT,UPDATE ON TABLE public.jobs TO bekup_app;
+
+--
+-- Name: TABLE notification_deliveries; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.status; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(status) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.summary; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(summary) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.attempts; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(attempts) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.last_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_code) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.last_error; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_error) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: COLUMN notification_deliveries.sent_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(sent_at) ON TABLE public.notification_deliveries TO bekup_app;
+
+--
+-- Name: TABLE notification_events; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.notification_events TO bekup_app;
+
+--
+-- Name: COLUMN notification_events.collapsed_into; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(collapsed_into) ON TABLE public.notification_events TO bekup_app;
+
+--
+-- Name: COLUMN notification_events.collapsed_count; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(collapsed_count) ON TABLE public.notification_events TO bekup_app;
+
+--
+-- Name: COLUMN notification_events.dispatched_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(dispatched_at) ON TABLE public.notification_events TO bekup_app;
+
+--
+-- Name: COLUMN notification_events.fanned_out_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(fanned_out_at) ON TABLE public.notification_events TO bekup_app;
+
+--
+-- Name: TABLE notifications; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.notifications TO bekup_app;
+
+--
+-- Name: COLUMN notifications.read_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(read_at) ON TABLE public.notifications TO bekup_app;
 
 --
 -- Name: TABLE recovery_codes; Type: ACL; Schema: public; Owner: bekup_owner
@@ -3474,6 +4416,90 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.sessions TO bekup_app;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.settings TO bekup_app;
 
 --
+-- Name: TABLE shared_channels; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.name; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(name) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.config; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(config) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.url_enc; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(url_enc) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.hmac_key_enc; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(hmac_key_enc) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.enabled; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(enabled) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.disabled_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(disabled_at) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.disabled_reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(disabled_reason) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.consecutive_failures; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(consecutive_failures) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.permanent_failures; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(permanent_failures) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.first_failure_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(first_failure_at) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.last_failure_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_failure_at) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.last_failure_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_failure_code) ON TABLE public.shared_channels TO bekup_app;
+
+--
+-- Name: COLUMN shared_channels.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.shared_channels TO bekup_app;
+
+--
 -- Name: TABLE test_restore_items; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -3592,6 +4618,108 @@ GRANT UPDATE(failed) ON TABLE public.test_restores TO bekup_app;
 --
 
 GRANT UPDATE(updated_at) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: TABLE user_channels; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.name; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(name) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.display_url; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(display_url) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.url_enc; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(url_enc) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.hmac_key_enc; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(hmac_key_enc) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.enabled; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(enabled) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.disabled_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(disabled_at) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.disabled_reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(disabled_reason) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.consecutive_failures; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(consecutive_failures) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.permanent_failures; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(permanent_failures) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.first_failure_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(first_failure_at) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.last_failure_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_failure_at) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.last_failure_code; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_failure_code) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: COLUMN user_channels.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.user_channels TO bekup_app;
+
+--
+-- Name: TABLE user_notification_prefs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.user_notification_prefs TO bekup_app;
+
+--
+-- Name: COLUMN user_notification_prefs.enabled; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(enabled) ON TABLE public.user_notification_prefs TO bekup_app;
+
+--
+-- Name: COLUMN user_notification_prefs.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.user_notification_prefs TO bekup_app;
 
 --
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: bekup_owner

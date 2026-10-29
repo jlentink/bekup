@@ -40,6 +40,28 @@ const (
 	// restores no worker will finish and retries dropping leftover scratch
 	// databases (task 4.6; periodic, maintenance queue).
 	KindTestRestoreSchedule = "test_restore_schedule"
+	// KindNotifyFanout resolves the recipients of one notification event
+	// and writes its inbox rows and deliveries (internal/notify, task 5.3;
+	// notify queue).
+	KindNotifyFanout = "notify_fanout"
+	// KindNotifyDeliver sends one e-mail or webhook delivery (task 5.3;
+	// notify queue, retried up to MaxAttemptsNotify).
+	KindNotifyDeliver = "notify_deliver"
+	// KindNotifyRetentionDigest emits the daily retention.summary events
+	// (task 5.3; periodic, maintenance queue).
+	KindNotifyRetentionDigest = "notify_retention_digest"
+	// KindNotifyCleanup prunes old notification events, deliveries and
+	// inbox rows (task 5.3; periodic, maintenance queue).
+	KindNotifyCleanup = "notify_cleanup"
+	// KindSecurityCheck runs the periodic security checks: certificate
+	// and pinned-certificate expiry, incremental audit chain verification
+	// and weakened-posture reminders (internal/monitor, task 5.5;
+	// periodic, maintenance queue).
+	KindSecurityCheck = "security_check"
+	// KindMissedBackupCheck emits backup.missed for jobs without a
+	// successful backup within their expected window (internal/notify/missed,
+	// task 5.4; periodic, maintenance queue).
+	KindMissedBackupCheck = "missed_backup_check"
 )
 
 // Trigger says why a backup run was enqueued.
@@ -143,6 +165,49 @@ type RetentionSweepArgs struct {
 // Kind implements river.JobArgs.
 func (RetentionSweepArgs) Kind() string { return KindRetentionSweep }
 
+// NotifyFanoutArgs are the args of KindNotifyFanout: the event id only
+// (the outbox row holds everything else). Unique by EventID.
+type NotifyFanoutArgs struct {
+	EventID uuid.UUID `json:"event_id" river:"unique"`
+}
+
+// Kind implements river.JobArgs.
+func (NotifyFanoutArgs) Kind() string { return KindNotifyFanout }
+
+// NotifyDeliverArgs are the args of KindNotifyDeliver: the delivery id
+// only. Unique by DeliveryID.
+type NotifyDeliverArgs struct {
+	DeliveryID uuid.UUID `json:"delivery_id" river:"unique"`
+}
+
+// Kind implements river.JobArgs.
+func (NotifyDeliverArgs) Kind() string { return KindNotifyDeliver }
+
+// NotifyRetentionDigestArgs are the (empty) args of
+// KindNotifyRetentionDigest.
+type NotifyRetentionDigestArgs struct{}
+
+// Kind implements river.JobArgs.
+func (NotifyRetentionDigestArgs) Kind() string { return KindNotifyRetentionDigest }
+
+// NotifyCleanupArgs are the (empty) args of KindNotifyCleanup.
+type NotifyCleanupArgs struct{}
+
+// Kind implements river.JobArgs.
+func (NotifyCleanupArgs) Kind() string { return KindNotifyCleanup }
+
+// SecurityCheckArgs are the (empty) args of KindSecurityCheck.
+type SecurityCheckArgs struct{}
+
+// Kind implements river.JobArgs.
+func (SecurityCheckArgs) Kind() string { return KindSecurityCheck }
+
+// MissedBackupCheckArgs are the (empty) args of KindMissedBackupCheck.
+type MissedBackupCheckArgs struct{}
+
+// Kind implements river.JobArgs.
+func (MissedBackupCheckArgs) Kind() string { return KindMissedBackupCheck }
+
 // KindSpec declares how a kind is inserted and worked.
 type KindSpec struct {
 	// Queue the kind runs in; its timeout bounds every attempt.
@@ -172,6 +237,16 @@ var catalog = map[string]KindSpec{
 	KindTestRestore: {Queue: QueueRestore, MaxAttempts: MaxAttemptsRestore, Unique: true, Args: TestRestoreArgs{}},
 	KindTestRestoreSchedule: {
 		Queue: QueueMaintenance, Unique: true, Args: TestRestoreScheduleArgs{},
+	},
+	KindNotifyFanout:  {Queue: QueueNotify, Unique: true, Args: NotifyFanoutArgs{}},
+	KindNotifyDeliver: {Queue: QueueNotify, Unique: true, Args: NotifyDeliverArgs{}},
+	KindNotifyRetentionDigest: {
+		Queue: QueueMaintenance, Unique: true, Args: NotifyRetentionDigestArgs{},
+	},
+	KindNotifyCleanup: {Queue: QueueMaintenance, Unique: true, Args: NotifyCleanupArgs{}},
+	KindSecurityCheck: {Queue: QueueMaintenance, Unique: true, Args: SecurityCheckArgs{}},
+	KindMissedBackupCheck: {
+		Queue: QueueMaintenance, Unique: true, Args: MissedBackupCheckArgs{},
 	},
 }
 

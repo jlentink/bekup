@@ -1,9 +1,19 @@
 # Destinations
 
-> **Status:** partial. The backends (disk, S3, SFTP; tasks 2.8–2.10) and
-> the GraphQL API (task 2.12) exist; the UI follows in task 6.4. Until
-> then, destinations are managed through the GraphQL API described in
-> [Managing destinations](#managing-destinations).
+Admins manage destinations on the **Destinations** page of the web UI
+(D-182) or through the GraphQL API described in
+[Managing destinations](#managing-destinations). The list shows each
+destination's type, Object Lock / no-delete mode and the stored result of
+the last test (passed or failed, its code, when, and a *Stale* marker after
+a configuration change; D-187, D-195); maintainers see it read only and may
+run tests.
+The form adapts to the type (S3: endpoint, region, bucket, prefix, path
+style, encryption, checksums, Object Lock, custom CA; SFTP: server, user,
+base path and sign-in; disk: the directory). Secret keys and passwords are
+write-only; changing an SFTP destination's server, user or base path asks
+for its stored password again (D-140). SFTP host keys are fetched, compared
+and confirmed explicitly, and **Generate keypair** shows the public key to
+install.
 
 A destination is a reusable place where bekup writes backup artifacts:
 local disk (confined to the disk root), S3 and S3-compatible storage
@@ -233,7 +243,8 @@ aws s3api put-bucket-lifecycle-configuration --bucket my-bekup-bucket \
 
 Lifecycle expiry ignores bekup's "keep the newest successful backup" rule:
 choose an expiry comfortably longer than your backup interval, and monitor
-missed runs (task 5.6).
+missed runs ([missed-backup alerts](jobs-and-schedules.md#missed-backup-alerts)
+and the [metrics](../operations.md#metrics)).
 
 ## SFTP
 
@@ -352,6 +363,12 @@ with a normalized code (`ok`, `permission_denied`, `host_key_mismatch`,
 `network`, `timeout`, ...) and a fixed message. Admins and maintainers may test; tests are
 limited to 10 per minute per user (burst 5), a few at a time, and one per
 request.
+
+The outcome of the newest test is stored on the destination as
+`lastTest { at ok code stale }` (D-187; admins and maintainers): `code` is
+the normalized class of the first failed step (null when ok). `stale`
+turns true once the destination's settings change; a test that races such
+a change stores nothing.
 
 ## Managing destinations
 

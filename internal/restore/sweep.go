@@ -101,7 +101,9 @@ func (s *Service) SweepStuck(ctx context.Context, timeout, grace time.Duration) 
 // lock; false when it is no longer stuck.
 func (s *Service) abandon(ctx context.Context, id uuid.UUID, p sqlc.ListStuckRestoresParams) (bool, error) {
 	done := false
+	var mode sqlc.RestoreMode
 	err := db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
+		done = false
 		r, err := q.LockRestore(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -146,11 +148,14 @@ func (s *Service) abandon(ctx context.Context, id uuid.UUID, p sqlc.ListStuckRes
 		}); err != nil {
 			return err
 		}
-		done = true
+		done, mode = true, r.Mode
 		return nil
 	})
 	if err != nil {
 		return false, fmt.Errorf("restore: abandon restore %s: %w", id, err)
+	}
+	if done {
+		s.o.Metrics.RestoreFinished(mode, StatusFailed)
 	}
 	return done, nil
 }

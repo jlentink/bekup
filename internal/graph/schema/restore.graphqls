@@ -346,4 +346,14 @@ extend type Subscription {
   after the restore finished. Same access as `restore`.
   """
   restoreUpdated(restoreId: UUID!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Changes of every restore you may view (admins and maintainers: all;
+  backup owners: their own jobs' restores), including new ones. Each event
+  is the restore re-loaded and authorized again when it is delivered.
+  Events are coalesced per restore and delivered at most 20 per second;
+  after possibly lost events the restores changed since are re-sent. One
+  stream counts against the per-session cap: open one per page.
+  """
+  restoresUpdated: Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }

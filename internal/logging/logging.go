@@ -15,6 +15,9 @@ type Options struct {
 	Format string
 	// Registry holds secret values to scrub; nil uses DefaultRegistry.
 	Registry *Registry
+	// LevelVar, when set, receives Level and becomes the handler's level,
+	// so the level can be changed at runtime (config reload, D-200).
+	LevelVar *slog.LevelVar
 }
 
 // ParseLevel parses a log level name.
@@ -41,6 +44,10 @@ func New(w io.Writer, opts Options) (*slog.Logger, error) {
 		return nil, err
 	}
 	hopts := &slog.HandlerOptions{Level: level}
+	if opts.LevelVar != nil {
+		opts.LevelVar.Set(level)
+		hopts.Level = opts.LevelVar
+	}
 	var inner slog.Handler
 	switch strings.ToLower(opts.Format) {
 	case "", "json":

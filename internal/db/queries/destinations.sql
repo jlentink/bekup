@@ -66,3 +66,32 @@ RETURNING *;
 
 -- name: SoftDeleteDestination :execrows
 UPDATE destinations SET deleted_at = now() WHERE id = @id AND deleted_at IS NULL;
+
+-- RecordDestinationTest stores the outcome of a test (D-187) when the row
+-- is unchanged since the test loaded it (settings_at = its updated_at); 0
+-- rows: changed or deleted meanwhile, the result is not stored. The
+-- trigger leaves updated_at alone for this update.
+-- name: RecordDestinationTest :execrows
+UPDATE destinations
+SET last_tested_at = now(),
+    last_test_ok = @ok,
+    last_test_code = sqlc.narg(code),
+    last_test_settings_at = updated_at
+WHERE id = @id AND deleted_at IS NULL AND updated_at = @settings_at;
+
+-- DestinationUsage returns, per destination that is not deleted, the
+-- bytes and number of the present artifacts stored on it (one grouped
+-- query; D-196).
+-- name: DestinationUsage :many
+SELECT d.id, d.name, d.type,
+       COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,
+       COALESCE(u.artifact_count, 0)::bigint AS artifact_count
+FROM destinations d
+LEFT JOIN (
+    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count
+    FROM artifacts a
+    WHERE a.state = 'present'
+    GROUP BY a.destination_id
+) u ON u.destination_id = d.id
+WHERE d.deleted_at IS NULL
+ORDER BY lower(d.name), d.id;

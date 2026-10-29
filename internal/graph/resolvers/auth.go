@@ -227,23 +227,31 @@ func (r *Resolver) mySessions(ctx context.Context) ([]model.Session, error) {
 	return out, nil
 }
 
-func userModel(u sqlc.User) (*model.User, error) {
-	var role model.Role
-	switch auth.Role(u.Role) {
+// modelRole maps an auth.Role to the GraphQL Role.
+func modelRole(r auth.Role) (model.Role, error) {
+	switch r {
 	case auth.RoleAdmin:
-		role = model.RoleAdmin
+		return model.RoleAdmin, nil
 	case auth.RoleMaintainer:
-		role = model.RoleMaintainer
+		return model.RoleMaintainer, nil
 	case auth.RoleUser:
-		role = model.RoleUser
+		return model.RoleUser, nil
 	default:
-		return nil, fmt.Errorf("resolvers: unknown role %q", u.Role)
+		return "", fmt.Errorf("resolvers: unknown role %q", r)
+	}
+}
+
+func userModel(u sqlc.User) (*model.User, error) {
+	role, err := modelRole(auth.Role(u.Role))
+	if err != nil {
+		return nil, err
 	}
 	return &model.User{
 		ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, Role: role,
 		Disabled: u.Disabled, LockedUntil: u.LockedUntil,
 		PasswordChangeRequired: u.PasswordTemporaryUntil != nil, TemporaryPasswordExpiresAt: u.PasswordTemporaryUntil,
 		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, DeletedAt: u.DeletedAt,
+		EmailVerified: u.EmailVerifiedAt != nil, EmailVerifiedAt: u.EmailVerifiedAt,
 	}, nil
 }
 

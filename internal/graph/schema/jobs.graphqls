@@ -195,6 +195,15 @@ type Job {
   timeoutSeconds: Int
   "Missed-backup alert window; null means derived from the schedule."
   expectedWindowSeconds: Int
+  """
+  True while the job is in a missed-backup outage: the missed-backup check
+  (every 5 minutes) found a scheduled backup that did not succeed in its
+  window and no backup succeeded since. Cleared by the next successful
+  run.
+  """
+  missed: Boolean!
+  "The first missed occurrence of the current outage (null when not missed)."
+  missedSince: Time
   verification: JobVerification!
   destinations: [JobDestinationRef!]!
   encryption: JobEncryption!
@@ -221,6 +230,12 @@ input JobFilter {
   connectionId: UUID
   "Substring of the name or slug (case-insensitive)."
   search: String
+  """
+  Only jobs this user owns (listed in the job's owners). Admins and
+  maintainers only (FORBIDDEN for backup owners, who see only their own
+  jobs anyway).
+  """
+  ownerId: UUID
 }
 
 """

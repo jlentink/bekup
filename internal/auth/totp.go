@@ -108,7 +108,8 @@ type SecondFactorNotifier interface {
 	SecondFactorLocked(ctx context.Context, ev SecondFactorEvent)
 }
 
-// NopSecondFactorNotifier ignores every event (until task 5.5).
+// NopSecondFactorNotifier ignores every event (the alerts come from the
+// audit entries, task 5.5).
 type NopSecondFactorNotifier struct{}
 
 // RecoveryCodeUsed does nothing.
@@ -136,6 +137,9 @@ type TOTPOptions struct {
 	// Lockout is the backoff after consecutive failed second-factor checks
 	// (security.lockout_*; its own counter, users.mfa_failed_count).
 	Lockout LockoutPolicy
+	// Limits, when set, replaces Lockout with the shared, reloadable
+	// policies (D-200).
+	Limits *Limits
 	// StepUpWindow is security.stepup_max_age (at most 5 min).
 	StepUpWindow time.Duration
 	// Notifier receives the alert hooks (nil: none).
@@ -163,7 +167,9 @@ func NewTOTP(o TOTPOptions) (*TOTP, error) {
 	if o.RemovalGuard == nil {
 		o.RemovalGuard = AllowFactorRemoval{}
 	}
-	o.Lockout = o.Lockout.normalized()
+	if o.Limits == nil {
+		o.Limits = NewLimits(PasswordPolicy{}, o.Lockout)
+	}
 	if o.StepUpWindow <= 0 || o.StepUpWindow > maxStepUpWindow {
 		o.StepUpWindow = maxStepUpWindow
 	}

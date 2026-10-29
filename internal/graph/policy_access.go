@@ -13,7 +13,8 @@ import (
 // is missing here, and the matrix in internal/authz pins what each
 // operation allows. Add the entry together with the schema field.
 var RootFieldOperations = map[string]authz.Operation{
-	"Query.auditLog": authz.OpAuditLogView,
+	"Query.auditLog":         authz.OpAuditLogView,
+	"Query.auditChainStatus": authz.OpAuditChainStatusView,
 
 	// Own account and sessions (task 1.5). Mutation.login is public
 	// (PublicRootFields) and rate limited by internal/auth.
@@ -43,15 +44,65 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.beginStepUp":          authz.OpAccountStepUp,
 	"Mutation.completeStepUp":       authz.OpAccountStepUp,
 	// 2FA policy (task 1.9): admin; changes need step-up.
-	"Query.twoFactorPolicy":          authz.OpMFAPolicyView,
+	"Query.twoFactorPolicy": authz.OpMFAPolicyView,
+	// Runtime SSRF allowlist (D-120, D-196): admin; changes need a
+	// step-up (re-checked in internal/egress).
+	"Query.ssrfAllowlist":          authz.OpSettingsView,
+	"Query.securityAlertTypes":     authz.OpAlertList,
+	"Mutation.updateSsrfAllowlist": authz.OpSettingsUpdate,
+	// Runtime config reload (task 6.13, D-200): admin; reloading needs
+	// a step-up (re-checked in internal/configreload).
+	"Query.configStatus":             authz.OpConfigStatusView,
+	"Query.configReloadRequest":      authz.OpConfigStatusView,
+	"Mutation.reloadConfig":          authz.OpConfigReload,
 	"Mutation.updateTwoFactorPolicy": authz.OpMFAPolicyUpdate,
-	// Subscriptions (task 1.10): every event is re-authorized at delivery.
-	"Subscription.sessionEvents": authz.OpAccountSessionsView,
+	// The account stream (D-197): session events and inbox notifications;
+	// every event is re-authorized at delivery with its own operation
+	// (account.sessions_view, notification.inbox).
+	"Subscription.accountEvents": authz.OpAccountSessionsView,
+
+	// E-mail (task 5.1, D-178): SMTP settings (admin; changes need
+	// step-up) and the own e-mail verification.
+	"Query.smtpSettings":                authz.OpSMTPView,
+	"Mutation.updateSmtpSettings":       authz.OpSMTPUpdate,
+	"Mutation.sendTestEmail":            authz.OpSMTPTest,
+	"Mutation.requestEmailVerification": authz.OpAccountEmailVerifyRequest,
+	"Mutation.verifyEmail":              authz.OpAccountEmailVerify,
+
+	// Notifications (task 5.3b, D-191): shared channels admin only
+	// (changes that carry a URL or key need step-up), own channels,
+	// preferences and inbox for every user (own data only; the stream
+	// re-loads each row for its own account).
+	"Query.sharedChannels":                  authz.OpSharedChannelList,
+	"Mutation.createSharedChannel":          authz.OpSharedChannelEdit,
+	"Mutation.updateSharedChannel":          authz.OpSharedChannelEdit,
+	"Mutation.rotateSharedChannelKey":       authz.OpSharedChannelEdit,
+	"Mutation.deleteSharedChannel":          authz.OpSharedChannelEdit,
+	"Mutation.enableSharedChannel":          authz.OpSharedChannelToggle,
+	"Mutation.disableSharedChannel":         authz.OpSharedChannelToggle,
+	"Mutation.testSharedChannel":            authz.OpSharedChannelTest,
+	"Mutation.attachSharedChannel":          authz.OpJobSharedChannelsEdit,
+	"Mutation.detachSharedChannel":          authz.OpJobSharedChannelsEdit,
+	"Query.myNotificationChannels":          authz.OpPersonalChannelList,
+	"Mutation.addMyWebhook":                 authz.OpPersonalChannelEdit,
+	"Mutation.rotateMyWebhookKey":           authz.OpPersonalChannelEdit,
+	"Mutation.deleteMyWebhook":              authz.OpPersonalChannelEdit,
+	"Mutation.testMyWebhook":                authz.OpPersonalChannelTest,
+	"Mutation.reenableMyWebhook":            authz.OpPersonalChannelEnable,
+	"Query.notificationCatalog":             authz.OpNotificationPrefsView,
+	"Query.myNotificationPreferences":       authz.OpNotificationPrefsView,
+	"Mutation.setNotificationPreference":    authz.OpNotificationPrefsEdit,
+	"Mutation.resetNotificationPreferences": authz.OpNotificationPrefsEdit,
+	"Query.notifications":                   authz.OpNotificationInbox,
+	"Query.unreadNotificationCount":         authz.OpNotificationInbox,
+	"Mutation.markNotificationsRead":        authz.OpNotificationInbox,
+	"Mutation.deleteNotification":           authz.OpNotificationInbox,
 
 	// User administration (task 1.6).
 	"Query.users":                     authz.OpUserList,
 	"Query.user":                      authz.OpUserView,
 	"Query.userSessions":              authz.OpUserSessionsView,
+	"Query.userDirectory":             authz.OpUserDirectoryView,
 	"Mutation.createUser":             authz.OpUserCreate,
 	"Mutation.updateUser":             authz.OpUserUpdate,
 	"Mutation.resetUserPassword":      authz.OpUserPasswordReset,
@@ -65,6 +116,7 @@ var RootFieldOperations = map[string]authz.Operation{
 	// Destinations (task 2.12, D-131): admin CRUD with step-up;
 	// maintainers see metadata and may test.
 	"Query.destinations":                     authz.OpDestinationList,
+	"Query.destinationUsage":                 authz.OpStorageUsageView,
 	"Query.destination":                      authz.OpDestinationView,
 	"Mutation.createDestination":             authz.OpDestinationCreate,
 	"Mutation.updateDestination":             authz.OpDestinationUpdate,
@@ -128,8 +180,13 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Query.artifacts":             authz.OpArtifactList,
 	"Subscription.runUpdated":     authz.OpRunView,
 	"Subscription.runLogAppended": authz.OpRunLogsView,
+	// Run page stream (D-197): run.view + run.logs_view at the start and
+	// per event kind.
+	"Subscription.runActivity": authz.OpRunView,
 	// Job calendar (task 3.14, D-156): jobs filtered by JobScope.
 	"Query.calendar": authz.OpCalendarView,
+	// System health (task 5.6, D-176).
+	"Query.systemHealth": authz.OpSystemHealthView,
 	// Job encryption (task 3.2, D-142; re-checked in internal/jobkeys).
 	"Mutation.setJobPassphrase":      authz.OpJobEncryptionKeysEdit,
 	"Mutation.generateJobPassphrase": authz.OpJobEncryptionKeysEdit,
@@ -156,6 +213,12 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.restoreGlobals":      authz.OpRestoreGlobals,
 	"Mutation.cancelRestore":       authz.OpRestoreCancel,
 	"Subscription.restoreUpdated":  authz.OpRestoreView,
+	// All restores the caller may view (D-196): staff all, owners their
+	// own jobs' (scoped resync, per-event authorization).
+	"Subscription.restoresUpdated": authz.OpRestoreView,
+	// Dashboard stream (D-197): runs (run.view) and restores
+	// (restore.view), each event re-authorized with its own operation.
+	"Subscription.activityUpdated": authz.OpRunView,
 	// Test restores (task 4.6): settings staff with a fresh second factor
 	// (the scratch target receives the job's data), runs staff, results
 	// staff and the job's owners (authorized with the job from the DB).

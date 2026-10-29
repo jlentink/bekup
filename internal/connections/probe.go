@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -273,10 +274,21 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (TestResu
 	defer done()
 	resp, err := s.probe(ctx, actor, &row, "test")
 	var te *TargetError
+	var pm *PinMismatchError
+	var hk *HostKeyMismatchError
 	switch {
 	case errors.As(err, &te):
-		return TestResult{Code: te.Code, Message: te.Message}, nil
+		res := TestResult{Code: te.Code, Message: te.Message}
+		s.recordTest(ctx, &row, false, res.Code, nil)
+		return res, nil
+	case errors.As(err, &pm):
+		s.recordTest(ctx, &row, false, CodeTLSPinMismatch, nil)
+		return TestResult{}, err
+	case errors.As(err, &hk):
+		s.recordTest(ctx, &row, false, CodeSSHHostKeyMismatch, nil)
+		return TestResult{}, err
 	case err != nil:
+		// Busy, runner unavailable, canceled: no verdict on the target.
 		return TestResult{}, err
 	}
 	res := TestResult{
@@ -290,7 +302,67 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (TestResu
 		res.Code = "INCOMPATIBLE_CLIENT"
 		res.Message = "the connection's client image cannot back up this server version; choose the detected version"
 	}
+	priv := res.Privileges
+	s.recordTest(ctx, &row, res.OK, res.Code, &priv)
 	return res, nil
+}
+
+// Codes of a stored test outcome for the security-event errors of Test.
+const (
+	CodeTLSPinMismatch     = "TLS_PIN_MISMATCH"
+	CodeSSHHostKeyMismatch = "SSH_HOST_KEY_MISMATCH"
+	// codeTestFailed replaces a failure code outside the stored syntax.
+	codeTestFailed = "FAILED"
+)
+
+// storedCode is the syntax of a stored test code (the DB checks it too).
+var storedCode = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
+
+// recordTest stores the outcome of a Test (D-187): normalized codes and
+// the bounded privilege verdict only, and only when the connection did not
+// change while the test ran (the row's updated_at). Storing is best
+// effort: a failure is logged and the test result still returned.
+func (s *Service) recordTest(ctx context.Context, row *sqlc.Connection, ok bool, code string, priv *Privileges) {
+	arg := sqlc.RecordConnectionTestParams{ID: row.ID, SettingsAt: row.UpdatedAt, Ok: &ok, PrivilegeReasons: []string{}}
+	if !ok {
+		if !storedCode.MatchString(code) {
+			code = codeTestFailed
+		}
+		arg.Code = &code
+	}
+	if priv != nil {
+		st := string(priv.Status)
+		arg.Privileges = &st
+		arg.PrivilegeReasons = boundedReasons(priv.Reasons)
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	n, err := sqlc.New(s.o.DB).RecordConnectionTest(ctx, arg)
+	switch {
+	case err != nil:
+		s.o.Logger.WarnContext(ctx, "storing the connection test result failed",
+			slog.String("connection_id", row.ID.String()), slog.Any("error", err))
+	case n == 0:
+		s.o.Logger.InfoContext(ctx, "connection changed during its test; result not stored",
+			slog.String("connection_id", row.ID.String()))
+	}
+}
+
+// boundedReasons keeps at most maxPrivilegeReasons valid reasons (the
+// verdict is already bounded by PrivilegesFromRunner; this guards the DB
+// constraint).
+func boundedReasons(in []string) []string {
+	out := make([]string, 0, min(len(in), maxPrivilegeReasons))
+	for _, r := range in {
+		if len(out) >= maxPrivilegeReasons {
+			break
+		}
+		if !validReason(r) {
+			r = ReasonInvalidReason
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func (s *Service) legacy(k engine.Kind, keys ...string) bool {

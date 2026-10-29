@@ -106,6 +106,17 @@
       "autoReplaceStringTemplate": "image = \"{{depName}}:{{currentValue}}@{{newDigest}}\""
     },
     {
+      "description": "Digest-pinned images in scripts/ annotated with '# renovate: image=<name>:<tag>' on the line above (e.g. the SBOM generator in publish.sh)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^scripts/[^/]+\\.(sh|bash)$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*image=(?<depName>[^:\\s]+):(?<currentValue>\\S+)\\s*\\n[A-Za-z_][A-Za-z0-9_]*=\\S+@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
       "description": "Tool versions annotated with '# renovate: datasource=... depName=...' in workflows",
       "customType": "regex",
       "managerFilePatterns": [

@@ -11,8 +11,9 @@ import (
 // AlertKind names a security event of a connection.
 type AlertKind string
 
-// Security events. Task 5.5 delivers them as security alerts to admins;
-// until then the default AlertFunc logs them.
+// Security events. Each one is audited; the audit observer
+// (notify.ObserveAudit, task 5.5) delivers it as a security.system alert to
+// the admins. The default AlertFunc adds a WARN log line.
 const (
 	// AlertTLSPinMismatch: the runner refused the target because its
 	// certificate does not match the pin (possible impersonation).

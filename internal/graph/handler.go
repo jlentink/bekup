@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/executor"
@@ -23,15 +24,18 @@ import (
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/calendar"
+	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/downloads"
+	"github.com/jlentink/bekup/internal/egress"
 	"github.com/jlentink/bekup/internal/graph/generated"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/graph/resolvers"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
+	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runstate"
@@ -115,11 +119,32 @@ type Options struct {
 	// TestRestores backs the test-restore fields (task 4.6; nil: those
 	// fields fail with an internal error).
 	TestRestores *restore.TestRestoreAPI
+	// Email backs the SMTP settings, sendTestEmail and the e-mail
+	// verification (task 5.1; nil members: those fields fail).
+	Email resolvers.EmailServices
+	// SystemHealth backs Query.systemHealth (task 5.6; nil: the field
+	// fails with an internal error).
+	SystemHealth resolvers.SystemHealthSource
+	// Notifications backs the notification fields (task 5.3b; nil: those
+	// fields fail). The inbox part of accountEvents also needs Bus
+	// (pubsub.NotificationEvents).
+	Notifications *notify.API
+	// Egress backs the SSRF allowlist fields (D-196; nil: those fields
+	// fail with an internal error).
+	Egress *egress.Service
+	// AuditChain backs Query.auditChainStatus (D-196; nil: the field
+	// fails with an internal error).
+	AuditChain resolvers.AuditChainSource
+	// ConfigReload backs the runtime config reload fields (task 6.13).
+	ConfigReload *configreload.API
 }
 
 // Handler is the /graphql endpoint.
 type Handler struct {
 	opts Options
+	// limits are the graphql.* limits; SetLimits swaps them at runtime
+	// (config reload, D-200). Each operation reads them once.
+	limits atomic.Pointer[Limits]
 	// srv is gqlgen's executor. The transports are this package's own
 	// (serveJSON, serveStream): gqlgen's handler and transport packages
 	// are not used, which also keeps their WebSocket library out of the
@@ -165,6 +190,12 @@ func New(opts Options) (*Handler, error) {
 			Calendar:        opts.Calendar,
 			Restores:        opts.Restores,
 			TestRestores:    opts.TestRestores,
+			Email:           opts.Email,
+			SystemHealth:    opts.SystemHealth,
+			Notifications:   opts.Notifications,
+			Egress:          opts.Egress,
+			AuditChain:      opts.AuditChain,
+			ConfigReload:    opts.ConfigReload,
 		},
 		Directives: directives(opts.Access),
 	})
@@ -199,10 +230,14 @@ func New(opts Options) (*Handler, error) {
 	srv.Use(introspectionGate{Allowed: func(ctx context.Context) bool {
 		return dev || access.IntrospectionAllowed(ctx)
 	}})
-	srv.Use(depthLimit{Max: opts.MaxDepth})
+	h := &Handler{opts: opts, srv: srv}
+	h.limits.Store(&Limits{MaxComplexity: opts.MaxComplexity, MaxDepth: opts.MaxDepth, MaxBodyBytes: opts.MaxBodyBytes})
+	srv.Use(depthLimit{Max: func() int { return h.limits.Load().MaxDepth }})
 	srv.Use(rootFieldGate{schema: es.Schema(), single: pubSet(SingleRootFields)})
 	srv.Use(transportGate{public: pubSet(PublicRootFields), ops: RootFieldOperations, access: access})
-	srv.Use(extension.FixedComplexityLimit(opts.MaxComplexity))
+	srv.Use(&extension.ComplexityLimit{Func: func(context.Context, *graphql.OperationContext) int {
+		return h.limits.Load().MaxComplexity
+	}})
 	srv.AroundRootFields(rootFieldGuard(PublicRootFields, RootFieldOperations, access))
 	// Per-operation batch loader of the run fields (task 3.7): queries
 	// and mutations only, so subscription events never read a cache.
@@ -214,8 +249,37 @@ func New(opts Options) (*Handler, error) {
 		}
 		return next(ctx)
 	})
-	return &Handler{opts: opts, srv: srv}, nil
+	return h, nil
 }
+
+// Limits are the graphql.* limits of a Handler (all positive).
+type Limits struct {
+	MaxComplexity int
+	MaxDepth      int
+	MaxBodyBytes  int64
+}
+
+// PrepareLimits validates l and returns the commit that applies it
+// (config reload, D-200); the commit cannot fail.
+func (h *Handler) PrepareLimits(l Limits) (func(), error) {
+	if l.MaxComplexity <= 0 || l.MaxDepth <= 0 || l.MaxBodyBytes <= 0 {
+		return nil, errors.New("graph: MaxComplexity, MaxDepth and MaxBodyBytes must be positive")
+	}
+	return func() { h.limits.Store(&l) }, nil
+}
+
+// SetLimits validates and applies l at once.
+func (h *Handler) SetLimits(l Limits) error {
+	commit, err := h.PrepareLimits(l)
+	if err != nil {
+		return err
+	}
+	commit()
+	return nil
+}
+
+// CurrentLimits returns the limits in effect.
+func (h *Handler) CurrentLimits() Limits { return *h.limits.Load() }
 
 // request is the only accepted body shape (the GraphQL-over-HTTP fields
 // gqlgen reads, without persisted-query or batching variants).
@@ -248,11 +312,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeTransportError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
 		return
 	}
-	if r.ContentLength > h.opts.MaxBodyBytes {
+	maxBody := h.limits.Load().MaxBodyBytes
+	if r.ContentLength > maxBody {
 		writeTransportError(w, http.StatusRequestEntityTooLarge, "request body too large")
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, h.opts.MaxBodyBytes))
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		if httpserver.IsBodyTooLarge(err) {
 			writeTransportError(w, http.StatusRequestEntityTooLarge, "request body too large")

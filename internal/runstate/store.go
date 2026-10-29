@@ -195,6 +195,34 @@ type Store struct {
 	now      func() time.Time
 	onFinish FinishHook
 	log      *slog.Logger
+	observer FinishObserver
+}
+
+// FinishObserver is told about every run the Store moved to a terminal
+// status (Finish, and an interrupted attempt that Begin fails), after the
+// transaction committed: the Prometheus counters of task 5.6. It must be
+// fast and must not fail; it never sees a write that rolled back. Runs
+// canceled before a worker picked them up (CancelQueuedTx) are not
+// observed.
+type FinishObserver interface {
+	RunFinished(ctx context.Context, run sqlc.Run)
+}
+
+// WithObserver sets the finish observer (nil: none) and returns s. Call it
+// before the store is used.
+func (s *Store) WithObserver(o FinishObserver) *Store {
+	s.observer = o
+	return s
+}
+
+// observe reports committed terminal runs to the observer.
+func (s *Store) observe(ctx context.Context, rows ...sqlc.Run) {
+	if s.observer == nil {
+		return
+	}
+	for i := range rows {
+		s.observer.RunFinished(ctx, rows[i])
+	}
 }
 
 // FinishHook runs inside the transaction of Finish after a run ended
@@ -260,19 +288,23 @@ type BeginParams struct {
 // crash, rescued job): it is finished as failed first.
 func (s *Store) Begin(ctx context.Context, p BeginParams) (Run, error) {
 	var out Run
+	var interrupted []sqlc.Run
 	err := db.Tx(ctx, s.db, func(q *sqlc.Queries) error {
+		interrupted = interrupted[:0]
 		cur, err := q.LatestRunForRiverJob(ctx, p.RiverJobID)
 		switch {
 		case err == nil && cur.Status == StatusQueued:
 			out = runOf(&cur)
 			return nil
 		case err == nil && cur.Status == StatusRunning:
-			if _, err := s.finishTx(ctx, q, Ref{RunID: cur.ID, JobID: cur.JobID}, Result{
+			row, err := s.finishTx(ctx, q, Ref{RunID: cur.ID, JobID: cur.JobID}, Result{
 				Status:  StatusFailed,
 				Failure: &Failure{Code: CodeInterrupted, Message: "the worker stopped before the run finished; a new attempt took over"},
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
+			interrupted = append(interrupted, row)
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return fmt.Errorf("runstate: load run: %w", err)
 		}
@@ -287,6 +319,9 @@ func (s *Store) Begin(ctx context.Context, p BeginParams) (Run, error) {
 		out = runOf(&row)
 		return publish(ctx, s.pub, q, EventRun, out.Ref)
 	})
+	if err == nil {
+		s.observe(ctx, interrupted...)
+	}
 	return out, err
 }
 
@@ -357,7 +392,7 @@ func (s *Store) Job(ctx context.Context, id uuid.UUID) (Job, error) {
 // Start moves a queued run to running with its directory timestamp.
 func (s *Store) Start(ctx context.Context, r Ref, attempt int, startedAt, storageTimestamp time.Time) error {
 	return db.Tx(ctx, s.db, func(q *sqlc.Queries) error {
-		_, err := q.StartRun(ctx, sqlc.StartRunParams{
+		row, err := q.StartRun(ctx, sqlc.StartRunParams{
 			ID: r.RunID, StartedAt: startedAt, StorageTimestamp: storageTimestamp.UTC().Truncate(time.Second),
 			Attempt: int32(min(max(attempt, 1), 1000)),
 		})
@@ -366,6 +401,9 @@ func (s *Store) Start(ctx context.Context, r Ref, attempt int, startedAt, storag
 		}
 		if err != nil {
 			return fmt.Errorf("runstate: start run: %w", err)
+		}
+		if err := emitRunEvent(ctx, q, &row); err != nil {
+			return err
 		}
 		return publish(ctx, s.pub, q, EventRun, r)
 	})
@@ -397,13 +435,20 @@ type Result struct {
 // Finish records the terminal status of an active run (ErrNotActive when it
 // already finished).
 func (s *Store) Finish(ctx context.Context, r Ref, res Result) error {
-	return db.TxWith(ctx, s.db, func(tx pgx.Tx, q *sqlc.Queries) error {
-		if _, err := s.finishTx(ctx, q, r, res); err != nil {
+	var row sqlc.Run
+	err := db.TxWith(ctx, s.db, func(tx pgx.Tx, q *sqlc.Queries) error {
+		var err error
+		if row, err = s.finishTx(ctx, q, r, res); err != nil {
 			return err
 		}
 		s.afterFinish(ctx, tx, r, res.Status)
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.observe(ctx, row)
+	return nil
 }
 
 // afterFinish runs the finish hook under a savepoint (success and partial
@@ -459,6 +504,9 @@ func finishTx(ctx context.Context, q *sqlc.Queries, pub *pubsub.Publisher, r Ref
 	}
 	if err != nil {
 		return sqlc.Run{}, fmt.Errorf("runstate: finish run: %w", err)
+	}
+	if err := emitRunEvent(ctx, q, &row); err != nil {
+		return sqlc.Run{}, err
 	}
 	return row, publish(ctx, pub, q, EventRun, r)
 }

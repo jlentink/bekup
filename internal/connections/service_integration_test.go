@@ -49,9 +49,14 @@ type fakeRunner struct {
 	chain    *runnerpb.FetchServerCertificateResponse
 	hostKey  *runnerpb.FetchHostKeyResponse
 	live     []*runnerpb.ProbeRequest
+	// onProbe runs at the start of Probe (outside the lock).
+	onProbe func()
 }
 
 func (f *fakeRunner) Probe(_ context.Context, req *runnerpb.ProbeRequest, _ ...grpc.CallOption) (*runnerpb.ProbeResponse, error) {
+	if f.onProbe != nil {
+		f.onProbe()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c, _ := proto.Clone(req).(*runnerpb.ProbeRequest) //nolint:errcheck // test fake: the clone has the same type

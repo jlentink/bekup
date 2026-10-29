@@ -58,6 +58,8 @@ func jobError(err error) error {
 		return apierror.New(apierror.Conflict, "a run of this job is already active")
 	case errors.Is(err, jobs.ErrDisabled):
 		return apierror.New(apierror.Conflict, "the job is disabled")
+	case errors.Is(err, jobs.ErrOwnerFilterForbidden):
+		return apierror.New(apierror.Forbidden, "only admins and maintainers can filter jobs by owner")
 	case errors.Is(err, jobs.ErrNotOwner):
 		return apierror.New(apierror.NotFound, "the user is not an owner of this job")
 	case errors.Is(err, jobkeys.ErrNotConfigured):
@@ -146,7 +148,7 @@ func (r *Resolver) jobs(ctx context.Context, filter *model.JobFilter, first *int
 	}
 	var f jobs.ListFilter
 	if filter != nil {
-		f.Enabled, f.ConnectionID = filter.Enabled, filter.ConnectionID
+		f.Enabled, f.ConnectionID, f.OwnerID = filter.Enabled, filter.ConnectionID, filter.OwnerID
 		if filter.Search != nil {
 			f.Search = *filter.Search
 		}

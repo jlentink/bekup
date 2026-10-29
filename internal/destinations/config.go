@@ -137,6 +137,20 @@ type Destination struct {
 	CreatedBy *uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
+
+	// LastTest is the stored outcome of the newest Test (D-187); nil when
+	// never tested.
+	LastTest *LastTest
+}
+
+// LastTest is the stored outcome of a Test (D-187): normalized codes only.
+type LastTest struct {
+	At time.Time
+	OK bool
+	// Code is the storage error class of the first failed step ("" when OK).
+	Code string
+	// Stale: the destination changed after the test.
+	Stale bool
 }
 
 // DiskInput sets the configuration of a disk destination.

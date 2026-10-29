@@ -30,7 +30,10 @@ export default defineConfig(
     },
     plugins: { "react-refresh": reactRefresh },
     rules: {
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      // Fast Refresh: a .tsx module exports only components (and primitive
+      // constants); helpers, hooks, contexts and other constants live in sibling
+      // .ts modules (*-model.ts, *-utils.ts, use-*.ts, *-context.ts).
+      "react-refresh/only-export-components": ["error", { allowConstantExport: true }],
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
       // Security: no string-to-code or raw HTML sinks in our own code.
@@ -72,13 +75,6 @@ export default defineConfig(
   {
     // shadcn/ui primitives: generated, exported with their variant helpers.
     files: ["src/components/ui/**/*.tsx"],
-    rules: {
-      "react-refresh/only-export-components": "off",
-    },
-  },
-  {
-    // Providers and route tables export hooks/constants alongside components.
-    files: ["src/lib/**/*.tsx", "src/app/**/*.tsx"],
     rules: {
       "react-refresh/only-export-components": "off",
     },

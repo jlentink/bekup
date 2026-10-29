@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
@@ -19,19 +21,27 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/calendar"
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/downloads"
+	"github.com/jlentink/bekup/internal/egress"
 	"github.com/jlentink/bekup/internal/graph"
 	"github.com/jlentink/bekup/internal/graph/model"
+	"github.com/jlentink/bekup/internal/graph/resolvers"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
+	"github.com/jlentink/bekup/internal/monitor"
+	"github.com/jlentink/bekup/internal/netguard"
+	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
+	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/runstate"
 )
@@ -86,6 +96,21 @@ type Options struct {
 	NoWorker bool
 	// QueueFetchPollInterval overrides River's poll interval (tests).
 	QueueFetchPollInterval time.Duration
+	// MetricsListener replaces binding metrics.listen (tests).
+	MetricsListener net.Listener
+	// LoadOptions are the config load options of startup (flags, env);
+	// a runtime reload re-reads the file with them (D-200).
+	LoadOptions config.Options
+	// ConfigPath is the file loaded at startup ("" on dev defaults).
+	ConfigPath string
+	// Warnings are the startup config warnings (a reload logs only new
+	// ones).
+	Warnings []string
+	// LogLevel is the logger's level; a reload of log.level sets it (nil:
+	// log.level is not reloadable in this process).
+	LogLevel *slog.LevelVar
+	// ReloadSignals receives a value per SIGHUP (nil: no signal reloads).
+	ReloadSignals <-chan struct{}
 }
 
 // App is a started-up serve instance.
@@ -107,6 +132,11 @@ type App struct {
 	twoFactorPolicy *auth.TwoFactorPolicies
 	// secondFactor is the two-step login and step-up (task 1.9).
 	secondFactor *auth.SecondFactorFlow
+	// guards are the process's per-scope SSRF guards (one per scope,
+	// D-196, D-198) and egress the admin allowlist service that keeps
+	// their runtime lists current.
+	guards *netguard.Set
+	egress *egress.Service
 	// destinations is the destination service (task 2.12).
 	destinations *destinations.Service
 	// runner is the mTLS runner client and connections the connection
@@ -131,10 +161,39 @@ type App struct {
 	restoreAPI *restore.API
 	// testRestoreAPI backs the test-restore GraphQL fields (task 4.6).
 	testRestoreAPI *restore.TestRestoreAPI
+	// email backs the SMTP settings, the test e-mail and the e-mail
+	// verification; mailer is the SMTP sender (task 5.1).
+	email  resolvers.EmailServices
+	mailer *email.Sender
+	// notifier is the notification core (task 5.3): outbox dispatcher,
+	// fan-out and delivery workers, post-commit emit hooks.
+	notifier *notify.Service
+	// notifyAPI backs the notification GraphQL fields (task 5.3b, serve
+	// only).
+	notifyAPI *notify.API
 	// subs is the subscription machinery (tasks 1.10, 2.13).
-	subs       subscriptions
-	addr       net.Addr
-	components []Component
+	subs subscriptions
+	// metrics is the Prometheus registry with the event counters, health
+	// the snapshot behind /metrics gauges and systemHealth (task 5.6;
+	// health in serve only).
+	metrics     *monitor.Metrics
+	health      *monitor.Health
+	metricsAddr net.Addr
+	addr        net.Addr
+	components  []Component
+
+	// Swappable parts for the runtime config reload (task 6.13, D-200).
+	// a.opts.Config stays the startup snapshot: never read live keys
+	// from it after startup (reloader.Running() has the current ones).
+	httpServer     *httpserver.Server
+	gql            *graph.Handler
+	loginLimiter   *httpserver.RateLimiter[netip.Prefix]
+	accountLimiter *httpserver.RateLimiter[string]
+	retention      *retention.Worker
+	reloader       *configreload.Reloader
+	reloadAPI      *configreload.API
+	instanceID     uuid.UUID
+	startedAt      time.Time
 }
 
 // New runs the startup checks and prepares the components. Close the App
@@ -143,7 +202,7 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if opts.Config == nil || opts.Logger == nil {
 		return nil, errors.New("app: Config and Logger are required")
 	}
-	a := &App{opts: opts}
+	a := &App{opts: opts, instanceID: uuid.New(), startedAt: time.Now()}
 	defer func() {
 		if err != nil {
 			a.Close()
@@ -155,7 +214,10 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.openDB(ctx); err != nil {
 		return nil, err
 	}
-	a.auditor = audit.New(a.pool, audit.Options{})
+	// Audited actions that are notification events go to the outbox in
+	// the audit entry's transaction (task 5.3).
+	a.auditor = audit.New(a.pool, audit.Options{Observer: notify.ObserveAudit})
+	a.newMetrics()
 	if opts.Mode == ModeWorker {
 		if err := a.newWorkerMode(ctx); err != nil {
 			return nil, err
@@ -196,6 +258,9 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if a.secondFactor, err = a.newSecondFactorFlow(); err != nil {
 		return nil, err
 	}
+	if err := a.newGuard(); err != nil {
+		return nil, err
+	}
 	if a.destinations, err = a.newDestinations(); err != nil {
 		return nil, err
 	}
@@ -203,6 +268,15 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 		return nil, err
 	}
 	a.policy = a.newPolicy()
+	// The admin SSRF allowlist is applied before anything dials out.
+	if err := a.newEgress(ctx, a.subs.bus); err != nil {
+		return nil, err
+	}
+	// The notification core before the queue: its workers are registered
+	// with the others.
+	if err := a.newNotify(); err != nil {
+		return nil, err
+	}
 	// The job keys come before the queue (the backup worker reads them),
 	// the queue before the job service (runJobNow inserts runs).
 	if err := a.newJobKeys(); err != nil {
@@ -227,6 +301,17 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.newTestRestoreAPI(); err != nil {
 		return nil, err
 	}
+	if a.email, err = a.newEmail(); err != nil {
+		return nil, err
+	}
+	if err := a.newHealth(); err != nil {
+		return nil, err
+	}
+	// The reloader before the HTTP handler: the GraphQL API backs
+	// reloadConfig with it; its appliers are bound after newHTTP.
+	if err := a.newReloader(); err != nil {
+		return nil, err
+	}
 	h, err := a.newHTTP(ctx)
 	if err != nil {
 		return nil, err
@@ -234,6 +319,12 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	a.components = append(a.components, h, signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger},
 		downloadCleanupComponent{a.downloads}, restoreHousekeepingComponent{a.restore})
 	if err := a.newScheduler(); err != nil {
+		return nil, err
+	}
+	if err := a.newMetricsServer(ctx); err != nil {
+		return nil, err
+	}
+	if err := a.startReload(ctx, a.subs.bus); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -249,6 +340,9 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 	if err := a.loadKeyring(ctx); err != nil {
 		return err
 	}
+	if err := a.newGuard(); err != nil {
+		return err
+	}
 	var err error
 	if a.destinations, err = a.newDestinations(); err != nil {
 		return err
@@ -257,6 +351,16 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 		return err
 	}
 	a.policy = a.newPolicy()
+	bus, err := a.newWorkerSettingsListener()
+	if err != nil {
+		return err
+	}
+	if err := a.newEgress(ctx, bus); err != nil {
+		return err
+	}
+	if err := a.newNotify(); err != nil {
+		return err
+	}
 	if err := a.newJobKeys(); err != nil {
 		return err
 	}
@@ -264,7 +368,17 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 		return err
 	}
 	a.components = append(a.components, restoreHousekeepingComponent{a.restore})
-	return a.newQueue(true)
+	if err := a.newQueue(true); err != nil {
+		return err
+	}
+	// Event counters only; the snapshot gauges come from serve.
+	if err := a.newMetricsServer(ctx); err != nil {
+		return err
+	}
+	if err := a.newReloader(); err != nil {
+		return err
+	}
+	return a.startReload(ctx, bus)
 }
 
 // openDB connects as bekup_app and refuses to continue unless the role is
@@ -396,6 +510,7 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.gql = gql
 	hopts.GraphQL = gql
 	// GET /api/download/{ticket} (task 3.9).
 	hopts.Download = a.downloads
@@ -406,6 +521,7 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.httpServer = s
 	ln := a.opts.Listener
 	if ln == nil {
 		var lc net.ListenConfig
@@ -464,6 +580,12 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		Calendar:      calendar.New(a.pool),
 		Restores:      a.restoreAPI,
 		TestRestores:  a.testRestoreAPI,
+		Email:         a.email,
+		SystemHealth:  a.health,
+		Notifications: a.notifyAPI,
+		Egress:        a.egress,
+		AuditChain:    a.auditor,
+		ConfigReload:  a.reloadAPI,
 	})
 }
 

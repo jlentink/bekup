@@ -179,7 +179,9 @@ func (s *Service) SweepStuckTestRestores(ctx context.Context, timeout, grace tim
 	n := 0
 	var errs []error
 	for _, id := range ids {
+		abandoned := false
 		err := db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
+			abandoned = false
 			tr, err := q.LockTestRestore(ctx, id)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil
@@ -208,11 +210,14 @@ func (s *Service) SweepStuckTestRestores(ctx context.Context, timeout, grace tim
 			}); err != nil {
 				return err
 			}
-			n++
+			abandoned = true
 			return nil
 		})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("restore: abandon test restore %s: %w", id, err))
+		} else if abandoned {
+			n++
+			s.o.Metrics.TestRestoreFinished(TRStatusError)
 		}
 	}
 	return n, errors.Join(errs...)

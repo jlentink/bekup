@@ -13,10 +13,14 @@ certs/
 **/id_ed25519*
 **/.env
 **/.env.*
+.just.env
+.just.env.example
 bekup.toml
 runner.toml
 scratch/
 data/
+# Native dev backups and restore staging (`just run`, possibly plaintext).
+.dev-data/
 
 # VCS, editors, agents.
 .git/
@@ -32,6 +36,10 @@ bin/
 dist/
 tmp/
 /bekup
+cmd/bekup/bekup
+# Local Go workspaces (the build also sets GOWORK=off).
+go.work
+go.work.sum
 **/node_modules/
 web/dist/
 web/.vite/

@@ -98,6 +98,26 @@ type Connection {
   temporary: Boolean!
   "When a temporary connection expires; null for permanent connections."
   expiresAt: Time
+  """
+  The newest stored testConnection result (D-187); null when never tested.
+  Normalized codes only.
+  """
+  lastTest: ConnectionLastTest
+}
+
+"The stored outcome of the newest testConnection (D-187)."
+type ConnectionLastTest {
+  at: Time!
+  ok: Boolean!
+  """
+  The normalized failure code (as ConnectionTestResult.code, plus
+  TLS_PIN_MISMATCH and SSH_HOST_KEY_MISMATCH); null when ok.
+  """
+  code: String
+  "The connection's settings changed after this test."
+  stale: Boolean!
+  "The privilege verdict of the test's probe; null when the test failed before the check."
+  privileges: TargetPrivileges
 }
 
 type ConnectionSettings {

@@ -39,9 +39,16 @@ func TestSessionEventOf(t *testing.T) {
 	}
 }
 
-func TestSessionEventsNeedsStream(t *testing.T) {
+func TestCombinedSubscriptionsNeedStream(t *testing.T) {
 	r := &Resolver{}
-	if _, err := r.sessionEvents(context.Background()); !apierror.IsCode(err, apierror.Forbidden) {
-		t.Fatalf("outside an event stream: %v", err)
+	ctx := context.Background()
+	if _, err := r.accountEvents(ctx); !apierror.IsCode(err, apierror.Forbidden) {
+		t.Fatalf("accountEvents outside an event stream: %v", err)
+	}
+	if _, err := r.activityUpdated(ctx); !apierror.IsCode(err, apierror.Forbidden) {
+		t.Fatalf("activityUpdated outside an event stream: %v", err)
+	}
+	if _, err := r.runActivity(ctx, uuid.New(), nil); !apierror.IsCode(err, apierror.Forbidden) {
+		t.Fatalf("runActivity outside an event stream: %v", err)
 	}
 }

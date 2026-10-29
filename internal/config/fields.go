@@ -17,9 +17,15 @@ const EnvPrefix = "BEKUP_"
 //	doc:"..."          one-line description, used for docs and the reference
 //	secret:"inline"    an inline secret value; only accepted in dev mode
 //	secret:"file"      a path to a secret file (read with ReadSecretFile)
+//	reload:"live"      bekup.toml only: a runtime config reload applies the
+//	                   key without a restart (D-200). Keys without it are
+//	                   restart-only (deny by default). A new live key needs
+//	                   an applier (internal/app) and a weakening rule
+//	                   (internal/configreload).
 const (
 	secretInline = "inline"
 	secretFile   = "file"
+	reloadLive   = "live"
 )
 
 // Field describes one leaf key of a config file. Config files have exactly
@@ -37,6 +43,9 @@ type Field struct {
 	InlineSecret bool
 	// SecretFile marks keys that hold the path of a secret file.
 	SecretFile bool
+	// Live marks keys a runtime config reload applies (reload:"live",
+	// D-200); all others need a restart.
+	Live bool
 }
 
 // Value returns the current value of the field.
@@ -83,6 +92,7 @@ func fieldsOf(cfg any) []Field {
 				Type:         typeName(v),
 				InlineSecret: kf.Tag.Get("secret") == secretInline,
 				SecretFile:   kf.Tag.Get("secret") == secretFile,
+				Live:         kf.Tag.Get("reload") == reloadLive,
 			})
 		}
 	}

@@ -1,0 +1,195 @@
+/**
+ * Strings of the user administration and owner assignment pages (task
+ * 6.8). Kept next to the feature so concurrent M6 work does not collide in
+ * lib/messages.ts; same rules: short, calm, no internal details.
+ */
+export const usersMessages = {
+  eyebrow: "Administration",
+  title: "Users",
+  lead: "Accounts, roles and access. Every change asks you to confirm your identity and is written to the audit log.",
+  create: "New user",
+  twoFactorPolicy: "2FA policy",
+  searchLabel: "Search users",
+  searchPlaceholder: "Name or e-mail",
+  roleFilter: "Role",
+  statusFilter: "Status",
+  anyRole: "Any role",
+  anyStatus: "Any status",
+  active: "Active",
+  disabledFilter: "Disabled",
+  includeDeleted: "Show deleted",
+  empty: "No accounts match these filters.",
+  previous: "Previous",
+  next: "Next",
+  page: (n: number) => `Page ${n}`,
+  columns: {
+    user: "User",
+    role: "Role",
+    status: "Status",
+    twoFactor: "2FA",
+    lastSeen: "Last seen",
+    created: "Created",
+  },
+  status: {
+    active: "Active",
+    disabled: "Disabled",
+    deleted: "Deleted",
+    locked: "Locked",
+    temporary: "Temporary password",
+    temporaryExpired: "Temporary password expired",
+    unverified: "E-mail unverified",
+  },
+  twoFactor: {
+    enrolled: "Enrolled",
+    grace: (when: string) => `Due ${when}`,
+    overdue: "Enrollment overdue",
+    none: "None",
+    enrolledHint: "The account has an authenticator app or a passkey.",
+    enrolledRequiredHint:
+      "The policy requires a second factor and the account has an authenticator app or a passkey.",
+    graceHint: "The policy requires a second factor; the account has none yet.",
+    overdueHint: "The grace period is over: the account can only enroll a second factor.",
+    noneHint:
+      "No authenticator app or passkey (recovery codes alone do not count). The 2FA policy does not require one for this role.",
+  },
+  lastSeen: {
+    never: "Never",
+    hint: "The newest activity of a fully signed-in session.",
+  },
+  youTag: "You",
+  // Create
+  createTitle: "Create an account",
+  createLead:
+    "bekup generates a temporary password. You never choose another person's password: hand the temporary one over through a trusted channel.",
+  email: "E-mail",
+  displayName: "Name",
+  role: "Role",
+  roleHints: {
+    ADMIN: "Full control, including users, keys and security settings.",
+    MAINTAINER: "Manages connections, destinations and every job. No downloads, no user admin.",
+    USER: "Sees and runs only the jobs they own (owner grants).",
+  },
+  createSubmit: "Create account",
+  creating: "Creating…",
+  emailInvalid: "Enter a valid e-mail address.",
+  nameRequired: "Enter a name.",
+  nameTooLong: "Keep the name under 200 characters.",
+  created: "Account created.",
+  // Temporary password
+  tempEyebrow: "One-time temporary password",
+  tempTitleCreated: (email: string) => `${email} can now sign in`,
+  tempTitleReset: (email: string) => `New temporary password for ${email}`,
+  tempLead:
+    "Give this password to the person through a trusted channel. They must choose a new one at their first sign-in.",
+  tempWarning:
+    "This password will not be shown again. bekup does not store it in readable form; if it is lost, reset the password again.",
+  tempExpires: (when: string, rel: string) => `Expires ${when} (${rel}).`,
+  tempPasswordLabel: "Temporary password",
+  tempCopied: "Temporary password copied.",
+  tempAcknowledge: "I have handed over or stored the password",
+  tempDone: "Done",
+  // Detail
+  back: "All users",
+  notFound: "This account does not exist.",
+  deletedBanner: (when: string) =>
+    `This account was deleted ${when}. It is kept for the audit log.`,
+  profileHeading: "Profile",
+  profileLead: "Name and role. A role change signs the person out everywhere.",
+  save: "Save changes",
+  saved: "Account updated.",
+  noChanges: "Nothing changed.",
+  roleChangeTitle: "Change the role?",
+  roleChange: (from: string, to: string) =>
+    `The role changes from ${from} to ${to}. All sessions of this account are revoked: the person has to sign in again.`,
+  roleChangeConfirm: "Change role",
+  roleOwnedJobsNote:
+    "Owner grants only take effect for the User role. Jobs this account owns stay listed but give no extra rights to other roles.",
+  selfRoleNote: "You cannot change your own role here; another admin has to do that.",
+  accessHeading: "Access",
+  accessLead: "Sign-in state, lockouts and passwords.",
+  disable: "Disable account",
+  enable: "Enable account",
+  disableTitle: "Disable this account?",
+  disableLead: "The person cannot sign in and all their sessions are revoked immediately.",
+  disabled: "Account disabled. Its sessions were revoked.",
+  enabled: "Account enabled.",
+  unlock: "Clear lockout",
+  unlocked: "Lockout cleared.",
+  lockedUntil: (when: string) => `Locked after failed sign-ins until ${when}.`,
+  temporaryPending: (when: string) => `Temporary password not changed yet; it expires ${when}.`,
+  temporaryExpired: "The temporary password expired. Reset the password to issue a new one.",
+  resetPassword: "Reset password",
+  resetPasswordTitle: "Reset the password?",
+  resetPasswordLead:
+    "bekup replaces the password with a new temporary one (valid for 72 hours), clears the lockout and revokes all sessions of this account.",
+  selfResetPassword: "Change your own password in your profile.",
+  twoFactorHeading: "Second factors",
+  twoFactorLead: "For a person who lost their authenticator or passkeys.",
+  resetFactors: "Reset second factors",
+  resetFactorsTitle: "Reset all second factors?",
+  resetFactorsLead:
+    "This removes the account's TOTP app, every passkey and all recovery codes, and revokes its sessions. The person must enroll a new second factor; if the 2FA policy requires one, a new grace period starts now. Only do this after verifying the person's identity out of band.",
+  resetFactorsDone: (totp: boolean, passkeys: number, codes: number) =>
+    `Second factors reset: ${totp ? "TOTP removed, " : ""}${passkeys} passkey${passkeys === 1 ? "" : "s"} and ${codes} recovery code${codes === 1 ? "" : "s"} removed.`,
+  selfResetFactors:
+    "You cannot reset your own second factors. Manage them in your profile, or ask another admin.",
+  dangerHeading: "Delete",
+  dangerLead:
+    "Deleting disables the account, removes its password and revokes its sessions. The record stays for the audit log; the e-mail address can be reused.",
+  delete: "Delete account",
+  deleteTitle: "Delete this account?",
+  deleteLead: (email: string) =>
+    `${email} will no longer be able to sign in. This cannot be undone from the UI.`,
+  deleteConfirmLabel: (email: string) => `Type ${email} to confirm`,
+  deleted: "Account deleted.",
+  selfDelete: "You cannot delete your own account.",
+  lastAdmin:
+    "This is the last active admin. Promote or enable another admin first, so the instance always keeps one.",
+  // Sessions
+  sessionsHeading: "Sessions",
+  sessionsLead: "Where this account is signed in, most recently used first.",
+  noSessions: "No active sessions.",
+  revokeAll: "Revoke all sessions",
+  revokeAllTitle: "Revoke every session?",
+  revokeAllLead: "The person is signed out on every device and has to sign in again.",
+  revokedCount: (n: number) => `${n} session${n === 1 ? "" : "s"} revoked.`,
+  lastActive: (rel: string) => `Last active ${rel}`,
+  neverActive: "No active session",
+  // Owned jobs
+  jobsHeading: "Owned jobs",
+  jobsLead:
+    "Backup owners see, run and restore their own jobs (and download their backups). Adding or removing a job is audited and alerts the admins.",
+  noJobs: "This account owns no jobs.",
+  assign: "Assign jobs",
+  assignTitle: "Assign jobs",
+  assignLead: (name: string) => `Choose jobs ${name} should own.`,
+  assignSearch: "Search jobs",
+  assignSubmit: (n: number) => `Assign ${n} job${n === 1 ? "" : "s"}`,
+  assignNone: "No more jobs to assign.",
+  assigned: (n: number) => `${n} job${n === 1 ? "" : "s"} assigned.`,
+  remove: "Remove",
+  removeLabel: (job: string) => `Remove ownership of ${job}`,
+  removeTitle: "Remove this ownership?",
+  removeLead: (job: string) => `The account loses access to ${job}.`,
+  removed: "Ownership removed.",
+  ownerRoleOnly:
+    "Owner grants give rights to accounts with the User role only (D-067). Admins and maintainers already reach jobs through their role.",
+  jobDisabled: "disabled",
+  loadMoreJobs: "Show more",
+  assignTruncated: "More jobs match: refine the search to find others.",
+  // Picker
+  pickerLabel: "Backup owners",
+  pickerSearch: "Search accounts",
+  pickerEmpty: "No accounts match.",
+  pickerSelected: "Selected",
+  pickerRoleOnly: "Only accounts with the User role can own jobs.",
+  pickerReason: {
+    role: "Admins and maintainers already have access through their role",
+    disabled: "Account disabled",
+    deleted: "Account deleted",
+  },
+  pickerForbidden:
+    "Only admins and maintainers can browse accounts. Ask one of them to assign owners.",
+  pickerRemove: (name: string) => `Remove ${name}`,
+  // Guard
+} as const;

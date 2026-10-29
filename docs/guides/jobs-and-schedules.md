@@ -1,10 +1,9 @@
 # Jobs and schedules
 
-> **Status:** schedule semantics (task 3.3), the job model and GraphQL
-> API (task 3.5), backup runs (task 3.6), run history and live run events
-> (task 3.7), completeness evidence (task 3.10) and the calendar (task
-> 3.14) documented. The jobs editor follows in task 6.5, the job and run
-> detail views in task 6.6, the calendar page in task 6.11.
+> **Status:** implemented: schedules, the job model and GraphQL API,
+> backup runs, run history and live run events, completeness evidence and
+> the calendar (M3), missed-backup alerts (M5), and the jobs editor, the
+> job and run pages and the calendar page of the web UI (M6).
 
 How to create backup jobs: selecting databases (all, one or several, plus Postgres globals), schedules (interval + anchor in a timezone, cron, or manual-only), expected windows for missed-backup alerts, destinations, owners and timeouts.
 
@@ -25,7 +24,7 @@ see and run only their own jobs (see [Who may do what](#who-may-do-what)).
 | `enabled` | Default on. A disabled job has no scheduled **and no manual** runs. Enabling plans the next run from now (missed periods are not caught up). |
 | `retention` | `keepLast` (1–10000 backups) and/or `keepDays` (1–36500 days); at least one. Applied per destination after every successful/partial run and daily; the newest complete backup on each destination is never deleted (see [Retention](retention.md)). |
 | `timeoutSeconds` | Optional run timeout, 60 seconds up to `workers.backup_timeout` (the queue cap, default 6h); empty means the cap. |
-| `expectedWindowSeconds` | Optional missed-backup alert window (task 5.4); empty means derived from the schedule. |
+| `expectedWindowSeconds` | Optional missed-backup alert window, 60 seconds to 366 days: how long after each planned time a backup must have succeeded before `backup.missed` is sent (see [Missed-backup alerts](#missed-backup-alerts)). Empty means derived: twice the run timeout plus one hour (13 h with the defaults). |
 | `verification` | `STANDARD` (object counts and row estimates) or `DEEP` (exact per-table row counts, PostgreSQL only; MySQL/MariaDB always use estimates); completeness evidence of task 3.10. |
 | `destinations` | 1–16 destinations in fan-out order; the dump runs once and is written to all. A destination used by a job that is not deleted cannot be deleted. |
 | `encryption` | Always on at creation (see [Encryption](encryption.md)): a generated passphrase (shown once in `createJob`), a chosen passphrase, a given age recipient or a generated age keypair (identity shown once). Only an admin can opt a job out afterwards. |
@@ -34,6 +33,36 @@ see and run only their own jobs (see [Who may do what](#who-may-do-what)).
 **Deleting** a job is a soft delete: its schedule stops at once, a run that
 is already in progress finishes, and the job's artifacts, keys, owners and
 audit history stay. Its name can be reused; its slug cannot.
+
+### In the web UI
+
+- **Backups → Jobs** lists the jobs you may see with their schedule, last
+  run, next run and encryption state, with a search and filters (enabled,
+  connection). **New job** (admins and maintainers) opens the editor:
+  connection, databases (**Select only**, the default: just the checked
+  databases; or **Exclude**: every database except the checked ones,
+  including databases created later; cluster globals for PostgreSQL), the
+  schedule builder (interval, cron or manual, with a preview of the next
+  occurrences), retention and limits, destinations, the verification level
+  and encryption. At creation the job gets a
+  generated passphrase by default, shown **once** after saving; admins
+  can choose a passphrase or an age recipient instead.
+- A job's page shows its configuration, the run history (live) and the
+  latest test-restore verdict. **Run now (extra run)** and
+  **Start next planned run early** are explained [below](#run-now-vs-start-the-next-run-early);
+  **Edit job** opens the editor with the **Encryption** section (key
+  actions, admins only, behind a step-up; see
+  [encryption](encryption.md)), the **Test restores** section and the
+  **Owners** panel (owners can be added once the job exists).
+- **Backups → Runs** lists every run you may see, updated live. A run's
+  page shows its databases, the files per destination with their
+  verification and signature state, warnings and errors, the
+  [completeness evidence](#completeness-evidence-verification-levels-and-warnings),
+  the live log while it runs (**Follow** keeps the tail in view, **Copy
+  log**), **Cancel run** (staff), and per file **Download**
+  ([downloads](downloads.md)) and **Restore** ([restore](restore.md)).
+- **Overview → Calendar** shows planned and past runs and expiries
+  ([below](#calendar)).
 
 ### Who may do what
 
@@ -50,6 +79,13 @@ audit history stay. Its name can be reused; its slug cannot.
 Owner rights apply to accounts with the **user** role only: a maintainer or
 admin listed as an owner gains nothing from it (D-067). Every owner change
 is audited and raises a security alert. A deleted account owns nothing.
+
+To pick owners, admins and maintainers search the **user directory**
+(`userDirectory(search, first, after)`): only the id, display name,
+e-mail address, role and disabled flag of accounts that are not deleted
+(D-184). `jobs(filter: {ownerId: "…"})` lists the jobs a user owns; the
+owner filter is for admins and maintainers (backup owners get
+`FORBIDDEN`; they see only their own jobs anyway).
 
 **Run now** enqueues a manual run of an enabled job. A job never has two
 runs at once: while one is queued, running or waiting for a retry, "Run
@@ -71,7 +107,7 @@ There are two ways to start a backup by hand (D-156, D-157):
 
 Note the different codes for a disabled job: `runJobNow` answers
 `CONFLICT`, `startNextRunEarly` answers `VALIDATION` (field `id`, the
-message names the reason). Clients (the UI in task 6.6) should treat both as
+message names the reason). Clients (the web UI does) should treat both as
 "enable the job first".
 
 An early run records the planned time it stands for in `scheduledFor`; the
@@ -155,6 +191,18 @@ the scratch connection also stops test restores that were already queued
 for the old one. Backup owners see the settings and the results of their
 jobs. What a test restore checks and how results are reported is described
 in [Restore](restore.md#scheduled-test-restores).
+
+In the web UI the settings are the **Test restores** section of the job
+editor (admins and maintainers). It offers the permanent connections of
+the job's engine and shows the role verdict known for the chosen one: the
+verdict stored when it was designated or, for another connection, the one
+from its last connection test. Admins tick the acknowledgement for a
+privileged, unknown or not yet tested role; the server probes the role on
+save and decides. Saving asks for a passkey or authenticator code. The job
+page shows the latest verdict with a summary of the differences, **Run
+test restore now** (staff) and **All test restores**: the history of the
+job's test restores and, for each, the restored databases with every
+finding (backup vs. restored count and the difference).
 
 ## Schedules
 
@@ -272,6 +320,38 @@ with the following regular time. A job whose stored schedule can no longer
 be evaluated stops being scheduled until it is saved again (recorded as
 "unschedulable" and logged at WARN). Skip records are kept for 90 days.
 
+### Missed-backup alerts
+
+A worker checks every 5 minutes whether each enabled job with a schedule
+(not manual) got a backup in time (D-188). A planned time **T** is
+**missed** when no run of the job ended `success` or `partial` between T
+and T + expected window. Counted are the job's own run for T (also a run
+started early for T), a later or manual run, and the run that was still
+running when T was skipped. So:
+
+| Situation | Missed? |
+|---|---|
+| The run for T succeeded (or partially succeeded) within the window | no |
+| T was skipped because the previous run was still running, and that run succeeded within T's window | no |
+| The run for T failed or was canceled, and nothing succeeded within the window | yes (`run_failed`, `run_canceled`) |
+| The run for T is still queued or running when the window ends | yes (`run_queued`, `run_running`) |
+| The run for T succeeded, but only after the window | yes (`finished_late`) |
+| The scheduler did not start T at all (bekup or the scheduler not running) | yes (`not_enqueued`) |
+| The schedule can no longer be evaluated | yes (`unschedulable`) |
+
+Planned times are taken from what the scheduler recorded (runs, skip
+records) and the stored next run time; times before a job was enabled are
+never judged. Disabled, manual-only and deleted jobs are not checked.
+
+**One alert per outage:** consecutive missed times count as one outage,
+which sends one `backup.missed` and then a reminder once a day while no
+backup succeeds. The next successful backup ends the outage
+(`backup.succeeded` is the "all clear"); a later miss starts a new one.
+Times whose deadline lies more than 7 days back are not looked at, except
+a planned time the scheduler never started. The alerts need a worker
+process to run; for independent monitoring use the `/metrics` endpoint
+(oldest last success per job, see [Operations](../operations.md)).
+
 ### Limits
 
 | Limit | Value |
@@ -288,7 +368,7 @@ applies when a schedule is saved again.
 
 Every scheduled, catch-up or manual run becomes a **run** the moment it is
 queued (`runJobNow` returns its `runId`). A run backs up each selected
-database into its own file (one file per database; with "all databases",
+database into its own file (one file per database; with "Exclude",
 every database on the server except the excluded ones), plus the PostgreSQL
 globals when the job includes them, then writes a signed `manifest.json`
 next to the files on every destination that holds all of them.
@@ -369,11 +449,31 @@ whose dump failed keeps its warnings (they often explain the failure):
 | `roles_without_passwords` | the PostgreSQL globals were dumped without role passwords (the backup user cannot read `pg_authid`) |
 | `stats_unavailable` | the statistics could not be captured; the backup ran without evidence |
 
-With "all databases", the databases on the server that the job's exclude
+With "Exclude", the databases on the server that the job's exclude
 list leaves out are reported as an informational **notice**
 (`databases_excluded` in `Run.notices`), not a warning: excluding them is
 intended, so it does not set **has warnings**. The signed manifest lists
 them in `stats.databases_excluded`.
+
+The evidence of each database is readable over GraphQL as
+`RunItem.stats` (D-187), with the same access as the run (backup owners
+see their own jobs' runs only): `level` (`STANDARD`/`DEEP`),
+`consistency` (`SNAPSHOT`: PostgreSQL counts taken in the dump's snapshot;
+`APPROXIMATE`: taken right before the dump), object counts by kind, the
+per-table row counts with `exact` / `estimate` / `unknown` /
+`approximate` flags (`rows` is null when unknown), `tablesTotal`,
+`tablesTruncated`, and the completeness `warnings` and `notices` with
+their codes and up to 50 object names each. It is null for databases
+without recorded evidence (failed or unverified dumps,
+`stats_unavailable`). A page of runs loads the evidence of all its items
+in one query. Names and counts only, never data.
+
+In the web UI the run page shows this evidence per database once the run
+has finished: level and consistency, object counts, warnings and notices
+with their object names, a note when the table list was truncated, and the
+per-table row counts with an `exact`, `estimate` or `unknown` badge (plus
+`approximate` for MySQL/MariaDB). Long table lists show the first 50
+tables with a filter and "show all".
 
 ### Canceling a run
 
@@ -419,12 +519,22 @@ new log lines in batches and ends with a `done` batch when the run is
 over. Every event is checked against your current rights when it is sent:
 an owner removed from a job stops receiving its runs at once. A session may
 hold `graphql.stream_max_per_session` streams (default 4), so the UI opens
-one `runUpdated` stream per page and filters on the client.
+at most one page stream per tab (D-197): `runActivity` (run changes and
+log lines) on a run page, one `runUpdated` filtered on the client on list
+pages, `activityUpdated` on the dashboard.
 
 ## Calendar
 
-The job calendar (task 3.14, D-156, D-159; the UI page follows in task
-6.11) shows, for a range of at most 93 days:
+The Calendar page has month, week and day views, filters by job,
+connection and destination, and a time-zone selector (default: the
+browser's zone). Planned runs are outlined, paused ones hatched, started-
+early ones marked, overdue ones highlighted, skipped ones struck through,
+runs filled by status and expiries labelled exact or projected; a click
+opens the run or job. Arrow keys move between days, Enter opens a day, and
+a notice appears when the range was truncated.
+
+The job calendar (D-156, D-159; the **Calendar** page of the web UI,
+D-185) shows, for a range of at most 93 days:
 
 | Kind | What | Markers |
 |---|---|---|

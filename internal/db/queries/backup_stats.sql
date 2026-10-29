@@ -12,3 +12,9 @@ ORDER BY ri.position, ri.id;
 
 -- name: GetBackupStatsByItem :one
 SELECT * FROM backup_stats WHERE run_item_id = $1;
+
+-- name: ListBackupStatsForRuns :many
+-- The completeness evidence of a batch of runs (RunItem.stats, D-187).
+SELECT run_item_id, run_id, level, consistency, tables_total, warning_count, stats, created_at
+FROM backup_stats
+WHERE run_id = ANY(@run_ids::uuid[]);

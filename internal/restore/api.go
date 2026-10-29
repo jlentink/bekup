@@ -248,6 +248,23 @@ func (a *API) verifySource(ctx context.Context, row *sqlc.GetDownloadArtifactRow
 	switch {
 	case errors.Is(err, artifactverify.ErrManifest):
 		ve := manifestFailure(err)
+		// Audited like a failure while staging (the audit observer raises
+		// the security.system alert, task 5.5); the request fails either
+		// way, so an audit failure is only logged.
+		actor := audit.SystemActor()
+		if p, ok := auth.FromContext(ctx); ok {
+			actor = audit.UserActor(p.UserID)
+		}
+		if _, aerr := a.svc.o.Auditor.Record(context.WithoutCancel(ctx), audit.Event{
+			Actor: actor, Action: audit.ActionRestoreVerificationFailed, TargetType: "artifact",
+			TargetID: art.ID.String(), IP: auth.RequestMetaFrom(ctx).IP,
+			Details: audit.Details{
+				"reason": ve.Code, "stage": "request", "artifact_id": art.ID.String(), "job_id": art.JobID.String(),
+				"run_id": art.RunID.String(), "destination_id": art.DestinationID.String(),
+			},
+		}); aerr != nil {
+			a.o.Logger.ErrorContext(ctx, "recording a restore verification failure failed", slog.Any("error", aerr))
+		}
 		a.svc.o.Alert(ctx, Alert{Kind: AlertArtifactTampered, JobID: art.JobID, ArtifactID: art.ID,
 			Details: map[string]any{"reason": ve.Code, "stage": "request"}})
 		return Source{}, ve
@@ -950,7 +967,8 @@ func (a *API) record(ctx context.Context, p *Preview, in CreateInput) (sqlc.Rest
 	}
 	if p.Privileges.Gated() {
 		// An acknowledged restore into a privileged (or unknown) target
-		// role is a security event (D-068; delivered by task 5.5).
+		// role is a security event (D-068): the audit observer alerts the
+		// admins from the restore.requested entry (task 5.5).
 		a.svc.o.Alert(ctx, Alert{Kind: AlertPrivilegedTarget, RestoreID: r.ID, JobID: r.JobID, ArtifactID: r.ArtifactID,
 			Details: map[string]any{
 				"target_connection_id": r.TargetConnectionID.String(), "target_privileges": string(p.Privileges.Status),
@@ -1088,7 +1106,10 @@ func (a *API) Cancel(ctx context.Context, id uuid.UUID) (Cancellation, error) {
 	}
 	now := a.svc.o.Now().UTC()
 	var out Cancellation
+	// finishedMode is set when this call finished the restore itself.
+	var finishedMode *sqlc.RestoreMode
 	err = db.TxWith(ctx, a.svc.o.DB, func(tx pgx.Tx, q *sqlc.Queries) error {
+		finishedMode = nil
 		r, err := q.LockRestore(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -1109,8 +1130,12 @@ func (a *API) Cancel(ctx context.Context, id uuid.UUID) (Cancellation, error) {
 		out = Cancellation{RestoreID: r.ID, JobID: r.JobID, Status: r.Status, RequestedAt: now}
 		if state != rivertype.JobStateRunning {
 			// Nobody works on it: finish it here.
-			if _, err := a.svc.finishTx(ctx, q, r.ID, StatusCanceled, context.Canceled, Outcome{}); err != nil {
+			changed, err := a.svc.finishTx(ctx, q, r.ID, StatusCanceled, context.Canceled, Outcome{})
+			if err != nil {
 				return err
+			}
+			if changed {
+				finishedMode = &r.Mode
 			}
 			if _, err := q.DeleteRestoreIdentityHandoff(ctx, r.ID); err != nil {
 				return fmt.Errorf("restore: delete identity handoff: %w", err)
@@ -1126,6 +1151,9 @@ func (a *API) Cancel(ctx context.Context, id uuid.UUID) (Cancellation, error) {
 	})
 	if err != nil {
 		return Cancellation{}, err
+	}
+	if finishedMode != nil {
+		a.svc.o.Metrics.RestoreFinished(*finishedMode, StatusCanceled)
 	}
 	return out, nil
 }

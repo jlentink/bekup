@@ -38,4 +38,22 @@ var (
 		Name:   "bekup_restore_events",
 		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenRestoreEvents(ctx) },
 	}
+
+	// NotificationEvents carries new in-app inbox rows (internal/notify:
+	// "inbox:<notification id>:<user id>"; task 5.3b). The
+	// accountEvents stream re-loads the row scoped to the stream's
+	// own user.
+	NotificationEvents = Channel{
+		Name:   "bekup_notification_events",
+		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenNotificationEvents(ctx) },
+	}
+
+	// SettingsEvents carries changes of runtime settings that every
+	// process applies in memory (payload: the settings key, e.g.
+	// "netguard.allowlist"; D-196). Receivers re-read the setting from the
+	// database.
+	SettingsEvents = Channel{
+		Name:   "bekup_settings_events",
+		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenSettingsEvents(ctx) },
+	}
 )

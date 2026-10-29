@@ -30,7 +30,7 @@ func protocolError(code apierror.Code, msg string) *gqlerror.Error {
 // (__schema, __type, __typename) are not counted: they are only reachable
 // when introspection is allowed and are bounded by the parser token limit
 // and the complexity limit.
-type depthLimit struct{ Max int }
+type depthLimit struct{ Max func() int }
 
 var _ interface {
 	graphql.HandlerExtension
@@ -47,7 +47,7 @@ func (d depthLimit) MutateOperationContext(_ context.Context, opCtx *graphql.Ope
 		return nil
 	}
 	w := depthWalker{doc: opCtx.Doc, memo: map[string]int{}, active: map[string]bool{}}
-	if got := w.depth(op.SelectionSet); got > d.Max {
+	if got := w.depth(op.SelectionSet); got > d.Max() {
 		return protocolError(apierror.QueryTooDeep, "operation exceeds the maximum depth")
 	}
 	return nil

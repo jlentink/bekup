@@ -74,7 +74,8 @@ type LockoutNotifier interface {
 	AccountLocked(ctx context.Context, ev LockoutEvent)
 }
 
-// NopLockoutNotifier ignores lockouts (until task 5.5).
+// NopLockoutNotifier ignores lockouts (the alert comes from the audit
+// entry, task 5.5).
 type NopLockoutNotifier struct{}
 
 // AccountLocked does nothing.

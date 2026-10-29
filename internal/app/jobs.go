@@ -73,7 +73,8 @@ func (a *App) newBackupWorker() (*jobs.BackupWorker, error) {
 		// A finished run (success/partial) enqueues its job's retention
 		// sweep in the same transaction (task 3.8).
 		Store: runstate.NewStore(a.pool, a.publisher(), nil).
-			WithFinishHook(retention.PostRunHook(a.queueInserter), a.opts.Logger),
+			WithFinishHook(retention.PostRunHook(a.queueInserter), a.opts.Logger).
+			WithObserver(a.metrics),
 		Slots:        runstate.NewSlots(a.pool),
 		Targets:      a.connections,
 		Runner:       a.runner.RPC(),

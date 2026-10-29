@@ -1,0 +1,135 @@
+# E-mail: SMTP settings, test e-mail and user e-mail verification (task
+# 5.1; D-023, D-051, D-178). SMTP settings are admin only; changes need a
+# fresh step-up and are audited by field. The password is write-only:
+# outputs only say whether one is stored (hasPassword). Transport security
+# follows the server (D-180): AUTO and NONE may send mail and credentials
+# unencrypted (mayBeUnencrypted).
+
+"Transport security of the SMTP connection (D-180)."
+enum SmtpMode {
+  """
+  The default: STARTTLS when the server offers it, otherwise unencrypted
+  (AUTH included). A failed STARTTLS handshake is an error, not a fallback.
+  An attacker on the path can suppress the STARTTLS offer.
+  """
+  AUTO
+  "Plain connection upgraded with STARTTLS (refused when the server does not offer it). Usually port 587."
+  STARTTLS
+  "TLS from the first byte (SMTPS). Usually port 465."
+  IMPLICIT_TLS
+  "Never encrypt, even when the server offers STARTTLS: mail and AUTH travel in clear text."
+  NONE
+}
+
+"The SMTP settings (never the password)."
+type SmtpSettings {
+  "False until an admin saved settings (the other fields are defaults then)."
+  configured: Boolean!
+  "False: bekup sends no e-mail."
+  enabled: Boolean!
+  host: String!
+  port: Int!
+  mode: SmtpMode!
+  "The AUTH username (null: no authentication)."
+  username: String
+  "True when a password is stored."
+  hasPassword: Boolean!
+  fromAddress: String!
+  fromName: String
+  "PEM CA certificates that replace the system roots for this server (null: system roots)."
+  caBundlePem: String
+  connectTimeoutSeconds: Int!
+  sendTimeoutSeconds: Int!
+  """
+  True for AUTO and NONE: mail, metadata and the SMTP credentials may travel
+  unencrypted (the UI shows a badge).
+  """
+  mayBeUnencrypted: Boolean!
+  updatedAt: Time
+}
+
+"""
+Replaces the SMTP settings. `password` omitted keeps the stored password;
+`clearPassword` removes it. When host, port or username change, the mode
+is weakened (STARTTLS or IMPLICIT_TLS to AUTO or NONE) or the CA bundle
+changes, a stored password must be entered again in the same update
+(VALIDATION on `password` otherwise; it is never sent to a new or less
+protected endpoint). The host must pass the SSRF guard (private relays
+must be allowlisted for the SMTP scope).
+"""
+input UpdateSmtpSettingsInput {
+  enabled: Boolean!
+  host: String!
+  port: Int!
+  mode: SmtpMode!
+  username: String
+  password: String
+  clearPassword: Boolean
+  fromAddress: String!
+  fromName: String
+  caBundlePem: String
+  "1..60 (default 10)."
+  connectTimeoutSeconds: Int
+  "5..300 (default 60): bounds the whole SMTP session."
+  sendTimeoutSeconds: Int
+}
+
+"The result of sendTestEmail."
+type SmtpTestResult {
+  ok: Boolean!
+  "The failure code (null on success), e.g. tls_failed, auth_failed, not_allowed, unreachable."
+  code: String
+  "A fixed, presentable description of the failure."
+  message: String
+  "Extra information for admins (the blocked address, the SMTP reply code)."
+  detail: String
+  "True when the SMTP session used TLS (as far as it got on failure)."
+  encrypted: Boolean!
+  "The negotiated TLS version, e.g. \"TLS 1.3\" (null without TLS)."
+  tlsVersion: String
+}
+
+"The result of requestEmailVerification."
+type EmailVerificationRequest {
+  "The address the link was sent to."
+  sentTo: String!
+  "When the link stops working (24 hours)."
+  expiresAt: Time!
+}
+
+extend type User {
+  "True when the account's e-mail address is verified (needed for e-mail notifications)."
+  emailVerified: Boolean!
+  emailVerifiedAt: Time
+}
+
+extend type Query {
+  "The SMTP settings."
+  smtpSettings: SmtpSettings! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  "Replaces the SMTP settings (audited by field; the password by name only)."
+  updateSmtpSettings(input: UpdateSmtpSettingsInput!): SmtpSettings! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Sends a test e-mail with the stored settings. Rate limited; failures are
+  returned as a result with a fixed code, never the server's text.
+  """
+  sendTestEmail(to: String!): SmtpTestResult! @hasRole(roles: [ADMIN])
+
+  """
+  Sends a verification link to the own e-mail address (replacing an older
+  link). The link works once, for 24 hours, and only while signed in to
+  this account. Rate limited (one link per minute). Needs working SMTP
+  settings; CONFLICT when the address is already verified.
+  """
+  requestEmailVerification: EmailVerificationRequest! @authenticated
+
+  """
+  Verifies the own e-mail address with the code of the link (the URL
+  fragment `code=`). Any problem (wrong, used, expired, another account's
+  or an old address's code) answers VALIDATION with one generic message.
+  """
+  verifyEmail(code: String!): User! @authenticated
+}

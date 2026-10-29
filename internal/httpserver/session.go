@@ -112,16 +112,9 @@ func sessionCookies(r *http.Request, name string) []string {
 //   - auth.ErrNoSession (unknown, expired, revoked or disabled):
 //     anonymous and the cookie is cleared;
 //   - any other error: 503 (fail closed, never anonymous by accident).
-func sessionMiddleware(o SessionOptions, logger *slog.Logger) (func(http.Handler) http.Handler, error) {
+func sessionMiddleware(o SessionOptions, users *RateLimiter[uuid.UUID], logger *slog.Logger) (func(http.Handler) http.Handler, error) {
 	if o.Resolver == nil {
 		return nil, errors.New("httpserver: SessionOptions.Resolver is required")
-	}
-	var users *RateLimiter[uuid.UUID]
-	if o.UserLimit.PerSecond > 0 {
-		var err error
-		if users, err = NewRateLimiter[uuid.UUID](o.UserLimit); err != nil {
-			return nil, err
-		}
 	}
 	name := o.Cookies.Name()
 	return func(next http.Handler) http.Handler {

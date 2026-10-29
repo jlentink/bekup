@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -579,6 +580,19 @@ func (r *Resolver) jobRecentRuns(ctx context.Context, obj *model.Job, n int) ([]
 	return r.loadRecentRuns(ctx, obj.ID, n)
 }
 
+// jobMissed serves Job.missed and Job.missedSince (D-196): the state the
+// missed-backup check recorded, batch-loaded per page of jobs. Same access
+// as the job's runs.
+func (r *Resolver) jobMissed(ctx context.Context, obj *model.Job) (*runstate.MissedState, error) {
+	if _, err := r.runReader(); err != nil {
+		return nil, err
+	}
+	if err := r.Authz.Authorize(ctx, authz.OpRunList); err != nil {
+		return nil, err
+	}
+	return r.loadMissed(ctx, obj.ID)
+}
+
 func (r *Resolver) jobLastRun(ctx context.Context, obj *model.Job) (*model.Run, error) {
 	runs, err := r.jobRecentRuns(ctx, obj, 1)
 	if err != nil || len(runs) == 0 {
@@ -605,3 +619,67 @@ func (r *Resolver) jobRecentRunsList(ctx context.Context, obj *model.Job, first 
 }
 
 func idString(id int64) string { return strconv.FormatInt(id, 10) }
+
+// runItemStats returns the completeness evidence of an item (D-187). It
+// inherits the run's authorization (RunItem is reachable through Run only)
+// and is batch-loaded for every hinted run of the operation.
+func (r *Resolver) runItemStats(ctx context.Context, obj *model.RunItem) (*model.RunItemStats, error) {
+	if _, err := r.runReader(); err != nil {
+		return nil, err
+	}
+	byItem, err := r.loadStats(ctx, obj.RunID)
+	if err != nil {
+		return nil, err
+	}
+	st := byItem[obj.ID]
+	if st == nil {
+		return nil, nil
+	}
+	return itemStatsModel(st), nil
+}
+
+func itemStatsModel(st *runstate.ItemStats) *model.RunItemStats {
+	m := &model.RunItemStats{
+		Level: model.StatsLevelStandard, Consistency: model.StatsConsistencyApproximate,
+		Objects: make([]model.StatsObjectCount, 0, len(st.Objects)), Tables: make([]model.TableStats, 0, len(st.Tables)),
+		TablesTotal: int(min(st.TablesTotal, math.MaxInt32)), TablesTruncated: st.TablesTruncated,
+		Warnings: findingsModel(st.Warnings), Notices: findingsModel(st.Notices), RecordedAt: st.RecordedAt,
+	}
+	if st.Level == "deep" {
+		m.Level = model.StatsLevelDeep
+	}
+	if st.Consistency == "snapshot" {
+		m.Consistency = model.StatsConsistencySnapshot
+	}
+	for _, o := range st.Objects {
+		m.Objects = append(m.Objects, model.StatsObjectCount{Kind: o.Kind, Count: float64(o.Count)})
+	}
+	for i := range st.Tables {
+		t := &st.Tables[i]
+		tm := model.TableStats{Name: t.Name, Approximate: t.Approximate}
+		switch t.Count {
+		case runstate.RowCountExact:
+			tm.Count, tm.Exact = model.RowCountKindExact, true
+		case runstate.RowCountEstimate:
+			tm.Count, tm.Estimate = model.RowCountKindEstimate, true
+		default:
+			tm.Count, tm.Unknown = model.RowCountKindUnknown, true
+		}
+		if t.Rows != nil && !tm.Unknown {
+			rows := float64(*t.Rows)
+			tm.Rows = &rows
+		}
+		m.Tables = append(m.Tables, tm)
+	}
+	return m
+}
+
+func findingsModel(fs []runstate.StatsFinding) []model.StatsFinding {
+	out := make([]model.StatsFinding, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, model.StatsFinding{
+			Code: f.Code, Count: float64(f.Count), Objects: append([]string{}, f.Objects...), Truncated: f.Truncated,
+		})
+	}
+	return out
+}

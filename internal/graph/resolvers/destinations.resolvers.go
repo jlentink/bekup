@@ -47,3 +47,7 @@ func (r *queryResolver) Destinations(ctx context.Context) ([]model.Destination, 
 func (r *queryResolver) Destination(ctx context.Context, id uuid.UUID) (*model.Destination, error) {
 	return r.destination(ctx, id)
 }
+
+func (r *queryResolver) DestinationUsage(ctx context.Context) ([]model.DestinationUsage, error) {
+	return r.destinationUsage(ctx)
+}

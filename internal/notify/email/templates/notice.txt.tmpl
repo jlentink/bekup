@@ -1,0 +1,11 @@
+{{.Heading}}
+{{range .Paragraphs}}
+{{.}}
+{{end}}{{if .Details}}
+{{range .Details}}{{.Label}}: {{.Value}}
+{{end}}{{end}}{{with .Action}}
+{{.Label}}:
+{{.URL}}
+{{end}}
+--
+{{.Footer}}

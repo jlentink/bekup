@@ -131,11 +131,11 @@ type streamResp struct {
 	Body       io.Reader
 }
 
-// openStream opens a sessionEvents event stream with the cookie and
+// openStream opens an accountEvents event stream with the cookie and
 // returns the response (the caller checks the status).
 func openStream(t *testing.T, addr, cookie string) *streamResp {
 	t.Helper()
-	body := `{"query":"subscription { sessionEvents { kind current } }"}`
+	body := `{"query":"subscription { accountEvents { session { kind current } } }"}`
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/graphql", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)

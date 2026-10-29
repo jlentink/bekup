@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -170,4 +172,45 @@ func auditConnection(page audit.Page, hasPrevious bool) *model.AuditLogConnectio
 		conn.PageInfo.EndCursor = &conn.Edges[n-1].Cursor
 	}
 	return conn
+}
+
+// AuditChainSource reads the audit chain status (*audit.Auditor).
+type AuditChainSource interface {
+	ChainStatus(ctx context.Context) (audit.ChainStatus, error)
+}
+
+var errAuditChainNotConfigured = errors.New("resolvers: audit chain status not configured")
+
+// auditChainStatus serves Query.auditChainStatus (admin, D-196).
+func (r *Resolver) auditChainStatus(ctx context.Context) (*model.AuditChainStatus, error) {
+	if r.AuditChain == nil {
+		return nil, errAuditChainNotConfigured
+	}
+	st, err := r.AuditChain.ChainStatus(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolvers: audit chain status: %w", err)
+	}
+	out := &model.AuditChainStatus{}
+	if v := st.LastVerification; v != nil {
+		m := &model.AuditChainVerification{CheckedAt: v.CheckedAt, Ok: v.OK, Full: v.Full}
+		if v.Finding != "" {
+			f := v.Finding
+			m.Finding = &f
+		}
+		if v.VerifiedThroughID > 0 {
+			id := strconv.FormatInt(v.VerifiedThroughID, 10)
+			m.VerifiedThroughID = &id
+		}
+		out.LastVerification = m
+	}
+	if st.HeadID > 0 {
+		id, hash, at := strconv.FormatInt(st.HeadID, 10), st.HeadHash, st.HeadAt
+		out.HeadID, out.HeadHash, out.HeadAt = &id, &hash, &at
+	}
+	if h := st.SignedHead; h != nil {
+		out.LatestSignedHead = &model.AuditSignedHead{
+			ChainID: strconv.FormatInt(h.ChainID, 10), SignedAt: h.SignedAt, KeyID: h.KeyID,
+		}
+	}
+	return out, nil
 }

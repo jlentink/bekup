@@ -1,8 +1,8 @@
 # Downloads
 
-> **Status:** the download API (task 3.9: `createDownloadTicket` and
-> `GET /api/download/{ticket}`) exists. The download dialog with the
-> restore command follows in task 6.6. Decision: D-150.
+> **Status:** implemented: the download API (`createDownloadTicket` and
+> `GET /api/download/{ticket}`) and the download dialog of the web UI.
+> Decision: D-150.
 
 Who can download backups, the `RAW` and `PLAIN` modes, the single-use
 download tickets and how to restore a downloaded file.
@@ -53,6 +53,20 @@ logged, audited or returned. `RAW` downloads and passphrase-encrypted
 backups do not take an identity (the request is refused if you send one);
 passphrase backups are decrypted with the stored passphrase version the
 artifact was written with.
+
+## In the web UI
+
+Open the run (**Backups → Runs**, or a job's run history) and click
+**Download** next to the file you want (shown only to admins and the
+job's backup owners, and only for downloadable files). The dialog asks
+**What to download**: the raw file as stored, or a plain (decrypted) one;
+for a recipient-encrypted backup, paste the age identity or **Choose
+identity file** (only the `AGE-SECRET-KEY-1` line is kept, sent with the
+ticket request and cleared afterwards). **Create link** asks for a step-up
+and shows **Your link is ready** with a 60-second countdown: click
+**Download** once, in the same browser session. Below it, **Restore it
+with** shows a command for the file with **Copy command**; placeholders
+in angle brackets are yours to fill in (D-186).
 
 ## Download tickets
 

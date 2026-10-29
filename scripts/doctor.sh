@@ -95,6 +95,16 @@ check optional mkcert "1.4" "mkcert -version" "brew install mkcert" "apt install
 check optional shellcheck "0.9" "shellcheck --version" "brew install shellcheck" "apt install shellcheck" "lint scripts/"
 check optional actionlint "1.7" "actionlint -version" "brew install actionlint" "go install github.com/rhysd/actionlint/cmd/actionlint@latest" "lint .github/workflows (CI runs it)"
 check optional zizmor "1.0" "zizmor --version" "brew install zizmor" "pipx install zizmor (or uvx zizmor)" "GitHub Actions security lint (CI runs it)"
+# buildx is a docker plugin: check() only sees the docker binary, so a
+# missing plugin is detected by its failing version command.
+if command -v docker >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then
+	check optional "docker buildx" "0.12" "docker buildx version" "ships with Docker Desktop" "apt install docker-buildx-plugin" "image publishing (just publish)"
+else
+	hint="apt install docker-buildx-plugin"
+	[[ $os == Darwin ]] && hint="ships with Docker Desktop"
+	printf '  %s %-15s %-12s %s\n' "$WARN" "docker buildx" "missing" "${DIM}optional, image publishing (just publish); install: $hint${R}"
+	warned=1
+fi
 
 printf '\n%sEnvironment%s\n' "$B" "$R"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then

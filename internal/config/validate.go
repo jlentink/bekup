@@ -31,7 +31,7 @@ const (
 )
 
 func (v *validator) addf(path, format string, args ...any) {
-	v.errs = append(v.errs, fmt.Errorf("%s: %s", path, fmt.Sprintf(format, args...)))
+	v.errs = append(v.errs, &KeyError{Path: path, Msg: path + ": " + fmt.Sprintf(format, args...)})
 }
 
 func (v *validator) positive(path string, n int64) {
@@ -465,8 +465,14 @@ func validateBekup(c *Bekup, dev bool) []error {
 
 	// [notifications]
 	v.positive("notifications.max_per_user_per_hour", int64(c.Notifications.MaxPerUserPerHour))
-	v.duration("notifications.collapse_window", c.Notifications.CollapseWindow, time.Second, 0)
+	if c.Notifications.MaxPerUserPerHour > 10000 {
+		v.addf("notifications.max_per_user_per_hour", "must be at most 10000")
+	}
+	v.duration("notifications.collapse_window", c.Notifications.CollapseWindow, time.Second, 24*time.Hour)
 	v.positive("notifications.webhook_failure_threshold", int64(c.Notifications.WebhookFailureThreshold))
+	if c.Notifications.WebhookFailureThreshold > 1000 {
+		v.addf("notifications.webhook_failure_threshold", "must be at most 1000")
+	}
 
 	// [netguard]
 	v.cidrs("netguard.allow_cidrs", c.Netguard.AllowCIDRs)
@@ -475,6 +481,8 @@ func validateBekup(c *Bekup, dev bool) []error {
 	// [metrics]
 	if c.Metrics.Enabled {
 		v.listen("metrics.listen", c.Metrics.Listen)
+		v.listenNoWildcard("metrics.listen", c.Metrics.Listen, dev, c.Metrics.AllowWildcardListen,
+			"metrics.allow_wildcard_listen", "10.213.252.10:9464")
 		if listenersCollide(c.Metrics.Listen, c.Server.Listen) {
 			v.addf("metrics.listen", "must differ from server.listen (metrics stay on an internal port)")
 		}

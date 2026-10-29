@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +84,7 @@ type Options struct {
 	// only).
 	Publisher *pubsub.Publisher
 	// Alerts receives unexpected deletions and aborted sweeps (nil: WARN
-	// logs until task 5.5).
+	// logs; the security alerts come from their audit entries).
 	Alerts AlertFunc
 	// DryRun forces every sweep to only plan (retention.dry_run).
 	DryRun bool
@@ -92,14 +93,54 @@ type Options struct {
 	MaxDeletions int
 	// PartialCleanupAge is retention.partial_cleanup_age.
 	PartialCleanupAge time.Duration
-	Logger            *slog.Logger
-	Now               func() time.Time
+	// Metrics counts the outcome of every job sweep (nil: none; task 5.6).
+	Metrics Metrics
+	Logger  *slog.Logger
+	Now     func() time.Time
 }
+
+// Metrics receives the result of every finished job sweep (also a failed
+// one: what was deleted stays deleted). It must be fast and must not fail.
+type Metrics interface {
+	SweepFinished(r Result)
+}
+
+// NopMetrics discards everything.
+type NopMetrics struct{}
+
+// SweepFinished implements Metrics.
+func (NopMetrics) SweepFinished(Result) {}
 
 // Worker works retention_sweep jobs; see the package documentation.
 type Worker struct {
 	river.WorkerDefaults[queue.RetentionSweepArgs]
 	o Options
+	// limits are the retention.* settings; SetLimits swaps them at runtime
+	// (config reload, D-200). Each sweep reads them once.
+	limits atomic.Pointer[Limits]
+}
+
+// Limits are the retention.* settings a config reload may change (D-200).
+type Limits struct {
+	// DryRun forces every sweep to only plan (retention.dry_run).
+	DryRun bool
+	// MaxDeletions caps the deletes of one job sweep (> 0).
+	MaxDeletions int
+	// PartialCleanupAge is retention.partial_cleanup_age (> 0).
+	PartialCleanupAge time.Duration
+}
+
+// CurrentLimits returns the settings in effect.
+func (w *Worker) CurrentLimits() Limits { return *w.limits.Load() }
+
+// PrepareLimits validates l and returns the commit that applies it (the
+// commit only does an atomic store; a running sweep keeps the values it
+// started with).
+func (w *Worker) PrepareLimits(l Limits) (func(), error) {
+	if l.MaxDeletions <= 0 || l.PartialCleanupAge <= 0 {
+		return nil, errors.New("retention: MaxDeletions and PartialCleanupAge must be positive")
+	}
+	return func() { w.limits.Store(&l) }, nil
 }
 
 // New validates o.
@@ -125,7 +166,12 @@ func New(o Options) (*Worker, error) {
 	if o.Publisher == nil {
 		o.Publisher = &pubsub.Publisher{}
 	}
-	return &Worker{o: o}, nil
+	if o.Metrics == nil {
+		o.Metrics = NopMetrics{}
+	}
+	w := &Worker{o: o}
+	w.limits.Store(&Limits{DryRun: o.DryRun, MaxDeletions: o.MaxDeletions, PartialCleanupAge: o.PartialCleanupAge})
+	return w, nil
 }
 
 // Register registers the worker and its daily periodic fan-out.
@@ -154,11 +200,15 @@ func PostRunHook(ins func() Inserter) runstate.FinishHook {
 // Work implements river.Worker.
 func (w *Worker) Work(ctx context.Context, job *river.Job[queue.RetentionSweepArgs]) error {
 	a := job.Args
-	dry := w.o.DryRun || a.DryRun
+	// One snapshot per sweep: a reload in between never mixes the dry-run
+	// flag of one config with the deletion cap of another.
+	lim := w.CurrentLimits()
+	dry := lim.DryRun || a.DryRun
 	if a.JobID == nil {
-		return w.Daily(ctx, dry)
+		return w.daily(ctx, dry, lim)
 	}
-	_, err := w.Sweep(ctx, *a.JobID, a.Reason, dry)
+	res, err := w.sweep(ctx, *a.JobID, a.Reason, dry, lim)
+	w.o.Metrics.SweepFinished(res)
 	return err
 }
 
@@ -166,6 +216,10 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[queue.RetentionSweepAr
 // leftover temporary files (older than PartialCleanupAge) on disk and SFTP
 // destinations (skipped in a dry run).
 func (w *Worker) Daily(ctx context.Context, dryRun bool) error {
+	return w.daily(ctx, dryRun, w.CurrentLimits())
+}
+
+func (w *Worker) daily(ctx context.Context, dryRun bool, lim Limits) error {
 	q := sqlc.New(w.o.DB)
 	ids, err := q.ListRetentionJobIDs(ctx)
 	if err != nil {
@@ -195,10 +249,10 @@ func (w *Worker) Daily(ctx context.Context, dryRun bool) error {
 	if dryRun {
 		return nil
 	}
-	return w.cleanupPartials(ctx)
+	return w.cleanupPartials(ctx, lim.PartialCleanupAge)
 }
 
-func (w *Worker) cleanupPartials(ctx context.Context) error {
+func (w *Worker) cleanupPartials(ctx context.Context, age time.Duration) error {
 	ids, err := sqlc.New(w.o.DB).ListPartialCleanupDestinations(ctx)
 	if err != nil {
 		return fmt.Errorf("retention: list destinations: %w", err)
@@ -214,7 +268,7 @@ func (w *Worker) cleanupPartials(ctx context.Context) error {
 			continue
 		}
 		if c, ok := d.(partialCleaner); ok {
-			n, err := c.CleanupPartials(ctx, w.o.PartialCleanupAge)
+			n, err := c.CleanupPartials(ctx, age)
 			switch {
 			case err != nil:
 				log.WarnContext(ctx, "partial cleanup failed", slog.Int("removed", n), slog.String("code", string(storage.Classify(err))))
@@ -261,6 +315,8 @@ type DestinationResult struct {
 	SkippedNoDelete bool
 	// Capped: the per-sweep deletion cap was reached.
 	Capped bool
+	// MaxDeletions is the per-sweep cap the sweep started with.
+	MaxDeletions int
 	// Aborted is a fixed reason when the destination was skipped by a
 	// safety check or a backend failure ("" otherwise).
 	Aborted     string
@@ -282,6 +338,11 @@ const (
 // Sweep applies the job's retention on every destination holding its
 // artifacts. A missing job is a no-op.
 func (w *Worker) Sweep(ctx context.Context, jobID uuid.UUID, reason queue.RetentionReason, dryRun bool) (Result, error) {
+	return w.sweep(ctx, jobID, reason, dryRun, w.CurrentLimits())
+}
+
+// sweep is Sweep with the limits snapshot of the run.
+func (w *Worker) sweep(ctx context.Context, jobID uuid.UUID, reason queue.RetentionReason, dryRun bool, lim Limits) (Result, error) {
 	res := Result{JobID: jobID, DryRun: dryRun}
 	q := sqlc.New(w.o.DB)
 	job, err := q.GetJobRetention(ctx, jobID)
@@ -299,12 +360,13 @@ func (w *Worker) Sweep(ctx context.Context, jobID uuid.UUID, reason queue.Retent
 	if job.DeletedAt != nil {
 		log = log.With(slog.Bool("job_deleted", true))
 	}
-	budget := w.o.MaxDeletions
+	maxDeletions := lim.MaxDeletions
+	budget := maxDeletions
 	for _, p := range Plan(in) {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		dr, err := w.sweepDestination(ctx, log.With(slog.String("destination_id", p.DestinationID.String())), jobID, reason, dryRun, p, &budget)
+		dr, err := w.sweepDestination(ctx, log.With(slog.String("destination_id", p.DestinationID.String())), jobID, reason, dryRun, p, &budget, maxDeletions)
 		res.Destinations = append(res.Destinations, dr)
 		if err != nil {
 			return res, err
@@ -364,9 +426,9 @@ func (w *Worker) input(ctx context.Context, q *sqlc.Queries, job *sqlc.GetJobRet
 }
 
 func (w *Worker) sweepDestination(ctx context.Context, log *slog.Logger, jobID uuid.UUID, reason queue.RetentionReason,
-	dryRun bool, p DestinationPlan, budget *int,
+	dryRun bool, p DestinationPlan, budget *int, maxDeletions int,
 ) (DestinationResult, error) {
-	dr := DestinationResult{DestinationID: p.DestinationID, Plan: p, Planned: p.DeleteCount()}
+	dr := DestinationResult{DestinationID: p.DestinationID, Plan: p, Planned: p.DeleteCount(), MaxDeletions: maxDeletions}
 	if !checkPlan(p) {
 		dr.Aborted = AbortPlanInvariant
 		log.ErrorContext(ctx, "retention plan violates its invariants; nothing deleted on this destination")
@@ -532,7 +594,7 @@ func (w *Worker) stop(dr *DestinationResult, why string) {
 	if why == "capped" {
 		dr.Capped = true
 		w.o.Logger.Warn("retention: deletion cap reached; the rest waits for the next sweep",
-			slog.String("destination_id", dr.DestinationID.String()), slog.Int("max_deletions_per_sweep", w.o.MaxDeletions))
+			slog.String("destination_id", dr.DestinationID.String()), slog.Int("max_deletions_per_sweep", dr.MaxDeletions))
 		return
 	}
 	dr.Aborted = why
@@ -709,7 +771,7 @@ func (w *Worker) recordPlanned(ctx context.Context, jobID uuid.UUID, reason queu
 			"destination_id": dr.DestinationID.String(), "reason": string(reason),
 			"newest_complete_run": dr.Plan.NewestComplete.String(), "kept_runs": len(dr.Plan.Keep),
 			"eligible_runs": runs, "eligible_runs_more": more, "eligible_objects": dr.Planned,
-			"max_deletions": w.o.MaxDeletions,
+			"max_deletions": dr.MaxDeletions,
 		},
 	})
 	if err != nil {

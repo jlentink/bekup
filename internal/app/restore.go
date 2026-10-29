@@ -20,6 +20,7 @@ func (a *App) newRestore() error {
 		DB: a.pool, Keyring: a.keyring, Auditor: a.auditor, Destinations: a.destinations, Keys: a.jobKeys,
 		ScratchDir: cfg.Storage.ScratchDir, ScratchReserve: cfg.Storage.ScratchReserveBytes,
 		StaleAfter: cfg.Storage.ScratchStaleAfter.D(), Publisher: a.publisher(), Logger: a.opts.Logger,
+		Metrics: a.metrics,
 	})
 	if err != nil {
 		return err
@@ -39,7 +40,8 @@ func (a *App) newRestoreWorker() (*restore.Worker, error) {
 		Service: a.restore, Slots: runstate.NewSlots(a.pool), Targets: a.connections, Runner: a.runner.RPC(),
 		Limits:      runstate.SlotLimits{Global: w.MaxConcurrentRuns, PerConnection: w.MaxRunsPerConnection},
 		LogMaxLines: w.RunLogMaxLines, LogMaxLineBytes: w.RunLogMaxLineBytes,
-		Logger: a.opts.Logger,
+		Notifier: restoreNotifier{a},
+		Logger:   a.opts.Logger,
 	})
 }
 
@@ -130,9 +132,8 @@ func (a *App) registerTestRestores(ws *queue.Workers, rsw *restore.Worker) error
 	})
 }
 
-// testRestoreNotifier is the D-161 emit hook of test restores: a no-op
-// until task 5.3 delivers notifications (then it is the serve notifier).
-func (a *App) testRestoreNotifier() restore.TestNotifier { return restore.NoTestNotify{} }
+// testRestoreNotifier is the D-161 emit hook of test restores (task 5.3).
+func (a *App) testRestoreNotifier() restore.TestNotifier { return restoreNotifier{a} }
 
 // statsLimits are the per-table timeout and the budget of completeness
 // statistics (D-151): the runner's defaults (0) for the backup statistics

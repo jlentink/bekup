@@ -1,0 +1,59 @@
+# System health (task 5.6, D-176). Admin only. Values come from a snapshot
+# cached for up to 15 seconds (shared with the Prometheus endpoint).
+
+"The runner as seen through its Health RPC (mTLS)."
+type RunnerHealth {
+  "The runner answered."
+  up: Boolean!
+  "The runner reports the Docker daemon reachable."
+  dockerOk: Boolean!
+  "The runner build version (null when it did not answer)."
+  version: String
+  "Containers the runner is running now (null when it did not answer)."
+  activeRuns: Int
+  "The runner's limit of concurrent containers (null when it did not answer)."
+  maxConcurrentRuns: Int
+}
+
+"The earliest expiry in one component's certificate file."
+type CertificateExpiry {
+  """
+  runner_server (from the runner), runner_client, runner_ca, postgres_ca or
+  postgres_client (from bekup.toml paths).
+  """
+  component: String!
+  notAfter: Time!
+}
+
+"River jobs of one queue in one state."
+type QueueDepth {
+  "backup, restore, retention, notify, maintenance or other."
+  queue: String!
+  "River job state (available, running, retryable, scheduled, ...)."
+  state: String!
+  jobs: Int!
+}
+
+"Operational health of this bekup instance (for the dashboard)."
+type SystemHealth {
+  "When the snapshot was taken."
+  checkedAt: Time!
+  runner: RunnerHealth!
+  "Sorted by component; unreadable files are left out."
+  certificates: [CertificateExpiry!]!
+  "Null when the app database could not be read."
+  queue: [QueueDepth!]
+  "Earliest expiry of a pinned target-database certificate (null: none)."
+  earliestPinNotAfter: Time
+  "The stalest latest successful run across enabled jobs (null: none)."
+  oldestLastSuccess: Time
+  "scheduler.enabled on this instance."
+  schedulerEnabled: Boolean!
+  "This instance's last completed scheduler tick (null: none yet or off)."
+  lastSchedulerTick: Time
+}
+
+extend type Query {
+  "Runner, certificate, queue and scheduler health (admins)."
+  systemHealth: SystemHealth! @hasRole(roles: [ADMIN])
+}

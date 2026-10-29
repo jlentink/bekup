@@ -1,19 +1,11 @@
 # Getting started
 
-> **Status:** partial (end of M3). The development quick start and the
-> production outline below match the current files. `bekup serve` runs with
-> the HTTP layer, the GraphQL API (incl. subscriptions as Server-Sent
-> Events), sign-in, sessions, second factors and step-up, the connection
-> and destination APIs (tasks 2.11, 2.12), backup jobs and schedules
-> (3.3–3.5), scheduled and manual backup runs with completeness evidence
-> (3.6, 3.10), run history and live run events (3.7), retention (3.8) and
-> backup downloads (3.9). `bekup runner` serves its complete mTLS gRPC API
-> (tasks 2.4–2.7a). The web UI is still a placeholder shell with the
-> sign-in page until M6 (task 6.1 onwards), so connections, destinations
-> and jobs are created through the GraphQL API for now
-> ([first backup job](#first-backup-job-graphql)). Restores follow in M4.
-> Creating the first admin (CLI only, D-113) and enrolling a second factor
-> (tasks 1.7–1.9) are described below; the page is completed in task 7.5.
+> **Status:** current for the end of M6. The web UI is the primary
+> interface: everything below, from the first connection to a restore and
+> the notification settings, is done in the browser. Only the first admin
+> is created on the command line (D-113). The GraphQL API stays available
+> for automation ([advanced: the GraphQL API](#advanced-the-graphql-api)).
+> The page is completed in task 7.5.
 
 There are two ways to run bekup with Docker Compose:
 
@@ -50,8 +42,8 @@ On Linux, run `sudo deploy/dev/gen-dev-keys.sh --chown` once before
   `secrets/` on the first run and applies the migrations.
 - The first admin is created on the command line only:
   `just admin-create <email> <name>` (wraps `bekup admin create`). Then
-  sign in and enroll a second factor (through the GraphQL API until the
-  web UI's sign-in and account pages land in M6).
+  sign in on <http://localhost:8080> and enroll a second factor under
+  **Profile → Two-factor** ([your first backup](#your-first-backup)).
 - `just run` serves over **plain HTTP** on loopback. Plain HTTP is allowed
   in dev mode, but never silently (D-095): bekup logs a WARN line at every
   startup and the UI shows a permanent red banner "Connection is not
@@ -119,8 +111,8 @@ and [installation/reverse-proxy.md](installation/reverse-proxy.md):
    `migrate` applies the database migrations before `serve` starts.
 5. Create the first admin on the host with `bekup admin create`
    ([first admin](#first-admin)), sign in, enroll a passkey or TOTP, then add
-   a connection, a destination and a backup job (GraphQL API for now, see
-   [first backup job](#first-backup-job-graphql); UI in M6).
+   a connection, a destination and a backup job in the web UI
+   ([your first backup](#your-first-backup)).
 
 Running production without a proxy over plain HTTP requires an explicit
 `server.allow_insecure_http = true` and raises a startup warning, a UI
@@ -156,29 +148,126 @@ in to the web UI with that e-mail address and password.
 
 Enrolling a second factor (a passkey, or TOTP with an authenticator app;
 D-112) is strongly recommended for every admin. 2FA is **off by default**:
-an admin turns it on for all accounts or per role (`updateTwoFactorPolicy`;
-the users admin UI follows in task 6.8). Accounts of a role that requires it
+an admin turns it on for all accounts or per role in the web UI under
+**Administration → Users → 2FA policy** (`/admin/two-factor`; API:
+`updateTwoFactorPolicy`). Weakening the policy asks for an extra
+confirmation and raises a security alert. Accounts of a role that requires it
 then get a 7-day grace period (configurable, 0–90 days), after which an
 account without a factor can do nothing but enroll one. Every login of an
 account with a factor asks for it after the password, and sensitive actions
 ask for it again (step-up, valid for 5 minutes). Store the recovery codes
 shown at TOTP enrollment offline. Someone who lost every factor gets them
-reset by another admin (`resetUserSecondFactors`) or on the host with
+reset by another admin (user page → **Reset second factors**, or
+`resetUserSecondFactors`; never on your own account) or on the host with
 `bekup admin reset-2fa --email ...`.
 
-Admins then create further accounts (users admin UI in task 6.8): each new
-account gets a generated **temporary password** that is shown to the admin
-once, expires after 72 hours and must be changed at the first login.
+Admins then create further accounts under **Administration → Users →
+New user**: each new account gets a generated **temporary password** that is
+shown to the admin once (copy it before closing the dialog; it cannot be
+retrieved again), expires after 72 hours and must be changed at the first
+login. The same page changes roles (revokes the account's sessions),
+disables, unlocks, resets passwords, revokes sessions, deletes accounts
+(the last active admin cannot be demoted, disabled or deleted) and assigns
+backup jobs to accounts with the User role (owner grants, D-067). Every
+change asks for a step-up and is audited.
 
-## First backup job (GraphQL)
+## The dashboard
 
-Until the jobs editor arrives in M6 (task 6.5), connections, destinations
-and jobs are managed through the GraphQL API. The simplest client is the
-browser itself: sign in on the bekup page (the sign-in page exists), open
-the developer console **on that same page** and send POST + JSON requests
-to `/graphql`. The browser adds the session cookie and the `Origin` /
-`Sec-Fetch-Site` headers the server requires (D-050, D-102); requests from
-other origins or tools without the session cookie are refused.
+The home page (**Overview → Dashboard**) adapts to the role. On a fresh
+install it walks staff through the first connection, destination and job.
+Afterwards everyone sees the health of every visible job (last result,
+next run, missed/overdue markers, warnings; backup owners only their own
+jobs), the runs and restores in progress (live), failures and missed
+backups of the last 7 days, the runs planned for the next 24 hours and
+their unread alerts. Admins and maintainers also see the security findings
+(unencrypted jobs, insecure transport, privileged target roles, expired or
+expiring certificate pins, identity mismatches) and the bytes stored per
+destination (bekup's own records of the files it wrote, D-196). Admins also see the system health: runner and Docker,
+scheduler tick, work queues and certificate expiries (D-192). Every tile
+links to its detail page.
+
+## Your first backup
+
+The steps below follow the order the dashboard's getting-started tile
+suggests on a fresh install. Connections and destinations are managed by
+admins; jobs by admins and maintainers. Actions that change security
+settings ask you to confirm your identity again (step-up: a passkey or
+authenticator code, valid for 5 minutes).
+
+1. **Sign in and secure your account.** Sign in with the e-mail address and
+   password of the first admin. Under **Profile → Two-factor** enroll a
+   passkey or TOTP (store the recovery codes offline; they are shown
+   once). Under **Profile → Notifications** verify your account's e-mail
+   address if you want e-mail notifications.
+2. **Add a connection.** **Infrastructure → Connections → New
+   connection**: engine, host, port, the backup role's user name and
+   password (write-only: it is never shown again), optionally an SSH
+   tunnel through a bastion. The connection starts in the pinned TLS mode
+   (D-034): open it and click **Pin certificate**. bekup captures the
+   server's certificate chain through the runner and lists every
+   certificate with its fingerprints; compare the leaf's SPKI fingerprint
+   with the database server out of band (e.g. `openssl x509 -pubkey ...`
+   on the server), tick the confirmation and click **Confirm pin**. For a
+   tunnel, **Fetch and confirm host key** works the same way for the
+   bastion's SSH key. Then **Test connection**: it shows the server
+   version, client compatibility and the privilege verdict of the role (a
+   superuser or otherwise privileged role is flagged). Details:
+   [connections](guides/connections.md).
+3. **Add a destination.** **Infrastructure → Destinations → New
+   destination**: local disk (inside the disk root), S3 (endpoint, bucket,
+   prefix, optional Object Lock) or SFTP (fetch and confirm the host key,
+   or **Generate keypair** and install the public key). Run the test on
+   the destination's page; it writes, reads back and deletes a small probe
+   object.
+   Details: [destinations](guides/destinations.md).
+4. **Create a job.** **Backups → Jobs → New job**: the connection, all or
+   selected databases (plus the PostgreSQL globals), the schedule (the
+   builder shows the next occurrences in your time zone), retention, the
+   destinations and the verification level. Encryption is on by default:
+   with **Generate a passphrase (recommended)** bekup shows the generated
+   passphrase **once** after saving; store it offline before you confirm
+   ("I've saved it somewhere safe"). An age recipient (public key) can be
+   chosen instead. Details: [jobs and schedules](guides/jobs-and-schedules.md),
+   [encryption](guides/encryption.md).
+5. **Run it.** On the job's page, **Run now (extra run)** queues a run at
+   once without touching the schedule (**Start next planned run early**
+   pulls the next planned run forward instead). The run appears in the
+   job's run history; open it to watch its status and **live log**
+   (**Follow** keeps the newest lines in view). When it has finished, the
+   run page lists each database's files per destination with their
+   verification and signature state and the completeness evidence.
+6. **Download a backup** (admins and the job's backup owners; never
+   maintainers). On the run page click **Download** next to a file, choose
+   the raw (encrypted) file or a plain (decrypted) one, confirm your
+   identity and click the one-time link within 60 seconds. The dialog also
+   shows a command to restore the file by hand. Details:
+   [downloads](guides/downloads.md).
+7. **Restore.** **Backups → Restores → New restore** (or **Restore** next
+   to a file on a run page) opens the wizard: the backup, the target connection and
+   database, the options, a preview with every warning, the typed
+   confirmation and a fresh passkey or authenticator check, then the live
+   progress. Details: [restore](guides/restore.md).
+8. **Set up notifications.** The bell in the top bar shows your in-app
+   notifications live. Under **Profile → Notifications** add up to
+   five webhooks (each signing key is shown once) and choose per event and
+   per job what reaches which channel. Admins configure SMTP under
+   **Administration → Settings** and team channels under **Administration →
+   Shared channels**. Security alerts always reach every admin. Details:
+   [notifications](guides/notifications.md).
+
+The calendar (**Overview → Calendar**) shows the planned runs, the past
+runs and when backups expire; **Administration → Audit log** shows who did
+what.
+
+## Advanced: the GraphQL API
+
+Everything in the UI goes through the GraphQL API (D-105), which you can
+use for automation or debugging. The simplest client is the browser
+itself: sign in, open the developer console **on the bekup page** and send
+POST + JSON requests to `/graphql`. The browser adds the session cookie and
+the `Origin` / `Sec-Fetch-Site` headers the server requires (D-050, D-102);
+requests from other origins or tools without the session cookie are
+refused.
 
 ```js
 const gql = (query, variables = {}) =>
@@ -190,39 +279,28 @@ const gql = (query, variables = {}) =>
   }).then((r) => r.json());
 ```
 
-1. Create a connection and a destination as an admin
-   ([connections](guides/connections.md),
-   [destinations](guides/destinations.md)). Both need a fresh step-up
-   first, e.g.
-   `gql('mutation { completeStepUp(method: TOTP, code: "123456") { stepUpAt } }')`.
-2. Look up their IDs:
-   `gql("{ connections { id name } destinations { id name } }")`.
-3. Create the job (admin or maintainer). A daily 03:00 UTC backup of every
-   database, keeping the newest 14 backups:
+For example, a daily 03:00 UTC backup of every database, keeping the
+newest 14 backups (admin or maintainer; look up the IDs with
+`gql("{ connections { id name } destinations { id name } }")`):
 
-   ```graphql
-   mutation {
-     createJob(input: {
-       name: "Production DB"
-       connectionId: "<connection id>"
-       schedule: {kind: CRON, cron: "0 3 * * *", timezone: "UTC"}
-       retention: {keepLast: 14}
-       destinationIds: ["<destination id>"]
-     }) {
-       job { id slug nextRunAt scheduleDescription }
-       generatedPassphrase   # shown once: store it offline
-     }
-   }
-   ```
+```graphql
+mutation {
+  createJob(input: {
+    name: "Production DB"
+    connectionId: "<connection id>"
+    schedule: {kind: CRON, cron: "0 3 * * *", timezone: "UTC"}
+    retention: {keepLast: 14}
+    destinationIds: ["<destination id>"]
+  }) {
+    job { id slug nextRunAt scheduleDescription }
+    generatedPassphrase   # shown once: store it offline
+  }
+}
+```
 
-   Encryption is always on at creation: without an `encryption` input the
-   job gets a generated passphrase, returned **once** in
-   `generatedPassphrase`. Store it offline; it is needed to decrypt the
-   backups ([encryption](guides/encryption.md)).
-4. Optionally start a run at once with
-   `mutation { runJobNow(id: "<job id>") { queuedAt } }` and follow it with
-   `{ runs(filter: {jobId: "<job id>"}, first: 5) { edges { node { id status warnings { code } } } } }`.
-
-All job fields, schedule kinds, retention, verification levels and runs
-are described in [jobs and schedules](guides/jobs-and-schedules.md);
-downloading a finished backup in [downloads](guides/downloads.md).
+Mutations that need a fresh step-up answer `STEP_UP_REQUIRED`; complete
+it first, e.g.
+`gql('mutation { completeStepUp(method: TOTP, code: "123456") { stepUpAt } }')`.
+`mutation { runJobNow(id: "<job id>") { queuedAt } }` starts a run. The
+full schema is in [reference/schema.graphql](reference/schema.graphql);
+the guides list the operations of each area.

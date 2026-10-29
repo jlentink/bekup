@@ -197,7 +197,14 @@ services:
       backend: {}
       runner-ctl: {}
       egress: {}
-    # NO `ports:`. Never publish serve; only the reverse proxy reaches it.
+      metrics:
+        # Fixed address for [metrics] listen = "10.213.252.10:9464": the
+        # Prometheus endpoint (task 5.6) is reachable only from this
+        # internal network, never from frontend/backend/egress/runner-ctl.
+        # Attach your Prometheus here (docs/operations.md#metrics).
+        ipv4_address: ${SERVE_METRICS_IP:-10.213.252.10}
+    # NO `ports:`. Never publish serve; only the reverse proxy reaches it,
+    # and the metrics port (9464) only from the `metrics` network.
     healthcheck:
       # Exec form: distroless has no shell. `bekup healthcheck serve` GETs
       # /healthz (liveness) on the server.listen address (D-080, D-102).
@@ -592,6 +599,14 @@ networks:
   # serve -> destinations (S3, SFTP), SMTP and webhooks. Not internal; every
   # dial goes through the app's SSRF guard (D-055).
   egress: {}
+  # Prometheus -> serve /metrics (task 5.6). Internal and empty by default:
+  # attach a Prometheus container to it (in an override file, or from
+  # another compose project as the external network `bekup_metrics`).
+  metrics:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${METRICS_SUBNET:-10.213.252.0/24}
   # Reverse proxy <-> internet (published 80/443, ACME). Only the proxy
   # profiles (traefik | nginx, certbot) attach here. Published ports need a
   # non-internal network, so the proxy cannot publish them on `frontend`.

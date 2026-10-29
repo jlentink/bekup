@@ -64,7 +64,8 @@ func (a *App) newAuditHeadSigner(ctx context.Context) (*headSignerComponent, err
 
 // auditInsecureTransport records a startup over plain HTTP outside dev mode
 // (D-095). Fail closed: serve does not start if the entry cannot be stored.
-// The admin alert follows in task 5.5.
+// The audit observer raises the security.system alert (once per day, with
+// the periodic reminder of the security check; task 5.5).
 func (a *App) auditInsecureTransport(ctx context.Context) error {
 	cfg := a.opts.Config
 	if a.opts.Dev || !cfg.InsecureTransport() {
@@ -89,8 +90,8 @@ func (a *App) auditInsecureTransport(ctx context.Context) error {
 
 // auditInsecureDBTLS records a startup with a weakened database.tls_mode
 // (require or disable) outside dev mode (D-001, D-100: weakened settings
-// are audited). Fail closed like auditInsecureTransport. The admin alert
-// follows in task 5.5.
+// are audited). Fail closed like auditInsecureTransport. The audit
+// observer raises the security.system alert (task 5.5).
 func (a *App) auditInsecureDBTLS(ctx context.Context) error {
 	cfg := a.opts.Config
 	if a.opts.Dev || !cfg.Database.TLSWeakened() {

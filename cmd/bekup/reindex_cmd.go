@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/offline"
 	"github.com/jlentink/bekup/internal/storage"
@@ -127,7 +126,7 @@ func runReindex(c *cobra.Command, g *globalFlags, f *reindexFlags) error {
 			return errors.New("the database has no instance keys: nothing can be verified for an import")
 		}
 		keys.Add(dbKeys...)
-		importer = &offline.Importer{DB: pool, Auditor: audit.New(pool, audit.Options{}), DestinationID: destID, DestinationType: dc.Type}
+		importer = &offline.Importer{DB: pool, Auditor: newCLIAuditor(pool), DestinationID: destID, DestinationType: dc.Type}
 	} else {
 		ks, err := loadKeys(f.pubkeys)
 		if err != nil {

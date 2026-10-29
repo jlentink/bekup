@@ -240,7 +240,29 @@ func (s *Service) view(row *sqlc.Connection) Connection {
 	}
 	c.NotReadyReason = notReadyReason(&c)
 	c.Ready = c.NotReadyReason == ""
+	c.LastTest = lastTestOf(row)
 	return c
+}
+
+// lastTestOf reads the stored test outcome of a row (D-187).
+func lastTestOf(row *sqlc.Connection) *LastTest {
+	if row.LastTestedAt == nil || row.LastTestOk == nil || row.LastTestSettingsAt == nil {
+		return nil
+	}
+	lt := &LastTest{
+		At: *row.LastTestedAt, OK: *row.LastTestOk, Code: deref(row.LastTestCode),
+		Stale: !row.LastTestSettingsAt.Equal(row.UpdatedAt),
+	}
+	if row.LastTestPrivileges != nil {
+		p := Privileges{Status: PrivilegeStatus(*row.LastTestPrivileges), Reasons: append([]string{}, row.LastTestPrivilegeReasons...)}
+		switch p.Status {
+		case PrivilegeNotPrivileged, PrivilegePrivileged, PrivilegeUnknown:
+		default:
+			p.Status = PrivilegeUnknown
+		}
+		lt.Privileges = &p
+	}
+	return lt
 }
 
 func pinStatus(mode TLSMode, p *Pin, now time.Time) PinStatus {

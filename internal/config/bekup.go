@@ -33,26 +33,26 @@ type Server struct {
 	AllowWildcardListen    bool     `toml:"allow_wildcard_listen" doc:"Allow a wildcard/unspecified server.listen address outside dev mode (logs a startup warning). Prefer binding the internal network address."`
 	BaseURL                string   `toml:"base_url" doc:"Public URL of the UI as served by the reverse proxy; all links are built from it. Must be https unless dev mode is on or allow_insecure_http is set."`
 	AllowInsecureHTTP      bool     `toml:"allow_insecure_http" doc:"Accept a plain http base_url outside dev mode (D-095). Traffic, sessions and credentials are then NOT encrypted; bekup logs a warning at every startup and shows a permanent UI banner."`
-	TrustedProxies         []string `toml:"trusted_proxies" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy)."`
+	TrustedProxies         []string `toml:"trusted_proxies" reload:"live" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy)."`
 	ReadHeaderTimeout      Duration `toml:"read_header_timeout" doc:"Maximum time to read request headers."`
 	ReadTimeout            Duration `toml:"read_timeout" doc:"Maximum time to read a whole request, body included (at least read_header_timeout)."`
 	WriteTimeout           Duration `toml:"write_timeout" doc:"Maximum time to write a response. Long-lived routes (event streams of GraphQL subscriptions, artifact downloads) lift it per request."`
 	IdleTimeout            Duration `toml:"idle_timeout" doc:"Maximum keep-alive idle time between requests."`
 	ShutdownTimeout        Duration `toml:"shutdown_timeout" doc:"Grace period for in-flight requests on shutdown."`
 	MaxHeaderBytes         int      `toml:"max_header_bytes" doc:"Maximum size of the request headers in bytes (4 KiB to 1 MiB)."`
-	MaxBodyBytes           int64    `toml:"max_body_bytes" doc:"Maximum request body size in bytes."`
-	RateLimitPerSecond     float64  `toml:"rate_limit_per_second" doc:"Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After."`
-	RateLimitBurst         int      `toml:"rate_limit_burst" doc:"Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load."`
+	MaxBodyBytes           int64    `toml:"max_body_bytes" reload:"live" doc:"Maximum request body size in bytes."`
+	RateLimitPerSecond     float64  `toml:"rate_limit_per_second" reload:"live" doc:"Per-client-IP request rate (token bucket refill per second) for all HTTP requests. Exceeding it returns 429 with Retry-After."`
+	RateLimitBurst         int      `toml:"rate_limit_burst" reload:"live" doc:"Per-client-IP burst size (bucket capacity); must cover the asset requests of one UI page load."`
 	RateLimitMaxClients    int      `toml:"rate_limit_max_clients" doc:"Maximum number of client IPs tracked by the rate limiter; the least recently seen entries are evicted beyond it (memory bound)."`
-	UserRateLimitPerSecond float64  `toml:"user_rate_limit_per_second" doc:"Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After."`
-	UserRateLimitBurst     int      `toml:"user_rate_limit_burst" doc:"Per-user burst size (bucket capacity) for authenticated requests."`
+	UserRateLimitPerSecond float64  `toml:"user_rate_limit_per_second" reload:"live" doc:"Per-user request rate (token bucket refill per second) for authenticated /graphql and /api requests, on top of the per-IP limit. Exceeding it returns 429 with Retry-After."`
+	UserRateLimitBurst     int      `toml:"user_rate_limit_burst" reload:"live" doc:"Per-user burst size (bucket capacity) for authenticated requests."`
 }
 
 // GraphQL configures the limits of the /graphql endpoint (D-050, D-105).
 type GraphQL struct {
-	MaxComplexity int   `toml:"max_complexity" doc:"Maximum complexity of one GraphQL operation (1 per selected field, more for list fields that declare it); larger operations are rejected before execution (50 to 100000)."`
-	MaxDepth      int   `toml:"max_depth" doc:"Maximum field nesting depth of one GraphQL operation (3 to 50)."`
-	MaxBodyBytes  int64 `toml:"max_body_bytes" doc:"Maximum size of a GraphQL request body in bytes (1024 up to server.max_body_bytes); larger requests get 413."`
+	MaxComplexity int   `toml:"max_complexity" reload:"live" doc:"Maximum complexity of one GraphQL operation (1 per selected field, more for list fields that declare it); larger operations are rejected before execution (50 to 100000)."`
+	MaxDepth      int   `toml:"max_depth" reload:"live" doc:"Maximum field nesting depth of one GraphQL operation (3 to 50)."`
+	MaxBodyBytes  int64 `toml:"max_body_bytes" reload:"live" doc:"Maximum size of a GraphQL request body in bytes (1024 up to server.max_body_bytes); larger requests get 413."`
 	// Live event streams: GraphQL subscriptions over Server-Sent Events
 	// (task 2.13).
 	StreamMaxPerSession      int      `toml:"stream_max_per_session" doc:"Maximum concurrent event streams (GraphQL subscriptions over SSE) of one session on one instance (1 to 20, at most stream_max_per_user); further streams get 429. Browsers open at most 6 connections per origin over HTTP/1.1, so keep this well below 6 when serving without an HTTP/2 proxy."`
@@ -104,13 +104,13 @@ type Security struct {
 	Argon2Iterations        int      `toml:"argon2_iterations" doc:"argon2id iterations. Can only be raised above the default (3)."`
 	Argon2Parallelism       int      `toml:"argon2_parallelism" doc:"argon2id parallelism (>= 1)."`
 	Argon2MaxConcurrent     int      `toml:"argon2_max_concurrent" doc:"Maximum concurrent argon2id hash operations (memory bound, 1 to 64). Requests beyond it wait briefly and are then refused with RATE_LIMITED; they never queue without bound."`
-	PasswordMinLength       int      `toml:"password_min_length" doc:"Minimum password length in characters. Can only be raised above the default (12); at most 128."`
-	PasswordMinScore        int      `toml:"password_min_score" doc:"Minimum zxcvbn strength score (0-4) of a new password. Can only be raised above the default (3)."`
-	LoginRateLimitPerMinute int      `toml:"login_rate_limit_per_minute" doc:"Login attempts per client IP per minute (a stricter limiter on top of the server-wide one; 1 to 600); the same rate also limits password verifications per account (logins, password step-ups and changes). Excess attempts get RATE_LIMITED."`
-	LoginRateLimitBurst     int      `toml:"login_rate_limit_burst" doc:"Burst of login attempts per client IP, and of password verifications per account (1 to 100)."`
-	LockoutThreshold        int      `toml:"lockout_threshold" doc:"Consecutive failed logins after which an account is temporarily locked (3 to 20)."`
-	LockoutBaseDuration     Duration `toml:"lockout_base_duration" doc:"Lock duration after lockout_threshold failures; it doubles with every further failure (10s to 1h)."`
-	LockoutMaxDuration      Duration `toml:"lockout_max_duration" doc:"Upper bound of the exponential lockout backoff (lockout_base_duration to 24h)."`
+	PasswordMinLength       int      `toml:"password_min_length" reload:"live" doc:"Minimum password length in characters. Can only be raised above the default (12); at most 128."`
+	PasswordMinScore        int      `toml:"password_min_score" reload:"live" doc:"Minimum zxcvbn strength score (0-4) of a new password. Can only be raised above the default (3)."`
+	LoginRateLimitPerMinute int      `toml:"login_rate_limit_per_minute" reload:"live" doc:"Login attempts per client IP per minute (a stricter limiter on top of the server-wide one; 1 to 600); the same rate also limits password verifications per account (logins, password step-ups and changes). Excess attempts get RATE_LIMITED."`
+	LoginRateLimitBurst     int      `toml:"login_rate_limit_burst" reload:"live" doc:"Burst of login attempts per client IP, and of password verifications per account (1 to 100)."`
+	LockoutThreshold        int      `toml:"lockout_threshold" reload:"live" doc:"Consecutive failed logins after which an account is temporarily locked (3 to 20)."`
+	LockoutBaseDuration     Duration `toml:"lockout_base_duration" reload:"live" doc:"Lock duration after lockout_threshold failures; it doubles with every further failure (10s to 1h)."`
+	LockoutMaxDuration      Duration `toml:"lockout_max_duration" reload:"live" doc:"Upper bound of the exponential lockout backoff (lockout_base_duration to 24h)."`
 	AuditHeadSignInterval   Duration `toml:"audit_head_sign_interval" doc:"How often serve signs the audit chain head with the instance key when the chain has grown (1m to 24h)."`
 }
 
@@ -167,9 +167,9 @@ type Scheduler struct {
 // Retention configures the retention worker (task 3.8). The policy itself
 // (keep last N / keep N days) is set per job.
 type Retention struct {
-	DryRun               bool     `toml:"dry_run" doc:"Compute and log every retention plan without deleting anything (instance-wide dry run)."`
-	MaxDeletionsPerSweep int      `toml:"max_deletions_per_sweep" doc:"Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep."`
-	PartialCleanupAge    Duration `toml:"partial_cleanup_age" doc:"The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days)."`
+	DryRun               bool     `toml:"dry_run" reload:"live" doc:"Compute and log every retention plan without deleting anything (instance-wide dry run)."`
+	MaxDeletionsPerSweep int      `toml:"max_deletions_per_sweep" reload:"live" doc:"Hard cap on the objects one retention sweep of a job may delete (1-100000); the rest waits for the next sweep."`
+	PartialCleanupAge    Duration `toml:"partial_cleanup_age" reload:"live" doc:"The daily sweep removes leftover temporary upload files on disk and SFTP destinations older than this (1h to 30 days)."`
 }
 
 // Restore configures restores. Temporary restore connections (task 4.4,
@@ -180,29 +180,38 @@ type Restore struct {
 	TempConnectionMaxTTL Duration `toml:"temp_connection_max_ttl" doc:"Longest lifetime of a temporary restore connection counted from its creation, including extensions (at least temp_connection_ttl, at most 30 days)."`
 }
 
-// Notifications configures delivery rate limits.
+// Notifications configures the noise rules of the notification core
+// (task 5.3, D-183).
 type Notifications struct {
-	MaxPerUserPerHour       int      `toml:"max_per_user_per_hour" doc:"Maximum notifications per user per hour before digesting."`
-	CollapseWindow          Duration `toml:"collapse_window" doc:"Repeated failures of the same job within this window collapse into one notification."`
-	WebhookFailureThreshold int      `toml:"webhook_failure_threshold" doc:"Consecutive failures after which a user webhook is auto-disabled."`
+	MaxPerUserPerHour       int      `toml:"max_per_user_per_hour" reload:"live" doc:"Per-user flood rule: e-mail (or webhook) notifications one user gets within an hour; the next one becomes a single summary and further ones stay in the in-app inbox until the rate drops. Security alerts are exempt (1-10000)."`
+	CollapseWindow          Duration `toml:"collapse_window" reload:"live" doc:"Low-priority *.started events (backup.started, restore.started) of the same job within this window collapse into the first one (1s-24h)."`
+	WebhookFailureThreshold int      `toml:"webhook_failure_threshold" reload:"live" doc:"Permanent webhook failures (redirect, 4xx, refused address, TLS error) since the last success after which a webhook (personal or shared) is auto-disabled; 10 consecutive failures spanning at least 24 hours also disable it (1-1000)."`
 }
 
 // Netguard holds the bootstrap SSRF allowlist (the admin allowlist lives in
-// the DB settings table).
+// the DB settings table, managed under Admin → Settings → Network, D-196;
+// both apply together). The bootstrap list never applies to personal
+// webhooks (D-198).
 type Netguard struct {
-	AllowCIDRs []string `toml:"allow_cidrs" doc:"Private CIDRs that outbound connections (S3, SMTP, SFTP, webhooks) may reach. Empty denies all private ranges."`
-	AllowHosts []string `toml:"allow_hosts" doc:"Host names (exact, or *.example.com for any subdomain) that may resolve to private addresses. Never re-allows loopback (outside dev mode), link-local, metadata or other always-denied ranges."`
+	AllowCIDRs []string `toml:"allow_cidrs" reload:"live" doc:"Private CIDRs that outbound connections (S3, SFTP, SMTP, shared webhooks; never users' personal webhooks) may reach, in addition to the admin allowlist managed in the UI (Admin, Settings, Network). Empty denies all private ranges not allowlisted there."`
+	AllowHosts []string `toml:"allow_hosts" reload:"live" doc:"Host names (exact, or *.example.com for any subdomain; not over a public suffix or a wildcard-DNS service such as nip.io) that may resolve to private addresses, for the same uses as allow_cidrs. Never re-allows loopback (outside dev mode), link-local, metadata or other always-denied ranges."`
 }
 
 // Metrics configures the internal Prometheus endpoint.
 type Metrics struct {
 	Enabled bool   `toml:"enabled" doc:"Serve Prometheus /metrics."`
-	Listen  string `toml:"listen" doc:"Internal address for /metrics (host:port). Never publish it."`
+	Listen  string `toml:"listen" doc:"Internal address for /metrics and /healthz (host:port). Never publish it. Outside dev mode a wildcard address (:port, 0.0.0.0, [::]) is refused unless allow_wildcard_listen is set; bind loopback or an internal network address (compose: the metrics network address)."`
+	// AllowWildcardListen mirrors server.allow_wildcard_listen (D-098).
+	AllowWildcardListen bool `toml:"allow_wildcard_listen" doc:"Allow a wildcard/unspecified metrics.listen address outside dev mode (logs a startup warning). Prefer binding an internal address."`
+	// AuthBearerFile enables bearer authentication of /metrics.
+	AuthBearerFile string `toml:"auth_bearer_file" secret:"file" doc:"Optional path to a file holding the bearer credential Prometheus must send (Authorization: Bearer ...; at least 32 characters, surrounding whitespace trimmed). Empty: /metrics is unauthenticated and protected only by binding an internal address. Same file rules as database.url_file."`
+	// PerJobLabels adds per-job series (label job = the job slug).
+	PerJobLabels bool `toml:"per_job_labels" doc:"Add per-job series (bekup_backup_last_success_timestamp_seconds with label job = job slug, at most 1000 jobs). Off by default: job slugs are names chosen by admins and one series per job grows with the installation."`
 }
 
 // Log configures logging.
 type Log struct {
-	Level  string `toml:"level" doc:"Log level: debug, info, warn or error."`
+	Level  string `toml:"level" reload:"live" doc:"Log level: debug, info, warn or error."`
 	Format string `toml:"format" doc:"Log format: json or text (text is the default in dev mode)."`
 }
 
@@ -378,6 +387,9 @@ func (c *Bekup) warnings(dev bool) []string {
 	}
 	if !dev && c.Server.AllowWildcardListen && isWildcardListen(c.Server.Listen) {
 		out = append(out, fmt.Sprintf("server.listen %q listens on every interface (server.allow_wildcard_listen = true); bind the internal network address instead", c.Server.Listen))
+	}
+	if !dev && c.Metrics.Enabled && c.Metrics.AllowWildcardListen && isWildcardListen(c.Metrics.Listen) {
+		out = append(out, fmt.Sprintf("metrics.listen %q listens on every interface (metrics.allow_wildcard_listen = true); bind an internal address instead", c.Metrics.Listen))
 	}
 	switch c.Database.TLSMode {
 	case DBTLSDisable:

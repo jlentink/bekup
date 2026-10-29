@@ -33,11 +33,12 @@ type Options struct {
 type lookupFunc func(ctx context.Context, network, host string) ([]netip.Addr, error)
 
 // Guard checks and dials outbound connections. It is safe for concurrent
-// use; SetAllowlist swaps the runtime allowlist atomically.
+// use; SetAllowlist swaps the runtime allowlist atomically, and a config
+// reload swaps the bootstrap list atomically (Set.PrepareBootstrap, D-200).
 type Guard struct {
 	loopbackSoft bool
 	dialTimeout  time.Duration
-	bootstrap    *allowlist
+	bootstrap    atomic.Pointer[allowlist]
 	runtime      atomic.Pointer[allowlist]
 	lookup       lookupFunc
 }
@@ -51,12 +52,12 @@ func New(opts Options) (*Guard, error) {
 	g := &Guard{
 		loopbackSoft: opts.LoopbackAllowable,
 		dialTimeout:  opts.DialTimeout,
-		bootstrap:    boot,
 		lookup:       net.DefaultResolver.LookupNetIP,
 	}
 	if g.dialTimeout <= 0 {
 		g.dialTimeout = DefaultDialTimeout
 	}
+	g.bootstrap.Store(boot)
 	g.runtime.Store(emptyAllowlist)
 	return g, nil
 }
@@ -101,9 +102,9 @@ func (g *Guard) Check(addr netip.Addr, host string) error {
 	ip := addr.WithZone("").Unmap()
 	if !c.Hard {
 		h := normalizeHost(host)
-		rt := g.runtime.Load()
-		if g.bootstrap.containsAddr(ip) || rt.containsAddr(ip) ||
-			g.bootstrap.matchesHost(h) || rt.matchesHost(h) {
+		rt, boot := g.runtime.Load(), g.bootstrap.Load()
+		if boot.containsAddr(ip) || rt.containsAddr(ip) ||
+			boot.matchesHost(h) || rt.matchesHost(h) {
 			return nil
 		}
 	}

@@ -380,6 +380,26 @@ func TestJobsGraphQLOwners(t *testing.T) {
 	if r := e.gql(ownerC, assignMut, map[string]any{"id": a.Job.ID, "u": []string{owner.ID.String()}}); r.code() != "FORBIDDEN" {
 		t.Fatalf("owner assigns: %+v", r.Errors)
 	}
+	// Staff filter jobs by owner (D-184); owners may not use the filter.
+	for who, c := range map[string]string{"admin": adminC, "maintainer": maintC} {
+		e.mustGQL(c, listJobsQuery, map[string]any{"f": map[string]any{"ownerId": owner.ID.String()}}).field(t, "jobs", &page)
+		if len(page.Edges) != 1 || page.Edges[0].Node.ID != a.Job.ID {
+			t.Errorf("%s owner filter: %+v", who, page)
+		}
+		e.mustGQL(c, listJobsQuery, map[string]any{"f": map[string]any{"ownerId": maint.ID.String()}}).field(t, "jobs", &page)
+		if len(page.Edges) != 0 {
+			t.Errorf("%s filter by non-owner: %+v", who, page)
+		}
+		e.mustGQL(c, listJobsQuery, map[string]any{"f": map[string]any{"ownerId": owner.ID.String(), "search": "beta"}}).field(t, "jobs", &page)
+		if len(page.Edges) != 0 {
+			t.Errorf("%s owner filter with search: %+v", who, page)
+		}
+	}
+	for _, id := range []string{owner.ID.String(), admin.ID.String()} {
+		if r := e.gql(ownerC, listJobsQuery, map[string]any{"f": map[string]any{"ownerId": id}}); r.code() != "FORBIDDEN" {
+			t.Errorf("owner uses the owner filter (%s): %+v", id, r.Errors)
+		}
+	}
 	// Admin sees owners; removal ends access.
 	var adminView *jobGQL
 	e.mustGQL(adminC, viewJobQuery, map[string]any{"id": a.Job.ID}).field(t, "job", &adminView)

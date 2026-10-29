@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -176,6 +178,8 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (storage.
 		}
 		s.o.Logger.WarnContext(ctx, "destination test could not open the backend",
 			slog.String("destination_id", id.String()), slog.String("code", string(code)), slog.Any("error", err))
+		s.testFailed(ctx, id, code)
+		s.recordTest(ctx, r, false, code)
 		return storage.TestResult{Steps: []storage.TestStep{{Name: StepConnect, Code: code, Message: code.Message()}}}, nil
 	}
 	defer func() {
@@ -197,13 +201,61 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (storage.
 	res.Steps = append(steps, res.Steps...)
 	if !res.OK {
 		s.o.Logger.InfoContext(ctx, "destination test failed", slog.String("destination_id", id.String()))
+		code := storage.CodeOK
+		for _, st := range res.Steps {
+			if !st.OK {
+				code = st.Code
+				break
+			}
+		}
+		s.testFailed(ctx, id, code)
+		s.recordTest(ctx, r, false, code)
+	} else {
+		s.recordTest(ctx, r, true, storage.CodeOK)
 	}
 	return res, nil
 }
 
+// storedCode is the syntax of a stored test code (the DB checks it too).
+var storedCode = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
+
+// recordTest stores the outcome of a Test (D-187): the normalized error
+// class only, and only when the destination did not change while the test
+// ran (the row's updated_at). Storing is best effort: a failure is logged
+// and the test result still returned.
+func (s *Service) recordTest(ctx context.Context, r *record, ok bool, code storage.ErrorCode) {
+	arg := sqlc.RecordDestinationTestParams{ID: r.row.ID, SettingsAt: r.row.UpdatedAt, Ok: &ok}
+	if !ok {
+		c := string(code)
+		if !storedCode.MatchString(c) {
+			c = "failed"
+		}
+		arg.Code = &c
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	n, err := sqlc.New(s.o.DB).RecordDestinationTest(ctx, arg)
+	switch {
+	case err != nil:
+		s.o.Logger.WarnContext(ctx, "storing the destination test result failed",
+			slog.String("destination_id", r.row.ID.String()), slog.Any("error", err))
+	case n == 0:
+		s.o.Logger.InfoContext(ctx, "destination changed during its test; result not stored",
+			slog.String("destination_id", r.row.ID.String()))
+	}
+}
+
+// testFailed reports a failed test to the TestFailed hook.
+func (s *Service) testFailed(ctx context.Context, id uuid.UUID, code storage.ErrorCode) {
+	if s.o.TestFailed != nil {
+		s.o.TestFailed(context.WithoutCancel(ctx), id, code)
+	}
+}
+
 // hostKeyMismatch records a host-key pin violation seen by Test: a
 // security event (possible impersonation of the SFTP server), audited
-// (fail closed) and logged at WARN; task 5.5 turns it into an alert.
+// (fail closed) and logged at WARN; the audit observer raises the
+// security.system alert (task 5.5).
 func (s *Service) hostKeyMismatch(ctx context.Context, actor Actor, r *record) error {
 	details := audit.Details{"name": r.row.Name, "host": r.sftp.Host, "port": r.sftp.Port}
 	if r.row.HostKeyFingerprint != nil {

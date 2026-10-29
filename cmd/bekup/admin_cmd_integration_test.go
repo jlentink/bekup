@@ -148,6 +148,32 @@ tls_ca_file = %q
 	if out, _, err := run(t, "--dev", "--config", cfg, "audit", "verify"); err != nil {
 		t.Fatalf("verify: %v %s", err, out)
 	}
+
+	// Every break-glass action is also a security.system alert to the
+	// admins (D-069, task 5.5) in the outbox, with the OS user and host;
+	// reset-password and reset-2fa also alert the account itself.
+	alerts := func(action audit.Action) int {
+		t.Helper()
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM notification_events WHERE type = 'security.system'
+			AND detail->>'action' = $1 AND detail->>'via' = 'cli' AND detail ? 'hostname'`, string(action)).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	for action, want := range map[audit.Action]int{
+		audit.ActionCLIAdminCreated: 2, audit.ActionCLIAdminUnlocked: 1, audit.ActionCLIAdminPasswordReset: 1,
+		audit.ActionCLIAdminDisabled: 1, audit.ActionCLIAdminMFAReset: 1,
+	} {
+		if got := alerts(action); got != want {
+			t.Errorf("%s: %d security.system alerts, want %d", action, got, want)
+		}
+	}
+	var account int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM notification_events WHERE type = 'security.account'
+		AND user_id = $1 AND detail->>'kind' IN ('password_reset', 'second_factors_reset')`, u.ID).Scan(&account); err != nil || account != 2 {
+		t.Fatalf("account alerts %d %v", account, err)
+	}
 }
 
 // certs rotate records certs.rotated with actor cli (M1 code review L3).
@@ -173,5 +199,10 @@ tls_ca_file = %q
 	if len(page.Entries) != 1 || page.Entries[0].ActorKind != audit.ActorCLI ||
 		!strings.Contains(string(page.Entries[0].Details), `"operation": "leaf"`) {
 		t.Fatalf("entries: %+v", page.Entries)
+	}
+	var n int
+	if err := d.AppPool(t).QueryRow(t.Context(), `SELECT count(*) FROM notification_events
+		WHERE type = 'security.system' AND detail->>'kind' = 'certs_rotated' AND detail->>'via' = 'cli'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("certs.rotated alerts %d %v", n, err)
 	}
 }

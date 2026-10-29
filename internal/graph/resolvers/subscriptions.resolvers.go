@@ -12,8 +12,12 @@ import (
 	"github.com/jlentink/bekup/internal/graph/model"
 )
 
-func (r *subscriptionResolver) SessionEvents(ctx context.Context) (<-chan *model.SessionEvent, error) {
-	return r.sessionEvents(ctx)
+func (r *subscriptionResolver) AccountEvents(ctx context.Context) (<-chan *model.AccountEvent, error) {
+	return r.accountEvents(ctx)
+}
+
+func (r *subscriptionResolver) ActivityUpdated(ctx context.Context) (<-chan *model.ActivityEvent, error) {
+	return r.activityUpdated(ctx)
 }
 
 func (r *Resolver) Subscription() generated.SubscriptionResolver { return &subscriptionResolver{r} }

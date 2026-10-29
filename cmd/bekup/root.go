@@ -52,11 +52,23 @@ func (g *globalFlags) options(cmd *cobra.Command) config.Options {
 // newLogger builds the redacting logger for a loaded bekup config. In dev
 // mode the default format is text.
 func newLogger(w io.Writer, res *config.Result[config.Bekup]) (*slog.Logger, error) {
+	logger, _, err := newLevelLogger(w, res)
+	return logger, err
+}
+
+// newLevelLogger is newLogger with a runtime-adjustable level: serve and
+// worker hand the level to the config reload (log.level is live, D-200).
+func newLevelLogger(w io.Writer, res *config.Result[config.Bekup]) (*slog.Logger, *slog.LevelVar, error) {
 	format := res.Config.Log.Format
 	if res.Dev && res.Sources["log.format"] == config.SourceDefault {
 		format = "text"
 	}
-	return logging.New(w, logging.Options{Level: res.Config.Log.Level, Format: format})
+	level := new(slog.LevelVar)
+	logger, err := logging.New(w, logging.Options{Level: res.Config.Log.Level, Format: format, LevelVar: level})
+	if err != nil {
+		return nil, nil, err
+	}
+	return logger, level, nil
 }
 
 func newVersionCmd() *cobra.Command {

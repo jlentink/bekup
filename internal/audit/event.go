@@ -61,8 +61,9 @@ const (
 
 // CLIEvent builds an event for a break-glass CLI action (D-069, `bekup
 // admin`, task 1.6): actor kind cli, plus the OS user and hostname when
-// available. Use Auditor.Record or RecordTx to store it; callers also raise
-// the security.system alert (task 5.5).
+// available. Use Auditor.Record or RecordTx to store it with an auditor
+// whose observer is notify.ObserveAudit (cmd/bekup newCLIAuditor): that
+// raises the security.system alert in the same transaction (task 5.5).
 func CLIEvent(action Action, targetType, targetID string, details Details) Event {
 	d := make(Details, len(details)+3)
 	for k, v := range details {

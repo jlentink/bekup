@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/auth"
-	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
@@ -75,8 +76,8 @@ func (r *Resolver) adminCaller(ctx context.Context) (*auth.UserAdmin, auth.Princ
 	return r.Users, p, auth.AdminActor(p, auth.RequestMetaFrom(ctx)), nil
 }
 
-func encodeUserCursor(u *sqlc.User) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(userCursorPrefix + u.ID.String() + ":" + u.Email))
+func encodeUserCursor(id uuid.UUID, email string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(userCursorPrefix + id.String() + ":" + email))
 }
 
 func decodeUserCursor(after *string) (*auth.UserCursor, error) {
@@ -124,12 +125,8 @@ func (r *Resolver) users(ctx context.Context, filter *model.UserFilter, first *i
 	}
 	var f auth.UserFilter
 	if filter != nil {
-		if filter.Search != nil {
-			s := strings.TrimSpace(*filter.Search)
-			if !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxUserSearchLen || strings.ContainsRune(s, 0) {
-				return nil, apierror.Invalid("filter.search", "search must be at most 200 characters")
-			}
-			f.Search = s
+		if f.Search, err = cleanUserSearch("filter.search", filter.Search); err != nil {
+			return nil, err
 		}
 		if filter.Role != nil {
 			role, ok := authRole(*filter.Role)
@@ -146,18 +143,117 @@ func (r *Resolver) users(ctx context.Context, filter *model.UserFilter, first *i
 		return nil, userAdminError(err)
 	}
 	conn := &model.UserConnection{Edges: make([]model.UserEdge, 0, len(rows)), PageInfo: &model.PageInfo{HasNextPage: more, HasPreviousPage: cur != nil}}
+	ids := make([]uuid.UUID, 0, len(rows))
 	for i := range rows {
 		u, err := userModel(rows[i])
 		if err != nil {
 			return nil, err
 		}
-		conn.Edges = append(conn.Edges, model.UserEdge{Cursor: encodeUserCursor(&rows[i]), Node: u})
+		conn.Edges = append(conn.Edges, model.UserEdge{Cursor: encodeUserCursor(rows[i].ID, rows[i].Email), Node: u})
+		ids = append(ids, rows[i].ID)
+	}
+	// User.lastSeenAt / twoFactorEnrolled load for the whole page at once.
+	hintUsers(ctx, ids)
+	if n := len(conn.Edges); n > 0 {
+		start, end := conn.Edges[0].Cursor, conn.Edges[n-1].Cursor
+		conn.PageInfo.StartCursor, conn.PageInfo.EndCursor = &start, &end
+	}
+	return conn, nil
+}
+
+// cleanUserSearch validates a user search string (trimmed, at most
+// maxUserSearchLen characters, no NUL).
+func cleanUserSearch(field string, in *string) (string, error) {
+	if in == nil {
+		return "", nil
+	}
+	s := strings.TrimSpace(*in)
+	if !utf8.ValidString(s) || utf8.RuneCountInString(s) > maxUserSearchLen || strings.ContainsRune(s, 0) {
+		return "", apierror.Invalid(field, "search must be at most 200 characters")
+	}
+	return s, nil
+}
+
+// userDirectory lists the minimal facts of active accounts for the owner
+// picker (admins and maintainers, D-184). It never returns more than
+// UserDirectoryEntry carries.
+func (r *Resolver) userDirectory(ctx context.Context, search *string, first *int, after *string) (*model.UserDirectoryConnection, error) {
+	if r.Users == nil {
+		return nil, errUsersNotConfigured
+	}
+	if _, err := caller(ctx); err != nil {
+		return nil, err
+	}
+	limit := defaultUserPage
+	if first != nil {
+		if *first < 1 || *first > auth.MaxUserPage {
+			return nil, apierror.Invalid("first", "first must be between 1 and 200")
+		}
+		limit = *first
+	}
+	cur, err := decodeUserCursor(after)
+	if err != nil {
+		return nil, err
+	}
+	q, err := cleanUserSearch("search", search)
+	if err != nil {
+		return nil, err
+	}
+	rows, more, err := r.Users.Directory(ctx, q, cur, limit)
+	if err != nil {
+		return nil, userAdminError(err)
+	}
+	conn := &model.UserDirectoryConnection{
+		Edges:    make([]model.UserDirectoryEdge, 0, len(rows)),
+		PageInfo: &model.PageInfo{HasNextPage: more, HasPreviousPage: cur != nil},
+	}
+	for i := range rows {
+		role, err := modelRole(auth.Role(rows[i].Role))
+		if err != nil {
+			return nil, err
+		}
+		conn.Edges = append(conn.Edges, model.UserDirectoryEdge{Cursor: encodeUserCursor(rows[i].ID, rows[i].Email), Node: &model.UserDirectoryEntry{
+			ID: rows[i].ID, DisplayName: rows[i].DisplayName, Email: rows[i].Email, Role: role, Disabled: rows[i].Disabled,
+		}})
 	}
 	if n := len(conn.Edges); n > 0 {
 		start, end := conn.Edges[0].Cursor, conn.Edges[n-1].Cursor
 		conn.PageInfo.StartCursor, conn.PageInfo.EndCursor = &start, &end
 	}
 	return conn, nil
+}
+
+// userActivity returns the admin facts of u. lastSeenAt is admin only;
+// twoFactorEnrolled also for the account itself (selfOK). Others get
+// FORBIDDEN (the User type is also reachable through me and other
+// fields).
+func (r *Resolver) userActivity(ctx context.Context, u *model.User, selfOK bool) (auth.UserActivity, error) {
+	if r.Users == nil {
+		return auth.UserActivity{}, errUsersNotConfigured
+	}
+	p, err := caller(ctx)
+	if err != nil {
+		return auth.UserActivity{}, err
+	}
+	if !selfOK || p.UserID != u.ID {
+		if r.Authz == nil {
+			return auth.UserActivity{}, errors.New("resolvers: authz policy not configured")
+		}
+		if err := r.Authz.Authorize(ctx, authz.OpUserView); err != nil {
+			return auth.UserActivity{}, err
+		}
+	}
+	return r.loadUserActivity(ctx, u.ID)
+}
+
+func (r *Resolver) userLastSeenAt(ctx context.Context, u *model.User) (*time.Time, error) {
+	a, err := r.userActivity(ctx, u, false)
+	return a.LastSeenAt, err
+}
+
+func (r *Resolver) userTwoFactorEnrolled(ctx context.Context, u *model.User) (bool, error) {
+	a, err := r.userActivity(ctx, u, true)
+	return a.TwoFactorEnrolled, err
 }
 
 func (r *Resolver) user(ctx context.Context, id uuid.UUID) (*model.User, error) {

@@ -67,11 +67,11 @@ const (
 	ActionSessionsRevoked        Action = "session.revoked_all"
 
 	// Settings and stored credentials (the value is never recorded).
-	// Reserved: recorded from tasks 2.11/2.12 (connection and destination
-	// secrets) and 5.1 (SMTP).
+	// Recorded from tasks 2.11/2.12 (connection and destination secrets)
+	// and 5.1 (SMTP password).
 	ActionSecretChanged Action = "secret.changed"
-	// Reserved: recorded from tasks 2.3 (SSRF allowlist) and 5.1/6.9
-	// (admin settings).
+	// Recorded from task 5.1 (SMTP settings); reserved for 2.3 (SSRF
+	// allowlist) and 6.9 (admin settings).
 	ActionSettingChanged Action = "setting.changed"
 
 	// Security posture changes (D-001: weakened settings are audited).
@@ -284,6 +284,42 @@ const (
 	ActionTestRestoreScratchKept Action = "test_restore.scratch_kept"
 )
 
+// E-mail actions (task 5.1, D-178). The SMTP settings change itself is
+// setting.changed (target setting/smtp) plus secret.changed for the
+// password (by name only).
+const (
+	// ActionSMTPTestSent: an admin sent a test e-mail (details: recipient,
+	// ok and the failure code; never server text).
+	ActionSMTPTestSent Action = "smtp.test_sent"
+	// ActionUserEmailVerificationRequested: a verification link was sent
+	// to the account's address (target user).
+	ActionUserEmailVerificationRequested Action = "user.email_verification_requested"
+	// ActionUserEmailVerified: the account's address was verified.
+	ActionUserEmailVerified Action = "user.email_verified"
+	// ActionUserEmailVerificationFailed: a verification code was refused
+	// (details.reason: wrong_code, expired, address_changed, ...).
+	ActionUserEmailVerificationFailed Action = "user.email_verification_failed"
+)
+
+// Notification channel actions (task 5.3b, D-191). Target shared_channel
+// or user_channel; details never carry a URL beyond its display form or a
+// signing key (a new URL or key also records secret.changed by name).
+const (
+	ActionNotificationChannelCreated    Action = "notification.channel_created"
+	ActionNotificationChannelUpdated    Action = "notification.channel_updated"
+	ActionNotificationChannelDeleted    Action = "notification.channel_deleted"
+	ActionNotificationChannelKeyRotated Action = "notification.channel_key_rotated"
+	ActionNotificationChannelEnabled    Action = "notification.channel_enabled"
+	ActionNotificationChannelDisabled   Action = "notification.channel_disabled"
+	// ActionNotificationChannelTested: a test delivery (details: ok and
+	// the fixed result code).
+	ActionNotificationChannelTested Action = "notification.channel_tested"
+	// ActionNotificationChannelAttached / Detached: a shared channel was
+	// attached to or detached from a job (details: job_id, filter).
+	ActionNotificationChannelAttached Action = "notification.channel_attached"
+	ActionNotificationChannelDetached Action = "notification.channel_detached"
+)
+
 // Passkey actions (task 1.8). Enrollment and removal use auth.mfa.enrolled
 // / auth.mfa.removed with details.factor = "passkey".
 //
@@ -339,7 +375,32 @@ var catalog = []Action{
 	ActionRestoreSecdefNeutralized, ActionRestorePrivilegedTarget,
 	ActionJobTestRestoreUpdated, ActionTestRestoreRequested, ActionTestRestoreFinished, ActionTestRestoreAbandoned,
 	ActionTestRestoreScratchKept,
+	ActionSMTPTestSent, ActionUserEmailVerificationRequested, ActionUserEmailVerified,
+	ActionUserEmailVerificationFailed,
+	ActionNotificationChannelCreated, ActionNotificationChannelUpdated, ActionNotificationChannelDeleted,
+	ActionNotificationChannelKeyRotated, ActionNotificationChannelEnabled, ActionNotificationChannelDisabled,
+	ActionNotificationChannelTested, ActionNotificationChannelAttached, ActionNotificationChannelDetached,
+	ActionConfigReloadRequested, ActionConfigReloaded, ActionConfigReloadFailed,
 }
+
+// Runtime config reload actions (task 6.13, D-200). Details carry key
+// names, counts and the error kind only: never values or the config file
+// path.
+const (
+	// ActionConfigReloadRequested: an admin asked every serve and worker
+	// process to reload bekup.toml (user actor; details: request_id).
+	ActionConfigReloadRequested Action = "config.reload_requested"
+	// ActionConfigReloaded: a process re-read bekup.toml without errors
+	// (system actor; details: request_id, trigger, instance_id,
+	// process_kind, applied, restart_required, weakened, status). A
+	// non-empty weakened list raises the config_reload_weakened alert.
+	ActionConfigReloaded Action = "config.reloaded"
+	// ActionConfigReloadFailed: a process refused the file or could not
+	// apply it and kept its running config (system actor; details:
+	// request_id, trigger, instance_id, process_kind, error_kind,
+	// error_keys).
+	ActionConfigReloadFailed Action = "config.reload_failed"
+)
 
 // actionRe is the syntax of an action: at least two dot-separated words,
 // at most 128 characters (the audit_log CHECK).

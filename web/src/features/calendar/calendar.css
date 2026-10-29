@@ -1,0 +1,15 @@
+/*
+ * Calendar-only pattern (task 6.11). Plain CSS on the design tokens: no
+ * inline styles (CSP style-src 'self', D-082).
+ */
+
+/* Paused occurrences: muted diagonal hatch, distinct from the orange
+ * hazard hatch reserved for weakened security (.hatch-insecure). */
+.cal-hatch-paused {
+  background-color: var(--surface-sunken);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    color-mix(in oklch, var(--status-neutral) 18%, transparent) 4px 8px
+  );
+}

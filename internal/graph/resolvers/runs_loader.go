@@ -6,7 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -28,8 +30,19 @@ type runLoader struct {
 	jobHints  []uuid.UUID
 	items     map[uuid.UUID][]sqlc.RunItem
 	artifacts map[uuid.UUID][]runstate.ArtifactView
+	// stats is the completeness evidence by run id, then item id (D-187).
+	stats map[uuid.UUID]map[uuid.UUID]*runstate.ItemStats
 	// recent is keyed by the per-job count.
 	recent map[int]map[uuid.UUID][]runstate.RunView
+	// missed is the missed-backup state by job id (Job.missed, D-196).
+	missed map[uuid.UUID]*runstate.MissedState
+	// userHints/activity batch the admin facts of a page of users
+	// (User.lastSeenAt, User.twoFactorEnrolled; D-184).
+	userHints []uuid.UUID
+	activity  map[uuid.UUID]auth.UserActivity
+	// channels are the shared channels attached to a page of jobs
+	// (Job.sharedChannelAttachments, D-198).
+	channels map[uuid.UUID][]notify.JobAttachment
 }
 
 type runLoaderKey struct{}
@@ -40,7 +53,11 @@ func WithRunLoader(ctx context.Context) context.Context {
 	return context.WithValue(ctx, runLoaderKey{}, &runLoader{
 		items:     map[uuid.UUID][]sqlc.RunItem{},
 		artifacts: map[uuid.UUID][]runstate.ArtifactView{},
+		stats:     map[uuid.UUID]map[uuid.UUID]*runstate.ItemStats{},
 		recent:    map[int]map[uuid.UUID][]runstate.RunView{},
+		missed:    map[uuid.UUID]*runstate.MissedState{},
+		activity:  map[uuid.UUID]auth.UserActivity{},
+		channels:  map[uuid.UUID][]notify.JobAttachment{},
 	})
 }
 
@@ -65,6 +82,15 @@ func hintJobs(ctx context.Context, ids []uuid.UUID) {
 	if l := loaderFrom(ctx); l != nil {
 		l.mu.Lock()
 		l.jobHints = append(l.jobHints, ids...)
+		l.mu.Unlock()
+	}
+}
+
+// hintUsers announces the users of a page.
+func hintUsers(ctx context.Context, ids []uuid.UUID) {
+	if l := loaderFrom(ctx); l != nil {
+		l.mu.Lock()
+		l.userHints = append(l.userHints, ids...)
 		l.mu.Unlock()
 	}
 }
@@ -113,8 +139,9 @@ func batchLoad[V any](ctx context.Context, l *runLoader, cache func(*runLoader) 
 	return m[id], nil
 }
 
-func runHintsOf(l *runLoader) []uuid.UUID { return l.runHints }
-func jobHintsOf(l *runLoader) []uuid.UUID { return l.jobHints }
+func runHintsOf(l *runLoader) []uuid.UUID  { return l.runHints }
+func jobHintsOf(l *runLoader) []uuid.UUID  { return l.jobHints }
+func userHintsOf(l *runLoader) []uuid.UUID { return l.userHints }
 
 // loadItems returns the items of a run.
 func (r *Resolver) loadItems(ctx context.Context, runID uuid.UUID) ([]sqlc.RunItem, error) {
@@ -126,6 +153,12 @@ func (r *Resolver) loadItems(ctx context.Context, runID uuid.UUID) ([]sqlc.RunIt
 func (r *Resolver) loadArtifacts(ctx context.Context, runID uuid.UUID) ([]runstate.ArtifactView, error) {
 	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID][]runstate.ArtifactView { return l.artifacts },
 		runHintsOf, runID, r.Runs.Artifacts)
+}
+
+// loadStats returns the completeness evidence of a run's items by item id.
+func (r *Resolver) loadStats(ctx context.Context, runID uuid.UUID) (map[uuid.UUID]*runstate.ItemStats, error) {
+	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID]map[uuid.UUID]*runstate.ItemStats { return l.stats },
+		runHintsOf, runID, r.Runs.Stats)
 }
 
 // loadRecentRuns returns the newest n runs of a job.
@@ -141,4 +174,17 @@ func (r *Resolver) loadRecentRuns(ctx context.Context, jobID uuid.UUID, n int) (
 		}
 		return m
 	}, jobHintsOf, jobID, fetch)
+}
+
+// loadMissed returns the ongoing missed-backup outage of a job (nil:
+// none).
+func (r *Resolver) loadMissed(ctx context.Context, jobID uuid.UUID) (*runstate.MissedState, error) {
+	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID]*runstate.MissedState { return l.missed },
+		jobHintsOf, jobID, r.Runs.MissedForJobs)
+}
+
+// loadUserActivity returns the admin facts of a user.
+func (r *Resolver) loadUserActivity(ctx context.Context, userID uuid.UUID) (auth.UserActivity, error) {
+	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID]auth.UserActivity { return l.activity },
+		userHintsOf, userID, r.Users.Activity)
 }

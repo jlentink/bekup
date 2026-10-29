@@ -605,7 +605,7 @@ func connectionModel(c *connections.Connection, full bool) *model.Connection {
 		PinStatus: pinStatusModel(c.PinStatus), PinExpiresAt: c.PinExpiresAt, SSHEnabled: c.SSH != nil,
 		Ready: c.Ready, NotReadyReason: nonEmpty(c.NotReadyReason), CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 		MaxConcurrentRuns: c.MaxConcurrentRuns, EffectiveMaxConcurrentRuns: c.EffectiveMaxConcurrentRuns,
-		Temporary: c.Temporary, ExpiresAt: c.ExpiresAt,
+		Temporary: c.Temporary, ExpiresAt: c.ExpiresAt, LastTest: connectionLastTestModel(c.LastTest),
 	}
 	if !full {
 		return m
@@ -636,5 +636,18 @@ func connectionModel(c *connections.Connection, full bool) *model.Connection {
 		set.SSH = ss
 	}
 	m.Settings = set
+	return m
+}
+
+// connectionLastTestModel converts the stored test outcome (D-187;
+// metadata visible to admins and maintainers).
+func connectionLastTestModel(lt *connections.LastTest) *model.ConnectionLastTest {
+	if lt == nil {
+		return nil
+	}
+	m := &model.ConnectionLastTest{At: lt.At, Ok: lt.OK, Code: nonEmpty(lt.Code), Stale: lt.Stale}
+	if lt.Privileges != nil {
+		m.Privileges = targetPrivilegesModel(*lt.Privileges)
+	}
 	return m
 }

@@ -184,7 +184,8 @@ chmod 0600 "$d"/*
 # dev app Postgres through its published port 127.0.0.1:$BEKUP_DEV_PG_PORT
 # (verify-full against the dev CA; the postgres certificate names
 # 127.0.0.1): both role URLs with the host address, a copy of the master
-# keyring and of the DB CA bundle. Separate copies, so that `--chown` can
+# keyring, of the DB CA bundle and of serve's runner client certificate.
+# Separate copies, so that `--chown` can
 # hand the container files to the container UIDs while these stay owned by
 # the developer (bekup reads only files owned by itself or root, D-041).
 local_url() { # local_url <role> <password file>
@@ -217,12 +218,20 @@ copy_local() {
         return 0
     fi
     rm -f "$2"
-    cat "$1" >"$2"
+    # umask 077 in a subshell: the file is created 0600, never briefly
+    # readable by others.
+    (umask 077 && cat "$1" >"$2")
     chmod 0600 "$2"
     echo "generated ${2#"$repo_root"/}"
 }
 copy_local "$s/bekup_master_key" "$l/bekup_master_key"
 copy_local "$c/postgres/ca.crt" "$l/postgres_ca.crt"
+# serve's runner client identity (spiffe://bekup/serve) and the private CA:
+# serve refuses to start without a readable client certificate, even when
+# no runner is up (it connects lazily, D-127).
+copy_local "$c/serve/serve.crt" "$l/bekup_client.crt"
+copy_local "$c/serve/serve.key" "$l/bekup_client.key"
+copy_local "$c/serve/ca.crt" "$l/bekup_ca.crt"
 
 # --- ownership (Linux) -----------------------------------------------------------
 if [[ $do_chown -eq 1 ]]; then

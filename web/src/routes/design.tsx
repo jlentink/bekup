@@ -97,7 +97,7 @@ const TYPE_SCALE = [
 
 const SPACING = [1, 2, 3, 4, 6, 8, 12, 16] as const;
 const RADII = ["rounded-xs", "rounded-sm", "rounded-md", "rounded-lg", "rounded-xl"] as const;
-const ROLES: readonly Role[] = ["admin", "maintainer", "owner"];
+const ROLES: readonly Role[] = ["ADMIN", "MAINTAINER", "USER"];
 
 const SAMPLE_RUNS = [
   {

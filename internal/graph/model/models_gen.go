@@ -12,6 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// One event of accountEvents: exactly one field is set.
+type AccountEvent struct {
+	// A change to one or all of your sessions.
+	Session *SessionEvent `json:"session,omitempty"`
+	// A new notification of your inbox.
+	Notification *Notification `json:"notification,omitempty"`
+}
+
+// One event of activityUpdated: exactly one field is set.
+type ActivityEvent struct {
+	// A run changed (its state at delivery).
+	Run *Run `json:"run,omitempty"`
+	// A restore changed or was created (its state at delivery).
+	Restore *Restore `json:"restore,omitempty"`
+}
+
 // One object stored on a destination.
 type Artifact struct {
 	ID    uuid.UUID `json:"id"`
@@ -83,6 +99,32 @@ type ArtifactFilter struct {
 	Kind          *ArtifactKind  `json:"kind,omitempty"`
 }
 
+// The audit chain status.
+type AuditChainStatus struct {
+	// The latest verification (null: none ran yet).
+	LastVerification *AuditChainVerification `json:"lastVerification,omitempty"`
+	// The newest audit entry (null: the log is empty).
+	HeadID *string `json:"headId,omitempty"`
+	// Its chain hash (hex).
+	HeadHash *string    `json:"headHash,omitempty"`
+	HeadAt   *time.Time `json:"headAt,omitempty"`
+	// The newest signed chain head (null: none yet).
+	LatestSignedHead *AuditSignedHead `json:"latestSignedHead,omitempty"`
+}
+
+// The outcome of one completed audit chain verification.
+type AuditChainVerification struct {
+	CheckedAt time.Time `json:"checkedAt"`
+	// False when a problem was found (an audit.verify.failed entry and a critical alert).
+	Ok bool `json:"ok"`
+	// True when the whole chain was verified, false for an incremental check of new entries.
+	Full bool `json:"full"`
+	// The problem found, as `<kind>:<entry id>` (e.g. `hash_mismatch:1234`); null when ok.
+	Finding *string `json:"finding,omitempty"`
+	// The newest entry known to verify (null: none yet).
+	VerifiedThroughID *string `json:"verifiedThroughId,omitempty"`
+}
+
 // A page of audit entries.
 type AuditLogConnection struct {
 	Edges    []AuditLogEdge `json:"edges"`
@@ -125,6 +167,15 @@ type AuditLogFilter struct {
 	From *time.Time `json:"from,omitempty"`
 	// Entries before this time.
 	To *time.Time `json:"to,omitempty"`
+}
+
+// A signed audit chain head.
+type AuditSignedHead struct {
+	// The audit entry the signature covers.
+	ChainID  string    `json:"chainId"`
+	SignedAt time.Time `json:"signedAt"`
+	// The instance signing key (fingerprint id).
+	KeyID string `json:"keyId"`
 }
 
 // A calendar range.
@@ -185,6 +236,14 @@ type CertificateChain struct {
 	LeafSpkiSha256 string `json:"leafSpkiSha256"`
 }
 
+// The earliest expiry in one component's certificate file.
+type CertificateExpiry struct {
+	// runner_server (from the runner), runner_client, runner_ca, postgres_ca or
+	// postgres_client (from bekup.toml paths).
+	Component string    `json:"component"`
+	NotAfter  time.Time `json:"notAfter"`
+}
+
 // A confirmed certificate pin (public data).
 type CertificatePin struct {
 	// The anchor: a self-signed server certificate or the root CA.
@@ -224,6 +283,70 @@ type ChainCertificate struct {
 	SpkiSha256Hex string `json:"spkiSha256Hex"`
 	// SHA-256 of the certificate (DER, hex).
 	FingerprintSha256 string `json:"fingerprintSha256"`
+}
+
+// One process's answer to a reload request, or its startup row.
+type ConfigProcessResult struct {
+	// Random id of the process (new at every start).
+	InstanceID uuid.UUID        `json:"instanceId"`
+	Kind       BekupProcessKind `json:"kind"`
+	// Host name of the process (usually the container id).
+	Hostname string `json:"hostname"`
+	// bekup version of the process.
+	Version          string    `json:"version"`
+	ProcessStartedAt time.Time `json:"processStartedAt"`
+	FinishedAt       time.Time `json:"finishedAt"`
+	// The request answered (null for the startup row).
+	RequestID *uuid.UUID `json:"requestId,omitempty"`
+	// What started the answered request (null for the startup row).
+	Trigger *ConfigReloadTrigger `json:"trigger,omitempty"`
+	// The process's LISTEN connection is up now, so it receives reload
+	// requests. False: the process stopped (or lost its database connection);
+	// its row is history and needs no action. Display only (the connection's
+	// application_name; D-200).
+	Listening bool               `json:"listening"`
+	Status    ConfigReloadStatus `json:"status"`
+	// Set for REJECTED and FAILED.
+	ErrorKind *ConfigReloadErrorKind `json:"errorKind,omitempty"`
+	// Live keys this reload applied (a live key this kind of process does not use is not listed).
+	AppliedKeys []string `json:"appliedKeys"`
+	// Changed keys that need a restart of this process.
+	RestartKeys []string `json:"restartKeys"`
+	// Keys named by the errors of a rejected file (unknown keys appear as `<section>.unknown_key`).
+	ErrorKeys []string `json:"errorKeys"`
+	// Applied keys whose change weakens security (every admin was alerted).
+	WeakenedKeys []string `json:"weakenedKeys"`
+}
+
+// A reload request with the answers so far.
+type ConfigReloadRequest struct {
+	ID          uuid.UUID `json:"id"`
+	RequestedAt time.Time `json:"requestedAt"`
+	// The admin who asked.
+	RequestedBy *uuid.UUID          `json:"requestedBy,omitempty"`
+	Trigger     ConfigReloadTrigger `json:"trigger"`
+	// One entry per process that answered (poll until expectedProcesses answered).
+	Results []ConfigProcessResult `json:"results"`
+	// Processes that can receive a request right now.
+	ListeningProcesses int `json:"listeningProcesses"`
+	// Processes this request waits for: those that answered plus those
+	// listening now that are responsible for it (startup row at most one
+	// minute after the request, database time; a process started later loaded
+	// a newer file and never answers it; D-200).
+	ExpectedProcesses int `json:"expectedProcesses"`
+}
+
+// The configuration page.
+type ConfigStatus struct {
+	// Keys a reload applies without a restart (`section.key`).
+	LiveKeys []string `json:"liveKeys"`
+	// The newest row of every process listening now (any age) and of every
+	// process seen in the last 7 days, newest first (at most 100).
+	Processes []ConfigProcessResult `json:"processes"`
+	// Processes that can receive a reload request right now.
+	ListeningProcesses int `json:"listeningProcesses"`
+	// The newest reload request (null: none yet).
+	LastRequest *ConfigReloadRequest `json:"lastRequest,omitempty"`
 }
 
 // A database connection.
@@ -268,12 +391,28 @@ type Connection struct {
 	Temporary bool `json:"temporary"`
 	// When a temporary connection expires; null for permanent connections.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// The newest stored testConnection result (D-187); null when never tested.
+	// Normalized codes only.
+	LastTest *ConnectionLastTest `json:"lastTest,omitempty"`
 }
 
 type ConnectionDatabases struct {
 	// Databases reported by the server, without the engine's system databases.
 	Databases []string `json:"databases"`
 	Warnings  []string `json:"warnings"`
+}
+
+// The stored outcome of the newest testConnection (D-187).
+type ConnectionLastTest struct {
+	At time.Time `json:"at"`
+	Ok bool      `json:"ok"`
+	// The normalized failure code (as ConnectionTestResult.code, plus
+	// TLS_PIN_MISMATCH and SSH_HOST_KEY_MISMATCH); null when ok.
+	Code *string `json:"code,omitempty"`
+	// The connection's settings changed after this test.
+	Stale bool `json:"stale"`
+	// The privilege verdict of the test's probe; null when the test failed before the check.
+	Privileges *TargetPrivileges `json:"privileges,omitempty"`
 }
 
 type ConnectionSettings struct {
@@ -425,6 +564,17 @@ type CreateJobResult struct {
 	GeneratedKeypair *GeneratedAgeKeypair `json:"generatedKeypair,omitempty"`
 }
 
+// Creates a shared channel: an e-mail list (addresses) or a webhook (url).
+type CreateSharedChannelInput struct {
+	// 1..100 characters, unique.
+	Name string            `json:"name"`
+	Type SharedChannelType `json:"type"`
+	// E-mail list: 1..50 addresses.
+	Addresses []string `json:"addresses,omitempty"`
+	// Webhook: https only, must pass the SSRF guard; never shown again.
+	URL *string `json:"url,omitempty"`
+}
+
 // A temporary restore connection: the fields of CreateConnectionInput without
 // the run limit (the global default applies).
 type CreateTemporaryConnectionInput struct {
@@ -478,6 +628,19 @@ type Destination struct {
 	UpdatedAt      time.Time `json:"updatedAt"`
 	// The full non-secret configuration. Admins only: null for maintainers.
 	Settings *DestinationSettings `json:"settings,omitempty"`
+	// The newest stored testDestination result (D-187); null when never
+	// tested. Normalized codes only.
+	LastTest *DestinationLastTest `json:"lastTest,omitempty"`
+}
+
+// The stored outcome of the newest testDestination (D-187).
+type DestinationLastTest struct {
+	At time.Time `json:"at"`
+	Ok bool      `json:"ok"`
+	// The normalized error class of the first failed step (as DestinationTestStep.code); null when ok.
+	Code *string `json:"code,omitempty"`
+	// The destination's settings changed after this test.
+	Stale bool `json:"stale"`
 }
 
 // Per-type settings; exactly the field of the destination's type is set.
@@ -515,6 +678,17 @@ type DestinationTestStep struct {
 	Message string `json:"message"`
 }
 
+// What bekup stores on one destination.
+type DestinationUsage struct {
+	DestinationID uuid.UUID       `json:"destinationId"`
+	Name          string          `json:"name"`
+	Type          DestinationType `json:"type"`
+	// Sum of the sizes of the present backup files (bytes).
+	StoredBytes float64 `json:"storedBytes"`
+	// Number of present backup files (dumps and manifests).
+	ArtifactCount int `json:"artifactCount"`
+}
+
 type DiskDestinationInput struct {
 	// Directory below storage.disk_root (relative; no '..').
 	Path string `json:"path"`
@@ -540,6 +714,14 @@ type DownloadTicket struct {
 	// A shell command template to restore or unpack the file; placeholders in
 	// angle brackets (`<database>`, `<key-file>`, `<dump-file>`).
 	RestoreCommand string `json:"restoreCommand"`
+}
+
+// The result of requestEmailVerification.
+type EmailVerificationRequest struct {
+	// The address the link was sent to.
+	SentTo string `json:"sentTo"`
+	// When the link stops working (24 hours).
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // An allowlisted engine version of the image catalog.
@@ -602,14 +784,23 @@ type Job struct {
 	// The job's run timeout; null means workers.backup_timeout.
 	TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
 	// Missed-backup alert window; null means derived from the schedule.
-	ExpectedWindowSeconds *int                `json:"expectedWindowSeconds,omitempty"`
-	Verification          JobVerification     `json:"verification"`
-	Destinations          []JobDestinationRef `json:"destinations"`
-	Encryption            *JobEncryption      `json:"encryption"`
+	ExpectedWindowSeconds *int `json:"expectedWindowSeconds,omitempty"`
+	// True while the job is in a missed-backup outage: the missed-backup check
+	// (every 5 minutes) found a scheduled backup that did not succeed in its
+	// window and no backup succeeded since. Cleared by the next successful
+	// run.
+	Missed bool `json:"missed"`
+	// The first missed occurrence of the current outage (null when not missed).
+	MissedSince  *time.Time          `json:"missedSince,omitempty"`
+	Verification JobVerification     `json:"verification"`
+	Destinations []JobDestinationRef `json:"destinations"`
+	Encryption   *JobEncryption      `json:"encryption"`
 	// Admins and maintainers only (null for backup owners).
 	Owners    []JobOwner `json:"owners,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
 	UpdatedAt time.Time  `json:"updatedAt"`
+	// The shared channels attached to this job. Admins and maintainers only (null for backup owners).
+	SharedChannelAttachments []JobSharedChannelAttachment `json:"sharedChannelAttachments,omitempty"`
 	// The newest run of the job.
 	LastRun *Run `json:"lastRun,omitempty"`
 	// The newest runs of the job, newest first (`first` 1-20, default 5).
@@ -683,6 +874,10 @@ type JobFilter struct {
 	ConnectionID *uuid.UUID `json:"connectionId,omitempty"`
 	// Substring of the name or slug (case-insensitive).
 	Search *string `json:"search,omitempty"`
+	// Only jobs this user owns (listed in the job's owners). Admins and
+	// maintainers only (FORBIDDEN for backup owners, who see only their own
+	// jobs anyway).
+	OwnerID *uuid.UUID `json:"ownerId,omitempty"`
 }
 
 // A backup owner of a job. Only owners with role USER gain rights (D-067).
@@ -733,6 +928,20 @@ type JobRetention struct {
 type JobRetentionInput struct {
 	KeepLast *int `json:"keepLast,omitempty"`
 	KeepDays *int `json:"keepDays,omitempty"`
+}
+
+// A shared channel attached to a job.
+type JobSharedChannelAttachment struct {
+	ChannelID uuid.UUID         `json:"channelId"`
+	Name      string            `json:"name"`
+	Type      SharedChannelType `json:"type"`
+	// Scheme, host and port of a webhook URL (null for e-mail lists).
+	DisplayURL *string `json:"displayUrl,omitempty"`
+	// False while the channel is disabled (by an admin or automatically).
+	Enabled bool `json:"enabled"`
+	// Groups and events the channel receives for this job; both empty: every non-security event of the job.
+	Groups []NotificationGroup `json:"groups"`
+	Events []string            `json:"events"`
 }
 
 // The test-restore settings of a job.
@@ -788,7 +997,165 @@ type LoginResult struct {
 	PasswordChangeRequired bool `json:"passwordChangeRequired"`
 }
 
+type MarkNotificationsReadResult struct {
+	// How many notifications changed to read.
+	Marked int `json:"marked"`
+	// Your remaining unread notifications.
+	UnreadCount int `json:"unreadCount"`
+}
+
 type Mutation struct {
+}
+
+// Your own notification channels.
+type MyNotificationChannels struct {
+	// Your e-mail address (the e-mail channel).
+	Email string `json:"email"`
+	// False: e-mail notifications are skipped; verify with requestEmailVerification.
+	EmailVerified   bool              `json:"emailVerified"`
+	EmailVerifiedAt *time.Time        `json:"emailVerifiedAt,omitempty"`
+	Webhooks        []PersonalWebhook `json:"webhooks"`
+	// The most personal webhooks you may have (5).
+	MaxWebhooks int `json:"maxWebhooks"`
+}
+
+// One notification of your in-app inbox.
+type Notification struct {
+	ID uuid.UUID `json:"id"`
+	// The event type (or notice.webhook_disabled).
+	Type string `json:"type"`
+	// The event's group (null for notices).
+	Group    *NotificationGroup   `json:"group,omitempty"`
+	Severity NotificationSeverity `json:"severity"`
+	Title    string               `json:"title"`
+	Body     string               `json:"body"`
+	// A link into the UI.
+	Link *string `json:"link,omitempty"`
+	// The minimal event data (job id/name, run id, status, ...); never secrets.
+	Data      JSON       `json:"data,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	ReadAt    *time.Time `json:"readAt,omitempty"`
+}
+
+// One cell of the preference matrix.
+type NotificationChannelPreference struct {
+	Channel NotificationChannelType `json:"channel"`
+	// The effective value for events without a per-job override.
+	Enabled bool                         `json:"enabled"`
+	Source  NotificationPreferenceSource `json:"source"`
+	// Locked cells cannot be changed (mandatory security channels).
+	Locked bool `json:"locked"`
+}
+
+// Delivery health of a channel.
+type NotificationChannelState struct {
+	Enabled    bool       `json:"enabled"`
+	DisabledAt *time.Time `json:"disabledAt,omitempty"`
+	// Why it is off: manual, repeated_failures or permanent_failures (auto-disabled).
+	DisabledReason *string `json:"disabledReason,omitempty"`
+	// A presentable explanation of disabledReason.
+	DisabledMessage     *string    `json:"disabledMessage,omitempty"`
+	ConsecutiveFailures int        `json:"consecutiveFailures"`
+	PermanentFailures   int        `json:"permanentFailures"`
+	LastFailureAt       *time.Time `json:"lastFailureAt,omitempty"`
+	// The fixed code of the last failure, e.g. http_status, tls, not_allowed, unreachable.
+	LastFailureCode *string `json:"lastFailureCode,omitempty"`
+}
+
+type NotificationConnection struct {
+	Edges    []NotificationEdge `json:"edges"`
+	PageInfo *PageInfo          `json:"pageInfo"`
+}
+
+type NotificationEdge struct {
+	Cursor string        `json:"cursor"`
+	Node   *Notification `json:"node"`
+}
+
+// A group of the catalog with the events your role can receive.
+type NotificationEventGroup struct {
+	Group  NotificationGroup       `json:"group"`
+	Label  string                  `json:"label"`
+	Events []NotificationEventInfo `json:"events"`
+}
+
+// One event of the catalog.
+type NotificationEventInfo struct {
+	// The event type, e.g. backup.failed.
+	Type     string               `json:"type"`
+	Label    string               `json:"label"`
+	Group    NotificationGroup    `json:"group"`
+	Audience NotificationAudience `json:"audience"`
+	// Problem events go to e-mail by default.
+	Problem bool `json:"problem"`
+	// Mandatory events always reach the inbox and e-mail.
+	Mandatory bool                 `json:"mandatory"`
+	Priority  NotificationPriority `json:"priority"`
+	Severity  NotificationSeverity `json:"severity"`
+	// True for events about a job: per-job overrides and shared channels apply.
+	PerJob bool `json:"perJob"`
+	// The channels on by default.
+	DefaultChannels []NotificationChannelType `json:"defaultChannels"`
+}
+
+// One row of the preference matrix.
+type NotificationEventPreference struct {
+	Event    *NotificationEventInfo          `json:"event"`
+	Channels []NotificationChannelPreference `json:"channels"`
+	// Overrides for jobs you may still see.
+	JobOverrides []NotificationJobOverride `json:"jobOverrides"`
+}
+
+// The events a shared channel receives from one job; both empty: every non-security event.
+type NotificationFilterInput struct {
+	Groups []NotificationGroup `json:"groups,omitempty"`
+	// Event types of the catalog (job events only).
+	Events []string `json:"events,omitempty"`
+}
+
+// Filters of your inbox; unset fields do not filter.
+type NotificationInboxFilter struct {
+	// Only unread notifications.
+	UnreadOnly *bool `json:"unreadOnly,omitempty"`
+	// Only events of this group (notices have no group).
+	Group *NotificationGroup `json:"group,omitempty"`
+	// Only these event types (catalog types or notice.webhook_disabled; at most 64). With `group`, both must match.
+	Events []string `json:"events,omitempty"`
+}
+
+// A per-job override (wins over the per-event setting for that job).
+type NotificationJobOverride struct {
+	JobID   uuid.UUID               `json:"jobId"`
+	JobName string                  `json:"jobName"`
+	Channel NotificationChannelType `json:"channel"`
+	Enabled bool                    `json:"enabled"`
+}
+
+type NotificationPreferenceGroup struct {
+	Group  NotificationGroup             `json:"group"`
+	Label  string                        `json:"label"`
+	Events []NotificationEventPreference `json:"events"`
+}
+
+// Your effective notification preferences.
+type NotificationPreferences struct {
+	Groups []NotificationPreferenceGroup `json:"groups"`
+	// False: e-mail notifications are skipped until you verify your address (requestEmailVerification).
+	EmailVerified bool `json:"emailVerified"`
+	// Your enabled personal webhooks (the WEBHOOK column needs at least one).
+	ActiveWebhooks int `json:"activeWebhooks"`
+}
+
+// The result of a test send. Codes and messages are fixed; the receiver's response is never shown.
+type NotificationTestResult struct {
+	Ok bool `json:"ok"`
+	// The failure code (ok on success), e.g. http_status, redirect, tls,
+	// not_allowed, unreachable. Personal webhook tests only answer ok,
+	// not_allowed or failed.
+	Code    *string `json:"code,omitempty"`
+	Message *string `json:"message,omitempty"`
+	// The receiver's HTTP status, when it answered (shared channels only; never for personal webhook tests).
+	StatusCode *int `json:"statusCode,omitempty"`
 }
 
 // Relay-style pagination info of a connection.
@@ -821,7 +1188,33 @@ type Passkey struct {
 	SignCountAnomalyAt *time.Time `json:"signCountAnomalyAt,omitempty"`
 }
 
+// One of your personal webhooks.
+type PersonalWebhook struct {
+	ID    uuid.UUID `json:"id"`
+	Label string    `json:"label"`
+	// Scheme, host and port of the URL.
+	DisplayURL string                    `json:"displayUrl"`
+	State      *NotificationChannelState `json:"state"`
+	CreatedAt  time.Time                 `json:"createdAt"`
+}
+
+// A personal webhook with its new signing key (shown once).
+type PersonalWebhookWithKey struct {
+	Webhook *PersonalWebhook `json:"webhook"`
+	// The HMAC signing key. Shown only now.
+	SigningKey string `json:"signingKey"`
+}
+
 type Query struct {
+}
+
+// River jobs of one queue in one state.
+type QueueDepth struct {
+	// backup, restore, retention, notify, maintenance or other.
+	Queue string `json:"queue"`
+	// River job state (available, running, retryable, scheduled, ...).
+	State string `json:"state"`
+	Jobs  int    `json:"jobs"`
 }
 
 // A new set of single-use recovery codes. They are never shown again.
@@ -1083,6 +1476,14 @@ type Run struct {
 	Manifest  *RunManifest `json:"manifest"`
 }
 
+// One event of runActivity: exactly one field is set.
+type RunActivity struct {
+	// The run changed (its state at delivery).
+	Run *Run `json:"run,omitempty"`
+	// New log lines (the last batch has done set).
+	Logs *RunLogBatch `json:"logs,omitempty"`
+}
+
 // The user who started a manual run.
 type RunActor struct {
 	UserID      uuid.UUID `json:"userId"`
@@ -1150,6 +1551,31 @@ type RunItem struct {
 	Warnings        []RunWarning `json:"warnings"`
 	// The objects of this item, one per destination.
 	Artifacts []Artifact `json:"artifacts"`
+	// The completeness evidence of a complete, verified dump (D-141, D-151):
+	// the source statistics taken for it. Null when none was recorded (failed
+	// or unverified dumps, statistics unavailable).
+	Stats *RunItemStats `json:"stats,omitempty"`
+}
+
+// The completeness evidence of one run item (backup_stats, D-141/D-151/D-153).
+// Bounded by what is stored: at most 10000 tables (tablesTruncated beyond
+// that) and 32 findings of 50 objects each.
+type RunItemStats struct {
+	Level       StatsLevel       `json:"level"`
+	Consistency StatsConsistency `json:"consistency"`
+	// Object counts by kind, ordered by kind.
+	Objects []StatsObjectCount `json:"objects"`
+	// Per-table row counts, ordered by name (empty for the globals).
+	Tables []TableStats `json:"tables"`
+	// The number of tables in the database (may exceed the listed tables).
+	TablesTotal int `json:"tablesTotal"`
+	// Not every table is listed (the statistics table limit).
+	TablesTruncated bool `json:"tablesTruncated"`
+	// Completeness warnings (privileges, non-transactional tables, timeouts, ...).
+	Warnings []StatsFinding `json:"warnings"`
+	// Informational findings that are not warnings.
+	Notices    []StatsFinding `json:"notices"`
+	RecordedAt time.Time      `json:"recordedAt"`
 }
 
 // An accepted runJobNow or startNextRunEarly.
@@ -1219,6 +1645,20 @@ type RunWarning struct {
 	Database *string `json:"database,omitempty"`
 	// The destination it concerns, if any.
 	DestinationID *uuid.UUID `json:"destinationId,omitempty"`
+}
+
+// The runner as seen through its Health RPC (mTLS).
+type RunnerHealth struct {
+	// The runner answered.
+	Up bool `json:"up"`
+	// The runner reports the Docker daemon reachable.
+	DockerOk bool `json:"dockerOk"`
+	// The runner build version (null when it did not answer).
+	Version *string `json:"version,omitempty"`
+	// Containers the runner is running now (null when it did not answer).
+	ActiveRuns *int `json:"activeRuns,omitempty"`
+	// The runner's limit of concurrent containers (null when it did not answer).
+	MaxConcurrentRuns *int `json:"maxConcurrentRuns,omitempty"`
 }
 
 type S3DestinationInput struct {
@@ -1314,6 +1754,18 @@ type SecondFactorReset struct {
 	RevokedSessions int `json:"revokedSessions"`
 }
 
+// One security.system alert kind.
+type SecurityAlertType struct {
+	// The kind (data.kind of the notification), e.g. ssrf_allowlist_widened.
+	Kind string `json:"kind"`
+	// Its fixed severity.
+	Severity NotificationSeverity `json:"severity"`
+	// What raises it.
+	Description string `json:"description"`
+	// How often it is sent, e.g. `every time` or `once a day`.
+	Repeat string `json:"repeat"`
+}
+
 // Public information about the running server. Never contains secrets.
 type ServerInfo struct {
 	// The bekup version.
@@ -1386,6 +1838,77 @@ type SftpDestinationSettings struct {
 	HostKey *SSHHostKey `json:"hostKey,omitempty"`
 }
 
+// An admin-managed e-mail list or webhook that receives the events of the jobs it is attached to (never security alerts).
+type SharedChannel struct {
+	ID   uuid.UUID         `json:"id"`
+	Name string            `json:"name"`
+	Type SharedChannelType `json:"type"`
+	// The addresses of an e-mail list (empty for webhooks).
+	Addresses []string `json:"addresses"`
+	// Scheme, host and port of a webhook URL (null for e-mail lists).
+	DisplayURL  *string                   `json:"displayUrl,omitempty"`
+	State       *NotificationChannelState `json:"state"`
+	Attachments []SharedChannelAttachment `json:"attachments"`
+	CreatedAt   time.Time                 `json:"createdAt"`
+	UpdatedAt   time.Time                 `json:"updatedAt"`
+}
+
+// A shared channel attached to a job with its event filter.
+type SharedChannelAttachment struct {
+	JobID   uuid.UUID `json:"jobId"`
+	JobName string    `json:"jobName"`
+	// Groups and events the channel receives; both empty: every non-security event of the job.
+	Groups []NotificationGroup `json:"groups"`
+	Events []string            `json:"events"`
+}
+
+// A shared channel with its new signing key (shown once).
+type SharedChannelWithKey struct {
+	Channel *SharedChannel `json:"channel"`
+	// The new HMAC signing key of a webhook (null for e-mail lists). Shown only now.
+	SigningKey *string `json:"signingKey,omitempty"`
+}
+
+// The SMTP settings (never the password).
+type SMTPSettings struct {
+	// False until an admin saved settings (the other fields are defaults then).
+	Configured bool `json:"configured"`
+	// False: bekup sends no e-mail.
+	Enabled bool     `json:"enabled"`
+	Host    string   `json:"host"`
+	Port    int      `json:"port"`
+	Mode    SMTPMode `json:"mode"`
+	// The AUTH username (null: no authentication).
+	Username *string `json:"username,omitempty"`
+	// True when a password is stored.
+	HasPassword bool    `json:"hasPassword"`
+	FromAddress string  `json:"fromAddress"`
+	FromName    *string `json:"fromName,omitempty"`
+	// PEM CA certificates that replace the system roots for this server (null: system roots).
+	CaBundlePem           *string `json:"caBundlePem,omitempty"`
+	ConnectTimeoutSeconds int     `json:"connectTimeoutSeconds"`
+	SendTimeoutSeconds    int     `json:"sendTimeoutSeconds"`
+	// True for AUTO and NONE: mail, metadata and the SMTP credentials may travel
+	// unencrypted (the UI shows a badge).
+	MayBeUnencrypted bool       `json:"mayBeUnencrypted"`
+	UpdatedAt        *time.Time `json:"updatedAt,omitempty"`
+}
+
+// The result of sendTestEmail.
+type SMTPTestResult struct {
+	Ok bool `json:"ok"`
+	// The failure code (null on success), e.g. tls_failed, auth_failed, not_allowed, unreachable.
+	Code *string `json:"code,omitempty"`
+	// A fixed, presentable description of the failure.
+	Message *string `json:"message,omitempty"`
+	// Extra information for admins (the blocked address, the SMTP reply code).
+	Detail *string `json:"detail,omitempty"`
+	// True when the SMTP session used TLS (as far as it got on failure).
+	Encrypted bool `json:"encrypted"`
+	// The negotiated TLS version, e.g. "TLS 1.3" (null without TLS).
+	TLSVersion *string `json:"tlsVersion,omitempty"`
+}
+
 // An SSH host key (public data).
 type SSHHostKey struct {
 	// Key type, e.g. ssh-ed25519.
@@ -1401,6 +1924,92 @@ type SSHHostKey struct {
 	// confirming: the pin is refused (CONFLICT) if the record changed since.
 	Host *string `json:"host,omitempty"`
 	Port *int    `json:"port,omitempty"`
+}
+
+// The SSRF allowlist.
+type SsrfAllowlist struct {
+	// CIDRs managed here (canonical form, e.g. 10.20.0.0/16), whatever their scopes (legacy: use cidrEntries).
+	Cidrs []string `json:"cidrs"`
+	// Host names managed here (canonical form), whatever their scopes (legacy: use hostEntries).
+	Hosts []string `json:"hosts"`
+	// CIDRs managed here with their scopes.
+	CidrEntries []SsrfAllowlistEntry `json:"cidrEntries"`
+	// Host names managed here (exact names or `*.suffix`) with their scopes.
+	HostEntries []SsrfAllowlistEntry `json:"hostEntries"`
+	// The scopes the bootstrap entries of bekup.toml apply to (every scope except PERSONAL_WEBHOOKS).
+	ConfigScopes []SsrfScope `json:"configScopes"`
+	// The scopes of an entry saved without scopes.
+	DefaultScopes []SsrfScope `json:"defaultScopes"`
+	// True when an admin entry carries PERSONAL_WEBHOOKS: users' personal
+	// webhooks may reach private targets (a weakened default; show it).
+	PersonalWebhooksWidened bool `json:"personalWebhooksWidened"`
+	// The bootstrap CIDRs of `[netguard] allow_cidrs` in bekup.toml (read-only).
+	ConfigCidrs []string `json:"configCidrs"`
+	// The bootstrap host names of `[netguard] allow_hosts` in bekup.toml (read-only).
+	ConfigHosts []string `json:"configHosts"`
+	// True in dev mode only: loopback ranges may be allowlisted.
+	LoopbackAllowed bool `json:"loopbackAllowed"`
+	// Stored entries this server does not apply (for example loopback after
+	// leaving dev mode); saving the list drops them.
+	IgnoredEntries int `json:"ignoredEntries"`
+	// The most entries per list (256).
+	MaxEntries int `json:"maxEntries"`
+	// When the list was last changed (null: never).
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	// Who changed it last.
+	UpdatedBy *uuid.UUID `json:"updatedBy,omitempty"`
+}
+
+// One admin allowlist entry.
+type SsrfAllowlistEntry struct {
+	// The CIDR or host name (canonical form).
+	Value string `json:"value"`
+	// The uses it widens (at least one).
+	Scopes []SsrfScope `json:"scopes"`
+}
+
+// One admin allowlist entry to store.
+type SsrfAllowlistEntryInput struct {
+	// A CIDR (e.g. 10.20.0.0/16) or a host name (exact or `*.suffix`).
+	Value string `json:"value"`
+	// The uses it widens (at least one). Null: the scopes stored for the same
+	// value, or every use except PERSONAL_WEBHOOKS for a new value.
+	Scopes []SsrfScope `json:"scopes,omitempty"`
+}
+
+type SsrfAllowlistInput struct {
+	// The complete new list of CIDRs as plain values (each keeps its stored
+	// scopes; new values get the default scopes). Give either cidrs or
+	// cidrEntries.
+	Cidrs []string `json:"cidrs,omitempty"`
+	// The complete new list of host names as plain values. Give either hosts
+	// or hostEntries.
+	Hosts []string `json:"hosts,omitempty"`
+	// The complete new list of CIDRs with their scopes (replaces the stored one).
+	CidrEntries []SsrfAllowlistEntryInput `json:"cidrEntries,omitempty"`
+	// The complete new list of host names with their scopes (replaces the stored one).
+	HostEntries []SsrfAllowlistEntryInput `json:"hostEntries,omitempty"`
+	// The `updatedAt` of the list you edited (null when none was stored):
+	// CONFLICT when someone changed it in the meantime.
+	ExpectedUpdatedAt *time.Time `json:"expectedUpdatedAt,omitempty"`
+}
+
+// A completeness warning or notice of the statistics (codes and object names only).
+type StatsFinding struct {
+	Code string `json:"code"`
+	// The number of affected objects.
+	Count float64 `json:"count"`
+	// Some affected object names (at most 50).
+	Objects []string `json:"objects"`
+	// More objects are affected than listed.
+	Truncated bool `json:"truncated"`
+}
+
+// The number of objects of one kind (e.g. tables, views, roles).
+type StatsObjectCount struct {
+	// The object kind: schemas, tables, views, materialized_views, sequences, functions, procedures, triggers, extensions, events, roles or tablespaces.
+	Kind  string  `json:"kind"`
+	Count float64 `json:"count"`
 }
 
 // How the caller can step up (beginStepUp).
@@ -1422,6 +2031,42 @@ type StepUpResult struct {
 }
 
 type Subscription struct {
+}
+
+// Operational health of this bekup instance (for the dashboard).
+type SystemHealth struct {
+	// When the snapshot was taken.
+	CheckedAt time.Time     `json:"checkedAt"`
+	Runner    *RunnerHealth `json:"runner"`
+	// Sorted by component; unreadable files are left out.
+	Certificates []CertificateExpiry `json:"certificates"`
+	// Null when the app database could not be read.
+	Queue []QueueDepth `json:"queue,omitempty"`
+	// Earliest expiry of a pinned target-database certificate (null: none).
+	EarliestPinNotAfter *time.Time `json:"earliestPinNotAfter,omitempty"`
+	// The stalest latest successful run across enabled jobs (null: none).
+	OldestLastSuccess *time.Time `json:"oldestLastSuccess,omitempty"`
+	// scheduler.enabled on this instance.
+	SchedulerEnabled bool `json:"schedulerEnabled"`
+	// This instance's last completed scheduler tick (null: none yet or off).
+	LastSchedulerTick *time.Time `json:"lastSchedulerTick,omitempty"`
+}
+
+// The row count of one table (names and counts only, never data).
+type TableStats struct {
+	// Schema-qualified on PostgreSQL (schema.table); the table name on MySQL/MariaDB.
+	Name string `json:"name"`
+	// Null when the count is UNKNOWN.
+	Rows  *float64     `json:"rows,omitempty"`
+	Count RowCountKind `json:"count"`
+	// count is EXACT.
+	Exact bool `json:"exact"`
+	// count is ESTIMATE.
+	Estimate bool `json:"estimate"`
+	// count is UNKNOWN.
+	Unknown bool `json:"unknown"`
+	// Taken outside the dump's snapshot (MySQL/MariaDB).
+	Approximate bool `json:"approximate"`
 }
 
 // The privilege verdict on a connection's role (D-068).
@@ -1632,6 +2277,38 @@ type UpdateJobInput struct {
 	DestinationIds []uuid.UUID `json:"destinationIds,omitempty"`
 }
 
+// Changes a shared channel; omitted fields stay.
+type UpdateSharedChannelInput struct {
+	Name      *string  `json:"name,omitempty"`
+	Addresses []string `json:"addresses,omitempty"`
+	// A new webhook URL (the signing key stays; rotate it separately).
+	URL *string `json:"url,omitempty"`
+}
+
+// Replaces the SMTP settings. `password` omitted keeps the stored password;
+// `clearPassword` removes it. When host, port or username change, the mode
+// is weakened (STARTTLS or IMPLICIT_TLS to AUTO or NONE) or the CA bundle
+// changes, a stored password must be entered again in the same update
+// (VALIDATION on `password` otherwise; it is never sent to a new or less
+// protected endpoint). The host must pass the SSRF guard (private relays
+// must be allowlisted for the SMTP scope).
+type UpdateSMTPSettingsInput struct {
+	Enabled       bool     `json:"enabled"`
+	Host          string   `json:"host"`
+	Port          int      `json:"port"`
+	Mode          SMTPMode `json:"mode"`
+	Username      *string  `json:"username,omitempty"`
+	Password      *string  `json:"password,omitempty"`
+	ClearPassword *bool    `json:"clearPassword,omitempty"`
+	FromAddress   string   `json:"fromAddress"`
+	FromName      *string  `json:"fromName,omitempty"`
+	CaBundlePem   *string  `json:"caBundlePem,omitempty"`
+	// 1..60 (default 10).
+	ConnectTimeoutSeconds *int `json:"connectTimeoutSeconds,omitempty"`
+	// 5..300 (default 60): bounds the whole SMTP session.
+	SendTimeoutSeconds *int `json:"sendTimeoutSeconds,omitempty"`
+}
+
 // Fields to change; unset fields stay unchanged.
 type UpdateUserInput struct {
 	DisplayName *string `json:"displayName,omitempty"`
@@ -1645,6 +2322,9 @@ type User struct {
 	Email       string    `json:"email"`
 	DisplayName string    `json:"displayName"`
 	Role        Role      `json:"role"`
+	// True when the account's e-mail address is verified (needed for e-mail notifications).
+	EmailVerified   bool       `json:"emailVerified"`
+	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
 	// True when the 2FA policy requires a second factor for this account's role.
 	TwoFactorRequired bool `json:"twoFactorRequired"`
 	// When 2FA is required and the account has no second factor: the end of
@@ -1665,12 +2345,41 @@ type User struct {
 	UpdatedAt                  time.Time  `json:"updatedAt"`
 	// Set when the account was deleted (only visible to admins listing deleted accounts).
 	DeletedAt *time.Time `json:"deletedAt,omitempty"`
+	// The most recent activity of any of the account's sessions; null when
+	// none is on record. Admins only (FORBIDDEN otherwise); loaded for a whole
+	// page of users at once.
+	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
+	// True when the account has a second factor (a TOTP authenticator or a
+	// passkey). Admins and the account itself only (FORBIDDEN otherwise);
+	// loaded for a whole page of users at once.
+	TwoFactorEnrolled bool `json:"twoFactorEnrolled"`
 }
 
 // A page of accounts.
 type UserConnection struct {
 	Edges    []UserEdge `json:"edges"`
 	PageInfo *PageInfo  `json:"pageInfo"`
+}
+
+// A page of the user directory.
+type UserDirectoryConnection struct {
+	Edges    []UserDirectoryEdge `json:"edges"`
+	PageInfo *PageInfo           `json:"pageInfo"`
+}
+
+type UserDirectoryEdge struct {
+	Cursor string              `json:"cursor"`
+	Node   *UserDirectoryEntry `json:"node"`
+}
+
+// An account in the user directory: only what picking a job owner needs
+// (only role USER gains owner rights, D-067).
+type UserDirectoryEntry struct {
+	ID          uuid.UUID `json:"id"`
+	DisplayName string    `json:"displayName"`
+	Email       string    `json:"email"`
+	Role        Role      `json:"role"`
+	Disabled    bool      `json:"disabled"`
 }
 
 type UserEdge struct {
@@ -1878,6 +2587,62 @@ func (e AuditActorKind) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// The kind of bekup process.
+type BekupProcessKind string
+
+const (
+	BekupProcessKindServe  BekupProcessKind = "SERVE"
+	BekupProcessKindWorker BekupProcessKind = "WORKER"
+)
+
+var AllBekupProcessKind = []BekupProcessKind{
+	BekupProcessKindServe,
+	BekupProcessKindWorker,
+}
+
+func (e BekupProcessKind) IsValid() bool {
+	switch e {
+	case BekupProcessKindServe, BekupProcessKindWorker:
+		return true
+	}
+	return false
+}
+
+func (e BekupProcessKind) String() string {
+	return string(e)
+}
+
+func (e *BekupProcessKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = BekupProcessKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid BekupProcessKind", str)
+	}
+	return nil
+}
+
+func (e BekupProcessKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *BekupProcessKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e BekupProcessKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // What a calendar event shows.
 type CalendarEventKind string
 
@@ -1938,6 +2703,200 @@ func (e *CalendarEventKind) UnmarshalJSON(b []byte) error {
 }
 
 func (e CalendarEventKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Why a reload was rejected or failed. (An outcome that could not be
+// recorded, database unavailable, is never stored: it is only in the
+// process's log and metrics.)
+type ConfigReloadErrorKind string
+
+const (
+	// The file is missing, unreadable or fails the ownership/mode checks.
+	ConfigReloadErrorKindFile ConfigReloadErrorKind = "FILE"
+	// The file is not valid TOML.
+	ConfigReloadErrorKindSyntax ConfigReloadErrorKind = "SYNTAX"
+	// A key is unknown or a value is invalid (see errorKeys).
+	ConfigReloadErrorKindInvalid ConfigReloadErrorKind = "INVALID"
+	// A component refused the new values.
+	ConfigReloadErrorKindApply ConfigReloadErrorKind = "APPLY"
+)
+
+var AllConfigReloadErrorKind = []ConfigReloadErrorKind{
+	ConfigReloadErrorKindFile,
+	ConfigReloadErrorKindSyntax,
+	ConfigReloadErrorKindInvalid,
+	ConfigReloadErrorKindApply,
+}
+
+func (e ConfigReloadErrorKind) IsValid() bool {
+	switch e {
+	case ConfigReloadErrorKindFile, ConfigReloadErrorKindSyntax, ConfigReloadErrorKindInvalid, ConfigReloadErrorKindApply:
+		return true
+	}
+	return false
+}
+
+func (e ConfigReloadErrorKind) String() string {
+	return string(e)
+}
+
+func (e *ConfigReloadErrorKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConfigReloadErrorKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConfigReloadErrorKind", str)
+	}
+	return nil
+}
+
+func (e ConfigReloadErrorKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConfigReloadErrorKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConfigReloadErrorKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// The outcome of a reload in one process.
+type ConfigReloadStatus string
+
+const (
+	// The process started with this configuration (no reload yet).
+	ConfigReloadStatusLoaded ConfigReloadStatus = "LOADED"
+	// Live keys changed and were applied.
+	ConfigReloadStatusApplied ConfigReloadStatus = "APPLIED"
+	// The file matches the running configuration.
+	ConfigReloadStatusUnchanged ConfigReloadStatus = "UNCHANGED"
+	// Keys changed that need a restart (live keys, if any, were applied).
+	ConfigReloadStatusRestartRequired ConfigReloadStatus = "RESTART_REQUIRED"
+	// The file could not be read or is invalid; nothing changed.
+	ConfigReloadStatusRejected ConfigReloadStatus = "REJECTED"
+	// A change could not be applied or recorded; nothing changed.
+	ConfigReloadStatusFailed ConfigReloadStatus = "FAILED"
+)
+
+var AllConfigReloadStatus = []ConfigReloadStatus{
+	ConfigReloadStatusLoaded,
+	ConfigReloadStatusApplied,
+	ConfigReloadStatusUnchanged,
+	ConfigReloadStatusRestartRequired,
+	ConfigReloadStatusRejected,
+	ConfigReloadStatusFailed,
+}
+
+func (e ConfigReloadStatus) IsValid() bool {
+	switch e {
+	case ConfigReloadStatusLoaded, ConfigReloadStatusApplied, ConfigReloadStatusUnchanged, ConfigReloadStatusRestartRequired, ConfigReloadStatusRejected, ConfigReloadStatusFailed:
+		return true
+	}
+	return false
+}
+
+func (e ConfigReloadStatus) String() string {
+	return string(e)
+}
+
+func (e *ConfigReloadStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConfigReloadStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConfigReloadStatus", str)
+	}
+	return nil
+}
+
+func (e ConfigReloadStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConfigReloadStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConfigReloadStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What started a reload.
+type ConfigReloadTrigger string
+
+const (
+	// An admin's reloadConfig (every process).
+	ConfigReloadTriggerUI ConfigReloadTrigger = "UI"
+	// SIGHUP to one process.
+	ConfigReloadTriggerSignal ConfigReloadTrigger = "SIGNAL"
+)
+
+var AllConfigReloadTrigger = []ConfigReloadTrigger{
+	ConfigReloadTriggerUI,
+	ConfigReloadTriggerSignal,
+}
+
+func (e ConfigReloadTrigger) IsValid() bool {
+	switch e {
+	case ConfigReloadTriggerUI, ConfigReloadTriggerSignal:
+		return true
+	}
+	return false
+}
+
+func (e ConfigReloadTrigger) String() string {
+	return string(e)
+}
+
+func (e *ConfigReloadTrigger) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ConfigReloadTrigger(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ConfigReloadTrigger", str)
+	}
+	return nil
+}
+
+func (e ConfigReloadTrigger) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ConfigReloadTrigger) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ConfigReloadTrigger) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -2470,6 +3429,366 @@ func (e JobVerification) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Who can receive an event before preferences apply.
+type NotificationAudience string
+
+const (
+	// Everyone who may see the job (admins, maintainers, the job's owners).
+	NotificationAudienceJob NotificationAudience = "JOB"
+	// Admins and maintainers.
+	NotificationAudienceStaff NotificationAudience = "STAFF"
+	// Admins only.
+	NotificationAudienceAdmins NotificationAudience = "ADMINS"
+	// Only the account the event is about.
+	NotificationAudienceOwnAccount NotificationAudience = "OWN_ACCOUNT"
+)
+
+var AllNotificationAudience = []NotificationAudience{
+	NotificationAudienceJob,
+	NotificationAudienceStaff,
+	NotificationAudienceAdmins,
+	NotificationAudienceOwnAccount,
+}
+
+func (e NotificationAudience) IsValid() bool {
+	switch e {
+	case NotificationAudienceJob, NotificationAudienceStaff, NotificationAudienceAdmins, NotificationAudienceOwnAccount:
+		return true
+	}
+	return false
+}
+
+func (e NotificationAudience) String() string {
+	return string(e)
+}
+
+func (e *NotificationAudience) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationAudience(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationAudience", str)
+	}
+	return nil
+}
+
+func (e NotificationAudience) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationAudience) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationAudience) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A channel column of the preference matrix (push follows in phase 2).
+type NotificationChannelType string
+
+const (
+	NotificationChannelTypeInbox   NotificationChannelType = "INBOX"
+	NotificationChannelTypeEmail   NotificationChannelType = "EMAIL"
+	NotificationChannelTypeWebhook NotificationChannelType = "WEBHOOK"
+)
+
+var AllNotificationChannelType = []NotificationChannelType{
+	NotificationChannelTypeInbox,
+	NotificationChannelTypeEmail,
+	NotificationChannelTypeWebhook,
+}
+
+func (e NotificationChannelType) IsValid() bool {
+	switch e {
+	case NotificationChannelTypeInbox, NotificationChannelTypeEmail, NotificationChannelTypeWebhook:
+		return true
+	}
+	return false
+}
+
+func (e NotificationChannelType) String() string {
+	return string(e)
+}
+
+func (e *NotificationChannelType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationChannelType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationChannelType", str)
+	}
+	return nil
+}
+
+func (e NotificationChannelType) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationChannelType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationChannelType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A group of the event catalog (D-161).
+type NotificationGroup string
+
+const (
+	NotificationGroupBackup    NotificationGroup = "BACKUP"
+	NotificationGroupRestore   NotificationGroup = "RESTORE"
+	NotificationGroupRetention NotificationGroup = "RETENTION"
+	NotificationGroupConfig    NotificationGroup = "CONFIG"
+	NotificationGroupSecurity  NotificationGroup = "SECURITY"
+)
+
+var AllNotificationGroup = []NotificationGroup{
+	NotificationGroupBackup,
+	NotificationGroupRestore,
+	NotificationGroupRetention,
+	NotificationGroupConfig,
+	NotificationGroupSecurity,
+}
+
+func (e NotificationGroup) IsValid() bool {
+	switch e {
+	case NotificationGroupBackup, NotificationGroupRestore, NotificationGroupRetention, NotificationGroupConfig, NotificationGroupSecurity:
+		return true
+	}
+	return false
+}
+
+func (e NotificationGroup) String() string {
+	return string(e)
+}
+
+func (e *NotificationGroup) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationGroup(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationGroup", str)
+	}
+	return nil
+}
+
+func (e NotificationGroup) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationGroup) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationGroup) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Where an effective preference comes from.
+type NotificationPreferenceSource string
+
+const (
+	// The D-161 default (inbox for every event, e-mail for problems).
+	NotificationPreferenceSourceDefault NotificationPreferenceSource = "DEFAULT"
+	// Your own per-event setting.
+	NotificationPreferenceSourceOverride NotificationPreferenceSource = "OVERRIDE"
+	// Mandatory (security alerts always reach the inbox and e-mail); locked.
+	NotificationPreferenceSourceMandatory NotificationPreferenceSource = "MANDATORY"
+)
+
+var AllNotificationPreferenceSource = []NotificationPreferenceSource{
+	NotificationPreferenceSourceDefault,
+	NotificationPreferenceSourceOverride,
+	NotificationPreferenceSourceMandatory,
+}
+
+func (e NotificationPreferenceSource) IsValid() bool {
+	switch e {
+	case NotificationPreferenceSourceDefault, NotificationPreferenceSourceOverride, NotificationPreferenceSourceMandatory:
+		return true
+	}
+	return false
+}
+
+func (e NotificationPreferenceSource) String() string {
+	return string(e)
+}
+
+func (e *NotificationPreferenceSource) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationPreferenceSource(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationPreferenceSource", str)
+	}
+	return nil
+}
+
+func (e NotificationPreferenceSource) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationPreferenceSource) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationPreferenceSource) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type NotificationPriority string
+
+const (
+	NotificationPriorityNormal NotificationPriority = "NORMAL"
+	// Collapsed per job within a short window (*.started events).
+	NotificationPriorityLow NotificationPriority = "LOW"
+)
+
+var AllNotificationPriority = []NotificationPriority{
+	NotificationPriorityNormal,
+	NotificationPriorityLow,
+}
+
+func (e NotificationPriority) IsValid() bool {
+	switch e {
+	case NotificationPriorityNormal, NotificationPriorityLow:
+		return true
+	}
+	return false
+}
+
+func (e NotificationPriority) String() string {
+	return string(e)
+}
+
+func (e *NotificationPriority) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationPriority(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationPriority", str)
+	}
+	return nil
+}
+
+func (e NotificationPriority) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationPriority) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationPriority) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type NotificationSeverity string
+
+const (
+	NotificationSeverityInfo     NotificationSeverity = "INFO"
+	NotificationSeverityWarning  NotificationSeverity = "WARNING"
+	NotificationSeverityError    NotificationSeverity = "ERROR"
+	NotificationSeverityCritical NotificationSeverity = "CRITICAL"
+)
+
+var AllNotificationSeverity = []NotificationSeverity{
+	NotificationSeverityInfo,
+	NotificationSeverityWarning,
+	NotificationSeverityError,
+	NotificationSeverityCritical,
+}
+
+func (e NotificationSeverity) IsValid() bool {
+	switch e {
+	case NotificationSeverityInfo, NotificationSeverityWarning, NotificationSeverityError, NotificationSeverityCritical:
+		return true
+	}
+	return false
+}
+
+func (e NotificationSeverity) String() string {
+	return string(e)
+}
+
+func (e *NotificationSeverity) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = NotificationSeverity(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid NotificationSeverity", str)
+	}
+	return nil
+}
+
+func (e NotificationSeverity) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *NotificationSeverity) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e NotificationSeverity) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // S3 Object Lock retention modes.
 type ObjectLockMode string
 
@@ -2709,6 +4028,65 @@ func (e *Role) UnmarshalJSON(b []byte) error {
 }
 
 func (e Role) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How a table's row count was obtained.
+type RowCountKind string
+
+const (
+	RowCountKindExact    RowCountKind = "EXACT"
+	RowCountKindEstimate RowCountKind = "ESTIMATE"
+	// Not counted (time limit, budget or failure); rows is null.
+	RowCountKindUnknown RowCountKind = "UNKNOWN"
+)
+
+var AllRowCountKind = []RowCountKind{
+	RowCountKindExact,
+	RowCountKindEstimate,
+	RowCountKindUnknown,
+}
+
+func (e RowCountKind) IsValid() bool {
+	switch e {
+	case RowCountKindExact, RowCountKindEstimate, RowCountKindUnknown:
+		return true
+	}
+	return false
+}
+
+func (e RowCountKind) String() string {
+	return string(e)
+}
+
+func (e *RowCountKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RowCountKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RowCountKind", str)
+	}
+	return nil
+}
+
+func (e RowCountKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RowCountKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RowCountKind) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -3497,6 +4875,309 @@ func (e *SftpAuthMethod) UnmarshalJSON(b []byte) error {
 }
 
 func (e SftpAuthMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SharedChannelType string
+
+const (
+	SharedChannelTypeEmailList SharedChannelType = "EMAIL_LIST"
+	SharedChannelTypeWebhook   SharedChannelType = "WEBHOOK"
+)
+
+var AllSharedChannelType = []SharedChannelType{
+	SharedChannelTypeEmailList,
+	SharedChannelTypeWebhook,
+}
+
+func (e SharedChannelType) IsValid() bool {
+	switch e {
+	case SharedChannelTypeEmailList, SharedChannelTypeWebhook:
+		return true
+	}
+	return false
+}
+
+func (e SharedChannelType) String() string {
+	return string(e)
+}
+
+func (e *SharedChannelType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SharedChannelType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SharedChannelType", str)
+	}
+	return nil
+}
+
+func (e SharedChannelType) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SharedChannelType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SharedChannelType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Transport security of the SMTP connection (D-180).
+type SMTPMode string
+
+const (
+	// The default: STARTTLS when the server offers it, otherwise unencrypted
+	// (AUTH included). A failed STARTTLS handshake is an error, not a fallback.
+	// An attacker on the path can suppress the STARTTLS offer.
+	SMTPModeAuto SMTPMode = "AUTO"
+	// Plain connection upgraded with STARTTLS (refused when the server does not offer it). Usually port 587.
+	SMTPModeStarttls SMTPMode = "STARTTLS"
+	// TLS from the first byte (SMTPS). Usually port 465.
+	SMTPModeImplicitTLS SMTPMode = "IMPLICIT_TLS"
+	// Never encrypt, even when the server offers STARTTLS: mail and AUTH travel in clear text.
+	SMTPModeNone SMTPMode = "NONE"
+)
+
+var AllSMTPMode = []SMTPMode{
+	SMTPModeAuto,
+	SMTPModeStarttls,
+	SMTPModeImplicitTLS,
+	SMTPModeNone,
+}
+
+func (e SMTPMode) IsValid() bool {
+	switch e {
+	case SMTPModeAuto, SMTPModeStarttls, SMTPModeImplicitTLS, SMTPModeNone:
+		return true
+	}
+	return false
+}
+
+func (e SMTPMode) String() string {
+	return string(e)
+}
+
+func (e *SMTPMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SMTPMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SmtpMode", str)
+	}
+	return nil
+}
+
+func (e SMTPMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SMTPMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SMTPMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// An outbound use an allowlist entry widens.
+type SsrfScope string
+
+const (
+	// S3 and SFTP destinations.
+	SsrfScopeDestinations SsrfScope = "DESTINATIONS"
+	// The SMTP server.
+	SsrfScopeSMTP SsrfScope = "SMTP"
+	// Shared notification webhooks (configured by admins).
+	SsrfScopeSharedWebhooks SsrfScope = "SHARED_WEBHOOKS"
+	// Users' personal webhooks. Any user can enter a webhook URL, so an entry
+	// with this scope lets every user make bekup send requests to that private
+	// target. Never granted by default.
+	SsrfScopePersonalWebhooks SsrfScope = "PERSONAL_WEBHOOKS"
+)
+
+var AllSsrfScope = []SsrfScope{
+	SsrfScopeDestinations,
+	SsrfScopeSMTP,
+	SsrfScopeSharedWebhooks,
+	SsrfScopePersonalWebhooks,
+}
+
+func (e SsrfScope) IsValid() bool {
+	switch e {
+	case SsrfScopeDestinations, SsrfScopeSMTP, SsrfScopeSharedWebhooks, SsrfScopePersonalWebhooks:
+		return true
+	}
+	return false
+}
+
+func (e SsrfScope) String() string {
+	return string(e)
+}
+
+func (e *SsrfScope) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SsrfScope(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SsrfScope", str)
+	}
+	return nil
+}
+
+func (e SsrfScope) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SsrfScope) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SsrfScope) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// Whether the statistics describe exactly what was dumped.
+type StatsConsistency string
+
+const (
+	// PostgreSQL: taken inside the snapshot the dump used; exact counts match the dump.
+	StatsConsistencySnapshot StatsConsistency = "SNAPSHOT"
+	// Taken right before the dump (MySQL/MariaDB, globals); rows may have changed since.
+	StatsConsistencyApproximate StatsConsistency = "APPROXIMATE"
+)
+
+var AllStatsConsistency = []StatsConsistency{
+	StatsConsistencySnapshot,
+	StatsConsistencyApproximate,
+}
+
+func (e StatsConsistency) IsValid() bool {
+	switch e {
+	case StatsConsistencySnapshot, StatsConsistencyApproximate:
+		return true
+	}
+	return false
+}
+
+func (e StatsConsistency) String() string {
+	return string(e)
+}
+
+func (e *StatsConsistency) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = StatsConsistency(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid StatsConsistency", str)
+	}
+	return nil
+}
+
+func (e StatsConsistency) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *StatsConsistency) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e StatsConsistency) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How the statistics of a dump were taken (D-151).
+type StatsLevel string
+
+const (
+	// Planner estimates (PostgreSQL) or information_schema (MySQL/MariaDB).
+	StatsLevelStandard StatsLevel = "STANDARD"
+	// Exact row counts where the engine allows them (PostgreSQL).
+	StatsLevelDeep StatsLevel = "DEEP"
+)
+
+var AllStatsLevel = []StatsLevel{
+	StatsLevelStandard,
+	StatsLevelDeep,
+}
+
+func (e StatsLevel) IsValid() bool {
+	switch e {
+	case StatsLevelStandard, StatsLevelDeep:
+		return true
+	}
+	return false
+}
+
+func (e StatsLevel) String() string {
+	return string(e)
+}
+
+func (e *StatsLevel) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = StatsLevel(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid StatsLevel", str)
+	}
+	return nil
+}
+
+func (e StatsLevel) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *StatsLevel) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e StatsLevel) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

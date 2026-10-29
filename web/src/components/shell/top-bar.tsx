@@ -1,5 +1,6 @@
-import { Bell, LogOut, Menu, UserRound } from "lucide-react";
+import { LogOut, Menu, UserRound } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 
 import { Wordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -19,19 +20,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { SessionUser } from "@/lib/session";
+import type { SessionUser } from "@/features/auth/session-model";
+import { useSignOut } from "@/features/auth/use-sign-out";
+import { NotificationBell } from "@/features/notifications/bell";
+import { messages } from "@/lib/messages";
 
 import { SidebarNav } from "./sidebar";
-
-const ROLE_LABEL = { admin: "Admin", maintainer: "Maintainer", owner: "Backup owner" } as const;
 
 function MobileNav({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="lg:hidden" aria-label="Open navigation">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="lg:hidden"
+          aria-label={messages.shell.openNavigation}
+        >
           <Menu aria-hidden="true" />
         </Button>
       </DialogTrigger>
@@ -41,7 +47,7 @@ function MobileNav({ user }: { user: SessionUser }) {
             <Wordmark />
           </div>
         </DialogTitle>
-        <DialogDescription className="sr-only">Main navigation</DialogDescription>
+        <DialogDescription className="sr-only">{messages.shell.mainNavigation}</DialogDescription>
         <SidebarNav
           role={user.role}
           onNavigate={() => {
@@ -53,47 +59,52 @@ function MobileNav({ user }: { user: SessionUser }) {
   );
 }
 
-/** Placeholder bell: the live inbox and unread badge arrive in task 6.10. */
-function NotificationBell() {
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Notifications" className="relative">
-          <Bell aria-hidden="true" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Notifications</TooltipContent>
-    </Tooltip>
+    letters
+      .map((p) => p?.charAt(0) ?? "")
+      .join("")
+      .toUpperCase() || "?"
   );
 }
 
 function UserMenu({ user }: { user: SessionUser }) {
+  const signOut = useSignOut();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-8 gap-2 px-2" aria-label="Account menu">
+        <Button variant="ghost" className="h-8 gap-2 px-2" aria-label={messages.shell.accountMenu}>
           <span
             aria-hidden="true"
             className="inline-flex size-6 items-center justify-center rounded-sm bg-primary font-mono text-2xs font-semibold text-primary-foreground"
           >
-            {user.displayName.slice(0, 1)}
+            {initials(user.displayName)}
           </span>
           <span className="hidden text-[0.8125rem] font-medium sm:inline">{user.displayName}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           <span className="font-medium">{user.displayName}</span>
-          <span className="font-mono text-xs font-normal text-muted-foreground">
-            {user.username} · {ROLE_LABEL[user.role]}
+          <span className="truncate font-mono text-xs font-normal text-muted-foreground">
+            {user.email}
           </span>
+          <span className="eyebrow mt-1">{messages.roles[user.role]}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
-          <UserRound aria-hidden="true" /> Profile and security
+        <DropdownMenuItem asChild>
+          <Link to="/profile">
+            <UserRound aria-hidden="true" /> {messages.shell.profile}
+          </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
-          <LogOut aria-hidden="true" /> Sign out
+        <DropdownMenuItem
+          onSelect={() => {
+            void signOut();
+          }}
+        >
+          <LogOut aria-hidden="true" /> {messages.common.signOut}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

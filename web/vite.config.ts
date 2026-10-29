@@ -8,6 +8,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
 import { cspStrictStyles } from "./vite-plugins/csp-strict-styles.ts";
+import { graphqlDocuments } from "./vite-plugins/graphql-documents.ts";
 
 const src = fileURLToPath(new URL("./src", import.meta.url));
 const styleSingletonShim = fileURLToPath(
@@ -44,7 +45,7 @@ function keepGitkeep(): Plugin {
 const backend = process.env.BEKUP_DEV_BACKEND ?? "http://localhost:8080";
 
 export default defineConfig({
-  plugins: [cspStrictStyles(), react(), tailwindcss(), keepGitkeep()],
+  plugins: [cspStrictStyles(), graphqlDocuments(), react(), tailwindcss(), keepGitkeep()],
   resolve: {
     alias: [
       { find: /^@\//, replacement: `${src}/` },
@@ -109,7 +110,14 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: true,
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "vite-plugins/**/*.test.ts"],
     restoreMocks: true,
+    // Stability under parallel load (e.g. `just test` running Go and web
+    // tests at once): page tests render the whole app in jsdom, so give
+    // them generous budgets and leave CPU for the rest of the machine.
+    // findBy*/waitFor use the asyncUtilTimeout set in src/test/setup.ts.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
+    maxWorkers: "50%",
   },
 });

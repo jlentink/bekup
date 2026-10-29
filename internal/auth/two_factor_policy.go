@@ -155,7 +155,8 @@ type TwoFactorPolicyNotifier interface {
 	TwoFactorPolicyWeakened(ctx context.Context, ev TwoFactorPolicyEvent)
 }
 
-// NopTwoFactorPolicyNotifier ignores every event (until task 5.5).
+// NopTwoFactorPolicyNotifier ignores every event (the alert comes from
+// the audit entry, task 5.5).
 type NopTwoFactorPolicyNotifier struct{}
 
 // TwoFactorPolicyWeakened does nothing.

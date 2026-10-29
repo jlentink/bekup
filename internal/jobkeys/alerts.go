@@ -11,8 +11,9 @@ import (
 // AlertKind names a security event of job encryption.
 type AlertKind string
 
-// Security events. Task 5.5 delivers them as security alerts to admins;
-// until then the default AlertFunc logs them.
+// Security events. Each one is audited; the audit observer
+// (notify.ObserveAudit, task 5.5) delivers it as a security.system alert to
+// the admins. The default AlertFunc adds a WARN log line.
 const (
 	// AlertEncryptionOptOut: an admin turned a job's encryption off.
 	AlertEncryptionOptOut AlertKind = "job_encryption_opt_out"

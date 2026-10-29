@@ -2,7 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
-import { THEME_STORAGE_KEY, ThemeProvider } from "@/lib/theme";
+import { ThemeProvider } from "@/lib/theme";
+import { THEME_STORAGE_KEY } from "@/lib/theme-model";
 import { mockMatchMedia } from "@/test/match-media";
 
 import { ThemeToggle } from "./theme-toggle";

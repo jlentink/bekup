@@ -21,6 +21,18 @@ extend type User {
   updatedAt: Time!
   "Set when the account was deleted (only visible to admins listing deleted accounts)."
   deletedAt: Time
+  """
+  The most recent activity of any of the account's sessions; null when
+  none is on record. Admins only (FORBIDDEN otherwise); loaded for a whole
+  page of users at once.
+  """
+  lastSeenAt: Time
+  """
+  True when the account has a second factor (a TOTP authenticator or a
+  passkey). Admins and the account itself only (FORBIDDEN otherwise);
+  loaded for a whole page of users at once.
+  """
+  twoFactorEnrolled: Boolean!
 }
 
 extend type LoginResult {
@@ -40,6 +52,15 @@ extend type Query {
 
   "One account (also a deleted one); null when it does not exist."
   user(id: UUID!): User @hasRole(roles: [ADMIN])
+
+  """
+  Minimal facts of the accounts that are not deleted, for picking job
+  owners (admins and maintainers; D-106, D-184). Ordered by e-mail address;
+  `search` is a case-insensitive substring of the e-mail address or display
+  name (at most 200 characters); `first` is 1..200 (default 50); `after` is
+  the `endCursor` of the previous page.
+  """
+  userDirectory(search: String, first: Int, after: String): UserDirectoryConnection! @hasRole(roles: [ADMIN, MAINTAINER])
 
   "The active sessions of an account, most recently used first."
   userSessions(userId: UUID!): [Session!]! @hasRole(roles: [ADMIN])
@@ -140,6 +161,29 @@ type UserConnection {
 type UserEdge {
   cursor: String!
   node: User!
+}
+
+"""
+An account in the user directory: only what picking a job owner needs
+(only role USER gains owner rights, D-067).
+"""
+type UserDirectoryEntry {
+  id: UUID!
+  displayName: String!
+  email: String!
+  role: Role!
+  disabled: Boolean!
+}
+
+"A page of the user directory."
+type UserDirectoryConnection {
+  edges: [UserDirectoryEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserDirectoryEdge {
+  cursor: String!
+  node: UserDirectoryEntry!
 }
 
 "A newly created account and its one-time temporary password."

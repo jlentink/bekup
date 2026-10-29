@@ -352,7 +352,7 @@ func openCertsAudit(c *cobra.Command, g *globalFlags) (*certsAudit, error) {
 	if err != nil {
 		return nil, fmt.Errorf("certs.rotated must be recorded in the audit log, but the app database is not available (use --no-audit to rotate without it): %w", err)
 	}
-	return &certsAudit{auditor: audit.New(pool, audit.Options{}), close: closePool}, nil
+	return &certsAudit{auditor: newCLIAuditor(pool), close: closePool}, nil
 }
 
 // record stores the event (nil receiver: auditing was skipped).

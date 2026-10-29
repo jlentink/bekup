@@ -88,6 +88,10 @@ type Options struct {
 	OperationTimeout time.Duration
 	// Logger receives operational events (never secrets).
 	Logger *slog.Logger
+	// TestFailed is told about every failed destination test (the
+	// destination.test_failed notification, task 5.3; nil: none). It
+	// receives the first failing step's code only and must not block.
+	TestFailed func(ctx context.Context, id uuid.UUID, code storage.ErrorCode)
 }
 
 // Actor is the admin (or maintainer, for tests) performing an action.
@@ -188,6 +192,14 @@ func (r *record) view() Destination {
 	}
 	d.NotReadyReason = notReadyReason(&d)
 	d.Ready = d.NotReadyReason == ""
+	if row.LastTestedAt != nil && row.LastTestOk != nil && row.LastTestSettingsAt != nil {
+		d.LastTest = &LastTest{
+			At: *row.LastTestedAt, OK: *row.LastTestOk, Stale: !row.LastTestSettingsAt.Equal(row.UpdatedAt),
+		}
+		if row.LastTestCode != nil {
+			d.LastTest.Code = *row.LastTestCode
+		}
+	}
 	return d
 }
 
@@ -817,4 +829,28 @@ func diff(cur *record, st *state) ([]string, map[string]any) {
 		changed = append(changed, "host_key")
 	}
 	return changed, values
+}
+
+// Usage is what bekup stores on one destination (D-196).
+type Usage struct {
+	ID            uuid.UUID
+	Name          string
+	Type          Type
+	StoredBytes   int64
+	ArtifactCount int64
+}
+
+// Usage returns, per destination that is not deleted, the bytes and
+// number of its present artifacts (one aggregate query). The caller is
+// authorized by the GraphQL layer (staff).
+func (s *Service) Usage(ctx context.Context) ([]Usage, error) {
+	rows, err := sqlc.New(s.o.DB).DestinationUsage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("destinations: usage: %w", err)
+	}
+	out := make([]Usage, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Usage{ID: r.ID, Name: r.Name, Type: Type(r.Type), StoredBytes: r.StoredBytes, ArtifactCount: r.ArtifactCount})
+	}
+	return out, nil
 }

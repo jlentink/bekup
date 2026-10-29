@@ -9,6 +9,15 @@ import (
 	"context"
 )
 
+const listenNotificationEvents = `-- name: ListenNotificationEvents :exec
+LISTEN bekup_notification_events
+`
+
+func (q *Queries) ListenNotificationEvents(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenNotificationEvents)
+	return err
+}
+
 const listenRestoreEvents = `-- name: ListenRestoreEvents :exec
 LISTEN bekup_restore_events
 `
@@ -33,6 +42,15 @@ LISTEN bekup_session_events
 
 func (q *Queries) ListenSessionEvents(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, listenSessionEvents)
+	return err
+}
+
+const listenSettingsEvents = `-- name: ListenSettingsEvents :exec
+LISTEN bekup_settings_events
+`
+
+func (q *Queries) ListenSettingsEvents(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenSettingsEvents)
 	return err
 }
 

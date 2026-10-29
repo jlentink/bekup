@@ -1,6 +1,6 @@
 # Hardening guide
 
-> **Status:** partial (end of M3). The controls below exist in the shipped
+> **Status:** partial (end of M6). The controls below exist in the shipped
 > compose files, the implemented CLI/config code, `serve` and the runner:
 > HTTP headers, Origin checks and the plain-HTTP warning (1.1), app-DB TLS
 > with channel binding (1.0), passwords and sessions (1.5), second
@@ -12,9 +12,11 @@
 > backend (2.9), backup jobs with encryption on by default (3.2, 3.5),
 > verified and signed backups with completeness evidence (3.1, 3.6, 3.10),
 > retention honouring Object Lock and no-delete mode (3.8) and step-up
-> download tickets (3.9). Still to come with their tasks: hardened restores
-> (M4), SSRF guard for SMTP and webhooks (5.1, 5.2), monitoring (5.6),
-> signed release images (7.4). Completed in task 7.5.
+> download tickets (3.9); hardened restores with the fresh second-factor
+> check and privileged-target gating (M4); the SSRF guard for SMTP and
+> webhooks with the admin allowlist, security alerts and monitoring (M5,
+> D-196); the web UI under the strict CSP (M6). Still to come: signed
+> release images (7.4). Completed in task 7.5.
 
 A checklist for running bekup securely. The threat model behind it is
 [`SECURITY.md`](../../SECURITY.md); deployment details are in
@@ -181,6 +183,34 @@ values (D-073, D-107).
       `serve` direct egress (the `egress` network) to its destinations.
 - [ ] Redirects are never followed; point webhooks and S3 endpoints at
       their final URL.
+- [ ] Prefer the **admin allowlist** (Admin → Settings → Network) over
+      `[netguard]` for entries that change: it is validated with exactly
+      the same rules, needs an admin with a fresh step-up, is audited
+      (`setting.changed` with the added and removed entries) and every
+      addition raises the `ssrf_allowlist_widened` security alert to all
+      admins (D-196). Keep `[netguard]` for entries that must exist before
+      anyone signs in. The effective list is both lists together; a change
+      reaches every `serve` and `bekup worker` process within seconds
+      (settings event) and at the latest after 5 minutes. Review the
+      admin list after every `ssrf_allowlist_widened` alert and remove
+      entries that are no longer needed.
+- [ ] Give every admin entry the **narrowest scopes** (D-198):
+      `destinations`, `smtp`, `shared_webhooks` (the default for entries
+      saved without scopes, and the only scopes the `[netguard]` bootstrap
+      list ever applies to) and `personal_webhooks`. Avoid
+      `personal_webhooks`: any user can enter a personal webhook URL, so
+      such an entry lets every account make bekup send requests to that
+      private target. If you must add it, scope it to one exact host or a
+      `/32`; the save is audited (`personal_webhooks_widened`), alerted
+      and the Network page flags it permanently.
+- [ ] Wildcard entries over a public suffix (`*.co.uk`, `*.github.io`)
+      and any entry under a public wildcard-DNS service (`nip.io`,
+      `sslip.io`, `localtest.me`, ...) are refused: anyone could make such
+      names resolve to the address of their choice.
+- [ ] Stored admin entries that a process rejects (for example loopback
+      after turning dev mode off) are not applied (fail closed) and are
+      reported as ignored on the Network page until the list is saved
+      again.
 
 ## Accounts, storage and monitoring
 

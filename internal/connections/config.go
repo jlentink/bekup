@@ -167,6 +167,21 @@ type Connection struct {
 	// at ExpiresAt or after the restore that used it finished.
 	Temporary bool
 	ExpiresAt *time.Time
+	// LastTest is the stored outcome of the newest Test (D-187); nil when
+	// never tested.
+	LastTest *LastTest
+}
+
+// LastTest is the stored outcome of a Test (D-187): normalized codes only.
+type LastTest struct {
+	At time.Time
+	OK bool
+	// Code is the normalized failure code ("" when OK).
+	Code string
+	// Stale: the connection changed after the test.
+	Stale bool
+	// Privileges is the probe's verdict (nil when the test failed first).
+	Privileges *Privileges
 }
 
 // SSHInput sets the SSH tunnel. It replaces the non-secret tunnel

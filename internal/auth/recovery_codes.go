@@ -264,7 +264,7 @@ type SecondFactorAttempt struct {
 // allows. While locked it answers *SecondFactorLockedError without
 // counting; the refusal is recorded at most once per lock window.
 func (t *TOTP) reserveMFA(ctx context.Context, userID uuid.UUID, f Factor) (SecondFactorAttempt, error) {
-	threshold, base, maxSecs := t.o.Lockout.reserveArgs()
+	threshold, base, maxSecs := t.o.Limits.Lockout().reserveArgs()
 	q := sqlc.New(t.o.DB)
 	for range 2 {
 		now := t.o.Now()
@@ -348,7 +348,7 @@ func (t *TOTP) failMFA(ctx context.Context, a SecondFactorAttempt, f Factor, rea
 			TargetType: "user", TargetID: userID.String(),
 			Details: audit.Details{
 				"failed_count": a.att.count, "locked_until": until.UTC().Format(time.RFC3339),
-				"lock_seconds": int64(t.o.Lockout.LockFor(int(a.att.count)) / time.Second),
+				"lock_seconds": int64(t.o.Limits.Lockout().LockFor(int(a.att.count)) / time.Second),
 			},
 		}); err != nil {
 			return err

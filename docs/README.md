@@ -1,3 +1,5 @@
+<img src="assets/bekup-mark.svg" alt="" width="48" height="48" align="left">
+
 # bekup documentation
 
 User and operator documentation for bekup. Pages marked as stubs are filled

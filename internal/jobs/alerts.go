@@ -12,8 +12,9 @@ import (
 type AlertKind string
 
 // Security events (D-067: every owner change raises a security alert to
-// admins). Task 5.5 delivers them as alerts; until then the default
-// AlertFunc logs them.
+// admins). Each one is audited; the audit observer (notify.ObserveAudit,
+// task 5.5) delivers it as a security.system alert. The default AlertFunc
+// adds a WARN log line.
 const (
 	AlertOwnerAdded   AlertKind = "job_owner_added"
 	AlertOwnerRemoved AlertKind = "job_owner_removed"

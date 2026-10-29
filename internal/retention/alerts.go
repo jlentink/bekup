@@ -8,12 +8,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// AlertKind names a retention anomaly (notification event
-// retention.anomaly, task 5.5).
+// AlertKind names a retention anomaly.
 type AlertKind string
 
-// Retention anomalies. Until task 5.5 delivers them, the default AlertFunc
-// logs them at WARN.
+// Retention anomalies. Each one is audited; the audit observer
+// (notify.ObserveAudit, task 5.5) delivers it as a security.system alert
+// (and serve adds artifact.missing for the job's audience). The default
+// AlertFunc logs them at WARN.
 const (
 	// AlertArtifactMissing: an object vanished from its destination
 	// without bekup deleting it (immutable backups: unexpected deletion).
@@ -38,6 +39,10 @@ type Alert struct {
 // for long and cannot fail the sweep (the audit entry is the durable
 // record).
 type AlertFunc func(ctx context.Context, a Alert)
+
+// LogAlert is the default AlertFunc (a WARN log line per anomaly), for
+// callers that add to it.
+func LogAlert(l *slog.Logger) AlertFunc { return logAlert(l) }
 
 func logAlert(l *slog.Logger) AlertFunc {
 	return func(ctx context.Context, a Alert) {

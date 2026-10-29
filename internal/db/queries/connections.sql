@@ -241,3 +241,17 @@ SELECT c.id,
        EXISTS (SELECT 1 FROM run_slots s WHERE s.connection_id = c.id) AS slot_held
 FROM connections c
 WHERE c.id = @id AND c.temporary AND c.deleted_at IS NULL;
+
+-- RecordConnectionTest stores the outcome of a test (D-187) when the row
+-- is unchanged since the test loaded it (settings_at = its updated_at); 0
+-- rows: changed or deleted meanwhile, the result is not stored. The
+-- trigger leaves updated_at alone for this update.
+-- name: RecordConnectionTest :execrows
+UPDATE connections
+SET last_tested_at = now(),
+    last_test_ok = @ok,
+    last_test_code = sqlc.narg(code),
+    last_test_settings_at = updated_at,
+    last_test_privileges = sqlc.narg(privileges),
+    last_test_privilege_reasons = @privilege_reasons::text[]
+WHERE id = @id AND deleted_at IS NULL AND updated_at = @settings_at;

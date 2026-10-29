@@ -33,6 +33,13 @@ type noRunner struct{ runnerpb.RunnerServiceClient }
 
 func newRunLimitEnv(t *testing.T) *destEnv {
 	t.Helper()
+	return newRunnerlessConnEnv(t, noRunner{})
+}
+
+// newRunnerlessConnEnv is a GraphQL environment whose connection service
+// talks to the given in-process runner fake.
+func newRunnerlessConnEnv(t *testing.T, runner runnerpb.RunnerServiceClient) *destEnv {
+	t.Helper()
 	d := dbtest.Migrated(t)
 	e := &authEnv{t: t, d: d, pool: d.AppPool(t)}
 	e.auditor = audit.New(e.pool, audit.Options{Registry: logging.NewRegistry()})
@@ -54,7 +61,8 @@ func newRunLimitEnv(t *testing.T) *destEnv {
 	}
 	t.Cleanup(kr.Destroy)
 	conns, err := connections.New(connections.Options{
-		DB: e.pool, Keyring: kr, Auditor: e.auditor, Runner: noRunner{},
+		DB: e.pool, Keyring: kr, Auditor: e.auditor, Runner: runner,
+		Limiter:           func(string) (bool, time.Duration) { return true, 0 },
 		MaxConcurrentRuns: 6, DefaultRunsPerConnection: 2,
 	})
 	if err != nil {

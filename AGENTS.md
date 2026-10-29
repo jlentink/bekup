@@ -38,7 +38,9 @@ Components (one Go binary, several subcommands; D-025):
   destinations. Talks to Postgres as `bekup_app`, to destinations/SMTP/webhooks
   through the SSRF guard, and to the runner over mTLS gRPC. `--no-worker`
   drops the workers; **`bekup worker`** runs only the workers (no HTTP, no
-  scheduler) to scale out (D-145).
+  scheduler) to scale out (D-145). serve and worker reload a conservative
+  set of live `bekup.toml` keys on an admin request (all processes) or
+  SIGHUP (one process); everything else needs a restart (D-200).
 - **`bekup runner`**: the **only** component with Docker access (D-003). Small,
   typed mTLS gRPC API; image allowlist and target allowlist from its own
   `runner.toml`; builds hardened container specs itself (D-029–D-033).
@@ -59,8 +61,9 @@ Trust boundaries:
 | Browser → proxy → `serve` | TLS at the proxy; `serve` only on an internal network; trusted-proxy list; strict CSP, POST+JSON GraphQL, Origin checks (D-050) |
 | `serve` → runner | mTLS (TLS 1.3, private CA, SAN check), typed RPCs only (D-030) |
 | runner → Docker / target DBs | image allowlist, fixed container spec, per-run isolated networks, target allowlist, DB certificate pinning (D-029, D-031, D-034) |
-| `serve` → destinations, SMTP, webhooks | dial-time SSRF guard, TLS ≥1.2, no redirects (D-049, D-055) |
+| `serve` → destinations, SMTP, webhooks | dial-time SSRF guard (one guard per scope; personal webhooks only through entries scoped to them, D-198), TLS ≥1.2, no redirects (D-049, D-055); SMTP TLS follows the server and may be unencrypted in `auto`/`none` (D-180) |
 | `serve` → app DB | TLS verify-full by default (D-100), least-privilege roles, envelope-encrypted secrets, append-only audit log (D-046, D-054) |
+| Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
 
 `serve` can **never** reach target DBs or Docker.
 
@@ -110,6 +113,11 @@ cmd/bekup/              # single binary entry point (cobra CLI)
 proto/runner/v1/        # runner gRPC API (package runner.v1; Go code in internal/runnerpb)
 internal/
   implemented:  config  logging  db  crypto  certs  audit  instancekeys
+                configreload (runtime config reload, D-200: Reloader with
+                  pinned path + merged re-validation + two-phase apply,
+                  weaken.go rules, API (configStatus/reloadConfig), Sync
+                  (broadcast answers + catch-up), SignalLoop (SIGHUP),
+                  Pruner: 6.13; appliers in internal/app/configreload.go)
                 httpserver  app (serve composition, task 1.1)  graph (1.2)
                 graph/streams (SSE subscription streams: 2.13)
                 authz (1.4)  auth (passwords, sessions, lockout: 1.5; factors 1.7-1.9)
@@ -117,6 +125,7 @@ internal/
                 destinations (destination CRUD, Open/Test, host keys: 2.12)
                 connections (connection CRUD, pins, host keys, runner request builder: 2.11)
                 netguard (dial-time SSRF guard: 2.3)
+                egress (admin SSRF allowlist in settings with scopes + per-process sync: D-196, D-198)
                 storage (Destination interface + Disk: 2.8; S3 storage/s3store: 2.9; SFTP: 2.10)
                 tunnel (SSH client, host-key pin, TOFU fetch: 2.2)
                 sshpolicy (the one SSH client policy: pins, algorithms, keys,
@@ -176,9 +185,33 @@ internal/
                 testutil (test-only helpers: dockertest skip policy,
                   runnertest.WaitDockerOK for real-runner harnesses);
                   storage/sftp/sftptest (atmoz/sftp test server)
-  doc.go only until their task:
-    notify (5.1-5.3)  monitor (5.6)
+                notify/email (5.1: SMTP settings, sender, message
+                  builder + templates, e-mail verification)
+                notify/webhook (5.2: URL validation, signed sender,
+                  result classification, FailurePolicy, signing keys)
+                notify (5.3: D-161 catalog.go, Emit/outbox event.go,
+                  ObserveAudit audit.go, prefs.go, dispatcher + Register
+                  service.go, fanout.go, deliver.go, content.go, digest.go;
+                  5.5: security.go security alert mapping, severities,
+                  dedup keys, failed-login bursts; 5.3b: API in
+                  api.go, api_channels.go, api_personal.go,
+                  api_prefs.go, api_inbox.go)
+                notify/missed (5.4: dead-man detector, evaluate.go pure
+                  outage logic, detector.go periodic missed_backup_check)
+                monitor (5.6: metrics.go registry + event counters,
+                  health.go snapshot, collector.go gauges, server.go
+                  internal /metrics listener; 5.5: security.go hourly
+                  security_check: cert/pin expiry, audit chain, posture)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
+  src/app/              providers, route table (router.tsx), RootLayout (step-up host)
+  src/features/<area>/  routes.tsx, pages, operations.ts, model.ts, own strings + tests:
+                        auth account dashboard calendar jobs runs restore connections
+                        destinations users notifications admin (smtp channels
+                        security-alerts audit network recovery two-factor)
+  src/components/       shell/ (sidebar, top bar, nav.ts, banners), ui/, status/, ssh/
+  src/routes/           login, login/verify, profile, 404, /design (dev)
+  src/lib/ src/test/    apollo, api-error, route-access, messages, ... / renderApp fake API
+  scripts/csp-check.mjs # headless-Chrome walk of the pages under the production CSP
 deploy/                 # postgres init, traefik/nginx proxy configs, dev/ keys + seeds
 scripts/                # helpers behind the justfile (doctor, bump, release, ...)
 docs/                   # user/operator docs; docs/DECISIONS.md is the decision log
@@ -222,6 +255,29 @@ Each `internal/` package has a `doc.go` describing its responsibility.
 - All UI work uses the **`frontend-design` skill** on top of the design
   system from task 0.8 (D-021). Accessible (WCAG AA), dark mode.
 - Apollo Client + graphql-codegen; react-hook-form + zod.
+- Every signed-in route declares `handle: access.…` (`lib/route-access`,
+  derived from the nav roles); the single `RequireRole` guard denies routes
+  without one (D-199). Format sizes/durations only with `lib/format`
+  (binary IEC units); shared operations live in `lib/operations`.
+  Mutations returning secrets use `fetchPolicy: "no-cache"`. Builds split
+  GraphQL documents per route (`vite-plugins/graphql-documents.ts`): keep
+  `graphql()` templates plain text and run `just gen` after changes.
+- Shell and auth (D-179): signed-in pages live under `RequireSession`
+  (`me` drives the forced password change / 2FA enrollment) and use
+  `useSessionUser()` for display only. Wrap mutations that may need a
+  fresh confirmation in `useStepUp().withStepUp(op, { aal2 })` and report
+  failures with `reportActionError` (ignores a closed dialog). Show errors
+  with `userMessage` / `applyFieldErrors` (`src/lib/api-error.ts`); auth
+  codes are handled globally by the Apollo error link. Return paths only
+  via `safeReturnPath`. Strings stay out of the markup: shell/auth/account
+  in `src/lib/messages.ts`, each feature its own (`messages.ts` or a `T`
+  table in `src/features/<area>/`). Every signed-in route declares its
+  roles as `handle` (`lib/route-access.ts`, enforced by `RequireRole`; UI
+  only). One-time material (keys, tickets, temporary passwords) uses
+  `fetchPolicy: "no-cache"` and lives only in component state. Never insert
+  server markup (the TOTP QR code is re-rendered by `lib/qr-svg.ts`).
+  Flow tests use `renderApp` (`src/test/mock-api.tsx`); keep
+  `pnpm csp-check` green.
 
 **Security**
 
@@ -311,6 +367,43 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   a token from `ServiceOptions.AccountLimiter` first; authenticated checks
   of a locked account answer RATE_LIMITED without argon2id; refusals while
   locked are audited once per lock window (D-117).
+- E-mail (`internal/notify/email`, D-178, proposed; D-180): send only
+  through `email.Mailer` (`Sender`: stored SMTP settings,
+  `Guard.DialContext`; TLS follows the server: modes `auto` (default:
+  STARTTLS when offered, else plain), `starttls`, `implicit_tls`, `none`;
+  whenever TLS is used ≥ 1.2 with host verification against the system
+  roots or only the admin CA bundle and no fallback after a failed
+  STARTTLS; AUTH without TLS only in `auto`/`none`, through the package's
+  own PLAIN/LOGIN mechanisms (never `smtp.PlainAuth`); `auto`/`none` are
+  flagged `MayBeUnencrypted`, audited with the mode and an unencrypted
+  send WARNs once per server; `Sender.SendDelivery` reports
+  encrypted/TLS version). Build bodies only with `email.Render`
+  (`Notice`: plain values, embedded html/template layout, no images or
+  tracking, absolute http(s) links from `server.base_url`) and messages
+  with `email.NewMessage`; header values are refused on CR/LF/controls,
+  never sanitized. Only `email.Settings` touches the `smtp` settings row
+  (password sealed under AAD `settings:smtp:password`, write-only, re-entry
+  required on host/port/username change, on weakening the mode to
+  `auto`/`none` and on a CA bundle change (D-198); audited `setting.changed` +
+  `secret.changed`). Show users only "could not be sent"; admins get the
+  `SendError.Code` message and `Detail` (blocked address or SMTP reply
+  code), never server text. Deliver e-mail to a user only when
+  `email.IsVerified` says so; verification only via `email.Verifier`
+  (256-bit code in the URL fragment, MAC-stored, single use, 24 h, bound
+  to the signed-in account and address); a `users` trigger clears
+  `email_verified_at` on any address change.
+- Webhooks (`internal/notify/webhook`, D-177, proposed): validate URLs
+  only with `webhook.ValidateURL` (input-time netguard check) and send
+  only through `webhook.Sender` (built from a `*netguard.Guard`; one
+  attempt, no redirects, response ignored); the caller retries on
+  `OutcomeRetryable`, stops on `OutcomePermanent`, never counts
+  `OutcomeAborted`, and feeds every attempt into `FailurePolicy.Record`
+  (auto-disable + inbox reason). Keys only from `GenerateHMACKey`
+  (shown once, stored sealed); keep `X-Bekup-Delivery` stable across
+  retries; the `v1` signature covers timestamp, delivery ID, event type
+  and body (D-198). Personal webhook test results are bucketed
+  (`ok`/`not_allowed`/`failed`, no status code). Never log a webhook URL
+  (use `DisplayURL`) or a raw send error.
 - Subscriptions (D-052, D-108, D-124): **Server-Sent Events, no
   WebSocket** (never add one unless 100% needed). One `POST /graphql`
   (`application/json`, `Accept: text/event-stream`) per subscription,
@@ -334,8 +427,16 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   event, then `complete`: UNAUTHENTICATED session ended, FORBIDDEN access
   changed, SESSION_ROTATED (reopen with the new cookie), UNAVAILABLE
   (shutdown or failed check; retry later). The web client is the
-  `graphql-sse` Apollo link in `web/src/lib/apollo.ts`; keep pages to 2-3
-  subscriptions (HTTP/1.1 allows 6 connections per origin).
+  `graphql-sse` Apollo link in `web/src/lib/apollo.ts`. Stream budget
+  (D-197; HTTP/1.1 allows 6 connections per origin, the session cap is
+  4): one shared account stream per browser (`accountEvents`, held by
+  one tab and relayed to the others over a BroadcastChannel,
+  `web/src/lib/stream-sharing.ts`; mark shareable subscriptions with
+  `sharedStream(key)`, key incl. the user id) plus at most one page
+  stream per tab; combine event kinds server-side (`streams.Combine`,
+  e.g. `runActivity`, `activityUpdated`) instead of opening a second
+  stream. 429 retries use a long jittered backoff and show the "too
+  many open tabs" banner.
 - Accounts and the first admin (D-110, D-113): change users only through
   `auth.UserAdmin` (actor `auth.AdminActor` for the API,
   `auth.OperatorActor` for `bekup admin`): it audits, revokes sessions on
@@ -353,7 +454,10 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `UserAdmin.ResetSecondFactors` (`resetUserSecondFactors`: admin,
   step-up, never the own account; `bekup admin reset-2fa`): it wipes
   TOTP, passkeys and recovery codes, revokes all sessions and sets
-  `users.mfa_reset_at` (a new grace period).
+  `users.mfa_reset_at` (a new grace period). Maintainers read accounts
+  only through `userDirectory` (`UserDirectoryEntry`: id, name, e-mail,
+  role, disabled; D-184); `User.lastSeenAt`/`twoFactorEnrolled` are
+  admin-only field resolvers batch-loaded per page (`hintUsers`).
 - Second factors: TOTP and recovery codes only through `auth.TOTP`
   (D-111): secrets sealed under `users:<id>:totp_secret` /
   `totp_pending` and never returned after enrollment; verification via
@@ -589,6 +693,132 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `restore.Notifier` hook (no-op until 5.3). The runner drops only
   derived bekup temporary databases (`DropTempDatabase`, roles RESTORE /
   OLD); never add an RPC that takes a database name to drop.
+- Missed backups (`internal/notify/missed`, D-188, proposed): occurrences
+  are judged from recorded evidence (runs by `scheduled_for`,
+  `schedule_skips`, the stored `next_run_at`), never replayed from the
+  schedule; `success` and `partial` cover an occurrence; one
+  `backup.missed` per outage (dedup key = last success before it) plus a
+  daily reminder. A new kind of scheduled backup run must keep
+  `runs.scheduled_for` set to its occurrence, and a new skip reason must
+  be classified in `missed.reasonOf`.
+- Runtime config reload (`internal/configreload`, D-200, proposed): only
+  `bekup.toml` keys tagged `reload:"live"` change at runtime (deny by
+  default; posture keys such as `base_url`, `allow_insecure_http`,
+  `listen`, `database.*`, `dev.*`, the master key, argon2, sessions and the
+  step-up window stay restart-only). **A new live key needs** (1) the tag
+  in `internal/config`, (2) an applier in `internal/app/configreload.go`
+  (`Prepare(next) (commit, error)`: validate everything, commit only does
+  atomic stores and cannot fail; or an explicit nil-Prepare entry where a
+  process does not use it; `configreload.New` refuses uncovered keys) and
+  (3) a weakening rule in `internal/configreload/weaken.go` (a test
+  requires one). Components hold live values in atomics read once per
+  request/sweep; **never read live values from `a.opts.Config`** after
+  startup (it stays the startup snapshot; `Reloader.Running()` has the
+  current config). Reloads re-validate `config.WithLive(running, loaded)`
+  under the startup dev mode, record the audit entry and result row fail
+  closed before committing, and expose key names and an error kind only
+  (never values or the file path). The UI broadcast is a NOTIFY carrying
+  only `config.reload:<request id>`, acted on only with a matching recent
+  `ui` request row; SIGHUP reloads one process with the system actor.
+  Keys of a nil-Prepare applier are not reported as applied/weakened by
+  that process. Never name an audit detail or log attribute `*_keys`
+  (`logging.IsSecretKey` redacts it; use `error_settings`, `settings`).
+  Liveness comes only from the LISTEN connections' application_name
+  (`configreload.ListenerApplicationName`, `<prefix>:<instance id>`;
+  spoofable, display/progress only). Who answers a UI request is one rule
+  in SQL on DB time (`configreload.StartupGrace`: startup row at most 1
+  minute after the request), shared by the catch-up and
+  `expectedProcesses`; never compare the Go clock with DB timestamps
+  there. A result row that exists already rolls the reload back
+  (`Result.AlreadyAnswered`, nothing applied or audited).
+- Metrics (`internal/monitor`, D-176, proposed): register only on
+  `monitor.Metrics.Registry()` (never the global Prometheus registry).
+  To add a metric: (1) define it in `monitor.New` (namespace `bekup`,
+  snake_case, unit suffix `_seconds`/`_bytes`, `_total` for counters);
+  (2) give every label a fixed value set and map values with `bound`
+  (outside the set: `other`), pre-initialize the combinations; never a
+  label from IDs, user data, host names, error texts or secrets (job slugs
+  only behind `metrics.per_job_labels`); (3) feed it through the small
+  hook interfaces (`runstate.FinishObserver`, `restore.Metrics`,
+  `retention.Metrics`, `scheduler.Metrics`) called after the commit, or
+  for state from the DB/runner extend `monitor.Health` (cached snapshot,
+  sqlc queries in `monitor.sql`) and its collector; (4) add a unit test
+  and a row in `docs/operations.md#metric-reference`. `metrics.listen`
+  is an internal address (wildcards refused, D-098); `/metrics` serves
+  nothing else but `/healthz`.
+- Notifications (`internal/notify`, D-161, D-183): emit a catalog event
+  with `notify.Emit(ctx, q, notify.Event{Type, Subject{JobID, ...},
+  Detail})` using the `*sqlc.Queries` of the transaction of the state
+  change (an outbox row; the dispatcher, fan-out and delivery workers do
+  the rest). Never resolve recipients or send anything yourself, never put
+  secrets, connection strings, server output or DB content in `Detail`
+  (bounded scalars only). Audited job/connection/security actions are
+  already mapped in `notify/audit.go` (`audit.Observer`): add a mapping
+  there instead of a second emit; post-commit hooks use
+  `Service.EmitNow`. A new event needs a catalog entry (group, audience,
+  problem flag, authz view operation, subject) and a test row in
+  `notify_test.go`. Webhook URLs and HMAC keys are sealed under
+  `notify.ChannelAAD(table, id, "url"|"hmac_key")`.
+- Notifications API (task 5.3b, D-191): the GraphQL layer reaches
+  channels, preferences and the inbox only through `notify.API` (caller
+  from the context, operation re-authorized; personal rows always
+  addressed with the caller's `user_id` in `notify_api.sql`). Webhook URLs
+  only via `webhook.ValidateURL`, keys only from `GenerateHMACKey`,
+  returned once (`signingKey`) and zeroed, never listed; outputs show
+  `DisplayURL` only. Shared-channel changes carrying a URL or key and
+  personal add/rotate/delete need step-up; test sends are single-root and
+  rate limited and never feed the failure policy. Inbox rows are inserted
+  only through `Service.insertInbox` (announces
+  `pubsub.NotificationEvents` `inbox:<id>:<user>` in the transaction);
+  the inbox part of `accountEvents` loads each announced row scoped to
+  the stream's user. A new matrix channel (push, phase 2) goes into
+  `notify.MatrixChannels` and the `NotificationChannelType` enum. The
+  inbox filter (`notify.InboxFilter`: unreadOnly, group, events; D-196)
+  resolves to catalog types server-side; filter in SQL, never on the
+  client. Every inbox read (list, unread count, the stream's row load and
+  resync) applies the read-time visibility of `inboxVisibility` (the
+  reader's current DB role: hidden staff/admin types, owned jobs only for
+  role `user`; D-198) via the `hidden_types`/`owned_jobs_only` query
+  parameters; `security.*` rows are never deleted by users (VALIDATION).
+  Personal webhooks use `APIOptions.PersonalGuard`/`PersonalWebhooks`
+  (`Options.PersonalWebhooks` for delivery), never the shared ones.
+  `notify.SecurityAlertTypes` backs `securityAlertTypes`: add a new
+  `security.system` kind to `systemSeverity` (and `alertRepeat` when it
+  is deduplicated).
+- Dashboard aggregates (D-196): `Job.missed`/`missedSince` read
+  `job_missed_state`, written only by the missed-backup detector
+  (`internal/notify/missed`, upsert/clear per batch, prune of unwatched
+  jobs) and batch-loaded per page (`runstate.Reader.MissedForJobs`, run
+  loader); a success after `checked_at` ends the outage for readers.
+  `destinationUsage` is one grouped query (`destinations.Service.Usage`,
+  operation `destination.usage_view`). `restoresUpdated` coalesces
+  restore ids (`pumpCoalescedIDs`), resyncs with
+  `restore.API.IDsUpdatedSince` (scoped like `restores`) and re-loads and
+  re-authorizes every event. The audit chain status comes from
+  `audit.SaveVerification` (written only by `monitor.SecurityChecker`) and
+  `audit.LoadChainStatus`; it is informational, never a proof.
+- Security alerts (task 5.5, D-190): to raise one, **audit the action**
+  (fail closed) and map its audit action in `internal/notify/security.go`
+  (`securitySystemKinds`, or a detail-conditional case in
+  `securityFromAudit`) with a `Kind*` constant, a severity in
+  `systemSeverity`, a sentence in `content.go` and, if it can repeat, a
+  dedup rule in `systemDedupKey`; add a row to `security_test.go` and to
+  the alert table in `docs/guides/notifications.md`. `security.system` goes
+  to all admins, `security.account` to the affected user; both are
+  mandatory (inbox + e-mail, no prefs, no shared channels). Never emit a
+  second time from a post-commit `AlertFunc`/notifier hook (they stay log
+  lines / no-ops). Conditions without an action belong in
+  `monitor.SecurityChecker` (hourly) and emit with `notify.Emit` and a
+  dedup key. CLI commands build their auditor with `newCLIAuditor`
+  (observer `notify.ObserveAudit`): every CLI entry is alerted (D-069).
+- Stored test results and run evidence (D-187): `connections.Service.Test`
+  / `destinations.Service.Test` store only normalized codes (and the
+  bounded privilege verdict) via the conditional `Record*Test` queries;
+  never store messages or raw errors there, and never write the
+  `last_test_*` columns elsewhere (the `set_updated_at` triggers skip
+  updates of only those columns). `RunItem.stats` parses `backup_stats`
+  with `runstate.ParseItemStats` (bounded) and loads through the run
+  loader; RunItem stays reachable only through an authorized Run.
 - Audit: record through `internal/audit` only (`Record`, or `RecordTx` inside
   the action's `db.Tx`); audit failures fail the operation (fail closed);
   actions come from the typed catalog; details are redacted but still never
@@ -612,9 +842,28 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   a `*net.Dialer`), HTTP via `Guard.NewHTTPClient` (no proxy, no
   redirects, TLS ≥ 1.2) with bodies read through `ReadAllLimited` /
   `LimitReader`. Validate entered hosts with `ResolveAndCheck`, but rely on
-  the dial-time check. Build the guard with `netguard.FromConfig`; the
-  admin allowlist is applied with `Guard.SetAllowlist` (validated; hard
-  ranges and loopback outside dev can never be allowlisted). Show
+  the dial-time check. serve and `bekup worker` build **one**
+  `netguard.Set` per process (`App.newGuard`, `netguard.SetFromConfig`):
+  one guard per scope (`ScopeDestinations`, `ScopeSMTP`,
+  `ScopeSharedWebhooks`, `ScopePersonalWebhooks`, D-198); hand each
+  outbound component the guard of **its** scope (`Set.Guard(scope)`;
+  personal webhooks only ever the personal guard and their own sender);
+  never build a guard in the app (it would miss the admin list). The
+  bootstrap list and entries without scopes cover every scope except
+  `personal_webhooks`. The admin allowlist lives in
+  `settings` (`netguard.allowlist`, version 2: entries with scopes) and is
+  changed and applied only through `internal/egress` (D-196, D-198):
+  `Service.Update` (admin + fresh step-up re-checked,
+  `Set.NormalizeEntries` validation with `cidrs.<i>[.scopes]`/`hosts.<i>`
+  field errors, `setting.changed` audit with added/removed entries and
+  gained scopes, `widened` raises the `ssrf_allowlist_widened` alert
+  (with `personal_webhooks` when that scope was added),
+  `pubsub.SettingsEvents` in the same transaction) and
+  `egress.Sync` (startup load before anything dials, reload on the event
+  and every 5 min; rejected or undecodable stored entries are dropped,
+  never the other way round). Hard ranges and loopback outside dev can
+  never be allowlisted, nor wildcards over public suffixes or entries
+  under wildcard-DNS services (nip.io, ...). Show
   `*BlockedAddressError` details to admins only; return
   `netguard.Normalize(err)` to everyone else. Never set
   `http.Transport.Proxy` or use `http.DefaultClient` for such endpoints.
@@ -898,7 +1147,8 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   in `streams.Deliver`, and keep one goroutine + one bus subscription per
   stream; log batches ≤ 200 lines. `runUpdated` coalesces per stream
   (pending set ≤ 100, then a resync; ≤ 20 deliveries/s; D-155). The UI
-  uses one `runUpdated` stream per page (stream cap 4 per session).
+  uses at most one page stream per tab (D-197: `runActivity` on a run
+  page, `activityUpdated` on the dashboard; stream cap 4 per session).
 - Retention (`internal/retention`, D-148, proposed): one River kind
   `retention_sweep` (`job_id` optional + unique, `reason`, `dry_run`),
   enqueued by the `runstate.Store` finish hook (`retention.PostRunHook`,
@@ -966,12 +1216,16 @@ with no arguments for grouped help. Key recipes: `just doctor` (dev-machine
 tool check; **a task that introduces a new tool must add it to
 `scripts/doctor.sh`**), `just dev` (infra only: app Postgres with TLS on
 127.0.0.1, mailpit, adminer; D-114), `just run` (native `bekup serve`, dev
-mode), `just dev-migrate`, `just admin-create <email> <name>`,
-`just web-dev`, `just dev-full` (containerised stack, profile `full`),
+mode), `just run-watch` (same with air hot reload), `just dev-migrate`, `just admin-create <email> <name>`,
+`just web-dev`, `just dev-runner` (only the runner, gRPC on
+127.0.0.1:7443, + sample targets for a native `just run`; D-201),
+`just dev-full` (containerised stack, profile `full`),
 `just dev-down`, `just gen`,
 `just lint`, `just sec`, `just test`, `just test-int`, `just test-e2e`,
 `just build`, `just docker`, `just db-reset`, `just db-schema`, `just migrate-new <name>`,
-`just keygen`, `just certs`, `just docs` (config key reference, later the
+`just keygen`, `just certs`, `just publish [repo]` (multi-arch image
+to your own registry; the repo only from the argument, `BEKUP_IMAGE_REPO`
+or the gitignored `.just.env`, never committed; D-202), `just docs` (config key reference, later the
 CLI/GraphQL references), `just bump <level>`, `just release`.
 Recipe arguments are passed as positional parameters, never interpolated
 (D-071); recipes for tooling from later tasks fail with "not available yet

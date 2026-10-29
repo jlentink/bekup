@@ -71,8 +71,9 @@ func (a Actor) event(api, cli audit.Action, targetID uuid.UUID, d audit.Details)
 		if cli == "" {
 			cli = api
 		}
-		// TODO(task 5.5): raise the security.system alert to all admins
-		// for every break-glass CLI action (D-069).
+		// The CLI auditor's observer (notify.ObserveAudit) raises the
+		// security.system alert to all admins for every break-glass CLI
+		// action (D-069, task 5.5).
 		return audit.CLIEvent(cli, "user", targetID.String(), d)
 	}
 	return audit.Event{
@@ -83,14 +84,18 @@ func (a Actor) event(api, cli audit.Action, targetID uuid.UUID, d audit.Details)
 
 // UserAdminOptions configure NewUserAdmin.
 type UserAdminOptions struct {
-	DB       DB
-	Hasher   *Hasher
-	Policy   PasswordPolicy
+	DB     DB
+	Hasher *Hasher
+	Policy PasswordPolicy
+	// Limits, when set, replaces Policy with the shared, reloadable
+	// password policy (D-200).
+	Limits   *Limits
 	Sessions *Sessions
 	Auditor  *audit.Auditor
 	Logger   *slog.Logger
 	// FactorReset is told about committed second-factor resets (nil:
-	// nobody; the security alert follows in task 5.5).
+	// nobody; the security alerts come from the audit entries through
+	// the audit observer, task 5.5).
 	FactorReset FactorResetNotifier
 	// Now replaces time.Now (tests).
 	Now func() time.Time
@@ -110,7 +115,8 @@ type FactorResetNotifier interface {
 	SecondFactorsReset(ctx context.Context, ev FactorResetEvent)
 }
 
-// NopFactorResetNotifier ignores every event (until task 5.5).
+// NopFactorResetNotifier ignores every event (the alert comes from the
+// audit entry, task 5.5).
 type NopFactorResetNotifier struct{}
 
 // SecondFactorsReset does nothing.
@@ -131,7 +137,9 @@ func NewUserAdmin(o UserAdminOptions) (*UserAdmin, error) {
 	if o.DB == nil || o.Hasher == nil || o.Sessions == nil || o.Auditor == nil {
 		return nil, errors.New("auth: DB, Hasher, Sessions and Auditor are required")
 	}
-	o.Policy = NewPasswordPolicy(o.Policy.MinLength, o.Policy.MinScore)
+	if o.Limits == nil {
+		o.Limits = NewLimits(o.Policy, LockoutPolicy{})
+	}
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -145,7 +153,7 @@ func NewUserAdmin(o UserAdminOptions) (*UserAdmin, error) {
 }
 
 // Policy returns the password policy.
-func (s *UserAdmin) Policy() PasswordPolicy { return s.o.Policy }
+func (s *UserAdmin) Policy() PasswordPolicy { return s.o.Limits.Policy() }
 
 // TemporaryPassword is a generated one-time password. It is shown to the
 // admin once and never stored or logged in plain text.
@@ -248,6 +256,76 @@ func (s *UserAdmin) List(ctx context.Context, f UserFilter, after *UserCursor, l
 	return rows, more, nil
 }
 
+// DirectoryEntry is the minimal view of an account in the user directory
+// (the owner picker for admins and maintainers, D-184): no password,
+// lockout, second-factor or session state.
+type DirectoryEntry = sqlc.ListUserDirectoryRow
+
+// Directory returns up to limit accounts that are not deleted, after
+// cursor (nil: from the start), ordered by e-mail address, and whether
+// more follow. search (may be empty) matches a substring of the e-mail
+// address or display name (case-insensitive).
+func (s *UserAdmin) Directory(ctx context.Context, search string, after *UserCursor, limit int) ([]DirectoryEntry, bool, error) {
+	if limit < 1 || limit > MaxUserPage {
+		return nil, false, fmt.Errorf("auth: page size %d out of range", limit)
+	}
+	p := sqlc.ListUserDirectoryParams{Lim: int32(limit + 1)}
+	if search != "" {
+		esc := likeEscaper.Replace(search)
+		p.Search = &esc
+	}
+	if after != nil {
+		p.AfterEmail, p.AfterID = &after.Email, &after.ID
+	}
+	rows, err := sqlc.New(s.o.DB).ListUserDirectory(ctx, p)
+	if err != nil {
+		return nil, false, fmt.Errorf("auth: list user directory: %w", err)
+	}
+	more := len(rows) > limit
+	if more {
+		rows = rows[:limit]
+	}
+	return rows, more, nil
+}
+
+// MaxActivityBatch bounds the accounts of one Activity call.
+const MaxActivityBatch = 500
+
+// UserActivity is the admin-only activity summary of an account.
+type UserActivity struct {
+	// LastSeenAt is the most recent activity of any of its sessions (nil:
+	// none on record; revoked and expired sessions count until they are
+	// purged, sessions waiting for their second factor never).
+	LastSeenAt *time.Time
+	// TwoFactorEnrolled reports a TOTP authenticator or a passkey.
+	TwoFactorEnrolled bool
+}
+
+// Activity returns the activity summary of the given accounts in one
+// query (unknown ids are absent from the result).
+func (s *UserAdmin) Activity(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]UserActivity, error) {
+	if len(ids) > MaxActivityBatch {
+		return nil, fmt.Errorf("auth: %d accounts exceed the activity batch", len(ids))
+	}
+	out := make(map[uuid.UUID]UserActivity, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := sqlc.New(s.o.DB).UserActivityFacts(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("auth: load user activity: %w", err)
+	}
+	for _, r := range rows {
+		a := UserActivity{TwoFactorEnrolled: r.TwoFactorEnrolled}
+		if r.LastSeenAt.After(time.Unix(0, 0)) {
+			t := r.LastSeenAt
+			a.LastSeenAt = &t
+		}
+		out[r.ID] = a
+	}
+	return out, nil
+}
+
 // likeEscaper escapes the LIKE wildcards (ESCAPE '\').
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
@@ -283,7 +361,7 @@ func (s *UserAdmin) Create(ctx context.Context, a Actor, in NewUser) (sqlc.User,
 		temp *TemporaryPassword
 	)
 	if in.Password != "" {
-		if err := s.o.Policy.Check(in.Password, email, name); err != nil {
+		if err := s.o.Limits.Policy().Check(in.Password, email, name); err != nil {
 			return sqlc.User{}, nil, err
 		}
 		if hash, err = s.o.Hasher.Hash(ctx, in.Password); err != nil {
@@ -448,7 +526,7 @@ func (s *UserAdmin) ResetPassword(ctx context.Context, a Actor, id uuid.UUID, pa
 		temp *TemporaryPassword
 	)
 	if password != "" {
-		if err := s.o.Policy.Check(password, u.Email, u.DisplayName); err != nil {
+		if err := s.o.Limits.Policy().Check(password, u.Email, u.DisplayName); err != nil {
 			return nil, 0, err
 		}
 		if hash, err = s.o.Hasher.Hash(ctx, password); err != nil {

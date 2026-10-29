@@ -350,3 +350,35 @@ func (r *Reader) Logs(ctx context.Context, runID uuid.UUID, afterID int64, limit
 	}
 	return rows, more, nil
 }
+
+// MissedState is a job's ongoing missed-backup outage as the
+// missed-backup check last saw it (job_missed_state, D-196).
+type MissedState struct {
+	Since        time.Time
+	LastMissedAt time.Time
+	Reason       string
+}
+
+// MissedForJobs returns the ongoing outages of jobIDs (at most MaxBatch);
+// jobs without one map to nil. A run that succeeded after the check's
+// last confirmation already ends the outage here.
+func (r *Reader) MissedForJobs(ctx context.Context, jobIDs []uuid.UUID) (map[uuid.UUID]*MissedState, error) {
+	if len(jobIDs) > MaxBatch {
+		return nil, ErrBadPage
+	}
+	out := make(map[uuid.UUID]*MissedState, len(jobIDs))
+	for _, id := range jobIDs {
+		out[id] = nil
+	}
+	if len(jobIDs) == 0 {
+		return out, nil
+	}
+	rows, err := sqlc.New(r.db).ListJobMissedState(ctx, jobIDs)
+	if err != nil {
+		return nil, fmt.Errorf("runstate: missed state: %w", err)
+	}
+	for _, x := range rows {
+		out[x.JobID] = &MissedState{Since: x.MissedSince, LastMissedAt: x.LastMissedAt, Reason: x.Reason}
+	}
+	return out, nil
+}

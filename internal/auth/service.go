@@ -99,6 +99,10 @@ type ServiceOptions struct {
 	// LoginLimiter is the strict per-IP login limiter (nil: unlimited;
 	// serve always sets it).
 	LoginLimiter LoginLimiter
+	// Limits, when set, holds the password and lockout policies instead of
+	// Policy and Lockout (shared with TOTP and UserAdmin so a config
+	// reload swaps them everywhere, D-200).
+	Limits *Limits
 	// AccountLimiter is the per-account password-verification limiter
 	// (D-117), taken before every argon2id verification of a login,
 	// password step-up or password change, keyed by AccountKey (nil:
@@ -118,6 +122,7 @@ type ServiceOptions struct {
 // management for the API. It is safe for concurrent use.
 type Service struct {
 	o        ServiceOptions
+	limits   *Limits
 	refusals *lockedRefusals
 }
 
@@ -126,8 +131,9 @@ func NewService(o ServiceOptions) (*Service, error) {
 	if o.DB == nil || o.Hasher == nil || o.Sessions == nil || o.Auditor == nil || o.Factors == nil {
 		return nil, errors.New("auth: DB, Hasher, Sessions, Auditor and Factors are required")
 	}
-	o.Policy = NewPasswordPolicy(o.Policy.MinLength, o.Policy.MinScore)
-	o.Lockout = o.Lockout.normalized()
+	if o.Limits == nil {
+		o.Limits = NewLimits(o.Policy, o.Lockout)
+	}
 	if o.Notifier == nil {
 		o.Notifier = NopLockoutNotifier{}
 	}
@@ -137,7 +143,7 @@ func NewService(o ServiceOptions) (*Service, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	return &Service{o: o, refusals: newLockedRefusals()}, nil
+	return &Service{o: o, limits: o.Limits, refusals: newLockedRefusals()}, nil
 }
 
 // Hasher returns the password hasher (task 1.6 hashes admin-set passwords
@@ -145,7 +151,10 @@ func NewService(o ServiceOptions) (*Service, error) {
 func (s *Service) Hasher() *Hasher { return s.o.Hasher }
 
 // Policy returns the password policy.
-func (s *Service) Policy() PasswordPolicy { return s.o.Policy }
+func (s *Service) Policy() PasswordPolicy { return s.limits.Policy() }
+
+// Limits returns the shared password and lockout policies.
+func (s *Service) Limits() *Limits { return s.limits }
 
 // Sessions returns the session store.
 func (s *Service) Sessions() *Sessions { return s.o.Sessions }
@@ -260,7 +269,7 @@ func (s *Service) limitAccount(ctx context.Context, key string) error {
 // threshold locks the account in the same statement, so concurrent
 // attempts can never verify more than the threshold allows.
 func (s *Service) reserveAttempt(ctx context.Context, userID uuid.UUID) (attempt, error) {
-	threshold, base, maxSecs := s.o.Lockout.reserveArgs()
+	threshold, base, maxSecs := s.limits.Lockout().reserveArgs()
 	q := sqlc.New(s.o.DB)
 	for range 2 {
 		now := s.o.Now()
@@ -479,7 +488,7 @@ func (s *Service) failPassword(ctx context.Context, user *sqlc.User, att attempt
 			TargetType: "user", TargetID: user.ID.String(),
 			Details: audit.Details{
 				"failed_count": att.count, "locked_until": until.UTC().Format(time.RFC3339),
-				"lock_seconds": int64(s.o.Lockout.LockFor(int(att.count)) / time.Second),
+				"lock_seconds": int64(s.limits.Lockout().LockFor(int(att.count)) / time.Second),
 			},
 		}); err != nil {
 			return err
@@ -596,7 +605,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 	if subtle.ConstantTimeCompare([]byte(current), []byte(next)) == 1 {
 		return Issued{}, &PolicyError{ReasonUnchanged, "the new password must differ from the current one"}
 	}
-	if err := s.o.Policy.Check(next, user.Email, user.DisplayName); err != nil {
+	if err := s.limits.Policy().Check(next, user.Email, user.DisplayName); err != nil {
 		return Issued{}, err
 	}
 	hash, err := s.o.Hasher.Hash(ctx, next)

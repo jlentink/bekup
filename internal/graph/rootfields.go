@@ -77,6 +77,16 @@ var SingleRootFields = []string{
 	"Mutation.restoreGlobals",
 	"Query.restoreTargetDatabases",
 	"Query.restorePreview",
+	// E-mail (task 5.1, D-178): each sends an e-mail through the SMTP
+	// relay (one per request past the per-user limiter); verifyEmail
+	// checks a verification code.
+	"Mutation.sendTestEmail",
+	"Mutation.requestEmailVerification",
+	"Mutation.verifyEmail",
+	// Notification test sends (task 5.3b, D-191): each posts a webhook
+	// or sends an e-mail (one per request past the per-user limiter).
+	"Mutation.testSharedChannel",
+	"Mutation.testMyWebhook",
 }
 
 // CredentialOperations are the authz operations whose root fields verify,

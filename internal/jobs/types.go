@@ -241,6 +241,10 @@ type ListFilter struct {
 	ConnectionID *uuid.UUID
 	// Search matches a substring of the name or slug (case-insensitive).
 	Search string
+	// OwnerID narrows the page to the jobs this user owns (backup owner
+	// listed in job_owners). Staff only: List refuses it for an owned
+	// scope (ErrOwnerFilterForbidden).
+	OwnerID *uuid.UUID
 }
 
 // Cursor is the keyset position of a page (the last row of the previous

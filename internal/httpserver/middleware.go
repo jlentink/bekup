@@ -124,9 +124,13 @@ func (x *xffWarner) check(r *http.Request, trusted []netip.Prefix) {
 		slog.String("peer", ap.Addr().Unmap().String()), slog.String("request_id", RequestID(r.Context())))
 }
 
-func clientIP(trusted []netip.Prefix, warn *xffWarner) func(http.Handler) http.Handler {
+// clientIP resolves the client address with the current trusted-proxy
+// list (proxies is read once per request; a config reload swaps it,
+// D-200).
+func clientIP(proxies func() []netip.Prefix, warn *xffWarner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			trusted := proxies()
 			warn.check(r, trusted)
 			ci := resolveClient(r, trusted)
 			for _, h := range forwardingHeaders {
@@ -157,7 +161,10 @@ func isTrusted(a netip.Addr, trusted []netip.Prefix) bool {
 func resolveClient(r *http.Request, trusted []netip.Prefix) clientInfo {
 	var peer netip.Addr
 	if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
-		peer = ap.Addr().Unmap()
+		// Zones are dropped (a link-local client "fe80::1%eth0" is
+		// "fe80::1"): they are host-local, would not fit an inet column
+		// and must not make one client look like several.
+		peer = canonicalIP(ap.Addr())
 	}
 	ci := clientInfo{ip: peer}
 	if !isTrusted(peer, trusted) {
@@ -175,7 +182,7 @@ func resolveClient(r *http.Request, trusted []netip.Prefix) clientInfo {
 		if err != nil {
 			break
 		}
-		a = a.Unmap()
+		a = canonicalIP(a)
 		ci.ip = a
 		if !isTrusted(a, trusted) {
 			break
@@ -183,6 +190,9 @@ func resolveClient(r *http.Request, trusted []netip.Prefix) clientInfo {
 	}
 	return ci
 }
+
+// canonicalIP drops an IPv6 zone and unmaps IPv4-mapped addresses.
+func canonicalIP(a netip.Addr) netip.Addr { return a.WithZone("").Unmap() }
 
 func lastListValue(values []string) string {
 	if len(values) == 0 {
@@ -415,9 +425,10 @@ func IsBodyTooLarge(err error) bool {
 	return errors.As(err, &mbe)
 }
 
-func bodyLimit(limit int64) func(http.Handler) http.Handler {
+func bodyLimit(current func() int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			limit := current()
 			if r.ContentLength > limit {
 				writeError(w, http.StatusRequestEntityTooLarge)
 				return

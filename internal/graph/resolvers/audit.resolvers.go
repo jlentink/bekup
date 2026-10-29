@@ -35,3 +35,7 @@ func (r *queryResolver) AuditLog(ctx context.Context, filter *model.AuditLogFilt
 	}
 	return auditConnection(page, cursor > 0), nil
 }
+
+func (r *queryResolver) AuditChainStatus(ctx context.Context) (*model.AuditChainStatus, error) {
+	return r.auditChainStatus(ctx)
+}

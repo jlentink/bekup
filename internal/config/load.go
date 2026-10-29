@@ -123,13 +123,13 @@ func load[T any](cfg *T, name string, opts Options, devDefaults func(*T, bool),
 
 	path, err := findConfig(name, opts, lookup, dev)
 	if err != nil {
-		return nil, err
+		return nil, &FileError{Err: err}
 	}
 
 	if path != "" {
 		data, err := readSafeFile(path, false, maxConfigBytes)
 		if err != nil {
-			return nil, fmt.Errorf("config file: %w", err)
+			return nil, &FileError{Err: fmt.Errorf("config file: %w", err)}
 		}
 		present, err := decodeStrict(path, data, cfg)
 		if err != nil {
@@ -171,7 +171,7 @@ func load[T any](cfg *T, name string, opts Options, devDefaults func(*T, bool),
 			continue
 		}
 		if !dev {
-			errs = append(errs, fmt.Errorf("%s: inline secrets are rejected outside dev mode (set via %s); use %s_file", f.Path, sources[f.Path], f.Key))
+			errs = append(errs, &KeyError{Path: f.Path, Msg: fmt.Sprintf("%s: inline secrets are rejected outside dev mode (set via %s); use %s_file", f.Path, sources[f.Path], f.Key)})
 			continue
 		}
 		res.Warnings = append(res.Warnings, fmt.Sprintf("dev mode: using inline secret %s; use %s_file outside dev mode", f.Path, f.Key))
@@ -333,7 +333,8 @@ func formatDecodeError(path string, err error) error {
 		for i := range sme.Errors {
 			e := &sme.Errors[i]
 			row, col := e.Position()
-			errs = append(errs, fmt.Errorf("%s:%d:%d: unknown key %q", path, row, col, strings.Join(e.Key(), ".")))
+			key := strings.Join(e.Key(), ".")
+			errs = append(errs, &KeyError{Path: key, Msg: fmt.Sprintf("%s:%d:%d: unknown key %q", path, row, col, key)})
 		}
 		return errors.Join(errs...)
 	}
@@ -342,9 +343,10 @@ func formatDecodeError(path string, err error) error {
 		row, col := de.Position()
 		msg := strings.TrimPrefix(de.Error(), "toml: ")
 		if key := de.Key(); len(key) > 0 {
-			msg = fmt.Sprintf("key %q: %s", strings.Join(key, "."), msg)
+			k := strings.Join(key, ".")
+			return &KeyError{Path: k, Msg: fmt.Sprintf("%s:%d:%d: key %q: %s", path, row, col, k, msg)}
 		}
-		return fmt.Errorf("%s:%d:%d: %s", path, row, col, msg)
+		return &SyntaxError{Err: fmt.Errorf("%s:%d:%d: %s", path, row, col, msg)}
 	}
-	return fmt.Errorf("%s: %w", path, err)
+	return &SyntaxError{Err: fmt.Errorf("%s: %w", path, err)}
 }

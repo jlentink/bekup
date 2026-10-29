@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-import { useTheme } from "@/lib/theme";
+import { useTheme } from "@/lib/theme-context";
 
 /**
  * App-wide toaster. Its CSS comes from sonner/dist/styles.css (imported in

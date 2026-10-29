@@ -12,7 +12,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/jlentink/bekup/internal/app"
-	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/config"
 )
@@ -57,7 +56,7 @@ func openAdmin(c *cobra.Command, g *globalFlags) (*adminEnv, error) {
 	users, err := auth.NewUserAdmin(auth.UserAdminOptions{
 		DB: pool, Hasher: hasher, Sessions: sessions, Logger: logger,
 		Policy:  auth.NewPasswordPolicy(sec.PasswordMinLength, sec.PasswordMinScore),
-		Auditor: audit.New(pool, audit.Options{}),
+		Auditor: newCLIAuditor(pool),
 	})
 	if err != nil {
 		closePool()

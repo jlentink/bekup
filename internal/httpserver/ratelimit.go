@@ -46,9 +46,18 @@ type bucket[K comparable] struct {
 	last   time.Time
 }
 
+// CheckRate validates a refill rate and burst (PerSecond > 0 and finite,
+// Burst >= 1).
+func CheckRate(perSecond float64, burst int) error {
+	if math.IsNaN(perSecond) || math.IsInf(perSecond, 0) || perSecond <= 0 || burst < 1 {
+		return errors.New("httpserver: rate limit needs PerSecond > 0 and Burst >= 1")
+	}
+	return nil
+}
+
 // NewRateLimiter returns a limiter with o.
 func NewRateLimiter[K comparable](o RateLimitOptions) (*RateLimiter[K], error) {
-	if math.IsNaN(o.PerSecond) || math.IsInf(o.PerSecond, 0) || o.PerSecond <= 0 || o.Burst < 1 || o.MaxClients < 1 {
+	if CheckRate(o.PerSecond, o.Burst) != nil || o.MaxClients < 1 {
 		return nil, errors.New("httpserver: rate limit needs PerSecond > 0, Burst >= 1 and MaxClients >= 1")
 	}
 	now := o.Now
@@ -63,6 +72,43 @@ func NewRateLimiter[K comparable](o RateLimitOptions) (*RateLimiter[K], error) {
 		lru:        list.New(),
 		buckets:    make(map[K]*list.Element),
 	}, nil
+}
+
+// PrepareLimits validates a new refill rate and burst and returns the
+// commit that applies them (config reload, D-200). Tracked buckets keep
+// their tokens, capped at the new burst; the key bound (MaxClients) never
+// changes. Nothing changes until the commit runs.
+func (l *RateLimiter[K]) PrepareLimits(perSecond float64, burst int) (func(), error) {
+	if err := CheckRate(perSecond, burst); err != nil {
+		return nil, err
+	}
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.rate, l.burst = perSecond, float64(burst)
+		for _, el := range l.buckets {
+			if b, ok := el.Value.(*bucket[K]); ok {
+				b.tokens = math.Min(b.tokens, l.burst)
+			}
+		}
+	}, nil
+}
+
+// SetLimits validates and applies a new refill rate and burst at once.
+func (l *RateLimiter[K]) SetLimits(perSecond float64, burst int) error {
+	commit, err := l.PrepareLimits(perSecond, burst)
+	if err != nil {
+		return err
+	}
+	commit()
+	return nil
+}
+
+// Limits returns the current refill rate and burst.
+func (l *RateLimiter[K]) Limits() (perSecond float64, burst int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.rate, int(l.burst)
 }
 
 func newRateLimiter(o RateLimitOptions) (*RateLimiter[netip.Prefix], error) {

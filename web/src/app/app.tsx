@@ -1,5 +1,7 @@
 import { ApolloProvider } from "@apollo/client/react";
+import type { ApolloClient } from "@apollo/client";
 import { useState } from "react";
+import type { createBrowserRouter } from "react-router";
 import { RouterProvider } from "react-router/dom";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -9,9 +11,10 @@ import { ThemeProvider } from "@/lib/theme";
 
 import { createRouter } from "./router";
 
-export function App() {
-  const [client] = useState(createApolloClient);
-  const [router] = useState(createRouter);
+type Router = ReturnType<typeof createBrowserRouter>;
+
+/** Providers around a router; tests pass a memory router and a mock client. */
+export function AppProviders({ client, router }: { client: ApolloClient; router: Router }) {
   return (
     <ThemeProvider>
       <ApolloProvider client={client}>
@@ -22,4 +25,10 @@ export function App() {
       </ApolloProvider>
     </ThemeProvider>
   );
+}
+
+export function App() {
+  const [client] = useState(() => createApolloClient());
+  const [router] = useState(createRouter);
+  return <AppProviders client={client} router={router} />;
 }

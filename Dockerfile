@@ -87,9 +87,11 @@ ARG VERSION_VAR=main.version
 
 # GOTOOLCHAIN=local: never download a different toolchain during the build.
 # GOFLAGS=-mod=readonly: go.mod/go.sum must already be complete.
+# GOWORK=off: a local go.work never changes the module graph of the image.
 ENV CGO_ENABLED=0 \
     GOTOOLCHAIN=local \
-    GOFLAGS=-mod=readonly
+    GOFLAGS=-mod=readonly \
+    GOWORK=off
 
 WORKDIR /src
 

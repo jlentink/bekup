@@ -9,7 +9,8 @@ Run the HTTP server (embedded web UI, GraphQL API, health endpoints), the schedu
 without workers (scale them out with `bekup worker`). Refuses to start when the database role
 is privileged, the schema version differs from this binary (run `bekup migrate` first) or the
 master keyring does not match. SIGINT/SIGTERM drain in-flight requests within
-server.shutdown_timeout and running jobs within workers.shutdown_timeout.
+server.shutdown_timeout and running jobs within workers.shutdown_timeout. SIGHUP re-reads
+bekup.toml and applies the keys that are safe to change at runtime (D-200).
 
 ```
 bekup serve [flags]

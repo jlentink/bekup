@@ -1,9 +1,9 @@
 # Restore
 
-> **Status:** partial. Staging and verification (task 4.1), the restore
-> worker and the PostgreSQL restore (4.2), the MySQL/MariaDB restore (4.3),
-> temporary restore connections (4.4), the restore API (4.5) and scheduled
-> test restores (4.6) are implemented; the wizard (6.7) follows.
+> **Status:** implemented: staging and verification, the restore worker
+> for PostgreSQL and MySQL/MariaDB, temporary restore connections, the
+> restore API, scheduled test restores (M4) and the restore wizard, the
+> restore history and the test-restore pages of the web UI (M6).
 
 How to restore a backup: allowed targets per role, the mandatory fresh
 second-factor check, type-to-confirm for overwrites, stage-verify-restore,
@@ -12,8 +12,24 @@ restore connections (admin only) and scheduled test restores.
 
 ## Requesting a restore
 
-Restores are requested through the GraphQL API (D-167); the web wizard
-(task 6.7) builds on the same calls.
+Restores are requested in the web UI's restore wizard or through the
+GraphQL API (D-167); the wizard uses the same calls.
+
+In the web UI, open **Backups → Restores → New restore** (`/restore`), or
+click **Restore** next to a file on a run page
+(`/restore?artifactId=<id>`). The wizard walks through six steps: the backup (job → run →
+a verified, signed copy), the target (a connection from `restoreTargets`;
+an existing database or a new one; admins can create a temporary
+connection and pin its certificate and SSH host key inline), the options
+(keep owners for PostgreSQL; the age identity for recipient-encrypted
+backups, sent only with the restore request and cleared afterwards), the
+preview with every warning (destructive ones in red) and the privileged-
+target verdict (only admins may continue, after an explicit
+acknowledgement), the confirmation (the database name for an overwrite,
+the phrase for a globals restore) followed by a fresh passkey or
+authenticator-code check, and the live progress with the log, cancel
+(admins and maintainers) and the result, including the routines switched
+to SECURITY INVOKER. `/restores` lists past restores with filters (D-185).
 
 ### Who may restore what
 

@@ -1,0 +1,87 @@
+/*
+ * Dashboard-only patterns (task 6.2). Plain CSS on the design tokens: no
+ * inline styles (CSP style-src 'self', D-082). Geometry of the charts is
+ * carried by SVG attributes, never style attributes.
+ */
+
+/* Ledger folio: a double rule along the top edge of every tile. */
+.dash-tile {
+  box-shadow: var(--shadow-raised);
+  border-top-width: 3px;
+  border-top-style: double;
+  border-top-color: var(--border-strong);
+}
+
+/* One orchestrated page load: tiles rise in folio order. */
+.dash-reveal {
+  animation: dash-rise 0.45s var(--ease-out) both;
+}
+.dash-stagger > :nth-child(2) {
+  animation-delay: 60ms;
+}
+.dash-stagger > :nth-child(3) {
+  animation-delay: 120ms;
+}
+.dash-stagger > :nth-child(4) {
+  animation-delay: 180ms;
+}
+.dash-stagger > :nth-child(n + 5) {
+  animation-delay: 240ms;
+}
+
+@keyframes dash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Job health cards: a status stripe on the binding edge. */
+.dash-health-card {
+  border-left-width: 4px;
+}
+.dash-health-card[data-state="failing"] {
+  border-left-color: var(--status-failed);
+}
+.dash-health-card[data-state="missed"],
+.dash-health-card[data-state="overdue"] {
+  border-left-color: var(--status-missed);
+}
+.dash-health-card[data-state="warning"] {
+  border-left-color: var(--status-partial);
+}
+.dash-health-card[data-state="running"] {
+  border-left-color: var(--status-running);
+}
+.dash-health-card[data-state="healthy"] {
+  border-left-color: var(--status-success);
+}
+.dash-health-card[data-state="never"],
+.dash-health-card[data-state="paused"] {
+  border-left-color: var(--status-neutral);
+  border-left-style: dashed;
+}
+
+/* Summary figures: ruled columns like a ledger's totals line. */
+.dash-figures > * + * {
+  border-left: 1px solid var(--rule);
+}
+@media (max-width: 47.99rem) {
+  .dash-figures > :nth-child(odd) {
+    border-left: 0;
+  }
+  .dash-figures > :nth-child(n + 3) {
+    border-top: 1px solid var(--rule);
+  }
+}
+
+/* The 24 h strip's hour labels. */
+.dash-strip-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  fill: var(--muted-foreground);
+}

@@ -31,12 +31,15 @@ SELECT EXISTS (SELECT 1 FROM jobs WHERE slug = @slug)::boolean;
 
 -- ListJobs returns one page of non-deleted jobs ordered by (lower(name),
 -- id) after the cursor. scope_all = false limits the page to the jobs
--- @user_id owns (authz.JobScope).
+-- @user_id owns (authz.JobScope). owner_id (staff only, checked by the
+-- service) narrows the page to the jobs that user owns.
 -- name: ListJobs :many
 SELECT j.* FROM jobs j
 WHERE j.deleted_at IS NULL
   AND (@scope_all::boolean OR EXISTS (
         SELECT 1 FROM job_owners o WHERE o.job_id = j.id AND o.user_id = @user_id::uuid))
+  AND (sqlc.narg(owner_id)::uuid IS NULL OR EXISTS (
+        SELECT 1 FROM job_owners fo WHERE fo.job_id = j.id AND fo.user_id = sqlc.narg(owner_id)::uuid))
   AND (sqlc.narg(enabled)::boolean IS NULL OR j.enabled = sqlc.narg(enabled)::boolean)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR j.connection_id = sqlc.narg(connection_id)::uuid)
   AND (sqlc.narg(search)::text IS NULL

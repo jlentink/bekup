@@ -31,10 +31,10 @@ const firstAdminCommand = "bekup admin create --email <address> --display-name <
 // active admin exists, serve logs the command to run at WARN and keeps
 // running (nobody can sign in until an admin exists).
 func (a *App) newUserAdmin(ctx context.Context) error {
-	sec := a.opts.Config.Security
-	policy := auth.NewPasswordPolicy(sec.PasswordMinLength, sec.PasswordMinScore)
+	// The password policy is the auth service's shared, reloadable one
+	// (D-200).
 	users, err := auth.NewUserAdmin(auth.UserAdminOptions{
-		DB: a.pool, Hasher: a.auth.Hasher(), Policy: policy, Sessions: a.auth.Sessions(),
+		DB: a.pool, Hasher: a.auth.Hasher(), Limits: a.auth.Limits(), Sessions: a.auth.Sessions(),
 		Auditor: a.auditor, Logger: a.opts.Logger,
 	})
 	if err != nil {

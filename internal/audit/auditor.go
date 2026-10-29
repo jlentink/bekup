@@ -23,15 +23,25 @@ var (
 
 // Auditor records audit entries. It is safe for concurrent use.
 type Auditor struct {
-	db  sqlc.DBTX
-	reg *logging.Registry
+	db       sqlc.DBTX
+	reg      *logging.Registry
+	observer Observer
 }
+
+// Observer is told about every recorded entry with the q of the entry, so
+// it writes in the same transaction (task 5.3: audited actions that are
+// notification events go to the notification outbox atomically with the
+// entry). An error fails the record (and so the audited operation): it
+// must only fail on database errors.
+type Observer func(ctx context.Context, q *sqlc.Queries, ev Event) error
 
 // Options configures New.
 type Options struct {
 	// Registry holds secret values scrubbed from details
 	// (nil: logging.DefaultRegistry).
 	Registry *logging.Registry
+	// Observer is called after every recorded entry (nil: none).
+	Observer Observer
 }
 
 // New returns an Auditor writing through db (normally the bekup_app pool).
@@ -40,7 +50,7 @@ func New(db sqlc.DBTX, opts Options) *Auditor {
 	if reg == nil {
 		reg = logging.DefaultRegistry
 	}
-	return &Auditor{db: db, reg: reg}
+	return &Auditor{db: db, reg: reg, observer: opts.Observer}
 }
 
 // Entry is a stored audit row as returned by Record.
@@ -64,6 +74,11 @@ func (a *Auditor) RecordTx(ctx context.Context, q *sqlc.Queries, ev Event) (Entr
 	row, err := q.InsertAuditLog(ctx, p)
 	if err != nil {
 		return Entry{}, fmt.Errorf("%w: %s: %w", ErrRecordFailed, ev.Action, err)
+	}
+	if a.observer != nil {
+		if err := a.observer(ctx, q, ev); err != nil {
+			return Entry{}, fmt.Errorf("%w: %s: observer: %w", ErrRecordFailed, ev.Action, err)
+		}
 	}
 	return row, nil
 }

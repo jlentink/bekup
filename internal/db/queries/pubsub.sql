@@ -15,3 +15,9 @@ LISTEN bekup_run_events;
 
 -- name: ListenRestoreEvents :exec
 LISTEN bekup_restore_events;
+
+-- name: ListenNotificationEvents :exec
+LISTEN bekup_notification_events;
+
+-- name: ListenSettingsEvents :exec
+LISTEN bekup_settings_events;

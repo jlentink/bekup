@@ -42,6 +42,9 @@ var (
 	ErrNotOwner = errors.New("jobs: the user is not an owner of the job")
 	// ErrActorMismatch: the actor is not the authenticated caller.
 	ErrActorMismatch = errors.New("jobs: the actor is not the authenticated caller")
+	// ErrOwnerFilterForbidden: List with an owner filter for a caller
+	// limited to their own jobs (the filter is for admins and maintainers).
+	ErrOwnerFilterForbidden = errors.New("jobs: the owner filter needs access to every job")
 )
 
 // AuditTargetType is the audit target type of job entries (target id =
@@ -272,13 +275,16 @@ func (s *Service) List(ctx context.Context, scope authz.Scope, userID uuid.UUID,
 	if limit < 1 || limit > 200 {
 		return Page{}, fieldErr("first", "must be between 1 and 200")
 	}
-	p := sqlc.ListJobsParams{UserID: userID, Enabled: f.Enabled, ConnectionID: f.ConnectionID, MaxRows: int32(limit + 1)}
+	p := sqlc.ListJobsParams{UserID: userID, OwnerID: f.OwnerID, Enabled: f.Enabled, ConnectionID: f.ConnectionID, MaxRows: int32(limit + 1)}
 	switch scope {
 	case authz.ScopeAll:
 		p.ScopeAll = true
 	case authz.ScopeOwned:
 		if userID == uuid.Nil {
 			return Page{}, ErrActorMismatch
+		}
+		if f.OwnerID != nil {
+			return Page{}, ErrOwnerFilterForbidden
 		}
 	default:
 		return Page{}, ErrActorMismatch

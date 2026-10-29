@@ -1,0 +1,143 @@
+# Runtime config reload (task 6.13, D-200). Admin only.
+#
+# Every serve and worker process re-reads its own bekup.toml (the file it
+# loaded at startup) on request, applies only the keys that are safe to
+# change without a restart ("live" keys) and reports changed keys that
+# still need a restart. An unreadable or invalid file never replaces the
+# running configuration. Only key names and an error kind are ever shown:
+# never values and never the file path (details are in the server log).
+
+"The outcome of a reload in one process."
+enum ConfigReloadStatus {
+  "The process started with this configuration (no reload yet)."
+  LOADED
+  "Live keys changed and were applied."
+  APPLIED
+  "The file matches the running configuration."
+  UNCHANGED
+  "Keys changed that need a restart (live keys, if any, were applied)."
+  RESTART_REQUIRED
+  "The file could not be read or is invalid; nothing changed."
+  REJECTED
+  "A change could not be applied or recorded; nothing changed."
+  FAILED
+}
+
+"""
+Why a reload was rejected or failed. (An outcome that could not be
+recorded, database unavailable, is never stored: it is only in the
+process's log and metrics.)
+"""
+enum ConfigReloadErrorKind {
+  "The file is missing, unreadable or fails the ownership/mode checks."
+  FILE
+  "The file is not valid TOML."
+  SYNTAX
+  "A key is unknown or a value is invalid (see errorKeys)."
+  INVALID
+  "A component refused the new values."
+  APPLY
+}
+
+"What started a reload."
+enum ConfigReloadTrigger {
+  "An admin's reloadConfig (every process)."
+  UI
+  "SIGHUP to one process."
+  SIGNAL
+}
+
+"The kind of bekup process."
+enum BekupProcessKind {
+  SERVE
+  WORKER
+}
+
+"One process's answer to a reload request, or its startup row."
+type ConfigProcessResult {
+  "Random id of the process (new at every start)."
+  instanceId: UUID!
+  kind: BekupProcessKind!
+  "Host name of the process (usually the container id)."
+  hostname: String!
+  "bekup version of the process."
+  version: String!
+  processStartedAt: Time!
+  finishedAt: Time!
+  "The request answered (null for the startup row)."
+  requestId: UUID
+  "What started the answered request (null for the startup row)."
+  trigger: ConfigReloadTrigger
+  """
+  The process's LISTEN connection is up now, so it receives reload
+  requests. False: the process stopped (or lost its database connection);
+  its row is history and needs no action. Display only (the connection's
+  application_name; D-200).
+  """
+  listening: Boolean!
+  status: ConfigReloadStatus!
+  "Set for REJECTED and FAILED."
+  errorKind: ConfigReloadErrorKind
+  "Live keys this reload applied (a live key this kind of process does not use is not listed)."
+  appliedKeys: [String!]!
+  "Changed keys that need a restart of this process."
+  restartKeys: [String!]!
+  "Keys named by the errors of a rejected file (unknown keys appear as `<section>.unknown_key`)."
+  errorKeys: [String!]!
+  "Applied keys whose change weakens security (every admin was alerted)."
+  weakenedKeys: [String!]!
+}
+
+"A reload request with the answers so far."
+type ConfigReloadRequest {
+  id: UUID!
+  requestedAt: Time!
+  "The admin who asked."
+  requestedBy: UUID
+  trigger: ConfigReloadTrigger!
+  "One entry per process that answered (poll until expectedProcesses answered)."
+  results: [ConfigProcessResult!]!
+  "Processes that can receive a request right now."
+  listeningProcesses: Int!
+  """
+  Processes this request waits for: those that answered plus those
+  listening now that are responsible for it (startup row at most one
+  minute after the request, database time; a process started later loaded
+  a newer file and never answers it; D-200).
+  """
+  expectedProcesses: Int!
+}
+
+"The configuration page."
+type ConfigStatus {
+  "Keys a reload applies without a restart (`section.key`)."
+  liveKeys: [String!]!
+  """
+  The newest row of every process listening now (any age) and of every
+  process seen in the last 7 days, newest first (at most 100).
+  """
+  processes: [ConfigProcessResult!]!
+  "Processes that can receive a reload request right now."
+  listeningProcesses: Int!
+  "The newest reload request (null: none yet)."
+  lastRequest: ConfigReloadRequest
+}
+
+extend type Query {
+  "Live keys, processes and the newest reload request."
+  configStatus: ConfigStatus! @hasRole(roles: [ADMIN])
+  "One reload request with its answers (NOT_FOUND for an unknown id)."
+  configReloadRequest(id: UUID!): ConfigReloadRequest! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Asks every serve and worker process to reload bekup.toml. Audited
+  (config.reload_requested; each process records config.reloaded or
+  config.reload_failed). Returns the request with the answer of the
+  process that took it; poll configReloadRequest for the others.
+  RATE_LIMITED when a reload was requested less than 10 seconds ago. A
+  change that weakens security raises a security alert to every admin.
+  """
+  reloadConfig: ConfigReloadRequest! @hasRole(roles: [ADMIN]) @stepUp
+}

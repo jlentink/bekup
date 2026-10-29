@@ -201,3 +201,24 @@ func (a *API) logs(ctx context.Context, v *View, afterID int64, limit int) (LogP
 	out.Lines = rows
 	return out, nil
 }
+
+// IDsUpdatedSince returns up to limit (1..MaxPage) restores the caller
+// may view that changed at or after since, newest change first (the
+// resync of the restoresUpdated stream; D-196). Delivery re-loads and
+// re-authorizes each one.
+func (a *API) IDsUpdatedSince(ctx context.Context, since time.Time, limit int) ([]uuid.UUID, error) {
+	if err := a.o.Policy.Precheck(ctx, authz.OpRestoreView); err != nil {
+		return nil, err
+	}
+	scope, uid, err := a.o.Policy.JobScope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := sqlc.New(a.svc.o.DB).ListRestoreIDsUpdatedSince(ctx, sqlc.ListRestoreIDsUpdatedSinceParams{
+		Since: since, ScopeAll: scope == authz.ScopeAll, UserID: uid, MaxRows: int32(min(max(limit, 1), MaxPage)),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("restore: restores updated since: %w", err)
+	}
+	return ids, nil
+}

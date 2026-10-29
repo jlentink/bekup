@@ -109,7 +109,10 @@ type runEnv struct {
 	river   int64
 }
 
-func newRunEnv(t *testing.T) *runEnv {
+// runEnvOption adds services to the GraphQL options of newRunEnv.
+type runEnvOption func(e *authEnv, o *graph.Options)
+
+func newRunEnv(t *testing.T, opts ...runEnvOption) *runEnv {
 	t.Helper()
 	d := dbtest.Migrated(t)
 	e := &authEnv{t: t, d: d, pool: d.AppPool(t)}
@@ -155,12 +158,17 @@ func newRunEnv(t *testing.T) *runEnv {
 		t.Fatal(err)
 	}
 	counter := &countingDB{DBTX: e.pool, begin: e.pool}
-	gql, err := graph.New(graph.Options{
+	gopts := graph.Options{
 		Logger: logger, MaxComplexity: 5000, MaxDepth: 12, MaxBodyBytes: 1 << 16,
 		Access: graph.NewPolicyAccess(pol), Policy: pol, AuditLog: e.auditor, Auth: svc,
 		Jobs: js, JobKeys: keys, Runs: runstate.NewReader(counter), Bus: bus, Calendar: calendar.New(counter),
-		Streams: &graph.StreamOptions{Hub: hub, AllowedOrigins: []string{testBaseURL}},
-	})
+		Streams:      &graph.StreamOptions{Hub: hub, AllowedOrigins: []string{testBaseURL}},
+		SystemHealth: newSystemHealth(t, e.pool),
+	}
+	for _, o := range opts {
+		o(e, &gopts)
+	}
+	gql, err := graph.New(gopts)
 	if err != nil {
 		t.Fatal(err)
 	}

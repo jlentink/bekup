@@ -67,6 +67,29 @@ services:
     profiles: [full]
     build: *bekup-build
 
+  # DEV ONLY (profile `runner`, `just dev-runner`, D-201): the runner for a
+  # NATIVE serve (`just run`). Same image, hardening, socket and dev
+  # runner.toml as `runner`, but its gRPC listener binds a dedicated
+  # `runner-host` network whose port is published on 127.0.0.1 only (Docker
+  # cannot publish from the internal `runner-ctl`). Not on `backend` or
+  # `dev-host` (no app DB access) and not listening on `targets` (the target
+  # DBs cannot reach the gRPC port). mTLS is unchanged: the native serve uses
+  # secrets/local/bekup_client.* and runner.server_name = "runner".
+  runner-host:
+    extends:
+      file: docker-compose.yml
+      service: runner
+    profiles: [runner]
+    build: *bekup-build
+    environment:
+      BEKUP_LISTEN_ADDRESS: ${RUNNER_HOST_IP:-10.213.253.10}:7443
+    networks: !override
+      runner-host:
+        ipv4_address: ${RUNNER_HOST_IP:-10.213.253.10}
+      targets: {}
+    ports:
+      - "127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}:7443"
+
   serve:
     profiles: [full]
     # Go toolchain + air instead of the distroless binary.
@@ -473,6 +496,12 @@ networks:
   # DEV ONLY: carries the loopback-published ports of postgres and adminer
   # (`backend` is internal, so Docker cannot publish ports from it).
   dev-host: {}
+  # DEV ONLY: carries the loopback-published gRPC port of `runner-host`
+  # (D-201). Only that service is attached.
+  runner-host:
+    ipam:
+      config:
+        - subnet: ${RUNNER_HOST_SUBNET:-10.213.253.0/24}
 
 volumes:
   go-mod: {}

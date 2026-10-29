@@ -1,0 +1,20 @@
+# Reference list of the security.system alert kinds (D-190, D-198).
+# Admin only. The server decides what raises an alert; this list only
+# documents it so clients need not hard-code it.
+
+"One security.system alert kind."
+type SecurityAlertType {
+  "The kind (data.kind of the notification), e.g. ssrf_allowlist_widened."
+  kind: String!
+  "Its fixed severity."
+  severity: NotificationSeverity!
+  "What raises it."
+  description: String!
+  "How often it is sent, e.g. `every time` or `once a day`."
+  repeat: String!
+}
+
+extend type Query {
+  "Every security.system alert kind, most severe first."
+  securityAlertTypes: [SecurityAlertType!]! @hasRole(roles: [ADMIN])
+}

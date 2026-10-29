@@ -17,6 +17,14 @@
 // multicast, broadcast, reserved, tunnel/translation forms of denied
 // addresses, and loopback outside dev mode) can never be allowlisted.
 //
+// Allowlist entries are scoped (D-198): a Set holds one Guard per Scope
+// (destinations, smtp, shared_webhooks, personal_webhooks) and each guard
+// honors only the entries carrying its scope. The bootstrap list applies
+// to every scope except personal_webhooks, so only an admin entry
+// explicitly scoped to it can widen what users' personal webhooks reach.
+// Wildcards over public suffixes and names under public wildcard-DNS
+// services are refused.
+//
 // HTTP clients from NewHTTPClient never follow redirects, use no proxy,
 // require TLS 1.2 or later and come with response size limit helpers.
 // Normalize maps dial errors to generic categories for non-admin callers so

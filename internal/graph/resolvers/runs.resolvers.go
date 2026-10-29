@@ -58,12 +58,20 @@ func (r *runItemResolver) Artifacts(ctx context.Context, obj *model.RunItem) ([]
 	return r.runArtifacts(ctx, obj.RunID, &id, nil)
 }
 
+func (r *runItemResolver) Stats(ctx context.Context, obj *model.RunItem) (*model.RunItemStats, error) {
+	return r.runItemStats(ctx, obj)
+}
+
 func (r *subscriptionResolver) RunUpdated(ctx context.Context, jobID *uuid.UUID, runID *uuid.UUID) (<-chan *model.Run, error) {
 	return r.runUpdated(ctx, jobID, runID)
 }
 
 func (r *subscriptionResolver) RunLogAppended(ctx context.Context, runID uuid.UUID, afterID *string) (<-chan *model.RunLogBatch, error) {
 	return r.runLogAppended(ctx, runID, afterID)
+}
+
+func (r *subscriptionResolver) RunActivity(ctx context.Context, runID uuid.UUID, afterLogID *string) (<-chan *model.RunActivity, error) {
+	return r.runActivity(ctx, runID, afterLogID)
 }
 
 func (r *Resolver) Run() generated.RunResolver { return &runResolver{r} }

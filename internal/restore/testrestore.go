@@ -222,7 +222,9 @@ type NoTestNotify struct{}
 // EmitTestRestore implements TestNotifier.
 func (NoTestNotify) EmitTestRestore(context.Context, TestNotification) {}
 
-// Alert kinds of test restores (logged at ERROR until task 5.5).
+// Alert kinds of test restores (logged at ERROR; the failure reaches the
+// job's audience as test_restore.failed and a kept scratch database is
+// audited as test_restore.scratch_kept).
 const (
 	// AlertTestRestoreFailed: a test restore failed or could not complete.
 	AlertTestRestoreFailed AlertKind = "run.test_restore_failed"
@@ -813,8 +815,12 @@ func (w *TestRestoreWorker) finish(ctx context.Context, log *slog.Logger, tr sql
 		code, msg := out.code, TestErrorMessage(out.code)
 		p.ErrorCode, p.ErrorMessage = &code, &msg
 	}
-	if _, err := sqlc.New(svc.o.DB).FinishTestRestore(fctx, p); err != nil {
+	n, err := sqlc.New(svc.o.DB).FinishTestRestore(fctx, p)
+	if err != nil {
 		return fmt.Errorf("restore: record test restore %s: %w", tr.ID, err)
+	}
+	if n > 0 {
+		svc.o.Metrics.TestRestoreFinished(out.status)
 	}
 	details := audit.Details{
 		"job_id": tr.JobID.String(), "target_connection_id": tr.TargetConnectionID.String(), "trigger": string(tr.Trigger),

@@ -1,0 +1,23 @@
+# The shared notification channels attached to a job, as admins and
+# maintainers see them (D-198). Backup owners get null. Never e-mail
+# addresses, webhook URLs or signing keys; managing channels stays admin
+# only (sharedChannels, attachSharedChannel, ...).
+
+"A shared channel attached to a job."
+type JobSharedChannelAttachment {
+  channelId: UUID!
+  name: String!
+  type: SharedChannelType!
+  "Scheme, host and port of a webhook URL (null for e-mail lists)."
+  displayUrl: String
+  "False while the channel is disabled (by an admin or automatically)."
+  enabled: Boolean!
+  "Groups and events the channel receives for this job; both empty: every non-security event of the job."
+  groups: [NotificationGroup!]!
+  events: [String!]!
+}
+
+extend type Job {
+  "The shared channels attached to this job. Admins and maintainers only (null for backup owners)."
+  sharedChannelAttachments: [JobSharedChannelAttachment!]
+}

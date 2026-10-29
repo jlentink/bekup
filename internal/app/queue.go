@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/jlentink/bekup/internal/connections"
+	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/notify/missed"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
@@ -48,7 +50,8 @@ func (a *App) newQueue(withWorkers bool) error {
 	}
 	a.queue = c
 	if withWorkers {
-		a.components = append(a.components, c)
+		// The outbox dispatcher runs where the workers run.
+		a.components = append(a.components, c, a.notifier)
 	}
 	return nil
 }
@@ -74,6 +77,7 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	if err := retention.Register(ws, rw); err != nil {
 		return err
 	}
+	a.retention = rw
 	// Restores (tasks 4.2/4.3).
 	rsw, err := a.newRestoreWorker()
 	if err != nil {
@@ -88,6 +92,26 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	}
 	// Restores no worker will finish (task 4.5): failed, released, audited.
 	if err := restore.RegisterStuckSweep(ws, a.restore, a.opts.Config.Workers.RestoreTimeout.D()); err != nil {
+		return err
+	}
+	// Notifications (task 5.3): fan-out, deliveries, the daily retention
+	// digest and cleanup.
+	if err := notify.Register(ws, a.notifier); err != nil {
+		return err
+	}
+	// Missed-backup (dead-man) alerts (task 5.4).
+	md, err := missed.New(missed.Options{
+		DB: a.pool, DefaultTimeout: a.opts.Config.Workers.BackupTimeout.D(), Logger: a.opts.Logger,
+	})
+	if err != nil {
+		return err
+	}
+	if err := missed.Register(ws, md); err != nil {
+		return err
+	}
+	// Security checks (task 5.5): certificate and pin expiry, audit chain
+	// verification, posture reminders.
+	if err := a.registerSecurityChecks(ws); err != nil {
 		return err
 	}
 	// Temporary restore connections (task 4.4): expiry / after-restore
@@ -116,7 +140,8 @@ func (a *App) newRetentionWorker() (*retention.Worker, error) {
 	return retention.New(retention.Options{
 		DB: a.pool, Auditor: a.auditor, Destinations: a.destinations, Queue: a.queueInserter,
 		Publisher: a.publisher(), DryRun: cfg.DryRun, MaxDeletions: cfg.MaxDeletionsPerSweep,
-		PartialCleanupAge: cfg.PartialCleanupAge.D(), Logger: a.opts.Logger,
+		PartialCleanupAge: cfg.PartialCleanupAge.D(), Metrics: a.metrics, Logger: a.opts.Logger,
+		Alerts: a.retentionAlerts(),
 	})
 }
 
@@ -136,6 +161,7 @@ func (a *App) newScheduler() error {
 		Interval:  cfg.TickInterval.D(),
 		BatchSize: cfg.BatchSize,
 		Publisher: a.publisher(),
+		Metrics:   a.metrics,
 	})
 	if err != nil {
 		return err

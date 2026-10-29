@@ -1,0 +1,131 @@
+# Runtime SSRF allowlist (D-120, D-196). Admin only.
+#
+# Every outbound connection of bekup (S3 and SFTP destinations, SMTP,
+# webhooks) goes through the dial-time SSRF guard. Private, shared and
+# special-purpose ranges are denied unless allowlisted; metadata,
+# link-local, multicast, reserved and tunnel ranges (and loopback outside
+# dev mode) are always denied. The effective allowlist is the bootstrap
+# list of `[netguard]` in bekup.toml plus the admin list managed here; a
+# change applies to every serve and worker process within seconds.
+#
+# Every admin entry names the outbound uses it widens (scopes, D-198).
+# The bootstrap list and entries saved without scopes cover every use
+# except personal webhooks: users' personal webhooks reach a private
+# target only through an entry an admin explicitly scoped to
+# PERSONAL_WEBHOOKS.
+
+"An outbound use an allowlist entry widens."
+enum SsrfScope {
+  "S3 and SFTP destinations."
+  DESTINATIONS
+  "The SMTP server."
+  SMTP
+  "Shared notification webhooks (configured by admins)."
+  SHARED_WEBHOOKS
+  """
+  Users' personal webhooks. Any user can enter a webhook URL, so an entry
+  with this scope lets every user make bekup send requests to that private
+  target. Never granted by default.
+  """
+  PERSONAL_WEBHOOKS
+}
+
+"One admin allowlist entry."
+type SsrfAllowlistEntry {
+  "The CIDR or host name (canonical form)."
+  value: String!
+  "The uses it widens (at least one)."
+  scopes: [SsrfScope!]!
+}
+
+"One admin allowlist entry to store."
+input SsrfAllowlistEntryInput {
+  "A CIDR (e.g. 10.20.0.0/16) or a host name (exact or `*.suffix`)."
+  value: String!
+  """
+  The uses it widens (at least one). Null: the scopes stored for the same
+  value, or every use except PERSONAL_WEBHOOKS for a new value.
+  """
+  scopes: [SsrfScope!]
+}
+
+"The SSRF allowlist."
+type SsrfAllowlist {
+  "CIDRs managed here (canonical form, e.g. 10.20.0.0/16), whatever their scopes (legacy: use cidrEntries)."
+  cidrs: [String!]!
+  "Host names managed here (canonical form), whatever their scopes (legacy: use hostEntries)."
+  hosts: [String!]!
+  "CIDRs managed here with their scopes."
+  cidrEntries: [SsrfAllowlistEntry!]!
+  "Host names managed here (exact names or `*.suffix`) with their scopes."
+  hostEntries: [SsrfAllowlistEntry!]!
+  "The scopes the bootstrap entries of bekup.toml apply to (every scope except PERSONAL_WEBHOOKS)."
+  configScopes: [SsrfScope!]!
+  "The scopes of an entry saved without scopes."
+  defaultScopes: [SsrfScope!]!
+  """
+  True when an admin entry carries PERSONAL_WEBHOOKS: users' personal
+  webhooks may reach private targets (a weakened default; show it).
+  """
+  personalWebhooksWidened: Boolean!
+  "The bootstrap CIDRs of `[netguard] allow_cidrs` in bekup.toml (read-only)."
+  configCidrs: [String!]!
+  "The bootstrap host names of `[netguard] allow_hosts` in bekup.toml (read-only)."
+  configHosts: [String!]!
+  "True in dev mode only: loopback ranges may be allowlisted."
+  loopbackAllowed: Boolean!
+  """
+  Stored entries this server does not apply (for example loopback after
+  leaving dev mode); saving the list drops them.
+  """
+  ignoredEntries: Int!
+  "The most entries per list (256)."
+  maxEntries: Int!
+  "When the list was last changed (null: never)."
+  updatedAt: Time
+  "Who changed it last."
+  updatedBy: UUID
+}
+
+input SsrfAllowlistInput {
+  """
+  The complete new list of CIDRs as plain values (each keeps its stored
+  scopes; new values get the default scopes). Give either cidrs or
+  cidrEntries.
+  """
+  cidrs: [String!]
+  """
+  The complete new list of host names as plain values. Give either hosts
+  or hostEntries.
+  """
+  hosts: [String!]
+  "The complete new list of CIDRs with their scopes (replaces the stored one)."
+  cidrEntries: [SsrfAllowlistEntryInput!]
+  "The complete new list of host names with their scopes (replaces the stored one)."
+  hostEntries: [SsrfAllowlistEntryInput!]
+  """
+  The `updatedAt` of the list you edited (null when none was stored):
+  CONFLICT when someone changed it in the meantime.
+  """
+  expectedUpdatedAt: Time
+}
+
+extend type Query {
+  "The SSRF allowlist (bootstrap and admin entries)."
+  ssrfAllowlist: SsrfAllowlist! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Replaces the admin SSRF allowlist. Every entry is validated like the
+  bootstrap list (VALIDATION with field `cidrs.<i>`, `hosts.<i>`,
+  `cidrEntries.<i>.value`, `cidrEntries.<i>.scopes`, ...): no /0, nothing
+  overlapping an always-denied range, IP literals only as CIDRs, loopback
+  only in dev mode, wildcards not over a public suffix (`*.co.uk`) or a
+  public wildcard-DNS service (nip.io and the like), at least one scope.
+  Audited (setting.changed); adding entries or scopes widens what bekup
+  may connect to and raises a security alert to every admin (stating when
+  personal webhooks gained access).
+  """
+  updateSsrfAllowlist(input: SsrfAllowlistInput!): SsrfAllowlist! @hasRole(roles: [ADMIN]) @stepUp
+}

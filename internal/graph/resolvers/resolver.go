@@ -18,12 +18,15 @@ import (
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/calendar"
+	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/downloads"
+	"github.com/jlentink/bekup/internal/egress"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
+	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runstate"
@@ -85,4 +88,25 @@ type Resolver struct {
 	// TestRestores backs the test-restore fields (task 4.6; nil: those
 	// fields fail with an internal error).
 	TestRestores *restore.TestRestoreAPI
+	// Email backs the SMTP settings, sendTestEmail and the e-mail
+	// verification (task 5.1; nil members: those fields fail with an
+	// internal error).
+	Email EmailServices
+	// SystemHealth backs Query.systemHealth (task 5.6; nil: the field
+	// fails with an internal error).
+	SystemHealth SystemHealthSource
+	// Notifications backs the shared channels, own channels, preferences
+	// and inbox fields and, with Bus, the inbox part of accountEvents
+	// (task 5.3b, D-197; nil: those fields fail with an internal error,
+	// accountEvents delivers session events only).
+	Notifications *notify.API
+	// Egress backs ssrfAllowlist and updateSsrfAllowlist (D-196; nil:
+	// those fields fail with an internal error).
+	Egress *egress.Service
+	// AuditChain backs Query.auditChainStatus (D-196; nil: the field
+	// fails with an internal error).
+	AuditChain AuditChainSource
+	// ConfigReload backs configStatus, configReloadRequest and
+	// reloadConfig (task 6.13, D-200; nil: the fields fail).
+	ConfigReload *configreload.API
 }

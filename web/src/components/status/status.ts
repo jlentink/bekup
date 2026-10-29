@@ -68,5 +68,9 @@ export const STATUS_META: Record<RunStatus, StatusMeta> = {
 };
 
 /** Weakened-security markers (D-001: permanent, never hidden). */
-export const SECURITY_FLAGS = ["unencrypted", "insecure-transport"] as const;
+export const SECURITY_FLAGS = [
+  "unencrypted",
+  "insecure-transport",
+  "personal-webhooks-widened",
+] as const;
 export type SecurityFlag = (typeof SECURITY_FLAGS)[number];

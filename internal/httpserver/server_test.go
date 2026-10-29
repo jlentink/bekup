@@ -40,6 +40,7 @@ type recorded struct {
 
 type testEnv struct {
 	h      http.Handler
+	srv    *Server
 	logs   *bytes.Buffer
 	rec    *recorded
 	ready  *error
@@ -102,6 +103,7 @@ func newEnv(t *testing.T, mutate func(*Options)) *testEnv {
 		t.Fatal(err)
 	}
 	env.h = s.Handler()
+	env.srv = s
 	return env
 }
 
@@ -322,6 +324,10 @@ func TestClientIPTrustedProxies(t *testing.T) {
 		{"bad proto ignored", "10.0.0.5:1", []string{"X-Forwarded-Proto", "javascript"}, "10.0.0.5", ""},
 		{"ipv6 trusted", "[fd00::1]:1", []string{"X-Forwarded-For", "2001:db8::5"}, "2001:db8::5", ""},
 		{"mapped peer", "[::ffff:10.0.0.5]:1", []string{"X-Forwarded-For", "198.51.100.9"}, "198.51.100.9", ""},
+		// M5 review L1: zones are dropped, so link-local clients get a
+		// storable address (and one client stays one address).
+		{"link-local peer with zone", "[fe80::1%eth0]:1", nil, "fe80::1", ""},
+		{"zoned XFF entry", "10.0.0.5:1", []string{"X-Forwarded-For", "fe80::7%en0"}, "fe80::7", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

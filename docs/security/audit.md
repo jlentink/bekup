@@ -100,7 +100,8 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   unknown actions are rejected. Areas: `auth.*`, `user.*`, `session.*`,
   `secret.changed`, `setting.changed`, `security.*`, `system.*`,
   `cli.admin.*`, `keys.*` (incl. `keys.check_value_stored`), `certs.rotated`, `audit.*`,
-  `download.*`, `connection.*`, `destination.*`, `job.*`, `mfa_policy.*`.
+  `download.*`, `connection.*`, `destination.*`, `job.*`, `mfa_policy.*`,
+  `config.*`.
 - Job encryption (task 3.2, D-142; target type `job`, target id the job
   id): `job.encryption_passphrase_set` (`version`, `previous_version`,
   `generated`, `via` set/generate/create; also `secret.changed` with
@@ -257,6 +258,44 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   the run id; job, destination, manifest key and SHA-256, signing key,
   artifact and verified counts). (The `setup.*`
   actions of the removed web setup flow no longer exist.)
+- SSRF allowlist (D-196): `setting.changed` (target `setting`/
+  `netguard.allowlist`; details `setting`, `added_cidrs`, `removed_cidrs`,
+  `added_hosts`, `removed_hosts`, `widened`). `widened: true` raises the
+  `ssrf_allowlist_widened` security alert.
+- Runtime config reload (task 6.13, D-200; target type `config`):
+  `config.reload_requested` (user actor, IP; target and `request_id` the
+  request id), `config.reloaded` (system actor; target the process's
+  instance id; details `request_id`, `trigger` ui/signal, `instance_id`,
+  `process_kind`, `status`, and the key-name lists `applied`,
+  `restart_required`, `weakened`) and `config.reload_failed` (system actor;
+  `error_kind` file/syntax/invalid/apply and the key names
+  `error_settings`; never a `*_keys` name, which the redactor treats as a
+  secret). A live key a process does not use is not listed by it.
+  Never values or the config file path. A non-empty `weakened` list raises
+  the `config_reload_weakened` security alert. Each process records its
+  entry fail closed before it applies anything.
+- E-mail (task 5.1, D-178, D-180): `setting.changed` (target `setting`/`smtp`;
+  `changed` field names, `values` old/new, the CA bundle only as a flag,
+  `created`, always the `mode` and `may_be_unencrypted`) plus `secret.changed` (`fields: ["password"]`, `change`
+  `set`/`cleared`) when the SMTP password changes; `smtp.test_sent`
+  (recipient, `ok`, failure `code`, `encrypted`, `tls_version`; never
+  server text);
+  `user.email_verification_requested` (address, `expires_at`),
+  `user.email_verified` (address) and `user.email_verification_failed`
+  (`reason`: `wrong_code`, `expired`, `address_changed`,
+  `account_disabled`, `no_pending_verification`; `failed_attempts`).
+  Codes and passwords are never recorded.
+- Notification channels (task 5.3b, D-191; targets `shared_channels` or
+  `user_channels`): `notification.channel_created` (name, type, address
+  count or `display_url`), `notification.channel_updated` (changed
+  `fields`), `notification.channel_deleted`,
+  `notification.channel_key_rotated`, `notification.channel_enabled`
+  (`previous_reason`) / `notification.channel_disabled`,
+  `notification.channel_tested` (`ok`, fixed `code`),
+  `notification.channel_attached` (`job_id`, `groups`, `events`) /
+  `notification.channel_detached` (`job_id`), plus `secret.changed`
+  (`fields: ["url", "signing_key"]`, `via`) when a webhook URL or signing
+  key is set. URL paths and signing keys are never recorded.
 - Passkeys (task 1.8, D-109): `auth.passkey.registration_begun`,
   `auth.passkey.registration_failed` (`reason`), `auth.mfa.enrolled` and
   `auth.mfa.removed` with `factor: "passkey"`, `auth.passkey.renamed`,
@@ -300,10 +339,24 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   again). An attacker hammering a locked account therefore cannot flood
   the hash-chained log.
 - **Reserved actions** exist in the catalog before the feature that
-  records them: `secret.changed` (tasks 2.11, 5.1; recorded by 2.12),
-  `setting.changed` (2.3, 5.1, 6.9), `security.opt_out` (2.11, 2.12;
-  alert 5.5), `security.insecure_http` (5.5), `audit.verify.failed`
-  (5.6) and `connection.pin_confirmed` (2.7a, 2.11).
+  records them: `secret.changed` (recorded by 2.11, 2.12, 5.1),
+  `setting.changed` (recorded by 5.1; 2.3, 6.9), `security.opt_out` (2.11, 2.12),
+  `security.insecure_http` (reserved for a runtime switch), `audit.verify.failed`
+  (recorded by the hourly security check, 5.5) and `connection.pin_confirmed` (2.7a, 2.11).
+- **Security alerts** (task 5.5, D-190). serve's, the workers' and the
+  CLI's auditors have the observer `notify.ObserveAudit`: every
+  security-relevant entry also writes its mandatory `security.system`
+  (admins) or `security.account` (the affected user) notification event to
+  the outbox **in the entry's transaction** (an outbox failure fails the
+  entry and so the action, like an audit failure). Every break-glass CLI
+  entry (actor kind `cli`) raises a `security.system` alert with the
+  action, OS user and host name (D-069). After each `auth.login.failed`
+  the observer counts the failures of the last 15 minutes and raises a
+  burst alert (per address, account or instance; once per 15 minutes).
+  The alert list is in [Notifications](../guides/notifications.md#security-alerts).
+  A manifest failure at restore-request time is recorded as
+  `restore.verification_failed` with target type `artifact` (`stage:
+  request`).
 - **Details never hold secrets.** They are normalized through JSON, then
   values under secret-looking keys (`password`, `token`, `key`,
   `newPassword`, ...; not `key_id`, `master_key_file`) become
@@ -378,3 +431,28 @@ warning is printed (tail truncation is then undetectable).
 
 Exit status: 0 when everything verifies, non-zero on any break or head
 failure (and on operational errors). `--json` prints the full report.
+
+## Periodic verification and alerts (task 5.5, D-190)
+
+The hourly `security_check` job (maintenance queue) verifies the chain
+the same way: the whole chain at the first run of each worker process and
+then once a day, in between only the rows added since the last verified
+row. The incremental run first checks that the last verified row still
+exists with the hash remembered in memory, so a rewrite of already
+verified rows is caught; the checkpoint is never stored in the database
+(it could be forged together with the rows). A failure (`hash_mismatch`,
+`genesis`, `link_mismatch`, a failing signed head, or `anchor_missing` /
+`anchor_rewritten`) is recorded once per finding as `audit.verify.failed`
+(system actor, target `audit_log`, details `finding`, `problem`,
+`row_id`, `full`), which raises a **critical** `security.system` alert to
+every admin (deduplicated per finding across processes). The chain is not
+"repaired": investigate with `bekup audit verify --head-file` against an
+exported head.
+
+The outcome of every completed verification (time, ok, full or
+incremental, the finding and the newest verified row) is stored in
+`settings` (`audit.chain_verification`) and shown to admins with the newest
+entry and the newest signed head (`auditChainStatus`, the audit page;
+D-196). This status is for orientation only (it lives in the same database
+as the rows); the in-memory checkpoint above is unchanged and the proof is
+still `bekup audit verify` against an exported head.

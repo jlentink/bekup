@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/graph"
 	"github.com/jlentink/bekup/internal/graph/streams"
@@ -11,8 +12,9 @@ import (
 	"github.com/jlentink/bekup/internal/pubsub"
 )
 
-// ListenerApplicationName is reported to Postgres by the LISTEN connection.
-const ListenerApplicationName = "bekup-serve-listen"
+// ListenerApplicationName prefixes the application_name of serve's LISTEN
+// connection ("<prefix>:<instance id>", configreload.ListenerApplicationName).
+const ListenerApplicationName = configreload.ServeListenerPrefix
 
 // subscriptions is the subscription machinery (tasks 1.10, 2.13): the
 // in-process bus that the session store publishes to, the LISTEN/NOTIFY
@@ -30,7 +32,7 @@ type subscriptions struct {
 // like the session middleware) and registers both as components.
 func (a *App) newSubscriptions() error {
 	cfg := a.opts.Config
-	poolOpts, err := db.PoolOptionsFromConfig(cfg, ListenerApplicationName)
+	poolOpts, err := db.PoolOptionsFromConfig(cfg, configreload.ListenerApplicationName(configreload.KindServe, a.instanceID))
 	if err != nil {
 		return err
 	}
@@ -45,7 +47,7 @@ func (a *App) newSubscriptions() error {
 	}
 	a.subs.listener, err = pubsub.NewListener(pubsub.ListenerOptions{
 		Connect:  connect,
-		Channels: []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents, pubsub.RestoreEvents},
+		Channels: []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents, pubsub.RestoreEvents, pubsub.NotificationEvents, pubsub.SettingsEvents},
 		Bus:      a.subs.bus,
 		Logger:   a.opts.Logger,
 	})

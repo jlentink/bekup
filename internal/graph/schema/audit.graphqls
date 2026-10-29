@@ -7,6 +7,49 @@ extend type Query {
   """
   auditLog(filter: AuditLogFilter, first: Int, after: String): AuditLogConnection!
     @hasRole(roles: [ADMIN])
+
+  """
+  The state of the audit chain: the latest periodic verification (hourly
+  incremental, daily full; D-190), the newest entry and the newest signed
+  chain head. Informational: the proof is `bekup audit verify` against an
+  exported signed head.
+  """
+  auditChainStatus: AuditChainStatus! @hasRole(roles: [ADMIN])
+}
+
+"The outcome of one completed audit chain verification."
+type AuditChainVerification {
+  checkedAt: Time!
+  "False when a problem was found (an audit.verify.failed entry and a critical alert)."
+  ok: Boolean!
+  "True when the whole chain was verified, false for an incremental check of new entries."
+  full: Boolean!
+  "The problem found, as `<kind>:<entry id>` (e.g. `hash_mismatch:1234`); null when ok."
+  finding: String
+  "The newest entry known to verify (null: none yet)."
+  verifiedThroughId: ID
+}
+
+"A signed audit chain head."
+type AuditSignedHead {
+  "The audit entry the signature covers."
+  chainId: ID!
+  signedAt: Time!
+  "The instance signing key (fingerprint id)."
+  keyId: String!
+}
+
+"The audit chain status."
+type AuditChainStatus {
+  "The latest verification (null: none ran yet)."
+  lastVerification: AuditChainVerification
+  "The newest audit entry (null: the log is empty)."
+  headId: ID
+  "Its chain hash (hex)."
+  headHash: String
+  headAt: Time
+  "The newest signed chain head (null: none yet)."
+  latestSignedHead: AuditSignedHead
 }
 
 "Who performed an audited action."

@@ -1,4 +1,4 @@
-import { LockOpen, ShieldOff, type LucideIcon } from "lucide-react";
+import { LockOpen, ShieldOff, Webhook, type LucideIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
@@ -15,6 +15,12 @@ const FLAG_META: Record<SecurityFlag, { label: string; description: string; icon
     label: "Insecure transport",
     description: "TLS verification was relaxed for this connection by an administrator.",
     icon: ShieldOff,
+  },
+  "personal-webhooks-widened": {
+    label: "Personal webhooks widened",
+    description:
+      "An administrator let every user's personal webhooks reach a private network (SSRF allowlist).",
+    icon: Webhook,
   },
 };
 

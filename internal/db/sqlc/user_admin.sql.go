@@ -170,6 +170,68 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 	return i, err
 }
 
+const listUserDirectory = `-- name: ListUserDirectory :many
+SELECT id, email, display_name, role, disabled FROM users
+WHERE deleted_at IS NULL
+  AND ($1::text IS NULL
+       OR email::text ILIKE '%' || $1::text || '%' ESCAPE '\'
+       OR display_name ILIKE '%' || $1::text || '%' ESCAPE '\')
+  AND ($2::text IS NULL
+       OR (lower(email::text), id) > (lower($2::text), $3::uuid))
+ORDER BY lower(email::text), id
+LIMIT $4
+`
+
+type ListUserDirectoryParams struct {
+	Search     *string    `json:"search"`
+	AfterEmail *string    `json:"afterEmail"`
+	AfterID    *uuid.UUID `json:"afterId"`
+	Lim        int32      `json:"lim"`
+}
+
+type ListUserDirectoryRow struct {
+	ID          uuid.UUID `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"displayName"`
+	Role        UserRole  `json:"role"`
+	Disabled    bool      `json:"disabled"`
+}
+
+// ListUserDirectory pages the minimal facts of accounts that are not
+// deleted (the owner picker for admins and maintainers, D-184): no
+// password, lockout, 2FA or session state. Same order and cursor as
+// ListUsers.
+func (q *Queries) ListUserDirectory(ctx context.Context, arg ListUserDirectoryParams) ([]ListUserDirectoryRow, error) {
+	rows, err := q.db.Query(ctx, listUserDirectory,
+		arg.Search,
+		arg.AfterEmail,
+		arg.AfterID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserDirectoryRow
+	for rows.Next() {
+		var i ListUserDirectoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.DisplayName,
+			&i.Role,
+			&i.Disabled,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users
 WHERE ($1::boolean IS TRUE OR deleted_at IS NULL)
@@ -397,4 +459,45 @@ type UpdateUserRoleParams struct {
 func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) error {
 	_, err := q.db.Exec(ctx, updateUserRole, arg.Role, arg.ID)
 	return err
+}
+
+const userActivityFacts = `-- name: UserActivityFacts :many
+SELECT u.id,
+       COALESCE((SELECT max(s.last_seen_at) FROM sessions s
+                  WHERE s.user_id = u.id AND NOT s.mfa_pending),
+                'epoch'::timestamptz)::timestamptz AS last_seen_at,
+       (u.totp_enabled_at IS NOT NULL
+        OR EXISTS (SELECT 1 FROM webauthn_credentials w WHERE w.user_id = u.id))::boolean AS two_factor_enrolled
+FROM users u
+WHERE u.id = ANY($1::uuid[])
+`
+
+type UserActivityFactsRow struct {
+	ID                uuid.UUID `json:"id"`
+	LastSeenAt        time.Time `json:"lastSeenAt"`
+	TwoFactorEnrolled bool      `json:"twoFactorEnrolled"`
+}
+
+// UserActivityFacts returns, for each given account, its most recent
+// session activity ('epoch' when none; sessions still waiting for their
+// second factor do not count) and whether it has a second factor (TOTP or
+// a passkey). One query for a page of users (D-184).
+func (q *Queries) UserActivityFacts(ctx context.Context, ids []uuid.UUID) ([]UserActivityFactsRow, error) {
+	rows, err := q.db.Query(ctx, userActivityFacts, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserActivityFactsRow
+	for rows.Next() {
+		var i UserActivityFactsRow
+		if err := rows.Scan(&i.ID, &i.LastSeenAt, &i.TwoFactorEnrolled); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

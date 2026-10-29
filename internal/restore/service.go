@@ -120,8 +120,10 @@ type Options struct {
 	// Publisher sends the restore events (bekup_restore_events; nil =
 	// NOTIFY only, no local bus).
 	Publisher *pubsub.Publisher
-	Now       func() time.Time
-	Logger    *slog.Logger
+	// Metrics counts finished restores and test restores (nil: none).
+	Metrics Metrics
+	Now     func() time.Time
+	Logger  *slog.Logger
 }
 
 // Service stages and verifies restores.
@@ -159,6 +161,9 @@ func New(o Options) (*Service, error) {
 	}
 	if o.Now == nil {
 		o.Now = time.Now
+	}
+	if o.Metrics == nil {
+		o.Metrics = NopMetrics{}
 	}
 	return &Service{o: o, live: map[uuid.UUID]struct{}{}}, nil
 }
@@ -440,6 +445,9 @@ func (s *Service) finish(ctx context.Context, id uuid.UUID, status Status, cause
 	})
 	if err != nil {
 		return false, err
+	}
+	if changed {
+		s.observeFinished(ctx, id, status)
 	}
 	return changed, nil
 }

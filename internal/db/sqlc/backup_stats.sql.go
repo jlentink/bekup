@@ -118,3 +118,50 @@ func (q *Queries) ListBackupStatsByRun(ctx context.Context, runID uuid.UUID) ([]
 	}
 	return items, nil
 }
+
+const listBackupStatsForRuns = `-- name: ListBackupStatsForRuns :many
+SELECT run_item_id, run_id, level, consistency, tables_total, warning_count, stats, created_at
+FROM backup_stats
+WHERE run_id = ANY($1::uuid[])
+`
+
+type ListBackupStatsForRunsRow struct {
+	RunItemID    uuid.UUID       `json:"runItemId"`
+	RunID        uuid.UUID       `json:"runId"`
+	Level        JobVerification `json:"level"`
+	Consistency  string          `json:"consistency"`
+	TablesTotal  int32           `json:"tablesTotal"`
+	WarningCount int32           `json:"warningCount"`
+	Stats        json.RawMessage `json:"stats"`
+	CreatedAt    time.Time       `json:"createdAt"`
+}
+
+// The completeness evidence of a batch of runs (RunItem.stats, D-187).
+func (q *Queries) ListBackupStatsForRuns(ctx context.Context, runIds []uuid.UUID) ([]ListBackupStatsForRunsRow, error) {
+	rows, err := q.db.Query(ctx, listBackupStatsForRuns, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBackupStatsForRunsRow
+	for rows.Next() {
+		var i ListBackupStatsForRunsRow
+		if err := rows.Scan(
+			&i.RunItemID,
+			&i.RunID,
+			&i.Level,
+			&i.Consistency,
+			&i.TablesTotal,
+			&i.WarningCount,
+			&i.Stats,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

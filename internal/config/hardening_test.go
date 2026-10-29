@@ -145,6 +145,21 @@ func TestWildcardListen(t *testing.T) {
 				t.Fatalf("warning = %t, want %t (%v)", got, tc.warn, c.Warnings())
 			}
 		})
+		t.Run("metrics "+tc.name, func(t *testing.T) {
+			c := baseBekup()
+			c.Server.Listen = "10.213.250.10:8080"
+			c.Metrics.Enabled = true
+			c.Metrics.Listen = strings.Replace(tc.listen, "8080", "9464", 1)
+			c.Metrics.AllowWildcardListen = tc.allow
+			c.Dev.Enabled = tc.dev
+			joined := joinErrs(validateBekup(&c, tc.dev))
+			if got := strings.Contains(joined, "metrics.listen:"); got != tc.wantErr {
+				t.Fatalf("error = %t, want %t:\n%s", got, tc.wantErr, joined)
+			}
+			if got := hasWarning(c.Warnings(), "metrics.listen"); got != tc.warn {
+				t.Fatalf("warning = %t, want %t (%v)", got, tc.warn, c.Warnings())
+			}
+		})
 		t.Run("runner "+tc.name, func(t *testing.T) {
 			r := DefaultRunner()
 			r.Listen.Address = strings.Replace(tc.listen, "8080", "7443", 1)

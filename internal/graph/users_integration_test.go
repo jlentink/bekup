@@ -25,6 +25,8 @@ import (
 // (task 1.6).
 type usersEnv struct {
 	*authEnv
+	// counter counts the queries of the user admin service (N+1 checks).
+	counter *countingDB
 }
 
 func newUsersEnv(t *testing.T) *usersEnv {
@@ -45,7 +47,8 @@ func newUsersEnv(t *testing.T) *usersEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	users, err := auth.NewUserAdmin(auth.UserAdminOptions{DB: e.pool, Hasher: e.hasher, Sessions: sessions, Auditor: e.auditor, Policy: policy})
+	counter := &countingDB{DBTX: e.pool, begin: e.pool}
+	users, err := auth.NewUserAdmin(auth.UserAdminOptions{DB: counter, Hasher: e.hasher, Sessions: sessions, Auditor: e.auditor, Policy: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +76,7 @@ func newUsersEnv(t *testing.T) *usersEnv {
 		t.Fatal(err)
 	}
 	e.h = srv.Handler()
-	return &usersEnv{authEnv: e}
+	return &usersEnv{authEnv: e, counter: counter}
 }
 
 func (e *usersEnv) staleStepUp(cookieUser uuid.UUID) {
@@ -277,5 +280,179 @@ func TestUserAdminGraphQL(t *testing.T) {
 		if err != nil || len(page.Entries) == 0 || page.Entries[0].ActorUserID == nil || *page.Entries[0].ActorUserID != admin.ID {
 			t.Errorf("audit %s: %+v %v", a, page.Entries, err)
 		}
+	}
+}
+
+func TestUserDirectoryGraphQL(t *testing.T) {
+	e := newUsersEnv(t)
+	e.user("admin@example.com", sqlc.UserRoleAdmin)
+	e.user("maint@example.com", sqlc.UserRoleMaintainer)
+	e.user("plain@example.com", sqlc.UserRoleUser)
+	e.user("bob@example.com", sqlc.UserRoleUser)
+	gone := e.user("gone@example.com", sqlc.UserRoleUser)
+	if _, err := e.pool.Exec(t.Context(), "UPDATE users SET deleted_at = now(), disabled = true WHERE id = $1", gone.ID); err != nil {
+		t.Fatal(err)
+	}
+	adminC := e.mustLogin("admin@example.com")
+	maintC := e.mustLogin("maint@example.com")
+	plainC := e.mustLogin("plain@example.com")
+
+	const dirQ = `query($s: String, $first: Int, $after: String) { userDirectory(search: $s, first: $first, after: $after) {
+		edges { cursor node { id displayName email role disabled } } pageInfo { hasNextPage endCursor } } }`
+	type dirPage struct {
+		Edges []struct {
+			Node struct {
+				Email    string
+				Role     string
+				Disabled bool
+			}
+		}
+		PageInfo struct {
+			HasNextPage bool
+			EndCursor   *string
+		}
+	}
+
+	// Backup owners and anonymous callers are refused.
+	for who, c := range map[string]string{"user": plainC, "anonymous": ""} {
+		resp, _ := e.do(c, "", dirQ, nil)
+		want := "FORBIDDEN"
+		if who == "anonymous" {
+			want = "UNAUTHENTICATED"
+		}
+		if resp.code() != want {
+			t.Errorf("%s: %+v", who, resp.Errors)
+		}
+	}
+
+	// Admins and maintainers see every account that is not deleted.
+	for who, c := range map[string]string{"admin": adminC, "maintainer": maintC} {
+		resp, _ := e.do(c, "", dirQ, nil)
+		if len(resp.Errors) > 0 {
+			t.Fatalf("%s: %+v", who, resp.Errors)
+		}
+		var page dirPage
+		resp.field(t, "userDirectory", &page)
+		emails := make([]string, 0, len(page.Edges))
+		for _, ed := range page.Edges {
+			emails = append(emails, ed.Node.Email)
+		}
+		if got := strings.Join(emails, ","); got != "admin@example.com,bob@example.com,maint@example.com,plain@example.com" {
+			t.Errorf("%s: directory = %s", who, got)
+		}
+	}
+
+	// Search and pagination.
+	resp, _ := e.do(maintC, "", dirQ, map[string]any{"s": "BOB"})
+	var page dirPage
+	resp.field(t, "userDirectory", &page)
+	if len(page.Edges) != 1 || page.Edges[0].Node.Email != "bob@example.com" || page.Edges[0].Node.Role != "USER" {
+		t.Errorf("search: %+v", page)
+	}
+	resp, _ = e.do(maintC, "", dirQ, map[string]any{"s": "%"})
+	page = dirPage{}
+	resp.field(t, "userDirectory", &page)
+	if len(page.Edges) != 0 {
+		t.Errorf("wildcard search matched: %+v", page)
+	}
+	resp, _ = e.do(maintC, "", dirQ, map[string]any{"first": 3})
+	page = dirPage{}
+	resp.field(t, "userDirectory", &page)
+	if len(page.Edges) != 3 || !page.PageInfo.HasNextPage || page.PageInfo.EndCursor == nil {
+		t.Fatalf("first page: %+v", page)
+	}
+	resp, _ = e.do(maintC, "", dirQ, map[string]any{"first": 3, "after": *page.PageInfo.EndCursor})
+	page = dirPage{}
+	resp.field(t, "userDirectory", &page)
+	if len(page.Edges) != 1 || page.Edges[0].Node.Email != "plain@example.com" || page.PageInfo.HasNextPage {
+		t.Errorf("second page: %+v", page)
+	}
+	for _, vars := range []map[string]any{
+		{"first": 0}, {"first": 201}, {"after": "bogus"}, {"s": strings.Repeat("x", 201)},
+	} {
+		if resp, _ := e.do(maintC, "", dirQ, vars); resp.code() != "VALIDATION" {
+			t.Errorf("%v: %+v", vars, resp.Errors)
+		}
+	}
+
+	// The entry type carries no sensitive fields.
+	for _, f := range []string{"lockedUntil", "lastSeenAt", "twoFactorEnrolled", "passwordChangeRequired", "deletedAt", "createdAt"} {
+		resp, _ := e.do(maintC, "", `{ userDirectory { edges { node { id `+f+` } } } }`, nil)
+		if len(resp.Errors) == 0 || !strings.Contains(resp.Errors[0].Message, "Cannot query field") {
+			t.Errorf("field %s: %+v", f, resp.Errors)
+		}
+	}
+}
+
+func TestUserActivityFieldsGraphQL(t *testing.T) {
+	e := newUsersEnv(t)
+	e.user("admin@example.com", sqlc.UserRoleAdmin)
+	e.user("maint@example.com", sqlc.UserRoleMaintainer)
+	totpUser := e.user("totp@example.com", sqlc.UserRoleUser)
+	keyUser := e.user("key@example.com", sqlc.UserRoleUser)
+	e.user("never@example.com", sqlc.UserRoleUser)
+	for i := range 6 {
+		e.user("extra"+string(rune('a'+i))+"@example.com", sqlc.UserRoleUser)
+	}
+	ctx := t.Context()
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET totp_secret_enc = '\\x01'::bytea, totp_enabled_at = now() WHERE id = $1", totpUser.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.pool.Exec(ctx, `INSERT INTO webauthn_credentials (user_id, credential_id, public_key, name)
+		VALUES ($1, '\x000102030405060708090a0b0c0d0e0f'::bytea, '\x01'::bytea, 'Key')`, keyUser.ID); err != nil {
+		t.Fatal(err)
+	}
+	adminC := e.mustLogin("admin@example.com")
+	maintC := e.mustLogin("maint@example.com")
+	totpC := e.mustLogin("totp@example.com")
+
+	type node struct {
+		Email             string
+		LastSeenAt        *string
+		TwoFactorEnrolled bool
+	}
+	var page struct {
+		Edges []struct{ Node node }
+	}
+	before := e.counter.n.Load()
+	resp, _ := e.do(adminC, "", `{ users(first: 50) { edges { node { email lastSeenAt twoFactorEnrolled } } } }`, nil)
+	if len(resp.Errors) > 0 {
+		t.Fatalf("users: %+v", resp.Errors)
+	}
+	// One query for the page and one for the facts of every user on it.
+	if n := e.counter.n.Load() - before; n != 2 {
+		t.Errorf("queries for a page of users = %d, want 2", n)
+	}
+	resp.field(t, "users", &page)
+	if len(page.Edges) != 11 {
+		t.Fatalf("users = %d", len(page.Edges))
+	}
+	for _, ed := range page.Edges {
+		n := ed.Node
+		wantSeen := n.Email == "admin@example.com" || n.Email == "maint@example.com" || n.Email == "totp@example.com"
+		wantMFA := n.Email == "totp@example.com" || n.Email == "key@example.com"
+		if (n.LastSeenAt != nil) != wantSeen || n.TwoFactorEnrolled != wantMFA {
+			t.Errorf("%s: lastSeenAt=%v twoFactorEnrolled=%v", n.Email, n.LastSeenAt, n.TwoFactorEnrolled)
+		}
+	}
+
+	// A single user (admin).
+	resp, _ = e.do(adminC, "", `query($id: UUID!) { user(id: $id) { lastSeenAt twoFactorEnrolled } }`, map[string]any{"id": keyUser.ID.String()})
+	var one node
+	resp.field(t, "user", &one)
+	if len(resp.Errors) > 0 || one.LastSeenAt != nil || !one.TwoFactorEnrolled {
+		t.Errorf("user: %+v %+v", one, resp.Errors)
+	}
+
+	// Through me: lastSeenAt is admin only, twoFactorEnrolled also for the
+	// account itself.
+	if resp, _ := e.do(maintC, "", `{ me { lastSeenAt } }`, nil); resp.code() != "FORBIDDEN" {
+		t.Errorf("maintainer me.lastSeenAt: %+v", resp.Errors)
+	}
+	resp, _ = e.do(totpC, "", `{ me { twoFactorEnrolled } }`, nil)
+	var me node
+	resp.field(t, "me", &me)
+	if len(resp.Errors) > 0 || !me.TwoFactorEnrolled {
+		t.Errorf("own twoFactorEnrolled: %+v %+v", me, resp.Errors)
 	}
 }

@@ -60,6 +60,21 @@ type Destination {
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
   settings: DestinationSettings
+  """
+  The newest stored testDestination result (D-187); null when never
+  tested. Normalized codes only.
+  """
+  lastTest: DestinationLastTest
+}
+
+"The stored outcome of the newest testDestination (D-187)."
+type DestinationLastTest {
+  at: Time!
+  ok: Boolean!
+  "The normalized error class of the first failed step (as DestinationTestStep.code); null when ok."
+  code: String
+  "The destination's settings changed after this test."
+  stale: Boolean!
 }
 
 "Per-type settings; exactly the field of the destination's type is set."
@@ -165,6 +180,24 @@ extend type Query {
 
   "One destination; null when it does not exist or was deleted."
   destination(id: UUID!): Destination @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Storage per destination that is not deleted, ordered by name: the bytes
+  and number of the backup files bekup tracks as present there (exact; one
+  aggregate, no paging).
+  """
+  destinationUsage: [DestinationUsage!]! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+"What bekup stores on one destination."
+type DestinationUsage {
+  destinationId: UUID!
+  name: String!
+  type: DestinationType!
+  "Sum of the sizes of the present backup files (bytes)."
+  storedBytes: Float!
+  "Number of present backup files (dumps and manifests)."
+  artifactCount: Int!
 }
 
 extend type Mutation {

@@ -199,6 +199,32 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-171](#d-171-neutralize-restored-postgresql-databases-security-definer-to-invoker-no-public-access-warn) | Neutralize restored PostgreSQL databases: SECURITY DEFINER to INVOKER, no PUBLIC access, warn | accepted |
 | [D-172](#d-172-privileged-restore-targets-global-data-privileges-and-pg_readwrite_all_data-are-gated-corrects-d-168) | Privileged restore targets: global data privileges and pg_read/write_all_data are gated (corrects D-168) | proposed |
 | [D-173](#d-173-restore-core-review-fixes-worker-privilege-re-check-stored-acknowledgement-slot-bound-temporary-targets-swap-state-cancel-race-identity-redaction) | Restore core review fixes: worker privilege re-check, stored acknowledgement, slot-bound temporary targets, swap state, cancel race, identity redaction | proposed |
+| [D-176](#d-176-prometheus-metrics-dedicated-registry-bounded-labels-internal-listener-with-optional-bearer-systemhealth-task-56) | Prometheus metrics: dedicated registry, bounded labels, internal listener with optional bearer, systemHealth (task 5.6) | proposed |
+| [D-177](#d-177-webhook-sender-signature-scheme-signing-keys-url-rules-result-classification-and-auto-disable-policy-task-52) | Webhook sender: signature scheme, signing keys, URL rules, result classification and auto-disable policy (task 5.2) | proposed |
+| [D-178](#d-178-smtp-settings-e-mail-sender-and-user-e-mail-verification-task-51) | SMTP settings, e-mail sender and user e-mail verification (task 5.1) | proposed (transport/AUTH rules superseded by D-180) |
+| [D-179](#d-179-web-ui-shell-and-auth-flows-session-gate-auth-event-bus-step-up-hook-strict-qr-re-rendering-task-61) | Web UI shell and auth flows: session gate, auth event bus, step-up hook, strict QR re-rendering (task 6.1) | proposed |
+| [D-180](#d-180-smtp-follows-the-servers-tls-support) | SMTP follows the server's TLS support | accepted |
+| [D-181](#d-181-user-admin-ui-one-time-temporary-passwords-ui-only-self-guards-derived-2fa-state-admin-only-owner-picker-task-68) | User admin UI: one-time temporary passwords, UI-only self guards, derived 2FA state, admin-only owner picker (task 6.8) | proposed (derived 2FA state and admin-only picker superseded by D-195) |
+| [D-182](#d-182-connections-and-destinations-ui-deliberate-pin-and-host-key-confirmation-client-side-retargeting-prompt-session-only-test-results-tasks-63-64) | Connections and destinations UI: deliberate pin and host-key confirmation, client-side retargeting prompt, session-only test results (tasks 6.3, 6.4) | proposed (item 5 superseded by D-195) |
+| [D-183](#d-183-notification-core-transactional-outbox-audit-driven-emitters-delivery-time-authorization-noise-rules-and-storage-task-53) | Notification core: transactional outbox, audit-driven emitters, delivery-time authorization, noise rules and storage (task 5.3) | proposed |
+| [D-184](#d-184-user-directory-for-staff-admin-activity-facts-on-user-and-the-jobs-owner-filter-task-68-follow-up) | User directory for staff, admin activity facts on User and the jobs owner filter (task 6.8 follow-up) | proposed |
+| [D-185](#d-185-restore-wizard-and-calendar-ui-proactive-aal2-step-up-request-only-age-identity-client-side-calendar-filters-tasks-67-611) | Restore wizard and calendar UI: proactive AAL2 step-up, request-only age identity, client-side calendar filters (tasks 6.7, 6.11) | proposed |
+| [D-186](#d-186-jobs-and-runs-ui-start-early-ledger-no-cache-one-time-keys-and-tickets-virtualized-log-tail-derived-completeness-evidence-tasks-65-66) | Jobs and runs UI: start-early ledger, no-cache one-time keys and tickets, virtualized log tail, derived completeness evidence (tasks 6.5, 6.6) | proposed (item 5 per-table remark superseded by D-195) |
+| [D-187](#d-187-runitemstats-and-stored-last-test-results-of-connections-and-destinations-task-66-63-64-follow-up) | RunItem.stats and stored last test results of connections and destinations (task 6.6, 6.3, 6.4 follow-up) | proposed |
+| [D-188](#d-188-missed-backup-dead-man-alerts-recorded-occurrences-derived-window-one-alert-per-outage-with-daily-reminders-task-54) | Missed-backup (dead-man) alerts: recorded occurrences, derived window, one alert per outage with daily reminders (task 5.4) | proposed |
+| [D-190](#d-190-security-alerts-audit-driven-mandatory-deduplicated-burst-detection-hourly-security-checks-cli-alerts-via-the-outbox-task-55) | Security alerts: audit-driven, mandatory, deduplicated; burst detection; hourly security checks; CLI alerts via the outbox (task 5.5) | proposed |
+| [D-191](#d-191-notifications-api-shared-and-personal-channels-the-preference-matrix-the-inbox-and-its-live-stream-task-53b) | Notifications API: shared and personal channels, the preference matrix, the inbox and its live stream (task 5.3b) | proposed (item 7 superseded by D-197) |
+| [D-192](#d-192-dashboard-ui-one-run-stream-polled-restores-client-derived-health-and-security-findings-bounded-storage-sums-task-62) | Dashboard UI: one run stream, polled restores, client-derived health and security findings, bounded storage sums (task 6.2) | proposed (items 1, 2 "missed" and 4 superseded by D-196; item 1 stream by D-197) |
+| [D-193](#d-193-notification-center-ui-one-inbox-stream-in-the-bell-in-app-link-allowlist-memory-only-verification-code-no-cache-signing-keys-task-610) | Notification center UI: one inbox stream in the bell, in-app link allowlist, memory-only verification code, no-cache signing keys (task 6.10) | proposed (item 1 superseded by D-197) |
+| [D-194](#d-194-admin-settings-ui-settings-hub-client-filtered-security-alerts-audit-chain-status-from-auditverifyfailed-read-only-ssrf-allowlist-guarded-passphrase-export-task-69) | Admin settings UI: settings hub, client-filtered security alerts, audit chain status from audit.verify.failed, read-only SSRF allowlist, guarded passphrase export (task 6.9) | proposed (items 2-4 superseded by D-196) |
+| [D-195](#d-195-m6-ui-follow-ups-stored-test-results-per-item-statistics-shared-owner-picker-test-restore-pages-and-settings-stable-web-tests-task-612) | M6 UI follow-ups: stored test results, per-item statistics, shared owner picker, test-restore pages and settings, stable web tests (task 6.12) | proposed |
+| [D-196](#d-196-runtime-ssrf-allowlist-api-inbox-filter-audit-chain-status-and-dashboard-aggregates-task-612-follow-ups) | Runtime SSRF allowlist API, inbox filter, audit chain status and dashboard aggregates (task 6.12 follow-ups) | proposed (item 8 streams superseded by D-197; allowlist scopes added by D-198) |
+| [D-197](#d-197-stream-budget-one-shared-account-stream-combined-page-streams-cross-tab-relay-and-429-backoff) | Stream budget: one shared account stream, combined page streams, cross-tab relay and 429 backoff | proposed |
+| [D-198](#d-198-scoped-ssrf-allowlist-signed-delivery-id-and-event-type-bucketed-personal-tests-and-other-m5-security-follow-ups) | Scoped SSRF allowlist, signed delivery id and event type, bucketed personal tests and other M5 security follow-ups | proposed |
+| [D-199](#d-199-web-review-follow-ups-one-deny-by-default-route-guard-confirmed-sign-out-strict-return-paths-shared-web-modules-and-build-time-document-splitting) | Web review follow-ups: one deny-by-default route guard, confirmed sign-out, strict return paths, shared web modules and build-time document splitting | proposed |
+| [D-200](#d-200-runtime-config-reload-of-a-conservative-set-of-live-keys-admin-ui-broadcast-and-sighup) | Runtime config reload of a conservative set of live keys (admin UI broadcast and SIGHUP) | proposed |
+| [D-201](#d-201-dev-only-runner-for-a-native-serve-loopback-published-on-a-dedicated-network) | Dev-only runner for a native serve, loopback-published on a dedicated network | proposed |
+| [D-202](#d-202-manual-multi-arch-image-publishing-to-the-operators-own-registry-just-publish) | Manual multi-arch image publishing to the operator's own registry (`just publish`) | proposed |
 
 ---
 
@@ -8886,3 +8912,2111 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/connections/temporary.go`,
   `internal/db/migrations/00026_restore_privilege_ack.sql`,
   `internal/graph/resolvers/restore.go`, `SECURITY.md` (RN-16, SV-23).
+
+## D-176: Prometheus metrics: dedicated registry, bounded labels, internal listener with optional bearer, systemHealth (task 5.6)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent
+- **Context:** Task 5.6 adds `/metrics` on an internal port (D-024) and
+  runner health in the API. Open points: which collectors, how to keep
+  label cardinality bounded, how runs/restores/retention feed counters
+  without scattering metric calls, whether `/metrics` needs
+  authentication, how the wildcard rule of D-098 applies to
+  `metrics.listen`, and who may read `systemHealth`.
+- **Decision:**
+  1. **Registry and library.** `prometheus/client_golang` v1.23.2 with a
+     dedicated registry in `internal/monitor` (never the global default
+     registerer). It includes the standard Go and process collectors
+     (`go_*`, `bekup_process_*`: memory, GC, file descriptors, CPU; no
+     command line or environment) and `bekup_build_info{version,goversion}`.
+  2. **Bounded labels.** Every label has a fixed value set from the code
+     (run status/trigger, engine, restore status/mode, test-restore
+     status, skip reason, River queue/state, certificate component);
+     values outside it become `other`, undeterminable ones `unknown`; all
+     combinations of the event counters are pre-initialized. The only
+     open label is `job` (the job slug) on
+     `bekup_backup_last_success_timestamp_seconds`, emitted only with the
+     new `metrics.per_job_labels` (default false) and capped at the 1000
+     stalest jobs. Without it, `bekup_backup_oldest_last_success_timestamp_seconds`
+     supports a missed-backup alert. No IDs, user data, host names, error
+     messages or secrets in labels.
+  3. **Event counters through small hooks.** `runstate.Store.WithObserver`
+     (`FinishObserver`, called after the commit of `Finish` and of the
+     interrupted-attempt finish in `Begin`; the engine is read back from
+     the job, best effort), `restore.Options.Metrics` (after the commit of
+     every terminal path: worker finish, stuck sweep, API cancel, test
+     restore finish and test-restore stuck sweep), `retention.Options.Metrics`
+     (per job sweep; dry runs not counted) and the existing
+     `scheduler.Metrics` (D-145). Counters are per process (serve and
+     `bekup worker` each expose theirs). Runs canceled before a worker
+     picked them up (`CancelQueuedTx`) are not counted.
+  4. **Snapshot gauges.** Queue depth (`river_job` per queue/state),
+     runner up/Docker/active runs (Health RPC over mTLS), certificate
+     expiry in seconds (`runner_client`, `runner_ca`, `postgres_ca`,
+     `postgres_client` from the configured files, `runner_server` from
+     Health), the earliest target-certificate pin expiry and the last
+     successful runs come from one cached snapshot (15 s TTL, one refresh
+     at a time, 10 s bound): scrape floods cost no extra DB queries or
+     runner calls. Registered only in `serve`, not in `bekup worker`.
+     Three new read-only sqlc queries (`monitor.sql`), no migration.
+  5. **Listener.** `metrics.listen` gets the D-098 wildcard refusal
+     outside dev mode with the override `metrics.allow_wildcard_listen`
+     (startup warning). The server answers only `GET`/`HEAD /metrics` and
+     `/healthz` (fixed timeouts, 16 KiB headers, 4 scrapes in flight,
+     security headers, no UI/API routes). Compose adds an `internal`
+     `metrics` network (10.213.252.0/24) where serve has the fixed
+     address 10.213.252.10; no port is published.
+  6. **Optional bearer authentication.** `metrics.auth_bearer_file` (a
+     secret file, `config.ReadSecretFile`; ≥ 32 printable ASCII
+     characters) makes `/metrics` require `Authorization: Bearer`;
+     only the SHA-256 is kept and compared in constant time, the value is
+     registered with the log redaction and the file bytes zeroed.
+     `/healthz` stays open (it says only "ok"). Basic auth was not added:
+     Prometheus' `authorization.credentials_file` covers bearer with a
+     single file, and one scheme is less code.
+  7. **`Query.systemHealth`** (new operation `monitor.system_health_view`,
+     admin only, no freshness): runner up/Docker/version/active runs,
+     certificate expiries, queue depth, earliest pin expiry, oldest last
+     success, scheduler enabled and this process's last tick, from the
+     same snapshot. The existing `monitor.runner_health_view` (staff) stays
+     unused for a reduced dashboard view (6.2).
+- **Alternatives considered:** The global default registry (any imported
+  library could add metrics); per-job labels by default (unbounded
+  growth, slugs reveal job names to whoever can scrape); computing run
+  counters from the `runs` table at scrape time (correct across
+  restarts but not monotonic and an aggregate query per scrape); mTLS
+  for the scrape (heavy for operators; binding an internal network
+  plus the optional bearer is enough for non-secret operational data);
+  making `/metrics` authenticated by default (would break the zero-config
+  compose scrape; the data contains no secrets).
+- **Consequences:** **Security impact:** `/metrics` reveals operational
+  data (counts, durations, sizes, versions, certificate expiry, queue
+  depth, optionally job slugs) to anyone who reaches it; it is bound to
+  loopback or an internal network, never published, and can require a
+  bearer credential. The snapshot cache bounds the load an unauthenticated
+  scraper can cause. Runner errors are not logged verbatim. New config
+  keys: `metrics.allow_wildcard_listen`, `metrics.auth_bearer_file`,
+  `metrics.per_job_labels`.
+- **Related:** D-024, D-098, D-102, D-106, D-145; task 5.6;
+  `internal/monitor`, `internal/runstate/store.go`,
+  `internal/restore/metrics.go`, `internal/retention/worker.go`,
+  `internal/app/monitor.go`, `internal/db/queries/monitor.sql`,
+  `docker-compose.yml`, `docs/operations.md`, `SECURITY.md`.
+
+## D-177: Webhook sender: signature scheme, signing keys, URL rules, result classification and auto-disable policy (task 5.2)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 5.2)
+- **Context:** D-023/D-051 fix HMAC-signed webhooks with a timestamp, https
+  only, the SSRF guard, no redirects and auto-disable after repeated
+  failures, but not the header and signature format, the key format, the
+  URL rules, how an attempt's result is classified for the River notify
+  worker (MaxAttempts 10, D-145) or the auto-disable thresholds. Task 5.3
+  owns channel storage and the retries, so 5.2 is a storage-agnostic
+  library.
+- **Decision:**
+  1. **Package** `internal/notify/webhook`: `ValidateURL`, `Sender.Send`
+     (one attempt, never retries), `FailurePolicy`, `GenerateHMACKey`,
+     `Sign`/`Verify`, `BuildPayload`/`TestPayload`, `DisplayURL`.
+  2. **Request:** `POST`, body = the JSON envelope
+     `{"id","type","created_at","data"}` (≤ 64 KiB, `data` minimal per
+     NT-2), headers `Content-Type: application/json`,
+     `User-Agent: bekup/<version>`, `X-Bekup-Event` (D-161 type),
+     `X-Bekup-Delivery` (stable per (event, channel) across retries, so
+     receivers can deduplicate; random 128-bit hex if the caller has none),
+     `X-Bekup-Timestamp` (unix seconds, taken per attempt) and
+     `X-Bekup-Signature: v1=<hex HMAC-SHA256(key, "<timestamp>.<body>")>`.
+     The header may carry several comma-separated `v1=` entries in the
+     future (key rotation); receivers accept any match. Receivers must
+     reject timestamps outside **±5 minutes** and should drop repeated
+     delivery IDs within that window. Test vectors are in
+     `docs/guides/notifications.md` and the unit tests.
+  3. **Signing keys:** `bkwh_` + 32 bytes from `crypto/rand` in unpadded
+     base64url (48 characters). The whole string is the HMAC key (receivers
+     use it verbatim, no decoding step), shown to the owner exactly once at
+     creation/rotation; stored sealed with the keyring (5.3, AAD on the
+     channel row); `Send` accepts 32–256 byte keys.
+  4. **URL rules** (input time, `ValidateURL`): ≤ 2048 bytes of printable
+     ASCII (IDNs in punycode), https only (http only with `dev.enabled`,
+     logged at warn without the URL), no userinfo, no fragment, a valid
+     port, the shared host-name rule (D-140), and every resolved address
+     must pass `netguard.ResolveAndCheck`; errors are fixed messages that
+     never echo the URL or address (`ErrHostNotAllowed` /
+     `ErrHostUnreachable` follow netguard's normalization). `Send`
+     re-applies the syntactic rules; the dial-time guard is authoritative.
+     Webhook URLs are treated as sensitive (Slack/Teams embed a bearer
+     credential in the path): never logged; `DisplayURL` shows scheme,
+     host and port only.
+  5. **Transport:** only a `netguard` client (`NewSender` takes a
+     `*netguard.Guard`, not an arbitrary client): dial-time check, no
+     proxy, no redirects, TLS ≥ 1.2 system roots, 15 s per attempt
+     (configurable ≤ 60 s). The response content is ignored: at most 4 KiB
+     is read and discarded, the rest never read.
+  6. **Classification:** success = 2xx. Retryable: network errors and
+     timeouts, 5xx, 408, 429 (`Retry-After` seconds or HTTP date honored
+     on 429/503, clamped to ≤ 1 h). Permanent: any 3xx (never followed),
+     other 4xx, a blocked address, TLS errors, an invalid delivery.
+     Aborted: the caller's context ended (shutdown/timeout), which never
+     counts as a failure. Results carry fixed codes (`ok`, `http_status`,
+     `redirect`, `not_allowed`, `tls`, `unreachable`, `failed`,
+     `invalid_delivery`, `canceled`) and normalized errors only (raw
+     errors embed the URL; refused/timed-out/unresolvable stay one
+     category, D-120).
+  7. **Auto-disable** (`FailurePolicy`, counters persisted by 5.3 per
+     attempt): disable after **10 consecutive failed attempts spanning at
+     least 24 h**, or **5 permanent failures** since the last success
+     (retryable failures in between do not reset); a success resets
+     everything. The decision returns a reason with a user-facing message
+     for the owner's inbox notification. Re-enabling is a manual action by
+     the owner (5.3/6.10).
+- **Alternatives considered:** Signing headers too (more receiver
+  complexity; the delivery ID is only for dedup and the body carries the
+  event id/type). A raw/hex key that receivers must decode (a common
+  receiver mistake). Disabling on consecutive failures alone (one outage
+  with 10 River retries would disable a healthy receiver). Following
+  same-host redirects (still an SSRF/credential-leak vector).
+- **Consequences:** Receivers verify with a few lines of code (samples for
+  Go, Python and Node in the guide). A receiver behind a redirect (e.g.
+  http→https or a moved path) must be reconfigured with the final URL.
+  Security impact: no SSRF through redirects, proxies or rebinding; no
+  URL/address leakage through errors or logs; forged or replayed
+  deliveries are detectable by receivers that check the signature,
+  timestamp and delivery ID; floods towards dead receivers stop through
+  auto-disable.
+- **Related:** D-018, D-023, D-051, D-055, D-120, D-140, D-145, D-161;
+  tasks 5.2, 5.3, 5.3b, 6.10; `internal/notify/webhook`,
+  `docs/guides/notifications.md`, SECURITY.md NT-1, NT-6, WK-12.
+
+## D-178: SMTP settings, e-mail sender and user e-mail verification (task 5.1)
+
+- **Date:** 2026-10-28
+- **Status:** proposed; the TLS-required transport and AUTH rules (items 2,
+  3 and the `plaintext_refused` code) are superseded by D-180
+- **Decided by:** agent (task 5.1)
+- **Context:** D-023/D-051 require system SMTP for e-mail, an SSRF-guarded
+  connection (D-055, D-120), outbound TLS without pinning (D-018) and a
+  verified address (signed link) before e-mail delivery. The plan does not
+  fix where the settings live, the TLS and AUTH rules, how messages are
+  built, or the verification protocol.
+- **Decision:**
+  1. **Package** `internal/notify/email` (stdlib `net/smtp`, no new
+     dependency): `Settings` (the `settings` row `smtp`: non-secret JSON;
+     the password sealed with the keyring under AAD
+     `settings:smtp:password`), `Sender` (implements `Mailer`, used by
+     5.3), `Message`/`Render`/`Notice`, `TestMailer` and `Verifier`
+     (+ `IsVerified` for 5.3).
+  2. **Transport:** modes `starttls` and `implicit_tls`; TLS ≥ 1.2,
+     `ServerName` = the configured host, the system roots or, when the
+     admin sets a CA bundle (PEM certificates only, ≤ 256 KiB), **only**
+     that bundle (as for S3, D-129). A server that does not advertise
+     STARTTLS is refused (no downgrade). `plaintext` (no TLS, no AUTH)
+     exists only for the dev mailpit: refused at save and at send time
+     unless dev mode is on, logged at WARN on save and every send, flagged
+     `insecure` in the API.
+  3. **AUTH** only over TLS (checked twice: the session state and the
+     mechanism itself), PLAIN preferred, LOGIN as fallback, only to the
+     configured host; the password copy is zeroed after use and registered
+     with the log redaction registry. Username and password go together;
+     a stored password is never sent to a changed host/port/username
+     (D-140: must be entered again).
+  4. **Dial:** every connection through `netguard.Guard.DialContext`
+     (dial-time check); the host is also resolved and checked at save time
+     with admin-visible reasons. Private relays need the `[netguard]`
+     allowlist. Timeouts: connect 1–60 s (default 10), whole session 5–300 s
+     (default 60).
+  5. **Messages:** bare recipient addresses (≤ 50), subject ≤ 200
+     characters; CR, LF, other C0/C1 controls, U+2028/2029 and invalid
+     UTF-8 in any header value are refused (never stripped); the subject
+     is RFC 2047 encoded, addresses via `net/mail`; every header line is
+     re-checked before writing. Bodies are multipart/alternative
+     (quoted-printable) from one embedded `html/template` + `text/template`
+     layout: auto-escaping, no images, no remote resources, no tracking;
+     links must be absolute http(s) URLs without user info.
+     `Auto-Submitted: auto-generated` is set.
+  6. **Errors:** fixed codes (`not_configured`, `plaintext_refused`,
+     `not_allowed`, `unreachable`, `tls_failed`, `starttls_unavailable`,
+     `auth_failed`, `auth_unsupported`, `rejected`, `invalid_message`,
+     `failed`) with fixed messages; the admin detail is only the blocked
+     address or the SMTP reply code, never server text. Non-admin callers
+     only see "the e-mail could not be sent".
+  7. **API:** `smtpSettings` (`smtp.view`, admin), `updateSmtpSettings`
+     (`smtp.update`, admin + step-up; audited `setting.changed` with field
+     names and old/new values, the CA bundle as a flag, the password only
+     by name plus `secret.changed`), `sendTestEmail(to)` (`smtp.test`,
+     admin, single root, 10/min per admin, audited `smtp.test_sent`).
+  8. **Verification:** `requestEmailVerification` (`account.email_verify_request`,
+     every role) creates a 256-bit code, stores only
+     `Keyring.MAC("email-verification", user id ‖ address ‖ code)` with
+     the key ID in `email_verifications` (one row per user; a new request
+     replaces the old link), and mails
+     `<server.base_url>/verify-email#code=<base64url>`: the code is in the
+     URL **fragment**, so it never reaches server/proxy logs or a Referer.
+     Links expire after 24 hours; one link per minute per account
+     (enforced in the database) plus a per-account limiter (5 per
+     15 minutes); an undeliverable link is deleted. `verifyEmail(code)`
+     (`account.email_verify`, **authenticated**, single root) looks the
+     row up by the caller's user ID (never by the code), compares the MAC
+     with `hmac.Equal`, requires the same address, an unexpired row and an
+     active account, deletes the row (single use) and sets
+     `users.email_verified_at`; every failure is one generic VALIDATION
+     answer, counts towards deleting the row after 5 tries and is audited
+     (`user.email_verification_failed` with a reason). A trigger on
+     `users` clears `email_verified_at` whenever `email` changes, whatever
+     code path changes it. `User.emailVerified` / `emailVerifiedAt` are
+     exposed; 5.3 delivers e-mail only when `IsVerified` says so.
+- **Alternatives considered:** a vetted third-party SMTP library (rejected:
+  `net/smtp` covers STARTTLS/AUTH with a small surface and no new
+  dependency); system roots plus the bundle (rejected: a private relay's CA
+  should not widen trust for others, consistent with S3); a public
+  `verifyEmail` route usable while signed out (rejected: binding the code
+  to the signed-in account makes a leaked or forwarded link useless and
+  keeps link scanners from verifying addresses); the code in the query
+  string (rejected: logs and Referer); storing a plain SHA-256 of the code
+  (rejected in favour of the keyed MAC, which is useless without the master
+  key and binds the address).
+- **Consequences:** e-mail cannot be sent in clear text outside dev mode
+  and AUTH never leaves TLS; admins must allowlist internal relays.
+  Verifying requires signing in (the link opens the UI, task 6.10 builds
+  the page). `bekup_app` may only update `failed_attempts` of
+  `email_verifications`. **Security impact:** new outbound channel
+  (boundary B4) guarded like S3/webhooks; the SMTP password is a new sealed
+  secret (A4 protects it); verification codes are high-entropy, MAC-stored,
+  single use and account-bound.
+- **Related:** D-018, D-023, D-051, D-055, D-095, D-120, D-129, D-140,
+  D-161; tasks 5.1, 5.3, 6.9, 6.10; `internal/notify/email`,
+  `internal/db/migrations/00027_email_verification.sql`,
+  `internal/graph/schema/email.graphqls`, `docs/guides/notifications.md`,
+  SECURITY.md NT-1, NT-3, NT-5.
+
+## D-179: Web UI shell and auth flows: session gate, auth event bus, step-up hook, strict QR re-rendering (task 6.1)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 6.1)
+- **Context:** Task 6.1 builds the app shell, sign-in, forced flows, the
+  step-up dialog and the profile on the API of M1 (D-105, D-107, D-109,
+  D-110, D-112, D-113, D-116) and the SSE transport (D-124). The plan
+  leaves open how the UI reacts to session and restriction errors, how
+  pages ask for a step-up, how the TOTP QR code is shown under the strict
+  CSP (D-082: Trusted Types `'none'`, `img-src 'self'`) and how the
+  password strength is estimated without the server's zxcvbn.
+- **Decision:**
+  1. **Session gate.** A `RequireSession` route element loads `me` (the
+     only source of the signed-in user; never used for authorization) and
+     shows the shell, the forced password change (`passwordChangeRequired`)
+     or the forced 2FA enrollment (`twoFactorRequired` with a past
+     `twoFactorEnrollmentDeadline`); a future deadline shows a banner.
+     UNAUTHENTICATED → `/login?next=...`, SECOND_FACTOR_REQUIRED →
+     `/login/verify`. No setup page (D-113).
+  2. **Auth event bus.** An Apollo `ErrorLink` maps error codes of any
+     operation (except `Login`, `Me`, `Logout`, which handle their own) to
+     events: UNAUTHENTICATED → clear the cache and go to login with the
+     current page as return path; SECOND_FACTOR_REQUIRED → verify page;
+     PASSWORD_CHANGE_REQUIRED / REQUIRES_2FA_ENROLLMENT → refetch `me`.
+     A stream ended with UNAUTHENTICATED/FORBIDDEN (or a `sessionEvents`
+     event for the current session) only triggers a **session check**
+     (`me`, network-only): a password change revokes the stream's old
+     session while this browser holds a new one, so redirecting at once
+     would sign the user out after every password change. A confirmed
+     session reopens the stream (one `sessionEvents` stream per tab).
+  3. **Return paths** are accepted only as same-origin relative paths: no
+     scheme, no `//`, no backslash, no control characters, not `/login*`,
+     at most 2 KiB (open redirect protection); anything else → `/`.
+  4. **Step-up.** `useStepUp().withStepUp(op, {aal2})` runs `op`; on
+     STEP_UP_REQUIRED it opens one shared dialog (`beginStepUp`, the
+     account's methods; the password only for accounts without a factor;
+     `aal2` offers only a UV passkey or TOTP), completes `completeStepUp`
+     and retries `op` at most twice; closing rejects with
+     `StepUpCancelledError`. REQUIRES_2FA_ENROLLMENT links to the 2FA
+     settings. The dialog's `beginStepUp` runs once per opening (a second
+     call would replace the session's passkey challenge).
+  5. **TOTP QR code.** The server's SVG is never inserted as markup (no
+     `innerHTML`/`DOMParser` under Trusted Types, no `blob:`/`data:` image).
+     `lib/qr-svg.ts` matches the exact document shape of
+     `internal/auth/qrsvg.go` (viewBox, one white rect, one path of
+     `M x yhNv1h-Nz` runs) and re-renders it as React SVG elements; any
+     other input shows only the manual key.
+  6. **WebAuthn JSON** is converted in `lib/webauthn.ts` (base64url ↔
+     ArrayBuffer, response shaped like `PublicKeyCredential.toJSON()`)
+     instead of `PublicKeyCredential.parse*FromJSON`, which not every
+     supported browser has.
+  7. **Password strength** is an advisory client-side estimate (length in
+     code points, character classes, repetition and sequences, a short
+     common-word list, the account's e-mail/name parts like
+     `auth.identityParts`); the server's policy check is authoritative and
+     its VALIDATION message is shown on the field. No zxcvbn bundle in the
+     browser.
+  8. **One-time secrets in the UI** (TOTP key, recovery codes) live only in
+     component state, are dropped after confirmation, and recovery codes
+     need an explicit "I have saved these codes" before the dialog closes.
+     Copy uses the Clipboard API; download is a local `blob:` link.
+  9. **Strings** live in `src/lib/messages.ts` (English only); pages are
+     lazy-loaded route chunks; sign-in and sign-out clear the Apollo cache.
+- **Alternatives considered:** redirecting on every stream end code
+  (signs users out after a password change); a global step-up retry in
+  the Apollo link (cannot show a dialog or know whether the operation is
+  safe to repeat; per-call `withStepUp` keeps retries explicit);
+  rendering the QR code via `DOMParser`/`innerHTML` with a Trusted Types
+  policy (would need `trusted-types` to allow a policy, weakening D-082)
+  or as an `<img>` from a `blob:` URL (needs `img-src blob:`);
+  bundling zxcvbn-ts (about 800 KB of dictionaries for an advisory
+  meter).
+- **Consequences:** Pages of M6 use `useStepUp`, `apiErrors`/`userMessage`/
+  `applyFieldErrors` and `renderApp` for tests. The CSP stays exactly
+  D-082; `pnpm csp-check` now walks the real sign-in, step-up, TOTP
+  enrollment and profile pages against a fake API. A change of the QR SVG
+  format in `internal/auth/qrsvg.go` must update `lib/qr-svg.ts` (the
+  manual key keeps working meanwhile). Security impact: no new trust
+  boundary; open-redirect-safe return paths; one-time secrets never
+  persisted by the UI.
+- **Related:** D-057, D-082, D-083, D-095, D-105, D-107, D-109, D-112,
+  D-113, D-116, D-124; task 6.1; `web/src/app/`, `web/src/features/`,
+  `web/src/lib/`, `web/scripts/csp-check.mjs`, `docs/development.md`.
+
+## D-180: SMTP follows the server's TLS support
+
+- **Date:** 2026-10-28
+- **Status:** accepted
+- **Decided by:** user
+- **Context:** Task 5.1 required STARTTLS or implicit TLS for SMTP (plaintext
+  only in dev mode). The user wants bekup to work with any SMTP server's
+  settings; TLS must not be mandatory.
+- **Decision:** SMTP modes: `auto` (default: use STARTTLS when the server
+  offers it, otherwise send unencrypted), `starttls` (required),
+  `implicit_tls`, and `none` (never encrypt). AUTH over an unencrypted
+  connection is allowed when the configured mode permits plaintext. Following
+  D-001's pattern for weakened settings: changing SMTP settings stays admin +
+  step-up and audited (the audit records the mode); the UI shows an
+  "email may be sent unencrypted" badge for `auto`/`none`; a send that ends up
+  unencrypted logs a warning (no credentials logged). Certificate
+  verification still applies whenever TLS is used. Supersedes the
+  TLS-required part of D-178 and the plan's "STARTTLS/TLS required" wording.
+- **Alternatives considered:** TLS required (previous); plaintext allowed only
+  with an extra opt-in flag (rejected: the user wants it to just follow the
+  server).
+- **Consequences:** email content and SMTP credentials may travel unencrypted
+  to servers without TLS; this is visible to admins and audited.
+- **Related:** tasks 5.1, 6.9; D-001, D-095, D-178.
+
+## D-181: User admin UI: one-time temporary passwords, UI-only self guards, derived 2FA state, admin-only owner picker (task 6.8)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (derived 2FA state and admin-only picker superseded by D-195)
+- **Decided by:** agent (task 6.8)
+- **Context:** Task 6.8 builds the users admin, owner assignment and the
+  2FA policy page on the API of D-110, D-112 and D-067. The API returns a
+  temporary password once, does not expose an account's last activity or
+  whether it has a second factor that the policy does not require, has no
+  "jobs owned by user" filter, and `users` is admin only although
+  maintainers may assign owners.
+- **Decision:**
+  1. **Temporary passwords** (`createUser`, `resetUserPassword`) run with
+     Apollo `fetchPolicy: "no-cache"`; the value lives only in the page's
+     state and in a dialog that cannot be dismissed (Escape/outside click)
+     until the admin acknowledges it, then it is dropped. It shows the
+     72-hour expiry and a "will not be shown again" warning.
+  2. **Self guards are UI only:** on their own account an admin cannot
+     change the role, disable, reset the password, reset second factors or
+     delete (links to the profile instead). The server stays authoritative
+     (`resetUserSecondFactors` FORBIDDEN on self, last-admin CONFLICT);
+     CONFLICT from demote/disable/delete is shown as the last-admin
+     explanation.
+  3. **2FA column** is derived: required without a deadline = enrolled;
+     a future deadline = due; a past one = overdue; otherwise "not
+     required" (enrollment unknown). Last activity is shown on the detail
+     page from `userSessions`, not in the list.
+  4. **Owned jobs** are found client-side from `jobs(first: 200)` with
+     `owners`; a note appears when more jobs exist. Assigning several
+     jobs runs one `assignJobOwners` per job under a single step-up.
+  5. **`UserPicker`** (`web/src/features/users/user-picker.tsx`) is the
+     reusable owner picker: only role User is selectable (D-067), others
+     are listed disabled with the reason; deleted accounts are hidden.
+     It uses the admin-only `users` query and explains FORBIDDEN to other
+     roles.
+  6. **2FA policy page** (`/admin/two-factor`) previews the effects,
+     marks any weakening (a role no longer required, dropping "every
+     role", a longer grace period) with the insecure hatching, asks for
+     an extra confirmation and then a step-up.
+  7. Admin routes are wrapped in a `RequireAdmin` element (UI shaping
+     only; queries do not run for other roles).
+- **Alternatives considered:** keep the password in the cache (it could
+  re-render after a refetch); add `lastSeenAt` / `hasSecondFactor` /
+  owner filter / a maintainer-visible candidates query to the API now
+  (backend change outside this UI task; recommended follow-up).
+- **Consequences:** a temporary password never reaches the Apollo cache.
+  Maintainers cannot use `UserPicker` until a maintainer-visible
+  candidate query exists. Instances with more than 200 jobs see an
+  incomplete owned-jobs list until an owner filter exists. No security
+  boundary changes: the server enforces every rule.
+- **Related:** tasks 6.5, 6.8; D-001, D-067, D-106, D-110, D-112, D-179.
+
+## D-182: Connections and destinations UI: deliberate pin and host-key confirmation, client-side retargeting prompt, session-only test results (tasks 6.3, 6.4)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (item 5 superseded by D-195)
+- **Decided by:** agent (tasks 6.3, 6.4)
+- **Context:** The connection and destination pages drive the certificate
+  pinning (D-133, D-139, D-140), SSH host-key confirmation, write-only
+  credentials and the TLS opt-out on the API of tasks 2.11/2.12. The plan
+  leaves open how deliberate the confirmations must be in the UI, how the
+  D-140 re-entry rule surfaces, and where the "last test result" and the
+  privilege verdict (D-168) come from, since the API stores neither.
+- **Decision:**
+  1. **Pin confirmation.** The pin dialog captures the chain
+     (`fetchCertificate`), lists every certificate (subject, issuer, SANs,
+     validity, SPKI SHA-256 as base64 and hex, certificate SHA-256), marks
+     the suggested anchor and offers only a self-signed leaf or a CA as an
+     anchor; it always explains why public CAs are refused (D-139). The
+     confirm button stays disabled until the admin ticks "I compared the
+     fingerprints out of band"; `leafSpkiSha256` from the capture is sent
+     unless "allow leaf rotation" is chosen for a CA anchor. A PEM supplied
+     out of band needs the leaf SPKI or explicit leaf rotation. The same
+     dialog stages a backup pin.
+  2. **Host keys.** One shared dialog (`components/ssh/host-key-dialog`)
+     fetches the key, shows type, fingerprint and the authorized-key line,
+     warns when it differs from the pinned key and requires the comparison
+     tick; the confirmation sends the host/port the key was fetched from as
+     `expectedHost`/`expectedPort` (D-140). Generated keypairs show the
+     public line once with an "installed" acknowledgement (it stays visible
+     in the settings; it is public).
+  3. **TLS downgrade.** Weakening the TLS mode (`setTlsMode`) shows the
+     audit/alert/badge consequences in the hazard hatch and requires typing
+     the connection name; creating a connection with a non-pinned mode
+     shows the same warning. The TLS mode cannot change in the edit form.
+  4. **Write-only credentials.** Stored passwords/keys show only a
+     "Stored" state with Change/Remove; inputs exist only while a new value
+     is entered. The form mirrors D-140: when the database endpoint (host,
+     port, tunnel route) or the SFTP host/port/user/base path or the bastion
+     changes while a password is stored, the input is forced open with the
+     reason and a client-side check blocks saving until it is entered again
+     (or removed / replaced by a key); the server remains authoritative.
+  5. **Session-only results.** The last `testConnection` /
+     `testDestination` result per item is kept in an in-memory store of the
+     tab (`lib/session-results`), never persisted; the list's privilege
+     badge and "last test" column read from it and say "Not tested"
+     otherwise.
+  6. **Single-root requests.** Every runner-calling mutation is its own
+     operation with one root field (D-117); refetches are separate requests.
+     Maintainers see the metadata and the checks the API allows; admin
+     actions are hidden (the server enforces @hasRole).
+  7. Form selects are styled native `<select>` elements
+     (`components/ui/native-select`) for keyboard/screen-reader behaviour
+     and simple form binding.
+- **Alternatives considered:** auto-confirming a fetched pin or host key
+  (TOFU without comparison: rejected, D-034); persisting test results
+  server-side (an API change outside the UI tasks); relying on the server's
+  VALIDATION alone for D-140 (works, but the prompt before submit is
+  clearer).
+- **Consequences:** Confirmations take one extra deliberate step. Test
+  results and privilege badges disappear on reload until tested again. No
+  trust boundary changes. Security impact: the UI never displays stored
+  credentials and makes out-of-band comparison an explicit act.
+- **Related:** tasks 6.3, 6.4; D-034, D-117, D-133, D-139, D-140, D-158,
+  D-168, D-179; `web/src/features/connections`, `web/src/features/destinations`,
+  `web/src/components/ssh`.
+
+## D-183: Notification core: transactional outbox, audit-driven emitters, delivery-time authorization, noise rules and storage (task 5.3)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 5.3)
+- **Context:** D-023, D-051 and D-161 fix the channels, the catalog, the
+  audiences, the defaults and the noise rules; D-177 and D-178 deliver the
+  webhook and e-mail senders. Open were how producers emit events
+  (atomically or not), where recipients and access are resolved, how
+  preferences and channels are stored, how retries, auto-disable and
+  idempotency work, and the exact noise rules.
+- **Decision:**
+  1. **Outbox.** `notify.Emit(ctx, q, Event{Type, Subject, Severity,
+     Detail, DedupKey})` inserts a `notification_events` row with the
+     producer's `*sqlc.Queries`, so an event commits or rolls back with the
+     state change it reports. Events carry identifiers, a catalog type and
+     a bounded detail object (≤ 16 snake_case keys, strings ≤ 200
+     characters without control characters, booleans, integers, ≤ 2 KiB;
+     keys naming secrets are refused); never secrets, connection strings,
+     server output or database content. `DedupKey` makes an emit idempotent
+     (daily digests, sign-in alerts). A **dispatcher** (every process that
+     runs workers, every 2 s, `FOR UPDATE SKIP LOCKED`) enqueues the River
+     `notify_fanout` job and marks the event dispatched in one transaction,
+     so producers without a pgx.Tx or without a queue client (CLI) work too.
+  2. **Emitters through existing hooks.** Backup runs: `runstate` emits
+     `backup.started|started_early` in `Start` and the terminal event in
+     `finishTx` (covers Finish, interrupted attempts and canceled queued
+     runs). Job, connection and security events: an `audit.Observer`
+     (`notify.ObserveAudit`, set on serve's/worker's Auditor) maps audited
+     actions to events in the audit entry's transaction (`job.*`,
+     `connection.pin_changed|host_key_changed|tls_downgraded`,
+     `security.account`: sign-in (once per account, address and day),
+     password change/reset, second-factor changes, recovery codes,
+     lockouts, role changes; `security.system`: opt-outs, new admins and
+     admin grants, key/cert rotation, instance keys, audit verification
+     failures, pin/host-key mismatches, restore verification failures).
+     Restores, test restores, retention anomalies (`artifact.missing`) and
+     destination tests (`destination.test_failed`, a new `TestFailed`
+     hook) emit after their commit through the existing post-commit hooks
+     (`EmitNow`; failures are logged).
+  3. **Fan-out** (`notify_fanout`, notify queue, unique by event id, one
+     transaction): recipients are the active accounts (not deleted, not
+     disabled) for which `authz.Policy.Authorize` allows the event's view
+     operation with their **current** role (and the subject job:
+     `run.view`, `restore.view`, `test_restore.view`, `artifact.view`,
+     `job.view`, `connection.view`, `destination.view`, `account.view` +
+     subject, `monitor.alert_list`). Per recipient the channels resolve
+     **per-job override > per-event preference > D-161 default** (inbox on,
+     e-mail for problem events, webhooks/push opt-in); mandatory security
+     events always keep inbox + e-mail. It writes the inbox row (unique per
+     event and user) and one delivery per (recipient, channel) with an
+     idempotency key, plus one per enabled shared channel attached to the
+     job whose filter (groups/events, empty = all) matches; security
+     events never go to shared channels. E-mail needs a verified address
+     (else a `skipped/email_unverified` delivery).
+  4. **Delivery** (`notify_deliver`, unique by delivery id): re-checks the
+     recipient (active, still authorized, verified address, channel enabled
+     and still attached) before every attempt (`skipped/access_revoked`
+     etc.), renders minimal content (title, one sentence, link from
+     `server.base_url`; e-mail via the 5.1 templates, webhook envelope via
+     5.2 `BuildPayload` with the delivery id as `X-Bekup-Delivery`). Retries
+     follow 5.2's classification (River backoff; `Retry-After` as a snooze)
+     with the delivery's own attempt counter capped at 10; permanent
+     failures fail at once; SMTP not configured skips. Webhook failure
+     counters are persisted per channel and the D-177 `FailurePolicy`
+     (permanent threshold = `notifications.webhook_failure_threshold`)
+     auto-disables the channel and writes an inbox notice to its owner (all
+     admins for a shared channel).
+  5. **Noise rules:** `*.started` events of one job within
+     `notifications.collapse_window` collapse into the first (counted);
+     per user and channel, after `notifications.max_per_user_per_hour`
+     e-mail/webhook deliveries within an hour the next one is a single
+     summary and further ones are skipped (`flood_collapsed`) while the
+     inbox still gets everything; security events are exempt. Retention
+     removals are only reported by the daily `notify_retention_digest`
+     (one `retention.summary` per job and UTC day for the last 3 complete
+     days, deduplicated). `notify_cleanup` prunes events and deliveries
+     after 90 days and inbox rows after 180 days.
+  6. **Storage** (migration 00028): `notification_events`, `notifications`,
+     `notification_deliveries`, `shared_channels` (email_list | webhook),
+     `job_shared_channels`, `user_channels` (webhook; push reserved;
+     max 5 per user by trigger), `user_notification_prefs`. Webhook URLs
+     (may embed bearer credentials) and HMAC keys are sealed with the
+     keyring under `<table>:<id>:url` / `:hmac_key`; only `DisplayURL` is
+     stored in clear. `bekup_app` may update only progress columns of
+     events and deliveries, `read_at` of inbox rows and the mutable columns
+     of channels/preferences (never owner, type or identity).
+- **Alternatives considered:** River insert directly in the producers'
+  transactions (needs a pgx.Tx and a queue client everywhere; the CLI and
+  `*sqlc.Queries`-only paths could not emit); in-memory emit after commit
+  (events lost on crashes); per-producer emit calls for job/connection/
+  security actions (scattered and easy to forget; the audit log already
+  names every such action); resolving recipients at emit time (would
+  deliver to users who lost access in between); clear-text webhook URLs
+  (Slack/Teams URLs are credentials).
+- **Consequences:** every audited action of the mapped kinds now also
+  writes an outbox row in its transaction (an outbox failure fails the
+  action, like an audit failure). Notifications may arrive a few seconds
+  after the state change. Users who lose access stop receiving events
+  immediately, also for events already fanned out. Security impact: no
+  secrets in events, payloads, logs or River args (IDs only); sealed
+  webhook URLs and keys; webhooks only through the SSRF-guarded 5.2 sender;
+  e-mail only to verified addresses; no notification can reveal a job to a
+  user who may not see it.
+- **Related:** D-023, D-051, D-106, D-145, D-161, D-177, D-178; tasks 5.3,
+  5.3b, 5.4, 5.5, 6.10; `internal/notify`, `internal/runstate/notify.go`,
+  `internal/audit` (Observer), `internal/app/notify.go`,
+  `internal/db/migrations/00028_notifications.sql`,
+  `docs/guides/notifications.md`, SECURITY.md NT-*.
+
+## D-184: User directory for staff, admin activity facts on User and the jobs owner filter (task 6.8 follow-up)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 6.8 backend follow-up)
+- **Context:** D-181 recorded three API gaps found while building the
+  users admin: maintainers must pick job owners (D-106) but `users` is
+  admin only; the admin list cannot show last activity or whether an
+  account has a second factor without one query per user; and the owned
+  jobs of a user can only be found client-side from the first 200 jobs.
+  D-106 already reserved `user.directory_view` (admins, maintainers) for a
+  minimal owner-picker directory.
+- **Decision:**
+  1. **`Query.userDirectory(search, first, after)`** (`@hasRole(ADMIN,
+     MAINTAINER)`, operation `OpUserDirectoryView`, rule `staff`) returns
+     a separate type `UserDirectoryEntry { id, displayName, email, role,
+     disabled }` (not `User`, so no other field is reachable), only for
+     accounts that are not deleted, ordered by e-mail like `users`
+     (same cursor format, 1..200 per page, default 50). `search` is a
+     trimmed case-insensitive substring of e-mail or display name, at
+     most 200 characters, LIKE wildcards escaped. The sqlc query
+     `ListUserDirectory` selects only those columns.
+  2. **`User.lastSeenAt: Time`** is the newest `sessions.last_seen_at` of
+     the account, ignoring sessions still waiting for their second factor
+     (`mfa_pending`); revoked/expired rows count until housekeeping purges
+     them; null when none is on record. **`User.twoFactorEnrolled:
+     Boolean!`** is true with an enabled TOTP or at least one passkey
+     (recovery codes alone do not count). Both are field resolvers
+     guarded by `Policy.Authorize(OpUserView)` (admin only), except that
+     `twoFactorEnrolled` of the caller's own account is allowed (it is
+     already visible through `myTwoFactorStatus`); others get FORBIDDEN.
+     They are loaded by one query (`UserActivityFacts`) for every user on
+     the page: `users` hints its page ids into the per-operation batch
+     loader (`runLoader`, D-149) and `UserAdmin.Activity` takes
+     at most 500 ids.
+  3. **`JobFilter.ownerId`** narrows `jobs` to the jobs the user owns
+     (`job_owners`, an `EXISTS` in `ListJobs`), combined with the
+     existing `JobScope` filter. It is staff only: for a caller with an
+     owned scope the service refuses it (`ErrOwnerFilterForbidden` →
+     FORBIDDEN), even with the caller's own id.
+- **Alternatives considered:** open `users` to maintainers with field
+  masking (easy to leak a new field later); expose last activity and
+  enrollment through `userSessions` / the 2FA standing only (N+1 for a
+  list); silently ignore `ownerId` for owners (harmless because the scope
+  still applies, but hides misuse); counting recovery codes as enrolled
+  (they are a fallback, not a factor, D-112).
+- **Consequences:** maintainers can list e-mail addresses, display names,
+  roles and the disabled flag of every active account (needed to assign
+  owners; no password, lockout, 2FA, session or deletion state). Backup
+  owners and anonymous callers cannot. The admin list costs two queries
+  per page for the new fields. No trust boundary changes.
+- **Related:** D-067, D-106, D-110, D-112, D-146, D-149, D-181; tasks 3.5, 6.8;
+  `internal/graph/schema/users.graphqls`, `internal/graph/schema/jobs.graphqls`,
+  `internal/graph/resolvers/users.go`, `internal/graph/resolvers/runs_loader.go`,
+  `internal/auth/user_admin.go`, `internal/jobs/service.go`,
+  `internal/db/queries/user_admin.sql`, `internal/db/queries/jobs.sql`.
+
+## D-185: Restore wizard and calendar UI: proactive AAL2 step-up, request-only age identity, client-side calendar filters (tasks 6.7, 6.11)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (tasks 6.7, 6.11)
+- **Context:** The restore API (D-167, D-168, D-171) and the calendar query
+  (D-156, D-159, D-160) leave open how the UI orders the second-factor
+  check, holds the age identity, gates privileged targets, shows the
+  neutralized SECURITY DEFINER routines, and filters the calendar by
+  connection and destination (the query only takes job ids).
+- **Decision:**
+  1. **Proactive AAL2 step-up.** "Verify and start the restore" always
+     opens the step-up dialog with `aal2` (UV passkey or TOTP, D-116)
+     *before* `restoreArtifact`/`restoreGlobals` is sent; the request is
+     still wrapped in `withStepUp` for a late STEP_UP_REQUIRED. Accounts
+     without TOTP or a passkey (`myTwoFactorStatus`/`myPasskeys`) and a
+     REQUIRES_2FA_ENROLLMENT answer get an inline guide to
+     `/profile/security`; the submit stays disabled.
+  2. **Age identity in the request only.** The identity (pasted or read
+     from a file of at most 16 KiB; only the `AGE-SECRET-KEY-1` line is
+     kept) lives in wizard component state, is never in `restorePreview`,
+     never in storage or the Apollo cache (`client.mutate`, `no-cache`),
+     and is cleared once the request was sent (success or failure).
+  3. **Privileged targets.** `acknowledgementRequired` blocks non-admins
+     at the preview with an explanation; admins tick an acknowledgement
+     sent as `acknowledgePrivilegedTarget`. Changing target, database or
+     options resets the acknowledgement and the typed confirmation.
+  4. **Warnings** are shown by severity: data loss or server-wide changes
+     (`overwrite_in_place`, `overwrite_swap`, `globals_change_roles`,
+     `privileged_target`) red and first; notes (`restore_hardening` with
+     the GRANT CONNECT hint, `temporary_target`, `identity_required`)
+     last. The neutralized routines are read from the restore log lines
+     `switched to SECURITY INVOKER: ...` (internal/restore/postgres.go).
+  5. **Calendar filters** map connection and destination to job ids from
+     `jobs` on the client (`calendar(jobIds)`); a destination filter also
+     hides expiries of copies on other destinations. View, date, zone and
+     filters live in the URL; the zone defaults to the browser's. Views
+     are Monday-first civil-date grids (WAI-ARIA grid, roving tab stop)
+     computed with `Intl` (no calendar library); the range is at most 6
+     weeks and clamped to 93 days. One `runUpdated` stream per page:
+     known runs are updated in place, unknown ones trigger a debounced
+     refetch.
+- **Alternatives considered:** sending the restore first and stepping up
+  on STEP_UP_REQUIRED (sends the identity twice and before the check);
+  keeping the identity in react-hook-form or session storage; a calendar
+  library (inline styles conflict with D-082, heavier); a server-side
+  connection/destination filter (an API change for what the job list
+  already answers).
+- **Consequences:** Every restore costs one second-factor prompt even
+  right after another one. Security impact: no new trust boundary; the
+  identity's client-side lifetime is one request; privileged-target and
+  confirmation rules stay enforced by the server. A change of the
+  neutralization log wording must update `neutralizedFunctions`.
+- **Related:** D-068, D-082, D-116, D-156, D-159, D-160, D-163, D-167,
+  D-168, D-171, D-179; tasks 6.7, 6.11; `web/src/features/restore/`,
+  `web/src/features/calendar/`, `web/scripts/csp-check.mjs`.
+
+## D-186: Jobs and runs UI: start-early ledger, no-cache one-time keys and tickets, virtualized log tail, derived completeness evidence (tasks 6.5, 6.6)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (item 5 per-table remark superseded by D-195)
+- **Decided by:** agent (tasks 6.5, 6.6)
+- **Context:** The job and run pages sit on the APIs of D-143, D-146,
+  D-147, D-149, D-150, D-154, D-156/D-157/D-160 and D-184. The plan leaves
+  open how "Run now" and "Start next planned run early" are told apart,
+  where generated keys and download tickets live in the browser, how
+  live logs stay cheap, and what the per-run completeness panel shows
+  while the API exposes no per-table statistics.
+- **Decision:**
+  1. **Two actions, two dialogs.** "Run now (extra run)" says the
+     schedule is unchanged. "Start next planned run early" shows a
+     ledger correction: the planned occurrence struck through ("starts
+     now") and the next planned run afterwards (staff: the first
+     `previewSchedule` occurrence after `nextRunAt`; owners, who cannot
+     preview: a generic line, then the server's new `nextRunAt` in the
+     toast). Refusals stay in the dialog: CONFLICT "already active" →
+     fixed text; VALIDATION "already started early" → the one-ahead
+     rule (D-160); other codes (a disabled job: CONFLICT for runJobNow,
+     VALIDATION for startNextRunEarly) show the server's message. Start
+     early is disabled without a planned run.
+  2. **One-time material is never cached.** createJob,
+     generateJobPassphrase, generateAgeKeypair, exportJobPassphrases and
+     createDownloadTicket run with `fetchPolicy: "no-cache"`; generated
+     keys live only in component state until "I've saved it" (D-179
+     item 8); the passphrase export downloads at once and is not shown.
+     A pasted or chosen age identity is reduced to its single
+     `AGE-SECRET-KEY-1` line, sent only in the ticket request and
+     cleared after it; the ticket link is shown once with its 60 s
+     countdown and hidden after the click.
+  3. **Restore command.** The server's template gets the
+     server-sanitized file name (shell-quoted unless plainly safe) and the
+     database name only when it is a plain identifier; other
+     placeholders stay.
+  4. **Streams.** One `runUpdated` stream per page (job page and /runs:
+     filtered by job or unfiltered, new runs refetch page 1; run page:
+     by run id, only while active) plus, on an active run's page, one
+     `runLogAppended` stream started after the stored lines
+     (`runLogs` pages) from their last id; replayed lines are dropped by
+     id. The log viewer renders only a fixed-height window (no library);
+     "Follow" pins the tail, scrolling up pauses it.
+  5. **Completeness evidence** is derived from what the API exposes:
+     the exactness of the counts for the job's engine and level
+     (PostgreSQL deep exact, standard estimates; MySQL/MariaDB always
+     estimates, D-153), verified items, manifest coverage, completeness
+     warning codes grouped across items, and the test restore of this
+     run with its findings. Warnings and notices (D-155) are styled
+     apart (amber, solid rule vs. neutral, dashed). Per-table stats are
+     not in GraphQL; the panel points to `bekup verify`.
+  6. **Owner picker** uses `userDirectory` (D-184) for admins and
+     maintainers, narrowed to active role-USER accounts in the client.
+  7. **Feature routes** (`features/jobs/routes.tsx`,
+     `features/runs/routes.tsx`) come before the nav placeholders; the
+     restore wizard is opened with `/restore?artifactId=<id>` (D-185).
+- **Alternatives considered:** one "run" button with a mode switch
+  (hides the schedule effect); Apollo cache eviction after showing a
+  key (a window where it sits in the normalized cache); a virtualization
+  library (one more dependency for a fixed-row list); subscribing to the
+  log from the start for finished runs (an extra stream per page);
+  inventing stats from warnings.
+- **Consequences:** Download and key material never reaches the Apollo
+  cache or devtools cache views. The completeness panel lacks object
+  and row-count summaries until the API exposes `backup_stats` (e.g. a
+  `RunItem.stats` field); a follow-up backend task is needed for the
+  full 6.6 evidence summary. No trust boundary changes.
+- **Related:** D-141, D-143, D-146, D-147, D-149, D-150, D-151, D-153,
+  D-154, D-155, D-156, D-157, D-160, D-179, D-184, D-185; tasks 6.5, 6.6;
+  `web/src/features/jobs/`, `web/src/features/runs/`,
+  `web/scripts/csp-check.mjs`.
+
+## D-187: RunItem.stats and stored last test results of connections and destinations (task 6.6, 6.3, 6.4 follow-up)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (follow-up of D-182 and D-186)
+- **Context:** The M6 UI agents found two API gaps. The run page cannot
+  show the completeness evidence of `backup_stats` (D-141, D-151, D-153),
+  only derive it (D-186 item 5), and the connection and destination
+  lists keep the last test result and privilege verdict only in the
+  browser tab (D-182 item 5) because the API stores neither.
+- **Decision:**
+  1. **`RunItem.stats`** exposes the stored canonical stats object of an
+     item, parsed into a typed view (`runstate.ParseItemStats`): level,
+     consistency, object counts by kind, per-table rows with
+     `count` (`EXACT`/`ESTIMATE`/`UNKNOWN`) plus `exact`/`estimate`/
+     `unknown`/`approximate` flags (`rows` null when unknown), decoded
+     table names, `tablesTotal`, `tablesTruncated`, and the findings split
+     into `warnings` and `notices` (notice codes: `databases_excluded`).
+     The parser repeats the writer's caps (10 000 tables, 32 findings, 50
+     objects of ≤ 256 bytes, 4 MiB) and cuts beyond them; a malformed row
+     reads as null (the signed manifest keeps the original). The field
+     inherits the run's authorization (RunItem is reachable only through
+     Run; owners see their own jobs' runs) and is batch-loaded per
+     operation by the D-149 run loader: one `backup_stats` query per page
+     of runs (`ListBackupStatsForRuns`), loaded only when requested.
+  2. **Stored last test.** Migration 00029 adds `last_tested_at`,
+     `last_test_ok`, `last_test_code`, `last_test_settings_at` to
+     `connections` and `destinations`, and `last_test_privileges` /
+     `last_test_privilege_reasons` (≤ 32 × 64 bytes, D-168 bounds) to
+     `connections`, with CHECKs on completeness, the code syntax
+     (`^[A-Za-z][A-Za-z0-9_]{0,63}$`) and the verdict values. `Service.Test`
+     stores the outcome best effort (a failure is logged; the result is
+     still returned): connections store the runner reason / serve code of a
+     target failure, `INCOMPATIBLE_CLIENT`, or `TLS_PIN_MISMATCH` /
+     `SSH_HOST_KEY_MISMATCH` for the security events, plus the probe's
+     verdict when the probe got that far; destinations store the
+     normalized class of the first failed step. Calls without a verdict
+     on the target (rate limit, busy, runner unavailable, canceled, not
+     ready) store nothing. Codes outside the syntax become `FAILED` /
+     `failed`. Never a message or raw error.
+  3. **No stale results.** The update is conditional on the row's
+     `updated_at` as loaded by the test, so a test racing a settings
+     change stores nothing; `last_test_settings_at` records the
+     `updated_at` it ran against and `lastTest.stale` is true once they
+     differ. The `set_updated_at` triggers of both tables gain a WHEN
+     clause that skips updates changing only the last-test columns (with
+     a new `last_tested_at`), so storing a result never bumps
+     `updated_at`.
+  4. **API.** `Connection.lastTest { at ok code stale privileges { status
+     reasons acknowledgementRequired } }` and `Destination.lastTest { at ok
+     code stale }`: metadata visible to admins and maintainers (the only
+     roles that can read these types). Audit is unchanged: tests stay
+     unaudited apart from the existing pin / host-key mismatch events. The
+     stored verdict is informational only; restore gating keeps probing
+     live (D-168, D-173).
+- **Alternatives considered:** separate `connection_tests` /
+  `destination_tests` tables (no trigger change, but a join on every
+  list and two more tables for three columns); clearing the result on
+  every update (loses the information that a test once passed); storing
+  the full test result incl. messages and server version (more surface
+  for little value; messages are fixed texts derivable from the code);
+  returning `backup_stats` as a raw JSON scalar (untyped, unbounded for
+  the client); paging tables per item (the stored cap already bounds a
+  page; the field is loaded only when requested).
+- **Consequences:** The run page can show the full evidence summary
+  (D-186 follow-up) and the lists show the last test across reloads and
+  users; the UI's session-only store (D-182 item 5) can be replaced. A
+  page of runs that requests stats loads every stats object of the page
+  (bounded by the caps and the page size). No trust boundary changes;
+  `bekup_app` already had UPDATE on both tables. Security impact: only
+  normalized codes and bounded reason codes are stored and shown, to the
+  roles that already see the connection/destination metadata; owners
+  read stats only for runs they may already see.
+- **Related:** D-141, D-149, D-151, D-153, D-155, D-131, D-135, D-168,
+  D-173, D-182, D-186; `internal/db/migrations/00029_target_last_test.sql`,
+  `internal/runstate/stats.go`, `internal/connections/probe.go`,
+  `internal/destinations/open.go`, `internal/graph/resolvers/runs_read.go`,
+  `internal/graph/schema/{runs,connections,destinations}.graphqls`.
+
+
+## D-188: Missed-backup (dead-man) alerts: recorded occurrences, derived window, one alert per outage with daily reminders (task 5.4)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 5.4)
+- **Context:** The plan asks for missed-backup alerts from
+  `jobs.expected_window_seconds` (D-146: NULL = derived), emitted as the
+  catalog event `backup.missed` (D-161) through the outbox (D-183). Open
+  were what "missed" means, the default window, which occurrences are
+  judged, how skips, partial runs and early runs count, how often a broken
+  job alerts, and how the scan stays bounded.
+- **Decision:**
+  1. **Watched jobs:** enabled, not deleted, schedule not manual (a stored
+     schedule that does not compile stays watched). A periodic River job
+     `missed_backup_check` (maintenance queue, unique, every 5 minutes,
+     `internal/notify/missed`) scans them in keyset batches of 200 with
+     three set-based queries per batch (no per-job queries except for
+     reminders).
+  2. **Occurrences come from what the scheduler recorded, not from a
+     replay of the schedule:** scheduled, catch-up and early runs by
+     `scheduled_for`, `schedule_skips` rows (`still_running`,
+     `unschedulable`), and the stored `next_run_at` once its window has
+     passed (`not_enqueued`: the scheduler is not running or is stuck; this
+     one is judged whatever its age). A replay cannot tell occurrences
+     before the job was enabled from missed ones (no enable timestamp
+     exists) and would share any bug of the scheduler math it is meant to
+     catch. Occurrences collapsed into one catch-up run are judged through
+     that run. Only occurrences whose deadline (occurrence + window) lies in
+     the last 7 days are read (at most 2,500 newest per job).
+  3. **Covered vs missed:** an occurrence T is covered when its own run
+     reached `success` or `partial` by T + window (also an early run that
+     finished before T) or any run of the job (scheduled, manual, early)
+     finished `success`/`partial` in (T, T + window]. **Partial counts as
+     not missed** (the job ran; the failed databases have `backup.partial`).
+     **A skip because the previous run was still running is not a miss if
+     that run succeeds within the skipped occurrence's window**; failed,
+     canceled, still queued/running and late runs are misses (reason
+     `run_failed`, `run_canceled`, `run_queued`, `run_running`,
+     `finished_late`, `skipped_still_running`, `unschedulable`,
+     `not_enqueued`).
+  4. **Default window** (expected_window_seconds NULL): the longest a
+     backup may legitimately take: `MaxAttemptsBackup` (2) times the job's
+     timeout (`timeout_seconds`, else `workers.backup_timeout`) plus one
+     hour of grace (queue wait, backoff, clock skew); 13 h with the
+     defaults. It is independent of the schedule interval (no alert storms
+     for frequent schedules); operators who want faster alerts set the
+     window per job.
+  5. **One alert per outage, daily reminders, no recovery event:**
+     consecutive missed occurrences (not separated by a success) form one
+     outage identified by the last successful run before it ("never" when
+     the job never succeeded). Its first notice has dedup key
+     `backup.missed:<job>:after:<run|never>`, so re-runs and concurrent
+     checks never duplicate it; while the outage lasts (no success since
+     its last missed occurrence) one reminder per 24 h follows
+     (`…:r<n>`, n = whole days since the first notice). A recovered
+     outage first seen late (e.g. after downtime) is still notified once.
+     No `backup.recovered` event (not in the catalog): the next
+     `backup.succeeded` is the recovery notice. Detail: `scheduled_for`,
+     `last_scheduled_for`, `missed`, `window_seconds`, `reason`, `ongoing`,
+     `reminder` (fixed values, no free text).
+  6. **Stuck runs** are not a separate check: River's rescuer and runstate
+     finish backup runs that outlive their timeout; a run still `queued` or
+     `running` after the window shows up as a miss (`run_queued` /
+     `run_running`).
+  7. Events are emitted with `notify.Emit` in one transaction per job;
+     fan-out, recipients (`run.view` on the job) and channels follow D-183.
+- **Alternatives considered:** replaying the schedule with
+  `scheduler.Plan` from a lookback start (false alerts for occurrences
+  before a job was (re-)enabled; would need a new `jobs` column); one event
+  per missed occurrence as literally planned (hundreds of inbox entries a
+  day for a broken 5-minute job); a window derived from the schedule
+  interval ("before the next occurrence": too slow for daily jobs, too
+  noisy for minute schedules); counting a failed run as "ran" (a dead-man
+  should fire when no usable backup exists); a separate stuck-run sweep for
+  backups (duplicates River's rescuer).
+- **Consequences:** a broken job alerts once and then daily until a backup
+  succeeds. A job that missed occurrences, was disabled and is re-enabled
+  within 7 days may get one late notice for the old outage. Alerts depend
+  on a worker process running (`serve` with workers or `bekup worker`);
+  external monitoring of `/metrics` (oldest last success, task 5.6) stays
+  recommended. Security impact: none on trust boundaries; events carry
+  identifiers and fixed values only; the detector reads with `bekup_app`'s
+  existing SELECT grants and writes only outbox rows.
+- **Related:** D-143, D-145, D-146, D-147, D-157, D-161, D-176, D-183;
+  task 5.4; `internal/notify/missed`, `internal/db/queries/missed.sql`,
+  `internal/queue/kinds.go`, `docs/guides/notifications.md`,
+  `docs/guides/jobs-and-schedules.md`, SECURITY.md SC-3, SC-5.
+
+
+## D-190: Security alerts: audit-driven, mandatory, deduplicated; burst detection; hourly security checks; CLI alerts via the outbox (task 5.5)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 5.5)
+- **Context:** Task 5.5 delivers the security alerts the earlier tasks
+  left as log-only hooks (`AlertFunc`s of connections, jobs, jobkeys,
+  restore and retention, the Nop notifiers of internal/auth and passkeys,
+  "alert follows in 5.5" notes at startup and in the CLI). D-161 makes
+  `security.account` / `security.system` mandatory (inbox + e-mail);
+  D-183 introduced `notify.Emit`, the audit observer and the outbox, and
+  noted that the CLI auditor had no observer. Open were which component
+  emits, how repeating alerts are bounded, how failed-login bursts and
+  conditions without an action (certificate expiry, audit chain damage)
+  are detected, and how break-glass CLI actions reach the admins.
+- **Decision:**
+  1. **The audit entry is the single source.** Every security event is
+     already audited (fail closed), so `notify.ObserveAudit` maps the
+     audited action to the alert in the audit entry's transaction. The
+     post-commit hooks keep their defaults (log line / no-op); emitting
+     from them too would duplicate alerts. Gaps were closed by auditing:
+     a manifest verification failure at restore-request time is now
+     audited as `restore.verification_failed` (target artifact).
+  2. **Mapping** (`internal/notify/security.go`, on top of D-183):
+     `security.system` for opt-outs (incl. TLS downgrades), pin and SSH /
+     SFTP host-key mismatches, new admins (API and CLI), admin grants,
+     job owner changes (D-067), passphrase exports, key/certificate
+     rotation, instance keys, restore verification failures, acknowledged
+     privileged restore and test-restore targets, privileged-target
+     refusals, SECURITY DEFINER neutralization, unexpected artifact
+     deletions, aborted retention sweeps, a weakened 2FA policy, passkey
+     sign-counter anomalies, rejected download tickets, plain HTTP /
+     weakened app-DB TLS at startup (D-095, D-100), audit head export and
+     chain verification failures. `security.account` additionally for
+     passkey counter anomalies and the CLI password / 2FA resets. Each
+     system kind has a fixed severity (info … critical). Details are fixed
+     facts only (kind, ids, address, counts, dates; for CLI events the
+     action, OS user and host name); never audit details wholesale.
+  3. **Deduplication** (outbox dedup keys): posture alerts once per UTC
+     day (shared by the startup entry and the reminder); pin / host-key
+     mismatches once per object and day; aborted retention once per job,
+     destination and day; a rejected download ticket once per ticket; an
+     unexpected deletion once per artifact; an audit verification finding
+     once per finding.
+  4. **Failed-login bursts:** after every `auth.login.failed` entry the
+     observer counts failures in the last 15 minutes (one indexed query):
+     ≥ 20 from one address (across accounts), ≥ 10 on one existing account
+     (any address) or ≥ 100 in total raise one `security.system` alert per
+     address / account / instance and 15-minute bucket. The content names
+     the address or the account id only, never a submitted e-mail address
+     (no enumeration). Thresholds are constants (no new configuration).
+  5. **Hourly security check** (River `security_check`, maintenance queue,
+     `internal/monitor.SecurityChecker`): internal certificates (runner
+     client/CA, app-DB CA/client, runner server via its Health RPC) and
+     pinned target-DB certificates alert once at ≤ 30 days, once at ≤ 7
+     days and once when expired (dedup per object, expiry and threshold; a
+     renewed certificate alerts again); the audit chain is verified
+     incrementally from the last verified row, anchored on the remembered
+     hash (a rewrite of the verified part is caught), fully at the first
+     run of a process and then daily; a failure is recorded once per
+     finding as `audit.verify.failed` (critical alert through the
+     observer); weakened posture gets a daily reminder. The checkpoint is
+     kept in memory only (a database-stored checkpoint could be forged
+     together with the rows).
+  6. **CLI:** `bekup admin|certs|audit sign-head|reindex --import` use an
+     auditor with `notify.ObserveAudit`, so each CLI entry writes its
+     `security.system` alert (D-069; generic `cli_action` when no more
+     specific kind applies) to the outbox in the same transaction; a
+     running serve's dispatcher delivers it. An outbox failure fails the
+     command like an audit failure.
+  7. **Mandatory:** both security events keep inbox + e-mail regardless of
+     preferences (D-161, prefs.go), are exempt from the flood rule and
+     never go to shared channels (D-183).
+- **Alternatives considered:** emitting from each post-commit hook
+  (duplicates the observer, loses atomicity, and several events have no
+  hook); a per-event audience of "affected user" for burst alerts (would
+  tell an attacker-chosen account about attempts but not the admins);
+  storing the audit verification checkpoint in `settings` (forgeable by
+  the same write access that tampers rows); configurable burst thresholds
+  (more surface, no clear need yet); alerting every repeated mismatch
+  (alert floods from hourly backups of a broken pin).
+- **Consequences:** every audited security action also writes an outbox
+  row in its transaction; a failed-login attempt costs one extra counting
+  query. Alerts arrive seconds after the action (dispatcher). Repeated
+  conditions are bounded by the dedup keys. Security impact: admins learn
+  of weakened settings, impersonation signs, tampering, break-glass use and
+  credential attacks through two channels; alert content stays free of
+  secrets, connection strings, codes and submitted e-mail addresses; no new
+  trust boundary (the CLI already wrote to the app DB as `bekup_app`).
+- **Related:** D-001, D-067, D-068, D-069, D-095, D-100, D-109, D-112,
+  D-150, D-161, D-171, D-173, D-176, D-183; task 5.5;
+  `internal/notify/security.go`, `internal/notify/audit.go`,
+  `internal/monitor/security.go`, `internal/app/security.go`,
+  `cmd/bekup/cli_audit.go`, `internal/db/queries/security_alerts.sql`,
+  `docs/guides/notifications.md`, `docs/security/audit.md`, SECURITY.md.
+
+## D-191: Notifications API: shared and personal channels, the preference matrix, the inbox and its live stream (task 5.3b)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (item 7 superseded by D-197)
+- **Decided by:** agent (task 5.3b)
+- **Context:** D-183 delivered the notification core (tables, fan-out,
+  delivery) and left the GraphQL API to 5.3b: shared channels with job
+  attachments for admins, personal channels and the event × channel
+  preference matrix for every user, the in-app inbox and a live
+  `notificationReceived` stream. Open were the operations and their
+  freshness, how keys and URLs are shown, how the matrix is shaped, how the
+  stream learns about new rows and the audit trail.
+- **Decision:**
+  1. **Service** `notify.API` (serve only) behind the resolvers; every
+     method takes the caller from the context and re-authorizes its
+     operation (defense in depth behind the root-field gate); personal
+     queries are always scoped by `user_id` in SQL
+     (`internal/db/queries/notify_api.sql`).
+  2. **Operations:** shared channels `notification.shared_channel_list`,
+     `_edit` (create, update, rotate key, delete: admin + **step-up**,
+     they carry a URL or key), new `_toggle` (enable/disable, admin, no
+     step-up) and `_test`; attachments `job.shared_channels_edit` (admin);
+     own channels new `notification.personal_channel_list`,
+     `personal_channel_edit` (add, rotate, delete: every user + step-up,
+     a webhook is an exfiltration path for a stolen session), new
+     `personal_channel_enable` (re-enable after an auto-disable, no
+     step-up) and `personal_channel_test`; new `notification.prefs_view`
+     (catalog, matrix) and `prefs_edit` (set, reset);
+     `notification.inbox` (list, unread count, mark read, delete,
+     stream). Restricted principals get none of them.
+  3. **Webhooks:** URLs only through `webhook.ValidateURL` (fixed error
+     messages, never echoing the URL), sealed under
+     `<table>:<id>:url`; the API shows only `DisplayURL`. Signing keys only
+     from `webhook.GenerateHMACKey`, sealed under `:hmac_key`, returned
+     **once** (`signingKey` on create/rotate) and zeroed after the
+     response is built; never listed. Max 5 personal webhooks (the D-183
+     trigger, mapped to VALIDATION). Test sends (`testSharedChannel`,
+     `testMyWebhook`) are single-root, rate limited per user, work on
+     disabled channels, return fixed codes and the HTTP status only, and
+     never count towards the auto-disable policy. Re-enabling resets the
+     failure counters. E-mail lists: 1..50 addresses checked with
+     `email.CheckAddress`, de-duplicated; their test sends one message to
+     all addresses.
+  4. **Attachment filters:** groups and events of the catalog only, never
+     the security group/events, and only job events (shared channels only
+     receive events of the jobs they are attached to); both empty = every
+     non-security event; re-attaching replaces the filter.
+  5. **Catalog and matrix:** `notificationCatalog` lists the D-161 groups
+     with audience, problem, mandatory, priority, severity, perJob and the
+     default channels, filtered by the caller's role (job and own-account
+     events for everyone, staff events for admins and maintainers,
+     `security.system` for admins). `myNotificationPreferences` returns per
+     visible event the effective INBOX / EMAIL / WEBHOOK cells with their
+     source (DEFAULT, OVERRIDE, MANDATORY; mandatory cells locked) and the
+     per-job overrides of jobs the caller may still view (overrides of
+     lost jobs stay stored but are hidden and never apply, as the fan-out
+     re-checks access). `setNotificationPreference` refuses mandatory
+     INBOX/EMAIL (VALIDATION), events the role cannot receive, and jobs
+     the caller cannot view (NOT_FOUND); a job override needs a job event.
+     `resetNotificationPreferences(jobId?)` deletes all stored rows (back
+     to D-161) or the overrides of one job. Push stays out of the API
+     until phase 2. Preference changes are not audited (own, non-security
+     settings).
+  6. **Inbox:** cursor pagination `(created_at, id)` newest first (1..200,
+     default 50), `unreadOnly`, `markNotificationsRead(ids ≤ 200 | all)`
+     returning the remaining unread count, `deleteNotification`; rows of
+     other users are invisible (NOT_FOUND / zero changes).
+  7. **Live stream:** the fan-out (and the auto-disable notice) announces
+     each inserted inbox row on the new pubsub channel
+     `bekup_notification_events` (fixed `LISTEN` query) as
+     `inbox:<notification id>:<user id>` inside the inserting transaction.
+     `notificationReceived` pre-filters by the stream's user, loads the row
+     **scoped to that user**, retries a few times when the local bus
+     announced it before the commit, de-duplicates (bus + NOTIFY), resyncs
+     after possibly lost messages, and `streams.Deliver` re-authorizes
+     every event (`notification.inbox`, the stream's current principal
+     must own the row); logout or revocation ends the stream.
+  8. **Audit:** `notification.channel_created|updated|deleted|key_rotated|
+     enabled|disabled|tested|attached|detached` (targets `shared_channels`
+     / `user_channels`, details with the display URL, changed field names,
+     result codes; never a URL path or key), plus `secret.changed` by name
+     when a URL or key is set.
+- **Alternatives considered:** returning keys again on demand (a stored
+  key would have to be re-readable: refused); step-up for every
+  personal-channel change including re-enable (re-enabling resumes an
+  already approved URL); counting test sends towards auto-disable (a user
+  could disable a shared channel by testing); a stream that re-queries the
+  inbox on every hint without IDs (more load, no dedup); auditing every
+  preference toggle (noise without security value).
+- **Consequences:** the web UI (6.9, 6.10) has everything it needs. A lost
+  signing key means rotating it. Security impact: no webhook URL path or
+  signing key leaves the server after creation; every personal operation
+  is bound to the caller in SQL and re-authorized; a forged or misrouted
+  pubsub message cannot reveal another user's notification; shared
+  channels never receive security alerts; new webhook URLs pass the SSRF
+  guard at input and every dial.
+- **Related:** D-023, D-051, D-106, D-108, D-117, D-161, D-177, D-178,
+  D-183; tasks 5.3b, 6.9, 6.10; `internal/notify/api*.go`,
+  `internal/graph/schema/notifications.graphqls`,
+  `internal/graph/resolvers/notifications.go`, `internal/pubsub`,
+  `docs/guides/notifications.md`, SECURITY.md NT-*.
+
+
+## D-192: Dashboard UI: one run stream, polled restores, client-derived health and security findings, bounded storage sums (task 6.2)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (items 1, 2 ("missed" derivation) and 4 superseded by D-196; item 1 stream superseded by D-197)
+- **Decided by:** agent (task 6.2)
+- **Context:** The dashboard shows job health, live runs and restores,
+  failures and missed backups, the next 24 hours, alerts, and for staff
+  security findings and storage per destination, for admins system health.
+  The API has no dashboard aggregate: no per-job "missed" flag, no
+  unfiltered restore stream, no storage sum per destination, and the
+  session's stream cap (`graphql.stream_max_per_session`, default 4)
+  limits live subscriptions.
+- **Decision:**
+  1. **One stream.** The page opens exactly one unfiltered `runUpdated`
+     stream (D-149) and merges its events client-side into the active runs,
+     the failures list and each job's latest run. Active **restores are
+     polled** (`restores(first: 20)`, every 15 s): `restoreUpdated` is per
+     restore and would spend the stream cap.
+  2. **Job health is derived in the UI** (`features/dashboard/model.ts`)
+     from `jobs { lastRun nextRunAt enabled encryption }` plus two bounded
+     calendar queries: [now, now + 24 h) for upcoming and `overdue`
+     occurrences, [now − 7 d, now) for `SKIPPED` occurrences. A job is
+     "missed" when its newest skip is newer than its last run, "overdue"
+     when its next run is more than 10 minutes in the past (or the calendar
+     flags it). These are display hints; the authoritative dead-man alert
+     stays `backup.missed` (D-188). Owners get exactly what the server
+     returns for their role (no client-side owner filter).
+  3. **Security findings are derived** from data staff already read:
+     unencrypted jobs (opt-out or mode NONE), insecure transport (TLS
+     UNVERIFIED/DISABLED), privileged or unknown target roles from the
+     stored `lastTest.privileges` (D-187; marked when stale), expired /
+     expiring pins (`pinStatus`), and identity mismatches
+     (`lastTest.code` TLS_PIN_MISMATCH / SSH_HOST_KEY_MISMATCH, not stale)
+     as critical. Weakened settings use the reserved hazard hatch (D-001).
+  4. **Storage per destination** sums `artifacts(state: PRESENT)` pages on
+     the client, at most 5 pages of 200 (1,000 objects); beyond that the
+     figures are shown as lower bounds ("≥") with a note. Charts are SVG
+     with geometry in attributes and colors in classes (CSP `style-src
+     'self'`, D-082).
+  5. **Alerts** use `unreadNotificationCount` and the 5 newest unread
+     notifications (D-191); a notification `link` is followed only when it
+     is an in-app path (`/…`, not `//` or `/\`).
+- **Alternatives considered:** a server-side `dashboard` query with
+  per-job health and storage sums (best long-term; not in the API yet, see
+  consequences); one `restoreUpdated` stream per active restore (exhausts
+  the stream cap); deriving "missed" by replaying schedules in the browser
+  (the same pitfalls D-188 rejected); reading the inbox for `backup.missed`
+  (depends on each user's preferences).
+- **Consequences:** No new API surface and no trust boundary change; every
+  query is an existing, authorized operation and the staff/admin tiles are
+  requested only for those roles (the server still decides). The page
+  costs a handful of queries per load (up to 5 extra artifact pages for
+  staff) and polls restores/alerts/system health. Gaps to close later:
+  a server aggregate for bytes per destination (and per-job "missed" from
+  the D-188 checker) would make the storage tile exact and drop the
+  paging. Security impact: none beyond showing staff metadata they can
+  already read; server-provided links are restricted to in-app paths.
+- **Related:** D-001, D-082, D-149, D-156, D-161, D-176, D-187, D-188,
+  D-191; `web/src/features/dashboard/`.
+
+## D-193: Notification center UI: one inbox stream in the bell, in-app link allowlist, memory-only verification code, no-cache signing keys (task 6.10)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (item 1 superseded by D-197)
+- **Decided by:** agent (task 6.10)
+- **Context:** Task 6.10 adds the bell, the inbox page, the personal
+  notification settings and the `/verify-email#code=…` page on top of the
+  D-191 API. Open were where the live stream lives, how server links are
+  followed, how the e-mail code survives a sign-in without leaking, and how
+  one-time webhook keys are kept out of the client's state.
+- **Decision:**
+  1. **One stream per tab:** the top-bar bell owns the only
+     `notificationReceived` subscription (keyed on the session epoch like
+     the session watcher). Arrivals update the bell's cached query (count +
+     latest 8, de-duplicated by id) and reload the inbox page only when it
+     is on screen; error/critical arrivals also toast, all arrivals are
+     announced in a polite live region.
+  2. **Links:** a notification's absolute `link` is reduced to its path and
+     followed only when the path matches a fixed allowlist of app pages
+     (`/runs|jobs|restores|connections|destinations[/<uuid>]`,
+     `/profile[/x]`, `/admin/x`); anything else gets no link. The UI never
+     navigates to another origin, even when `base_url` differs.
+  3. **`/verify-email`** sits outside the session gate (the gate puts the
+     full URL, fragment included, into the login return path). The page
+     reads the code from the fragment before any request, replaces the
+     history entry with a fragment-less URL, and sends the code only in the
+     `verifyEmail` POST body. Signed out, it offers sign-in with
+     `next=/verify-email`; the code waits in module memory for 15 minutes
+     (never storage, never a URL) and is dropped after use or a VALIDATION
+     answer.
+  4. **Signing keys:** `addMyWebhook` / `rotateMyWebhookKey` run with
+     `fetchPolicy: "no-cache"`; the key lives only in the dialog's state
+     and is gone once the user confirms having stored it (same pattern as
+     temporary passwords, D-110/D-186). The dialog links to the signature
+     check in `docs/guides/notifications.md` on GitHub.
+  5. **Matrix:** the per-event matrix is held as server data plus answers
+     of `setNotificationPreference` applied locally; the push column is
+     shown disabled until phase 2; locked cells are disabled switches with
+     a lock and the security group carries the mandatory-alert note.
+     Webhook URLs get early client feedback on the D-177 rules (http only
+     when the server reports dev mode); the SSRF guard stays server-side.
+- **Alternatives considered:** a subscription per page (more streams, D-124);
+  following `link` as-is (open redirect if `base_url` is wrong or
+  hostile); keeping the verification code in `sessionStorage` across the
+  sign-in (persists beyond the tab's memory); putting `/verify-email` inside
+  the session gate (the code would land in `?next=`).
+- **Consequences:** a server link to a page outside the allowlist shows no
+  link until the allowlist is extended. A full page reload during the
+  sign-in detour loses the code (open the link again). Security impact:
+  the verification code never appears in a URL, history entry or request
+  line after the first paint; one-time keys never enter the Apollo cache;
+  notification links cannot leave the app.
+- **Related:** D-023, D-051, D-110, D-124, D-161, D-177, D-178, D-186,
+  D-191; `web/src/features/notifications/`.
+
+## D-194: Admin settings UI: settings hub, client-filtered security alerts, audit chain status from audit.verify.failed, read-only SSRF allowlist, guarded passphrase export (task 6.9)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (items 2, 3 and 4 superseded by D-196)
+- **Decided by:** agent (task 6.9)
+- **Context:** Task 6.9 builds the admin pages for SMTP, shared channels,
+  security alerts, the audit log with its chain status, the SSRF allowlist
+  and the passphrase export. Three of them have no dedicated API: the inbox
+  has no type filter (D-191), no field reports the last successful audit
+  chain verification (D-190 keeps the checkpoint in memory only), and the
+  runtime allowlist of D-120 has no GraphQL operations.
+- **Decision:**
+  1. **Layout.** `/admin/channels` and `/admin/audit` are their own pages;
+     `/admin/settings` is a hub with a section rail (SMTP as the index,
+     `security-alerts`, `network`, `recovery`; one URL each) linking the
+     2FA policy. All routes sit behind `RequireAdmin` (UI only; the server
+     enforces `@hasRole`).
+  2. **Security alerts** are the admin's own inbox filtered on the client
+     to `security.*` (or group SECURITY), 200 entries per page with a
+     severity filter, plus the alert-type reference table from
+     docs/guides/notifications.md. Links are reduced to known in-app paths.
+  3. **Audit chain status** is derived from the newest
+     `audit.verify.failed` entry (`auditLog(filter: {action}, first: 1)`):
+     "no failure recorded" or "failed <when>", with `bekup audit verify` as
+     the offline proof. The page never claims a successful verification.
+  4. **SSRF allowlist** is shown read-only: an explanation that it is
+     managed in `[netguard]` of bekup.toml (with the hard-deny and
+     allowlistable ranges); its values are not displayed (no API).
+  5. **Write-only and one-time values.** The SMTP password is never sent
+     back and must be re-entered when host, port or username change;
+     signing keys of `createSharedChannel`/`rotateSharedChannelKey` and the
+     passphrase export use `no-cache` and live only in component state; a
+     key is shown once behind an acknowledgement, the export downloads
+     straight to a file after a warning, an explicit acknowledgement and
+     step-up (never rendered). The event filter of shared-channel
+     attachments only offers per-job, non-mandatory, non-security events
+     and drops security groups/events from the input.
+  6. AUTO/NONE SMTP modes show the hazard-hatched "E-mail may be sent
+     unencrypted" badge (live while editing and from `mayBeUnencrypted`).
+- **Alternatives considered:** server-side inbox type filter and chain/
+  allowlist APIs (out of scope for a UI task; recorded as gaps); showing
+  the allowlist from the config (no API exposes it); rendering the export
+  content for copy (more exposure than a file download).
+- **Consequences:** the alerts view may need paging to find older alerts;
+  the chain status cannot show the time of the last successful check; the
+  allowlist is changed on the host only. Security impact: no new API
+  surface; secrets stay out of the cache and the DOM except the one-time
+  key dialog; links cannot leave the app.
+- **Related:** D-001, D-055, D-101, D-120, D-142, D-154, D-161, D-177,
+  D-178, D-180, D-190, D-191, D-193; `web/src/features/admin/`.
+
+## D-195: M6 UI follow-ups: stored test results, per-item statistics, shared owner picker, test-restore pages and settings, stable web tests (task 6.12)
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (task 6.12 follow-ups)
+- **Context:** D-184 and D-187 added the API the M6 pages lacked
+  (userDirectory, User.lastSeenAt/twoFactorEnrolled, JobFilter.ownerId,
+  RunItem.stats, stored lastTest). The UI still kept test results per tab
+  (D-182 item 5), derived 2FA enrollment from the policy and scanned the
+  first 200 jobs for a user's owned jobs (D-181), pointed to `bekup verify`
+  for per-table statistics (D-186 item 5) and had no test-restore history
+  or settings UI. Web tests timed out under parallel load.
+- **Decision:**
+  1. **Stored test results.** Connection and destination lists show the
+     stored `lastTest` (Passed/Failed, the normalized code, the time, a
+     Stale marker) and the connection list the stored privilege verdict;
+     detail pages show it until a test runs on the page, then the full
+     result of that test (component state only) and refetch the stored one
+     as a separate request (D-117). The per-tab store `lib/session-results`
+     is removed.
+  2. **Per-item statistics.** The run page loads `RunItem.stats` in its own
+     request once the run is no longer active and shows per database the
+     level and consistency, object counts, warnings (amber, solid) and
+     notices (neutral, dashed) with their object names, the truncation
+     notice, and the per-table rows with exact / estimate / unknown /
+     approximate badges (50 rows, then "show all", with a name filter).
+  3. **Users.** The admin list and user page use `lastSeenAt` and
+     `twoFactorEnrolled` (enrolled, grace, overdue, none); owned jobs come
+     from `jobs(filter: {ownerId})` with "show more", and the assign dialog
+     searches jobs server-side.
+  4. **One owner picker.** `features/users/UserPicker` reads
+     `userDirectory` (admins and maintainers) and is used by the job owners
+     panel: only active role-User accounts are selectable (D-067), current
+     owners and (for maintainers) the caller are not offered, and the chosen
+     accounts are granted in one `assignJobOwners` call behind the step-up.
+  5. **Test restores.** The job page shows the latest verdict with a diff
+     summary (findings by code, FAIL first) and links to
+     `/jobs/:id/test-restores` (history, paged) and
+     `/jobs/:id/test-restores/:testRestoreId` (databases with every finding);
+     staff get "Run test restore now". The job editor's test-restore
+     settings send `setJobTestRestore` behind an AAL2 step-up; scratch
+     targets are permanent connections of the job's engine; the verdict
+     shown is the designation's (current target) or the connection's
+     stored last test; admins tick the privileged-target acknowledgement
+     whenever the verdict is privileged, unknown or not yet known (the
+     server probes and decides), maintainers see that such a target needs
+     an admin. The stored verdict stays informational (D-187).
+  6. **Titles.** The top bar matches nav items by path segment and has
+     explicit titles for /restore, new/edit pages, test restores and
+     /notifications.
+  7. **Tests.** findBy/waitFor poll up to 10 s (`asyncUtilTimeout`), tests
+     and hooks get 30 s, vitest uses at most half the cores; optional finds
+     that may never match and synchronous asserts on effect-driven state
+     are replaced by waitFor.
+- **Alternatives considered:** keeping the per-tab store next to the
+  stored result (two sources that disagree after a reload); embedding
+  stats in RunDetail (every live run update would carry 10 000 tables);
+  a separate owner picker in the jobs feature (two components with
+  different role rules); showing the acknowledgement only after a server
+  VALIDATION (a second step-up round trip).
+- **Consequences:** Test outcomes survive reloads and are shared between
+  staff; no messages or raw errors are shown from storage. Maintainers can
+  assign owners themselves. The test-restore settings expose no new data:
+  the verdict and reasons were already visible to staff. Security impact:
+  none beyond D-184/D-187; the step-up, acknowledgement and role rules
+  stay enforced by the server. Supersedes D-182 item 5, D-186 item 5's
+  per-table remark and D-181's derived 2FA state and admin-only picker.
+- **Related:** D-067, D-117, D-169, D-170, D-181, D-182, D-184, D-186,
+  D-187; task 6.12; `web/src/features/{connections,destinations,runs,jobs,users,restore}/`,
+  `web/src/components/shell/nav.ts`, `web/vite.config.ts`, `web/src/test/setup.ts`.
+
+## D-196: Runtime SSRF allowlist API, inbox filter, audit chain status and dashboard aggregates (task 6.12 follow-ups)
+
+- **Date:** 2026-10-28
+- **Status:** proposed (item 8 dashboard streams superseded by D-197)
+- **Decided by:** agent (task 6.12 follow-ups)
+- **Context:** The M6 UI agents worked around missing API (D-192, D-194):
+  the admin allowlist of D-120 had no operations (the plan puts it in
+  `settings`, admin + step-up + audited), the inbox could only be filtered
+  on the client, the audit chain status was guessed from the newest
+  `audit.verify.failed` entry (the D-190 checkpoint lives in memory), and
+  the dashboard paged artifacts to sum storage, derived "missed" from the
+  calendar and polled restores because `restoreUpdated` is per restore.
+  serve built three separate SSRF guards (destinations, SMTP, webhooks),
+  so a runtime list would have had to be applied three times.
+- **Decision:**
+  1. **One guard per process; admin list in `settings`.** serve and
+     `bekup worker` build one `*netguard.Guard` (`[netguard]` bootstrap,
+     loopback allowlistable only in dev) shared by destinations, SMTP and
+     webhooks. The admin list is stored as `settings`
+     `netguard.allowlist` (`{"version":1,"cidrs":[…],"hosts":[…]}`,
+     canonical forms) and managed only through the new package
+     `internal/egress`.
+  2. **API.** `Query.ssrfAllowlist` (admin; operation `settings.view`)
+     shows the admin and the read-only bootstrap entries, `loopbackAllowed`,
+     `ignoredEntries`, `maxEntries` (256 per list), `updatedAt/By`.
+     `Mutation.updateSsrfAllowlist` (admin + step-up; `settings.update`,
+     re-checked in the service) replaces both lists. Every entry is
+     validated with the guard's own parser (`Guard.NormalizeAllowlist`:
+     no /0, nothing overlapping an always-denied range, IP literals only
+     as CIDRs, `*.suffix` with two labels, loopback only in dev mode,
+     entries ≤ 260 bytes); the first rejected entry answers VALIDATION with
+     field `cidrs.<i>` / `hosts.<i>`. Optimistic concurrency:
+     `expectedUpdatedAt` must match (CONFLICT otherwise, also when a list
+     exists and none was given).
+  3. **Audit and alert.** The change is recorded as `setting.changed`
+     (target `setting`/`netguard.allowlist`; `added_cidrs`,
+     `removed_cidrs`, `added_hosts`, `removed_hosts`, `widened`) in the
+     same transaction; `widened` (anything added) raises the mandatory
+     `security.system` alert `ssrf_allowlist_widened` (severity error,
+     every time). Narrowing is audited only.
+  4. **Propagation.** The transaction also publishes the IDs-only
+     settings event `pubsub.SettingsEvents` (`bekup_settings_events`,
+     payload = the settings key). Every process runs `egress.Sync`: it
+     applies the stored list before the components start (a read error
+     stops startup), reloads on every event and on listener resyncs, and
+     every 5 minutes. serve's listener carries the new channel;
+     `bekup worker` opens its own LISTEN connection for it
+     (`bekup-worker-listen`). Stored entries a process rejects, or an
+     undecodable value, are left out and counted as `ignoredEntries`
+     (fail closed: the effective list only gets narrower).
+  5. **Inbox filter.** `notifications(filter: {unreadOnly, group,
+     events})` (the old `unreadOnly` argument stays; either set is
+     enough). The server resolves group/events to catalog types (plus
+     `notice.webhook_disabled`; unknown types are VALIDATION
+     `filter.events.<i>`, at most 64) and filters in SQL; group and events
+     together must both match.
+  6. **Audit chain status.** The hourly security check stores every
+     completed verification in `settings` `audit.chain_verification`
+     (time, ok, full/incremental, the finding `<kind>:<row id>`, the newest
+     verified row; no actor). `Query.auditChainStatus` (admin;
+     `audit.chain_status_view`) returns it with the newest audit row
+     (id, hash, time) and the newest signed head (chain id, time, key id).
+     It is informational only (same database as the rows); the in-memory
+     checkpoint of D-190 is unchanged and `bekup audit verify` against an
+     exported head stays the proof.
+  7. **Dashboard aggregates.** `Query.destinationUsage` (staff;
+     `destination.usage_view`): per destination not deleted, the sum of
+     `size` and the count of `present` artifacts, one grouped query
+     (partial index `artifacts_destination_present_idx`).
+     `Job.missed` / `Job.missedSince`: the D-188 detector now records each
+     job's ongoing outage in `job_missed_state` (migration 00030; upsert
+     per batch, cleared when it ends, pruned for unwatched jobs);
+     readers batch-load it per page of jobs and treat a successful or
+     partial run finished after the detector's `checked_at` as the end of
+     the outage. `Subscription.restoresUpdated` (staff all, owners their
+     jobs'; `restore.view`) streams every restore change: events coalesced
+     per restore (≤ 100 pending, ≤ 20 deliveries/s), a resync scoped like
+     `restores` after possibly lost events, each event re-loaded and
+     re-authorized at delivery.
+  8. **UI.** The admin Network page edits the admin lists (bootstrap
+     entries read-only, client hints only) behind the step-up, maps field
+     errors to rows and offers a reload on CONFLICT; a save that adds
+     entries lists them in a hazard-style warning (D-001) and stays
+     disabled until the admin acknowledges it. The security-alerts view
+     asks the server for group SECURITY (optionally unread only; the
+     severity filter applies to the loaded page). The audit page shows
+     `auditChainStatus` and never claims a check that did not run. The
+     dashboard uses `destinationUsage`, `Job.missed` (a live successful
+     run clears the flag) and one `restoresUpdated` stream next to the
+     `runUpdated` one: two streams per page, no restore polling, no
+     client sums, no calendar-derived "missed".
+- **Alternatives considered:** keeping the list in bekup.toml only (no
+  audit or alert of changes, needs host access and a restart); applying
+  the list to three guards per process (easy to miss one); a dedicated
+  allowlist table (the plan names `settings`; one JSON value keeps the
+  change atomic); polling the setting only (up to minutes of divergence
+  between instances); storing the verification checkpoint in the
+  database and trusting it (forgeable with the rows; D-190 rejected
+  this); computing "missed" in the resolver by replaying D-188 per job
+  (several queries per job and page); one `restoreUpdated` stream per
+  active restore (exhausts the stream cap); a per-user restore stream
+  filter argument (not needed: the scope comes from the caller).
+- **Consequences:** Admins can open egress to private hosts from the UI;
+  every widening is audited and alerts every admin, and hard-denied
+  ranges stay unreachable whatever is stored. A compromised admin session
+  with a fresh step-up can widen egress to private ranges (as with the
+  TOML before, but now visible in the audit log and alerts). Amended by
+  D-198 (M5 security review): entries are scoped per outbound use, and
+  neither admin entries without the `personal_webhooks` scope nor the
+  bootstrap list widen users' personal webhooks. Workers hold
+  one more database connection (LISTEN). `Job.missed` depends on a worker
+  running the detector (stale by up to 5 minutes, except that a success
+  clears it at once). Storage figures are bekup's own records, not the
+  bucket's billing view. Security impact: new admin write surface on
+  egress (B4) with step-up, validation by the guard itself, audit and
+  alert; the inbox filter, usage and missed state expose nothing beyond
+  existing authorizations; `restoresUpdated` is re-authorized per event
+  like `restoreUpdated`. Supersedes D-192 items 1, 2 ("missed"
+  derivation) and 4, and D-194 items 2-4.
+- **Related:** D-001, D-055, D-101, D-120, D-149, D-155, D-161, D-167,
+  D-176, D-183, D-188, D-190, D-191, D-192, D-194; task 6.12;
+  `internal/egress`, `internal/netguard/allowlist.go`,
+  `internal/app/egress.go`, `internal/pubsub/channels.go`,
+  `internal/audit/chainstatus.go`, `internal/monitor/security.go`,
+  `internal/notify/{api_inbox,security}.go`, `internal/notify/missed`,
+  `internal/db/migrations/00030_dashboard_state.sql`,
+  `internal/graph/schema/{network,audit,notifications,destinations,jobs,restore}.graphqls`,
+  `web/src/features/{admin,dashboard}/`.
+
+## D-197: Stream budget: one shared account stream, combined page streams, cross-tab relay and 429 backoff
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (M5/M6 code review follow-up)
+- **Context:** Every subscription is one SSE connection (D-124) and a
+  session may hold `graphql.stream_max_per_session` streams (default 4,
+  kept). The shell opened two streams (`sessionEvents`, the bell's
+  `notificationReceived`), the dashboard two more (`runUpdated`,
+  `restoresUpdated`, D-192/D-196) and a run page two (`runUpdated`,
+  `runLogAppended`): one tab reached the cap, a second tab got 429s that
+  the client retried quickly, and over plain HTTP/1.1 (no proxy, D-095)
+  two tabs held 8 SSE connections against the browser's six per origin,
+  so even POSTs stalled.
+- **Decision:**
+  1. **One account stream.** `Subscription.accountEvents` (`@authenticated`,
+     mapped to `account.sessions_view`) carries the caller's session
+     notices (`session: SessionEvent`) and new inbox rows
+     (`notification: Notification`); each event sets exactly one field.
+     Each kind keeps its own delivery-time check (`account.sessions_view`;
+     `notification.inbox` with the row's owner equal to the current
+     principal) after the per-event session check; the terminal codes
+     (UNAUTHENTICATED, FORBIDDEN, SESSION_ROTATED, UNAVAILABLE) come from
+     the stream itself as before. Without the notification service only
+     session notices are sent. `sessionEvents` and `notificationReceived`
+     are removed (never released).
+  2. **Combined page streams.** `streams.Feed` + `streams.Combine` merge
+     two prepared sources into one stream whose events are checked and
+     converted by the feed they came from (one session check per event).
+     `activityUpdated` (dashboard; mapped to `run.view`) = every run as an
+     unfiltered `runUpdated` + every restore as `restoresUpdated`
+     (`restore.view`). `runActivity(runId, afterLogId)` (run page; mapped
+     to `run.view`, `run.logs_view` also checked up front) = the run's
+     changes + its log batches; after the `done` batch it sends the run
+     once more (re-loaded and authorized) and completes. `runUpdated`,
+     `runLogAppended`, `restoreUpdated` and `restoresUpdated` stay for
+     other pages and API clients.
+  3. **Cross-tab sharing (web).** `web/src/lib/stream-sharing.ts`: per
+     share key one tab leads (opens the stream) and relays every result
+     over the same-origin BroadcastChannel `bekup:streams:v1`; other tabs
+     only receive. Election: hello → the leader answers at once; no
+     answer within ~150-250 ms → claim; two leaders → the lower tab id
+     wins; followers ping every 15 s and take over after 3 s without an
+     answer; a leader resigns on unsubscribe and `pagehide` (immediate
+     handoff). Events during a handoff are not replayed (hints; pages
+     reconcile with queries). Keys always contain the user id
+     (`account:<id>`, `dashboard:<id>`), so a tab never accepts another
+     account's events. A relayed UNAUTHENTICATED/FORBIDDEN end or 401
+     refusal runs the session check in every tab. Without BroadcastChannel
+     each tab opens its own streams. Only the account and dashboard
+     streams are shared (`runActivity` has a per-tab log offset).
+  4. **429 backoff.** The SSE link retries 429 with 5 s doubling up to
+     2 min, jittered (half to full), separate from the 1-30 s backoff of
+     other failures, and the shell shows a "too many open tabs" banner
+     while a stream of the tab is refused.
+  5. **Budget.** One shared account stream per browser + at most one page
+     stream per tab: one tab uses 2 streams, two tabs at most 3, so the
+     cap of 4 leaves room for a third live tab and HTTP/1.1 stays below
+     six connections for two tabs.
+- **Alternatives considered:** raising the cap (does not fix the six
+  connections of HTTP/1.1 and widens the per-session resource budget);
+  one multiplexed stream per tab with dynamic topics (graphql-sse
+  single-connection mode: a new protocol surface and re-subscription
+  logic); a SharedWorker holding the streams (not in Safari on all
+  versions, harder to test, CSP worker-src changes); Web Locks for the
+  election (needs a secure context, absent on plain-HTTP LAN deployments
+  where the connection limit matters most); dropping live restores again
+  and polling (more requests, D-196 replaced polling); keeping the old
+  fields next to the new ones (unreleased, more surface).
+- **Consequences:** A browser holds at most one account stream and one
+  dashboard stream regardless of tabs; run pages still cost one stream
+  each. Leader handoff can drop events of a few hundred ms (hints only).
+  Security impact: no new data or trust boundary on the server; every
+  event of the combined streams is re-authorized per kind exactly like
+  the single streams. The relay crosses only same-origin tabs of one
+  browser, which share the session cookie and thus the account; share
+  keys carry the user id, so after a sign-in as another account in one
+  tab, other tabs ignore the previous account's stream. Messages carry
+  only results the server authorized for that session. Supersedes D-191
+  item 7 (`notificationReceived`; the delivery rules move to the inbox
+  part of `accountEvents`), D-192 item 1 and D-196 item 8 (two dashboard
+  streams), and D-193 item 1 (the bell's own stream).
+- **Related:** D-001, D-052, D-095, D-108, D-118, D-124, D-149, D-155,
+  D-191, D-192, D-193, D-196; `internal/graph/streams/combine.go`,
+  `internal/graph/resolvers/subscriptions.go`,
+  `internal/graph/schema/{subscriptions,runs,notifications}.graphqls`,
+  `web/src/lib/{apollo,stream-sharing}.ts`,
+  `web/src/components/shell/{account-stream,stream-limit-banner}.tsx`,
+  `web/src/features/{dashboard,runs,notifications}/`.
+
+
+## D-198: Scoped SSRF allowlist, signed delivery id and event type, bucketed personal tests and other M5 security follow-ups
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent (M5 security review follow-up)
+- **Context:** The M5 security review found that the admin and bootstrap
+  SSRF allowlist (D-120, D-196) also widened **personal webhooks**, which
+  any user can point anywhere: one private-network entry for a MinIO let
+  every user make bekup POST to that network, and `testMyWebhook` returned
+  the receiver's exact HTTP status (a service and port probe). Smaller
+  findings: link-local clients with an IPv6 zone could not sign in (the
+  zone reached the inet columns and dedup keys); `security.*` inbox rows
+  could be deleted; the SMTP transport could be weakened or its CA bundle
+  swapped while the stored password stayed (D-140 only covered host, port
+  and username); wildcard allowlist entries could cover public suffixes
+  (`*.co.uk`) or wildcard-DNS services (`*.nip.io`); the inbox kept
+  showing rows about jobs the reader lost and `security.system` rows to
+  demoted admins; the webhook signature covered only timestamp and body
+  (a captured request could be replayed under another delivery id past
+  the receiver's dedup); the failed-login burst count scanned every audit
+  row of its window; the web hard-coded the security alert kinds.
+- **Decision:**
+  1. **Allowlist scopes.** Every admin entry names the uses it widens:
+     `destinations`, `smtp`, `shared_webhooks`, `personal_webhooks`
+     (`netguard.Scope`). New entries without scopes and every migrated
+     entry get all scopes **except** `personal_webhooks`; the bootstrap
+     list of `[netguard]` applies to the same default scopes and can never
+     reach personal webhooks. `netguard.Set` holds one `Guard` per scope
+     per process; `egress` applies the stored list to all four together
+     (`Set.SetAllowlist`, nothing changes on a rejected list).
+     Destinations, SMTP, shared webhooks and personal webhooks each dial
+     through their own guard (two webhook senders; `notify.Options.PersonalWebhooks`
+     and `APIOptions.PersonalGuard`/`PersonalWebhooks` are never defaulted
+     to the shared ones; personal URLs are checked at input time against
+     the personal guard).
+  2. **Storage and API.** `settings` `netguard.allowlist` becomes version
+     2 (`{"version":2,"cidrs":[{"value","scopes"}],"hosts":[…]}`);
+     migration 00031 converts version 1 with the default scopes, and the
+     service reads a version-1 value the same way (an entry without scopes
+     in a version-2 value makes the whole value untrusted: fail closed).
+     GraphQL: `SsrfScope`, `SsrfAllowlist.cidrEntries/hostEntries`
+     (value + scopes), `configScopes`, `defaultScopes`,
+     `personalWebhooksWidened` (a weakened default: shown permanently);
+     `SsrfAllowlistInput.cidrEntries/hostEntries` (scopes null: keep the
+     stored scopes of the same value, defaults for a new one; `[]` is
+     VALIDATION). The plain `cidrs`/`hosts` fields stay for compatibility
+     (exactly one form per list; plain values keep their stored scopes).
+     Errors name `cidrEntries.<i>.value|scopes`.
+  3. **Audit and alert.** `setting.changed` gains `added_scopes`
+     (`[{value, scopes}]` for kept entries that gained scopes) and
+     `personal_webhooks_widened`; `widened` also covers gained scopes.
+     The `ssrf_allowlist_widened` alert carries `personal_webhooks: true`
+     and says that every user's personal webhooks may now reach private
+     targets.
+  4. **Personal test results.** `testMyWebhook` answers only `ok`,
+     `not_allowed` or `failed` (one fixed message), never `statusCode`;
+     the audit entry records the bucketed code. Shared-channel tests
+     (admins) keep the detailed codes.
+  5. **Host patterns.** Wildcards whose suffix is a public suffix (ICANN or
+     private PSL section, `golang.org/x/net/publicsuffix`) are refused,
+     and so is any entry under a built-in list of wildcard-DNS services
+     (nip.io, sslip.io, xip.io, nip.direct, localtest.me, lvh.me, vcap.me,
+     traefik.me, localhost.direct, 1u.ms, lacolhost.com).
+  6. **IPv6 zones.** `httpserver.resolveClient` drops zones and unmaps
+     (peer and X-Forwarded-For); notify's detail/dedup builders use the
+     same canonical form (`clientIP`).
+  7. **Inbox.** `security.*` rows cannot be deleted (VALIDATION on `id`,
+     also refused in SQL); they can be marked read. Every inbox read
+     (list, unread count, the stream's single-row load and resync) filters
+     at read time by the reader's **current** role from the database:
+     staff/admin-audience types the role may no longer see are hidden
+     (e.g. `security.system` after losing admin), and for role `user`
+     rows about jobs they do not own. Rows are kept (not pruned).
+  8. **SMTP.** Weakening the mode (STARTTLS or IMPLICIT_TLS to AUTO or
+     NONE) or changing the CA bundle requires the password in the same
+     update (VALIDATION on `password`), like the endpoint rule of D-140.
+  9. **Webhook signature.** `v1` now signs
+     `"<ts>\n<X-Bekup-Delivery>\n<X-Bekup-Event>\n<body>"` (none of the
+     three headers can contain a newline). The format was never released,
+     so `v1` is reused; docs and test vectors are updated.
+  10. **Login failures.** Partial index `audit_log_login_failed_ts_idx`
+     (`audit_log (ts) WHERE action = 'auth.login.failed'`), checked with
+     EXPLAIN in a test.
+  11. **Alert reference.** `Query.securityAlertTypes` (admin;
+     `monitor.alert_list`) lists every `security.system` kind with
+     severity, description and repeat rule from the server's own tables.
+  12. **Attachments for staff.** `Job.sharedChannelAttachments` (operation
+     `notification.shared_channel_attachment_view`: admins and
+     maintainers; null for backup owners, like `Job.owners`) lists the
+     shared channels attached to a job: id, name, type, masked display URL
+     of a webhook, enabled, the group/event filter; never e-mail
+     addresses, URLs or keys. Batch-loaded per page of jobs (one query).
+     Managing channels stays admin only.
+- **Alternatives considered:** a separate personal-webhook allowlist
+  (a second list to manage; scopes cover destinations and SMTP too); never
+  allowing private targets for personal webhooks (some installations run
+  their chat or ticket system internally: an explicit, alerted opt-in is
+  enough); keeping v1 and documenting dedup on the body's event id (the
+  event id is shared by every channel and retry, and a receiver that
+  dedups on the delivery header stays open to replays); pruning hidden
+  inbox rows on role or owner changes (irreversible and racy; read-time
+  filtering is exact and cheap); counters for failed logins (more state
+  to keep consistent; the partial index is enough at the rate limits).
+- **Consequences:** Existing admin entries stop applying to personal
+  webhooks after the upgrade (fail closed); admins who relied on it must
+  add the scope (audited, alerted, shown as a badge). Webhook receivers
+  must sign the delivery id and event type (pre-release change). Clients
+  must re-enter the SMTP password when weakening TLS or changing the CA.
+  The admin Network page needs a scope editor with a hazard warning for
+  `personal_webhooks` (task for the web). Security impact: closes the
+  user-reachable SSRF widening (B4/NT-1) and the test-result port probe;
+  the bootstrap list can no longer widen personal webhooks at all; hard
+  denials are unchanged. D-196's consequence "a change applies to every
+  outbound connection at once" now holds per scope.
+- **Related:** D-001, D-023, D-055, D-120, D-140, D-177, D-180, D-183,
+  D-190, D-191, D-196; `internal/netguard/{scope,allowlist}.go`,
+  `internal/egress`, `internal/app/{egress,notify,email,destinations}.go`,
+  `internal/notify/{api,api_channels,api_personal,api_inbox,deliver,fanout,security,alert_types}.go`,
+  `internal/notify/webhook/sign.go`, `internal/notify/email/settings.go`,
+  `internal/httpserver/middleware.go`,
+  `internal/db/migrations/00031_egress_scopes_login_failures.sql`,
+  `internal/graph/schema/{network,security_alerts,job_notifications,notifications,email}.graphqls`.
+
+## D-199: Web review follow-ups: one deny-by-default route guard, confirmed sign-out, strict return paths, shared web modules and build-time document splitting
+
+- **Date:** 2026-10-28
+- **Status:** proposed
+- **Decided by:** agent
+- **Context:** The M6 reviews found an open-redirect gap after dot-segment
+  normalisation in the login return path, a sign-out that treated any
+  failure as signed out, secret-returning TOTP/recovery mutations without
+  `no-cache`, placeholder routing, per-page role guards (none on
+  connections/destinations), duplicated helpers and operations, a
+  hard-coded security alert list and one eager chunk with every GraphQL
+  document.
+- **Decision:**
+  1. `safeReturnPath` re-checks the normalised path: a pathname starting
+     with `//` or containing `\` / `%5c` is refused.
+  2. Sign-out counts as done only on a successful `logout` or an
+     UNAUTHENTICATED answer; network, rate-limit and internal errors are
+     retried twice (0.5 s, 1.5 s backoff); anything else keeps the user
+     signed in with an error toast.
+  3. Every mutation that returns secret material runs with
+     `fetchPolicy: "no-cache"` (now also BeginTotpEnrollment,
+     ConfirmTotpEnrollment, RegenerateRecoveryCodes).
+  4. One route guard, `RequireRole` (a layout route around every
+     signed-in page), reads `handle: RouteAccess` of the matched routes
+     (`lib/route-access`, derived from the nav item roles). Every handle in
+     the chain must allow the role; a route without a handle is denied.
+     Connections/destinations: admin+maintainer; `/admin/*`: admin; job
+     editor: admin+maintainer. UI shaping only; the authz matrix decides.
+  5. Shared web modules: `lib/format` (sizes always in binary IEC units
+     KiB/MiB/GiB, durations, clock), `lib/age-identity` (exactly one
+     58-character identity), `lib/download` (blob: text download),
+     `lib/operations` (operations used by several features),
+     `components/status/tag` (Tone/Tag) and one signing-key dialog.
+  6. The job editor gets a notifications section: admins attach, re-filter
+     and detach shared channels for the job (security events never
+     offered); maintainers get a note until the API exposes attachments to
+     them; everyone gets a link to their per-job overrides
+     (`/profile/notifications?job=<uuid>`).
+  7. The security alert reference comes from `securityAlertTypes`.
+  8. Builds replace each `` graphql(`...`) `` call with an import of a
+     virtual module holding only that pre-compiled document
+     (`vite-plugins/graphql-documents.ts`), so documents ship with their
+     lazy routes; a call without generated output fails the build.
+- **Alternatives considered:** decoding and re-validating the return path
+  in a loop (the normalised URL is what navigation uses); best-effort
+  sign-out (a session the user believes ended could live on); guards per
+  page (easy to forget, as happened); the codegen babel plugin (needs a
+  babel pipeline next to oxc and still imports every document from one
+  generated module, so no per-route split).
+- **Consequences:** A user whose logout cannot be confirmed stays on the
+  page and must retry. New routes must declare `handle` or they are
+  denied (a test walks every route). Eager JavaScript drops from about
+  1,273 kB to 996 kB (gzip 316 kB to 297 kB). Security impact: closes
+  the protocol-relative return-path bypass, keeps TOTP secrets and
+  recovery codes out of the Apollo cache, and makes the role guard deny
+  by default; the server-side authorization is unchanged.
+- **Related:** D-050, D-053, D-067, D-082, D-179, D-186, D-190, D-191,
+  D-193, D-194, D-195, D-198; `web/src/lib/{return-path,route-access,format,age-identity,download,operations}.ts`,
+  `web/src/features/auth/{require-role.tsx,use-sign-out.ts}`,
+  `web/src/features/jobs/notifications-panel.tsx`,
+  `web/src/components/status/tag.tsx`, `web/vite-plugins/graphql-documents.ts`.
+
+## D-200: Runtime config reload of a conservative set of live keys (admin UI broadcast and SIGHUP)
+
+- **Date:** 2026-10-29
+- **Status:** proposed
+- **Decided by:** agent (requested by the user: a config reload triggered from the admin web UI that reaches every serve and worker process, plus SIGHUP on a single process; apply only keys that are safe at runtime, report the rest as restart-required, and never replace the running config with an invalid file; plan `plans/robust-giggling-tide.md` Part A, task 6.13)
+- **Context:** D-041 (implementing D-019) says "no hot reload": every
+  component copies its config at startup, so any change needs a restart of
+  every serve and worker process. Operators asked to tune limits, the log
+  level and allowlists without a restart, from the UI for all processes or
+  with SIGHUP for one. A reload must not become a way to weaken the posture
+  silently, to leave a process half-configured or to reveal config values.
+- **Decision:**
+  1. **Conservative per-key classification (deny by default).** Only
+     `bekup.toml` fields tagged `reload:"live"` change at runtime:
+     `log.level`; `server.trusted_proxies`, `max_body_bytes`,
+     `rate_limit_per_second`, `rate_limit_burst`,
+     `user_rate_limit_per_second`, `user_rate_limit_burst`;
+     `graphql.max_complexity`, `max_depth`, `max_body_bytes`;
+     `netguard.allow_cidrs`, `allow_hosts`; `security.password_min_length`,
+     `password_min_score`, `login_rate_limit_per_minute`,
+     `login_rate_limit_burst`, `lockout_threshold`, `lockout_base_duration`,
+     `lockout_max_duration`; `notifications.max_per_user_per_hour`,
+     `collapse_window`, `webhook_failure_threshold`; `retention.dry_run`,
+     `max_deletions_per_sweep`, `partial_cleanup_age`. Everything else is
+     restart-only, in particular `server.listen`, `base_url`,
+     `allow_insecure_http`, `allow_wildcard_listen`, all timeouts,
+     `max_header_bytes`, `rate_limit_max_clients` (the limiters' key bound),
+     `graphql.stream_*`, `database.*`, `runner.*`, `storage.*`,
+     `workers.*`, `scheduler.*`, `metrics.*`, `dev.*`, the master key,
+     `argon2_*`, `session_*`, `stepup_max_age`, `audit_head_sign_interval`
+     and `restore.temp_connection_*`. `runner.toml` is never reloaded. The
+     generated key reference has a Reload column; a test pins the list and
+     the posture keys.
+  2. **Merged re-validation under the startup dev mode.** A reload loads
+     the file with the startup load options and the absolute path loaded
+     at startup (same env, flags and D-041 file checks; a new
+     `./bekup.toml` never shadows it; a process that started on dev
+     defaults never searches), diffs it against the running config, builds
+     `WithLive(running, loaded)` and validates that with the startup dev
+     mode, so a file that turns on `dev.enabled` or `allow_insecure_http`
+     cannot get its live keys accepted under relaxed rules.
+  3. **Two-phase apply, audit first.** Every component exposes
+     `Prepare(next) (commit, error)`; commits only do atomic stores. All
+     appliers whose keys changed are prepared; any failure commits nothing
+     (`failed`/`apply`). Then the outcome is recorded fail closed in one
+     transaction (audit `config.reloaded` or `config.reload_failed`, system
+     actor, then the `config_reload_results` row); only after that commit
+     are the appliers committed and the running config swapped. If
+     recording fails nothing is applied (`failed`/`record`). Every live key
+     is covered by exactly one applier per process (keys a process does not
+     use are declared explicitly; startup fails otherwise). A changed key
+     that this process does not use (nil `Prepare`, e.g. `server.*` in a
+     worker, `retention.*` in `serve --no-worker`) is taken into its
+     running config but not listed as applied or weakened in its result;
+     the processes that use it report it. A changed key that no running
+     process uses raises no alert and no "applied" entry anywhere; it
+     takes effect when a process that uses it next starts (that process
+     loads the file at startup).
+     `a.opts.Config` stays the startup snapshot.
+  4. **Broadcast = NOTIFY-only trigger + request row.** The UI request
+     (admin + fresh step-up, at most one per 10 s instance-wide under an
+     advisory lock) inserts a `config_reload_requests` row, audits
+     `config.reload_requested` and NOTIFYs `config.reload:<request id>` on
+     `bekup_settings_events` in one transaction (NOTIFY only: the local bus
+     would deliver before the commit), then reloads the requesting process.
+     Every process acts on such a payload only when a matching `ui`
+     request row younger than 10 minutes exists (a forged NOTIFY does
+     nothing), deduplicates by request id (an answer row of this process
+     that exists already rolls the transaction back: nothing is audited
+     or applied again) and, at start and after a listener resync, answers
+     the unanswered requests of the last 10 minutes it is responsible for
+     (item 9).
+  5. **Names only.** Results, audit details, alerts, logs of outcomes and
+     the GraphQL API carry key names and an error kind (`file`, `syntax`,
+     `invalid`, `apply`, `record`) only; unknown keys are reported as
+     `<section>.unknown_key`. Values and the config file path never leave
+     the process except in the redacting log. Attribute and detail names
+     never end in `keys` (`logging.IsSecretKey` redacts those as secrets,
+     and it stays strict): the error key names are `error_settings` in the
+     audit details and the log, and the alert detail is `settings`.
+  6. **Weakening alerts.** Each live key has a rule for what weakens
+     security (wider trusted proxies, an added `[netguard]` entry, raised
+     rate/size/GraphQL limits, a raised lockout threshold or deletion cap,
+     shorter lockout durations or partial cleanup age, lower password
+     bounds, `retention.dry_run` true → false, a raised
+     `notifications.webhook_failure_threshold` (failing or refused
+     webhooks keep retrying longer before auto-disable); `log.level`,
+     `max_per_user_per_hour` and `collapse_window` never weaken); a test requires a rule for
+     every live key. A non-empty `weakened` list raises the
+     `config_reload_weakened` security alert (severity error) to every
+     admin, deduplicated by request id + key-set hash so replicas applying
+     the same change raise one alert (processes of different kinds may
+     report different sets, e.g. a worker without `server.*`, and then
+     raise one alert per set).
+  7. **SIGHUP with the system actor.** serve and worker catch SIGHUP (so
+     it no longer terminates them as PID 1; the runner is unchanged),
+     collapse bursts (buffer of one) and reload at most every 2 s, locally
+     only (a `signal` request row, no broadcast), audited with
+     `audit.SystemActor()` and `trigger: signal` in the details.
+  8. **No permanent badge.** The posture keys that have badges and startup
+     audits (`base_url`, `allow_insecure_http`, `database.tls_mode`) stay
+     restart-only, so the existing startup audit, banner and daily
+     reminder keep applying unchanged; a weakening reload is a one-off
+     alerted and audited event, not a standing state.
+  9. A `loaded` row per process start doubles as the process registry.
+     Liveness: each process's LISTEN connection reports
+     `application_name = bekup-serve-listen:<instance id>` or
+     `bekup-worker-listen:<instance id>` (56 characters); the API reads
+     `pg_stat_activity` (prefix match) and marks each process
+     `listening`. The status page lists the newest row of every process
+     listening now (any age) plus every process seen in 7 days; stopped
+     ones are shown as "not listening" history without a restart call to
+     action. **One rule decides who answers a UI request**, evaluated in
+     SQL on database time on both sides: a process is responsible for a
+     request when its first row (the startup row, written after the file
+     was read) is at most `configreload.StartupGrace` (1 minute) after
+     the request's `requested_at`. The catch-up answers exactly those
+     (plus the 10-minute bound), and a request's `expectedProcesses` =
+     processes that answered plus listening responsible ones, so the UI
+     stops polling once they answered. A process started later already
+     loaded a file newer than the request and never answers it; the grace
+     covers a request made between reading the file and writing the
+     startup row (that process answers it, usually `unchanged`). No
+     comparison of the Go host clock with the database clock is involved.
+     application_name is chosen by the client and can be spoofed by
+     anything that can log in to the app database: it is used for display
+     and progress only, never for a security decision. serve prunes rows
+     older than 30 days hourly, except the newest row of a listening
+     process (and the request it answered). A process whose LISTEN
+     connection is reconnecting during a prune is not "listening" then and
+     may lose its newest row when that row is older than 30 days; it
+     reappears with its next answer (display only: it still receives
+     broadcasts, and without rows it is responsible for no catch-up until
+     then). The `record` error kind is
+     never stored (the write failed): it appears only in the log and
+     metrics, not in the GraphQL enum. `bekup_app` has SELECT, INSERT and DELETE
+     only on the two tables (migration 00032). Metric
+     `bekup_config_reloads_total{status}`.
+  Once accepted, this decision supersedes the "no hot reload" clause of
+  D-041 (and thereby of D-019); their statuses are left for the user to
+  change.
+- **Alternatives considered:** reloading everything that parses (rejected:
+  listeners, TLS, DB pools, sessions and the master key cannot change
+  consistently mid-run, and posture keys would bypass the startup audit);
+  restart-only forever (rejected by the request); validating the loaded
+  file alone (rejected: a file enabling dev mode would relax the rules for
+  the live keys); applying first and auditing after (rejected: an applied
+  but unaudited change); broadcasting the config or the changed values in
+  the NOTIFY payload (rejected: payloads carry IDs only, D-050, and a
+  forged payload must not act); acting on any NOTIFY (rejected: forgeable
+  by anything with database access); `audit.CLIActor()` for SIGHUP
+  (rejected: every signal would raise a `cli_action` alert and the actor
+  is not a CLI command; the system actor with the trigger in the details
+  keeps it attributable); a permanent badge for weakened reloads (rejected:
+  the weakening keys are bounded limits already alerted once; the true
+  posture keys stay restart-only with their existing badges).
+- **Consequences:** Operators can tune limits, allowlists and the log
+  level without downtime and see per-process outcomes. Security impact: a
+  new admin-triggered path that can change security-relevant limits; it is
+  gated by admin + step-up and rate limited, never touches posture keys,
+  re-validates under the startup dev mode, is audited fail closed per
+  process and alerts every admin on a weakening change. SIGHUP needs host
+  access (T10, trusted) and is audited. A process that is down misses a
+  broadcast (it loads the current file when it starts); the status page
+  shows who answered. `SECURITY.md` CL-7/CL-12, `docs/configuration.md`
+  (Reloading), `docs/operations.md` (runbook, metric) and the alert table
+  are updated. A new live key needs the tag, an applier and a weakening
+  rule (AGENTS.md).
+- **Related:** D-019, D-041, D-050, D-055, D-069, D-095, D-098, D-100,
+  D-106, D-117, D-176, D-190, D-196, D-198; task 6.13;
+  `internal/config` (`reload.go`, `errors.go`), `internal/configreload`,
+  `internal/app/configreload.go`, `cmd/bekup/signal_unix.go`,
+  migration `00032_config_reloads.sql`,
+  `internal/graph/schema/config.graphqls`.
+
+## D-201: Dev-only runner for a native serve, loopback-published on a dedicated network
+
+- **Date:** 2026-10-29
+- **Status:** proposed
+- **Decided by:** agent (requested by the user: "can i also start a runner only next to the dev fe and backend i currently run")
+- **Context:** The native dev workflow (`just dev` + `just run` +
+  `just web-dev`, D-114) had no runner: the only dev runner lives in
+  profile `full` on the production network layout, where the gRPC port
+  sits on the internal `runner-ctl` network. Docker cannot publish ports
+  from an internal network, so a serve on the host could not reach it, and
+  a runner running natively on macOS cannot attach its dump containers to
+  per-run Docker networks.
+- **Decision:**
+  1. `docker-compose.dev.yml` gets the service `runner-host` (profile
+     `runner`), extending the production `runner` service (same image,
+     hardening, Docker socket, dev `runner.toml`, certificates).
+  2. Its networks are replaced by `targets` plus a dedicated, DEV ONLY
+     `runner-host` network (`10.213.253.0/24`, fixed address
+     `10.213.253.10`) that only this service joins. The listener binds that
+     address (`BEKUP_LISTEN_ADDRESS`) and the port is published on
+     `127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}` only.
+  3. Not on `backend` or `dev-host` (no app DB access) and not listening
+     on `targets` (target DBs cannot reach the gRPC port). The listener's
+     per-run network refusal and mTLS (TLS 1.3, private CA, SAN checks)
+     are unchanged; the native serve uses the dev `serve` client
+     certificate copied to `secrets/local/` and `server_name = "runner"`.
+  4. `just dev-runner` starts `runner-host` with the sample targets
+     (`DOCKER_GID=0` by default on macOS); `just dev-down` and
+     `just db-reset` include the profile; the native environment sets
+     `BEKUP_RUNNER_ADDRESS=127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}`.
+- **Alternatives considered:** publishing from `runner-ctl` (impossible:
+  internal network); making `runner-ctl` non-internal in dev (diverges
+  from production for `dev-full` too); listening on `targets` (the sample
+  target DBs could reach the gRPC port); a native runner on the host
+  (cannot join per-run Docker networks on Docker Desktop); running serve in
+  a container only (`just dev-full`, loses the fast native loop).
+- **Consequences:** Development only; production compose and the runner's
+  trust boundaries are unchanged. Any local process can open a TCP
+  connection to the loopback port, but only a client with a certificate
+  from the dev CA gets past the mTLS handshake. Do not run it together
+  with `just dev-full` (shared sample targets).
+- **Related:** D-003, D-029, D-030, D-081, D-114, D-125, D-127, D-132;
+  `docker-compose.dev.yml`, `justfile` (`dev-runner`),
+  `scripts/lib.bash` (`dev_native_env`), `deploy/dev/bekup.local.toml`,
+  `docs/development.md`.
+
+## D-202: Manual multi-arch image publishing to the operator's own registry (`just publish`)
+
+- **Date:** 2026-10-29
+- **Status:** proposed
+- **Decided by:** agent (requested by the user: "i need a just command to build the containers and send them to a docker repository of my choosing without commiting the repo url to git")
+- **Context:** Operators want to run their own build of bekup (a fork,
+  patches, an air-gapped mirror) before the official release workflow
+  (task 7.4) exists, and alongside it afterwards. Their registry name is
+  specific to their environment and must not land in git. Images must stay
+  digest-pinnable (D-061), traceable to a commit and distinguishable from
+  release tags. bekup ships one image (every component is a subcommand).
+- **Decision:**
+  1. `just publish [repo] [--dirty] [--yes] [--dry-run]` (group
+     `release`, `scripts/publish.sh`, positional arguments, D-071).
+  2. The repository comes from the argument, else `BEKUP_IMAGE_REPO`, else
+     a gitignored and dockerignored `.just.env` (`.just.env.example` is
+     committed with placeholders only). `load_local_env` in
+     `scripts/lib.bash` reads only `KEY=value` lines for `BEKUP_IMAGE_REPO`
+     and `BEKUP_PLATFORMS`, never sources or evaluates the file, warns about
+     and ignores unknown keys, never prints values and refuses a symlink, a
+     file not owned by the user, a group/world-writable file or one larger
+     than 4 KiB.
+  3. The repository must be `host[:port]/path` with an explicit registry
+     host, lowercase, without tag, digest, scheme or `user:pass@`.
+     Credentials come only from the user's own `docker login`.
+  4. A clean tree pushes `<VERSION>`, `sha-<12-char sha>` and `latest`; a
+     dirty tree (also files marked skip-worktree/assume-unchanged, which
+     hide their changes from `git status`) is refused, `--dirty` pushes
+     only `sha-<sha>-dirty` (also in the `org.opencontainers.image.revision`
+     label; a mutable tag, pin by digest). A clean build uses a pristine
+     export of HEAD (`git archive` into a temporary directory) as the build
+     context, so ignored or local files never enter it; `--dirty` builds
+     the working tree. The binary version (`VERSION` build argument) is
+     `<VERSION>` only when HEAD is the tag `v<VERSION>`, otherwise SemVer
+     build metadata `<VERSION>+sha.<short>` (`.dirty` appended for
+     `--dirty`); the image tags stay as above and a warning is printed when
+     HEAD is not the tag. The Dockerfile build stage sets `GOWORK=off` and
+     `.dockerignore` excludes `go.work*` and a locally built
+     `cmd/bekup/bekup`.
+  5. Build on a dedicated buildx builder `bekup-publish` (docker-container
+     driver) on the local Docker: the current docker context must be a
+     local socket and an existing builder must have exactly one node on
+     that context (otherwise it is refused until removed and recreated).
+     Platforms `BEKUP_PLATFORMS` (default `linux/amd64,linux/arm64`),
+     `--target runtime --pull --provenance=mode=max --sbom=true --push`,
+     the VERSION/VCS_REF/BUILD_DATE build arguments, and
+     `BUILDX_GIT_INFO=false` so the provenance does not record the git
+     remote URL (the revision comes from VCS_REF); the SBOM generator image
+     is pinned by digest. Invalid repository values are echoed with
+     `printf %q`; a registry port must be 1–65535.
+  6. It prints the digest and the compose pin `BEKUP_IMAGE=<repo>@sha256:…`;
+     a confirmation prompt lists repo and tags (`--yes` skips it and is
+     required without a terminal); `--dry-run` prints the command only.
+  7. It never creates git tags or touches `CHANGELOG`; official, signed
+     releases stay with the release workflow (task 7.4).
+- **Alternatives considered:** `set dotenv-load` in the justfile (injects
+  every variable of the file into every recipe; effectively sourcing);
+  the registry in the compose `.env` (mixes runtime and build configuration);
+  committing the registry (leaks private infrastructure names); plain
+  `docker build` + `docker push` (single-architecture, no provenance or
+  SBOM); the default builder (the docker driver cannot push
+  multi-platform indexes with attestations); `latest`/version tags from a
+  dirty tree (not reproducible from a commit).
+- **Consequences:** Operators can publish attested multi-arch images and pin
+  them by digest. Security impact: the repository string is validated (no
+  shell/argv injection) and credentials never pass through the recipe's
+  argv, logs or history; `.just.env` cannot execute code and never enters
+  the build context; provenance (mode=max) records build arguments (no
+  secrets) and base-image digests; dirty builds are visibly marked. The
+  images are not signed (cosign signing stays with task 7.4). Needs docker
+  buildx (optional check in `just doctor`). On macOS a `localhost:5000`
+  test registry can collide with AirPlay on port 5000 (use 127.0.0.1).
+- **Related:** D-020, D-025, D-061, D-071, D-072; task 7.4;
+  `scripts/publish.sh`, `scripts/publish_test.sh`, `scripts/lib.bash`
+  (`load_local_env`), `.just.env.example`, `docs/development.md`,
+  `docs/installation/compose.md`.

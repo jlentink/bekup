@@ -2,6 +2,7 @@
 # Go
 # ---------------------------------------------------------------------------
 /bekup
+/cmd/bekup/bekup
 /bin/
 /dist/
 *.exe
@@ -15,6 +16,8 @@ coverage.*
 *.coverprofile
 go.work
 go.work.sum
+# Native dev data: disk destinations and restore staging (`just run`)
+/.dev-data/
 # air hot-reload output (.air.toml tmp_dir) and its build-error log
 /tmp/
 air-build-errors.log
@@ -66,6 +69,8 @@ runner.toml
 .env
 .env.*
 !.env.example
+# Local just settings (registry for `just publish`, D-202); the example is committed.
+.just.env
 *.key
 *.pem
 *.p12

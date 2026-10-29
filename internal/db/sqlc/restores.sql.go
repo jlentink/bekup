@@ -371,6 +371,53 @@ func (q *Queries) IsRestoreStuck(ctx context.Context, arg IsRestoreStuckParams) 
 	return column_1, err
 }
 
+const listRestoreIDsUpdatedSince = `-- name: ListRestoreIDsUpdatedSince :many
+SELECT restores.id
+FROM restores
+WHERE restores.updated_at >= $1::timestamptz
+  AND ($2::boolean OR EXISTS (
+        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+        WHERE o.job_id = restores.job_id AND o.user_id = $3::uuid AND ou.deleted_at IS NULL))
+ORDER BY restores.updated_at DESC, restores.id
+LIMIT $4::int
+`
+
+type ListRestoreIDsUpdatedSinceParams struct {
+	Since    time.Time `json:"since"`
+	ScopeAll bool      `json:"scopeAll"`
+	UserID   uuid.UUID `json:"userId"`
+	MaxRows  int32     `json:"maxRows"`
+}
+
+// ListRestoreIDsUpdatedSince returns the restores changed at or after
+// @since that the caller may see (scope as in ListRestoresPage), newest
+// change first: the resync of the restoresUpdated stream after possibly
+// lost events (D-196). Delivery re-loads and re-authorizes every one.
+func (q *Queries) ListRestoreIDsUpdatedSince(ctx context.Context, arg ListRestoreIDsUpdatedSinceParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRestoreIDsUpdatedSince,
+		arg.Since,
+		arg.ScopeAll,
+		arg.UserID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRestoreLogs = `-- name: ListRestoreLogs :many
 SELECT id, restore_id, ts, level, stream, line FROM restore_logs WHERE restore_id = $1 AND id > $2 ORDER BY id LIMIT $3::int
 `

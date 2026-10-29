@@ -5,12 +5,33 @@ before it leaves the server. Encryption is **on by default** for every job;
 only an admin can turn it off for a job (see [Opting out](#opting-out)).
 Decisions: D-008, D-016, D-040, D-088, D-142.
 
-> **Status:** the key management service (task 3.2) and its GraphQL fields
-> (task 3.5: `Job.encryption`, `createJob(input.encryption)`,
+> **Status:** implemented: the key management service and its GraphQL
+> fields (`Job.encryption`, `createJob(input.encryption)`,
 > `setJobPassphrase`, `generateJobPassphrase`, `setJobRecipient`,
 > `generateAgeKeypair`, `enableJobEncryption`, `disableJobEncryption`,
-> `exportJobPassphrases`) exist, and so does the offline `bekup decrypt`
-> tool (task 4.7, [recovery.md](../recovery.md)). The UI follows in task 6.x.
+> `exportJobPassphrases`), the offline `bekup decrypt` tool
+> ([recovery.md](../recovery.md)) and the web UI described below.
+
+## In the web UI
+
+- **At creation** (**Backups → Jobs → New job**, section **Encryption**):
+  **Generate a passphrase (recommended)** is the default and the only
+  choice for maintainers; admins can also set their own passphrase, set
+  an age recipient or generate an age keypair. A generated passphrase or
+  private key is shown **once** after saving, with copy and download;
+  it is dropped from the page as soon as you confirm "I've saved it
+  somewhere safe" and never enters the browser's cache (D-186).
+- **Later** (**Edit job → Encryption**): the current mode, passphrase
+  version, recipient and fingerprint, and for admins the key actions
+  **Generate passphrase**, **Set passphrase**, **Generate age keypair**,
+  **Set recipient**, **Turn encryption off** (with a reason and an
+  acknowledgement) and **Export passphrases**. Each asks for a step-up.
+- Jobs without encryption carry the hazard-hatched *Unencrypted* badge on
+  the job list, the job page and the dashboard.
+- **Administration → Settings → Recovery** lists every job's key mode and
+  exports a job's passphrases (with a warning, an acknowledgement and a
+  step-up) next to the instance public keys needed for offline
+  verification (D-194).
 
 ## Modes
 

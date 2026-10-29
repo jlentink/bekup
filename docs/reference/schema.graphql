@@ -7,6 +7,49 @@ extend type Query {
   """
   auditLog(filter: AuditLogFilter, first: Int, after: String): AuditLogConnection!
     @hasRole(roles: [ADMIN])
+
+  """
+  The state of the audit chain: the latest periodic verification (hourly
+  incremental, daily full; D-190), the newest entry and the newest signed
+  chain head. Informational: the proof is `bekup audit verify` against an
+  exported signed head.
+  """
+  auditChainStatus: AuditChainStatus! @hasRole(roles: [ADMIN])
+}
+
+"The outcome of one completed audit chain verification."
+type AuditChainVerification {
+  checkedAt: Time!
+  "False when a problem was found (an audit.verify.failed entry and a critical alert)."
+  ok: Boolean!
+  "True when the whole chain was verified, false for an incremental check of new entries."
+  full: Boolean!
+  "The problem found, as `<kind>:<entry id>` (e.g. `hash_mismatch:1234`); null when ok."
+  finding: String
+  "The newest entry known to verify (null: none yet)."
+  verifiedThroughId: ID
+}
+
+"A signed audit chain head."
+type AuditSignedHead {
+  "The audit entry the signature covers."
+  chainId: ID!
+  signedAt: Time!
+  "The instance signing key (fingerprint id)."
+  keyId: String!
+}
+
+"The audit chain status."
+type AuditChainStatus {
+  "The latest verification (null: none ran yet)."
+  lastVerification: AuditChainVerification
+  "The newest audit entry (null: the log is empty)."
+  headId: ID
+  "Its chain hash (hex)."
+  headHash: String
+  headAt: Time
+  "The newest signed chain head (null: none yet)."
+  latestSignedHead: AuditSignedHead
 }
 
 "Who performed an audited action."
@@ -236,6 +279,149 @@ extend type Query {
   """
   calendar(from: Time!, to: Time!, timezone: String!, jobIds: [UUID!]): Calendar! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }
+# Runtime config reload (task 6.13, D-200). Admin only.
+#
+# Every serve and worker process re-reads its own bekup.toml (the file it
+# loaded at startup) on request, applies only the keys that are safe to
+# change without a restart ("live" keys) and reports changed keys that
+# still need a restart. An unreadable or invalid file never replaces the
+# running configuration. Only key names and an error kind are ever shown:
+# never values and never the file path (details are in the server log).
+
+"The outcome of a reload in one process."
+enum ConfigReloadStatus {
+  "The process started with this configuration (no reload yet)."
+  LOADED
+  "Live keys changed and were applied."
+  APPLIED
+  "The file matches the running configuration."
+  UNCHANGED
+  "Keys changed that need a restart (live keys, if any, were applied)."
+  RESTART_REQUIRED
+  "The file could not be read or is invalid; nothing changed."
+  REJECTED
+  "A change could not be applied or recorded; nothing changed."
+  FAILED
+}
+
+"""
+Why a reload was rejected or failed. (An outcome that could not be
+recorded, database unavailable, is never stored: it is only in the
+process's log and metrics.)
+"""
+enum ConfigReloadErrorKind {
+  "The file is missing, unreadable or fails the ownership/mode checks."
+  FILE
+  "The file is not valid TOML."
+  SYNTAX
+  "A key is unknown or a value is invalid (see errorKeys)."
+  INVALID
+  "A component refused the new values."
+  APPLY
+}
+
+"What started a reload."
+enum ConfigReloadTrigger {
+  "An admin's reloadConfig (every process)."
+  UI
+  "SIGHUP to one process."
+  SIGNAL
+}
+
+"The kind of bekup process."
+enum BekupProcessKind {
+  SERVE
+  WORKER
+}
+
+"One process's answer to a reload request, or its startup row."
+type ConfigProcessResult {
+  "Random id of the process (new at every start)."
+  instanceId: UUID!
+  kind: BekupProcessKind!
+  "Host name of the process (usually the container id)."
+  hostname: String!
+  "bekup version of the process."
+  version: String!
+  processStartedAt: Time!
+  finishedAt: Time!
+  "The request answered (null for the startup row)."
+  requestId: UUID
+  "What started the answered request (null for the startup row)."
+  trigger: ConfigReloadTrigger
+  """
+  The process's LISTEN connection is up now, so it receives reload
+  requests. False: the process stopped (or lost its database connection);
+  its row is history and needs no action. Display only (the connection's
+  application_name; D-200).
+  """
+  listening: Boolean!
+  status: ConfigReloadStatus!
+  "Set for REJECTED and FAILED."
+  errorKind: ConfigReloadErrorKind
+  "Live keys this reload applied (a live key this kind of process does not use is not listed)."
+  appliedKeys: [String!]!
+  "Changed keys that need a restart of this process."
+  restartKeys: [String!]!
+  "Keys named by the errors of a rejected file (unknown keys appear as `<section>.unknown_key`)."
+  errorKeys: [String!]!
+  "Applied keys whose change weakens security (every admin was alerted)."
+  weakenedKeys: [String!]!
+}
+
+"A reload request with the answers so far."
+type ConfigReloadRequest {
+  id: UUID!
+  requestedAt: Time!
+  "The admin who asked."
+  requestedBy: UUID
+  trigger: ConfigReloadTrigger!
+  "One entry per process that answered (poll until expectedProcesses answered)."
+  results: [ConfigProcessResult!]!
+  "Processes that can receive a request right now."
+  listeningProcesses: Int!
+  """
+  Processes this request waits for: those that answered plus those
+  listening now that are responsible for it (startup row at most one
+  minute after the request, database time; a process started later loaded
+  a newer file and never answers it; D-200).
+  """
+  expectedProcesses: Int!
+}
+
+"The configuration page."
+type ConfigStatus {
+  "Keys a reload applies without a restart (`section.key`)."
+  liveKeys: [String!]!
+  """
+  The newest row of every process listening now (any age) and of every
+  process seen in the last 7 days, newest first (at most 100).
+  """
+  processes: [ConfigProcessResult!]!
+  "Processes that can receive a reload request right now."
+  listeningProcesses: Int!
+  "The newest reload request (null: none yet)."
+  lastRequest: ConfigReloadRequest
+}
+
+extend type Query {
+  "Live keys, processes and the newest reload request."
+  configStatus: ConfigStatus! @hasRole(roles: [ADMIN])
+  "One reload request with its answers (NOT_FOUND for an unknown id)."
+  configReloadRequest(id: UUID!): ConfigReloadRequest! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Asks every serve and worker process to reload bekup.toml. Audited
+  (config.reload_requested; each process records config.reloaded or
+  config.reload_failed). Returns the request with the answer of the
+  process that took it; poll configReloadRequest for the others.
+  RATE_LIMITED when a reload was requested less than 10 seconds ago. A
+  change that weakens security raises a security alert to every admin.
+  """
+  reloadConfig: ConfigReloadRequest! @hasRole(roles: [ADMIN]) @stepUp
+}
 # Database connections (task 2.11; D-106, D-132, D-133, D-135). Admins
 # manage them; every change needs a fresh step-up and is audited.
 # Maintainers see metadata only (name, engine, version, host, port, TLS mode,
@@ -336,6 +522,26 @@ type Connection {
   temporary: Boolean!
   "When a temporary connection expires; null for permanent connections."
   expiresAt: Time
+  """
+  The newest stored testConnection result (D-187); null when never tested.
+  Normalized codes only.
+  """
+  lastTest: ConnectionLastTest
+}
+
+"The stored outcome of the newest testConnection (D-187)."
+type ConnectionLastTest {
+  at: Time!
+  ok: Boolean!
+  """
+  The normalized failure code (as ConnectionTestResult.code, plus
+  TLS_PIN_MISMATCH and SSH_HOST_KEY_MISMATCH); null when ok.
+  """
+  code: String
+  "The connection's settings changed after this test."
+  stale: Boolean!
+  "The privilege verdict of the test's probe; null when the test failed before the check."
+  privileges: TargetPrivileges
 }
 
 type ConnectionSettings {
@@ -784,6 +990,21 @@ type Destination {
   updatedAt: Time!
   "The full non-secret configuration. Admins only: null for maintainers."
   settings: DestinationSettings
+  """
+  The newest stored testDestination result (D-187); null when never
+  tested. Normalized codes only.
+  """
+  lastTest: DestinationLastTest
+}
+
+"The stored outcome of the newest testDestination (D-187)."
+type DestinationLastTest {
+  at: Time!
+  ok: Boolean!
+  "The normalized error class of the first failed step (as DestinationTestStep.code); null when ok."
+  code: String
+  "The destination's settings changed after this test."
+  stale: Boolean!
 }
 
 "Per-type settings; exactly the field of the destination's type is set."
@@ -889,6 +1110,24 @@ extend type Query {
 
   "One destination; null when it does not exist or was deleted."
   destination(id: UUID!): Destination @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Storage per destination that is not deleted, ordered by name: the bytes
+  and number of the backup files bekup tracks as present there (exact; one
+  aggregate, no paging).
+  """
+  destinationUsage: [DestinationUsage!]! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+"What bekup stores on one destination."
+type DestinationUsage {
+  destinationId: UUID!
+  name: String!
+  type: DestinationType!
+  "Sum of the sizes of the present backup files (bytes)."
+  storedBytes: Float!
+  "Number of present backup files (dumps and manifests)."
+  artifactCount: Int!
 }
 
 extend type Mutation {
@@ -1051,6 +1290,164 @@ extend type Mutation {
   stored sealed with the ticket only until the download starts.
   """
   createDownloadTicket(artifactId: UUID!, mode: DownloadMode!, ageIdentity: String): DownloadTicket! @stepUp
+}
+# E-mail: SMTP settings, test e-mail and user e-mail verification (task
+# 5.1; D-023, D-051, D-178). SMTP settings are admin only; changes need a
+# fresh step-up and are audited by field. The password is write-only:
+# outputs only say whether one is stored (hasPassword). Transport security
+# follows the server (D-180): AUTO and NONE may send mail and credentials
+# unencrypted (mayBeUnencrypted).
+
+"Transport security of the SMTP connection (D-180)."
+enum SmtpMode {
+  """
+  The default: STARTTLS when the server offers it, otherwise unencrypted
+  (AUTH included). A failed STARTTLS handshake is an error, not a fallback.
+  An attacker on the path can suppress the STARTTLS offer.
+  """
+  AUTO
+  "Plain connection upgraded with STARTTLS (refused when the server does not offer it). Usually port 587."
+  STARTTLS
+  "TLS from the first byte (SMTPS). Usually port 465."
+  IMPLICIT_TLS
+  "Never encrypt, even when the server offers STARTTLS: mail and AUTH travel in clear text."
+  NONE
+}
+
+"The SMTP settings (never the password)."
+type SmtpSettings {
+  "False until an admin saved settings (the other fields are defaults then)."
+  configured: Boolean!
+  "False: bekup sends no e-mail."
+  enabled: Boolean!
+  host: String!
+  port: Int!
+  mode: SmtpMode!
+  "The AUTH username (null: no authentication)."
+  username: String
+  "True when a password is stored."
+  hasPassword: Boolean!
+  fromAddress: String!
+  fromName: String
+  "PEM CA certificates that replace the system roots for this server (null: system roots)."
+  caBundlePem: String
+  connectTimeoutSeconds: Int!
+  sendTimeoutSeconds: Int!
+  """
+  True for AUTO and NONE: mail, metadata and the SMTP credentials may travel
+  unencrypted (the UI shows a badge).
+  """
+  mayBeUnencrypted: Boolean!
+  updatedAt: Time
+}
+
+"""
+Replaces the SMTP settings. `password` omitted keeps the stored password;
+`clearPassword` removes it. When host, port or username change, the mode
+is weakened (STARTTLS or IMPLICIT_TLS to AUTO or NONE) or the CA bundle
+changes, a stored password must be entered again in the same update
+(VALIDATION on `password` otherwise; it is never sent to a new or less
+protected endpoint). The host must pass the SSRF guard (private relays
+must be allowlisted for the SMTP scope).
+"""
+input UpdateSmtpSettingsInput {
+  enabled: Boolean!
+  host: String!
+  port: Int!
+  mode: SmtpMode!
+  username: String
+  password: String
+  clearPassword: Boolean
+  fromAddress: String!
+  fromName: String
+  caBundlePem: String
+  "1..60 (default 10)."
+  connectTimeoutSeconds: Int
+  "5..300 (default 60): bounds the whole SMTP session."
+  sendTimeoutSeconds: Int
+}
+
+"The result of sendTestEmail."
+type SmtpTestResult {
+  ok: Boolean!
+  "The failure code (null on success), e.g. tls_failed, auth_failed, not_allowed, unreachable."
+  code: String
+  "A fixed, presentable description of the failure."
+  message: String
+  "Extra information for admins (the blocked address, the SMTP reply code)."
+  detail: String
+  "True when the SMTP session used TLS (as far as it got on failure)."
+  encrypted: Boolean!
+  "The negotiated TLS version, e.g. \"TLS 1.3\" (null without TLS)."
+  tlsVersion: String
+}
+
+"The result of requestEmailVerification."
+type EmailVerificationRequest {
+  "The address the link was sent to."
+  sentTo: String!
+  "When the link stops working (24 hours)."
+  expiresAt: Time!
+}
+
+extend type User {
+  "True when the account's e-mail address is verified (needed for e-mail notifications)."
+  emailVerified: Boolean!
+  emailVerifiedAt: Time
+}
+
+extend type Query {
+  "The SMTP settings."
+  smtpSettings: SmtpSettings! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  "Replaces the SMTP settings (audited by field; the password by name only)."
+  updateSmtpSettings(input: UpdateSmtpSettingsInput!): SmtpSettings! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Sends a test e-mail with the stored settings. Rate limited; failures are
+  returned as a result with a fixed code, never the server's text.
+  """
+  sendTestEmail(to: String!): SmtpTestResult! @hasRole(roles: [ADMIN])
+
+  """
+  Sends a verification link to the own e-mail address (replacing an older
+  link). The link works once, for 24 hours, and only while signed in to
+  this account. Rate limited (one link per minute). Needs working SMTP
+  settings; CONFLICT when the address is already verified.
+  """
+  requestEmailVerification: EmailVerificationRequest! @authenticated
+
+  """
+  Verifies the own e-mail address with the code of the link (the URL
+  fragment `code=`). Any problem (wrong, used, expired, another account's
+  or an old address's code) answers VALIDATION with one generic message.
+  """
+  verifyEmail(code: String!): User! @authenticated
+}
+# The shared notification channels attached to a job, as admins and
+# maintainers see them (D-198). Backup owners get null. Never e-mail
+# addresses, webhook URLs or signing keys; managing channels stays admin
+# only (sharedChannels, attachSharedChannel, ...).
+
+"A shared channel attached to a job."
+type JobSharedChannelAttachment {
+  channelId: UUID!
+  name: String!
+  type: SharedChannelType!
+  "Scheme, host and port of a webhook URL (null for e-mail lists)."
+  displayUrl: String
+  "False while the channel is disabled (by an admin or automatically)."
+  enabled: Boolean!
+  "Groups and events the channel receives for this job; both empty: every non-security event of the job."
+  groups: [NotificationGroup!]!
+  events: [String!]!
+}
+
+extend type Job {
+  "The shared channels attached to this job. Admins and maintainers only (null for backup owners)."
+  sharedChannelAttachments: [JobSharedChannelAttachment!]
 }
 # Backup jobs (task 3.5; D-106, D-142, D-143, D-146). Admins and
 # maintainers manage every job; backup owners (role user, listed in a job's
@@ -1249,6 +1646,15 @@ type Job {
   timeoutSeconds: Int
   "Missed-backup alert window; null means derived from the schedule."
   expectedWindowSeconds: Int
+  """
+  True while the job is in a missed-backup outage: the missed-backup check
+  (every 5 minutes) found a scheduled backup that did not succeed in its
+  window and no backup succeeded since. Cleared by the next successful
+  run.
+  """
+  missed: Boolean!
+  "The first missed occurrence of the current outage (null when not missed)."
+  missedSince: Time
   verification: JobVerification!
   destinations: [JobDestinationRef!]!
   encryption: JobEncryption!
@@ -1275,6 +1681,12 @@ input JobFilter {
   connectionId: UUID
   "Substring of the name or slug (case-insensitive)."
   search: String
+  """
+  Only jobs this user owns (listed in the job's owners). Admins and
+  maintainers only (FORBIDDEN for backup owners, who see only their own
+  jobs anyway).
+  """
+  ownerId: UUID
 }
 
 """
@@ -1485,6 +1897,582 @@ extend type Mutation {
   "Exports every passphrase version of a job for offline recovery (admin; audited, alerted)."
   exportJobPassphrases(jobId: UUID!): JobPassphraseExport! @hasRole(roles: [ADMIN]) @stepUp
 }
+# System health (task 5.6, D-176). Admin only. Values come from a snapshot
+# cached for up to 15 seconds (shared with the Prometheus endpoint).
+
+"The runner as seen through its Health RPC (mTLS)."
+type RunnerHealth {
+  "The runner answered."
+  up: Boolean!
+  "The runner reports the Docker daemon reachable."
+  dockerOk: Boolean!
+  "The runner build version (null when it did not answer)."
+  version: String
+  "Containers the runner is running now (null when it did not answer)."
+  activeRuns: Int
+  "The runner's limit of concurrent containers (null when it did not answer)."
+  maxConcurrentRuns: Int
+}
+
+"The earliest expiry in one component's certificate file."
+type CertificateExpiry {
+  """
+  runner_server (from the runner), runner_client, runner_ca, postgres_ca or
+  postgres_client (from bekup.toml paths).
+  """
+  component: String!
+  notAfter: Time!
+}
+
+"River jobs of one queue in one state."
+type QueueDepth {
+  "backup, restore, retention, notify, maintenance or other."
+  queue: String!
+  "River job state (available, running, retryable, scheduled, ...)."
+  state: String!
+  jobs: Int!
+}
+
+"Operational health of this bekup instance (for the dashboard)."
+type SystemHealth {
+  "When the snapshot was taken."
+  checkedAt: Time!
+  runner: RunnerHealth!
+  "Sorted by component; unreadable files are left out."
+  certificates: [CertificateExpiry!]!
+  "Null when the app database could not be read."
+  queue: [QueueDepth!]
+  "Earliest expiry of a pinned target-database certificate (null: none)."
+  earliestPinNotAfter: Time
+  "The stalest latest successful run across enabled jobs (null: none)."
+  oldestLastSuccess: Time
+  "scheduler.enabled on this instance."
+  schedulerEnabled: Boolean!
+  "This instance's last completed scheduler tick (null: none yet or off)."
+  lastSchedulerTick: Time
+}
+
+extend type Query {
+  "Runner, certificate, queue and scheduler health (admins)."
+  systemHealth: SystemHealth! @hasRole(roles: [ADMIN])
+}
+# Runtime SSRF allowlist (D-120, D-196). Admin only.
+#
+# Every outbound connection of bekup (S3 and SFTP destinations, SMTP,
+# webhooks) goes through the dial-time SSRF guard. Private, shared and
+# special-purpose ranges are denied unless allowlisted; metadata,
+# link-local, multicast, reserved and tunnel ranges (and loopback outside
+# dev mode) are always denied. The effective allowlist is the bootstrap
+# list of `[netguard]` in bekup.toml plus the admin list managed here; a
+# change applies to every serve and worker process within seconds.
+#
+# Every admin entry names the outbound uses it widens (scopes, D-198).
+# The bootstrap list and entries saved without scopes cover every use
+# except personal webhooks: users' personal webhooks reach a private
+# target only through an entry an admin explicitly scoped to
+# PERSONAL_WEBHOOKS.
+
+"An outbound use an allowlist entry widens."
+enum SsrfScope {
+  "S3 and SFTP destinations."
+  DESTINATIONS
+  "The SMTP server."
+  SMTP
+  "Shared notification webhooks (configured by admins)."
+  SHARED_WEBHOOKS
+  """
+  Users' personal webhooks. Any user can enter a webhook URL, so an entry
+  with this scope lets every user make bekup send requests to that private
+  target. Never granted by default.
+  """
+  PERSONAL_WEBHOOKS
+}
+
+"One admin allowlist entry."
+type SsrfAllowlistEntry {
+  "The CIDR or host name (canonical form)."
+  value: String!
+  "The uses it widens (at least one)."
+  scopes: [SsrfScope!]!
+}
+
+"One admin allowlist entry to store."
+input SsrfAllowlistEntryInput {
+  "A CIDR (e.g. 10.20.0.0/16) or a host name (exact or `*.suffix`)."
+  value: String!
+  """
+  The uses it widens (at least one). Null: the scopes stored for the same
+  value, or every use except PERSONAL_WEBHOOKS for a new value.
+  """
+  scopes: [SsrfScope!]
+}
+
+"The SSRF allowlist."
+type SsrfAllowlist {
+  "CIDRs managed here (canonical form, e.g. 10.20.0.0/16), whatever their scopes (legacy: use cidrEntries)."
+  cidrs: [String!]!
+  "Host names managed here (canonical form), whatever their scopes (legacy: use hostEntries)."
+  hosts: [String!]!
+  "CIDRs managed here with their scopes."
+  cidrEntries: [SsrfAllowlistEntry!]!
+  "Host names managed here (exact names or `*.suffix`) with their scopes."
+  hostEntries: [SsrfAllowlistEntry!]!
+  "The scopes the bootstrap entries of bekup.toml apply to (every scope except PERSONAL_WEBHOOKS)."
+  configScopes: [SsrfScope!]!
+  "The scopes of an entry saved without scopes."
+  defaultScopes: [SsrfScope!]!
+  """
+  True when an admin entry carries PERSONAL_WEBHOOKS: users' personal
+  webhooks may reach private targets (a weakened default; show it).
+  """
+  personalWebhooksWidened: Boolean!
+  "The bootstrap CIDRs of `[netguard] allow_cidrs` in bekup.toml (read-only)."
+  configCidrs: [String!]!
+  "The bootstrap host names of `[netguard] allow_hosts` in bekup.toml (read-only)."
+  configHosts: [String!]!
+  "True in dev mode only: loopback ranges may be allowlisted."
+  loopbackAllowed: Boolean!
+  """
+  Stored entries this server does not apply (for example loopback after
+  leaving dev mode); saving the list drops them.
+  """
+  ignoredEntries: Int!
+  "The most entries per list (256)."
+  maxEntries: Int!
+  "When the list was last changed (null: never)."
+  updatedAt: Time
+  "Who changed it last."
+  updatedBy: UUID
+}
+
+input SsrfAllowlistInput {
+  """
+  The complete new list of CIDRs as plain values (each keeps its stored
+  scopes; new values get the default scopes). Give either cidrs or
+  cidrEntries.
+  """
+  cidrs: [String!]
+  """
+  The complete new list of host names as plain values. Give either hosts
+  or hostEntries.
+  """
+  hosts: [String!]
+  "The complete new list of CIDRs with their scopes (replaces the stored one)."
+  cidrEntries: [SsrfAllowlistEntryInput!]
+  "The complete new list of host names with their scopes (replaces the stored one)."
+  hostEntries: [SsrfAllowlistEntryInput!]
+  """
+  The `updatedAt` of the list you edited (null when none was stored):
+  CONFLICT when someone changed it in the meantime.
+  """
+  expectedUpdatedAt: Time
+}
+
+extend type Query {
+  "The SSRF allowlist (bootstrap and admin entries)."
+  ssrfAllowlist: SsrfAllowlist! @hasRole(roles: [ADMIN])
+}
+
+extend type Mutation {
+  """
+  Replaces the admin SSRF allowlist. Every entry is validated like the
+  bootstrap list (VALIDATION with field `cidrs.<i>`, `hosts.<i>`,
+  `cidrEntries.<i>.value`, `cidrEntries.<i>.scopes`, ...): no /0, nothing
+  overlapping an always-denied range, IP literals only as CIDRs, loopback
+  only in dev mode, wildcards not over a public suffix (`*.co.uk`) or a
+  public wildcard-DNS service (nip.io and the like), at least one scope.
+  Audited (setting.changed); adding entries or scopes widens what bekup
+  may connect to and raises a security alert to every admin (stating when
+  personal webhooks gained access).
+  """
+  updateSsrfAllowlist(input: SsrfAllowlistInput!): SsrfAllowlist! @hasRole(roles: [ADMIN]) @stepUp
+}
+# Notifications (task 5.3b; D-161, D-177, D-183, D-191): shared channels
+# (admin), personal channels and the preference matrix (every user for
+# themselves), and the in-app inbox with its live stream.
+#
+# Webhook URLs may embed a bearer credential (Slack, Teams): they are
+# write-only and only shown as `displayUrl` (scheme, host and port). A
+# webhook's signing key is generated by the server and returned exactly
+# once (`signingKey`, on creation and rotation); store it in the receiver.
+
+"A channel column of the preference matrix (push follows in phase 2)."
+enum NotificationChannelType {
+  INBOX
+  EMAIL
+  WEBHOOK
+}
+
+"A group of the event catalog (D-161)."
+enum NotificationGroup {
+  BACKUP
+  RESTORE
+  RETENTION
+  CONFIG
+  SECURITY
+}
+
+"Who can receive an event before preferences apply."
+enum NotificationAudience {
+  "Everyone who may see the job (admins, maintainers, the job's owners)."
+  JOB
+  "Admins and maintainers."
+  STAFF
+  "Admins only."
+  ADMINS
+  "Only the account the event is about."
+  OWN_ACCOUNT
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum NotificationPriority {
+  NORMAL
+  "Collapsed per job within a short window (*.started events)."
+  LOW
+}
+
+"Where an effective preference comes from."
+enum NotificationPreferenceSource {
+  "The D-161 default (inbox for every event, e-mail for problems)."
+  DEFAULT
+  "Your own per-event setting."
+  OVERRIDE
+  "Mandatory (security alerts always reach the inbox and e-mail); locked."
+  MANDATORY
+}
+
+"One event of the catalog."
+type NotificationEventInfo {
+  "The event type, e.g. backup.failed."
+  type: String!
+  label: String!
+  group: NotificationGroup!
+  audience: NotificationAudience!
+  "Problem events go to e-mail by default."
+  problem: Boolean!
+  "Mandatory events always reach the inbox and e-mail."
+  mandatory: Boolean!
+  priority: NotificationPriority!
+  severity: NotificationSeverity!
+  "True for events about a job: per-job overrides and shared channels apply."
+  perJob: Boolean!
+  "The channels on by default."
+  defaultChannels: [NotificationChannelType!]!
+}
+
+"A group of the catalog with the events your role can receive."
+type NotificationEventGroup {
+  group: NotificationGroup!
+  label: String!
+  events: [NotificationEventInfo!]!
+}
+
+"One cell of the preference matrix."
+type NotificationChannelPreference {
+  channel: NotificationChannelType!
+  "The effective value for events without a per-job override."
+  enabled: Boolean!
+  source: NotificationPreferenceSource!
+  "Locked cells cannot be changed (mandatory security channels)."
+  locked: Boolean!
+}
+
+"A per-job override (wins over the per-event setting for that job)."
+type NotificationJobOverride {
+  jobId: UUID!
+  jobName: String!
+  channel: NotificationChannelType!
+  enabled: Boolean!
+}
+
+"One row of the preference matrix."
+type NotificationEventPreference {
+  event: NotificationEventInfo!
+  channels: [NotificationChannelPreference!]!
+  "Overrides for jobs you may still see."
+  jobOverrides: [NotificationJobOverride!]!
+}
+
+type NotificationPreferenceGroup {
+  group: NotificationGroup!
+  label: String!
+  events: [NotificationEventPreference!]!
+}
+
+"Your effective notification preferences."
+type NotificationPreferences {
+  groups: [NotificationPreferenceGroup!]!
+  "False: e-mail notifications are skipped until you verify your address (requestEmailVerification)."
+  emailVerified: Boolean!
+  "Your enabled personal webhooks (the WEBHOOK column needs at least one)."
+  activeWebhooks: Int!
+}
+
+"Delivery health of a channel."
+type NotificationChannelState {
+  enabled: Boolean!
+  disabledAt: Time
+  "Why it is off: manual, repeated_failures or permanent_failures (auto-disabled)."
+  disabledReason: String
+  "A presentable explanation of disabledReason."
+  disabledMessage: String
+  consecutiveFailures: Int!
+  permanentFailures: Int!
+  lastFailureAt: Time
+  "The fixed code of the last failure, e.g. http_status, tls, not_allowed, unreachable."
+  lastFailureCode: String
+}
+
+enum SharedChannelType {
+  EMAIL_LIST
+  WEBHOOK
+}
+
+"A shared channel attached to a job with its event filter."
+type SharedChannelAttachment {
+  jobId: UUID!
+  jobName: String!
+  "Groups and events the channel receives; both empty: every non-security event of the job."
+  groups: [NotificationGroup!]!
+  events: [String!]!
+}
+
+"An admin-managed e-mail list or webhook that receives the events of the jobs it is attached to (never security alerts)."
+type SharedChannel {
+  id: UUID!
+  name: String!
+  type: SharedChannelType!
+  "The addresses of an e-mail list (empty for webhooks)."
+  addresses: [String!]!
+  "Scheme, host and port of a webhook URL (null for e-mail lists)."
+  displayUrl: String
+  state: NotificationChannelState!
+  attachments: [SharedChannelAttachment!]!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+"A shared channel with its new signing key (shown once)."
+type SharedChannelWithKey {
+  channel: SharedChannel!
+  "The new HMAC signing key of a webhook (null for e-mail lists). Shown only now."
+  signingKey: String
+}
+
+"Creates a shared channel: an e-mail list (addresses) or a webhook (url)."
+input CreateSharedChannelInput {
+  "1..100 characters, unique."
+  name: String!
+  type: SharedChannelType!
+  "E-mail list: 1..50 addresses."
+  addresses: [String!]
+  "Webhook: https only, must pass the SSRF guard; never shown again."
+  url: String
+}
+
+"Changes a shared channel; omitted fields stay."
+input UpdateSharedChannelInput {
+  name: String
+  addresses: [String!]
+  "A new webhook URL (the signing key stays; rotate it separately)."
+  url: String
+}
+
+"The events a shared channel receives from one job; both empty: every non-security event."
+input NotificationFilterInput {
+  groups: [NotificationGroup!]
+  "Event types of the catalog (job events only)."
+  events: [String!]
+}
+
+"Filters of your inbox; unset fields do not filter."
+input NotificationInboxFilter {
+  "Only unread notifications."
+  unreadOnly: Boolean
+  "Only events of this group (notices have no group)."
+  group: NotificationGroup
+  "Only these event types (catalog types or notice.webhook_disabled; at most 64). With `group`, both must match."
+  events: [String!]
+}
+
+"The result of a test send. Codes and messages are fixed; the receiver's response is never shown."
+type NotificationTestResult {
+  ok: Boolean!
+  """
+  The failure code (ok on success), e.g. http_status, redirect, tls,
+  not_allowed, unreachable. Personal webhook tests only answer ok,
+  not_allowed or failed.
+  """
+  code: String
+  message: String
+  "The receiver's HTTP status, when it answered (shared channels only; never for personal webhook tests)."
+  statusCode: Int
+}
+
+"One of your personal webhooks."
+type PersonalWebhook {
+  id: UUID!
+  label: String!
+  "Scheme, host and port of the URL."
+  displayUrl: String!
+  state: NotificationChannelState!
+  createdAt: Time!
+}
+
+"A personal webhook with its new signing key (shown once)."
+type PersonalWebhookWithKey {
+  webhook: PersonalWebhook!
+  "The HMAC signing key. Shown only now."
+  signingKey: String!
+}
+
+"Your own notification channels."
+type MyNotificationChannels {
+  "Your e-mail address (the e-mail channel)."
+  email: String!
+  "False: e-mail notifications are skipped; verify with requestEmailVerification."
+  emailVerified: Boolean!
+  emailVerifiedAt: Time
+  webhooks: [PersonalWebhook!]!
+  "The most personal webhooks you may have (5)."
+  maxWebhooks: Int!
+}
+
+"One notification of your in-app inbox."
+type Notification {
+  id: UUID!
+  "The event type (or notice.webhook_disabled)."
+  type: String!
+  "The event's group (null for notices)."
+  group: NotificationGroup
+  severity: NotificationSeverity!
+  title: String!
+  body: String!
+  "A link into the UI."
+  link: String
+  "The minimal event data (job id/name, run id, status, ...); never secrets."
+  data: JSON
+  createdAt: Time!
+  readAt: Time
+}
+
+type NotificationConnection {
+  edges: [NotificationEdge!]!
+  pageInfo: PageInfo!
+}
+
+type NotificationEdge {
+  cursor: String!
+  node: Notification!
+}
+
+type MarkNotificationsReadResult {
+  "How many notifications changed to read."
+  marked: Int!
+  "Your remaining unread notifications."
+  unreadCount: Int!
+}
+
+extend type Query {
+  "The shared channels with their job attachments."
+  sharedChannels: [SharedChannel!]! @hasRole(roles: [ADMIN])
+
+  "The event catalog, grouped, filtered to the events your role can receive."
+  notificationCatalog: [NotificationEventGroup!]! @authenticated
+
+  "Your effective preference matrix (event × channel) with per-job overrides."
+  myNotificationPreferences: NotificationPreferences! @authenticated
+
+  "Your e-mail address and personal webhooks."
+  myNotificationChannels: MyNotificationChannels! @authenticated
+
+  """
+  Your inbox, newest first. `first` is 1..200 (default 50); `after` is the
+  `endCursor` of the previous page. `unreadOnly` is the same as
+  `filter.unreadOnly` (either one set is enough).
+  """
+  notifications(unreadOnly: Boolean, filter: NotificationInboxFilter, first: Int, after: String): NotificationConnection! @authenticated
+
+  unreadNotificationCount: Int! @authenticated
+}
+
+extend type Mutation {
+  "Creates a shared channel (audited). A webhook's signing key is returned once."
+  createSharedChannel(input: CreateSharedChannelInput!): SharedChannelWithKey! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Changes a shared channel (audited)."
+  updateSharedChannel(id: UUID!, input: UpdateSharedChannelInput!): SharedChannel! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Replaces a shared webhook's signing key; the new key is returned once."
+  rotateSharedChannelKey(id: UUID!): SharedChannelWithKey! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Deletes a shared channel with its job attachments."
+  deleteSharedChannel(id: UUID!): Boolean! @hasRole(roles: [ADMIN]) @stepUp
+
+  "Turns a shared channel on (also after an auto-disable; failure counters start afresh)."
+  enableSharedChannel(id: UUID!): SharedChannel! @hasRole(roles: [ADMIN])
+
+  "Turns a shared channel off."
+  disableSharedChannel(id: UUID!): SharedChannel! @hasRole(roles: [ADMIN])
+
+  "Sends a test delivery (rate limited; one per request)."
+  testSharedChannel(id: UUID!): NotificationTestResult! @hasRole(roles: [ADMIN])
+
+  "Attaches a shared channel to a job, or replaces the filter of an existing attachment."
+  attachSharedChannel(jobId: UUID!, channelId: UUID!, filter: NotificationFilterInput): SharedChannel! @hasRole(roles: [ADMIN])
+
+  "Detaches a shared channel from a job."
+  detachSharedChannel(jobId: UUID!, channelId: UUID!): SharedChannel! @hasRole(roles: [ADMIN])
+
+  """
+  Adds a personal webhook (at most 5; https, must pass the SSRF guard).
+  The signing key is returned once.
+  """
+  addMyWebhook(url: String!, label: String!): PersonalWebhookWithKey! @authenticated @stepUp
+
+  "Replaces the signing key of one of your webhooks; the new key is returned once."
+  rotateMyWebhookKey(id: UUID!): PersonalWebhookWithKey! @authenticated @stepUp
+
+  "Deletes one of your webhooks."
+  deleteMyWebhook(id: UUID!): Boolean! @authenticated @stepUp
+
+  """
+  Sends a test delivery to one of your webhooks (rate limited; one per
+  request; also while it is disabled). The result is only ok, not_allowed
+  or failed, without the HTTP status.
+  """
+  testMyWebhook(id: UUID!): NotificationTestResult! @authenticated
+
+  "Turns one of your webhooks on again after it was auto-disabled (failure counters start afresh)."
+  reenableMyWebhook(id: UUID!): PersonalWebhook! @authenticated
+
+  """
+  Sets your preference for an event and channel, per event or (jobId) as
+  an override for one job you may see. Mandatory security channels (INBOX,
+  EMAIL) cannot be changed: VALIDATION.
+  """
+  setNotificationPreference(event: String!, channel: NotificationChannelType!, enabled: Boolean!, jobId: UUID): NotificationEventPreference! @authenticated
+
+  "Resets your preferences to the defaults, or (jobId) removes the overrides of one job."
+  resetNotificationPreferences(jobId: UUID): NotificationPreferences! @authenticated
+
+  "Marks notifications read: the given ids (at most 200) or all."
+  markNotificationsRead(ids: [UUID!], all: Boolean): MarkNotificationsReadResult! @authenticated
+
+  """
+  Deletes one of your notifications. Security notifications
+  (security.account, security.system) cannot be deleted, only marked read
+  (VALIDATION).
+  """
+  deleteNotification(id: UUID!): Boolean! @authenticated
+}
+
 # Restores (task 4.5, D-167). Admins and maintainers restore into any
 # connection with the backup's engine (admins also into temporary restore
 # connections); backup owners only into the databases their own jobs back
@@ -1833,6 +2821,16 @@ extend type Subscription {
   after the restore finished. Same access as `restore`.
   """
   restoreUpdated(restoreId: UUID!): Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  Changes of every restore you may view (admins and maintainers: all;
+  backup owners: their own jobs' restores), including new ones. Each event
+  is the restore re-loaded and authorized again when it is delivered.
+  Events are coalesced per restore and delivered at most 20 per second;
+  after possibly lost events the restores changed since are re-sent. One
+  stream counts against the per-session cap: open one per page.
+  """
+  restoresUpdated: Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }
 # Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
 # see every run; backup owners see the runs and artifacts of the jobs they
@@ -2033,6 +3031,94 @@ type RunItem {
   warnings: [RunWarning!]!
   "The objects of this item, one per destination."
   artifacts: [Artifact!]!
+  """
+  The completeness evidence of a complete, verified dump (D-141, D-151):
+  the source statistics taken for it. Null when none was recorded (failed
+  or unverified dumps, statistics unavailable).
+  """
+  stats: RunItemStats
+}
+
+"How the statistics of a dump were taken (D-151)."
+enum StatsLevel {
+  "Planner estimates (PostgreSQL) or information_schema (MySQL/MariaDB)."
+  STANDARD
+  "Exact row counts where the engine allows them (PostgreSQL)."
+  DEEP
+}
+
+"Whether the statistics describe exactly what was dumped."
+enum StatsConsistency {
+  "PostgreSQL: taken inside the snapshot the dump used; exact counts match the dump."
+  SNAPSHOT
+  "Taken right before the dump (MySQL/MariaDB, globals); rows may have changed since."
+  APPROXIMATE
+}
+
+"How a table's row count was obtained."
+enum RowCountKind {
+  EXACT
+  ESTIMATE
+  "Not counted (time limit, budget or failure); rows is null."
+  UNKNOWN
+}
+
+"The number of objects of one kind (e.g. tables, views, roles)."
+type StatsObjectCount {
+  "The object kind: schemas, tables, views, materialized_views, sequences, functions, procedures, triggers, extensions, events, roles or tablespaces."
+  kind: String!
+  count: Float!
+}
+
+"The row count of one table (names and counts only, never data)."
+type TableStats {
+  "Schema-qualified on PostgreSQL (schema.table); the table name on MySQL/MariaDB."
+  name: String!
+  "Null when the count is UNKNOWN."
+  rows: Float
+  count: RowCountKind!
+  "count is EXACT."
+  exact: Boolean!
+  "count is ESTIMATE."
+  estimate: Boolean!
+  "count is UNKNOWN."
+  unknown: Boolean!
+  "Taken outside the dump's snapshot (MySQL/MariaDB)."
+  approximate: Boolean!
+}
+
+"A completeness warning or notice of the statistics (codes and object names only)."
+type StatsFinding {
+  code: String!
+  "The number of affected objects."
+  count: Float!
+  "Some affected object names (at most 50)."
+  objects: [String!]!
+  "More objects are affected than listed."
+  truncated: Boolean!
+}
+
+"""
+The completeness evidence of one run item (backup_stats, D-141/D-151/D-153).
+Bounded by what is stored: at most 10000 tables (tablesTruncated beyond
+that) and 32 findings of 50 objects each.
+"""
+type RunItemStats {
+  level: StatsLevel!
+  consistency: StatsConsistency!
+  "Object counts by kind, ordered by kind."
+  objects: [StatsObjectCount!]!
+  "Per-table row counts, ordered by name (empty for the globals)."
+  tables: [TableStats!]!
+  "The number of tables in the database (may exceed the listed tables)."
+  tablesTotal: Int!
+  "Not every table is listed (the statistics table limit)."
+  tablesTruncated: Boolean!
+  "Completeness warnings (privileges, non-transactional tables, timeouts, ...)."
+  warnings: [StatsFinding!]!
+  "Informational findings that are not warnings."
+  notices: [StatsFinding!]!
+  recordedAt: Time!
 }
 
 "The signed manifests of a run."
@@ -2225,6 +3311,25 @@ extend type Subscription {
   `runLogs`, checked again for every batch.
   """
   runLogAppended(runId: UUID!, afterId: ID): RunLogBatch! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+
+  """
+  The run page stream (D-197): changes of one run (as runUpdated with
+  `runId`) and its new log lines after `afterLogId` (as runLogAppended),
+  in one stream. Each event sets exactly one of its fields and is
+  re-loaded and re-authorized when it is delivered (run.view for `run`,
+  run.logs_view for `logs`). After the `done` log batch the stream sends
+  the run's final state once more and completes. Needs access to both
+  the run and its logs.
+  """
+  runActivity(runId: UUID!, afterLogId: ID): RunActivity! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+"One event of runActivity: exactly one field is set."
+type RunActivity {
+  "The run changed (its state at delivery)."
+  run: Run
+  "New log lines (the last batch has done set)."
+  logs: RunLogBatch
 }
 # bekup GraphQL schema: shared scalars, directives and types (task 1.2).
 # Feature tasks add their own *.graphqls files next to this one and extend
@@ -2290,6 +3395,26 @@ type ServerInfo {
   "True when dev mode is on (never in production)."
   devMode: Boolean!
 }
+# Reference list of the security.system alert kinds (D-190, D-198).
+# Admin only. The server decides what raises an alert; this list only
+# documents it so clients need not hard-code it.
+
+"One security.system alert kind."
+type SecurityAlertType {
+  "The kind (data.kind of the notification), e.g. ssrf_allowlist_widened."
+  kind: String!
+  "Its fixed severity."
+  severity: NotificationSeverity!
+  "What raises it."
+  description: String!
+  "How often it is sent, e.g. `every time` or `once a day`."
+  repeat: String!
+}
+
+extend type Query {
+  "Every security.system alert kind, most severe first."
+  securityAlertTypes: [SecurityAlertType!]! @hasRole(roles: [ADMIN])
+}
 # Subscriptions (tasks 1.10 and 2.13, D-050, D-105). Subscriptions run only
 # as Server-Sent Events: POST /graphql with Content-Type application/json and
 # Accept: text/event-stream, one subscription per request (graphql-sse,
@@ -2301,14 +3426,49 @@ type ServerInfo {
 # later), then the complete event. Every event is re-authorized when it is
 # delivered.
 
+#
+# Stream budget (D-197): a session may hold graphql.stream_max_per_session
+# streams (default 4). The web client keeps one accountEvents stream per
+# browser (shared across tabs) and at most one page stream per tab.
+
 type Subscription {
   """
-  Changes to your own sessions (one revoked or rotated, or all of them
-  revoked), e.g. to refresh the session list. When the change ends the
-  session of this stream, the stream ends with its final error event (see
-  above) and the notice may not arrive first.
+  The account stream: changes to your own sessions (one revoked or
+  rotated, or all of them revoked) and new notifications of your own
+  inbox, in one stream. Each event sets exactly one of its fields and is
+  re-loaded for this stream's account and re-authorized when it is
+  delivered. When a session change ends the session of this stream, the
+  stream ends with its final error event (see above) and the notice may
+  not arrive first. Without the notification service only session events
+  arrive.
   """
-  sessionEvents: SessionEvent! @authenticated
+  accountEvents: AccountEvent! @authenticated
+
+  """
+  The dashboard stream: changes of every run you may view (like
+  runUpdated without a filter) and of every restore you may view (like
+  restoresUpdated), in one stream. Each event sets exactly one of its
+  fields and is re-loaded and re-authorized when it is delivered (backup
+  owners receive their jobs' runs and restores at that moment only).
+  Events are coalesced per run and per restore, as in the single streams.
+  """
+  activityUpdated: ActivityEvent! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+"One event of accountEvents: exactly one field is set."
+type AccountEvent {
+  "A change to one or all of your sessions."
+  session: SessionEvent
+  "A new notification of your inbox."
+  notification: Notification
+}
+
+"One event of activityUpdated: exactly one field is set."
+type ActivityEvent {
+  "A run changed (its state at delivery)."
+  run: Run
+  "A restore changed or was created (its state at delivery)."
+  restore: Restore
 }
 
 "What happened to a session."
@@ -2757,6 +3917,18 @@ extend type User {
   updatedAt: Time!
   "Set when the account was deleted (only visible to admins listing deleted accounts)."
   deletedAt: Time
+  """
+  The most recent activity of any of the account's sessions; null when
+  none is on record. Admins only (FORBIDDEN otherwise); loaded for a whole
+  page of users at once.
+  """
+  lastSeenAt: Time
+  """
+  True when the account has a second factor (a TOTP authenticator or a
+  passkey). Admins and the account itself only (FORBIDDEN otherwise);
+  loaded for a whole page of users at once.
+  """
+  twoFactorEnrolled: Boolean!
 }
 
 extend type LoginResult {
@@ -2776,6 +3948,15 @@ extend type Query {
 
   "One account (also a deleted one); null when it does not exist."
   user(id: UUID!): User @hasRole(roles: [ADMIN])
+
+  """
+  Minimal facts of the accounts that are not deleted, for picking job
+  owners (admins and maintainers; D-106, D-184). Ordered by e-mail address;
+  `search` is a case-insensitive substring of the e-mail address or display
+  name (at most 200 characters); `first` is 1..200 (default 50); `after` is
+  the `endCursor` of the previous page.
+  """
+  userDirectory(search: String, first: Int, after: String): UserDirectoryConnection! @hasRole(roles: [ADMIN, MAINTAINER])
 
   "The active sessions of an account, most recently used first."
   userSessions(userId: UUID!): [Session!]! @hasRole(roles: [ADMIN])
@@ -2876,6 +4057,29 @@ type UserConnection {
 type UserEdge {
   cursor: String!
   node: User!
+}
+
+"""
+An account in the user directory: only what picking a job owner needs
+(only role USER gains owner rights, D-067).
+"""
+type UserDirectoryEntry {
+  id: UUID!
+  displayName: String!
+  email: String!
+  role: Role!
+  disabled: Boolean!
+}
+
+"A page of the user directory."
+type UserDirectoryConnection {
+  edges: [UserDirectoryEdge!]!
+  pageInfo: PageInfo!
+}
+
+type UserDirectoryEdge {
+  cursor: String!
+  node: UserDirectoryEntry!
 }
 
 "A newly created account and its one-time temporary password."

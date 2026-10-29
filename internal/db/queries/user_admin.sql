@@ -97,3 +97,32 @@ DELETE FROM webauthn_ceremonies WHERE user_id = $1;
 SELECT EXISTS (
     SELECT 1 FROM users WHERE role = 'admin' AND NOT disabled AND deleted_at IS NULL
 ) AS exists;
+
+-- ListUserDirectory pages the minimal facts of accounts that are not
+-- deleted (the owner picker for admins and maintainers, D-184): no
+-- password, lockout, 2FA or session state. Same order and cursor as
+-- ListUsers.
+-- name: ListUserDirectory :many
+SELECT id, email, display_name, role, disabled FROM users
+WHERE deleted_at IS NULL
+  AND (sqlc.narg(search)::text IS NULL
+       OR email::text ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\'
+       OR display_name ILIKE '%' || sqlc.narg(search)::text || '%' ESCAPE '\')
+  AND (sqlc.narg(after_email)::text IS NULL
+       OR (lower(email::text), id) > (lower(sqlc.narg(after_email)::text), sqlc.narg(after_id)::uuid))
+ORDER BY lower(email::text), id
+LIMIT @lim;
+
+-- UserActivityFacts returns, for each given account, its most recent
+-- session activity ('epoch' when none; sessions still waiting for their
+-- second factor do not count) and whether it has a second factor (TOTP or
+-- a passkey). One query for a page of users (D-184).
+-- name: UserActivityFacts :many
+SELECT u.id,
+       COALESCE((SELECT max(s.last_seen_at) FROM sessions s
+                  WHERE s.user_id = u.id AND NOT s.mfa_pending),
+                'epoch'::timestamptz)::timestamptz AS last_seen_at,
+       (u.totp_enabled_at IS NOT NULL
+        OR EXISTS (SELECT 1 FROM webauthn_credentials w WHERE w.user_id = u.id))::boolean AS two_factor_enrolled
+FROM users u
+WHERE u.id = ANY(@ids::uuid[]);

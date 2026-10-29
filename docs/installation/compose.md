@@ -166,6 +166,9 @@ Bind the runner's listener to its `runner-ctl` address
 (`[listen] address = "10.213.251.10:7443"`) and `serve` to its `frontend`
 address (`[server] listen = "10.213.250.10:8080"`), so neither port is
 reachable from the other networks, including the runner's per-run networks.
+Likewise bind the Prometheus endpoint to serve's address on the internal
+`metrics` network (`[metrics] listen = "10.213.252.10:9464"`); it is never
+published (see [Operations: metrics](../operations.md#metrics)).
 
 ## Configuration files
 
@@ -317,6 +320,23 @@ The web stage builds `web/` with pnpm (`--frozen-lockfile`) when
 `web/package.json` exists, and otherwise embeds a placeholder page, so the
 image always builds. The version comes from `--build-arg VERSION` or the
 `VERSION` file and is validated as SemVer before it is passed to `-ldflags`.
+
+### Using your own image
+
+To run an image you built and pushed yourself (for example with
+`just publish`, see [development.md](../development.md#publishing-your-own-image)),
+pin it by digest, never by a mutable tag (a `sha-…-dirty` tag in particular
+is overwritten by the next dirty build of the same commit):
+
+```sh
+# .env next to docker-compose.yml (or the environment)
+BEKUP_IMAGE=registry.example.com/team/bekup@sha256:<digest printed by just publish>
+```
+
+On a private registry, run `docker login registry.example.com` on the host
+before `docker compose pull`. Verify what you pin with
+`docker buildx imagetools inspect <repo>@sha256:…` (platforms, SBOM and
+provenance attestations).
 
 ## Development stack
 

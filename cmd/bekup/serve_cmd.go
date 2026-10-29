@@ -23,14 +23,15 @@ func newServeCmd(g *globalFlags) *cobra.Command {
 			"without workers (scale them out with `bekup worker`). Refuses to start when the database role\n" +
 			"is privileged, the schema version differs from this binary (run `bekup migrate` first) or the\n" +
 			"master keyring does not match. SIGINT/SIGTERM drain in-flight requests within\n" +
-			"server.shutdown_timeout and running jobs within workers.shutdown_timeout.",
+			"server.shutdown_timeout and running jobs within workers.shutdown_timeout. SIGHUP re-reads\n" +
+			"bekup.toml and applies the keys that are safe to change at runtime (D-200).",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			res, err := config.LoadBekup(g.options(c))
 			if err != nil {
 				return fmt.Errorf("invalid configuration:\n%w", err)
 			}
-			logger, err := newLogger(c.ErrOrStderr(), res)
+			logger, level, err := newLevelLogger(c.ErrOrStderr(), res)
 			if err != nil {
 				return err
 			}
@@ -39,13 +40,20 @@ func newServeCmd(g *globalFlags) *cobra.Command {
 			logLoaded(c, logger, res.Path, res.Warnings)
 			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			hup, stopHUP := reloadSignals()
+			defer stopHUP()
 			return app.Run(ctx, app.Options{
-				Config:   res.Config,
-				Dev:      res.Dev,
-				Logger:   logger,
-				UI:       web.DistFS(),
-				Version:  version,
-				NoWorker: noWorker,
+				Config:        res.Config,
+				Dev:           res.Dev,
+				Logger:        logger,
+				UI:            web.DistFS(),
+				Version:       version,
+				NoWorker:      noWorker,
+				LoadOptions:   g.options(c),
+				ConfigPath:    res.Path,
+				Warnings:      res.Warnings,
+				LogLevel:      level,
+				ReloadSignals: hup,
 			})
 		},
 	}
@@ -61,26 +69,34 @@ func newWorkerCmd(g *globalFlags) *cobra.Command {
 			"housekeeping) as bekup_app, without HTTP and without the scheduler, to scale work out next to\n" +
 			"`bekup serve --no-worker`. Same startup checks as serve (database role, schema version,\n" +
 			"master keyring). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within\n" +
-			"workers.shutdown_timeout, then cancel them.",
+			"workers.shutdown_timeout, then cancel them. SIGHUP re-reads bekup.toml and applies the\n" +
+			"keys that are safe to change at runtime (D-200).",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			res, err := config.LoadBekup(g.options(c))
 			if err != nil {
 				return fmt.Errorf("invalid configuration:\n%w", err)
 			}
-			logger, err := newLogger(c.ErrOrStderr(), res)
+			logger, level, err := newLevelLogger(c.ErrOrStderr(), res)
 			if err != nil {
 				return err
 			}
 			logLoaded(c, logger, res.Path, res.Warnings)
 			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			hup, stopHUP := reloadSignals()
+			defer stopHUP()
 			return app.Run(ctx, app.Options{
-				Config:  res.Config,
-				Dev:     res.Dev,
-				Logger:  logger,
-				Version: version,
-				Mode:    app.ModeWorker,
+				Config:        res.Config,
+				Dev:           res.Dev,
+				Logger:        logger,
+				Version:       version,
+				Mode:          app.ModeWorker,
+				LoadOptions:   g.options(c),
+				ConfigPath:    res.Path,
+				Warnings:      res.Warnings,
+				LogLevel:      level,
+				ReloadSignals: hup,
 			})
 		},
 	}

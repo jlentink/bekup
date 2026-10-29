@@ -505,9 +505,27 @@ func TestIntegrationDeletionCapAndDryRun(t *testing.T) {
 		e.assertRun(r, "present", true)
 	}
 
-	// Cap 3: the oldest run (2 objects) and the next run's dump go; its
-	// manifest waits for the next sweep.
-	res, err = e.worker(func(o *Options) { o.MaxDeletions = 3 }).Sweep(t.Context(), j.id, queue.RetentionDaily, false)
+	// A config reload turning retention.dry_run on applies to the next
+	// sweep (D-200).
+	commit, err := w.PrepareLimits(Limits{DryRun: true, MaxDeletions: 500, PartialCleanupAge: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit()
+	if err := w.Work(t.Context(), &river.Job[queue.RetentionSweepArgs]{Args: queue.RetentionSweepArgs{JobID: &j.id, Reason: queue.RetentionDaily}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range runs {
+		e.assertRun(r, "present", true)
+	}
+
+	// Cap 3 (set by a reload): the oldest run (2 objects) and the next
+	// run's dump go; its manifest waits for the next sweep.
+	if commit, err = w.PrepareLimits(Limits{MaxDeletions: 3, PartialCleanupAge: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	commit()
+	res, err = w.Sweep(t.Context(), j.id, queue.RetentionDaily, false)
 	if err != nil {
 		t.Fatal(err)
 	}

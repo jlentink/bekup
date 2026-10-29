@@ -3,6 +3,7 @@ package resolvers
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/google/uuid"
@@ -403,6 +404,9 @@ func destinationModel(d *destinations.Destination, full bool) *model.Destination
 		ObjectLockMode: lockModeModel(d.ObjectLockMode), Ready: d.Ready,
 		CreatedAt: d.CreatedAt, UpdatedAt: d.UpdatedAt,
 	}
+	if lt := d.LastTest; lt != nil {
+		m.LastTest = &model.DestinationLastTest{At: lt.At, Ok: lt.OK, Code: nonEmpty(lt.Code), Stale: lt.Stale}
+	}
 	if m.ObjectLockMode != nil {
 		days := d.ObjectLockRetentionDays
 		m.ObjectLockRetentionDays = &days
@@ -462,4 +466,27 @@ func nonEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+// destinationUsage serves Query.destinationUsage (staff, D-196).
+func (r *Resolver) destinationUsage(ctx context.Context) ([]model.DestinationUsage, error) {
+	svc, _, _, err := r.destinationCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Authz.Authorize(ctx, authz.OpStorageUsageView); err != nil {
+		return nil, err
+	}
+	list, err := svc.Usage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.DestinationUsage, 0, len(list))
+	for _, u := range list {
+		out = append(out, model.DestinationUsage{
+			DestinationID: u.ID, Name: u.Name, Type: destinationTypeModel(u.Type),
+			StoredBytes: float64(u.StoredBytes), ArtifactCount: int(min(u.ArtifactCount, math.MaxInt32)),
+		})
+	}
+	return out, nil
 }

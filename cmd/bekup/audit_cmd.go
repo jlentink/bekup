@@ -104,7 +104,7 @@ func newAuditSignHeadCmd(g *globalFlags) *cobra.Command {
 			if strings.TrimSpace(exportFile) != "" {
 				exp = audit.FileExporter{Path: exportFile}
 			}
-			a := audit.New(pool, audit.Options{})
+			a := newCLIAuditor(pool)
 			h, err := audit.NewHeadSigner(pool, kr, a, exp).SignHead(c.Context())
 			if err != nil && !errors.Is(err, audit.ErrExportFailed) {
 				return err

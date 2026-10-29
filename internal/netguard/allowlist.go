@@ -6,6 +6,8 @@ import (
 	"net/netip"
 	"strings"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/jlentink/bekup/internal/hostname"
 )
 
@@ -130,9 +132,39 @@ func normalizeHost(h string) string { return hostname.Normalize(h) }
 // refuses.
 func validHostName(h string) bool { return hostname.Validate(h) == nil }
 
+// wildcardDNSServices are public services that resolve names under them
+// to any address encoded in the name (10-0-0-5.nip.io → 10.0.0.5) or to
+// loopback. An allowlist entry under one of them would let anyone pick
+// the private address a name resolves to, so they are refused (exact and
+// wildcard entries).
+var wildcardDNSServices = []string{
+	"nip.io", "sslip.io", "xip.io", "nip.direct", "localtest.me", "lvh.me",
+	"vcap.me", "traefik.me", "localhost.direct", "1u.ms", "lacolhost.com",
+}
+
+// underWildcardDNSService reports whether h is one of wildcardDNSServices
+// or a name under one.
+func underWildcardDNSService(h string) bool {
+	for _, d := range wildcardDNSServices {
+		if h == d || strings.HasSuffix(h, "."+d) {
+			return true
+		}
+	}
+	return false
+}
+
+// isPublicSuffix reports whether h is itself a public suffix (ICANN or
+// private section of the Public Suffix List, e.g. co.uk or github.io):
+// a wildcard under it would match names anyone can register.
+func isPublicSuffix(h string) bool {
+	ps, _ := publicsuffix.PublicSuffix(h)
+	return ps == h
+}
+
 // parseHostPattern validates an allowlist host entry: an exact host name or
-// "*.suffix" with at least two labels in the suffix. IP literals are
-// rejected (use a CIDR).
+// "*.suffix" with at least two labels in the suffix, where the suffix is
+// not a public suffix (*.co.uk). IP literals and names under public
+// wildcard-DNS services (nip.io and the like) are rejected.
 func parseHostPattern(s string) (pattern string, wildcard bool, err error) {
 	h := normalizeHost(s)
 	if rest, ok := strings.CutPrefix(h, "*."); ok {
@@ -142,6 +174,12 @@ func parseHostPattern(s string) (pattern string, wildcard bool, err error) {
 		if _, err := netip.ParseAddr(rest); err == nil {
 			return "", false, fmt.Errorf("invalid wildcard host %q", s)
 		}
+		if isPublicSuffix(rest) {
+			return "", false, fmt.Errorf("wildcard host %q covers a public suffix (anyone can register names under it)", s)
+		}
+		if underWildcardDNSService(rest) {
+			return "", false, fmt.Errorf("wildcard host %q is under a public wildcard-DNS service", s)
+		}
 		return "." + rest, true, nil
 	}
 	if _, err := netip.ParseAddr(h); err == nil {
@@ -149,6 +187,9 @@ func parseHostPattern(s string) (pattern string, wildcard bool, err error) {
 	}
 	if !validHostName(h) {
 		return "", false, fmt.Errorf("invalid host name %q (no scheme, port or path)", s)
+	}
+	if underWildcardDNSService(h) {
+		return "", false, fmt.Errorf("host %q is under a public wildcard-DNS service", s)
 	}
 	return h, false, nil
 }
@@ -181,3 +222,90 @@ func buildAllowlist(cidrs, hosts []string, loopbackSoft bool) (*allowlist, error
 	}
 	return a, nil
 }
+
+// Allowlist list names of EntryError.
+const (
+	ListCIDRs = "cidrs"
+	ListHosts = "hosts"
+)
+
+// EntryError is one rejected allowlist entry: the list it belongs to
+// (ListCIDRs or ListHosts), its index there and a presentable reason
+// (it quotes the entry, never anything else).
+type EntryError struct {
+	List  string
+	Index int
+	// Field is "" for the entry's value and "scopes" for its scopes
+	// (Set.NormalizeEntries).
+	Field   string
+	Message string
+}
+
+func (e *EntryError) Error() string {
+	if e.Field != "" {
+		return fmt.Sprintf("netguard: %s[%d].%s: %s", e.List, e.Index, e.Field, e.Message)
+	}
+	return fmt.Sprintf("netguard: %s[%d]: %s", e.List, e.Index, e.Message)
+}
+
+// NormalizeAllowlist validates every entry exactly like SetAllowlist and
+// returns the canonical forms (CIDRs masked, IPv4-mapped prefixes
+// unmapped; host names lowercased without a trailing dot, wildcards as
+// "*.suffix"), in input order without duplicates, plus one EntryError per
+// rejected entry. Callers that must not apply a partially valid list
+// check errs first.
+func (g *Guard) NormalizeAllowlist(cidrs, hosts []string) (outCIDRs, outHosts []string, errs []*EntryError) {
+	outCIDRs, outHosts = []string{}, []string{}
+	seen := map[string]bool{}
+	for i, s := range cidrs {
+		p, err := parseAllowPrefix(s, g.loopbackSoft)
+		if err != nil {
+			errs = append(errs, &EntryError{List: ListCIDRs, Index: i, Message: err.Error()})
+			continue
+		}
+		c := p.String()
+		if !seen["c:"+c] {
+			seen["c:"+c] = true
+			outCIDRs = append(outCIDRs, c)
+		}
+	}
+	for i, s := range hosts {
+		pat, wildcard, err := parseHostPattern(s)
+		if err != nil {
+			errs = append(errs, &EntryError{List: ListHosts, Index: i, Message: err.Error()})
+			continue
+		}
+		h := pat
+		if wildcard {
+			h = "*" + pat
+		}
+		if !seen["h:"+h] {
+			seen["h:"+h] = true
+			outHosts = append(outHosts, h)
+		}
+	}
+	return outCIDRs, outHosts, errs
+}
+
+// normalizeValue validates one entry of list (ListCIDRs or ListHosts)
+// and returns its canonical form.
+func (g *Guard) normalizeValue(list, value string) (string, error) {
+	if list == ListCIDRs {
+		p, err := parseAllowPrefix(value, g.loopbackSoft)
+		if err != nil {
+			return "", err
+		}
+		return p.String(), nil
+	}
+	pat, wildcard, err := parseHostPattern(value)
+	if err != nil {
+		return "", err
+	}
+	if wildcard {
+		return "*" + pat, nil
+	}
+	return pat, nil
+}
+
+// LoopbackAllowable reports whether loopback may be allowlisted (dev mode).
+func (g *Guard) LoopbackAllowable() bool { return g.loopbackSoft }

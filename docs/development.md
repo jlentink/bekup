@@ -36,6 +36,8 @@ Recipes whose tooling arrives in a later task fail with
 | dev | `just` / `just help` | Styled help screen |
 | dev | `just dev` | Starts the dev infrastructure (app Postgres with TLS, mailpit, adminer; all on `127.0.0.1`), generating missing dev keys first, and applies the migrations natively (see [Local development](#local-development)) |
 | dev | `just run` | Builds `bin/bekup-dev`, migrates and runs `bekup serve` natively in dev mode on `http://localhost:8080` |
+| dev | `just run-watch` | Like `just run`, but with [air](https://github.com/air-verse/air) (`.air.toml`): rebuilds, applies new migrations and restarts `serve` when Go, SQL, GraphQL, proto or TOML files change (needs `air`, see `just doctor`) |
+| dev | `just dev-runner` | Starts only the runner (mTLS gRPC on `127.0.0.1:7443`) and the sample target DBs for a native `serve` (D-201) |
 | dev | `just dev-migrate` | Applies the migrations natively as `bekup_owner` |
 | dev | `just admin-create <email> <name>` | Creates an admin account on the dev DB (`bekup admin create`; password prompted on the terminal) |
 | dev | `just web-dev` | Vite dev server with hot reload on `http://localhost:5173`, proxying the API to `:8080` |
@@ -44,7 +46,7 @@ Recipes whose tooling arrives in a later task fail with
 | dev | `just gen` | Runs sqlc, `buf generate` (runner API: `proto/` → `internal/runnerpb`), gqlgen, graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
 | quality | `just lint` | `golangci-lint` (incl. gosec, also `integration`-tagged files), `sqlc vet` + `sqlc diff`, `buf lint` + `buf format --diff` (+ `buf breaking` against `main` once `proto/` exists there); with `web/`: eslint + `tsc --noEmit` |
 | quality | `just test` | Script tests, `go test -race ./...`; with `web/`: vitest |
-| quality | `just test-scripts` | Tests for the release scripts (semver math, bump refusals, happy path) |
+| quality | `just test-scripts` | Tests for the release scripts (semver math, bump refusals, happy path, `just publish`) |
 | quality | `just test-int` | Integration tests (`-tags integration`, testcontainers; needs Docker) |
 | quality | `just test-e2e` | Playwright E2E (`web` script `test:e2e`) |
 | security | `just sec` | `govulncheck` + `osv-scanner`; fails if a scanner is missing |
@@ -58,6 +60,7 @@ Recipes whose tooling arrives in a later task fail with
 | docs | `just docs` | Regenerates the key reference in `docs/configuration.md`; later also `docs/reference/` (CLI reference from cobra, task 7.5; GraphQL schema, task 1.2) |
 | release | `just bump [level]` | Version bump, changelog, signed commit and tag (see below) |
 | release | `just release` | Asks for confirmation, verifies the signed tag, pushes `main` + tag |
+| release | `just publish [repo] [--dirty] [--yes] [--dry-run]` | Builds a multi-arch image (provenance + SBOM) and pushes it to your own registry; prints the digest pin (see [below](#publishing-your-own-image), D-202) |
 
 Recipe arguments are passed to the shell as positional parameters, never
 pasted into the script text, and are validated by the recipe (D-071). Longer
@@ -88,18 +91,40 @@ just dev-down                                # stop the containers (data is kept
   is missing (it never overwrites existing files without `--force`). Besides
   the container files in `secrets/` it writes `secrets/local/` for native
   processes: both role URLs pointing at `127.0.0.1:<port>`, and copies of
-  the master keyring and the DB CA bundle. The dev postgres certificate
+  the master keyring, the DB CA bundle and serve's runner client
+  certificate (`bekup_client.{crt,key}`, `bekup_ca.crt`). The dev postgres certificate
   names `postgres`, `localhost` and `127.0.0.1`, so the host connects with
   `verify-full` against the dev CA, exactly like production. A dev PKI from
   before D-114 is re-issued automatically (and the postgres container
   re-created).
-- **Native config.** `just run`, `just dev-migrate` and `just admin-create`
+- **Native config.** `just run`, `just run-watch`, `just dev-migrate` and `just admin-create`
   use `deploy/dev/bekup.local.toml` (dev mode, `listen =
   "127.0.0.1:8080"`, `base_url = "http://localhost:8080"`); the justfile
   sets the absolute `*_file` paths into `secrets/local/` through
   `BEKUP_DATABASE_URL_FILE`, `BEKUP_DATABASE_TLS_CA_FILE` and
-  `BEKUP_SECURITY_MASTER_KEY_FILE`. Only the migration step gets
-  `BEKUP_DATABASE_OWNER_URL_FILE`; `serve` never sees the owner URL.
+  `BEKUP_SECURITY_MASTER_KEY_FILE` and `BEKUP_RUNNER_{CERT,KEY,CA}_FILE`.
+  Only the migration step gets `BEKUP_DATABASE_OWNER_URL_FILE`; `serve`
+  never sees the owner URL. `just dev` starts no runner: `serve` points at
+  `127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}` (`BEKUP_RUNNER_ADDRESS`),
+  connects lazily and logs `runner health check failed`; connection tests,
+  backups and restores fail until a runner listens there.
+- **Local storage.** The native environment points `storage.disk_root` at
+  `.dev-data/backups` and `storage.scratch_dir` at `.dev-data/scratch`
+  (gitignored, created 0700). Add a **Disk** destination with a relative
+  path such as `local`; its encrypted backups land in
+  `.dev-data/backups/local/`. `just db-reset` does not touch `.dev-data/`:
+  delete it by hand to start over.
+- **Dev runner for native serve.** `just dev-runner` (compose profile
+  `runner`, D-201) starts only the runner (`runner-host`) and the sample
+  targets (`pg15`, `pg15-tunneled`, `mysql`, `mariadb`, `bastion`) next to
+  `just dev`, `just run` and `just web-dev`. Its mTLS gRPC port is published
+  on `127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}` from a dedicated
+  `runner-host` network (the production `runner-ctl` network is internal, so
+  Docker cannot publish from it); it is not on `backend`/`dev-host` and does
+  not listen on `targets`. The recipe sets `DOCKER_GID=0` on macOS (Docker
+  Desktop) unless set. Use the host names above in connections; the
+  runner's allowlist is `deploy/dev/runner.dev.toml`. Do not run it together
+  with `just dev-full` (same sample targets).
 - **Plain HTTP.** `serve` logs the D-095 warning at every start and the UI
   shows the red "not encrypted" banner; both are expected in dev. Passkeys
   work, because browsers treat `localhost` as a secure context. `serve`
@@ -234,6 +259,75 @@ so they show up in the changelog.
 the annotated tag `v$(cat VERSION)` and that its signature verifies, then runs
 `git push --atomic origin main vX.Y.Z`.
 
+## Publishing your own image
+
+`just publish` (`scripts/publish.sh`, D-202) builds the `runtime` image for
+several platforms and pushes it to a registry **you** run or rent. It is the
+operator's own push; official releases (signed, task 7.4) come from the
+release workflow, and `publish` never touches git tags or `CHANGELOG.md`.
+
+The registry is never committed. It is taken from, in this order:
+
+1. the recipe argument: `just publish registry.example.com/team/bekup`;
+2. the environment variable `BEKUP_IMAGE_REPO`;
+3. the gitignored file `.just.env` in the repository root (copy
+   [`.just.env.example`](../.just.env.example); `chmod 0600 .just.env`).
+
+`.just.env` is parsed, never sourced: only `KEY=value` lines for
+`BEKUP_IMAGE_REPO` and `BEKUP_PLATFORMS` are read (optional `export` prefix
+and matching quotes; no expansion), other keys are ignored with a warning, and
+the file is refused when it is a symlink, not owned by you, or group- or
+world-writable. It is also excluded from the Docker build context.
+
+The repository is `host[:port]/path`, lowercase, with an explicit registry
+host (`docker.io/<user>/bekup` for Docker Hub), and without tag, digest,
+scheme or `user:pass@`. Credentials only come from your own
+`docker login <registry>`; they never pass through the recipe.
+
+```sh
+docker login registry.example.com
+just publish --dry-run                                  # show tags and the buildx command
+just publish                                            # confirm, then build and push
+BEKUP_PLATFORMS=linux/arm64 just publish --yes          # one platform, no prompt
+```
+
+- **Tags:** on a clean tree `<repo>:<VERSION>`, `<repo>:sha-<12-char sha>` and
+  `<repo>:latest`. A dirty tree (changes, untracked non-ignored files, or
+  files marked `skip-worktree`/`assume-unchanged`, which hide their changes
+  from `git status`) is refused; with `--dirty` only `<repo>:sha-<sha>-dirty`
+  is pushed, never the version or `latest`. A warning is shown when `HEAD` is
+  not the tag `v<VERSION>`. `sha-…-dirty` tags are mutable: another dirty
+  build of the same commit overwrites them, so always pin by digest.
+- **Version and context:** a clean build uses a pristine export of `HEAD`
+  (`git archive` into a temporary directory) as the build context, so
+  ignored or local files (`go.work`, a built `cmd/bekup/bekup`, local
+  configs) can never enter the image; `--dirty` builds the working tree. The
+  binary reports `<VERSION>` only on the release tag `v<VERSION>`, otherwise
+  SemVer build metadata: `<VERSION>+sha.<12-char sha>`, and
+  `<VERSION>+sha.<sha>.dirty` with `--dirty`. The Go build runs with
+  `GOWORK=off`.
+- **Build:** a dedicated buildx builder `bekup-publish` (driver
+  `docker-container`, created on first use) runs
+  `docker buildx build --platform $BEKUP_PLATFORMS --target runtime --pull
+  --provenance=mode=max --sbom=generator=<pinned scanner> --push` with the
+  `VERSION`, `VCS_REF` and `BUILD_DATE` build args and
+  `BUILDX_GIT_INFO=false` (the provenance gets the revision from `VCS_REF`,
+  never the git remote URL). The builder must run on the local Docker: the
+  current docker context must be a local socket, and an existing
+  `bekup-publish` builder must have exactly one node on that context
+  (otherwise remove it with `docker buildx rm bekup-publish` so it is
+  recreated). The SBOM generator
+  (`docker/buildkit-syft-scanner`) is pinned by digest in `scripts/publish.sh`
+  and kept current by Renovate. The web UI is built inside the image, so no host
+  Node is needed. Platforms default to `linux/amd64,linux/arm64` (Go
+  cross-compiles, no emulation).
+- **Result:** the pushed tags, the image digest and a compose pin:
+  `BEKUP_IMAGE=<repo>@sha256:…` (see
+  [compose installation](installation/compose.md#using-your-own-image)).
+  Inspect it with `docker buildx imagetools inspect <repo>@sha256:…`.
+- A confirmation prompt shows the repository and tags; `--yes` skips it, and
+  without a terminal `--yes` is required.
+
 ## Web UI (`web/`)
 
 Stack (D-026, D-084): Vite 8, React 19, TypeScript 6 (strict +
@@ -279,7 +373,9 @@ JSON to `/graphql` with `credentials: "same-origin"`. Subscriptions are
 Server-Sent Events on the same path (D-124): the Apollo link built on
 `graphql-sse` (distinct connections mode) POSTs each subscription with
 `Accept: text/event-stream`. A stream the server ends carries a final
-error code: `UNAUTHENTICATED`/`FORBIDDEN` navigate to `/login`,
+error code: `UNAUTHENTICATED`/`FORBIDDEN` trigger a session check (`me`,
+then `/login` only if the session really ended: a password change revokes
+the stream's old session while the browser keeps a new one),
 `SESSION_ROTATED` reopens at once, `UNAVAILABLE` and network errors reopen
 with backoff. There is no WebSocket; don't add one. `graphql-ws` still shows
 up in `web/pnpm-lock.yaml`, but only as a transitive dependency of
@@ -289,13 +385,115 @@ dependency) that pnpm also uses to satisfy Apollo's *optional*
 code imports it, and the production bundle doesn't contain it. ESLint
 (`no-restricted-imports`) rejects imports of `graphql-ws`,
 `@apollo/client/link/subscriptions` and `subscriptions-transport-ws`.
-Without a proxy the
-browser talks HTTP/1.1 (6 connections per origin), so keep a page to 2 or
-3 subscriptions (the server allows `graphql.stream_max_per_session`, 4 by
-default). `codegen.ts` generates the typed `graphql()` helper in
+**Stream budget.** Without a proxy the browser talks HTTP/1.1 (6
+connections per origin), and the server allows
+`graphql.stream_max_per_session` streams (4 by default; more get `429`).
+Each tab therefore holds one shared account stream plus at most one page
+stream. Pages filter or merge events on the client instead of opening a
+stream per item, and pages that need more data poll or refetch. `codegen.ts` generates the typed `graphql()` helper in
 `src/graphql/gen/` from the server schema `internal/graph/schema/*.graphqls`
 (`just gen` runs gqlgen first, then graphql-codegen). The scalars `Time` and
 `UUID` are strings on the client.
+
+**App structure (D-179; feature pages tasks 6.2-6.12).**
+
+```
+src/app/              AppProviders, the route table (router.tsx), RootLayout
+                      (auth events, step-up host), the session epoch
+src/features/<area>/  one folder per area: routes.tsx (lazy route objects),
+                      pages and components, operations.ts (GraphQL documents),
+                      a pure model.ts where there is logic, its own strings
+                      and tests
+  auth/               session gate, sign-in operations, ChallengeForm,
+                      step-up dialog (useStepUp), forced flows, role guards
+  account/            password + strength meter, TOTP, passkeys, recovery codes, sessions
+  dashboard/ calendar/ jobs/ runs/ restore/ connections/ destinations/
+  users/ notifications/ admin/ (smtp, channels, security-alerts, audit,
+                      network, recovery, two-factor)
+src/components/shell/ app shell, sidebar, top bar, role nav (nav.ts: items,
+                      roles, page titles), banners, SessionWatcher, skeletons
+src/components/       ui/ (shadcn/ui primitives, native-select), status/
+                      (StatusBadge, SecurityBadge), ssh/ (host-key and keypair
+                      dialogs), confirm dialog, copy value, empty state, page header
+src/routes/           login, login/verify, profile/*, 404 and error pages, /design (dev)
+src/lib/              apollo (links, cache, SSE), api-error, auth-events,
+                      return-path, webauthn, qr-svg, password-strength,
+                      messages (shell/auth/account strings), format, theme,
+                      route-access, zod config, csp/ (style shim)
+src/test/             setup, mock-api (renderApp + fixtures), WebAuthn and matchMedia stubs
+scripts/              csp-check.mjs, codegen post-processing
+vite-plugins/         csp-strict-styles (build-time CSP hardening)
+```
+
+- **Routes.** `RootLayout` wraps `/login`, `/login/verify`,
+  `/verify-email` (outside the session gate, D-193), `/design` (dev) and
+  the signed-in tree. The signed-in tree sits behind `RequireSession`,
+  which loads `me` and renders the shell, the forced password change
+  (`passwordChangeRequired`) or the forced 2FA enrollment
+  (`twoFactorRequired` and a past `twoFactorEnrollmentDeadline`). During
+  the grace period the shell shows a deadline banner. Each feature exports
+  its lazy route objects from `features/<area>/routes.tsx`, which
+  `app/router.tsx` mounts. Every signed-in route declares who may open it
+  as its `handle` (`access.nav("/jobs")`, `access.staff`, `access.admin`,
+  `access.all` from `lib/route-access.ts`, derived from the nav roles in
+  `components/shell/nav.ts`, which also holds the page titles); the one
+  `RequireRole` layout route renders a page only for those roles and
+  denies routes without a handle. This only shapes the UI; the server
+  enforces access. There is no setup page (D-113).
+- **Errors (`lib/api-error.ts`).** `apiErrors(err)` normalizes Apollo errors
+  to `{code, message, field, requestId}`. `userMessage(err)` shows the
+  server's message for codes whose messages are user-safe (VALIDATION,
+  RATE_LIMITED, CONFLICT, ...), fixed text otherwise, and the request ID for
+  INTERNAL. `applyFieldErrors(err, form.setError, fields)` puts VALIDATION
+  errors on react-hook-form fields. The Apollo error link
+  (`authEventFor`) maps UNAUTHENTICATED → login with a validated return path
+  (`lib/return-path.ts`: same-origin relative paths only),
+  SECOND_FACTOR_REQUIRED → `/login/verify`, PASSWORD_CHANGE_REQUIRED /
+  REQUIRES_2FA_ENROLLMENT → refetch `me` (the gate shows the forced flow).
+  `Login`, `Me` and `Logout` handle their own errors. Sign-in and sign-out
+  clear the Apollo cache.
+- **Step-up.** Wrap any mutation that may need a fresh confirmation:
+
+  ```tsx
+  const { withStepUp } = useStepUp();
+  try {
+    await withStepUp(() => updateThing({ variables }), { aal2: isRestore });
+  } catch (err) {
+    reportActionError(err); // ignores a closed dialog (StepUpCancelledError)
+  }
+  ```
+
+  On `STEP_UP_REQUIRED` the dialog runs `beginStepUp`, offers the account's
+  methods (passkey with user verification, TOTP, recovery code; the
+  password only for accounts without a factor), completes `completeStepUp`
+  and retries the operation (at most twice). `aal2: true` offers only a
+  passkey or TOTP (restores, D-057/D-116). `REQUIRES_2FA_ENROLLMENT`
+  shows a toast that links to `/profile/security`.
+- **WebAuthn (`lib/webauthn.ts`).** Converts the server's
+  `{"publicKey": ...}` JSON (base64url) for `navigator.credentials.get` /
+  `create` and encodes the response like `PublicKeyCredential.toJSON()`.
+  Passkey UI is hidden with the server's reason when
+  `webauthnStatus.webauthnAvailable` is false and with a note when the
+  browser can't do WebAuthn.
+- **TOTP QR code.** The server's SVG can't be inserted as markup under
+  Trusted Types, so `lib/qr-svg.ts` parses its exact shape and the page
+  re-renders it as React SVG. Anything else falls back to the manual key.
+- **Strings.** English only, kept apart from the markup so a translation
+  layer can replace them: the shell, auth and account strings in
+  `lib/messages.ts`; every feature keeps its own (a `messages.ts` in the
+  feature folder or a `T` table at the top of the component).
+- **Tests.** `renderApp(path, handlers)` from `src/test/mock-api.tsx`
+  renders the real routes and links over a fake GraphQL server that answers
+  by operation name (`baseHandlers`, `meFixture`, `ok`, `gqlError`). Use it
+  for flows; use plain unit tests for `lib/` and the features' `model.ts`.
+  `findBy`/`waitFor` poll up to 10 s and tests get 30 s, because vitest runs
+  in parallel (D-195); assert effect-driven state with `waitFor`.
+  `pnpm csp-check` walks the real pages against a fake API under the
+  production CSP: sign-in → second factor → profile, step-up, TOTP
+  enrollment, the dashboard, connections, destinations, jobs, runs, the
+  restore wizard and history, the calendar, the notification center and
+  `/verify-email`, the admin settings, channels and audit log, and the
+  404 page. Extend it when you add a page or an overlay.
 
 **GraphQL server (`internal/graph`, D-105).** Add or change types in
 `internal/graph/schema/<area>.graphqls` (extend `Query`/`Mutation` with

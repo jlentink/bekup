@@ -11,6 +11,12 @@
 #                                   (only for `bekup migrate`)
 #   BEKUP_DATABASE_TLS_CA_FILE      secrets/local/postgres_ca.crt
 #   BEKUP_SECURITY_MASTER_KEY_FILE  secrets/local/bekup_master_key
+#   BEKUP_RUNNER_CERT_FILE          secrets/local/bekup_client.crt
+#   BEKUP_RUNNER_KEY_FILE           secrets/local/bekup_client.key
+#   BEKUP_RUNNER_CA_FILE            secrets/local/bekup_ca.crt
+#   BEKUP_RUNNER_ADDRESS            127.0.0.1:$BEKUP_DEV_RUNNER_PORT (default 7443)
+#   BEKUP_STORAGE_DISK_ROOT         .dev-data/backups (disk destinations)
+#   BEKUP_STORAGE_SCRATCH_DIR       .dev-data/scratch (restore staging)
 
 [server]
 # Loopback only: plain HTTP without a proxy, so bekup logs the D-095 warning
@@ -24,6 +30,13 @@ trusted_proxies = []
 # Same as production (D-100): TLS verify-full against the dev CA. The URLs
 # use 127.0.0.1, which the dev postgres certificate names (D-114).
 tls_mode = "verify-full"
+
+[runner]
+# `just dev-runner` publishes the dev runner here (D-201; the justfile sets
+# BEKUP_RUNNER_ADDRESS from BEKUP_DEV_RUNNER_PORT). Without it serve still
+# starts (it connects lazily); only the runner operations (connection tests,
+# backups, restores) fail.
+address = "127.0.0.1:7443"
 
 [netguard]
 # mailpit's SMTP port is published on 127.0.0.1:1025.

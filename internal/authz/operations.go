@@ -30,9 +30,13 @@ const (
 	// factor (beginPasskeyLogin, completeSecondFactor; task 1.9).
 	OpAccountSecondFactorLogin Operation = "account.second_factor_login"
 	OpAccountPasswordChange    Operation = "account.password_change"    // change own password
-	OpAccountSessionsView      Operation = "account.sessions_view"      // list own sessions
+	OpAccountSessionsView      Operation = "account.sessions_view"      // list own sessions, accountEvents
 	OpAccountSessionsRevoke    Operation = "account.sessions_revoke"    // revoke own sessions
 	OpAccountSecondFactorEdit  Operation = "account.second_factor_edit" // TOTP, passkeys, recovery codes (own)
+	// Own e-mail verification (task 5.1, D-178): request a link, redeem
+	// it (only the signed-in account it was issued to).
+	OpAccountEmailVerifyRequest Operation = "account.email_verify_request"
+	OpAccountEmailVerify        Operation = "account.email_verify"
 
 	// User management (admin; tasks 1.6, 6.8).
 	OpUserList             Operation = "user.list"
@@ -46,8 +50,8 @@ const (
 	OpUserSecondFactorEdit Operation = "user.second_factor_reset"
 	OpUserSessionsView     Operation = "user.sessions_view"
 	OpUserSessionsRevoke   Operation = "user.sessions_revoke"
-	// OpUserDirectoryView lists minimal user facts (id, name, role) for the
-	// owner picker of the job editor.
+	// OpUserDirectoryView lists minimal user facts (id, name, e-mail, role,
+	// disabled; D-184) for the owner picker of the job editor.
 	OpUserDirectoryView Operation = "user.directory_view"
 
 	// 2FA policy (admin; task 1.9).
@@ -62,6 +66,11 @@ const (
 	OpSMTPTest            Operation = "smtp.test"
 	OpSSRFAllowlistView   Operation = "ssrf_allowlist.view"
 	OpSSRFAllowlistUpdate Operation = "ssrf_allowlist.update"
+
+	// Runtime config reload (task 6.13, D-200): key names and per-process
+	// outcomes (admin); reloading every process needs a step-up.
+	OpConfigStatusView Operation = "config.status_view"
+	OpConfigReload     Operation = "config.reload"
 
 	// Connections (task 2.11, D-135). Maintainers use connections:
 	// non-secret metadata, test/detect/list databases; no CRUD, no
@@ -128,7 +137,7 @@ const (
 
 	// Runs (tasks 3.6, 3.7).
 	OpRunList     Operation = "run.list"
-	OpRunView     Operation = "run.view" // incl. runUpdated
+	OpRunView     Operation = "run.view" // incl. runUpdated, runActivity, activityUpdated
 	OpRunLogsView Operation = "run.logs_view"
 	OpRunNow      Operation = "run.now"
 	// OpRunStartEarly starts the next planned run early (task 3.12, D-156):
@@ -177,19 +186,37 @@ const (
 	OpTestRestoreRun Operation = "test_restore.run"
 
 	// Notifications (tasks 5.3b, 6.10).
-	OpSharedChannelList     Operation = "notification.shared_channel_list"
-	OpSharedChannelEdit     Operation = "notification.shared_channel_edit"
-	OpSharedChannelTest     Operation = "notification.shared_channel_test"
-	OpPersonalChannelEdit   Operation = "notification.personal_channel_edit" // own email/webhooks
-	OpPersonalChannelTest   Operation = "notification.personal_channel_test"
+	OpSharedChannelList Operation = "notification.shared_channel_list"
+	OpSharedChannelEdit Operation = "notification.shared_channel_edit"
+	OpSharedChannelTest Operation = "notification.shared_channel_test"
+	// OpSharedChannelToggle turns a shared channel on or off (task 5.3b,
+	// D-191): no step-up, the channel's URL and key are unchanged.
+	OpSharedChannelToggle Operation = "notification.shared_channel_toggle"
+	// OpSharedChannelAttachmentView reads the shared channels attached to
+	// a job (Job.sharedChannelAttachments: name, type, masked URL, filter;
+	// never addresses or keys). Staff only, null for backup owners (D-198).
+	OpSharedChannelAttachmentView Operation = "notification.shared_channel_attachment_view"
+	OpPersonalChannelEdit         Operation = "notification.personal_channel_edit" // own email/webhooks
+	OpPersonalChannelTest         Operation = "notification.personal_channel_test"
+	// OpPersonalChannelList reads the own channels (e-mail address and
+	// verification, webhooks with their display URL and health).
+	OpPersonalChannelList Operation = "notification.personal_channel_list"
+	// OpPersonalChannelEnable re-enables an own (auto-disabled) webhook.
+	OpPersonalChannelEnable Operation = "notification.personal_channel_enable"
+	// OpNotificationPrefsView reads the catalog and the own preference
+	// matrix.
+	OpNotificationPrefsView Operation = "notification.prefs_view"
 	OpNotificationPrefsEdit Operation = "notification.prefs_edit" // own preference matrix
-	OpNotificationInbox     Operation = "notification.inbox"      // own inbox, unread, mark read, subscription
+	OpNotificationInbox     Operation = "notification.inbox"      // own inbox, unread, mark read, accountEvents
 
 	// Monitoring (tasks 5.5, 5.6, 6.2).
 	OpDashboardView    Operation = "monitor.dashboard_view" // scoped to visible jobs
 	OpAlertList        Operation = "monitor.alert_list"     // security alerts
 	OpAlertAcknowledge Operation = "monitor.alert_acknowledge"
 	OpRunnerHealthView Operation = "monitor.runner_health_view"
+	// OpSystemHealthView is Query.systemHealth (task 5.6, D-176): runner,
+	// certificate expiry, queue depth, scheduler; admins only.
+	OpSystemHealthView Operation = "monitor.system_health_view"
 
 	// Audit and keys (tasks 1.3, 1.4, 6.9).
 	OpAuditLogView         Operation = "audit.log_view"
@@ -253,11 +280,13 @@ var policy = map[Operation]Rule{
 	OpAccountStepUp: {Roles: everyone},
 	// Only meaningful for a session waiting for its second factor; the
 	// resolver refuses other sessions (CONFLICT).
-	OpAccountSecondFactorLogin: {Roles: everyone},
-	OpAccountPasswordChange:    {Roles: everyone, Fresh: FreshStepUp},
-	OpAccountSessionsView:      {Roles: everyone},
-	OpAccountSessionsRevoke:    {Roles: everyone},
-	OpAccountSecondFactorEdit:  {Roles: everyone, Fresh: FreshStepUp},
+	OpAccountSecondFactorLogin:  {Roles: everyone},
+	OpAccountPasswordChange:     {Roles: everyone, Fresh: FreshStepUp},
+	OpAccountSessionsView:       {Roles: everyone},
+	OpAccountSessionsRevoke:     {Roles: everyone},
+	OpAccountSecondFactorEdit:   {Roles: everyone, Fresh: FreshStepUp},
+	OpAccountEmailVerifyRequest: {Roles: everyone},
+	OpAccountEmailVerify:        {Roles: everyone},
 
 	OpUserList:             {Roles: adminOnly},
 	OpUserView:             {Roles: adminOnly},
@@ -282,6 +311,8 @@ var policy = map[Operation]Rule{
 	OpSMTPTest:            {Roles: adminOnly},
 	OpSSRFAllowlistView:   {Roles: adminOnly},
 	OpSSRFAllowlistUpdate: {Roles: adminOnly, Fresh: FreshStepUp},
+	OpConfigStatusView:    {Roles: adminOnly},
+	OpConfigReload:        {Roles: adminOnly, Fresh: FreshStepUp},
 
 	OpConnectionList:            {Roles: staff},
 	OpConnectionView:            {Roles: staff},
@@ -362,18 +393,24 @@ var policy = map[Operation]Rule{
 	OpTestRestoreView: {Roles: staff, Owner: OwnerJob},
 	OpTestRestoreRun:  {Roles: staff},
 
-	OpSharedChannelList:     {Roles: adminOnly},
-	OpSharedChannelEdit:     {Roles: adminOnly, Fresh: FreshStepUp},
-	OpSharedChannelTest:     {Roles: adminOnly},
-	OpPersonalChannelEdit:   {Roles: everyone, Fresh: FreshStepUp},
-	OpPersonalChannelTest:   {Roles: everyone},
-	OpNotificationPrefsEdit: {Roles: everyone},
-	OpNotificationInbox:     {Roles: everyone},
+	OpSharedChannelList:           {Roles: adminOnly},
+	OpSharedChannelAttachmentView: {Roles: staff},
+	OpSharedChannelEdit:           {Roles: adminOnly, Fresh: FreshStepUp},
+	OpSharedChannelTest:           {Roles: adminOnly},
+	OpSharedChannelToggle:         {Roles: adminOnly},
+	OpPersonalChannelEdit:         {Roles: everyone, Fresh: FreshStepUp},
+	OpPersonalChannelTest:         {Roles: everyone},
+	OpPersonalChannelList:         {Roles: everyone},
+	OpPersonalChannelEnable:       {Roles: everyone},
+	OpNotificationPrefsView:       {Roles: everyone},
+	OpNotificationPrefsEdit:       {Roles: everyone},
+	OpNotificationInbox:           {Roles: everyone},
 
 	OpDashboardView:    {Roles: staff, Owner: OwnerList},
 	OpAlertList:        {Roles: adminOnly},
 	OpAlertAcknowledge: {Roles: adminOnly},
 	OpRunnerHealthView: {Roles: staff},
+	OpSystemHealthView: {Roles: adminOnly},
 
 	OpAuditLogView:         {Roles: adminOnly},
 	OpAuditChainStatusView: {Roles: adminOnly},

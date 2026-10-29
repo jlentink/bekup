@@ -540,3 +540,135 @@ func pumpRestoreEvents(ctx context.Context, sub *pubsub.Subscription, src chan<-
 		}
 	}
 }
+
+// restoreIDEvent is one delivery of a restoresUpdated stream.
+type restoreIDEvent struct {
+	id   uuid.UUID
+	view *restore.View
+}
+
+// restoresUpdated streams the changes of every restore the caller may
+// view (D-196): bekup_restore_events "restore:<id>" hints, coalesced per
+// restore; every event re-loads the restore and authorizes restore.view
+// with its job from the row. After possibly lost events the restores
+// changed since the last resync (scoped like Query.restores) are re-sent.
+func (r *Resolver) restoresUpdated(ctx context.Context) (<-chan *model.Restore, error) {
+	if streams.FromContext(ctx) == nil {
+		return nil, errNotStream
+	}
+	f, err := r.restoresUpdatesFeed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return f.Deliver(ctx), nil
+}
+
+// restoresUpdatesFeed checks access and starts the restore event source
+// of restoresUpdated (and activityUpdated): it runs until ctx ends.
+func (r *Resolver) restoresUpdatesFeed(ctx context.Context) (streams.Feed[*restoreIDEvent, *model.Restore], error) {
+	var none streams.Feed[*restoreIDEvent, *model.Restore]
+	api, err := r.restoreAPI()
+	if err != nil {
+		return none, err
+	}
+	if r.Bus == nil {
+		return none, errRunEventsNotConfigured
+	}
+	if err := r.Authz.Precheck(ctx, authz.OpRestoreView); err != nil {
+		return none, err
+	}
+	sub := r.Bus.Subscribe(pubsub.RestoreEvents.Name, runEventBuffer)
+	src := make(chan *restoreIDEvent)
+	go pumpCoalescedIDs(ctx, sub, src, func(id uuid.UUID) *restoreIDEvent { return &restoreIDEvent{id: id} },
+		func(payload string) (uuid.UUID, bool) {
+			kind, id, err := restore.ParsePayload(payload)
+			return id, err == nil && kind == restore.EventRestore
+		}, api.IDsUpdatedSince, runEventMinGap)
+	check := streams.Authorize(r.Authz, authz.OpRestoreView, func(ctx context.Context, ev *restoreIDEvent) ([]authz.Resource, error) {
+		v, err := api.LoadForEvent(ctx, ev.id)
+		if err != nil {
+			return nil, err
+		}
+		ev.view = &v
+		return []authz.Resource{authz.Job{ID: v.JobID}}, nil
+	})
+	conv := func(ctx context.Context, ev *restoreIDEvent) (*model.Restore, bool) {
+		if ev.view == nil {
+			return nil, false
+		}
+		return restoreModel(ev.view, r.showActor(ctx)), true
+	}
+	return streams.Feed[*restoreIDEvent, *model.Restore]{Src: src, Check: check, Conv: conv}, nil
+}
+
+// pumpCoalescedIDs turns bus messages into events (parse filters and
+// extracts the id, wrap builds the event) until ctx ends, closing out at
+// the end. Like the run
+// stream: an id already pending is not queued again, at most resyncMax
+// ids are pending (beyond that the stream resyncs), ids are sent at most
+// every gap, and after possibly lost messages the ids changed since the
+// last resync (resync) are queued.
+func pumpCoalescedIDs[T any](ctx context.Context, sub *pubsub.Subscription, out chan<- T, wrap func(uuid.UUID) T,
+	parse func(string) (uuid.UUID, bool), resync func(context.Context, time.Time, int) ([]uuid.UUID, error), gap time.Duration,
+) {
+	defer close(out)
+	defer sub.Close()
+	since := time.Now()
+	var pending []uuid.UUID
+	queued := map[uuid.UUID]bool{}
+	needResync := false
+	add := func(id uuid.UUID) {
+		if queued[id] {
+			return
+		}
+		if len(pending) >= resyncMax {
+			needResync = true
+			return
+		}
+		queued[id] = true
+		pending = append(pending, id)
+	}
+	ready := true
+	timer := time.NewTimer(gap)
+	timer.Stop()
+	defer timer.Stop()
+	for {
+		if needResync && len(pending) == 0 {
+			now := time.Now()
+			list, err := resync(ctx, since.Add(-resyncMargin), resyncMax)
+			if ctx.Err() != nil {
+				return
+			}
+			// On an error since stays, so the next resync covers the gap.
+			needResync = false
+			if err == nil {
+				since = now
+				for _, id := range list {
+					add(id)
+				}
+			}
+		}
+		var send chan<- T
+		var next T
+		if ready && len(pending) > 0 {
+			send, next = out, wrap(pending[0])
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case send <- next:
+			delete(queued, pending[0])
+			pending = pending[1:]
+			ready = false
+			timer.Reset(gap)
+		case <-timer.C:
+			ready = true
+		case m := <-sub.C():
+			if id, ok := parse(m.Payload); ok {
+				add(id)
+			}
+		case <-sub.Resync():
+			needResync = true
+		}
+	}
+}

@@ -77,6 +77,23 @@ run:
     info "bekup serve on http://localhost:8080 (dev mode; the plain-HTTP warning is expected, D-095)"
     exec bin/bekup-dev serve
 
+[doc('Like `run`, but air rebuilds and restarts serve when Go/SQL/GraphQL/proto/TOML files change')]
+[group('dev')]
+[script]
+run-watch:
+    {{ lib }}
+    need_cmd air "go install github.com/air-verse/air@latest"
+    dev_native_env
+    dev_build
+    dev_migrate
+    # Every rebuild applies new migrations first, with the owner URL set only
+    # for that `migrate` command (serve never sees it), then air restarts
+    # serve. The watch list and exclusions come from .air.toml.
+    owner_url_file="$(dev_keys_dir)/local/bekup_database_owner_url"
+    printf -v migrate 'BEKUP_DATABASE_OWNER_URL_FILE=%q ./tmp/bekup migrate up' "$owner_url_file"
+    info "bekup serve with air hot reload on http://localhost:8080 (dev mode; the plain-HTTP warning is expected, D-095)"
+    exec air -c .air.toml --build.cmd "go build -trimpath -o ./tmp/bekup ./cmd/bekup && $migrate"
+
 [doc('Apply the migrations natively as bekup_owner against the dev infra')]
 [group('dev')]
 [script]
@@ -104,6 +121,36 @@ web-dev:
     web_deps
     BEKUP_DEV_BACKEND="${BEKUP_DEV_BACKEND:-http://localhost:8080}" web_run dev
 
+[doc('Start only the runner (gRPC on 127.0.0.1) + sample target DBs for a native `just run`')]
+[group('dev')]
+[script]
+dev-runner:
+    {{ lib }}
+    need_cmd docker "https://docs.docker.com/get-docker/"
+    need_cmd openssl "brew install openssl (or apt install openssl)"
+    dev_keys
+    # The runner joins the group owning the Docker socket: root:root inside
+    # Docker Desktop's VM, the socket's group on Linux.
+    if [[ -z "${DOCKER_GID:-}" ]]; then
+        if [[ "$(uname -s)" == Darwin ]]; then
+            DOCKER_GID=0
+        else
+            DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+        fi
+    fi
+    export DOCKER_GID
+    info "starting the dev runner and the sample target DBs (D-201)"
+    {{ compose_dev }} --profile runner up --detach --force-recreate --wait --build runner-host pg15 pg15-tunneled mysql mariadb bastion
+    keys=$(dev_keys_dir)
+    keys=${keys#"$PWD"/}
+    cat <<EOF
+
+    Dev runner is running: mTLS gRPC on 127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443} (used by just run).
+    Connection hosts (the runner's allowlist): pg15, mysql, mariadb; pg15-tunneled
+    only through the SSH bastion "bastion". Sample passwords: $keys/dev/.
+    Stop with: just dev-down
+    EOF
+
 [doc('Start the full containerised dev stack (air serve, runner, sample DBs, minio, sftp)')]
 [group('dev')]
 [script]
@@ -120,7 +167,7 @@ dev-full:
 dev-down:
     {{ lib }}
     need_cmd docker "https://docs.docker.com/get-docker/"
-    {{ compose_dev }} --profile full --profile web --profile traefik --profile nginx down --remove-orphans
+    {{ compose_dev }} --profile full --profile runner --profile web --profile traefik --profile nginx down --remove-orphans
 
 [doc('Run all code generators (sqlc, buf, gqlgen, graphql-codegen, config reference)')]
 [group('dev')]
@@ -225,11 +272,12 @@ test: test-scripts
         note "vitest: not available yet (task 0.8)"
     fi
 
-[doc('Test the release helper scripts (semver math, bump refusals and happy path)')]
+[doc('Test the release helper scripts (semver math, bump refusals and happy path, publish)')]
 [group('quality')]
 test-scripts:
     @scripts/semver_test.sh
     @scripts/bump_test.sh
+    @scripts/publish_test.sh
 
 [doc('Run integration tests (testcontainers; needs Docker)')]
 [group('quality')]
@@ -328,7 +376,7 @@ docker:
 db-reset:
     {{ lib }}
     need_cmd docker "https://docs.docker.com/get-docker/"
-    {{ compose_dev }} --profile full --profile web --profile traefik --profile nginx down --volumes --remove-orphans
+    {{ compose_dev }} --profile full --profile runner --profile web --profile traefik --profile nginx down --volumes --remove-orphans
     dev_keys
     {{ compose_dev }} up --detach --wait postgres mailpit adminer
     # Natively, through the published loopback port (D-114).
@@ -428,3 +476,8 @@ bump level="patch":
 [group('release')]
 release:
     @scripts/release.sh origin
+
+[doc('Build a multi-arch image and push it to your own registry ([repo] [--dirty] [--yes] [--dry-run])')]
+[group('release')]
+publish *args:
+    @scripts/publish.sh "$@"

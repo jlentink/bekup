@@ -49,6 +49,11 @@ models:
         resolver: true
       twoFactorEnrollmentDeadline:
         resolver: true
+      # Admin facts, batch-loaded per page of users (D-184).
+      lastSeenAt:
+        resolver: true
+      twoFactorEnrolled:
+        resolver: true
   # Encryption status and owners are loaded per job; owners only for
   # admins and maintainers (task 3.5).
   Job:
@@ -61,6 +66,16 @@ models:
       lastRun:
         resolver: true
       recentRuns:
+        resolver: true
+      # Missed-backup state of the 5.4 detector, batch-loaded per page
+      # (D-196).
+      missed:
+        resolver: true
+      missedSince:
+        resolver: true
+      # Shared channels attached to the job, staff only, batch-loaded
+      # per page (D-198).
+      sharedChannelAttachments:
         resolver: true
   # Items, artifacts and the manifest are batch-loaded per page of runs
   # (task 3.7, runLoader).
@@ -75,4 +90,7 @@ models:
   RunItem:
     fields:
       artifacts:
+        resolver: true
+      # Completeness evidence, batch-loaded per page of runs (D-187).
+      stats:
         resolver: true

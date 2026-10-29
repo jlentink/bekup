@@ -7,11 +7,25 @@ package resolvers
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jlentink/bekup/internal/graph/generated"
 	"github.com/jlentink/bekup/internal/graph/model"
 )
+
+func (r *jobResolver) Missed(ctx context.Context, obj *model.Job) (bool, error) {
+	m, err := r.jobMissed(ctx, obj)
+	return m != nil, err
+}
+
+func (r *jobResolver) MissedSince(ctx context.Context, obj *model.Job) (*time.Time, error) {
+	m, err := r.jobMissed(ctx, obj)
+	if err != nil || m == nil {
+		return nil, err
+	}
+	return &m.Since, nil
+}
 
 func (r *jobResolver) Encryption(ctx context.Context, obj *model.Job) (*model.JobEncryption, error) {
 	return r.jobEncryption(ctx, obj)
