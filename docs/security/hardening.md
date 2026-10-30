@@ -35,8 +35,9 @@ A checklist for running bekup securely. The threat model behind it is
       remaps the dump containers.
 - [ ] Pin `BEKUP_IMAGE` to a released, digest-pinned image. Every image in
       the Dockerfile and compose files is pinned by tag and digest; Renovate
-      keeps them current (D-061, D-065). Verify release signatures with
-      `cosign verify` once task 7.4 publishes them.
+      keeps them current (D-061, D-065). Verify the release signature with
+      `cosign verify` before running the image
+      ([verifying release images](../installation/compose.md#verifying-release-images), D-204).
 
 ## Container hardening (shipped)
 

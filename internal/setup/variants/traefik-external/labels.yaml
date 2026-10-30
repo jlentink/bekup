@@ -1,0 +1,14 @@
+    # Routing for YOUR Traefik (Docker provider with exposedByDefault=false;
+    # docs/installation/reverse-proxy.md#existing-traefik). No middlewares:
+    # bekup sets its own security headers (D-102). flushinterval -1ms
+    # streams the live updates (Server-Sent Events, D-124) without delay.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${BEKUP_PROXY_NETWORK:-bekup-proxy}
+      traefik.http.routers.bekup.rule: "Host(`${BEKUP_DOMAIN:-bekup.invalid}`)"
+      traefik.http.routers.bekup.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.bekup.tls: "true"
+      traefik.http.routers.bekup.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.bekup.service: bekup
+      traefik.http.services.bekup.loadbalancer.server.port: "8080"
+      traefik.http.services.bekup.loadbalancer.responseforwarding.flushinterval: "-1ms"

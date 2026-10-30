@@ -622,7 +622,6 @@ const (
 	NotificationChannelInbox   NotificationChannel = "inbox"
 	NotificationChannelEmail   NotificationChannel = "email"
 	NotificationChannelWebhook NotificationChannel = "webhook"
-	NotificationChannelPush    NotificationChannel = "push"
 )
 
 func (e *NotificationChannel) Scan(src interface{}) error {
@@ -664,8 +663,7 @@ func (e NotificationChannel) Valid() bool {
 	switch e {
 	case NotificationChannelInbox,
 		NotificationChannelEmail,
-		NotificationChannelWebhook,
-		NotificationChannelPush:
+		NotificationChannelWebhook:
 		return true
 	}
 	return false
@@ -676,7 +674,6 @@ func AllNotificationChannelValues() []NotificationChannel {
 		NotificationChannelInbox,
 		NotificationChannelEmail,
 		NotificationChannelWebhook,
-		NotificationChannelPush,
 	}
 }
 
@@ -1531,7 +1528,6 @@ type UserChannelType string
 
 const (
 	UserChannelTypeWebhook UserChannelType = "webhook"
-	UserChannelTypePush    UserChannelType = "push"
 )
 
 func (e *UserChannelType) Scan(src interface{}) error {
@@ -1571,8 +1567,7 @@ func (ns NullUserChannelType) Value() (driver.Value, error) {
 
 func (e UserChannelType) Valid() bool {
 	switch e {
-	case UserChannelTypeWebhook,
-		UserChannelTypePush:
+	case UserChannelTypeWebhook:
 		return true
 	}
 	return false
@@ -1581,7 +1576,6 @@ func (e UserChannelType) Valid() bool {
 func AllUserChannelTypeValues() []UserChannelType {
 	return []UserChannelType{
 		UserChannelTypeWebhook,
-		UserChannelTypePush,
 	}
 }
 

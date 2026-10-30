@@ -125,6 +125,7 @@ func newRunEnv(t *testing.T, opts ...runEnvOption) *runEnv {
 		t.Fatal(err)
 	}
 	bus := pubsub.NewBus()
+	startBusListener(t, d, bus)
 	sessions := auth.NewSessions(e.pool, auth.SessionOptions{Events: auth.PubSubSessionEvents{Publisher: &pubsub.Publisher{Bus: bus}}})
 	svc, err := auth.NewService(auth.ServiceOptions{DB: e.pool, Hasher: e.hasher, Sessions: sessions, Auditor: e.auditor, Factors: auth.NewSecondFactors()})
 	if err != nil {
@@ -715,21 +716,30 @@ func TestRunEventStreams(t *testing.T) {
 
 	// A run of another job is not delivered to the owner; the next event
 	// is the owner's own run.
-	e.newRun(e.jobB, &admin.ID)
+	bRun := e.newRun(e.jobB, &admin.ID)
 	ref := e.newRun(e.jobA, &admin.ID)
 	var got runEvGQL
 	nextData(t, ownerAll, "runUpdated", &got)
 	if got.ID != ref.RunID.String() || got.Status != "QUEUED" || got.TriggeredBy != nil {
 		t.Fatalf("owner event: %+v", got)
 	}
-	// Staff receive both, with the actor.
-	nextData(t, adminAll, "runUpdated", &got)
-	if got.Job.ID != e.jobB.String() || got.TriggeredBy == nil {
-		t.Fatalf("admin event 1: %+v", got)
-	}
-	nextData(t, adminAll, "runUpdated", &got)
-	if got.ID != ref.RunID.String() {
-		t.Fatalf("admin event 2: %+v", got)
+	// Staff receive both, with the actor. Every change is announced twice
+	// (local bus before the commit, NOTIFY after it), and the NOTIFY of b
+	// may still arrive: wait for both runs instead of a fixed sequence.
+	for seenB, seenRef := false, false; !seenB || !seenRef; {
+		nextData(t, adminAll, "runUpdated", &got)
+		switch got.ID {
+		case bRun.RunID.String():
+			if got.Job.ID != e.jobB.String() || got.TriggeredBy == nil {
+				t.Fatalf("admin event of the other job: %+v", got)
+			}
+			seenB = true
+		case ref.RunID.String():
+			seenRef = true
+		case b.RunID.String():
+		default:
+			t.Fatalf("admin event of an unknown run: %+v", got)
+		}
 	}
 
 	// Log stream: batches, then done once the run finished.
@@ -760,8 +770,11 @@ func TestRunEventStreams(t *testing.T) {
 		t.Fatalf("log stream did not complete: %+v", ev)
 	}
 	// The owner saw the run's progress (running, items, success).
-	for got.Status != "SUCCESS" {
+	for got = (runEvGQL{}); got.Status != "SUCCESS"; {
 		nextData(t, ownerAll, "runUpdated", &got)
+		if got.ID != ref.RunID.String() {
+			t.Fatalf("owner event of another run: %+v", got)
+		}
 	}
 	if len(got.Items) != 1 || got.Items[0].Database != "app" {
 		t.Fatalf("final event: %+v", got)

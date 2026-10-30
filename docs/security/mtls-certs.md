@@ -94,8 +94,16 @@ How `bekup runner` and its clients use these certificates (D-126, D-127):
 ```sh
 bekup certs init --dir secrets/certs            # prompts for a CA key passphrase
 just certs                                       # same, into secrets/certs
-docker compose --profile setup run --rm certs-init   # compose (runner + serve + postgres)
+docker compose --profile setup run --rm certs-init   # compose from a source checkout
 ```
+
+Production installs get the PKI from `bekup setup init` (D-203,
+[compose installation](../installation/compose.md#install-with-bekup-setup-container-only)):
+it runs `certs init` for runner, serve and postgres with a passphrase-sealed
+CA key, writes the CA directly to the offline media mounted at
+`/deploy/secrets/certs/ca` (setup and `setup check` warn while `ca.key`
+lies on the host's disk instead), hands every file to its consumer's UID
+and prints the certificate fingerprints as evidence.
 
 Flags:
 
@@ -146,7 +154,8 @@ Docker access on the runner host.
   manager attachment, HSM-backed vault) and delete it from the host. It is
   needed again only for `bekup certs rotate`.
 - Never mount `ca/` into a long-running container or put it on a shared
-  volume. In compose only the one-shot `certs-init` container sees it.
+  volume. In compose only the one-shot `certs-init` or `bekup setup`
+  container sees it.
 - `--unencrypted-ca-key` exists for throwaway dev PKIs
   (`deploy/dev/gen-dev-keys.sh`). Do not use it in production.
 
@@ -166,7 +175,8 @@ Each service gets exactly its own directory as file-based Docker secrets
 
 Use each component's own `ca.crt` bundle, not `ca/ca.crt`: the bundles are
 what changes during a CA rotation, and `ca/` should be offline. On Linux the
-files must be owned by the container UID (65532); see
+keys must be owned by the reading container UID (65532, postgres 70), which
+`bekup setup` applies; see
 [compose installation](../installation/compose.md).
 
 ## Rotation
@@ -187,6 +197,48 @@ audit log, so `bekup certs rotate` needs the app database configured and
 reachable; it checks this before changing any file. Where that's impossible
 (e.g. the compose `certs-init` container, which has no DB access), pass
 `--no-audit`: the command prints a warning and the rotation is not audited.
+
+With a `bekup setup` deployment directory, rotate in a one-shot root
+container with only `CAP_CHOWN` and `CAP_FOWNER` (the files belong to the
+container users) and the offline CA mounted, then re-apply the ownership
+manifest:
+
+```sh
+docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 \
+  --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --security-opt no-new-privileges \
+  -v /opt/bekup:/deploy -v /media/usb/bekup-ca:/deploy/secrets/certs/ca \
+  "$IMAGE" certs rotate --dir /deploy/secrets/certs --all --no-audit
+docker run --rm --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 \
+  --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v /opt/bekup:/deploy "$IMAGE" setup check --fix-ownership
+docker compose up -d --force-recreate serve runner postgres
+```
+
+`--log-driver none` keeps the container's output (the passphrase prompt)
+out of Docker's logs. `setup check --fix-ownership` needs only `CAP_CHOWN`:
+a file that already belongs to a container user is taken over, chmod'ed and
+handed back.
+
+**Offline CA media.** Use a POSIX file system for the CA media (for
+example ext4 on a LUKS-encrypted USB stick), so `ca.key` keeps mode 0600 and
+owner root. FAT/exFAT have no Unix modes or owners: `bekup setup` then
+leaves the CA directory's modes and owners as they are with a warning
+(`setup check` reports them as warnings, not errors), which is acceptable
+only because the CA key is age-encrypted with its passphrase. Writing the
+certificates may still fail on such media unless it is mounted so that
+chmod succeeds (vfat `quiet`).
+
+`bekup setup init` never reuses, overwrites or rolls back an existing CA:
+with `ca.crt`/`ca.key` already in `secrets/certs/ca` (for example the media of
+an earlier install) it refuses before writing anything. Issue the runner,
+serve and postgres certificates from that CA with `certs rotate` and re-run
+`setup init --keep-existing`, or move the CA away. `--regenerate-secrets`
+replaces the CA too, **including an offline CA mounted there**; the old files
+are kept aside until the run succeeded and restored on any failure.
+
+Record the rotation in the audit log afterwards (it ran with `--no-audit`
+because the container has no database access). A `setup rotate-certs`
+wrapper is planned.
 
 Each rotation creates a new key and certificate from the existing CA; the CA
 and the other components are untouched. The runner's extra names are kept

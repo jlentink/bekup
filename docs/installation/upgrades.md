@@ -5,9 +5,9 @@
 > refuses to start on an outdated schema (task 1.1), the postgres
 > certificate rotation is described below (task 1.0, D-104), and so are
 > image catalog changes (task 2.1). Runner certificate and CA rotation are in
-> [mTLS certificates](../security/mtls-certs.md). Re-encryption after a
-> keyring rotation and the release/verification steps (task 7.4) are added
-> later; completed in task 7.5.
+> [mTLS certificates](../security/mtls-certs.md). Release images are
+> verified with `cosign verify` (task 7.4, D-204). Re-encryption after a
+> keyring rotation is added later; completed in task 7.5.
 
 ## Before you upgrade
 
@@ -30,11 +30,132 @@
    audit log. Also make sure the master key and its escrow copy are
    available (they are needed to read the encrypted credentials after a
    restore; [key management](../security/key-management.md)).
-3. Pin the new image by digest (`BEKUP_IMAGE=ghcr.io/jlentink/bekup:x.y.z@sha256:…`).
-   Signature verification with `cosign verify` arrives with the release
-   workflow (task 7.4).
+3. **Get and verify the new release files.** Compose-first installs need
+   only the new compose file (it pins the new image by digest; see below).
+   Setup-first installs pin the new image by digest, taken from the GitHub
+   release notes of the version (`ghcr.io/jlentink/bekup:x.y.z@sha256:…`),
+   and **verify its signature** before anything runs it:
+   ```sh
+   NEW=ghcr.io/jlentink/bekup:x.y.z@sha256:<digest from the release notes>
+   docker pull "$NEW"
+   cosign verify \
+     --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+     "$NEW"
+   ```
+   The release notes repeat this command with the exact identity of the
+   version; `gh attestation verify "oci://$NEW" --repo jlentink/bekup`
+   checks the build provenance instead
+   ([verifying release images](compose.md#verifying-release-images)).
 
 ## Applying the upgrade
+
+### Container-only installs (`bekup setup`)
+
+**Compose-first** (the default since D-205): `compose.yaml` is the release
+file you downloaded; it pins the image in its `x-bekup-image` line. Upgrade
+by replacing it with the new release's file of the **same variant**, then
+let the new image's setup service do the rest:
+
+```sh
+cd /opt/bekup
+# the same asset you installed: compose.yaml, compose.traefik-external.yaml or compose.npm.yaml
+sudo curl -fsSLo compose.yaml.new https://github.com/jlentink/bekup/releases/download/vX.Y.Z/compose.yaml
+gh attestation verify compose.yaml.new --repo jlentink/bekup
+diff -u compose.yaml compose.yaml.new     # review: the image line and any service changes
+sudo mv compose.yaml.new compose.yaml
+docker compose run --rm setup upgrade
+docker compose pull
+docker compose up -d
+docker compose -f compose.yaml run --rm setup check
+```
+
+Local changes live in `compose.override.yaml`, so replacing `compose.yaml`
+loses nothing. If you customized `compose.yaml` itself, re-apply the change
+to the new file (the [hardening lint](compose.md#the-override-file-and-the-hardening-lint)
+checks it); better move it into the override.
+
+`setup upgrade` (D-203, D-205) in a compose-first deployment:
+
+- takes the new image from `compose.yaml` (the setup service's
+  `BEKUP_IMAGE` must match) and **never writes `compose.yaml`**;
+  `--write-compose` is refused;
+- refuses a variant switch (for example from `npm` to `traefik`): set up a
+  new directory instead and move the data;
+- rewrites only the generated files: `deploy/**` (assets the new version no
+  longer ships are removed), `reference/*.example.toml` and
+  `bekup-setup.json`;
+- never touches `.env` (except the `BEKUP_IMAGE` line with the committed
+  file, below), `bekup.toml`, `runner.toml`, the override file or an
+  existing secret; it re-validates the TOML files with the new version's
+  validators first (fix them before upgrading: unknown keys are rejected)
+  and generates only secrets that are new in the ownership manifest;
+- refuses when a generated file was edited locally; `--force` keeps a copy
+  as `<file>.bak-<timestamp>` and replaces it;
+- refuses a version older than the one recorded in `bekup-setup.json`
+  (`--allow-downgrade` only after restoring a matching database backup) and
+  an image tag that names another version than the binary
+  (`--allow-version-mismatch`).
+
+Until you run `setup upgrade`, `setup check` reports the newer image in
+`compose.yaml` as a warning; an older image is an error.
+
+**Compose-first with the committed file** (`deploy/compose/`, D-205
+amendment 3): `compose.yaml` takes the image from `BEKUP_IMAGE`, which setup
+keeps in `.env`. Upgrade by naming the new image in the shell for one
+command, so docker compose runs the **new** image's setup service; it
+rewrites the `BEKUP_IMAGE` line of `.env` (the only change it makes to
+`.env`) and records the image:
+
+```sh
+cd /opt/bekup
+# first take the committed file of the new version (same variant), if it changed:
+sudo curl -fsSLo compose.yaml.new https://raw.githubusercontent.com/jlentink/bekup/vX.Y.Z/deploy/compose/compose.yaml
+diff -u compose.yaml compose.yaml.new     # review; no output: unchanged
+sudo mv compose.yaml.new compose.yaml
+NEW=<registry>/bekup:X.Y.Z@sha256:<digest>
+BEKUP_IMAGE="$NEW" docker compose run --rm setup upgrade
+docker compose pull
+docker compose up -d
+docker compose -f compose.yaml run --rm setup check
+```
+
+Equivalently, edit the `BEKUP_IMAGE=` line of `.env` yourself and run
+`docker compose run --rm setup upgrade`. `setup upgrade --image <new>`
+alone does not work: compose would still run the old image's setup (it
+refuses with the command above). Until `setup upgrade` ran, `setup check`
+reports a `BEKUP_IMAGE` in `.env` that differs from the recorded image, or
+one set in the shell that overrides `.env`, as an error. Switching between
+the committed file and a release file of the same variant is an upgrade
+too: replace `compose.yaml` and run `setup upgrade` (with a release file it
+removes the `BEKUP_IMAGE` line from `.env`).
+
+### Setup-first installs
+
+With a `compose.yaml` that setup wrote itself (`--write-compose`), run
+`setup upgrade --write-compose` from the **new** image (pinned by digest
+and verified with `cosign verify` as above); it also rewrites
+`compose.yaml` and prints a summary of the compose changes:
+
+```sh
+NEW=ghcr.io/jlentink/bekup:1.1.0@sha256:<digest from the release notes>
+cd /opt/bekup
+docker run --rm --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v /opt/bekup:/deploy "$NEW" setup upgrade --write-compose --image "$NEW"
+docker compose pull
+docker compose up -d
+docker compose -f compose.yaml run --rm setup check
+```
+
+The rules above apply; a locally edited `compose.yaml` is refused (move
+the change into `compose.override.yaml`).
+
+Adopting an install that was set up from a source checkout (without
+`bekup-setup.json`) is not supported yet; keep following the steps below
+for those.
+
+### Source-checkout installs
 
 ```sh
 docker compose pull

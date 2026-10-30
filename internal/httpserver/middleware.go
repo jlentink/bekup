@@ -90,38 +90,68 @@ var forwardingHeaders = []string{
 // trusted proxy without X-Forwarded-For.
 const missingXFFWarnInterval = 5 * time.Minute
 
-// xffWarner logs, at most once per missingXFFWarnInterval, that a trusted
-// proxy sent a request without X-Forwarded-For (M1 review L4): every such
-// request is attributed to the proxy itself, so per-IP rate limits and
-// audit IPs then lump all clients together. Health checks are exempt
-// (probes often come from the proxy host directly).
+// xffWarner logs, at most once per missingXFFWarnInterval each, two
+// signs of a reverse-proxy misconfiguration:
+//   - a trusted proxy sent a request without X-Forwarded-For (M1 review
+//     L4): every such request is attributed to the proxy itself, so per-IP
+//     rate limits and audit IPs then lump all clients together;
+//   - a peer that is not a trusted proxy sent X-Forwarded-For (D-205): the
+//     header is ignored, so the proxy is probably not at the address
+//     server.trusted_proxies names (e.g. a proxy on the bekup-proxy link
+//     network without its fixed address), and every client is attributed
+//     to the proxy.
+//
+// Health checks are exempt (probes often come from the proxy host
+// directly). Only the peer address is logged, never header values.
 type xffWarner struct {
-	logger *slog.Logger
-	now    func() time.Time
-	mu     sync.Mutex
-	last   time.Time
+	logger        *slog.Logger
+	now           func() time.Time
+	mu            sync.Mutex
+	last          time.Time
+	lastUntrusted time.Time
 }
 
 func (x *xffWarner) check(r *http.Request, trusted []netip.Prefix) {
-	if x == nil || x.logger == nil || len(r.Header.Values("X-Forwarded-For")) > 0 ||
-		r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+	if x == nil || x.logger == nil || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 		return
 	}
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)
-	if err != nil || !isTrusted(ap.Addr().Unmap(), trusted) {
+	if err != nil {
 		return
 	}
+	peer := ap.Addr().Unmap()
+	hasXFF := len(r.Header.Values("X-Forwarded-For")) > 0
+	switch trustedPeer := isTrusted(peer, trusted); {
+	case !hasXFF && trustedPeer:
+		if x.allow(&x.last) {
+			x.logger.LogAttrs(r.Context(), slog.LevelWarn,
+				"request from a trusted proxy without X-Forwarded-For; the proxy address is used as the client address", warnAttrs(r, peer)...)
+		}
+	case hasXFF && !trustedPeer:
+		if x.allow(&x.lastUntrusted) {
+			x.logger.LogAttrs(r.Context(), slog.LevelWarn,
+				"X-Forwarded-For from a peer that is not in server.trusted_proxies; the header is ignored (is the reverse proxy at its configured fixed address?)", warnAttrs(r, peer)...)
+		}
+	}
+}
+
+// warnAttrs are the attributes of the warnings: the peer only, never a
+// header value.
+func warnAttrs(r *http.Request, peer netip.Addr) []slog.Attr {
+	return []slog.Attr{slog.String("peer", peer.String()), slog.String("request_id", RequestID(r.Context()))}
+}
+
+// allow reports whether a warning of the kind whose last time is *last may
+// be logged now (at most once per missingXFFWarnInterval) and records it.
+func (x *xffWarner) allow(last *time.Time) bool {
 	now := x.now()
 	x.mu.Lock()
-	if !x.last.IsZero() && now.Sub(x.last) < missingXFFWarnInterval {
-		x.mu.Unlock()
-		return
+	defer x.mu.Unlock()
+	if !last.IsZero() && now.Sub(*last) < missingXFFWarnInterval {
+		return false
 	}
-	x.last = now
-	x.mu.Unlock()
-	x.logger.LogAttrs(r.Context(), slog.LevelWarn,
-		"request from a trusted proxy without X-Forwarded-For; the proxy address is used as the client address",
-		slog.String("peer", ap.Addr().Unmap().String()), slog.String("request_id", RequestID(r.Context())))
+	*last = now
+	return true
 }
 
 // clientIP resolves the client address with the current trusted-proxy

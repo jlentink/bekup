@@ -1,0 +1,557 @@
+# Release workflow (task 7.4, D-204, proposed).
+#
+# A signed `vX.Y.Z` tag pushed by `just release` (D-072) builds, scans,
+# signs and publishes ghcr.io/<owner>/<repo>:X.Y.Z (and `latest` when X.Y.Z
+# is the highest released version), then creates the GitHub release with
+# notes from CHANGELOG.md. Nothing is published from branches.
+#
+# Same rules as ci.yml:
+# - Every action is pinned by full commit SHA with a `# vX.Y.Z` comment and
+#   every image by digest (Renovate keeps both up to date, see renovate.json).
+# - step-security/harden-runner (egress audit) is the first step of every job.
+# - No secrets except the workflow's own GITHUB_TOKEN; top-level
+#   permissions are empty and each job asks only for what it needs;
+#   checkout never persists credentials; no `pull_request_target`.
+# - No caches (a release must not consume state another workflow wrote):
+#   setup-qemu/setup-buildx cache nothing here, and the called ci.yml gets
+#   `disable_cache: true` (setup-go, setup-node, golangci-lint).
+# - Credentials with write access never meet third-party tools: the build
+#   job (packages: write) runs only docker/* actions, the Trivy scan runs in
+#   its own job with packages: read, and the publish job (packages: write,
+#   id-token: write) runs only sigstore/cosign-installer,
+#   actions/attest-build-provenance and docker/login + imagetools
+#   (harden-runner and checkout are in every job by project rule). The
+#   compose job (packages: read, id-token: write, attestations: write) runs
+#   the published image without network, cosign, attest-build-provenance
+#   and actions/upload-artifact; the release job (contents: write) only
+#   downloads that artifact, re-checks it against the compose job's digest
+#   output and runs the preinstalled gh.
+# - Values from the event reach `run:` scripts only through env variables,
+#   and the testable logic lives in scripts/release_ci.sh
+#   (scripts/release_ci_test.sh, `just test-scripts`).
+#
+# Order: verify the tag (VERSION, annotated, its tag object names this tag,
+# on main, signed by the pinned release key) and run the full CI, then push
+# the image by digest only (build), scan it with Trivy (scan), sign it
+# (cosign keyless) and attest SBOM and provenance, and only then give the
+# verified digest its tags (publish; `latest` recomputed right before
+# tagging inside the global release-latest group). The compose files
+# (D-205) are rendered by the published digest itself, checked, signed
+# (cosign sign-blob bundles) and attested (compose), and attached to the
+# GitHub release (release, contents: write, runs only gh).
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions: {}
+
+concurrency:
+  # One run per tag; a second push of the same tag waits instead of racing.
+  # (Differs from the group ci.yml computes for the called CI, so the two
+  # never wait for each other.)
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # The OpenPGP key whose signature a release tag must carry (primary key
+  # fingerprint). The public key is .github/release-signers.asc; rotating it
+  # means replacing both in one reviewed commit on main (docs/development.md).
+  RELEASE_SIGNER_FPR: 1563553AE7CE3A740617A07A592C7E70AA120838
+  PLATFORMS: linux/amd64,linux/arm64
+  # renovate: datasource=github-releases depName=sigstore/cosign
+  COSIGN_VERSION: v3.1.4
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  verify:
+    name: Verify the release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: ancestry check against main.
+          fetch-depth: 0
+
+      # actions/checkout may store the tag as the bare commit (no tag
+      # object); fetch the annotated tag object itself. The token is passed
+      # for this one command only (checkout does not persist it), through
+      # git's GIT_CONFIG_* environment, never on the command line (argv is
+      # visible to every process on the runner).
+      - name: Fetch the tag object
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.$GITHUB_SERVER_URL/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+            git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+
+      - name: Tag matches VERSION, is annotated, names itself and is on main
+        id: tag
+        run: |
+          version=$(scripts/release_ci.sh check-tag "$GITHUB_REF_NAME" VERSION)
+          ref="refs/tags/$GITHUB_REF_NAME"
+          if [ "$(git cat-file -t "$ref")" != tag ]; then
+            echo "::error::$GITHUB_REF_NAME is not an annotated tag"
+            exit 1
+          fi
+          # The name recorded in the signed tag object must be this tag (a
+          # signed v1.2.3 object pushed as v1.2.4 is refused).
+          name=$(git cat-file tag "$ref" | scripts/release_ci.sh tag-object-name)
+          if [ "$name" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::the tag object names $name, not $GITHUB_REF_NAME"
+            exit 1
+          fi
+          if [ "$(git rev-parse "$ref^{commit}")" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME does not point at the commit of this run"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
+          echo "release $version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      - name: Tag is signed by the pinned release key
+        run: |
+          GNUPGHOME="$RUNNER_TEMP/gnupg"
+          export GNUPGHOME
+          install -d -m 0700 "$GNUPGHOME"
+          gpg --batch --quiet --import .github/release-signers.asc
+          printf '%s:6:\n' "$RELEASE_SIGNER_FPR" | gpg --batch --quiet --import-ownertrust
+          if ! status=$(git -c gpg.format=openpgp -c gpg.minTrustLevel=fully \
+            verify-tag --raw "refs/tags/$GITHUB_REF_NAME" 2>&1); then
+            printf '%s\n' "$status"
+            echo "::error::the signature of $GITHUB_REF_NAME does not verify against .github/release-signers.asc"
+            exit 1
+          fi
+          printf '%s\n' "$status" | scripts/release_ci.sh verify-signer "$RELEASE_SIGNER_FPR"
+
+  ci:
+    name: CI
+    permissions:
+      contents: read
+    # The same commit's ci.yml (checked out by GitHub, not by a step). The
+    # newer self-repository form `$/...` is not understood by actionlint yet.
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
+    with:
+      disable_cache: true
+
+  # Build and push by digest only: no tag exists before scan and signature.
+  # Only docker/* actions see the packages: write token here.
+  build:
+    name: Image (build, push by digest)
+    needs: [verify, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # push to GHCR (by digest)
+    outputs:
+      repo: ${{ steps.meta.outputs.repo }}
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build metadata
+        id: meta
+        run: |
+          repo=$(scripts/release_ci.sh image-repo "$GITHUB_REPOSITORY")
+          epoch=$(git show -s --format=%ct HEAD)
+          build_date=$(TZ=UTC git show -s --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd HEAD)
+          sbom_generator=$(scripts/release_ci.sh sbom-generator)
+          {
+            echo "repo=$repo"
+            echo "epoch=$epoch"
+            echo "build_date=$build_date"
+            echo "sbom_generator=$sbom_generator"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+          cache-image: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+          cache-binary: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Release tags are immutable: a re-run never moves an existing tag.
+      # Fails closed: only a registry "not found" counts as absent.
+      - name: The version tag does not exist yet
+        env:
+          REPO: ${{ steps.meta.outputs.repo }}
+        run: |
+          state=$(scripts/release_ci.sh tag-state "$REPO:$VERSION")
+          if [ "$state" != absent ]; then
+            echo "::error::$REPO:$VERSION already exists; release tags are never overwritten"
+            exit 1
+          fi
+
+      - name: Build and push by digest (no tags)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.epoch }}
+        with:
+          context: .
+          target: runtime
+          platforms: ${{ env.PLATFORMS }}
+          pull: true
+          no-cache: true
+          provenance: mode=max
+          sbom: generator=${{ steps.meta.outputs.sbom_generator }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+          annotations: |
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.version=${{ env.VERSION }}
+            index:org.opencontainers.image.licenses=MIT
+            index:org.opencontainers.image.description=Self-hosted, security-first backup manager for PostgreSQL, MySQL and MariaDB
+          outputs: type=image,name=${{ steps.meta.outputs.repo }},push-by-digest=true,name-canonical=true,push=true
+
+  # Trivy runs with a read-only package token.
+  scan:
+    name: Image (Trivy scan)
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read # pull the pushed digest
+    env:
+      IMAGE: ${{ needs.build.outputs.repo }}@${{ needs.build.outputs.digest }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout (.trivyignore)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR (read only)
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Trivy (linux/amd64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: ${{ env.TRIVY_VERSION }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          cache: false
+
+      - name: Trivy (linux/arm64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: ${{ env.TRIVY_VERSION }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          cache: false
+          skip-setup-trivy: true
+
+  # Sign, attest and tag the scanned digest.
+  publish:
+    name: Image (sign, attest, tag)
+    needs: [verify, build, scan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read # list the release tags (latest rule)
+      packages: write # signatures, attestations, tags
+      id-token: write # cosign keyless + attestations (OIDC)
+      attestations: write # actions/attest-build-provenance
+    # One publish at a time across all releases, so `latest` is decided
+    # and set atomically (an older line finishing late never takes it).
+    concurrency:
+      group: release-latest
+      cancel-in-progress: false
+    outputs:
+      latest: ${{ steps.tag.outputs.latest }}
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      REPO: ${{ needs.build.outputs.repo }}
+      DIGEST: ${{ needs.build.outputs.digest }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout (scripts/release_ci.sh)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Sign (cosign keyless) and attest the SBOMs
+        run: |
+          # The index and every platform manifest.
+          cosign sign --yes --recursive "$REPO@$DIGEST"
+          # One SPDX SBOM (from BuildKit, pinned generator) per platform
+          # manifest, attested to that manifest's digest.
+          docker buildx imagetools inspect --raw "$REPO@$DIGEST" >"$RUNNER_TEMP/index.json"
+          for platform in ${PLATFORMS//,/ }; do
+            os=${platform%%/*} arch=${platform#*/}
+            pdigest=$(jq -r --arg os "$os" --arg arch "$arch" \
+              '[.manifests[] | select(.platform.os == $os and .platform.architecture == $arch)] | if length == 1 then .[0].digest else error("platform manifest not unique") end' \
+              "$RUNNER_TEMP/index.json")
+            sbom="$RUNNER_TEMP/sbom-$os-$arch.spdx.json"
+            docker buildx imagetools inspect "$REPO@$DIGEST" \
+              --format "{{ json (index .SBOM \"$platform\").SPDX }}" >"$sbom"
+            jq -e '.spdxVersion' "$sbom" >/dev/null
+            cosign attest --yes --type spdxjson --predicate "$sbom" "$REPO@$pdigest"
+          done
+
+      - name: Attest build provenance (GitHub)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ needs.build.outputs.repo }}
+          subject-digest: ${{ needs.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Tag the verified digest
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(scripts/release_ci.sh tag-state "$REPO:$VERSION")
+          if [ "$state" != absent ]; then
+            echo "::error::$REPO:$VERSION appeared during the run; not overwriting it"
+            exit 1
+          fi
+          # Decide `latest` now (inside release-latest), from every release
+          # tag that exists at this moment.
+          refs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" --jq '.[].ref')
+          latest=$(printf '%s\n' "$refs" | sed 's|^refs/tags/||' | scripts/release_ci.sh is-latest "$VERSION")
+          tags=(--tag "$REPO:$VERSION")
+          if [ "$latest" = true ]; then
+            tags+=(--tag "$REPO:latest")
+          else
+            echo "::notice::$VERSION is not the highest released version; latest stays where it is"
+          fi
+          docker buildx imagetools create "${tags[@]}" "$REPO@$DIGEST"
+          # The tag must name exactly the scanned and signed digest.
+          got=$(docker buildx imagetools inspect "$REPO:$VERSION" --format '{{ json .Manifest }}' | jq -r .digest)
+          if [ "$got" != "$DIGEST" ]; then
+            echo "::error::$REPO:$VERSION resolves to $got, not the signed digest $DIGEST"
+            exit 1
+          fi
+          echo "latest=$latest" >>"$GITHUB_OUTPUT"
+          echo "published $REPO:$VERSION@$DIGEST (latest: $latest)"
+
+  # The compose files (D-205): rendered by running the published digest
+  # (`bekup setup compose`; no network, read-only, UID 65532, no
+  # capabilities), checked, signed and attested. No write access to the
+  # repository; the files reach the release job as a workflow artifact.
+  compose:
+    name: Compose files (render, sign, attest)
+    needs: [verify, build, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read # pull the published digest
+      id-token: write # cosign keyless + attestations (OIDC)
+      attestations: write # actions/attest-build-provenance
+    outputs:
+      # Digest over the sha256sum lines of every asset (files + bundles):
+      # the release job recomputes it from the downloaded artifact, so an
+      # artifact swapped between the jobs is never published.
+      assets: ${{ steps.digests.outputs.assets }}
+    env:
+      IMAGE: ${{ needs.build.outputs.repo }}:${{ needs.verify.outputs.version }}@${{ needs.build.outputs.digest }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout (scripts/release_ci.sh)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Log in to GHCR (read only)
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Render and check the compose files
+        run: |
+          out="$RUNNER_TEMP/compose"
+          install -d -m 0755 "$out"
+          scripts/release_ci.sh render-compose "$IMAGE" "$out"
+          # The tag's committed deploy/compose/ files (D-205 amendment 3)
+          # must be these files with the BEKUP_IMAGE placeholder line.
+          scripts/release_ci.sh committed-compose "$out" deploy/compose
+          (cd "$out" && sha256sum compose.yaml compose.traefik-external.yaml compose.npm.yaml >SHA256SUMS)
+          cat "$out/SHA256SUMS"
+
+      - name: Attest build provenance (GitHub)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/compose/compose.yaml
+            ${{ runner.temp }}/compose/compose.traefik-external.yaml
+            ${{ runner.temp }}/compose/compose.npm.yaml
+            ${{ runner.temp }}/compose/SHA256SUMS
+
+      - name: Sign the files (cosign keyless bundles)
+        run: |
+          cd "$RUNNER_TEMP/compose"
+          for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml SHA256SUMS; do
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f" >/dev/null
+          done
+          ls -l
+
+      - name: Digest of the assets (job output)
+        id: digests
+        run: |
+          assets=$(scripts/release_ci.sh assets-digest "$RUNNER_TEMP/compose")
+          echo "assets $assets"
+          echo "assets=$assets" >>"$GITHUB_OUTPUT"
+
+      - name: Hand the files to the release job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-files
+          path: ${{ runner.temp }}/compose/
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    name: GitHub release
+    needs: [verify, build, publish, compose]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # create the release
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the compose files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: compose-files
+          path: ${{ runner.temp }}/compose
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          LATEST: ${{ needs.publish.outputs.latest }}
+          REPO: ${{ needs.build.outputs.repo }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+          ASSETS: ${{ needs.compose.outputs.assets }}
+        run: |
+          dir="$RUNNER_TEMP/compose"
+          # Re-check what the artifact carried: exactly the files the compose
+          # job signed (digest passed as a job output, not through the
+          # artifact), the pins and the sums.
+          got=$(scripts/release_ci.sh assets-digest "$dir")
+          if [ -z "$ASSETS" ] || [ "$got" != "$ASSETS" ]; then
+            echo "::error::the compose files differ from those the compose job signed ($got, want $ASSETS)"
+            exit 1
+          fi
+          scripts/release_ci.sh compose-assets "$REPO:$VERSION@$DIGEST" "$dir"
+          (cd "$dir" && sha256sum -c SHA256SUMS)
+          files=()
+          for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml SHA256SUMS; do
+            test -s "$dir/$f.sigstore.json"
+            files+=("$dir/$f" "$dir/$f.sigstore.json")
+          done
+          notes="$RUNNER_TEMP/notes.md"
+          scripts/release_ci.sh release-notes "$VERSION" "$REPO" "$DIGEST" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" CHANGELOG.md >"$notes"
+          gh release create "$GITHUB_REF_NAME" --verify-tag \
+            --title "bekup $VERSION" --notes-file "$notes" --latest="$LATEST" "${files[@]}"

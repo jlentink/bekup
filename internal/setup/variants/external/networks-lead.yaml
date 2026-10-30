@@ -1,0 +1,12 @@
+# ---------------------------------------------------------------------------
+# Networks: segmented so every component reaches only what it needs.
+# `internal: true` networks have no route to the outside world.
+#
+# The fixed subnets lie outside Docker's default address pools
+# (172.17-31.0.0/16, 192.168.0.0/16) so they cannot collide with networks
+# Docker allocates automatically. If they clash with your LAN, override the
+# compose variables (in .env) AND update bekup.toml / runner.toml to match:
+#   RUNNER_CTL_SUBNET, RUNNER_CTL_IP, METRICS_SUBNET, SERVE_METRICS_IP,
+#   BEKUP_PROXY_NETWORK, SERVE_PROXY_IP
+# (compose interpolation only; these are not bekup configuration keys).
+# ---------------------------------------------------------------------------

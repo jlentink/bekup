@@ -48,7 +48,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-020](#d-020-justfile-as-the-single-task-entry-point) | justfile as the single task entry point | accepted |
 | [D-021](#d-021-web-design-with-the-frontend-design-skill) | Web design with the frontend-design skill | accepted |
 | [D-022](#d-022-restore-safety-stage-verify-restore) | Restore safety: stage, verify, restore | accepted |
-| [D-023](#d-023-notifications-phase-1) | Notifications (Phase 1) | accepted |
+| [D-023](#d-023-notifications-phase-1) | Notifications (Phase 1) | accepted (push channel superseded by D-206) |
 | [D-024](#d-024-monitoring-phase-1) | Monitoring (Phase 1) | accepted |
 | [D-025](#d-025-packaging-single-go-binary) | Packaging: single Go binary | accepted |
 | [D-026](#d-026-web-stack) | Web stack | accepted |
@@ -186,7 +186,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-158](#d-158-per-connection-run-limit-details-task-313) | Per-connection run limit: details (task 3.13) | accepted |
 | [D-159](#d-159-job-calendar-query-details-task-314) | Job calendar query: details (task 3.14) | accepted (amended by D-160) |
 | [D-160](#d-160-m3-addendum-review-fixes-one-early-start-ahead-calendar-catch-up-time-prefix-truncation-and-bounded-reads) | M3 addendum review fixes: one early start ahead, calendar catch-up, time-prefix truncation and bounded reads | accepted |
-| [D-161](#d-161-notification-event-catalog-and-per-user-defaults) | Notification event catalog and per-user defaults | accepted |
+| [D-161](#d-161-notification-event-catalog-and-per-user-defaults) | Notification event catalog and per-user defaults | accepted (push default superseded by D-206) |
 | [D-162](#d-162-restore-staging-and-verification) | Restore staging and verification | proposed |
 | [D-163](#d-163-temporary-restore-connections) | Temporary restore connections | proposed |
 | [D-164](#d-164-offline-recovery-tooling-verify-decrypt-reindeximport-and-public-key-export) | Offline recovery tooling: verify, decrypt, reindex/import and public key export | proposed |
@@ -206,16 +206,16 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-180](#d-180-smtp-follows-the-servers-tls-support) | SMTP follows the server's TLS support | accepted |
 | [D-181](#d-181-user-admin-ui-one-time-temporary-passwords-ui-only-self-guards-derived-2fa-state-admin-only-owner-picker-task-68) | User admin UI: one-time temporary passwords, UI-only self guards, derived 2FA state, admin-only owner picker (task 6.8) | proposed (derived 2FA state and admin-only picker superseded by D-195) |
 | [D-182](#d-182-connections-and-destinations-ui-deliberate-pin-and-host-key-confirmation-client-side-retargeting-prompt-session-only-test-results-tasks-63-64) | Connections and destinations UI: deliberate pin and host-key confirmation, client-side retargeting prompt, session-only test results (tasks 6.3, 6.4) | proposed (item 5 superseded by D-195) |
-| [D-183](#d-183-notification-core-transactional-outbox-audit-driven-emitters-delivery-time-authorization-noise-rules-and-storage-task-53) | Notification core: transactional outbox, audit-driven emitters, delivery-time authorization, noise rules and storage (task 5.3) | proposed |
+| [D-183](#d-183-notification-core-transactional-outbox-audit-driven-emitters-delivery-time-authorization-noise-rules-and-storage-task-53) | Notification core: transactional outbox, audit-driven emitters, delivery-time authorization, noise rules and storage (task 5.3) | proposed (push parts of items 3 and 6 superseded by D-206) |
 | [D-184](#d-184-user-directory-for-staff-admin-activity-facts-on-user-and-the-jobs-owner-filter-task-68-follow-up) | User directory for staff, admin activity facts on User and the jobs owner filter (task 6.8 follow-up) | proposed |
 | [D-185](#d-185-restore-wizard-and-calendar-ui-proactive-aal2-step-up-request-only-age-identity-client-side-calendar-filters-tasks-67-611) | Restore wizard and calendar UI: proactive AAL2 step-up, request-only age identity, client-side calendar filters (tasks 6.7, 6.11) | proposed |
 | [D-186](#d-186-jobs-and-runs-ui-start-early-ledger-no-cache-one-time-keys-and-tickets-virtualized-log-tail-derived-completeness-evidence-tasks-65-66) | Jobs and runs UI: start-early ledger, no-cache one-time keys and tickets, virtualized log tail, derived completeness evidence (tasks 6.5, 6.6) | proposed (item 5 per-table remark superseded by D-195) |
 | [D-187](#d-187-runitemstats-and-stored-last-test-results-of-connections-and-destinations-task-66-63-64-follow-up) | RunItem.stats and stored last test results of connections and destinations (task 6.6, 6.3, 6.4 follow-up) | proposed |
 | [D-188](#d-188-missed-backup-dead-man-alerts-recorded-occurrences-derived-window-one-alert-per-outage-with-daily-reminders-task-54) | Missed-backup (dead-man) alerts: recorded occurrences, derived window, one alert per outage with daily reminders (task 5.4) | proposed |
 | [D-190](#d-190-security-alerts-audit-driven-mandatory-deduplicated-burst-detection-hourly-security-checks-cli-alerts-via-the-outbox-task-55) | Security alerts: audit-driven, mandatory, deduplicated; burst detection; hourly security checks; CLI alerts via the outbox (task 5.5) | proposed |
-| [D-191](#d-191-notifications-api-shared-and-personal-channels-the-preference-matrix-the-inbox-and-its-live-stream-task-53b) | Notifications API: shared and personal channels, the preference matrix, the inbox and its live stream (task 5.3b) | proposed (item 7 superseded by D-197) |
+| [D-191](#d-191-notifications-api-shared-and-personal-channels-the-preference-matrix-the-inbox-and-its-live-stream-task-53b) | Notifications API: shared and personal channels, the preference matrix, the inbox and its live stream (task 5.3b) | proposed (item 7 superseded by D-197; push in item 5 by D-206) |
 | [D-192](#d-192-dashboard-ui-one-run-stream-polled-restores-client-derived-health-and-security-findings-bounded-storage-sums-task-62) | Dashboard UI: one run stream, polled restores, client-derived health and security findings, bounded storage sums (task 6.2) | proposed (items 1, 2 "missed" and 4 superseded by D-196; item 1 stream by D-197) |
-| [D-193](#d-193-notification-center-ui-one-inbox-stream-in-the-bell-in-app-link-allowlist-memory-only-verification-code-no-cache-signing-keys-task-610) | Notification center UI: one inbox stream in the bell, in-app link allowlist, memory-only verification code, no-cache signing keys (task 6.10) | proposed (item 1 superseded by D-197) |
+| [D-193](#d-193-notification-center-ui-one-inbox-stream-in-the-bell-in-app-link-allowlist-memory-only-verification-code-no-cache-signing-keys-task-610) | Notification center UI: one inbox stream in the bell, in-app link allowlist, memory-only verification code, no-cache signing keys (task 6.10) | proposed (item 1 superseded by D-197; push column in item 5 by D-206) |
 | [D-194](#d-194-admin-settings-ui-settings-hub-client-filtered-security-alerts-audit-chain-status-from-auditverifyfailed-read-only-ssrf-allowlist-guarded-passphrase-export-task-69) | Admin settings UI: settings hub, client-filtered security alerts, audit chain status from audit.verify.failed, read-only SSRF allowlist, guarded passphrase export (task 6.9) | proposed (items 2-4 superseded by D-196) |
 | [D-195](#d-195-m6-ui-follow-ups-stored-test-results-per-item-statistics-shared-owner-picker-test-restore-pages-and-settings-stable-web-tests-task-612) | M6 UI follow-ups: stored test results, per-item statistics, shared owner picker, test-restore pages and settings, stable web tests (task 6.12) | proposed |
 | [D-196](#d-196-runtime-ssrf-allowlist-api-inbox-filter-audit-chain-status-and-dashboard-aggregates-task-612-follow-ups) | Runtime SSRF allowlist API, inbox filter, audit chain status and dashboard aggregates (task 6.12 follow-ups) | proposed (item 8 streams superseded by D-197; allowlist scopes added by D-198) |
@@ -223,8 +223,12 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-198](#d-198-scoped-ssrf-allowlist-signed-delivery-id-and-event-type-bucketed-personal-tests-and-other-m5-security-follow-ups) | Scoped SSRF allowlist, signed delivery id and event type, bucketed personal tests and other M5 security follow-ups | proposed |
 | [D-199](#d-199-web-review-follow-ups-one-deny-by-default-route-guard-confirmed-sign-out-strict-return-paths-shared-web-modules-and-build-time-document-splitting) | Web review follow-ups: one deny-by-default route guard, confirmed sign-out, strict return paths, shared web modules and build-time document splitting | proposed |
 | [D-200](#d-200-runtime-config-reload-of-a-conservative-set-of-live-keys-admin-ui-broadcast-and-sighup) | Runtime config reload of a conservative set of live keys (admin UI broadcast and SIGHUP) | proposed |
-| [D-201](#d-201-dev-only-runner-for-a-native-serve-loopback-published-on-a-dedicated-network) | Dev-only runner for a native serve, loopback-published on a dedicated network | proposed |
+| [D-201](#d-201-dev-only-runner-for-a-native-serve-loopback-published-on-a-dedicated-network) | Dev-only runner for a native serve, loopback-published on a dedicated network | proposed (dev subnet moved by D-205) |
 | [D-202](#d-202-manual-multi-arch-image-publishing-to-the-operators-own-registry-just-publish) | Manual multi-arch image publishing to the operator's own registry (`just publish`) | proposed |
+| [D-203](#d-203-container-only-compose-install-bekup-setup-with-embedded-assets-an-ownership-manifest-and-a-root--cap_chown-setup-container) | Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container | proposed (partly superseded by D-205) |
+| [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205) |
+| [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder) |
+| [D-206](#d-206-mobile-apps-and-the-push-channel-dropped-from-the-roadmap) | Mobile apps and the push channel dropped from the roadmap | proposed |
 
 ---
 
@@ -582,7 +586,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-023: Notifications (Phase 1)
 
 - **Date:** 2026-10-26
-- **Status:** accepted
+- **Status:** accepted (push channel superseded by D-206)
 - **Decided by:** user
 - **Context:** Operators and owners need to know about failures and security
   events through channels of their choice.
@@ -7656,7 +7660,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-161: Notification event catalog and per-user defaults
 
 - **Date:** 2026-10-28
-- **Status:** accepted
+- **Status:** accepted (push default superseded by D-206)
 - **Decided by:** user
 - **Context:** Users should choose exactly which notifications they receive
   (e.g. backup failed, backup successful, backup started, restore started).
@@ -9420,7 +9424,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-183: Notification core: transactional outbox, audit-driven emitters, delivery-time authorization, noise rules and storage (task 5.3)
 
 - **Date:** 2026-10-28
-- **Status:** proposed
+- **Status:** proposed (push parts of items 3 and 6 superseded by D-206)
 - **Decided by:** agent (task 5.3)
 - **Context:** D-023, D-051 and D-161 fix the channels, the catalog, the
   audiences, the defaults and the noise rules; D-177 and D-178 deliver the
@@ -9981,7 +9985,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-191: Notifications API: shared and personal channels, the preference matrix, the inbox and its live stream (task 5.3b)
 
 - **Date:** 2026-10-28
-- **Status:** proposed (item 7 superseded by D-197)
+- **Status:** proposed (item 7 superseded by D-197; push in item 5 superseded by D-206)
 - **Decided by:** agent (task 5.3b)
 - **Context:** D-183 delivered the notification core (tables, fan-out,
   delivery) and left the GraphQL API to 5.3b: shared channels with job
@@ -10144,7 +10148,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-193: Notification center UI: one inbox stream in the bell, in-app link allowlist, memory-only verification code, no-cache signing keys (task 6.10)
 
 - **Date:** 2026-10-28
-- **Status:** proposed (item 1 superseded by D-197)
+- **Status:** proposed (item 1 superseded by D-197; push column in item 5 superseded by D-206)
 - **Decided by:** agent (task 6.10)
 - **Context:** Task 6.10 adds the bell, the inbox page, the personal
   notification settings and the `/verify-email#code=…` page on top of the
@@ -10901,7 +10905,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-201: Dev-only runner for a native serve, loopback-published on a dedicated network
 
 - **Date:** 2026-10-29
-- **Status:** proposed
+- **Status:** proposed (the `runner-host` subnet moved to `10.213.254.0/24` by D-205)
 - **Decided by:** agent (requested by the user: "can i also start a runner only next to the dev fe and backend i currently run")
 - **Context:** The native dev workflow (`just dev` + `just run` +
   `just web-dev`, D-114) had no runner: the only dev runner lives in
@@ -11020,3 +11024,851 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `scripts/publish.sh`, `scripts/publish_test.sh`, `scripts/lib.bash`
   (`load_local_env`), `.just.env.example`, `docs/development.md`,
   `docs/installation/compose.md`.
+
+## D-203: Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container
+
+- **Date:** 2026-10-29
+- **Status:** proposed (partly superseded by D-205: setup no longer always writes the compose file; items 2, 4 and 9 for the compose file, and the file names)
+- **Decided by:** agent (requested by the user: the deployment server should need only images, no source checkout; the user decided that the image carries the deploy assets, that a new `bekup setup` writes a ready deployment directory, that the image comes from a prompt or `BEKUP_IMAGE` and must be pinned by digest, that the directory holds only generated files, and that ownership is set by a root setup container with only `CAP_CHOWN`)
+- **Context:** A compose install needed the repository for
+  `deploy/postgres/*`, `deploy/traefik|nginx/*`, the compose file and
+  `just keygen`, plus a long list of manual `chown`/`chmod` steps (D-041)
+  that are easy to get wrong. Every secret must be readable by exactly the
+  consuming container's UID (65532 bekup, 70 postgres) and nobody else, the
+  CA key belongs offline, and the bekup image must be pinned (D-061).
+- **Decision:**
+  1. **Assets without drift.** The root package `bekup` (`embed.go`) embeds
+     `docker-compose.yml`, `bekup.example.toml`, `runner.example.toml` and
+     `deploy/{postgres,traefik,nginx}` (public files only; never
+     `deploy/dev`). `.dockerignore` excludes only `docker-compose.dev.yml`
+     and `docker-compose.override.yml`. Tests: the embedded files are
+     byte-equal to the repository files, every `./deploy/...` mount is
+     embedded and every embedded asset is mounted, `.dockerignore` excludes
+     none of them, third-party image pins come only from the repository
+     compose file.
+  2. **The generated compose file equals the repository's** except for the
+     single line `image: ${BEKUP_IMAGE:-bekup:dev}`, which becomes the
+     pinned reference as a literal (a shell variable cannot override it);
+     exactly one such line, no further `${BEKUP_IMAGE`, no `build:`,
+     otherwise setup fails. A header says "do not edit; use
+     docker-compose.override.yml".
+  3. **Image.** `--image` or `BEKUP_IMAGE`, parsed by `internal/imageref`
+     (`[registry/]path[:tag]@sha256:<64 hex>`, the grammar shared with the
+     engine catalog). A container cannot verify its own digest, so a tag
+     that names another version than the running binary is refused
+     (`--allow-version-mismatch`); the error explains how to obtain the
+     digest.
+  4. **`bekup setup init`** (`internal/setup`) writes, from validated
+     answers (strict patterns: no CR/LF, `$`, quotes, `#`, backslashes or
+     spaces), the compose file, `deploy/**`, `reference/*.example.toml`
+     (generated-upgradable), `.env` (compose variables, no secrets),
+     minimal `bekup.toml`/`runner.toml` validated in-process with
+     `config.LoadBekup`/`LoadRunner` and an empty environment, and for
+     static proxy TLS `docker-compose.override.yml` + `proxy-tls/`
+     (operator files, written once). Secrets: three 32-byte `crypto/rand`
+     database passwords (base64url) and the two URLs (built in one buffer,
+     registered with `logging.DefaultRegistry`, zeroed), the master keyring
+     (`crypto.GenerateKeyring`), and `certs.Init` for runner, serve and
+     postgres with a passphrase-sealed CA key (prompt twice,
+     `--ca-passphrase-file` via `config.ReadSecretFile`,
+     `--ca-passphrase-stdin`, or `--generate-ca-passphrase` shown once and
+     only on a terminal; no unencrypted CA). Secret groups (master key,
+     database, certificates) are generated whole or not at all.
+     `--keys-dir` is a clean relative path inside the deployment directory
+     (mount another volume there to keep secrets elsewhere).
+  5. **Writing.** Symlinks are refused on every path component (Lstat);
+     new files are created with `O_CREAT|O_EXCL|O_NOFOLLOW` in their final
+     mode and fsynced with their directory; upgradable files are replaced
+     through a temporary file and a rename; any error rolls back everything
+     the run created (and restores replaced non-secret files). Existing
+     files are kept: `--keep-existing` creates only missing files, `--force`
+     rewrites only non-secret files, `--regenerate-secrets` needs a terminal
+     and the typed confirmation `regenerate secrets` and warns about the
+     postgres volume and stored credentials.
+  6. **One versioned ownership manifest** (`internal/setup/manifest.go`,
+     `Entry{Path, Kind, Mode, UID, GID, Class, Secret, Group}`, classes
+     generated-upgradable / operator / secret) drives init, check and
+     `--fix-ownership`, and the table in `docs/installation/compose.md` (a
+     test keeps it in sync). Public files root 0644 (`*.sh` and directories
+     0755); `secrets/`, `secrets/certs/`, component directories root 0711;
+     master key, DB URLs, `serve.key`, `runner.key` 65532 0400; postgres,
+     owner and app passwords and `postgres.key` 70 0400; certificates and
+     bundles root 0644; `certs/ca/` root 0700 with `ca.key` 0600. A test
+     ties each secret's owner to the `user:` of every compose service that
+     consumes it.
+  7. **Ownership modes** `auto|chown|print|none`: `auto` reads
+     `/proc/self/mountinfo` (Docker Desktop file systems `fakeowner`,
+     `virtiofs`, `fuse.grpcfuse`, `osxfs`, `9p` give `none`), otherwise
+     `chown` as root, else `print`. Always chmod first, then `Lchown`, so
+     the setup container needs only `CAP_CHOWN`. The chosen mode is printed.
+     The documented container: `--user 0:0 --cap-drop ALL --cap-add CHOWN
+     --network none --read-only --tmpfs /tmp --security-opt
+     no-new-privileges`, the directory bind-mounted at `/deploy`.
+  8. **CA offline.** The recommended flow mounts the offline media at
+     `/deploy/secrets/certs/ca`, so the CA key never touches the server's
+     disk; setup detects the mount. Without it, setup and `setup check`
+     warn while `ca.key` is on disk.
+  9. **State and upgrade.** `bekup-setup.json` (no secrets: schema, manifest
+     version, bekup version, image, proxy, keys directory, ownership mode,
+     SHA-256 of every generated file, the secret groups). `setup upgrade
+     --image <pinned>` requires it, refuses a downgrade
+     (`--allow-downgrade`), refuses local edits of generated files
+     (`--force` keeps `<file>.bak-<UTC timestamp>`), re-validates the TOML
+     files first, rewrites only the compose file, `deploy/**` (removing
+     stale assets), `reference/*` and the state file, generates only secret
+     groups new in the manifest, never touches existing secrets, `.env` or
+     the TOMLs, and prints the compose diff. The same image changes nothing.
+  10. **`setup check`** is read-only (unless `--fix-ownership`) and never
+      opens a secret file: manifest presence/type/mode/owner (owner skipped
+      in `none` mode), no symlinks, every `image:` digest-pinned, generated
+      files unchanged and equal to this binary's, `.env` syntax, `base_url`
+      vs `BEKUP_DOMAIN`, `trusted_proxies` vs `PROXY_FRONTEND_IP`, listen
+      addresses vs the compose addresses, `docker.gid` vs `DOCKER_GID`,
+      shell variables that would override `.env`, certificate expiry, and
+      the CA key on disk. Non-zero exit on errors.
+  11. **Not audited.** Setup runs before the database exists and without
+      network; it prints the certificate fingerprints and the master key
+      ID as evidence and the escrow guidance instead. Certificate rotation
+      in a setup deployment: `certs rotate` in a root container with only
+      `CAP_CHOWN` + `CAP_FOWNER` (`--no-audit`, recorded afterwards), then
+      `setup check --fix-ownership`; a `setup rotate-certs` wrapper and
+      adopting existing source-based installs are follow-ups.
+  12. **Review amendments (milestone review, 2026-10-29).**
+      - *Ownership without `CAP_FOWNER`:* chmod only when the mode bits
+        (incl. setuid/setgid/sticky) differ; a file that belongs to another
+        UID is `Lchown`'ed to the caller, chmod'ed, then `Lchown`'ed to its
+        manifest owner (per entry), so `setup upgrade`, `check
+        --fix-ownership` and init `--force`/`--keep-existing` work on an
+        already-chowned tree with `CAP_CHOWN` only. CI runs `check
+        --fix-ownership` on the chowned tree.
+      - *Existing CA:* before writing anything, init checks every file
+        `certs.Init` writes (`certs.InitTargets`); an existing CA (e.g. the
+        offline media of an earlier install) is refused ("reuse via `certs
+        rotate` + `--keep-existing`, or remove it") and only paths that were
+        absent are tracked for the rollback, so a failed run never deletes
+        an existing CA. `--regenerate-secrets` moves the old secrets
+        (including a mounted offline CA, named in the warning) aside and
+        deletes them only after the run succeeded; any failure restores them.
+      - *Offline media without Unix modes (FAT/exFAT):* EPERM/ENOTSUP from
+        chmod/chown of offline entries on a separate mount are a warning
+        (the CA key is age-encrypted); `check` reports their modes as
+        warnings; a POSIX file system (ext4 on LUKS) is recommended.
+      - *Writes through `os.Root`:* the writer and the ownership code use an
+        `os.Root` on the deployment directory (Lstat checks stay), so no
+        racing symlink can lead outside it.
+      - *Deployment directory:* a manifest entry `.` (root, at most 0755):
+        `check` errors when it is group/world-writable or not root's, init
+        warns and narrows it.
+      - *Pin bypass:* `check` parses `docker-compose.override.yml` (yaml/v3,
+        aliases and merge keys followed): ERROR for an `image:` that is not
+        digest-pinned, any `build:`, `extends` from another file and a
+        top-level `include`; ERROR for other compose file names next to the
+        pinned one, and for `COMPOSE_FILE`, `COMPOSE_PATH_SEPARATOR`,
+        `COMPOSE_PROJECT_DIRECTORY`, `COMPOSE_ENV_FILES` in `.env` or the
+        environment (they select other compose files); WARN for
+        `COMPOSE_PROJECT_NAME` (only renames the project: new, empty
+        volumes).
+      - *Image tag:* a reference without a tag needs
+        `--allow-version-mismatch` (nothing to compare).
+      - *Upgrade:* an operator file at a path that becomes generated is
+        refused, or with `--force` backed up to `.bak-<timestamp>`.
+      - *CIDRs:* `--target-cidr`/`--trusted-proxy` wider than /8 (IPv4) or
+        /32 (IPv6), above all `0.0.0.0/0` and `::/0`, are refused; wider than
+        /16 or /48 warns (init report and `check`).
+      - *Output:* documented setup and rotation `docker run`s use
+        `--log-driver none`; a generated CA passphrase goes to stderr (only
+        when it is a terminal) with a log warning; `--ca-passphrase-stdin`
+        stops reading at the newline.
+- **Alternatives considered:** inline compose `configs.content` (puts
+  scripts into the compose file, no file modes, still needs secrets
+  created by hand); separate asset images (more images to pin and
+  verify); copying the assets with a `just gen` step into a release
+  bundle (drifts, still a second artefact); printing `sudo` commands only
+  (error-prone, ownership left to chance); an unencrypted CA option
+  (rejected: D-090).
+- **Consequences:** A production host needs only Docker and one pinned
+  image. Security impact: a root container on a host path is mitigated by
+  minimal capabilities (`CAP_CHOWN` only), no network, a read-only root, a
+  pinned image, symlink refusal and `O_NOFOLLOW`; a tampered setup image
+  could write malicious assets, so the image must be pinned by digest and
+  verified (provenance, task 7.4); secrets at rest are protected by the
+  manifest modes and owners (D-041), the CA key by its passphrase and the
+  offline mount; check detects drift, local edits and environment
+  overrides. Desktop file systems are detected (`--ownership` overrides).
+- **Related:** D-019, D-041, D-061, D-069, D-089, D-090, D-093, D-094,
+  D-100, D-113, D-202; task 6.14; `embed.go`, `internal/setup`,
+  `internal/imageref`, `cmd/bekup/setup_cmd.go`,
+  `docs/installation/compose.md`, `SECURITY.md`.
+
+## D-204: Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging
+
+- **Date:** 2026-10-29
+- **Status:** proposed (extended by D-205: the release also publishes the attested compose files)
+- **Decided by:** agent (task 7.4 brought forward; the user decided to publish only on release tags and supplied the release signing key, OpenPGP `1563553AE7CE3A740617A07A592C7E70AA120838`)
+- **Context:** `bekup setup` (D-203) installs from an image alone, and a
+  tampered setup image could write malicious assets, so operators need an
+  official image they can verify before running it. D-061 asks for SBOM,
+  cosign keyless signing and provenance; D-072 makes `just release` push a
+  signed annotated tag `vX.Y.Z` together with `main`.
+- **Decision:**
+  1. **Trigger:** only `push` of tags `v[0-9]+.[0-9]+.[0-9]+`
+     (`.github/workflows/release.yml`); nothing is published from branches,
+     no `pull_request_target`, one concurrency group per tag (queued, never
+     cancelled). Registry `ghcr.io/<owner>/<repo>` (lowercased), today
+     `ghcr.io/jlentink/bekup`; the only credential is the workflow's
+     `GITHUB_TOKEN`. Top-level `permissions: {}`; per job `verify`/`ci`
+     `contents: read`, `image` adds `packages: write`, `id-token: write`,
+     `attestations: write`, `release` `contents: write`. Actions pinned by
+     SHA, images (binfmt, BuildKit) by digest, cosign and Trivy versions
+     pinned in `env` (Renovate), harden-runner first, no caches (no state
+     from other workflows enters a release).
+  2. **Tag verification (`verify`):** the tag equals `v$(cat VERSION)`, is
+     annotated, points at the run's commit, and that commit is an ancestor
+     of `origin/main`. `git verify-tag --raw` runs in a temporary GnuPG home
+     holding only `.github/release-signers.asc` (public key, ownertrust
+     ultimate, `gpg.minTrustLevel=fully`), and `scripts/release_ci.sh
+     verify-signer` requires exactly one GOODSIG/VALIDSIG, no
+     BAD/ERR/EXP/REV status, a SHA-2 hash and a **primary key fingerprint**
+     equal to `RELEASE_SIGNER_FPR` in the workflow. Key rotation replaces
+     the file and the fingerprint in one reviewed commit on `main`. SSH
+     signatures are not accepted.
+  3. **CI gate:** `ci.yml` gains `on: workflow_call` (other triggers
+     unchanged) and runs in full on the tag; `image` needs `verify` and
+     `ci`.
+  4. **Build and push by digest only:** buildx (QEMU for arm64)
+     `linux/amd64,linux/arm64`, `target: runtime`, `pull`, `no-cache`,
+     build args `VERSION`, `VCS_REF` (commit), `BUILD_DATE` from the commit
+     time and `SOURCE_DATE_EPOCH`, `provenance: mode=max`, BuildKit SBOM with
+     the generator pinned once in `scripts/publish.sh` (D-202), OCI index
+     annotations; `outputs: push-by-digest=true`, so no tag exists before
+     the checks pass. An existing `:X.Y.Z` is refused before the build and
+     again before tagging (version tags are immutable).
+  5. **Scan:** Trivy (pinned action and version, default DB mirror, no
+     cache) scans the digest for both platforms; any HIGH or CRITICAL
+     vulnerability with a fix fails the release. `.trivyignore` holds only
+     reviewed exceptions with a reason, decider and Trivy `exp:` date.
+  6. **Sign and attest:** `cosign sign --yes --recursive` (keyless, GitHub
+     OIDC, Rekor) on the index digest (and so every platform manifest);
+     `cosign attest --type spdxjson` of each platform's BuildKit SPDX SBOM
+     to that platform's manifest digest; `actions/attest-build-provenance`
+     with `push-to-registry` for `gh attestation verify`.
+  7. **Tag:** `docker buildx imagetools create` gives the verified digest
+     `:X.Y.Z` and, only when X.Y.Z is at least the highest plain `vX.Y.Z`
+     tag (`release_ci.sh is-latest` with `semver.sh gt`; pre-releases and
+     other tags ignored), `:latest`. A patch for an older line never takes
+     `latest`. The version tag must then resolve to the signed digest.
+  8. **Release:** `gh release create --verify-tag` (no third-party release
+     action) with the CHANGELOG section of X.Y.Z (`release_ci.sh
+     release-notes`, inputs validated), the digest, `docker pull …@sha256:`,
+     `cosign verify --certificate-identity
+     https://github.com/jlentink/bekup/.github/workflows/release.yml@refs/tags/vX.Y.Z
+     --certificate-oidc-issuer https://token.actions.githubusercontent.com`
+     (docs give the general form
+     `--certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$'`),
+     `gh attestation verify`, and the hardened `setup init` / `setup
+     upgrade` commands with the pinned reference; GitHub's "latest release"
+     follows the same rule.
+  9. **Review amendments (milestone review, 2026-10-29).**
+     - *Job split:* `build` (packages: write; only `docker/*` actions,
+       harden-runner and checkout) pushes by digest; `scan` (packages: read)
+       runs Trivy; `publish` (packages: write, id-token: write,
+       attestations: write; only `sigstore/cosign-installer`,
+       `actions/attest-build-provenance`, `docker/login` + imagetools)
+       signs, attests and tags. The digest moves between jobs as outputs.
+       harden-runner and checkout stay in the write jobs (project rule,
+       decided by the user). The trivy-action pin
+       `ed142fd0673e97e23eac54620cfb913e5ce36c25` was confirmed as the
+       commit of the official annotated tag v0.36.0.
+     - *Immutability fails closed:* `release_ci.sh tag-state` treats only a
+       registry "not found" (MANIFEST_UNKNOWN, NAME_UNKNOWN, 404) as absent;
+       every other error (auth, network, rate limit) fails the release.
+     - *`latest`* is decided right before tagging from the release tags that
+       exist then (`gh api …/git/matching-refs/tags/v` + `is-latest`) inside
+       the global concurrency group `release-latest`; the GitHub release
+       follows that value. (GitHub keeps one pending run per group; a third
+       simultaneous release is cancelled before tagging and re-run.)
+     - *Tag object:* the annotated tag object is fetched explicitly with the
+       token (checkout may keep only the commit) and the `tag` name inside
+       the signed object must equal `GITHUB_REF_NAME`.
+     - *No caches:* the release calls `ci.yml` with `disable_cache: true`
+       (setup-go, setup-node, golangci-lint caches off); ci.yml's
+       concurrency group has the explicit prefix `ci-`.
+     - *Verification* needs cosign v3.0 or newer (Sigstore bundle format);
+       the release notes say so.
+- **Alternatives considered:** pushing tags directly from the build (a
+  failed scan would leave a published tag); an SSH allowed-signers file
+  (the maintainer signs with OpenPGP); trusting any key in the file without
+  a pinned fingerprint (a single edit of the file would add a signer);
+  key-based cosign signing (a long-lived secret in CI); a third-party
+  release action (more supply-chain surface than the preinstalled `gh`);
+  publishing `edge`/branch images (rejected by the user); moving `latest`
+  on every release (a patch for an old line would downgrade `latest`).
+- **Consequences:** Operators can verify an image's origin before running
+  setup with it (`cosign verify`, `gh attestation verify`, SBOMs). Security
+  impact: a release needs write access to `main` **and** the release
+  signing key; a compromised dependency with a fixed HIGH/CRITICAL CVE
+  blocks the release; keyless signatures are bound to this workflow file and
+  the tag ref and are logged publicly in Rekor; the workflow trusts the
+  signer file and fingerprint from the tagged commit, so branch protection
+  on `main` remains the root of trust. A failure after the tagging step
+  needs a new patch version (tags are never overwritten). The package must
+  be made public once after the first release. Integration + E2E CI jobs
+  (task 7.2) are still open.
+- **Related:** D-027, D-061, D-072, D-091, D-202, D-203; task 7.4;
+  `.github/workflows/release.yml`, `.github/workflows/ci.yml`,
+  `.github/release-signers.asc`, `.trivyignore`, `scripts/release_ci.sh`,
+  `scripts/release_ci_test.sh`, `scripts/semver.sh`, `renovate.json`,
+  `docs/development.md`, `docs/installation/compose.md`,
+  `docs/installation/upgrades.md`, `SECURITY.md`.
+
+## D-205: Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets
+
+- **Date:** 2026-10-29
+- **Status:** proposed
+- **Decided by:** agent (recording the user's decisions: the README leads with three steps (download a copyable `compose.yaml`, `docker compose run --rm setup`, `docker compose up -d`) in three variants (own Traefik as the default, behind an existing Traefik, behind Nginx Proxy Manager); full hardening in the copyable file; a dedicated `bekup-proxy` link network for external proxies; the files only as release downloads, pinned by digest and attested; the deployment file name `compose.yaml`; nothing committed under `examples/`)
+- **Context:** D-203 made `bekup setup init` write the whole deployment
+  directory, compose file included, from a `docker run` with a long list of
+  hardening flags. Most operators start from a compose file and already run
+  a reverse proxy. They need a short, copyable path that keeps every
+  hardening property, works behind Traefik or Nginx Proxy Manager without
+  weakening the proxy trust rules (D-048), and lets them verify the file
+  they run. Facts that shape the design: Docker assigns fixed addresses
+  only on networks created with a subnet; `docker compose run` starts a
+  service of an inactive profile; nothing is released yet, so names and the
+  state schema can still change.
+- **Decision:**
+  1. **One source, one image line.** `docker-compose.yml` stays the only
+     compose source (the `full` variant). The bekup image is named only in
+     the top-level line `x-bekup-image: &bekup-image
+     ${BEKUP_IMAGE:-bekup:dev}`; `x-bekup-hardening` and the `setup`
+     service use `*bekup-image`. Release and setup replace exactly that
+     line with the digest-pinned literal. Every `./deploy/...` bind uses the
+     long syntax, `read_only: true` and `create_host_path: false`.
+  2. **Setup service in the base file:** profile `setup` (never started by
+     `up`), `user: "0:0"`, `entrypoint: [/usr/local/bin/bekup, setup]`,
+     `command: [init]`, `BEKUP_IMAGE: *bekup-image`,
+     `DOCKER_GID: ${DOCKER_GID:-}`, read-only root, tmpfs `/tmp` noexec,
+     `cap_drop: [ALL]`, `cap_add: [CHOWN]`, `no-new-privileges`,
+     `network_mode: none`, `logging: {driver: none}`, `stdin_open`/`tty`,
+     `restart: "no"`, limits (1 CPU, 512 MiB for the scrypt CA sealing, 64
+     pids), and `.` bound at `/deploy` with `create_host_path: false`. The
+     same service runs `upgrade` and `check`.
+  3. **Variants are overlays, not copies:** `traefik` (Traefik and
+     `traefik-init` without profile, nginx/certbot removed),
+     `traefik-external` and `npm` (no bundled proxy, no `frontend`/`edge`
+     network, no published ports, serve on the external link network;
+     `traefik-external` adds Traefik labels on serve) and `full`
+     (header only). `internal/setup/variants.go` holds per-variant edit
+     lists applied by a path-addressed line editor
+     (`internal/setup/outline.go`: remove/replace a node with its leading
+     comments, insert after a node, replace leading comments, a
+     free-standing comment block or the header), fragments in
+     `internal/setup/variants/`. Untouched text stays byte-identical;
+     fragments never contain `image:` or `build:` (tests); a variant ships
+     only the `deploy/**` it mounts. `bekup setup compose --variant V
+     [--image <pinned>]` prints a variant; `just compose-examples` writes
+     them to the gitignored `dist/compose/`.
+  4. **File names:** the deployment file is `compose.yaml` and the override
+     `compose.override.yaml`, setup-first too. `compose.yml`,
+     `docker-compose.y{a,}ml` and the other override names next to them are
+     refused by init and check (docker compose would read them). The
+     repository source keeps the name `docker-compose.yml`.
+  5. **External proxies use a dedicated link network.** The operator runs
+     once `docker network create --internal --subnet 10.213.253.0/28
+     bekup-proxy` and attaches the proxy with `ipv4_address: 10.213.253.5`
+     (four lines in its compose file, then a recreate). The variants declare
+     the network external (`name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}`);
+     serve gets `ipv4_address: ${SERVE_PROXY_IP:-10.213.253.10}`, `listen =
+     "10.213.253.10:8080"` (no wildcard, D-098) and `trusted_proxies =
+     ["10.213.253.5/32"]`. Validation: a Docker network name; a private IPv4
+     subnet between /8 and /29 that overlaps neither `runner-ctl` nor
+     `metrics`; both addresses inside, distinct, never the network, gateway
+     or broadcast address. `setup check` errors unless `trusted_proxies` is
+     exactly the recorded proxy /32. Traefik labels on serve only:
+     `traefik.enable=true`, `traefik.docker.network`, router rule
+     ``Host(`${BEKUP_DOMAIN:-bekup.invalid}`)``, entrypoint
+     `${TRAEFIK_ENTRYPOINT:-websecure}`, `tls=true`, certresolver
+     `${TRAEFIK_CERTRESOLVER:-letsencrypt}`, service port 8080,
+     `responseforwarding.flushinterval=-1ms`, no middlewares (bekup sets
+     its own headers, D-102). NPM forwards `http` to `10.213.253.10:8080`
+     with Websockets off (SSE, D-124), Let's Encrypt, Force SSL, HTTP/2, its
+     HSTS off, and the Advanced block `proxy_http_version 1.1;
+     proxy_buffering off; proxy_cache off; proxy_read_timeout 3600s;
+     client_max_body_size 2m;`. serve logs a rate-limited WARN when
+     `X-Forwarded-For` comes from a peer outside `trusted_proxies` (the
+     header is ignored; only the peer is logged).
+  6. **Compose-first `setup init`** (the default): it reads
+     `/deploy/compose.yaml` safely, takes the image from the
+     `x-bekup-image` line (it must also be the YAML value; `BEKUP_IMAGE`
+     must match; `CheckVersionTag`), and recognizes the variant by
+     rendering each release variant with that image: *exact* (byte-equal),
+     *model* (same YAML model) or *customized* (a warning; `--variant` names
+     the base; the hardening lint must report no error). It **never writes
+     `compose.yaml`**. Without one it refuses with the release URL;
+     `--write-compose --variant traefik|traefik-external|npm|full` is the
+     setup-first path (`full` keeps `--proxy traefik|nginx|none`). Prompts:
+     domain, ACME e-mail (bundled Traefik) and CA passphrase; the Docker GID
+     from `DOCKER_GID`, otherwise a prompt; everything else from flags
+     (`--traefik-entrypoint`, `--traefik-certresolver`, `--proxy-network`,
+     `--proxy-subnet`, `--proxy-ip`, `--serve-ip`, ...).
+  7. **State** (`bekup-setup.json`, schema 1 changed in place):
+     `compose_mode` (`operator` | `generated`), `variant`, `proxy` (new
+     value `external`), the link network (`proxy_network`, `proxy_subnet`,
+     `proxy_ip`, `serve_ip`) and `compose_sha256` (operator mode). In the
+     manifest `compose.yaml` is `operator` compose-first and
+     `generated-upgradable` setup-first.
+  8. **Upgrade:** compose-first the operator replaces `compose.yaml` with
+     the new release file and runs `docker compose run --rm setup upgrade`:
+     it refuses a downgrade and a variant switch, re-validates the TOMLs,
+     rewrites `deploy/**` and `reference/*`, generates new secret groups,
+     updates the state and never writes `compose.yaml` (`--write-compose`
+     is refused). Setup-first upgrades need `--write-compose --image`.
+  9. **Check:** every image and the `x-bekup-image` line pinned; no
+     `build`, `include` or `extends.file`; the hardening lint
+     (`lintCompose`) for a customized `compose.yaml` and for
+     `compose.override.yaml`: `privileged`, host network/pid/ipc/userns/
+     uts/cgroup, dangerous `cap_add`, unconfined `security_opt`, the Docker
+     or Podman socket outside the runner, `ports` on anything but the
+     bundled proxy, bekup services on another image than `x-bekup-image`,
+     the setup service exactly as shipped (the override may not touch it);
+     the recognized variant equals the recorded one; a newer image than
+     recorded asks for `setup upgrade`, an older one is an error;
+     variant-aware TOML/`.env` consistency.
+  10. **Release assets** (extends D-204): a `compose` job renders
+      `compose.yaml` (own Traefik), `compose.traefik-external.yaml` and
+      `compose.npm.yaml` by running the published digest (`setup compose
+      --image <ref>`, `--network none`, read-only, UID 65532, no logs),
+      checks them with `scripts/release_ci.sh compose-assets` (exactly one
+      `x-bekup-image`, equal to the release reference; every image pinned;
+      no `build`), writes `SHA256SUMS`, attests all four with
+      `actions/attest-build-provenance` (`subject-path`) and signs each with
+      `cosign sign-blob` (keyless bundle `<file>.sigstore.json`); the
+      release job attaches them with `gh release create`. The release notes
+      show the three steps. Operators verify with `gh attestation verify
+      compose.yaml --repo jlentink/bekup` or `cosign verify-blob`.
+  11. **C0 spike (Docker 29.8, Compose 5.6, by hand):** `docker compose run
+      --rm setup` works in a directory that holds only `compose.yaml`:
+      missing `deploy/`, TOMLs and secret files and a missing external
+      network do not stop `run` of a `network_mode: none` service, and
+      `config -q` passes too. Prompts work on a TTY with `logging: none`
+      (`compose run` attaches); `-T` with piped stdin works (CI). A fixed
+      `ipv4_address` on an external network created with `--subnet` works.
+      `up` fails with "network bekup-proxy declared as external, but could
+      not be found" until the network exists, so the docs create it once
+      before the three steps (setup itself does not need it).
+  12. **Dev network moved:** the dev-only `runner-host` network of D-201
+      used `10.213.253.0/24`, which overlaps the link subnet; it moves to
+      `10.213.254.0/24` (runner `.10`). Existing dev stacks: `just
+      dev-down` and `docker network rm bekup_runner-host` once.
+- **Amendment 1 (2026-10-30, final review; proposed):**
+  1. **The hardening lint judges the resolved model (replaces the
+     deny-list of item 9).** A security review showed the raw-YAML lint
+     bypassable: only the first YAML document was read (Compose merges
+     every `---` document), merge-key precedence was implemented
+     backwards (explicit keys must win; in a merge list the earlier
+     mapping wins), `${VAR}` values from `.env` were invisible, and the
+     deny-list missed many host-access keys. setup now loads
+     `compose.yaml` + `compose.override.yaml` with **compose-go**
+     (`github.com/compose-spec/compose-go/v2` v2.16.2, Apache-2.0, the
+     loader Docker Compose itself uses) exactly as `docker compose` would:
+     multi-document merge, merge keys, aliases, `!reset`/`!override`,
+     same-file `extends`, interpolation from `.env` overridden by the
+     setup container's environment for referenced variables, every
+     profile enabled. A deny-all resource loader refuses `include` and
+     `extends.file`; `env_file`/`label_file` contents are never read.
+     Multi-document compose files and overrides are refused outright
+     (`singleDocument`) wherever setup reads them. New dependencies:
+     compose-go plus `mattn/go-shellwords` (MIT),
+     `santhosh-tekuri/jsonschema/v6` (Apache-2.0),
+     `xhit/go-str2duration/v2` (BSD-3) and `go.yaml.in/yaml/v4` (rc,
+     Apache-2.0/MIT); `just sec` clean.
+  2. **Allowlist on the canonical project** (`lintProject`): every service
+     has a digest-pinned image (bekup services and any service on the
+     bekup repository: the `x-bekup-image`), no `build`; `read_only:
+     true`, `cap_drop` containing `ALL`, `security_opt` only
+     `no-new-privileges:true` (required; no seccomp/AppArmor/label
+     options), a numeric non-root `user` (UID and GID ≠ 0) except `setup`,
+     `traefik-init` and `nginx-init` (the init services only with named
+     volumes and `network_mode: none`); `cap_add` only `NET_BIND_SERVICE`
+     (`setup`: `CHOWN`; init services: `CHOWN`, `FOWNER`); denied:
+     `privileged` (hooks too; hooks never as root), `devices`,
+     `device_cgroup_rules`, `volumes_from`, `gpus`, `pre_start`,
+     `provider`, `develop`, `use_api_socket`, `runtime`, `cgroup_parent`,
+     `isolation`, `credential_spec`, `storage_opt`, `volume_driver`,
+     `models`, `sysctls`, devices in `deploy.resources`, top-level `jobs`
+     and `models`; `network_mode`/`net` only `none`, `pid`/`uts` empty,
+     `ipc` empty/`none`/`private`, `cgroup` empty/`private`,
+     `userns_mode: host` a **warning** (the documented runner opt-out on
+     userns-remap daemons), anything else an error; bind sources only
+     strictly inside the deployment directory (`setup`: the directory
+     itself; the runner additionally its Docker socket
+     `/var/run/docker.sock`, `/run/docker.sock` or
+     `/run/user/<uid>/docker.sock`, read-only at `/var/run/docker.sock`),
+     propagation only `private`/`rprivate`, no `image`/`npipe`/`cluster`
+     mounts, `env_file`/`label_file` inside the directory; top-level
+     volumes only `local` without `driver_opts` and not external; networks
+     only `bridge` without `driver_opts`, default IPAM, never named
+     `host`/`none`; top-level secrets/configs `file` only inside the
+     directory, not external, no drivers; `ports` only on the bundled
+     proxy. The setup service is compared with the shipped one on the
+     resolved model (merged with the override; the override is blamed when
+     `compose.yaml` alone matches). A test reflects over compose-go's
+     service and project attributes so an upgrade that adds one fails until
+     it is reviewed.
+  3. **Recognition uses the same model.** *exact* stays byte-equality;
+     *model* now needs both the YAML model and the resolved project (same
+     `.env`) to equal a release file's, so a merge-key, `!reset` or
+     literal-vs-variable trick is always *customized* and linted. The lint
+     always runs on compose.yaml + override (+ `.env`), also for exact
+     files and setup-first deployments.
+  4. **`.env` Docker client variables:** `DOCKER_HOST`, `DOCKER_CONTEXT`,
+     `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH` and `DOCKER_CONFIG` in `.env`
+     are check errors (docker compose would deploy to another daemon or with
+     another client configuration).
+  5. **Ownership fixes on descriptors:** `applyOwnership` (init, upgrade,
+     `check --fix-ownership`) changes modes and owners only on a descriptor
+     from `openEntry`: each component opened with `openat(O_NOFOLLOW)`
+     relative to its parent (os.Root alone follows in-root symlinks),
+     `O_DIRECTORY` for directories, `O_PATH` on Linux (no read permission
+     needed with only `CAP_CHOWN`), the type re-checked with `fstat`;
+     `fchownat(AT_EMPTY_PATH)` and `chmod` of `/proc/self/fd/<n>`.
+  6. **Link network command (L3):** `docker network create --internal
+     --subnet 10.213.253.0/28 --gateway 10.213.253.1 --ip-range
+     10.213.253.12/30 bekup-proxy`: `--ip-range` keeps Docker's automatic
+     addresses away from the fixed proxy (`.5`) and serve (`.10`)
+     addresses, so a container that joins first cannot take them;
+     `--gateway` keeps the gateway at the first host (with only
+     `--ip-range` Docker would use the first address of the range), which
+     validation already reserves. setup prints the command for custom
+     values (`LinkNetwork.CreateCommand`: the largest aligned block, at most
+     /30, holding neither address; no `--ip-range` for a /29 where none
+     fits). Verified with Docker (API 1.47). Replaces the command of item 5.
+  7. **Proxy attachment:** the docs and the setup report attach the
+     operator's proxy to `bekup-proxy` in addition to its existing networks
+     (`default: {}` or the networks it already lists; a list becomes a
+     map), never by replacing them (the "four lines" of item 5 detached it).
+  8. **Running check (M1):** `docker compose -f compose.yaml run --rm setup
+     check` (the override cannot change the container that runs the check,
+     which still reads and lints it) or a hardened `docker run` of the
+     `x-bekup-image` with the deployment directory mounted read-only.
+  9. **Release integrity (L1, I3):** the `compose` job outputs one SHA-256
+     over the `sha256sum` lines of all eight assets (`release_ci.sh
+     assets-digest`); the `release` job recomputes it from the downloaded
+     artifact and refuses to publish on a mismatch, before `compose-assets`,
+     `sha256sum -c` and `gh release create` (the release job runs only
+     `gh`, no cosign). The `verify` job passes the fetch auth header through
+     `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, never argv.
+     The release notes verify a compose file under its release name (`gh
+     attestation verify`, or `sha256sum -c SHA256SUMS --ignore-missing`
+     plus `cosign verify-blob --bundle <file>.sigstore.json`) before
+     renaming it to `compose.yaml`.
+  10. **Traefik names:** the labels name the router and service `bekup`;
+      label keys cannot be interpolated, so a collision with another `bekup`
+      router is documented (rename the other one, customize the file with
+      `--variant traefik-external`, or use the file provider).
+  Consequences: operators can no longer bind host paths (disk
+  destinations mount the disk inside the deployment directory or use a
+  named volume; the static-TLS example uses `./proxy-tls`), and services
+  they add must carry the hardening baseline. Security impact: closes the
+  reviewed bypasses (H1-H4); the lint matches what Compose runs for the
+  variables visible to the setup container (shell-only variables on the
+  host are not visible; documented).
+- **Amendment 2 (2026-10-30, security re-check; proposed):** the
+  allowlist of amendment 1 still let a customized file or an override
+  change what bekup's own services run (H2: `environment`, `command`,
+  `entrypoint`, e.g. `BEKUP_DEV=1`, `BEKUP_TARGETS_ALLOW_CIDRS`, `--dev`),
+  take values from variables of the host shell that the setup container
+  cannot see (H1), reach bekup's files, volumes and secrets from added
+  services (M1), and change the network isolation (M2). The lint becomes
+  structural:
+  1. **Shipped services are pinned.** Every service the variant ships
+     (`setup`, `certs-init`, `migrate`, `admin`, `serve`, `runner`,
+     `postgres` and the variant's proxy services) must equal the shipped
+     variant's resolved definition (same `.env`) in **every** compose-go
+     service attribute, compared generically by reflection
+     (`internal/setup/composepin.go` `shippedDiff`; a compose-go upgrade
+     that adds an attribute is compared automatically). Only the explicit
+     operator-tunable set `operatorTunable` may differ, each value
+     validated: for every service but `setup` the cpus/memory/pids of
+     `deploy.resources` (nothing else under `deploy`, no unlimited pids;
+     every limit the shipped service sets stays set above 0, so
+     `deploy: !reset null` or `pids: 0` is an error),
+     legacy `cpus`/`mem_limit`/`mem_reservation`/`pids_limit` (> 0; a
+     written `pids_limit` of 0 or less is refused from the YAML, since
+     compose-go reads 0 as unset),
+     `restart`, `stop_grace_period`; `profiles` of the bundled proxy
+     services; on `traefik`/`nginx` `PROXY_TLS_MODE` (`acme`|`static`) and
+     `PROXY_HTTPS_PUBLIC_PORT`, a read-only `./proxy-tls` bind at `/certs`
+     and the published side of `ports` (same container ports, tcp); on the
+     runner the Docker socket source (rootful or rootless path, read-only,
+     no bind options, no SELinux relabeling) and `userns_mode: host` (a
+     warning); on serve the source of its backups/scratch mounts and extra
+     mounts below `/var/lib/bekup/backups/` (named volumes that are not
+     bekup's other volumes, or binds inside the deployment directory
+     outside bekup's files). `setup` has no tunables. The override is
+     blamed when `compose.yaml` alone matches.
+  2. **Shipped top-level objects are pinned:** the shipped networks
+     (`internal`, driver, IPAM subnets, `name`, `external` of the link
+     network), volumes, secrets and configs equal the shipped ones; the
+     project name stays the shipped one, both resolved and as written
+     (`name: ${ACME_CA_SERVER:-bekup}` resolves to `bekup` but is an
+     error).
+  3. **Added services** keep amendment 1's allowlist and additionally may
+     not bind the keys directory (`secrets/` and `BEKUP_KEYS_DIR`), the
+     state file, `.env`, the TOML and compose files, `deploy/` or
+     `proxy-tls/` (or a parent; case-insensitive), mount a shipped named
+     volume, use a shipped secret or config, or read such a file as
+     `env_file`/`label_file`; no `group_add`, `external_links`,
+     `oom_kill_disable`, negative `oom_score_adj`, real-time CPU settings
+     or unlimited pids; `ulimits` only `nofile` (≤ 2^20) and `nproc`
+     (≤ 65536), `shm_size` ≤ 1 GiB; logging only `json-file`, `local` or
+     `none` with size/rotation options; no `traefik.*` or `com.docker.*`
+     labels (also under `deploy.labels`). Networks: only networks they
+     declare themselves (or `default`), `metrics` (the documented
+     Prometheus attachment; serve answers only `/metrics` and `/healthz`
+     there) and, in the `full` variant, `frontend` (the documented own
+     proxy with `--proxy none`); never `backend`, `runner-ctl`,
+     `targets`, `egress`, `edge` or the `bekup-proxy` link; no aliases on
+     a shipped network and no `container_name` or service-level
+     `mac_address` when joining one; no fixed `ipv4_address`/
+     `ipv6_address`/`mac_address`/`link_local_ips` on a shipped network,
+     except on `frontend` in the `full` variant, where a fixed address
+     must differ from every address a shipped service (enabled or not)
+     uses there (`PROXY_FRONTEND_IP`, `SERVE_FRONTEND_IP`), so an added
+     container cannot take bekup's address on a network serve trusts. Added
+     networks/volumes may not be `external` or carry a `name:` other
+     than the project default; added secrets/configs no `environment:`
+     and no file among bekup's own.
+  4. **Interpolation allowlist.** compose.yaml and the override may
+     reference only bekup's compose variables (`composeVarAllowlist`,
+     equal to the set the shipped variants use; a test derives it), found
+     by walking the YAML scalars (keys and values, not comments); any
+     other `${VAR}`/`$VAR`, or a `$` that is neither `$$` nor a reference,
+     is an error. The walk reads node text, so explicit YAML tags are
+     limited to `!!str`, `!!int`, `!!bool`, `!!float`, `!!null`, `!!map`,
+     `!!seq`, `!reset` and `!override` (`!!binary` would hide a
+     `${VAR}` in base64 that compose-go then interpolates; custom tags
+     too). Additionally each file is loaded a second time without
+     interpolation and compared with the shipped file loaded the same
+     way: a variable in a shipped service attribute where the shipped
+     file has none (or another), or any variable in an added service or
+     added top-level object, is an error (a file that cannot be loaded
+     without interpolation is an error too). Variables therefore appear
+     only where the shipped file has them.
+  5. **Paths:** the project is resolved in a random sentinel working
+     directory (`lintRoot`), so only relative paths count as inside the
+     deployment directory (`/deploy/x`, `/deploy/../deploy/x` are host
+     paths, L1). init, upgrade and check refuse a symlink on the way to
+     every bind source, `env_file`, `label_file` and secret/config file
+     inside the directory (`lintPathSymlinks`, M3; check also walks the
+     whole directory). A managed file with a hard-link count other than 1
+     is a check error and refused by the descriptor check before any
+     chmod/chown (L2). SELinux relabeling (`z`/`Z`) is refused on every
+     bind; `userns_mode: host` only on the runner (a warning), an error
+     elsewhere.
+  6. **The lint is a guardrail, not a proof.** A deployment counts as
+     *verified* only when `compose.yaml` is the release file byte for
+     byte (*exact*), there is no `compose.override.yaml`, and the
+     recorded image is the file's `x-bekup-image`. Customized files and
+     overrides are linted best-effort: the lint models compose-go
+     v2.16.2 (Docker Compose v5.6.0 verified; minimum Docker Compose
+     v2.24.4 for `!reset`/`!override`), cannot see variables set only in
+     the host shell for the shipped variables, and a check that runs in a
+     container the checked file itself defines (`docker compose run
+     setup check`) is not trustworthy for a tampered file: the docs
+     recommend the hardened `docker run` of the attested image with the
+     directory mounted read-only for that. compose-go error messages may
+     quote interpolated values (bounded; `.env` holds no secrets).
+  Consequences: an operator can no longer change bekup's services beyond
+  the tunable set (other changes need a new release or a decision);
+  `userns_mode: host` for serve/migrate/certs-init (formerly suggested
+  for userns-remap) is refused: chown their files to the remapped IDs
+  instead. Security impact: closes H1, H2, M1-M3 and L1-L6 of the
+  re-check for files whose variables are visible to the setup
+  container; the residual risk (shell variables of the shipped variable
+  set, older Compose versions, a tampered file running its own check) is
+  documented in SECURITY.md (B10, SC-S4).
+- **Amendment 3 (2026-10-30, user decision: commit the three copyable
+  compose files; proposed):** the README linked release assets that do
+  not exist before the first release (404). The variants are now also
+  committed, which partly reverses the "release downloads only" part of
+  the decision and the rejected "unpinned compose files with
+  `${BEKUP_IMAGE}`" alternative, with the controls below.
+  1. **Committed, generated files.** `deploy/compose/compose.yaml`,
+     `compose.traefik-external.yaml` and `compose.npm.yaml` are written by
+     `just gen` (`scripts/gen_compose.sh`: `bekup setup compose --variant
+     V` without `--image`) and never edited by hand (the variant headers
+     say so). They equal the release assets byte for byte except for the
+     `x-bekup-image` line, which is exactly `ComposePlaceholderLine`:
+     `x-bekup-image: &bekup-image ${BEKUP_IMAGE:?set BEKUP_IMAGE to the
+     digest-pinned bekup image repo:tag@sha256:digest, see the README}` (no
+     default, so docker compose refuses to run without it: "required
+     variable BEKUP_IMAGE is missing a value"). `RenderVariant` without an
+     image now emits this line (formerly `${BEKUP_IMAGE:-bekup:dev}`). The
+     drift test `TestCommittedComposeFiles` compares them with the render
+     of the embedded `docker-compose.yml`, checks the single differing line
+     against the release render, and that `deploy/compose/` is neither
+     embedded (`embed.go`), nor a variant asset directory, nor a managed
+     asset path, and is excluded by `.dockerignore`. The variant headers
+     describe both forms (so the files stay identical apart from that
+     line).
+  2. **Placeholder mode in setup.** Compose-first init, upgrade and check
+     accept a `compose.yaml` whose `x-bekup-image` line is exactly the
+     placeholder (any other `$` in that line, another default, message,
+     tag or quoting is refused; the YAML value must equal it). The image
+     is then the `BEKUP_IMAGE` docker compose resolves (the setup
+     container's environment, which the setup service fills with
+     `BEKUP_IMAGE: *bekup-image`, else `.env`); it must pass
+     `imageref.ParsePinned` and `CheckVersionTag`. Recognition renders the
+     variants with the placeholder: the committed files are *exact* or
+     *model* for their variant (`ComposeInfo.FromEnv`), and the lint
+     compares with the placeholder render. The interpolation allowlist
+     admits `BEKUP_IMAGE` only as the value of the top-level
+     `x-bekup-image` key of `compose.yaml` when it is exactly the
+     placeholder (never in the override, never elsewhere). Init writes
+     `BEKUP_IMAGE=<pinned>` as the first variable of `.env` (also into an
+     existing `.env` with `--keep-existing`), so later `docker compose`
+     commands resolve it without a shell variable, and records
+     `image_source: env` in `bekup-setup.json` (compose-first only).
+  3. **Check (placeholder mode):** `.env` must name `BEKUP_IMAGE`,
+     digest-pinned and equal to the recorded image (older: error with the
+     downgrade warning; other: error asking for `setup upgrade`); a
+     `BEKUP_IMAGE` in the environment that differs from `.env` is an error
+     (docker compose would run it); the bekup services must resolve to the
+     recorded image (the lint already requires every bekup service to use
+     the `x-bekup-image`). A switch between the committed file and a
+     release file without `setup upgrade` is an error. With a release file
+     a `BEKUP_IMAGE` in `.env` stays a warning ("no effect").
+  4. **Upgrade (placeholder mode):** the operator runs
+     `BEKUP_IMAGE=<new> docker compose run --rm setup upgrade` (or edits the
+     `.env` line and runs `docker compose run --rm setup upgrade`), so the
+     *new* image's setup runs; `--image <new>` alone would run the old
+     image and is refused with that command. Upgrade rewrites only the
+     `BEKUP_IMAGE` line of `.env` (the one exception to "upgrade never
+     touches .env") and records the image; switching to a release file
+     removes the line and records `image_source` empty.
+  5. **Release:** unchanged assets (literal pin). The `compose` job also
+     runs `release_ci.sh committed-compose`: the tag's `deploy/compose/*`
+     must equal the rendered assets except for the `x-bekup-image` line,
+     which must be exactly the placeholder (a Go test keeps the script's
+     copy of the line equal to `ComposePlaceholderLine`).
+  6. **Renovate:** `renovate.json` disables `deploy/compose/**` (Renovate
+     bumps only `docker-compose.yml`); its PRs fail the CI `generated` job
+     and the drift test until `just gen` is run and committed on the PR
+     (docs/development.md).
+  7. **`just publish`** prints the pin with its first tag
+     (`<repo>:<tag>@sha256:...`) and notes when the tag does not name the
+     binary version (`--allow-version-mismatch`).
+  Consequences: the README quick start works today with the raw GitHub URL
+  of the committed file plus a digest-pinned `BEKUP_IMAGE`; the release
+  download stays the attested path. Security impact: the committed file is
+  not attested (fetched from `main` or a tag over HTTPS; compare it with
+  the repository at the image's tag) and is never *verified* in the sense
+  of amendment 2 item 6; the image is not in the file but in `.env`
+  (root-owned, 0644, in the root-owned deployment directory, so whoever
+  can change it can change `compose.yaml` too) and in the shell of the
+  setup run. A shell `BEKUP_IMAGE` overrides `.env` for every `docker
+  compose` command: setup refuses an unpinned value, `check` reports any
+  override as an error, but a `docker compose up` with a deliberately set
+  shell variable runs that image (the operator's own command; documented).
+  Pinning by digest and the version check apply as before.
+- **Alternatives considered:** committed copies of each variant under
+  `examples/` (drift; rejected by the user); full YAML re-serialization of
+  the source (loses comments and byte-identity of untouched text); `include`
+  / `extends` from a shared file (the operator would need several files and
+  `check` could not see through them); a variant `frontend` network or the
+  proxy joining bekup's project network (a fixed proxy address then depends
+  on bekup's project, and Docker gives fixed addresses only on networks with
+  a subnet); trusting the whole link subnet (any container the operator
+  attaches could forge `X-Forwarded-For`); letting setup write
+  `compose.yaml` always (an upgrade could not be a plain, verifiable file
+  replacement); unpinned compose files with `${BEKUP_IMAGE}` (a shell
+  variable could swap the image).
+- **Consequences:** Installing needs Docker, one downloaded file and two
+  commands; the copyable file carries the full hardening and pins the image
+  by digest, and an upgrade is a verified file replacement plus `setup
+  upgrade`. Security impact: the compose file starts a root container with
+  `CAP_CHOWN` and the runner with the Docker socket, so it is a release
+  asset with build provenance and a cosign bundle, rendered from the scanned
+  and signed image, and the docs require verifying it before use; a
+  customized file must pass the hardening lint, and `check` keeps linting it
+  and the override. Behind an external proxy the only shared network is the
+  internal /28 link with fixed addresses and an exact /32 trust; an external
+  Traefik with the Docker provider holds the Docker socket (root on the
+  host; SECURITY.md RP-8, documented alternatives: socket proxy or file
+  provider). The setup service runs without logs, so the CA passphrase
+  prompt never reaches Docker's log files. Not verified end to end: a real
+  external Traefik reading the labels (compose config and unit tests
+  only).
+- **Related:** D-017, D-048, D-061, D-093, D-098, D-102, D-124, D-201,
+  D-203, D-204; tasks 6.14, 6.14b, 7.4; `docker-compose.yml`,
+  `docker-compose.dev.yml`, `internal/setup/{outline,variants,composefile}.go`,
+  `internal/setup/variants/`, `deploy/compose/`, `scripts/gen_compose.sh`,
+  `renovate.json`, `cmd/bekup/setup_cmd.go`,
+  `internal/httpserver/middleware.go`, `.github/workflows/release.yml`,
+  `.github/workflows/ci.yml`, `scripts/release_ci.sh`, `justfile`,
+  `README.md`, `docs/installation/{compose,reverse-proxy,upgrades}.md`,
+  `SECURITY.md`, `AGENTS.md`.
+
+## D-206: Mobile apps and the push channel dropped from the roadmap
+
+- **Date:** 2026-10-29
+- **Status:** proposed
+- **Decided by:** agent (recording the user's decision to remove every
+  iOS/Android app reference and the reserved push channel; Phase 2 keeps
+  only the external API)
+- **Context:** The plan listed native iOS and Android apps as Phases 3–4
+  and push notifications (FCM, device registration) for Phase 2. D-023
+  reserved a **push** channel for them, and D-161, D-183, D-191 and D-193
+  carried it along: the `notification_channel` and `user_channel_type`
+  enums of migration 00028 had a `push` value, `notify.ChannelPush`
+  existed but was never delivered, and the preference matrix showed a
+  disabled push column. The user decided that bekup will not ship mobile
+  apps, so the reserved channel has no consumer left.
+- **Decision:**
+  1. **Roadmap:** Phases 3–4 (native apps) are removed from the plan;
+     Phase 2 is only the isolated external API (`bekup external-api`, the
+     `api.*` views, scoped API tokens, its web UI). Device registration,
+     QR pairing and FCM/APNs push are out of scope.
+  2. **Channels:** the notification channels are inbox, e-mail and
+     webhook (personal and shared). The push parts of D-023 ("push is
+     added in Phase 2"), D-161 ("webhooks/push are opt-in": now webhooks
+     are opt-in), D-183 (items 3 and 6: push defaults and the reserved
+     `user_channels` push type), D-191 (item 5: push out of the API until
+     phase 2) and D-193 (item 5: the disabled push column) are superseded;
+     the rest of those decisions stands.
+  3. **Code and data:** `notify.ChannelPush` and the unused
+     `notify.UserChannels` are removed; `notify.MatrixChannels` (inbox,
+     e-mail, webhook) stays the single list of matrix channels and the
+     GraphQL `NotificationChannelType` enum is unchanged (it never had a
+     push value). Migration `00033_drop_push_channel.sql` deletes any
+     stored `push` preference rows (none in practice: the API never
+     accepted one, deliveries and personal channels refused it by CHECK)
+     and recreates both enums without `push` (PostgreSQL cannot drop an
+     enum value), re-adding the CHECK constraints that compare with enum
+     literals; its Down section appends `push` again. The web matrix has
+     no push column any more.
+  4. A future channel goes into `notify.MatrixChannels`, the GraphQL enum
+     and the `notification_channel` DB enum (a new migration), with its
+     own decision.
+- **Alternatives considered:** keeping the reserved value "just in case"
+  (dead code and a misleading UI column for a feature that will not
+  come); only narrowing CHECK constraints and leaving the enum values
+  (the generated `sqlc` constants and the schema would keep advertising
+  push); editing migration 00028 (forbidden: released migrations are
+  forward-only).
+- **Consequences:** Less surface: no reserved channel type that a later
+  change could start delivering to without a review, no push service
+  credentials or third-party push providers in the threat model, and
+  Phase 2 of `SECURITY.md` covers only the external API. The migration
+  takes short exclusive locks on `user_notification_prefs`,
+  `notification_deliveries` and `user_channels` while the columns are
+  rewritten (small tables; run during the normal upgrade). Security
+  impact: none weakened; deliveries, preferences and authorization are
+  unchanged for the remaining channels.
+- **Related:** D-023, D-161, D-183, D-191, D-193; plan Phase 2;
+  `internal/notify/prefs.go`, `internal/notify/api_prefs.go`,
+  `internal/db/migrations/00033_drop_push_channel.sql`,
+  `internal/db/schema.sql`, `internal/graph/schema/notifications.graphqls`,
+  `web/src/features/notifications/`, `docs/guides/notifications.md`,
+  `SECURITY.md`, `AGENTS.md`.

@@ -1,0 +1,15 @@
+  # =========================================================================
+  # Reverse proxy: Traefik v3 (task 0.7b), started with the stack.
+  # TLS for the UI is terminated here (D-017, D-048); serve stays unpublished
+  # on the internal `frontend` network. Traefik gets no Docker socket.
+  # Proxy-only environment (compose variables in .env, NOT bekup config keys):
+  #   BEKUP_DOMAIN    public host name, e.g. backup.example.com (required)
+  #   ACME_EMAIL      Let's Encrypt account e-mail (required for ACME)
+  #   ACME_CA_SERVER  ACME directory (default Let's Encrypt production)
+  #   PROXY_TLS_MODE  acme (default) | static (your certificate in
+  #                   proxy-tls/, mounted by compose.override.yaml)
+  #   PROXY_FRONTEND_IP  Traefik's fixed address on `frontend`
+  #                   (default 10.213.250.5); bekup.toml [server]
+  #                   trusted_proxies must name exactly this address (/32).
+  # Docs: docs/installation/reverse-proxy.md
+  # =========================================================================

@@ -407,7 +407,17 @@ describe("preference matrix", () => {
     expect(locked).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Security alert: Webhooks" })).toBeEnabled();
     expect(screen.getByText(/always reach your inbox and e-mail so an attack/)).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Backup failed: Push" })).toBeDisabled();
+
+    // Exactly the three channels: no Push column any more (D-206).
+    const [firstTable] = screen.getAllByRole("table");
+    if (!firstTable) throw new Error("no preference table");
+    const headers = within(firstTable)
+      .getAllByRole("columnheader")
+      .slice(1)
+      .map((h) => h.textContent);
+    expect(headers).toEqual(["In-app", "E-mail", "Webhooks"]);
+    expect(screen.queryByRole("columnheader", { name: /push/i })).toBeNull();
+    expect(screen.queryByRole("switch", { name: /: Push$/ })).toBeNull();
   });
 
   it("sets a per-job override", async () => {

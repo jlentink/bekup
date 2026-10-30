@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/jlentink/bekup/internal/imageref"
 )
 
 //go:embed catalog.toml
@@ -135,7 +137,8 @@ const maxUID = 1<<31 - 2
 var (
 	// imageRe: [registry[:port]/]path:tag@sha256:<64 hex>. The digest is
 	// mandatory; it must be the multi-arch index digest.
-	imageRe = regexp.MustCompile(`^((?:[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)*):([A-Za-z0-9_][A-Za-z0-9_.-]{0,127})@(sha256:[a-f0-9]{64})$`)
+	// The grammar parts are shared with internal/imageref (D-203).
+	imageRe = regexp.MustCompile(`^(` + imageref.RepoPattern + `):(` + imageref.TagPattern + `)@(` + imageref.DigestPattern + `)$`)
 	// tagVersionRe: the tag starts with the client version.
 	tagVersionRe = regexp.MustCompile(`^([0-9]{1,5}\.[0-9]{1,5}(?:\.[0-9]{1,5})?)(?:-[A-Za-z0-9_.-]+)?$`)
 )

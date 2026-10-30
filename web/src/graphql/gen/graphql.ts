@@ -354,7 +354,7 @@ export type JobVerification =
   /** Object counts and row estimates (cheap for huge databases). */
   | 'STANDARD';
 
-/** A channel column of the preference matrix (push follows in phase 2). */
+/** A channel column of the preference matrix. */
 export type NotificationChannelType =
   | 'EMAIL'
   | 'INBOX'

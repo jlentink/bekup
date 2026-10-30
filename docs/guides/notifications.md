@@ -37,7 +37,6 @@ connection strings, server output or database content.
 | In-app inbox | always there | every event you may see, by default |
 | E-mail | your account address | only after you [verified it](#verifying-your-e-mail-address); otherwise e-mails are skipped |
 | Personal webhooks | you (up to 5) | HMAC-signed, opt-in per event |
-| Push | (phase 2) | reserved |
 | Shared e-mail list / webhook | admins, attached to jobs | job events matching the channel's filter |
 
 Webhook URLs are stored encrypted (chat services put a bearer credential in
@@ -46,7 +45,7 @@ the URL); bekup only shows scheme, host and port.
 ### The event catalog
 
 Defaults for a new account: **every event you may see goes to the inbox;
-problem events (✱) also go to e-mail; webhooks and push are opt-in.**
+problem events (✱) also go to e-mail; webhooks are opt-in.**
 
 | Group | Event | Who may receive it |
 |---|---|---|

@@ -142,6 +142,7 @@ func newRestoreEnv(t *testing.T) *restoreEnv {
 		t.Fatal(err)
 	}
 	bus := pubsub.NewBus()
+	startBusListener(t, d, bus)
 	pub := &pubsub.Publisher{Bus: bus}
 	sessions := auth.NewSessions(e.pool, auth.SessionOptions{Events: auth.PubSubSessionEvents{Publisher: pub}})
 	authSvc, err := auth.NewService(auth.ServiceOptions{DB: e.pool, Hasher: e.hasher, Sessions: sessions, Auditor: e.auditor, Factors: auth.NewSecondFactors()})

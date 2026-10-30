@@ -89,7 +89,7 @@ export function unmaskRow(
   return getFragmentData(NotificationEventPreferenceFields, ref);
 }
 
-/** The matrix columns; push is listed but stays disabled until phase 2. */
+/** The matrix columns. */
 export const CHANNEL_COLUMNS: readonly NotificationChannelType[] = ["INBOX", "EMAIL", "WEBHOOK"];
 
 export const GROUP_ORDER: readonly NotificationGroup[] = [

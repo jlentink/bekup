@@ -5,6 +5,9 @@
 #   semver.sh valid <version>            exit 0 if <version> is a plain x.y.z
 #   semver.sh next  <current> <bump>     print the next version, where <bump> is
 #                                        patch | minor | major | x.y.z
+#   semver.sh gt    <a> <b>              exit 0 if a > b, 1 if not (both x.y.z;
+#                                        2 on invalid input). Used by the release
+#                                        workflow's `latest` rule (D-204).
 #
 # Only plain MAJOR.MINOR.PATCH is accepted: no "v" prefix, no leading zeros, no
 # pre-release or build metadata, at most 9 digits per component (keeps shell
@@ -67,7 +70,13 @@ next)
 	is_valid "$next" || die "resulting version '$next' is out of range"
 	printf '%s\n' "$next"
 	;;
+gt)
+	[ $# -eq 3 ] || { printf 'semver: usage: semver.sh gt <a> <b>\n' >&2; exit 2; }
+	is_valid "$2" || { printf "semver: '%s' is not a valid x.y.z version\n" "$2" >&2; exit 2; }
+	is_valid "$3" || { printf "semver: '%s' is not a valid x.y.z version\n" "$3" >&2; exit 2; }
+	greater "$2" "$3"
+	;;
 *)
-	die "usage: semver.sh valid <version> | semver.sh next <current> <patch|minor|major|x.y.z>"
+	die "usage: semver.sh valid <version> | semver.sh gt <a> <b> | semver.sh next <current> <patch|minor|major|x.y.z>"
 	;;
 esac

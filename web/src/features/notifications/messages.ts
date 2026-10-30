@@ -72,8 +72,6 @@ export const notificationsMessages = {
   prefs: {
     heading: "What reaches you",
     lead: "One switch per event and channel. Per-job overrides win for that job. Security alerts always reach your inbox and e-mail.",
-    push: "Push",
-    pushNote: "Push notifications to the mobile apps arrive in a later release.",
     eventColumn: "Event",
     cell: (event: string, channel: string) => `${event}: ${channel}`,
     cellForJob: (event: string, channel: string, job: string) => `${event}: ${channel} for ${job}`,

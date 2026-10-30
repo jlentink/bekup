@@ -9,18 +9,13 @@ import (
 // Channel is a delivery channel of a user.
 type Channel string
 
-// Channels. Push is reserved for phase 2 and never delivered.
+// Channels a preference can address (the preference matrix columns are
+// MatrixChannels).
 const (
 	ChannelInbox   Channel = "inbox"
 	ChannelEmail   Channel = "email"
 	ChannelWebhook Channel = "webhook"
-	ChannelPush    Channel = "push"
 )
-
-// UserChannels lists the channels a preference can address, in order.
-func UserChannels() []Channel {
-	return []Channel{ChannelInbox, ChannelEmail, ChannelWebhook, ChannelPush}
-}
 
 // Pref is one stored preference of a user for an event: per event (JobID
 // nil) or a per-job override.
@@ -31,8 +26,8 @@ type Pref struct {
 }
 
 // Default is the D-161 default of a channel for an event: the inbox for
-// every visible event, e-mail for problem events, webhooks and push only
-// when the user opts in.
+// every visible event, e-mail for problem events, webhooks only when the
+// user opts in.
 func Default(m Meta, ch Channel) bool {
 	switch ch {
 	case ChannelInbox:
@@ -47,12 +42,8 @@ func Default(m Meta, ch Channel) bool {
 // Enabled resolves whether ch is on for an event of m about jobID (nil
 // for events without a job): a per-job override beats the per-event
 // preference, which beats Default. Mandatory events always keep the
-// inbox and e-mail; preferences can only add channels to them. Push is
-// never on in phase 1.
+// inbox and e-mail; preferences can only add channels to them.
 func Enabled(m Meta, ch Channel, jobID *uuid.UUID, prefs []Pref) bool {
-	if ch == ChannelPush {
-		return false
-	}
 	if m.Mandatory && (ch == ChannelInbox || ch == ChannelEmail) {
 		return true
 	}

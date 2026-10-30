@@ -1,0 +1,2 @@
+  # Traefik's ACME state: the account key and the TLS private keys. Back it
+  # up like a secret.

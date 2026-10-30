@@ -64,6 +64,29 @@ count=$((count + 1))
 count=$((count + 1))
 if "$semver" valid 1.2.3-rc1 2>/dev/null; then echo "FAIL: valid 1.2.3-rc1" >&2; fail=1; fi
 
+gt() { # gt <want-status> <a> <b>
+	want=$1
+	shift
+	count=$((count + 1))
+	"$semver" gt "$@" 2>/dev/null
+	st=$?
+	if [ "$st" != "$want" ]; then
+		printf 'FAIL: semver gt %s: got exit %s, want %s\n' "$*" "$st" "$want" >&2
+		fail=1
+	fi
+}
+
+gt 0 1.2.4 1.2.3
+gt 0 1.10.0 1.9.9
+gt 0 2.0.0 1.99.99
+gt 0 0.0.1 0.0.0
+gt 1 1.2.3 1.2.3     # equal is not greater
+gt 1 1.2.3 1.2.4
+gt 1 1.9.9 1.10.0
+gt 2 v1.2.3 1.2.3    # invalid input is an error, not "false"
+gt 2 1.2.3 1.2.3-rc.1
+gt 2 1.2.3           # missing argument
+
 if [ "$fail" = 0 ]; then
 	printf 'semver_test: %d cases passed\n' "$count"
 fi

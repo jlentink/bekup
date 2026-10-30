@@ -28,11 +28,13 @@ ca="${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}"
 port="${PROXY_HTTPS_PUBLIC_PORT:-443}"
 
 # DNS name: labels of [a-z0-9-], at least one dot, max 253 characters.
-printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' \
-    && [ "${#domain}" -le 253 ] \
-    || die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
-printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 ] \
-    || die "PROXY_HTTPS_PUBLIC_PORT must be a port number"
+if ! { printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' &&
+    [ "${#domain}" -le 253 ]; }; then
+    die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
+fi
+if ! { printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 ]; }; then
+    die "PROXY_HTTPS_PUBLIC_PORT must be a port number"
+fi
 
 case "$mode" in
     acme)
@@ -42,8 +44,9 @@ case "$mode" in
             || die "ACME_CA_SERVER must be an https URL"
         ;;
     static)
-        [ -r /certs/tls.crt ] && [ -r /certs/tls.key ] \
-            || die "static mode needs /certs/tls.crt and /certs/tls.key (readable by UID $(id -u))"
+        if ! { [ -r /certs/tls.crt ] && [ -r /certs/tls.key ]; }; then
+            die "static mode needs /certs/tls.crt and /certs/tls.key (readable by UID $(id -u))"
+        fi
         ;;
     *) die "PROXY_TLS_MODE must be 'acme' or 'static'" ;;
 esac

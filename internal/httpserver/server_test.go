@@ -387,6 +387,46 @@ func TestMissingXFFWarning(t *testing.T) {
 	}
 }
 
+// D-205: X-Forwarded-For from a peer that is not a trusted proxy (a proxy
+// without its fixed address) is logged, at most once per interval, with
+// the peer only (never the header value).
+func TestUntrustedXFFWarning(t *testing.T) {
+	var buf bytes.Buffer
+	now := time.Unix(1000, 0)
+	x := &xffWarner{logger: slog.New(slog.NewJSONHandler(&buf, nil)), now: func() time.Time { return now }}
+	trusted := []netip.Prefix{netip.MustParsePrefix("10.213.253.5/32")}
+	mk := func(peer, path string, xff bool) *http.Request {
+		r := req(http.MethodGet, path)
+		r.RemoteAddr = peer
+		if xff {
+			r.Header.Set("X-Forwarded-For", "198.51.100.9")
+		}
+		return r
+	}
+	count := func() int { return strings.Count(buf.String(), "not in server.trusted_proxies") }
+	x.check(mk("10.213.253.5:1", "/api/x", true), trusted)   // trusted proxy
+	x.check(mk("10.213.253.7:1", "/api/x", false), trusted)  // no header
+	x.check(mk("10.213.253.7:1", "/healthz", true), trusted) // health probe
+	if count() != 0 {
+		t.Fatalf("warned for an exempt request: %s", buf.String())
+	}
+	x.check(mk("10.213.253.7:1", "/api/x", true), trusted)
+	x.check(mk("[::ffff:10.213.253.7]:1", "/api/x", true), trusted)
+	if count() != 1 || !strings.Contains(buf.String(), `"peer":"10.213.253.7"`) || strings.Contains(buf.String(), "198.51.100.9") {
+		t.Fatalf("want one WARN with the peer only: %s", buf.String())
+	}
+	// The two warnings are rate-limited independently.
+	x.check(mk("10.213.253.5:1", "/api/x", false), trusted)
+	if !strings.Contains(buf.String(), "without X-Forwarded-For") {
+		t.Fatalf("missing-XFF warning suppressed: %s", buf.String())
+	}
+	now = now.Add(missingXFFWarnInterval)
+	x.check(mk("10.213.253.7:1", "/api/x", true), trusted)
+	if count() != 2 {
+		t.Fatalf("no warning after the interval: %s", buf.String())
+	}
+}
+
 func TestOriginCheck(t *testing.T) {
 	ws := []string{"Connection", "keep-alive, Upgrade", "Upgrade", "websocket"}
 	cases := []struct {

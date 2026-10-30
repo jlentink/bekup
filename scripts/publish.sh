@@ -250,4 +250,9 @@ digest=$(grep -Eo '"containerimage\.digest"[[:space:]]*:[[:space:]]*"sha256:[0-9
 printf '\nPushed:\n'
 printf '  %s\n' "${tags[@]}"
 printf 'Digest: %s\n\n' "$digest"
-printf 'Pin it in compose (.env or the environment):\n  BEKUP_IMAGE=%s@%s\n' "$repo" "$digest"
+# The pin names the first tag (the version on a clean tree), so `bekup
+# setup` can compare it with the binary's version (CheckVersionTag).
+printf 'Pin it in compose (BEKUP_IMAGE for deploy/compose/*, .env or the environment):\n  BEKUP_IMAGE=%s@%s\n' "${tags[0]}" "$digest"
+if [[ ${tags[0]} != "${repo}:${build_version}" ]]; then
+	printf '  (the tag does not name the binary version %s: bekup setup needs --allow-version-mismatch)\n' "$build_version"
+fi

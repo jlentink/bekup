@@ -106,7 +106,7 @@ func TestDefaults(t *testing.T) {
 		ch   Channel
 		want bool
 	}{
-		{failed, ChannelInbox, true}, {failed, ChannelEmail, true}, {failed, ChannelWebhook, false}, {failed, ChannelPush, false},
+		{failed, ChannelInbox, true}, {failed, ChannelEmail, true}, {failed, ChannelWebhook, false},
 		{ok, ChannelInbox, true}, {ok, ChannelEmail, false}, {ok, ChannelWebhook, false},
 	} {
 		if got := Enabled(c.m, c.ch, nil, nil); got != c.want {
@@ -136,7 +136,6 @@ func TestPreferencePrecedence(t *testing.T) {
 		{"override of the job applies", []Pref{otherJobOn}, &other, ChannelWebhook, true},
 		{"job override without a job", []Pref{perJobOff, perEventOn}, nil, ChannelEmail, true},
 		{"inbox can be turned off", []Pref{{Channel: ChannelInbox, Enabled: false}}, &job, ChannelInbox, false},
-		{"push never", []Pref{{Channel: ChannelPush, Enabled: true}}, &job, ChannelPush, false},
 	}
 	for _, c := range cases {
 		if got := Enabled(m, c.ch, c.job, c.prefs); got != c.want {

@@ -6,8 +6,24 @@ never published. A reverse proxy in front of it handles HTTPS, certificates,
 HSTS and the HTTP→HTTPS redirect. bekup still sends HSTS, its CSP and the
 other security headers itself, as defence in depth (D-048, D-082).
 
-`docker-compose.yml` ships two proxies as compose **profiles**. Enable
-**exactly one**:
+Pick the compose variant that matches your proxy (D-205,
+[compose.md](compose.md)):
+
+| Variant (release asset) | Proxy | Section |
+|---|---|---|
+| `traefik` (`compose.yaml`) | bekup's own Traefik, started with the stack | [Quick start](#quick-start-production) |
+| `traefik-external` (`compose.traefik-external.yaml`) | your existing Traefik (Docker provider, labels on `serve`) | [Existing Traefik](#existing-traefik) |
+| `npm` (`compose.npm.yaml`) | Nginx Proxy Manager | [Nginx Proxy Manager](#nginx-proxy-manager) |
+| `full` (setup-first) | profile `traefik`, `nginx`, or your own proxy | below, [Using your own reverse proxy](#using-your-own-reverse-proxy) |
+
+Each release variant is also committed in
+[`deploy/compose/`](../../deploy/compose/) under the same file name (raw
+URL `https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/<file>`),
+with the image taken from `BEKUP_IMAGE` instead of a pinned literal
+([compose.md](compose.md#install-with-bekup-setup-container-only)).
+
+The repository's `docker-compose.yml` (the `full` variant) ships two
+proxies as compose **profiles**. Enable **exactly one**:
 
 | Profile | Services | Certificates | Docker socket |
 |---|---|---|---|
@@ -27,13 +43,32 @@ internet ──80/443──> traefik | nginx ──(frontend, internal)──> s
 
 ## Quick start (production)
 
+With `bekup setup` (the container-only install,
+[compose.md](compose.md#install-with-bekup-setup-container-only)) steps 2–4
+below are done for you. In the `traefik` variant Traefik has no profile and
+starts with `docker compose up -d`; setup asks for the domain and the ACME
+e-mail (`--tls-mode static`, `--acme-staging` while testing) and writes
+`BEKUP_DOMAIN`, `PROXY_TLS_MODE`, `ACME_EMAIL` and `ACME_CA_SERVER` to
+`.env` and `base_url` and `trusted_proxies` to `bekup.toml`.
+`--tls-mode static` also writes the `compose.override.yaml` below with
+`./proxy-tls` as the certificate directory. In the setup-first `full`
+variant `--proxy traefik|nginx` selects the profile through
+`COMPOSE_PROFILES` in `.env`; `--proxy none` starts no proxy: attach your
+own to the `frontend` network with a fixed address other than bekup's
+(`PROXY_FRONTEND_IP` and `SERVE_FRONTEND_IP` stay reserved; the lint
+refuses them) and pass it as `--trusted-proxy`. `bekup setup check` verifies that `.env` and
+`bekup.toml` agree.
+
+Without setup (source checkout):
+
 1. Point a DNS `A`/`AAAA` record for your host name (for example
    `backup.example.com`) at the Docker host. Ports **80 and 443** must be
    reachable from the internet: Let's Encrypt validates over port 80
    (HTTP-01), and all other port-80 traffic is redirected to HTTPS.
-2. Set the proxy variables in your shell or in a `.env` file next to
-   `docker-compose.yml`:
+2. Set the proxy variables in a `.env` file next to the compose file
+   (a variable set in the shell overrides `.env`):
    ```sh
+   COMPOSE_PROFILES=traefik      # or nginx; selects the proxy profile
    BEKUP_DOMAIN=backup.example.com
    ACME_EMAIL=ops@example.com
    ```
@@ -46,7 +81,7 @@ internet ──80/443──> traefik | nginx ──(frontend, internal)──> s
    ```
 4. Start the stack with one profile:
    ```sh
-   docker compose --profile traefik up -d     # or: --profile nginx
+   docker compose up -d     # COMPOSE_PROFILES from .env; or: --profile traefik
    ```
 5. Check it from outside: `curl -I https://backup.example.com` and an
    external TLS scan (see the [checklist](#security-checklist)).
@@ -70,6 +105,7 @@ configuration keys. bekup itself never reads them.
 | `ACME_EMAIL` | both (ACME) | none (required) | Let's Encrypt account e-mail |
 | `ACME_CA_SERVER` | both (ACME) | Let's Encrypt production | ACME directory URL (https only), for example the staging CA |
 | `PROXY_TLS_MODE` | both | `acme` | `static` uses your own certificate mounted at `/certs/tls.crt` + `/certs/tls.key` (internal PKI, dev) |
+| `COMPOSE_PROFILES` | – | none | `traefik` or `nginx`: selects the proxy profile (compose itself reads it) |
 | `PROXY_FRONTEND_IP` | both | `10.213.250.5` | the proxy's fixed address on `frontend` |
 | `FRONTEND_SUBNET`, `SERVE_FRONTEND_IP` | both | `10.213.250.0/24`, `10.213.250.10` | see [compose.md](compose.md) |
 
@@ -81,9 +117,10 @@ refuse to start otherwise.
 
 `PROXY_TLS_MODE=static` needs the certificate chain and key at
 `/certs/tls.crt` and `/certs/tls.key` inside the proxy container (readable
-by UID 65532; key `0600`). `docker-compose.yml` does not mount `/certs`
-itself, so add it in a `docker-compose.override.yml` next to it (compose
-reads that file automatically):
+by UID 65532; key `0600`). The compose file does not mount `/certs`
+itself, so add it in a `compose.override.yaml` next to it (compose
+reads that file automatically; `bekup setup init --tls-mode static` writes
+it with `source: ./proxy-tls` and sets `PROXY_TLS_MODE=static` in `.env`):
 
 ```yaml
 services:
@@ -92,7 +129,7 @@ services:
       PROXY_TLS_MODE: static
     volumes:
       - type: bind
-        source: /etc/bekup/proxy-tls     # tls.crt + tls.key
+        source: ./proxy-tls     # tls.crt + tls.key; exactly ./proxy-tls, read-only (the lint refuses anything else)
         target: /certs
         read_only: true
   certbot:            # nginx profile only: no ACME in static mode
@@ -103,6 +140,13 @@ To publish the proxy on other host ports or addresses (for example
 `127.0.0.1:8443`), override `ports` with `!override` the same way and set
 `PROXY_HTTPS_PUBLIC_PORT` in the proxy's `environment` to the public HTTPS
 port, so the HTTP→HTTPS redirect points at it.
+
+These are the only proxy changes `setup check` accepts on the shipped
+`traefik`/`nginx` services: `PROXY_TLS_MODE` and `PROXY_HTTPS_PUBLIC_PORT`
+in `environment`, the read-only `./proxy-tls` bind at `/certs`, the
+published side of `ports` (container ports 8080/8443, tcp), `profiles`,
+resource limits and `restart` ([the hardening
+lint](compose.md#the-override-file-and-the-hardening-lint)).
 
 ## Trusted proxies
 
@@ -261,9 +305,191 @@ BEKUP_DEV_BASE_URL=https://bekup.localhost:8443 \
   `BEKUP_DEV_BASE_URL` sets serve's `base_url` so that origin checks match
   the proxied URL.
 
+## Existing Traefik
+
+The `traefik-external` variant (`compose.traefik-external.yaml`, D-205)
+runs no proxy of its own. Your Traefik reaches `serve` over a dedicated
+**link network**, `bekup-proxy`: external to both projects, `internal`
+(no route out), a `/28` with fixed addresses. Nothing but your proxy and
+`serve` is on it, and `serve` publishes no port.
+
+| | Address | Set in |
+|---|---|---|
+| your Traefik | `10.213.253.5` | Traefik's compose file |
+| `serve` | `10.213.253.10:8080` | `SERVE_PROXY_IP` in `.env`, `[server] listen` |
+| `trusted_proxies` | `["10.213.253.5/32"]` | `bekup.toml` (written by setup; `setup check` errors on anything else) |
+
+Once per host, create the network:
+
+```sh
+docker network create --internal --subnet 10.213.253.0/28 \
+  --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+```
+
+`--ip-range` limits Docker's automatic addresses to `.12`–`.15`: a
+container that joins the network before Traefik or `serve` can never take
+`.5` or `.10` (fixed addresses outside the range still work). setup prints
+the command for another subnet or other addresses.
+
+Then attach Traefik **in addition to the networks it already has**, and
+recreate it (`docker compose up -d traefik` in its directory):
+
+```yaml
+# Traefik's compose file
+services:
+  traefik:
+    networks:
+      default: {}       # keep: the network it had without a networks: key
+      web: {}           # keep: every network it already lists (example)
+      bekup-proxy:
+        ipv4_address: 10.213.253.5
+networks:
+  web:
+    external: true      # unchanged
+  bekup-proxy:
+    external: true
+```
+
+A service's `networks:` replaces its default network, so list every network
+Traefik used before, or it loses its other routes. A list form
+(`networks: [web]`) can't carry an address: convert it to the map form
+(`web: {}`). A service without a `networks:` key was on `default`; add
+`default: {}`.
+
+The variant puts these labels on `serve` only (values from `.env`, written
+by setup):
+
+| Label | Value |
+|---|---|
+| `traefik.enable` | `true` |
+| `traefik.docker.network` | `${BEKUP_PROXY_NETWORK:-bekup-proxy}` |
+| `traefik.http.routers.bekup.rule` | ``Host(`${BEKUP_DOMAIN}`)`` |
+| `traefik.http.routers.bekup.entrypoints` | `${TRAEFIK_ENTRYPOINT:-websecure}` (`--traefik-entrypoint`) |
+| `traefik.http.routers.bekup.tls` | `true` |
+| `traefik.http.routers.bekup.tls.certresolver` | `${TRAEFIK_CERTRESOLVER:-letsencrypt}` (`--traefik-certresolver`) |
+| `traefik.http.routers.bekup.service` | `bekup` |
+| `traefik.http.services.bekup.loadbalancer.server.port` | `8080` |
+| `traefik.http.services.bekup.loadbalancer.responseforwarding.flushinterval` | `-1ms` (live updates are Server-Sent Events, D-124) |
+
+**Router and service name.** The labels name the router and the service
+`bekup`. Traefik's names are global across the Docker provider: if another
+container already defines a router or service called `bekup`, Traefik
+reports a conflict and routes neither. Compose can't interpolate label
+keys, so the name is not a variable: rename the other router, or customize
+`compose.yaml` (rename `bekup` in these label keys, pass `--variant
+traefik-external` to setup; the hardening lint then checks the file), or use
+the file provider below.
+
+There are no middleware labels: bekup sets HSTS, CSP and the other security
+headers itself (D-102). Your Traefik must:
+
+- use the Docker provider with `exposedByDefault: false`, so only labelled
+  containers are routed;
+- never set `forwardedHeaders.insecure` and never trust `0.0.0.0/0` (or any
+  wide range) in `forwardedHeaders.trustedIPs` on the entrypoint: otherwise
+  clients can forge `X-Forwarded-For`, which bekup then believes;
+- have no entrypoint-wide header middlewares that add or rewrite
+  `Strict-Transport-Security`, `Content-Security-Policy` or other security
+  headers (they would duplicate or weaken bekup's);
+- not set `respondingTimeouts.readTimeout: 0` (unlimited request reads);
+  long-lived *responses* need no special timeout with the flush interval
+  above;
+- redirect HTTP to HTTPS on its own entrypoints.
+
+**The Docker socket.** Traefik's Docker provider reads labels through the
+Docker socket, and socket access is root on the host. bekup cannot limit
+that: a compromised Traefik owns the host, bekup included. Prefer a
+read-only socket proxy that allows only the container list and inspect
+calls (e.g. a hardened docker-socket-proxy with `CONTAINERS=1` and nothing
+else), or skip the labels and use Traefik's **file provider**:
+
+```yaml
+# Traefik dynamic configuration (file provider)
+http:
+  routers:
+    bekup:
+      rule: Host(`backup.example.com`)
+      entryPoints: [websecure]
+      service: bekup
+      tls:
+        certResolver: letsencrypt
+  services:
+    bekup:
+      loadBalancer:
+        servers:
+          - url: http://10.213.253.10:8080
+        responseForwarding:
+          flushInterval: -1ms
+```
+
+With the file provider the labels on `serve` are ignored (no Docker
+provider reads them). See [Verify](#verify-an-external-proxy).
+
+## Nginx Proxy Manager
+
+The `npm` variant (`compose.npm.yaml`, D-205) uses the same link network as
+[Existing Traefik](#existing-traefik): create `bekup-proxy` once (same
+command, with `--ip-range`) and give NPM's container (usually the service
+`app`) `bekup-proxy` with `ipv4_address: 10.213.253.5` **next to its
+existing networks** (`default: {}` when it had no `networks:` key; a list
+becomes the map form), with the network declared `external: true`;
+recreate NPM. Then add a Proxy Host:
+
+| Field | Value |
+|---|---|
+| Domain Names | your DNS name (`BEKUP_DOMAIN`), e.g. `backup.example.com` |
+| Scheme | `http` |
+| Forward Hostname / IP | `10.213.253.10` |
+| Forward Port | `8080` |
+| Cache Assets | off |
+| Block Common Exploits | on |
+| Websockets Support | **off** (bekup uses Server-Sent Events, never WebSocket, D-124) |
+| SSL Certificate | Request a new SSL certificate (Let's Encrypt) |
+| Force SSL | on |
+| HTTP/2 Support | on |
+| HSTS Enabled | **off** (bekup sends HSTS itself; two headers are invalid) |
+
+Advanced tab (custom Nginx configuration):
+
+```nginx
+proxy_http_version 1.1;
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 3600s;
+client_max_body_size 2m;
+```
+
+`proxy_buffering off` and the long read timeout keep the live update
+streams flowing; the 2 MiB body limit sits just above bekup's own (`max_body_bytes`, 1 MiB), like the shipped nginx. NPM **appends** the
+client address to `X-Forwarded-For` (`$proxy_add_x_forwarded_for`) and sends
+`X-Forwarded-Proto https`. That is safe: bekup walks `X-Forwarded-For` from
+the right, takes the hop NPM appended (NPM is the only trusted address) and
+ignores whatever the client put in front of it.
+
+### Verify an external proxy
+
+```sh
+curl -sI https://backup.example.com/ | grep -i -E '^(strict-transport-security|content-security-policy):'
+```
+
+Expect **exactly one** `Strict-Transport-Security` header and bekup's
+`Content-Security-Policy` (`default-src 'self'; ... trusted-types 'none'`). Two HSTS
+headers mean the proxy adds its own: turn that off. `docker compose ps`
+must show no published port on any bekup service.
+
+If serve's log shows the warning "X-Forwarded-For from a peer that is not
+in server.trusted_proxies", requests arrive from an address other than
+`10.213.253.5`: the proxy is not attached with its fixed address (or
+`trusted_proxies` does not match). bekup then ignores the header and sees
+every client as the proxy, so per-client rate limits and audit addresses
+are wrong. A different subnet or addresses: `setup init --proxy-subnet
+--proxy-ip --serve-ip` (and `--proxy-network` for another name).
+
 ## Using your own reverse proxy
 
-If you already run a proxy, skip the profiles and connect your proxy to
+If you already run a proxy, use the [Existing Traefik](#existing-traefik) or
+[Nginx Proxy Manager](#nginx-proxy-manager) variant above, or (setup-first,
+`full` variant) skip the profiles and connect your proxy to
 bekup's `frontend` network (or run bekup's `serve` where your proxy can reach
 it). Then set `trusted_proxies` to your proxy's address. Requirements:
 
@@ -345,8 +571,13 @@ backup.example.com {
 
 ## Security checklist
 
-- [ ] Exactly one proxy profile is enabled. `docker compose ps` shows no
-      published port on `serve`, `runner` or `postgres`.
+- [ ] Exactly one proxy is in front of bekup (one profile in the `full`
+      variant). `docker compose ps` shows no published port on `serve`,
+      `runner` or `postgres`.
+- [ ] External proxy: it sits at the fixed address on `bekup-proxy`
+      (`10.213.253.5`), does not trust forwarded headers from everyone,
+      adds no HSTS of its own, and serve logs no untrusted
+      `X-Forwarded-For` warning.
 - [ ] `trusted_proxies` names only the proxy's address (`/32`), not a subnet
       and never `0.0.0.0/0`.
 - [ ] `base_url` is `https://` and equals `https://BEKUP_DOMAIN`.

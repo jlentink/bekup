@@ -24,5 +24,7 @@ func fileFreeSpace(f *os.File) (uint64, error) {
 	if serr != nil {
 		return 0, fmt.Errorf("storage: statfs: %w", serr)
 	}
-	return uint64(st.Bavail) * uint64(st.Bsize), nil //nolint:unconvert // field types differ per OS
+	// The field types differ per OS (Linux: Bsize int64; macOS: uint32;
+	// FreeBSD: Bavail int64), hence the generic helper.
+	return statfsFree(st.Bavail, st.Bsize)
 }

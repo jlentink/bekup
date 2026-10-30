@@ -25,11 +25,13 @@ mode="${PROXY_TLS_MODE:-acme}"
 port="${PROXY_HTTPS_PUBLIC_PORT:-443}"
 interval="${PROXY_CERT_CHECK_SECONDS:-300}"
 
-printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' \
-    && [ "${#domain}" -le 253 ] \
-    || die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
-printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 ] \
-    || die "PROXY_HTTPS_PUBLIC_PORT must be a port number"
+if ! { printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' &&
+    [ "${#domain}" -le 253 ]; }; then
+    die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
+fi
+if ! { printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 ]; }; then
+    die "PROXY_HTTPS_PUBLIC_PORT must be a port number"
+fi
 printf '%s' "$interval" | grep -Eqx '[1-9][0-9]{0,5}' \
     || die "PROXY_CERT_CHECK_SECONDS must be a positive number"
 
@@ -41,8 +43,9 @@ case "$mode" in
     static)
         cert=/certs/tls.crt
         key=/certs/tls.key
-        [ -r "$cert" ] && [ -r "$key" ] \
-            || die "static mode needs /certs/tls.crt and /certs/tls.key (readable by UID $(id -u))"
+        if ! { [ -r "$cert" ] && [ -r "$key" ]; }; then
+            die "static mode needs /certs/tls.crt and /certs/tls.key (readable by UID $(id -u))"
+        fi
         ;;
     *) die "PROXY_TLS_MODE must be 'acme' or 'static'" ;;
 esac
@@ -80,7 +83,7 @@ sleep_pid=""
 
 stop() {
     log "stopping"
-    [ -n "$sleep_pid" ] && kill "$sleep_pid" 2>/dev/null || true
+    if [ -n "$sleep_pid" ]; then kill "$sleep_pid" 2>/dev/null || true; fi
     nginx -s quit 2>/dev/null || kill -TERM "$nginx_pid" 2>/dev/null || true
     wait "$nginx_pid" 2>/dev/null || true
     exit 0

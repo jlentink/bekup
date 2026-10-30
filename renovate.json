@@ -85,6 +85,13 @@
       "groupName": "github actions"
     },
     {
+      "description": "deploy/compose/* is generated from docker-compose.yml by `just gen` (D-205 amendment 3): Renovate bumps only the source; run `just gen` on its PR (CI's generated job fails until then)",
+      "matchFileNames": [
+        "deploy/compose/**"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Major updates need explicit approval on the dashboard",
       "matchUpdateTypes": [
         "major"
@@ -113,6 +120,17 @@
       ],
       "matchStrings": [
         "#\\s*renovate:\\s*image=(?<depName>[^:\\s]+):(?<currentValue>\\S+)\\s*\\n[A-Za-z_][A-Za-z0-9_]*=\\S+@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Digest-pinned images in workflows written as <name>:<tag>@sha256:<digest> (release.yml: binfmt, buildkit; ci.yml: registry)",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker"
     },

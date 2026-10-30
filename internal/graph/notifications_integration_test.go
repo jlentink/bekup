@@ -83,6 +83,7 @@ func newNotifEnv(t *testing.T) *notifEnv {
 		t.Fatal(err)
 	}
 	bus := pubsub.NewBus()
+	startBusListener(t, d, bus)
 	sessions := auth.NewSessions(e.pool, auth.SessionOptions{Events: auth.PubSubSessionEvents{Publisher: &pubsub.Publisher{Bus: bus}}})
 	svc, err := auth.NewService(auth.ServiceOptions{DB: e.pool, Hasher: e.hasher, Sessions: sessions, Auditor: e.auditor, Factors: auth.NewSecondFactors()})
 	if err != nil {

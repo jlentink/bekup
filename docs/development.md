@@ -23,7 +23,9 @@ signing is set up, and prints install hints for macOS/Linux. It exits non-zero
 when a required tool is missing or outdated.
 
 Prerequisites: [just](https://just.systems/) ≥ 1.44, Go (see `go.mod`),
-`golangci-lint`, Docker, and for the web UI Node.js + pnpm. The security
+`golangci-lint` (exactly the version pinned as `GOLANGCI_LINT_VERSION` in
+`ci.yml`; `just lint` refuses another one unless
+`GOLANGCI_LINT_ANY_VERSION=1`), Docker, and for the web UI Node.js + pnpm. The security
 scanners `govulncheck` and `osv-scanner` and, for releases, `git-cliff` are
 needed for `just sec` and `just bump`; the recipes print an install hint when a
 tool is missing.
@@ -43,14 +45,15 @@ Recipes whose tooling arrives in a later task fail with
 | dev | `just web-dev` | Vite dev server with hot reload on `http://localhost:5173`, proxying the API to `:8080` |
 | dev | `just dev-full` | The full containerised stack (profile `full`: air serve, runner, sample DBs, MinIO, SFTP, bastion) |
 | dev | `just dev-down` | Stops every dev container of every profile; volumes are kept |
-| dev | `just gen` | Runs sqlc, `buf generate` (runner API: `proto/` → `internal/runnerpb`), gqlgen, graphql-codegen (`web` script `gen`) and the config key reference generator (`go run ./internal/config/gendocs`) |
-| quality | `just lint` | `golangci-lint` (incl. gosec, also `integration`-tagged files), `sqlc vet` + `sqlc diff`, `buf lint` + `buf format --diff` (+ `buf breaking` against `main` once `proto/` exists there); with `web/`: eslint + `tsc --noEmit` |
+| dev | `just gen` | Runs sqlc, `buf generate` (runner API: `proto/` → `internal/runnerpb`), gqlgen, graphql-codegen (`web` script `gen`), the config key reference generator (`go run ./internal/config/gendocs`) and `scripts/gen_compose.sh`, which renders the committed compose files `deploy/compose/*` from `docker-compose.yml` (`bekup setup compose --variant <v>`, D-205 amendment 3; never edit them by hand) |
+| quality | `just lint` | `golangci-lint` (incl. gosec) for `GOOS=linux` with and without the `integration` tag, plus a native pass on non-Linux hosts (OS-specific files differ); shellcheck (`scripts/shellcheck.sh`: the local shellcheck if it is the pinned version, else the digest-pinned `koalaman/shellcheck` image via Docker); `sqlc vet` + `sqlc diff`, `buf lint` + `buf format --diff` (+ `buf breaking` against `main` once `proto/` exists there); with `web/`: eslint + `tsc --noEmit` |
 | quality | `just test` | Script tests, `go test -race ./...`; with `web/`: vitest |
 | quality | `just test-scripts` | Tests for the release scripts (semver math, bump refusals, happy path, `just publish`) |
 | quality | `just test-int` | Integration tests (`-tags integration`, testcontainers; needs Docker) |
 | quality | `just test-e2e` | Playwright E2E (`web` script `test:e2e`) |
 | security | `just sec` | `govulncheck` + `osv-scanner`; fails if a scanner is missing |
 | build | `just build` | Web build (if present), then a static, trimmed `bin/bekup` with the version from `VERSION` |
+| build | `just compose-examples [image]` | Renders the compose variants (`traefik`, `traefik-external`, `npm`, `full`) into `dist/compose/` (gitignored) with `bekup setup compose`; with a pinned image the `x-bekup-image` line names it (like the release assets), otherwise it is the `${BEKUP_IMAGE:?...}` placeholder of the committed `deploy/compose/` files (D-205) |
 | build | `just docker` | Builds the image `bekup:<version>` and `bekup:dev` |
 | db | `just db-reset` | Asks for confirmation, wipes the dev stack volumes, starts the dev infrastructure and migrates natively |
 | db | `just db-schema` | Regenerates `internal/db/schema.sql` (pg_dump of all migrations in a test container) |
@@ -119,7 +122,10 @@ just dev-down                                # stop the containers (data is kept
   targets (`pg15`, `pg15-tunneled`, `mysql`, `mariadb`, `bastion`) next to
   `just dev`, `just run` and `just web-dev`. Its mTLS gRPC port is published
   on `127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}` from a dedicated
-  `runner-host` network (the production `runner-ctl` network is internal, so
+  `runner-host` network (`10.213.254.0/24`, runner at `.10`; moved off
+  `10.213.253.0/24` by D-205, which reserves that range for the production
+  `bekup-proxy` link network: after updating, run `just dev-down` and
+  `docker network rm bekup_runner-host` once; the production `runner-ctl` network is internal, so
   Docker cannot publish from it); it is not on `backend`/`dev-host` and does
   not listen on `targets`. The recipe sets `DOCKER_GID=0` on macOS (Docker
   Desktop) unless set. Use the host names above in connections; the
@@ -258,6 +264,8 @@ so they show up in the changelog.
 `just release` (`scripts/release.sh`) checks that `HEAD` of a clean `main` is
 the annotated tag `v$(cat VERSION)` and that its signature verifies, then runs
 `git push --atomic origin main vX.Y.Z`.
+The tag starts the [release workflow](#release-workflow-releaseyml), which
+accepts only tags signed with the pinned release key (OpenPGP).
 
 ## Publishing your own image
 
@@ -322,7 +330,10 @@ BEKUP_PLATFORMS=linux/arm64 just publish --yes          # one platform, no promp
   Node is needed. Platforms default to `linux/amd64,linux/arm64` (Go
   cross-compiles, no emulation).
 - **Result:** the pushed tags, the image digest and a compose pin:
-  `BEKUP_IMAGE=<repo>@sha256:…` (see
+  `BEKUP_IMAGE=<repo>:<first tag>@sha256:…`, ready for the committed
+  `deploy/compose/` files (a tag that does not name the binary version,
+  for example on a commit without the release tag, needs
+  `setup --allow-version-mismatch`; see
   [compose installation](installation/compose.md#using-your-own-image)).
   Inspect it with `docker buildx imagetools inspect <repo>@sha256:…`.
 - A confirmation prompt shows the repository and tags; `--yes` skips it, and
@@ -535,13 +546,14 @@ call the same `just` recipes you run locally where possible, so a green
 
 | Job | What it runs | Local equivalent |
 |---|---|---|
-| `go` | `go build ./...`, `go vet ./...`, `go test -race ./...`, golangci-lint (incl. gosec, `--build-tags integration`), `sqlc vet`, `sqlc diff` | `just lint` + `just test` |
+| `go` | `go build ./...`, `go vet ./...`, `go test -race ./...`, golangci-lint `GOLANGCI_LINT_VERSION` (incl. gosec; with and without `--build-tags integration`), `sqlc vet`, `sqlc diff` | `just lint` + `just test` |
 | `go-integration` | Integration tests with testcontainers (Docker on the runner, checked first; `CI=true`, so Docker-dependent tests fail instead of skipping) | `just test-int` |
 | `web` | frozen `pnpm install`, `lint`, `typecheck`, `test`, `build`, `csp-check` (headless Google Chrome) | `just lint` + `just test` + `just build`, then `pnpm csp-check` |
 | `security` | govulncheck + osv-scanner (pinned versions) | `just sec` |
-| `generated` | `go mod tidy -diff`, `just gen`, then fails on any uncommitted change | `go mod tidy && just gen`, then commit |
-| `scripts` | `just --fmt --check`, shellcheck on `scripts/` and `deploy/**/*.sh`, `just test-scripts` | same commands |
+| `generated` | `go mod tidy -diff`, `just gen`, then fails on any uncommitted change (generated code and `deploy/compose/*`) | `go mod tidy && just gen`, then commit |
+| `scripts` | `just --fmt --check`, `scripts/shellcheck.sh` (`shellcheck -x` 0.9.0 on `scripts/*.sh`, `scripts/lib.bash` and `deploy/**/*.sh`; findings of every severity fail), `just test-scripts` | same commands (`just lint` runs the shellcheck script) |
 | `compose` | `docker compose config` for `docker-compose.yml` and the dev overlay, all profiles | same commands |
+| `setup-install` | Builds the image, pushes it to a loopback registry for a digest-pinned reference. Setup-first: `bekup setup init --write-compose --variant full` (root + `CAP_CHOWN`, no network), the owners of key files, `docker compose config`, `setup check`, a no-op `setup upgrade --write-compose` and `check --fix-ownership` (D-203). Compose-first, end to end as in the README (D-205): the own-Traefik variant with a static self-signed `bekup.test` certificate (`compose run --rm -T setup`, `up -d --wait`, `/healthz` and the security headers through Traefik, the first admin, `setup check`, `down -v`) and the Nginx Proxy Manager variant on the `bekup-proxy` link network with a pinned curl container as the proxy at `10.213.253.5` (incl. the untrusted-`X-Forwarded-For` warning) | the steps in the job, see [compose.md](installation/compose.md#install-with-bekup-setup-container-only) |
 | `workflows` | actionlint (with shellcheck on `run:` blocks) and zizmor | `actionlint` and `zizmor .github/` |
 
 CI security rules (D-061, D-091). A change to `.github/` that breaks one of them
@@ -565,6 +577,14 @@ fails review, and usually the `workflows` job:
   values into `run:` scripts. Pass them through `env:` instead (zizmor checks
   this).
 
+**Renovate and generated files.** `deploy/compose/*` is rendered from
+`docker-compose.yml` by `just gen` (D-205 amendment 3). Renovate ignores
+`deploy/compose/**` (`renovate.json`) and bumps only the source, so a
+Renovate PR that changes an image digest in `docker-compose.yml` fails the
+`generated` job ("Run 'just gen' and commit the result") and the setup drift
+test (`TestCommittedComposeFiles`) until someone runs `just gen` on the PR
+branch and commits `deploy/compose/`. Never edit those files by hand.
+
 Run the workflow linters locally before pushing changes to `.github/`:
 
 ```sh
@@ -572,5 +592,49 @@ go run github.com/rhysd/actionlint/cmd/actionlint@latest
 uvx zizmor .github/          # or: pipx run zizmor .github/
 ```
 
-Release workflows (signed multi-arch image, SBOM, provenance) arrive in task
-7.4.
+`ci.yml` can also be called with `workflow_call`: the release workflow runs
+the whole CI on the release tag before it publishes anything, with the input
+`disable_cache: true` (no setup-go, setup-node or golangci-lint cache, so no
+state written by other workflows enters a release).
+
+### Release workflow (`release.yml`)
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) (task 7.4,
+D-204) runs only for a pushed tag `vX.Y.Z` (`just release`). Nothing is ever
+published from a branch. Its logic lives in
+[`scripts/release_ci.sh`](../scripts/release_ci.sh) (tests:
+`scripts/release_ci_test.sh`, part of `just test-scripts`).
+
+| Job | What it does | Permissions |
+|---|---|---|
+| `verify` | Fetches the annotated tag object with the token (checkout may store only the commit; the auth header reaches git through `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, never argv); the tag equals `v$(cat VERSION)`, is annotated, the name inside the tag object equals the pushed tag (`release_ci.sh tag-object-name`), it points at the run's commit and that commit is on `main`; the tag signature verifies with `git verify-tag` against [`.github/release-signers.asc`](../.github/release-signers.asc) in a temporary GnuPG home, and the signing key's **primary fingerprint** equals `RELEASE_SIGNER_FPR` in the workflow | `contents: read` |
+| `ci` | The full `ci.yml` (`workflow_call`, `disable_cache: true`) | `contents: read` |
+| `build` | Needs `verify` and `ci`. Only `docker/*` actions. Refuses when `:X.Y.Z` exists (`release_ci.sh tag-state`: only a registry "not found" counts as absent, any other error fails); builds `linux/amd64` + `linux/arm64` (`target: runtime`, `pull`, no cache, `SOURCE_DATE_EPOCH` and `BUILD_DATE` from the commit time, max-mode provenance, SBOM with the generator pinned in `scripts/publish.sh`) and **pushes by digest only** | `contents: read`, `packages: write` |
+| `scan` | Trivy on both platforms of the digest (HIGH/CRITICAL with a fix fail, exceptions only in [`.trivyignore`](../.trivyignore) with an expiry) | `contents: read`, `packages: read` |
+| `publish` | Global concurrency group `release-latest`. `cosign sign --recursive` (keyless), `cosign attest` of each platform's SPDX SBOM, `actions/attest-build-provenance`; re-checks that `:X.Y.Z` is absent, decides `latest` from the release tags that exist at that moment (`gh api …/git/matching-refs/tags/v` + `release_ci.sh is-latest`), tags the digest `:X.Y.Z` (and `:latest`) and checks the tag resolves to the signed digest | `contents: read`, `packages: write`, `id-token: write`, `attestations: write` |
+| `compose` | Needs `verify`, `build`, `publish` (D-205). Renders `compose.yaml`, `compose.traefik-external.yaml` and `compose.npm.yaml` by running the published digest (`release_ci.sh render-compose`: `setup compose --image <ref>`, `--network none`, read-only, UID 65532, no capabilities, no logs), checks them (`release_ci.sh compose-assets`: exactly one `x-bekup-image` naming the release reference, every image pinned, no `build`), requires the tag's committed `deploy/compose/*` to equal them except for the `x-bekup-image` line, which must be the `BEKUP_IMAGE` placeholder (`release_ci.sh committed-compose`, D-205 amendment 3), writes `SHA256SUMS`, attests the four files (`actions/attest-build-provenance`, `subject-path`), signs each with `cosign sign-blob` (bundle `<file>.sigstore.json`), outputs the digest over all eight assets (`release_ci.sh assets-digest`) and hands them over as a one-day workflow artifact | `contents: read`, `packages: read`, `id-token: write`, `attestations: write` |
+| `release` | Needs `compose`; runs only `gh`. Downloads the artifact, refuses it unless `release_ci.sh assets-digest` equals the `compose` job's output, re-runs `compose-assets` and `sha256sum -c SHA256SUMS`, then `gh release create` with the eight assets and notes: the CHANGELOG section of `X.Y.Z`, the pinned image, `docker pull`, `cosign verify` (cosign v3.0 or newer) and `gh attestation verify`, the compose-first install (verify the file under its release name, then save it as `compose.yaml`; `cosign verify-blob` alternative), the link network and the `setup upgrade` / `setup check` commands; "latest release" follows `publish` | `contents: write` |
+
+`latest` moves only to the highest plain `vX.Y.Z` tag: a patch release for an
+older line (for example `1.2.5` after `1.3.0`) gets only its version tag.
+Pre-release tags never match the trigger. `latest` is decided right before
+tagging inside the global `release-latest` group, so an older line that
+finishes late never takes it. (GitHub keeps only one pending run per
+concurrency group: a third simultaneous release cancels the pending one
+before it tagged anything; re-run it.) Runs of the same tag queue instead
+of racing, and an existing version tag is never overwritten (a re-run after a
+failure past the tagging step fails; publish a new patch version instead).
+
+After the very first release, check the package settings on GitHub: make
+`ghcr.io/jlentink/bekup` public and link it to the repository.
+
+**Release signing key.** Release tags must be signed (OpenPGP) by the key in
+`.github/release-signers.asc` (public key only, exported with
+`gpg --armor --export <fingerprint>`), and the workflow pins its primary
+fingerprint (`RELEASE_SIGNER_FPR`). Both come from the tagged commit, which
+must be on `main`, so branch protection on `main` is the root of trust. To
+rotate or extend the key: export the new public key into the file, update
+`RELEASE_SIGNER_FPR`, and merge both in one reviewed commit on `main`
+**before** tagging with the new key. A new signing subkey of the pinned key
+or an extended expiry needs only a refreshed file (same fingerprint). An
+SSH-signed tag is refused.

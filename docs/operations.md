@@ -89,13 +89,27 @@ Attach your Prometheus to that network, either in an override file of the
 same project:
 
 ```yaml
-# docker-compose.override.yml
+# compose.override.yaml
 services:
   prometheus:
     image: prom/prometheus:<pinned tag>@sha256:<digest>
-    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
     networks: [metrics]
+volumes:
+  prometheus-data: {}
 ```
+
+(`setup check` lints the override: digest-pinned image, a non-root user, a
+read-only root, no capabilities, `no-new-privileges`, literal values (no
+`${VAR}`), of bekup's networks only `metrics` and without aliases there,
+no bind of bekup's own files; see
+[the hardening lint](installation/compose.md#the-override-file-and-the-hardening-lint).)
 
 or from another compose project by declaring the network as external
 (`networks: { bekup_metrics: { external: true } }`). Scrape configuration:

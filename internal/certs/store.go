@@ -128,6 +128,27 @@ type Result struct {
 	Removed []string
 }
 
+// InitTargets returns every file Init writes or replaces below dir for the
+// components (default: all): the CA files (including the rotation state)
+// and each component's certificate, key and bundle. Init refuses to start
+// while one of them exists (unless Force).
+func InitTargets(dir string, components []string) ([]string, error) {
+	comps, err := normalizeComponents(components)
+	if err != nil {
+		return nil, err
+	}
+	return Layout{Dir: dir}.initTargets(comps), nil
+}
+
+func (l Layout) initTargets(comps []string) []string {
+	targets := make([]string, 0, 5+3*len(comps))
+	targets = append(targets, l.CACert(), l.CAKey(), l.nextCACert(), l.nextCAKey(), l.prevCACert())
+	for _, c := range comps {
+		targets = append(targets, l.CertFile(c), l.KeyFile(c), l.BundleFile(c))
+	}
+	return targets
+}
+
 // Init creates a new CA and the component certificates.
 func Init(opts InitOptions) (*Result, error) {
 	l := Layout{Dir: opts.Dir}
@@ -144,10 +165,7 @@ func Init(opts InitOptions) (*Result, error) {
 			return nil, err
 		}
 	}
-	targets := []string{l.CACert(), l.CAKey(), l.nextCACert(), l.nextCAKey(), l.prevCACert()}
-	for _, c := range comps {
-		targets = append(targets, l.CertFile(c), l.KeyFile(c), l.BundleFile(c))
-	}
+	targets := l.initTargets(comps)
 	if !opts.Force {
 		var existing []string
 		for _, t := range targets {

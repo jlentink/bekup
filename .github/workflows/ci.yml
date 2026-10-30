@@ -16,16 +16,30 @@ on:
   push:
     branches: [main]
   merge_group:
+  # The release workflow (release.yml, D-204) runs the full CI on the tag
+  # and publishes nothing unless it passes. It disables every cache, so no
+  # state written by other workflows enters a release.
+  workflow_call:
+    inputs:
+      disable_cache:
+        description: Disable the setup-go, setup-node and golangci-lint caches
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Explicit prefix: distinct from the release workflow's groups even when
+  # called from it (github.workflow is the caller's name there).
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   # Superseded PR runs are cancelled; every commit on main is checked.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
+  # `just lint` reads this pin and refuses another local golangci-lint.
+  # renovate: datasource=github-releases depName=golangci/golangci-lint
+  GOLANGCI_LINT_VERSION: v2.14.0
   # renovate: datasource=go depName=golang.org/x/vuln
   GOVULNCHECK_VERSION: v1.9.0
   # renovate: datasource=github-releases depName=google/osv-scanner
@@ -58,7 +72,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: ${{ inputs.disable_cache != true }}
 
       - name: Build
         run: go build ./...
@@ -72,9 +86,18 @@ jobs:
       - name: golangci-lint (incl. gosec)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.14.0
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          skip-cache: ${{ inputs.disable_cache == true }}
           # Same as `just lint`: integration-tagged files are linted too.
           args: --build-tags integration
+
+      # Same as `just lint`: files excluded by the integration tag
+      # (`//go:build !integration`) are only seen without it.
+      - name: golangci-lint (no build tags)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          skip-cache: ${{ inputs.disable_cache == true }}
 
       # Same as `just lint`. sqlc is pinned through the go.mod `tool`
       # directive, so no extra download is needed. The `generated` job also
@@ -123,7 +146,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: ${{ inputs.disable_cache != true }}
 
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
@@ -169,7 +192,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          cache: ${{ inputs.disable_cache != true && 'pnpm' || '' }}
           cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install dependencies (frozen lockfile)
@@ -212,7 +235,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: ${{ inputs.disable_cache != true }}
 
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
@@ -246,7 +269,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: ${{ inputs.disable_cache != true }}
 
       - name: Set up pnpm (version from web/package.json packageManager)
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -257,7 +280,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          cache: ${{ inputs.disable_cache != true && 'pnpm' || '' }}
           cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Set up just
@@ -278,7 +301,7 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git status --short
             git diff
-            echo "::error::Generated code is out of date. Run 'just gen' and commit the result."
+            echo "::error::Generated code (incl. deploy/compose/*) is out of date. Run 'just gen' and commit the result."
             exit 1
           fi
 
@@ -313,14 +336,168 @@ jobs:
       - name: justfile formatting
         run: just --fmt --check
 
-      - name: shellcheck (preinstalled on the runner)
-        run: |
-          shellcheck --version
-          shopt -s globstar nullglob
-          shellcheck scripts/*.sh scripts/lib.bash deploy/**/*.sh
+      # Same as `just lint`: the version and file list live in the script
+      # (the preinstalled shellcheck when it is the pinned version, else the
+      # digest-pinned image).
+      - name: shellcheck
+        run: scripts/shellcheck.sh
 
       - name: Script tests
         run: just test-scripts
+
+  # Container-only install from the image alone (bekup setup, D-203,
+  # D-205). Setup-first (docker run): init as root with only CAP_CHOWN and
+  # no network, the ownership manifest on a real Linux file system, compose
+  # validation, `setup check`, a no-op `setup upgrade` and `setup check
+  # --fix-ownership` on the chowned tree (both with CAP_CHOWN only, no
+  # CAP_FOWNER). Compose-first, end to end as in the README: the bundled
+  # Traefik variant with a static self-signed certificate (up, /healthz
+  # through Traefik, first admin, check, down -v) and the Nginx Proxy
+  # Manager variant on the bekup-proxy link network with a pinned curl
+  # container standing in for the proxy at 10.213.253.5.
+  setup-install:
+    name: Container-only install (bekup setup)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      # Stands in for Nginx Proxy Manager (digest-pinned; Renovate updates it).
+      CURL_IMAGE: curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --build-arg WEB_BUILD=skip --build-arg VERSION=0.0.0 -t bekup:0.0.0 .
+
+      # setup needs a digest-pinned reference; a loopback-only registry
+      # gives the local image one.
+      - name: Local registry for a digest-pinned ref
+        id: reg
+        run: |
+          docker run -d --name reg -p 127.0.0.1:5000:5000 \
+            registry:2@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker tag bekup:0.0.0 127.0.0.1:5000/bekup:0.0.0
+          docker push 127.0.0.1:5000/bekup:0.0.0
+          image=$(docker image inspect --format '{{index .RepoDigests 0}}' 127.0.0.1:5000/bekup:0.0.0 | sed 's|@|:0.0.0@|')
+          echo "image=$image" >>"$GITHUB_OUTPUT"
+
+      - name: setup-first init (root + CAP_CHOWN, no network)
+        env:
+          IMAGE: ${{ steps.reg.outputs.image }}
+        run: |
+          D="$RUNNER_TEMP/deploy"; sudo install -d -m 0755 "$D"
+          printf '%s\n' 'ci passphrase for the test CA' > "$RUNNER_TEMP/pass"
+          docker run --rm -i --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 \
+            --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+            -e BEKUP_IMAGE="$IMAGE" -v "$D:/deploy" "$IMAGE" setup init --non-interactive \
+            --write-compose --variant full \
+            --proxy traefik --domain backup.example.com --tls-mode acme --acme-email ops@example.com \
+            --docker-gid "$(stat -c %g /var/run/docker.sock)" --target-cidr 10.20.0.0/16 \
+            --ca-passphrase-stdin < "$RUNNER_TEMP/pass"
+
+      - name: Owners
+        run: |
+          D="$RUNNER_TEMP/deploy"
+          test "$(sudo stat -c %u:%g:%a "$D/secrets/bekup_master_key")" = 65532:65532:400
+          test "$(sudo stat -c %u:%g:%a "$D/secrets/postgres_password")" = 70:70:400
+          test "$(sudo stat -c %u:%g:%a "$D/secrets/certs/postgres/postgres.key")" = 70:70:400
+          test "$(sudo stat -c %u:%g:%a "$D/secrets/certs/serve/serve.crt")" = 0:0:644
+          test "$(sudo stat -c %u:%g:%a "$D/bekup.toml")" = 0:0:644
+          test "$(sudo stat -c %u:%g:%a "$D/compose.yaml")" = 0:0:644
+
+      - name: compose config + setup check + no-op upgrade
+        env:
+          IMAGE: ${{ steps.reg.outputs.image }}
+        run: |
+          D="$RUNNER_TEMP/deploy"; (cd "$D" && docker compose --profile '*' config -q)
+          run() { docker run --rm --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 --cap-drop ALL \
+            --cap-add CHOWN --security-opt no-new-privileges -v "$D:/deploy" "$IMAGE" "$@"; }
+          run setup check
+          sudo find "$D" -type f -not -path '*/secrets/*' -exec sha256sum {} + | sort > "$RUNNER_TEMP/before"
+          run setup upgrade --write-compose --image "$IMAGE" | tee "$RUNNER_TEMP/upgrade.log"
+          grep -q 'no changes' "$RUNNER_TEMP/upgrade.log"
+          sudo find "$D" -type f -not -path '*/secrets/*' -exec sha256sum {} + | sort | diff "$RUNNER_TEMP/before" -
+          # A drifted mode on a file that already belongs to 65532.
+          sudo chmod 0440 "$D/secrets/bekup_master_key"
+          run setup check --fix-ownership
+          test "$(sudo stat -c %u:%g:%a "$D/secrets/bekup_master_key")" = 65532:65532:400
+
+      # README flow, own Traefik: save the (here: locally rendered) release
+      # file, `compose run --rm setup`, `up -d`, the first admin.
+      - name: compose-first, own Traefik (static TLS for bekup.test)
+        env:
+          IMAGE: ${{ steps.reg.outputs.image }}
+        run: |
+          D="$RUNNER_TEMP/bundled"; sudo install -d -m 0755 "$D"; cd "$D"
+          docker run --rm --log-driver none --network none --read-only --user 65532:65532 --cap-drop ALL \
+            --security-opt no-new-privileges "$IMAGE" setup compose --variant traefik --image "$IMAGE" |
+            sudo tee compose.yaml >/dev/null
+          DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm -T setup init \
+            --non-interactive --domain bekup.test --tls-mode static --ca-passphrase-stdin < "$RUNNER_TEMP/pass"
+          test ! -e docker-compose.yml
+          test "$(sudo stat -c %u:%g:%a compose.override.yaml)" = 0:0:644
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 \
+            -subj /CN=bekup.test -addext subjectAltName=DNS:bekup.test \
+            -keyout "$RUNNER_TEMP/tls.key" -out "$RUNNER_TEMP/tls.crt" 2>/dev/null
+          sudo install -d -m 0755 proxy-tls
+          sudo install -o 65532 -g 65532 -m 0600 "$RUNNER_TEMP/tls.key" proxy-tls/tls.key
+          sudo install -o 0 -g 0 -m 0644 "$RUNNER_TEMP/tls.crt" proxy-tls/tls.crt
+          docker compose up -d --wait --wait-timeout 300 || { docker compose ps -a; docker compose logs --no-color | tail -n 200; exit 1; }
+          curl -fsS --cacert "$RUNNER_TEMP/tls.crt" --resolve bekup.test:443:127.0.0.1 https://bekup.test/healthz
+          headers=$(curl -fsS -o /dev/null -D - --cacert "$RUNNER_TEMP/tls.crt" --resolve bekup.test:443:127.0.0.1 https://bekup.test/)
+          test "$(printf '%s\n' "$headers" | grep -ci '^strict-transport-security:')" = 1
+          printf '%s\n' "$headers" | grep -qi '^content-security-policy:'
+          printf 'pw-%s\n' "$(openssl rand -hex 24)" > "$RUNNER_TEMP/admin-pw"
+          sudo chown 65532:65532 "$RUNNER_TEMP/admin-pw"; sudo chmod 0400 "$RUNNER_TEMP/admin-pw"
+          docker compose run --rm -T -v "$RUNNER_TEMP/admin-pw:/run/pw:ro" admin create \
+            --email ci@example.com --display-name "CI Admin" --password-file /run/pw
+          docker compose -f compose.yaml run --rm -T setup check
+          docker compose down -v
+
+      # README flow, Nginx Proxy Manager: the link network once, then the
+      # same steps; a pinned curl container plays NPM at 10.213.253.5.
+      - name: compose-first, Nginx Proxy Manager (curl as the proxy)
+        env:
+          IMAGE: ${{ steps.reg.outputs.image }}
+        run: |
+          D="$RUNNER_TEMP/npm"; sudo install -d -m 0755 "$D"; cd "$D"
+          docker network create --internal --subnet 10.213.253.0/28 \
+            --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+          docker run --rm --log-driver none --network none --read-only --user 65532:65532 --cap-drop ALL \
+            --security-opt no-new-privileges "$IMAGE" setup compose --variant npm --image "$IMAGE" |
+            sudo tee compose.yaml >/dev/null
+          DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm -T setup init \
+            --non-interactive --domain bekup.test --ca-passphrase-stdin < "$RUNNER_TEMP/pass"
+          grep -qx 'trusted_proxies = \["10.213.253.5/32"\]' bekup.toml
+          docker compose up -d --wait --wait-timeout 300 || { docker compose ps -a; docker compose logs --no-color | tail -n 200; exit 1; }
+          proxy() { docker run --rm --network bekup-proxy --ip 10.213.253.5 --read-only --cap-drop ALL \
+            --security-opt no-new-privileges "$CURL_IMAGE" "$@"; }
+          proxy -fsS -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 198.51.100.7' \
+            http://10.213.253.10:8080/healthz
+          proxy -fsS -o /dev/null -D - -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' \
+            http://10.213.253.10:8080/ | grep -qi '^content-security-policy:'
+          # A proxy at another address: its X-Forwarded-For is ignored and logged.
+          docker run --rm --network bekup-proxy --ip 10.213.253.6 --read-only --cap-drop ALL \
+            --security-opt no-new-privileges "$CURL_IMAGE" -sS -o /dev/null -H 'Host: bekup.test' \
+            -H 'X-Forwarded-For: 198.51.100.7' http://10.213.253.10:8080/ || true
+          docker compose logs serve | grep -q 'not in server.trusted_proxies'
+          docker compose -f compose.yaml run --rm -T setup check
+          # The compose-free check of the docs: the pinned image, read-only mount.
+          docker run --rm --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 --cap-drop ALL \
+            --cap-add CHOWN --security-opt no-new-privileges -v "$D:/deploy:ro" "$IMAGE" setup check
+          docker compose down -v
+          docker network rm bekup-proxy
 
   compose:
     name: Compose files are valid

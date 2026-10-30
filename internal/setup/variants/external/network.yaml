@@ -1,0 +1,11 @@
+  # Your reverse proxy <-> serve: the link network (D-205), created ONCE on
+  # the host, outside this project:
+  #   docker network create --internal --subnet 10.213.253.0/28 \
+  #     --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+  # (--ip-range keeps Docker's automatic addresses off .5 and .10.)
+  # Your proxy joins it with the fixed address 10.213.253.5, so bekup.toml
+  # [server] trusted_proxies names exactly that address (/32); serve has
+  # 10.213.253.10. No other bekup service is attached.
+  proxy:
+    external: true
+    name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}

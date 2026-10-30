@@ -72,6 +72,9 @@ if [[ -f web/package.json ]]; then
 	[[ -n $pinned ]] && pnpm_min=$pinned
 fi
 go_min=$(awk '$1 == "go" { print $2; exit }' go.mod 2>/dev/null)
+# golangci-lint: `just lint` needs exactly the version CI pins.
+golangci_ci=$(awk '$1 == "GOLANGCI_LINT_VERSION:" { v = $2; gsub(/["v]/, "", v); print v; exit }' .github/workflows/ci.yml 2>/dev/null)
+golangci_ci=${golangci_ci:-2.14.0}
 
 printf '\n%sbekup doctor%s  %s(%s)%s\n\n' "$B" "$R" "$DIM" "$os" "$R"
 printf '%sRequired%s\n' "$B" "$R"
@@ -82,7 +85,14 @@ check required docker "24.0" "docker version --format '{{.Client.Version}}'" "br
 check required "docker compose" "2.20" "docker compose version --short" "ships with Docker Desktop" "apt install docker-compose-plugin" "dev/prod stacks"
 check required node "22.0" "node --version" "brew install node@22 (or nvm/fnm)" "https://nodejs.org/ (or nvm/fnm)" "web build"
 check required pnpm "$pnpm_min" "pnpm --version" "corepack enable pnpm" "corepack enable pnpm" "web package manager (pinned in web/package.json)"
-check required golangci-lint "2.0" "golangci-lint version" "brew install golangci-lint" "https://golangci-lint.run/welcome/install/" "Go lint incl. gosec"
+check required golangci-lint "$golangci_ci" "golangci-lint version" "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$golangci_ci" "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$golangci_ci" "Go lint incl. gosec (just lint needs exactly $golangci_ci, the CI pin)"
+if command -v golangci-lint >/dev/null 2>&1; then
+	golangci_have=$(first_version "$(golangci-lint version 2>&1 | head -n1)")
+	if [[ -n $golangci_have && $golangci_have != "$golangci_ci" ]] && version_ge "$golangci_have" "$golangci_ci"; then
+		printf '  %s %-15s %-12s %s\n' "$WARN" "golangci-lint" "$golangci_have" "${DIM}newer than the CI pin $golangci_ci: just lint refuses it (GOLANGCI_LINT_ANY_VERSION=1 to override)${R}"
+		warned=1
+	fi
+fi
 check required govulncheck "" "govulncheck -version | grep Scanner" "go install golang.org/x/vuln/cmd/govulncheck@latest" "go install golang.org/x/vuln/cmd/govulncheck@latest" "Go vulnerability scan"
 check required osv-scanner "2.0" "osv-scanner --version" "brew install osv-scanner" "https://google.github.io/osv-scanner/installation/" "dependency vulnerability scan"
 check required openssl "3.0" "openssl version" "brew install openssl" "apt install openssl" "dev secret generation"
@@ -92,7 +102,22 @@ printf '\n%sOptional%s\n' "$B" "$R"
 check optional git-cliff "2.0" "git-cliff --version" "brew install git-cliff" "cargo install git-cliff" "changelog for just bump"
 check optional air "" "air -v" "go install github.com/air-verse/air@latest" "go install github.com/air-verse/air@latest" "native hot reload (dev stack runs it in a container)"
 check optional mkcert "1.4" "mkcert -version" "brew install mkcert" "apt install mkcert" "local TLS for the reverse-proxy profiles"
-check optional shellcheck "0.9" "shellcheck --version" "brew install shellcheck" "apt install shellcheck" "lint scripts/"
+# just lint runs scripts/shellcheck.sh: the local shellcheck when it is the
+# CI version, else the digest-pinned koalaman/shellcheck image via Docker.
+shellcheck_ci=$(sed -n 's/^# renovate: image=koalaman\/shellcheck:v\([0-9.]*\)$/\1/p' scripts/shellcheck.sh 2>/dev/null)
+shellcheck_ci=${shellcheck_ci:-0.9.0}
+if command -v shellcheck >/dev/null 2>&1; then
+	shellcheck_have=$(first_version "$(shellcheck --version 2>&1)")
+	if [[ $shellcheck_have == "$shellcheck_ci" ]]; then
+		printf '  %s %-15s %-12s %s\n' "$OK" "shellcheck" "$shellcheck_have" "${DIM}lint scripts/ and deploy/ (CI version)${R}"
+	else
+		printf '  %s %-15s %-12s %s\n' "$WARN" "shellcheck" "$shellcheck_have" "${DIM}optional; not the CI version $shellcheck_ci, just lint uses the pinned Docker image instead${R}"
+		warned=1
+	fi
+else
+	printf '  %s %-15s %-12s %s\n' "$WARN" "shellcheck" "missing" "${DIM}optional; just lint runs koalaman/shellcheck:v$shellcheck_ci via Docker (CI uses $shellcheck_ci)${R}"
+	warned=1
+fi
 check optional actionlint "1.7" "actionlint -version" "brew install actionlint" "go install github.com/rhysd/actionlint/cmd/actionlint@latest" "lint .github/workflows (CI runs it)"
 check optional zizmor "1.0" "zizmor --version" "brew install zizmor" "pipx install zizmor (or uvx zizmor)" "GitHub Actions security lint (CI runs it)"
 # buildx is a docker plugin: check() only sees the docker binary, so a

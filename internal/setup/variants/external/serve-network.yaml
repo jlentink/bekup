@@ -1,0 +1,5 @@
+      proxy:
+        # Fixed address on the bekup-proxy link network (SERVE_PROXY_IP), so
+        # [server] listen = "10.213.253.10:8080" binds this interface only.
+        # Your reverse proxy is the only other member of that network.
+        ipv4_address: ${SERVE_PROXY_IP:-10.213.253.10}

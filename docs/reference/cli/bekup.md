@@ -30,6 +30,7 @@ encrypts them and writes them to disk, S3 and SFTP.
 * [bekup reindex](bekup_reindex.md)	 - List and verify the runs on a destination; with --import, record them for a job after a database loss
 * [bekup runner](bekup_runner.md)	 - Run the Docker runner (mTLS gRPC, reads runner.toml)
 * [bekup serve](bekup_serve.md)	 - Run the web UI, GraphQL API, scheduler and background workers
+* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory
 * [bekup verify](bekup_verify.md)	 - Verify a run's signed manifest and its artifacts offline (no database needed)
 * [bekup version](bekup_version.md)	 - Print the bekup version
 * [bekup worker](bekup_worker.md)	 - Run background workers only

@@ -40,6 +40,29 @@ tool() {
 	fi
 }
 
+# ci_golangci_lint_version: the golangci-lint version CI uses (the
+# GOLANGCI_LINT_VERSION pin in .github/workflows/ci.yml), without the "v".
+ci_golangci_lint_version() {
+	awk '$1 == "GOLANGCI_LINT_VERSION:" { v = $2; gsub(/["v]/, "", v); print v; exit }' .github/workflows/ci.yml
+}
+
+# need_golangci_lint: fail unless golangci-lint is the version CI uses
+# (results differ between versions). GOLANGCI_LINT_ANY_VERSION=1 turns a
+# mismatch into a warning.
+need_golangci_lint() {
+	local want have
+	want=$(ci_golangci_lint_version)
+	[[ -n $want ]] || die "no GOLANGCI_LINT_VERSION pin in .github/workflows/ci.yml"
+	need_cmd golangci-lint "go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$want (or brew install golangci-lint)"
+	have=$(golangci-lint version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+	[[ $have == "$want" ]] && return 0
+	if [[ ${GOLANGCI_LINT_ANY_VERSION:-} == 1 ]]; then
+		warn "golangci-lint is ${have:-unknown}, CI uses $want: results may differ"
+		return 0
+	fi
+	die "golangci-lint is ${have:-unknown}, CI uses $want. Install it with: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$want (or set GOLANGCI_LINT_ANY_VERSION=1)"
+}
+
 # has_web: the web UI (task 0.8) exists.
 has_web() { [[ -f web/package.json ]]; }
 
@@ -132,11 +155,13 @@ dev_keys_ready() {
 		grep -q 'IP Address:127.0.0.1'
 }
 
-# dev_keys: run deploy/dev/gen-dev-keys.sh unless dev_keys_ready. Sets
-# DEV_PG_CERT_CHANGED=1 when the postgres certificate changed (running
-# containers keep the old bind-mounted file and must be re-created).
+# dev_keys: run deploy/dev/gen-dev-keys.sh unless dev_keys_ready.
+# dev_pg_cert_changed then tells whether the postgres certificate changed
+# (running containers keep the old bind-mounted file and must be
+# re-created).
+_dev_pg_cert_changed=0
 dev_keys() {
-	DEV_PG_CERT_CHANGED=0
+	_dev_pg_cert_changed=0
 	dev_keys_ready && return 0
 	local crt before after
 	crt="$(dev_keys_dir)/certs/postgres/postgres.crt"
@@ -144,8 +169,12 @@ dev_keys() {
 	info "generating dev keys (deploy/dev/gen-dev-keys.sh)"
 	deploy/dev/gen-dev-keys.sh
 	after=$({ cksum <"$crt"; } 2>/dev/null || true)
-	[[ $before == "$after" ]] || DEV_PG_CERT_CHANGED=1
+	[[ $before == "$after" ]] || _dev_pg_cert_changed=1
 }
+
+# dev_pg_cert_changed: true when the last dev_keys changed the postgres
+# certificate.
+dev_pg_cert_changed() { ((_dev_pg_cert_changed)); }
 
 # dev_native_env: environment for a bekup process on the host against the
 # dev infrastructure: deploy/dev/bekup.local.toml plus absolute *_file paths
@@ -180,6 +209,7 @@ dev_native_env() {
 	local v
 	for v in $(compgen -e); do
 		if [[ $v == BEKUP_DEV_* && $v != BEKUP_DEV_ENABLED ]]; then
+			# shellcheck disable=SC2163 # $v holds the variable name: un-export that variable
 			export -n "$v"
 		fi
 	done

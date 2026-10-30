@@ -1,0 +1,13 @@
+# Trivy exceptions for the release image scan (.github/workflows/release.yml,
+# D-204). The release fails on any HIGH or CRITICAL vulnerability that has a
+# fix; an entry here is a reviewed exception, never a convenience.
+#
+# Every entry needs, on the lines above it: why it does not affect bekup (or
+# why no fixed version can be used yet), who decided it, and an expiry date.
+# Use Trivy's inline expiry so the exception lapses on its own:
+#
+#   # golang.org/x/example: vulnerable function not reachable (govulncheck),
+#   # fix needs Go 1.xx; decided by <name> 2026-11-01.
+#   CVE-2026-00000 exp:2026-12-31
+#
+# Keep this list empty whenever possible.

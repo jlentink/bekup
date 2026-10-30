@@ -51,10 +51,17 @@ coverage.*
 *.out
 *.test
 
-# Not needed in the image.
+# Not needed in the image. docker-compose.yml, *.example.toml and
+# deploy/{postgres,traefik,nginx} ARE needed: the binary embeds them for
+# `bekup setup` (embed.go, D-203). Never embed or send deploy/dev.
 plans/
 docs/
 deploy/dev/
-docker-compose*.yml
+# The committed compose files (rendered from docker-compose.yml by `just
+# gen`, D-205 amendment 3): for operators, never embedded.
+deploy/compose/
+docker-compose.dev.yml
+docker-compose.override.yml
 Dockerfile
 .dockerignore
+.trivyignore

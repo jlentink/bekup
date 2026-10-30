@@ -1,0 +1,2 @@
+  # Traefik <-> internet (published 80/443, ACME). Published ports need a
+  # non-internal network, so Traefik cannot publish them on `frontend`.

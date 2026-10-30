@@ -22,10 +22,6 @@
   <a href="docs/DECISIONS.md">Decisions</a>
 </p>
 
-> [!WARNING]
-> **bekup is under development and not ready for production use.**
-> Interfaces, configuration and file formats may change without notice.
-
 ## Why bekup
 
 Database backups hold your most sensitive data, yet backup tools often get
@@ -134,6 +130,160 @@ Components, networks and data flows are described in
 
 ## Quick start
 
+You need a Linux host with Docker Engine 26+ and Compose 2.24+, and a DNS
+name for the UI. Every step runs as root (or a member of the `docker`
+group) in the deployment directory. Pick the variant that matches your
+reverse proxy. Each variant is one compose file, committed in
+[`deploy/compose/`](deploy/compose/) (generated, never edited by hand; the
+image comes from `BEKUP_IMAGE`) and, once releases exist, also published
+with every release with the bekup image pinned by digest and attested.
+
+**The image.** With the committed file, step 2 names the bekup image pinned
+by digest, `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`; setup
+refuses anything unpinned and keeps it in `.env` for every later command.
+The digest comes from the output of `just publish` (your own registry), the
+release notes, or `docker image inspect --format '{{index .RepoDigests 0}}'
+<registry>/bekup:<version>` after a `docker pull` (it prints
+`<registry>/bekup@sha256:…`; keep `:<version>` in front of the `@`). The
+release file already pins it: drop `BEKUP_IMAGE=…` there.
+
+<details open>
+<summary><b>Own Traefik</b> (bekup brings Traefik; ports 80/443, Let's Encrypt)</summary>
+
+1. Save the compose file:
+   ```sh
+   sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+   sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.yaml
+   ```
+   Once releases exist, take the release file instead (pinned and
+   attested) and verify it:
+   ```sh
+   sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.yaml
+   gh attestation verify compose.yaml --repo jlentink/bekup
+   ```
+   `gh attestation verify` needs a signed-in GitHub CLI (`gh auth login`).
+   Without it, verify the cosign bundle `compose.yaml.sigstore.json` from the
+   same release with `cosign verify-blob`
+   ([docs/installation/compose.md](docs/installation/compose.md#install-with-bekup-setup-container-only)).
+2. `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest> DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
+   (release file: without `BEKUP_IMAGE=…`)
+3. `docker compose up -d`, then `docker compose run --rm admin create --email you@example.com --display-name "Your Name"`
+
+</details>
+
+<details>
+<summary><b>Behind your existing Traefik</b></summary>
+
+Once: create the link network and give your Traefik a fixed address on it.
+
+```sh
+docker network create --internal --subnet 10.213.253.0/28 \
+  --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+```
+
+(`--ip-range` keeps Docker's automatic addresses away from the fixed `.5`
+and `.10`.) In Traefik's compose file add `bekup-proxy` **next to the
+networks Traefik already has**, then recreate Traefik
+(`docker compose up -d traefik` in its directory):
+
+```yaml
+services:
+  traefik:
+    networks:
+      default: {}                  # keep every network Traefik already uses
+      web: {}                      # (example: your existing proxy network)
+      bekup-proxy:
+        ipv4_address: 10.213.253.5
+networks:
+  web:
+    external: true                 # as before
+  bekup-proxy:
+    external: true
+```
+
+A list such as `networks: [web]` must become the map form above (`web: {}`)
+to carry the address; a service without a `networks:` key is on `default`
+and must list `default: {}`, or it loses its other networks.
+
+Then the same three steps as above, with
+`compose.traefik-external.yaml` saved as `compose.yaml`:
+
+```sh
+sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.traefik-external.yaml
+# or, once releases exist (pinned, attested):
+sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.traefik-external.yaml
+gh attestation verify compose.yaml --repo jlentink/bekup
+```
+
+bekup sets the router labels on `serve` itself (entrypoint `websecure`,
+certificate resolver `letsencrypt`; change them with
+`--traefik-entrypoint` / `--traefik-certresolver`). Traefik needs
+`exposedByDefault=false` and must not trust forwarded headers from
+everyone: [docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#existing-traefik).
+
+</details>
+
+<details>
+<summary><b>Behind Nginx Proxy Manager</b></summary>
+
+Once: the same network setup as for Traefik: the `docker network create`
+command above, and in NPM's compose file its service (usually `app`) gets
+`bekup-proxy` with `ipv4_address: 10.213.253.5` **next to its existing
+networks** (`default: {}` when it had none), the network declared
+`external: true`; then recreate NPM.
+
+Then the same three steps, with `compose.npm.yaml` saved as
+`compose.yaml`:
+
+```sh
+sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.npm.yaml
+# or, once releases exist (pinned, attested):
+sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.npm.yaml
+gh attestation verify compose.yaml --repo jlentink/bekup
+```
+
+Finally add a Proxy Host in NPM:
+
+| Field | Value |
+|---|---|
+| Domain Names | your DNS name, e.g. `backup.example.com` |
+| Scheme | `http` |
+| Forward Hostname / IP | `10.213.253.10` |
+| Forward Port | `8080` |
+| Cache Assets | off |
+| Block Common Exploits | on |
+| Websockets Support | **off** (bekup uses Server-Sent Events) |
+| SSL | Request a new certificate (Let's Encrypt), Force SSL on, HTTP/2 on, HSTS **off** (bekup sends HSTS itself) |
+
+and in the **Advanced** tab:
+
+```nginx
+proxy_http_version 1.1;
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 3600s;
+client_max_body_size 2m;
+```
+
+Details and verification:
+[docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#nginx-proxy-manager).
+
+</details>
+
+Setup asks for the domain, the ACME e-mail (own Traefik only) and a
+passphrase for the CA key, writes everything except `compose.yaml` and
+hands every file to the container user that reads it. Escrow the master key
+offline and move the CA directory to offline media (`setup` prints how).
+Upgrades: replace `compose.yaml` with the new release file, then
+`docker compose run --rm setup upgrade`, `docker compose pull` and
+`docker compose up -d`; with the committed file run
+`BEKUP_IMAGE=<new image> docker compose run --rm setup upgrade` instead
+(it updates `.env`) ([docs/installation/upgrades.md](docs/installation/upgrades.md)).
+
+Using nginx, your own proxy, or the full setup with every service? See the
+setup-first install in
+[docs/installation/compose.md](docs/installation/compose.md#alternative-setup-first).
+
 <details>
 <summary><b>Try it locally (development)</b></summary>
 
@@ -156,27 +306,6 @@ banner, which is expected in dev. Details:
 
 </details>
 
-<details>
-<summary><b>Production (Docker Compose)</b></summary>
-
-The full procedure is in
-[docs/installation/compose.md](docs/installation/compose.md#first-start-target-flow).
-In short:
-
-1. Create `bekup.toml` and `runner.toml` from the `*.example.toml` files
-   ([configuration](docs/configuration.md)).
-2. Create the secret files in `secrets/` and the master key
-   (`just keygen` or `bekup keys generate`). Escrow the key offline.
-3. Create the mTLS certificates once with
-   `docker compose --profile setup run --rm certs-init`, then move
-   `secrets/certs/ca/` offline.
-4. Start the stack with exactly one reverse-proxy profile:
-   `docker compose --profile traefik up -d` (or `--profile nginx`).
-5. Create the first admin on the host:
-   `docker compose run --rm admin create --email you@example.com --display-name "Your Name"`.
-
-</details>
-
 ## Documentation
 
 | Topic | Pages |
@@ -194,7 +323,7 @@ In short:
 `just` with no arguments prints every recipe, grouped. The everyday checks:
 
 ```sh
-just lint       # golangci-lint (incl. gosec), buf, eslint + tsc
+just lint       # golangci-lint (incl. gosec, also GOOS=linux), shellcheck, buf, eslint + tsc
 just test       # unit tests (Go with the race detector, scripts, vitest)
 just test-int   # integration tests with testcontainers (needs Docker)
 just sec        # govulncheck and osv-scanner

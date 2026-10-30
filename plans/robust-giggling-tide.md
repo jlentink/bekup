@@ -1,178 +1,255 @@
-# Plan: finish the config reload fixes, then add `just publish`
+# Plan: finish the fix round, remove mobile-app references, compose-first onboarding
 
 ## Context
 
-- **Interrupted fix round.** The config reload feature (D-200), the dev runner (D-201) and the job editor change are built. Both reviews have run, and a fix agent was halfway through the findings when plan mode stopped it. Right now `internal/app/configreload_integration_test.go` does not compile (it calls the removed `CountConfigReloadListeners`). The tests, docs and checks for the fixes are missing too. The exact leftover list is in `plans/robust-giggling-tide-agent-a1057e8ab2015b70d.md`.
-- **New request.** The user wants a just recipe that builds the bekup container image and pushes it to a registry of their choice, without the registry URL ever being committed.
-- **One image.** bekup is one binary and one image: serve, worker, runner, migrate and admin are subcommands of the same `bekup` image (`Dockerfile` target `runtime`; compose uses `${BEKUP_IMAGE:-bekup:dev}`).
+Since commit `7564cdd` these are built but uncommitted: the CI fixes, `bekup setup` (D-203) and the GHCR release workflow (D-204). Both reviews ran and a fix round was half done when plan mode paused it. The user then asked for:
 
-## Part 0: finish the review fixes (resume the fix agent)
+1. **Remove every iOS and Android app reference.** Also remove the reserved **push** channel, which existed only for the mobile apps (user decision). Phase 2 keeps only the external API.
+2. **Simple onboarding for Docker Compose users.** The README leads with three steps:
+   1. download a copyable `compose.yaml`;
+   2. `docker compose run --rm setup`;
+   3. `docker compose up -d`.
 
-Hand the leftover list to the fix agent, which keeps its context:
+   There are three variants: bekup with its own Traefik (the default), behind an **existing Traefik**, and behind **Nginx Proxy Manager**. User decisions:
+   - full hardening in the copyable file;
+   - a dedicated `bekup-proxy` link network for external proxies;
+   - the files come only as release downloads (pinned by digest, attested);
+   - the deployment file name is `compose.yaml`.
 
-1. **Fix `internal/app/configreload_integration_test.go`** and extend it:
-   - **Compile fixes:** `configreload.Listening`; `pg_terminate_backend` by `application_name` prefix; `o.LogLevel = new(slog.LevelVar)`.
-   - **New tests:**
-     - M1: audit `error_settings` / `applied` / `weakened` survive redaction;
-     - liveness and pruning: stopped vs listening, the 7-day and 30-day rules;
-     - `expectedProcesses`;
-     - L4: one key per applier group in serve, worker and `serve --no-worker`.
-2. **Check `internal/graph/config_reload_integration_test.go`** against the new `listening`, `trigger` and `expectedProcesses` fields.
-3. **Docs:**
-   - D-200: attribute naming; `application_name` liveness is spoofable and display only; the listing and pruning rules; unused keys are not reported; raising the webhook threshold counts as weakening; `RECORD` is not in the API.
-   - `docs/security/audit.md`, `docs/configuration.md`, `docs/operations.md`, the alert row in `docs/guides/notifications.md`, SECURITY.md CL-12, and AGENTS.md if needed.
-4. **Run every check:**
-   - `just gen` twice;
-   - build and vet, with and without the integration tag;
-   - `just lint`, golangci-lint with the integration tag, `just sec`, `just docs`;
-   - `go test -race ./...`;
-   - the integration packages with `DOCKER_API_VERSION=1.47 -p 1`;
-   - web lint, typecheck, test, build and csp-check.
+## Part A: finish the paused review-fix round (first)
 
-Then do a short re-check of the M1/M2 fixes by me (or a quick verify agent), and delete the agent's scratch plan file.
+Resume the fix agent with its notes (`plans/robust-giggling-tide-agent-a26fab53cbccb5a41.md`).
 
-## Part D: `just publish` (D-202, proposed)
+- **Already done:** ownership EPERM, offline CA protection, FAT/exFAT, `override.go`, the deployment root check, `os.Root`, tagless refs, L7 backups, CIDR limits.
+- **To do:**
+  - **`release.yml` split:** build/push by digest (write) → Trivy scan (read only) → sign/attest/tag (write). `harden-runner` and `checkout` stay in the write jobs (decided).
+    - recompute `latest` via `gh api …/git/matching-refs/tags/v` in a global `release-latest` concurrency group;
+    - the immutability check fails closed except on a 404;
+    - the tag object's name must equal `GITHUB_REF_NAME`;
+    - fetch the tag with the token;
+    - disable CI caches when called by the release;
+    - state the cosign minimum version;
+    - verify the trivy-action pin.
+  - **Remaining Lows:** L1 `--log-driver none`; passphrase warning on stderr; remaining tests (regenerate rollback, CA refusal, override, L7, L8); `pinHelp` in upgrade; `readPassphraseLine` stops at the newline; SECURITY.md B10 and the AGENTS.md boundary row; the `--fix-ownership` step in the `setup-install` CI job.
+  - **Docs:** the D-203/D-204 updates and the 5.7 note (three load-sensitive tests examined, carried to 7.1).
+- **Skip** the README, `compose.md` and `upgrades.md` rewrites and the shadow-file tests on the old names: Part C replaces them.
+- **Verify:** the Docker reproductions of both Highs with a rebuilt image, actionlint/zizmor, `just lint`/`sec`/`test-scripts`, race tests, setup integration tests.
 
-### Configuration: never committed
+## Part B: remove mobile-app references and the push channel
 
-- **Registry name:** `BEKUP_IMAGE_REPO`, e.g. `registry.example.com/team/bekup`, with no tag and no digest. It is read in this order:
-  1. the recipe's first argument;
-  2. the environment;
-  3. a gitignored `.just.env` in the repo root.
-- **`.just.env` file:**
-  - add it to `.gitignore` and to `.dockerignore`, so it never reaches git or the build context;
-  - commit `.just.env.example` with documented keys and no real values.
-- **Loading `.just.env`:**
-  - use a small parser in `scripts/lib.bash` (`load_local_env`) that only accepts `KEY=value` lines for the allowed keys `BEKUP_IMAGE_REPO` and `BEKUP_PLATFORMS`;
-  - do not use `set dotenv-load`, which would inject every variable into every recipe;
-  - check the file the way bekup checks its config: owned by the user and not group- or world-writable;
-  - never `source` the file.
-- **`BEKUP_PLATFORMS`** is configurable and defaults to `linux/amd64,linux/arm64`.
-- **Registry login is the user's job** (`docker login <registry>`). Credentials never pass through the recipe or argv. A repo string containing `user:pass@` or a scheme is refused.
+- **Plan** (`plans/backup-databases-abstract-corbato.md`):
+  - delete the "Phase 3 — Native iOS · Phase 4 — Native Android" section;
+  - in Phase 2, drop push/FCM/device registration and the "API style for mobile" wording, keeping only the external API;
+  - remove push from the P1 notifications row (l.45) and from the intro line (l.4);
+  - remove "push" from user-facing wording anywhere else in the plan.
+- **`SECURITY.md:587`:** "Phase 2 (external API)" only; drop "Phases 3–4 (mobile apps)".
+- **Push channel code and data:**
+  - GraphQL `internal/graph/schema/notifications.graphqls`: remove the `PUSH` value from the channel enum and the "push follows in phase 2" docstrings; `just gen` regenerates `generated.go`, `models_gen.go`, `docs/reference/schema.graphql` and `web/src/graphql/gen`.
+  - `internal/notify/prefs.go`, `api_prefs.go`, the matrix channel list (`notify.MatrixChannels`) and every switch/case on push.
+  - **DB:** a new migration `00033_drop_push_channel.sql` (migrations 00028+ are committed, so 00028 stays unedited):
+    - delete any `push` preference rows (there are none in practice);
+    - narrow the CHECK constraints that list `push`;
+    - write the Down section;
+    - update `internal/db/schema.sql`.
+  - **Web:**
+    - `features/notifications/model.ts` (matrix columns without push), `messages.ts` (`pushNote` removed), the preference matrix and its tests, csp-check fixtures;
+    - leave the session user-agent detection alone (`account/model.ts`, `sessions-section.tsx`, `user-sessions.tsx`): it labels phone browsers, not apps.
+  - **Docs:** `docs/guides/notifications.md` (the push row), `AGENTS.md:791` (the "A new matrix channel (push, phase 2)" convention becomes "A new matrix channel goes into `notify.MatrixChannels` …"), and the D-161/D-191-era texts in `docs/DECISIONS.md`.
 
-### Recipe `publish` (group `release`), in `justfile` and `scripts/publish.sh`
+    For accepted decisions, don't edit text away: add a short `proposed` **D-206** "Mobile apps and the push channel dropped from the roadmap", which supersedes the push parts of the affected decisions (D-161 channel list, D-191 matrix), and set their status notes accordingly. If an accepted entry is fully about push, mark it `superseded by D-206`.
+  - **Leave alone:** the word lists (`common_passwords.txt`, `eff_large_wordlist.txt`) and the HMAC `ipad` test variable.
+- **Verify:**
+  - `git grep --untracked -i -w -E 'ios|android|iphone|ipad|fcm|apns|mobile|testflight|swiftui|jetpack'` shows only the allowed hits (word lists, `ipad` HMAC, user-agent labels);
+  - `git grep -i -w push` shows no notification-channel uses;
+  - `just gen` ×2, lint, tests, web tests, migration up/down in the db integration tests.
 
-`scripts/publish.sh` follows the same pattern as `bump.sh` and `release.sh`:
+## Part C: compose-first onboarding (D-205 proposed)
 
-1. **Check tools:** `need_cmd docker`, and that buildx exists. Add buildx to `scripts/doctor.sh` as an optional check ("image publishing").
-2. **Resolve and validate the repo:** the image-reference regex `^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+$` (lowercase path, no tag or digest). If it is missing, fail with a hint pointing at `.just.env.example`.
-3. **Check the tree:**
-   - a clean tree is required;
-   - with `--dirty`, only `sha-<short>-dirty` is pushed, never the version or `latest`, and the recipe warns.
-4. **Tags:**
-   - `<repo>:<VERSION>` (from `read_version`);
-   - `<repo>:sha-<git short sha>`;
-   - `<repo>:latest`.
-5. **Builder:** reuse or create a dedicated buildx builder `bekup-publish` (driver `docker-container`), because multi-platform pushes need it.
-6. **Build and push:**
+Based on the design agent's proposal. The facts that drive it:
+- Docker gives fixed IPs only on networks created with a subnet.
+- `compose run` starts a service from an inactive profile.
+- Nothing is released yet, so names and the state schema can change freely.
+
+### C1. Single source and variants
+
+- **Image line:** `docker-compose.yml` gets one top-level line `x-bekup-image: &bekup-image ${BEKUP_IMAGE:-bekup:dev}`, and `x-bekup-hardening` uses `image: *bekup-image`. Release and setup rendering replace exactly that line.
+- **Setup service in the base file:**
+  - `profiles: [setup]`, `user: "0:0"`, `entrypoint: [/usr/local/bin/bekup, setup]`, `command: [init]`;
+  - `environment`: `BEKUP_IMAGE: *bekup-image` and `DOCKER_GID: ${DOCKER_GID:-}`;
+  - hardening: `read_only`, tmpfs `/tmp` (noexec), `cap_drop: [ALL]`, `cap_add: [CHOWN]`, `no-new-privileges`, `network_mode: none`, `logging: {driver: none}`, `stdin_open`/`tty`, `restart: "no"`, limits;
+  - volume `source: .`, `target: /deploy`, `create_host_path: false`.
+- Every `./deploy/...` bind uses long syntax with `create_host_path: false`.
+- **Variants are overlays, not copies.** They live in `internal/setup/variants.go` plus `internal/setup/variants/{traefik,traefik-external,npm}/*.yaml`, applied by a small path-addressed line editor (`internal/setup/outline.go`): delete or replace a service or key, insert after a key, replace a comment or the header.
+  - Untouched base text stays byte-identical.
+  - Overlays never contain `image:` (a test enforces it).
+- **New commands:** `bekup setup compose --variant V [--image pinned]` prints a variant, and `just compose-examples` writes `dist/compose/` (gitignored). Nothing is committed under `examples/` (decided).
+- **File names:** the deployment file is `compose.yaml` everywhere (setup-first too) and the override is `compose.override.yaml`. The shadow list becomes `compose.yml`, `docker-compose.y{a,}ml` and the other override names. The repo source stays `docker-compose.yml`.
+
+### C2. External proxies (variants b and c): dedicated link network (decided)
+
+- **Network:** `docker network create --internal --subnet 10.213.253.0/28 bekup-proxy` (once). The user's Traefik or NPM joins it with `ipv4_address: 10.213.253.5` (four lines plus a recreate).
+- **bekup side:** bekup declares it external (`name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}`). serve gets `ipv4_address: ${SERVE_PROXY_IP:-10.213.253.10}`, `listen = "10.213.253.10:8080"` and `trusted_proxies = ["10.213.253.5/32"]`.
+  - No wildcard listen (D-098 untouched).
+  - No variant `frontend`/`edge` network and no published ports.
+- **Validation:**
+  - a private subnet between /8 and /29, with no overlap with `runner-ctl`/`metrics`;
+  - both addresses inside the subnet and distinct, never the network, gateway or broadcast address;
+  - `trusted_proxies` exactly the proxy's /32 (a `check` ERROR otherwise).
+- **Existing Traefik** (labels on serve only):
+  - `traefik.enable=true`;
+  - `traefik.docker.network=${BEKUP_PROXY_NETWORK:-bekup-proxy}`;
+  - the router rule ``Host(`${BEKUP_DOMAIN:-bekup.invalid}`)``;
+  - entrypoint `${TRAEFIK_ENTRYPOINT:-websecure}`;
+  - `tls=true` and certresolver `${TRAEFIK_CERTRESOLVER:-letsencrypt}`;
+  - service port 8080;
+  - `responseforwarding.flushinterval=-1ms`;
+  - no middlewares (bekup sets its own headers, D-102).
+
+  The docs cover:
+  - `exposedByDefault=false`;
+  - never `forwardedHeaders.insecure` or a 0.0.0.0/0 `trustedIPs`;
+  - no entrypoint-wide header middlewares and no `readTimeout: 0`;
+  - the Docker-socket risk, recommending a socket proxy or the file provider (with a file-provider snippet).
+- **NPM:** the Proxy Host forwards `http` to `10.213.253.10:8080`.
+  - Websockets **off** (SSE, D-124).
+  - Let's Encrypt, Force SSL and HTTP/2 on; NPM's HSTS off (bekup sends HSTS).
+  - Advanced block: `proxy_http_version 1.1; proxy_buffering off; proxy_cache off; proxy_read_timeout 3600s; client_max_body_size 2m;`.
+- **Optional:** a rate-limited WARN in `internal/httpserver` for X-Forwarded-For from an untrusted peer.
+
+### C3. Setup in compose-first mode
+
+- **`setup init`** (default when `/deploy/compose.yaml` exists and there is no state file):
+  - read the file safely;
+  - take the image from the `x-bekup-image` line; `BEKUP_IMAGE` must match; `CheckVersionTag`;
+  - recognise the variant by rendering each embedded variant with that image: byte-equal / same YAML model / customised (customised gives a warning, requires `--variant` and runs the hardening lint);
+  - **never write `compose.yaml`**;
+  - write `.env`, the TOMLs, secrets, certificates, `deploy/**`, `reference/*` and the state file.
+- **No `compose.yaml`:** refuse with the release URL, or use `--write-compose --variant traefik|traefik-external|npm|full`. `full` is today's setup-first path, keeping nginx and own-proxy (`--proxy`).
+- **Prompts:**
+  - bundled: domain, ACME e-mail, CA passphrase;
+  - external variants: domain, CA passphrase;
+  - Docker GID from the `DOCKER_GID` environment variable, otherwise a prompt.
+
+  Everything else comes from flags: `--traefik-entrypoint`, `--traefik-certresolver`, `--proxy-network`, `--proxy-subnet`, `--proxy-ip`, `--serve-ip` and the existing ones. New validators cover network names and entrypoint/certresolver names.
+- **State:** adds `compose_mode` (`operator`|`generated`), `variant`, the link-network answers and the compose hash; schema 1 changes in place. In the manifest, `compose.yaml` is `operator` in compose-first and `generated-upgradable` in setup-first.
+- **`setup upgrade`, compose-first:**
+  - the user replaces `compose.yaml` with the new release file, then runs `docker compose run --rm setup upgrade`;
+  - it refuses a downgrade or a variant switch, re-validates the TOMLs, rewrites `deploy/**` and `reference/*`, generates new secret groups and updates the state;
+  - it never writes `compose.yaml`; `--write-compose` exists only for the `docker run` path.
+- **`setup check`, compose-first:**
+  - every image and the `x-bekup-image` line pinned;
+  - no `build`, `include` or `extends.file`;
+  - the hardening lint for customised files and the override: `privileged`, host network/pid/ipc, `docker.sock` outside runner, `ports:` on internal services, and the setup service hardening exact;
+  - recognition; a newer image than recorded gives a hint to upgrade;
+  - variant-aware TOML/`.env` consistency.
+
+### C4. Release assets (extends D-204; after the Part A split)
+
+- **Assets:** `compose.yaml` (own Traefik), `compose.traefik-external.yaml`, `compose.npm.yaml` and `SHA256SUMS`, rendered by running the published digest (`setup compose`, network none, read-only, uid 65532).
+- **Checks:** `release_ci.sh compose-assets`: exactly one pinned `x-bekup-image` equal to the release ref, and every image pinned. Tests are included.
+- **Provenance:** `actions/attest-build-provenance` (`subject-path`) plus `cosign sign-blob` bundles; the assets are uploaded with `gh release create`.
+- **Release notes:** the three steps.
+
+### C5. README quick start (exact text from the design)
+
+The README starts with: Linux host, Docker Engine 26+, Compose 2.24+, a DNS name.
+
+**Own Traefik** (open by default):
+1. Save the compose file and verify it:
+   ```sh
+   sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+   sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.yaml
+   gh attestation verify compose.yaml --repo jlentink/bekup
    ```
-   docker buildx build --builder bekup-publish --platform "$BEKUP_PLATFORMS" \
-     --target runtime --pull \
-     --build-arg VERSION=… --build-arg VCS_REF=<full sha> --build-arg BUILD_DATE=<UTC RFC 3339> \
-     --provenance=mode=max --sbom=true \
-     --metadata-file "$tmp/meta.json" \
-     -t … -t … -t … --push .
-   ```
-   The web UI is built inside the image (`WEB_BUILD` default `auto`), so no host Node is needed.
-7. **Report:**
-   - print the pushed tags and the image **digest** (from the metadata file);
-   - print the pin hint `BEKUP_IMAGE=<repo>@sha256:…` for compose, since digest pinning matches the project's convention.
-8. **Never print** the contents of `.just.env` beyond the repo name.
+2. `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
+3. `docker compose up -d`, then `docker compose run --rm admin create --email you@example.com --display-name "Your Name"`
 
-- **just conventions:** arguments are passed as positional parameters, never interpolated (D-071). Add a `[confirm]` prompt showing the repo and tags before pushing, with `--yes` to skip it.
-- **Relation to the release workflow (task 7.4):** that workflow will later handle official signed releases (cosign, GitHub). `just publish` is the operator's own push. The two must not conflict: `publish` never touches git tags or `CHANGELOG`.
+**Behind your existing Traefik:**
+- Once: `docker network create …`, and four lines added to Traefik's compose file.
+- Same three steps, with `compose.traefik-external.yaml` saved as `compose.yaml`.
 
-### Docs and governance
+**Behind Nginx Proxy Manager:**
+- Once: the same network setup.
+- Same three steps with `compose.npm.yaml`.
+- Then the NPM proxy-host field table and the Advanced block.
 
-- **D-202 (proposed):** manual image publishing, covering:
-  - the registry kept outside git;
-  - the clean-tree rule;
-  - the tags;
-  - multi-arch builds with provenance and SBOM attestations;
-  - the digest pin hint.
-  - Alternatives considered: `set dotenv-load` (leaks every variable) and putting the registry in compose `.env` (mixes runtime and build config).
-- **Docs:**
-  - `docs/development.md`: a recipe table row and a section "Publishing your own image";
-  - `docs/installation/compose.md`: use your own image via `BEKUP_IMAGE=<repo>@sha256:…`;
-  - the AGENTS.md task-runner line;
-  - `just` help, which comes automatically from `[doc]`.
-- **Tests:** add `scripts/publish_test.sh`, in the same style as `bump_test.sh`:
-  - repo validation;
-  - parsing `.just.env`: ignores unknown keys, refuses unsafe file modes, never executes the file;
-  - the dirty-tree rules and tag computation;
-  - a dry run (`--dry-run` prints the buildx command without running it).
-  - Hook it into `just test-scripts` (the existing release-helper test recipe) and run `shellcheck` if it's installed.
+Footer: nginx, own proxy or full setup → setup-first (`docs/installation/compose.md#alternative-setup-first`).
 
-## Part E: GitHub README (user request)
+### C6. Docs and governance
 
-The user chose an SVG banner, CI/license/Go/Node badges and a balanced layout.
+- **D-205 (proposed):**
+  - compose-first flow;
+  - `compose.yaml` naming;
+  - the `bekup-proxy` link network;
+  - variants as overlays;
+  - release assets with attestations.
 
-- **Banner and logo:** add `docs/assets/bekup-banner-light.svg`, `bekup-banner-dark.svg` and `bekup-mark.svg`.
-  - Use the UI's design language from `web/src/styles/theme.css`: background oklch(0.978 0.005 85) for light and oklch(0.165 0.012 258) for dark, primary oklch(0.46 0.15 262) / oklch(0.76 0.12 255), with the Instrument Serif wordmark feel. Convert the colours to hex for SVG.
-  - Turn the text into paths, or use a safe font stack, because GitHub renders SVG `<img>` without web fonts.
-  - Add a subtle motif: a stacked-disk "vault" mark and the tagline "Encrypted, verified database backups — self-hosted".
-  - Keep the files small and static: no scripts, no external references (GitHub sanitizes these anyway).
-  - Embed them with `<picture>` and `prefers-color-scheme` sources.
-  - Use the `frontend-design` skill for the visual direction.
-- **Badges:** use the shields.io style.
-  - CI from `.github/workflows/ci.yml` (`github.com/jlentink/bekup/actions/workflows/ci.yml/badge.svg`);
-  - MIT license;
-  - Go 1.27, from `go.mod`;
-  - Node 22, from the Dockerfile `NODE_IMAGE`;
-  - optionally an "under development" status badge;
-  - keep the development notice as a callout (`> [!WARNING]`).
-- **Structure** (concise, scannable, GitHub-flavored markdown):
-  1. Banner, badges, a one-line pitch and quick links (Docs · Getting started · Security · Decisions).
-  2. **Why bekup:** 3–4 sentences.
-  3. **Security first:** a compact two-column table or emoji-free bullet grid, true to the code:
-     - encrypted and signed backups, verified restores;
-     - a runner sidecar as the only component with Docker access, isolated per-run networks;
-     - certificate and host-key pinning, mTLS;
-     - envelope-encrypted, write-only credentials;
-     - passkeys, TOTP and step-up, with fresh 2FA before a restore;
-     - a hash-chained audit log;
-     - an SSRF guard;
-     - every weakening audited and alerted.
-  4. **Features:** grouped as Databases, Destinations, Scheduling and retention, Restore, Access, Notifications and monitoring, Operations.
-     - Include the newer items: calendar, start early, test restores, downloads, offline tools, config reload, per-user notification preferences.
-     - The "planned for the first release" wording becomes "Features" plus the status callout.
-  5. **Architecture:** a Mermaid flowchart showing browser → reverse proxy → `bekup serve` (and workers) → app Postgres; serve → mTLS → `bekup runner` → Docker → per-run dump containers → target DBs; serve → SSRF guard → S3/SFTP/disk, SMTP, webhooks. Mark the trust boundaries with subgraphs, plus a one-line link to `docs/architecture.md`.
-  6. **Quick start:** two tabs as `<details>` blocks.
-     - "Try it locally (dev)": `just doctor`, `just dev`, `just admin-create`, `just run`, `just web-dev`, `just dev-runner`.
-     - "Production (Docker Compose)": link to `docs/installation/compose.md` with the 4–5 key steps (certs init, keys generate, `admin create`, proxy profile).
-     - Verify every command against the justfile and `docs/getting-started.md`.
-  7. **Documentation:** a table of the main docs links.
-  8. **Development and contributing:** `just` help screen, `just lint` / `just test` / `just test-int`, AGENTS.md, the decision log. Note that changes need decision entries and tests.
-  9. **Security:** how to report a vulnerability, linking `SECURITY.md#1-reporting-a-vulnerability`.
-  10. **License:** MIT © 2026 Jason Lentink.
-- **Constraints:** every claim must match the implemented code and docs (verify feature names and commands). No screenshots. Relative links only. Check that every link target exists.
-- **Verification:**
-  - all relative links resolve (a small script: grep the links, test that each file or anchor exists);
-  - the SVGs pass `xmllint --noout` (if installed) and contain no `<script>` or external `href`;
-  - render-check in a browser with a GitHub-like markdown preview (e.g. headless Chrome on a local markdown render) in light and dark mode;
-  - Mermaid syntax validated with `npx @mermaid-js/mermaid-cli` if available; otherwise keep the syntax simple and standard.
+  It supersedes the parts of D-203 that make setup always write compose, and extends D-204. Update the D-203/D-204 status lines and the index.
+- **`docs/installation/compose.md`:** compose-first as the main path, with "Alternative: setup-first (`--write-compose`)", network tables per variant and the manifest table.
+- **`reverse-proxy.md`:** sections "Existing Traefik" and "Nginx Proxy Manager" with exact values and verification (`curl -sI`: one HSTS header, bekup's CSP).
+- **`upgrades.md`:** download the new `compose.yaml`, diff, `docker compose run --rm setup upgrade`, `pull`, `up -d`, `setup check`.
+- **Other docs:** `getting-started.md`, the CLI reference, CHANGELOG.
+- **SECURITY.md:**
+  - B2b: the proxy ↔ serve link network;
+  - RP-8: an external Traefik holds the Docker socket;
+  - B10 extended with the compose-run setup container.
+- **AGENTS.md conventions:**
+  - the image only via `x-bekup-image`;
+  - variants only as overlays (never full copies, no `image:`);
+  - deploy binds with `create_host_path: false`;
+  - the deployment file is `compose.yaml`;
+  - the external-proxy boundary row;
+  - `just compose-examples`.
+- **Plan:** task **6.14b** "Compose-first onboarding (D-205)" with acceptance criteria.
 
-## Status (2026-10-29)
+### C7. Tests
 
-- **Part 0:** all nine findings are fixed and the new tests pass (the 8 app ConfigReload tests and the graph test). `just gen` ×2, build, vet, `just lint` and golangci-lint with the integration tag are clean.
-  - Still to run: `just sec`, `just docs`, `go test -race ./...`, the full integration list (`DOCKER_API_VERSION=1.47 -p 1`), and web test, build and csp-check.
-  - Delete `plans/robust-giggling-tide-agent-a1057e8ab2015b70d.md`.
-- **Part D:** implemented and verified with a real two-platform push.
-  - Still to do: `just lint`, the D-202 entry and the AGENTS.md task-runner line (by me).
-  - Recommended: pin the SBOM generator `docker/buildkit-syft-scanner` by digest (`--sbom=generator=…@sha256:…` plus a Renovate rule, D-061).
-- **Then:**
-  1. Part E.
-  2. One full check run.
-  3. Both reviews over everything since the last review (Part 0 fixes, Part D, Part E).
-  4. Handover with a commit message and the proposed decisions D-200, D-201 and D-202.
+- **Line editor:** table tests and a fuzz test.
+- **Base style lint.**
+- **Variants:**
+  - exact service set, pins, no `build`;
+  - untouched blocks byte-equal to the base;
+  - external variants: no frontend network, only serve on the proxy network, no published ports;
+  - labels only in `traefik-external`;
+  - the setup service hardening exact.
+- **Recognition levels.**
+- **Compose-first init per variant:** `compose.yaml` untouched, values correct, refusal without a file, `--write-compose`.
+- **Upgrade:** the replaced-file path, a no-op, refusal of a variant switch.
+- **Check:** the /32 rule and the lint errors.
+- **Scripts:** `release_ci_test.sh compose-assets`.
+- **Integration:** `TestIntegrationComposeConfig` for the three variants.
+- **CI `setup-install` end to end, bundled variant:**
+  1. Render with the local-registry digest.
+  2. Self-signed `bekup.test` certificate (static TLS).
+  3. `docker compose run --rm -T setup init --non-interactive … --ca-passphrase-stdin`.
+  4. `up -d --wait`.
+  5. `curl --resolve … /healthz`.
+  6. `admin create` with a password file.
+  7. `setup check`, then `down -v`.
+- **CI `setup-install` end to end, NPM variant:** create the network, init, `up --wait`, then curl from a pinned curl container at 10.213.253.5.
+- **Spike first (C0):** check the Compose behaviour by hand (missing files or network at `run` time, tty/`-T` with `logging: none`, fixed IP on an external subnet network) and confirm Traefik v3 labels. Adjust the README order if Compose validates the external network at `run` time.
+
+## Order and agents
+
+1. **Part A** (the resumed fix agent) and **Part B** (a new agent) in parallel.
+   - Part B owns: notify, graph notification schema, migration 00033, web notifications, `docs/guides/notifications.md`, the plan Phase 2–4 sections, `SECURITY.md:587`, the push line in AGENTS.md and D-206.
+   - Part A owns: setup, release, ci.yml, and the D-203/D-204 edits.
+   - Shared files (DECISIONS index, SECURITY.md, AGENTS.md) get edited at different lines, each agent re-reading before editing.
+2. **Part C** after Part A: same packages and the release workflow.
+3. Then the full check run and both reviews (security and code) over A+B+C, the fixes, and the handover. No commits; the user commits and pushes.
 
 ## Verification
 
-- **Part 0:** the full check list above passes, and the integration suite is green with `DOCKER_API_VERSION=1.47`.
-- **Part D:**
-  - `scripts/publish_test.sh` passes;
-  - `just publish --dry-run` with a test repo prints the expected tags and command;
-  - a real push to a local registry: `docker run -d -p 127.0.0.1:5000:5000 registry:2`, then `BEKUP_IMAGE_REPO=localhost:5000/bekup just publish --yes`, then `docker buildx imagetools inspect localhost:5000/bekup:latest` shows both platforms and the attestations; afterwards remove that registry container;
-  - `git status` shows `.just.env` ignored;
-  - `just lint` stays green.
-- **Reviews:** both reviews (security + code) cover Part D together with the Part 0 re-check before handover. No commits: the user commits.
+- Every part's own checks (above).
+- **Final full run:**
+  - `just gen` ×2;
+  - build and vet (+ integration);
+  - `just lint` (Linux pass + shellcheck);
+  - `just sec`, `just docs`, `go mod tidy -diff`, `just test-scripts`;
+  - `go test -race ./...`;
+  - `DOCKER_API_VERSION=1.47 go test -race -tags integration -p 1 ./...`;
+  - compose config for every profile;
+  - the web suite and csp-check;
+  - actionlint and zizmor.
+- **By hand:** the three README flows against a local registry (the bundled variant with static TLS, and the NPM variant with a curl container acting as the proxy).
+- **After the user pushes:** CI green; the first real release is the user's `just bump` + `just release`.

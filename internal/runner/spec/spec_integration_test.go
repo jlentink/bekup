@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -162,6 +163,9 @@ func TestPreambleInImages(t *testing.T) {
 	for _, ent := range cat.Entries() {
 		t.Run(string(ent.Kind())+"-"+ent.Key(), func(t *testing.T) {
 			t.Parallel()
+			// ContainerCreate never pulls: without this the test passes
+			// only when another test pulled the image first.
+			ensureImage(t, c, ImageRef(ent))
 			eng, err := engine.ForKind(ent.Kind())
 			if err != nil {
 				t.Fatal(err)
@@ -248,9 +252,33 @@ func TestPreambleInImages(t *testing.T) {
 	}
 }
 
+// pullLocks serializes ensureImage per image reference (parallel
+// subtests and tests sharing an image pull it once).
+var pullLocks struct {
+	sync.Mutex
+	byRef map[string]*sync.Mutex
+}
+
+func pullLock(ref string) *sync.Mutex {
+	pullLocks.Lock()
+	defer pullLocks.Unlock()
+	if pullLocks.byRef == nil {
+		pullLocks.byRef = map[string]*sync.Mutex{}
+	}
+	mu := pullLocks.byRef[ref]
+	if mu == nil {
+		mu = new(sync.Mutex)
+		pullLocks.byRef[ref] = mu
+	}
+	return mu
+}
+
 // ensureImage pulls ref when it is not present.
 func ensureImage(t *testing.T, c *client.Client, ref string) client.ImageInspectResult {
 	t.Helper()
+	mu := pullLock(ref)
+	mu.Lock()
+	defer mu.Unlock()
 	if ins, err := c.ImageInspect(t.Context(), ref); err == nil {
 		return ins
 	}

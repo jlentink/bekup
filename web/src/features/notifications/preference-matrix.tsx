@@ -51,13 +51,6 @@ function HeaderRow({ first }: { first: ReactNode }) {
             {M.channels[c]}
           </th>
         ))}
-        <th
-          scope="col"
-          className="eyebrow w-20 px-2 py-2 text-center text-muted-foreground/60"
-          title={M.prefs.pushNote}
-        >
-          {M.prefs.push}
-        </th>
       </tr>
     </thead>
   );
@@ -95,7 +88,7 @@ export function GroupMatrix({
         </p>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[34rem] border-collapse text-sm">
+        <table className="w-full min-w-[29rem] border-collapse text-sm">
           <caption className="sr-only">{label}</caption>
           <HeaderRow first={<span className="eyebrow">{M.prefs.eventColumn}</span>} />
           <tbody>
@@ -138,14 +131,6 @@ export function GroupMatrix({
                     </td>
                   );
                 })}
-                <td className="px-2 py-2.5 text-center">
-                  <Switch
-                    aria-label={M.prefs.cell(row.event.label, M.prefs.push)}
-                    checked={false}
-                    disabled
-                    title={M.prefs.pushNote}
-                  />
-                </td>
               </tr>
             ))}
           </tbody>
@@ -174,7 +159,7 @@ export function JobOverrideMatrix({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[34rem] border-collapse text-sm" data-testid="override-matrix">
+      <table className="w-full min-w-[29rem] border-collapse text-sm" data-testid="override-matrix">
         <caption className="sr-only">{M.overrides.editing(jobName)}</caption>
         <HeaderRow first={<span className="eyebrow">{M.prefs.eventColumn}</span>} />
         <tbody>
@@ -215,13 +200,6 @@ export function JobOverrideMatrix({
                   </td>
                 );
               })}
-              <td className="px-2 py-2.5 text-center">
-                <Switch
-                  aria-label={M.prefs.cellForJob(row.event.label, M.prefs.push, jobName)}
-                  checked={false}
-                  disabled
-                />
-              </td>
             </tr>
           ))}
         </tbody>

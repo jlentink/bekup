@@ -16,8 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/apierror"
 )
 
-// MatrixChannels are the channel columns of the preference matrix (push
-// joins in phase 2).
+// MatrixChannels are the channel columns of the preference matrix.
 func MatrixChannels() []Channel {
 	return []Channel{ChannelInbox, ChannelEmail, ChannelWebhook}
 }
@@ -236,7 +235,7 @@ func (a *API) preferences(ctx context.Context, q *sqlc.Queries, p auth.Principal
 			prefs := stored[m.Type]
 			row := EventPrefs{Event: m, Channels: cells(m, prefs), Overrides: []JobOverride{}}
 			for _, pr := range prefs {
-				if pr.JobID == nil || pr.Channel == ChannelPush {
+				if pr.JobID == nil {
 					continue
 				}
 				name, ok := names[*pr.JobID]

@@ -3493,7 +3493,7 @@ func (e NotificationAudience) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// A channel column of the preference matrix (push follows in phase 2).
+// A channel column of the preference matrix.
 type NotificationChannelType string
 
 const (

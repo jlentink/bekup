@@ -107,6 +107,16 @@ only `internal` bridge networks with the options
 create its per-run network refuses the run (fail closed) and logs the
 Docker error.
 
+**`bekup setup`.** The container-only install works unchanged on a
+rootless daemon: run the setup container on that daemon (same
+`DOCKER_HOST`/context) as in [compose.md](compose.md#install-with-bekup-setup-container-only).
+Its root and the UIDs 65532/70 it `chown`s to map into the daemon user's
+subordinate range exactly as the bekup containers see them, and its
+`CAP_CHOWN` is only valid inside that user namespace. Pass
+`--docker-gid` with the group the runner sees (often `0`, see above), and
+add the socket override above as `compose.override.yaml` (operator
+file; `setup upgrade` never touches it).
+
 ## userns-remap
 
 With `"userns-remap": "default"` in `/etc/docker/daemon.json`, every
@@ -135,7 +145,11 @@ not owned by root or UID 65532 (D-041). In a remapped container a file
 owned by host root looks like `nobody` (65534). For `serve`, `migrate` and
 `certs-init`, either chown their bind-mounted files to the remapped IDs
 (`<subuid start> + 65532`, for example `165532`, or `<subuid start>` for
-root) or give those services `userns_mode: host` as well. The runner in
+root). `userns_mode: host` is allowed only on the runner: `setup check`
+refuses it on every other service (D-205 amendment 2). With
+`bekup setup`, the deployment directory itself must belong to the remapped
+root UID (`<subuid start>`): the remapped setup container is root only
+inside its namespace, and `chown`s to the remapped IDs automatically. The runner in
 the host namespace keeps the normal rule. The app Postgres (UID 70) needs
 the same treatment for its secret files.
 

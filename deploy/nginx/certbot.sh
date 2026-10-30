@@ -20,9 +20,10 @@ domain="${BEKUP_DOMAIN:-}"
 email="${ACME_EMAIL:-}"
 ca="${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}"
 
-printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' \
-    && [ "${#domain}" -le 253 ] \
-    || die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
+if ! { printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' &&
+    [ "${#domain}" -le 253 ]; }; then
+    die "BEKUP_DOMAIN must be a DNS host name such as backup.example.com (got '${domain}')"
+fi
 printf '%s' "$email" | grep -Eqx '[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z0-9-]+' \
     || die "ACME_EMAIL must be an e-mail address"
 printf '%s' "$ca" | grep -Eqx 'https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?' \

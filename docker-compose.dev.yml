@@ -82,10 +82,10 @@ services:
     profiles: [runner]
     build: *bekup-build
     environment:
-      BEKUP_LISTEN_ADDRESS: ${RUNNER_HOST_IP:-10.213.253.10}:7443
+      BEKUP_LISTEN_ADDRESS: ${RUNNER_HOST_IP:-10.213.254.10}:7443
     networks: !override
       runner-host:
-        ipv4_address: ${RUNNER_HOST_IP:-10.213.253.10}
+        ipv4_address: ${RUNNER_HOST_IP:-10.213.254.10}
       targets: {}
     ports:
       - "127.0.0.1:${BEKUP_DEV_RUNNER_PORT:-7443}:7443"
@@ -171,7 +171,7 @@ services:
   # -------------------------------------------------------------------------
   adminer:
     <<: *dev-hardening
-    image: adminer:5.5.1@sha256:87f9aeeef91638f5bc150bb6490a4fd85d071f458f38dcc8171a640e1751d29b
+    image: adminer:6.2.0
     user: "adminer"
     read_only: true
     tmpfs:
@@ -501,7 +501,7 @@ networks:
   runner-host:
     ipam:
       config:
-        - subnet: ${RUNNER_HOST_SUBNET:-10.213.253.0/24}
+        - subnet: ${RUNNER_HOST_SUBNET:-10.213.254.0/24}
 
 volumes:
   go-mod: {}

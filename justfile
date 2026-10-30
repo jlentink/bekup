@@ -40,7 +40,7 @@ dev:
     need_cmd openssl "brew install openssl (or apt install openssl)"
     dev_keys
     recreate=()
-    if (( DEV_PG_CERT_CHANGED )); then
+    if dev_pg_cert_changed; then
         recreate=(--force-recreate)
     fi
     info "starting postgres, mailpit and adminer"
@@ -169,7 +169,7 @@ dev-down:
     need_cmd docker "https://docs.docker.com/get-docker/"
     {{ compose_dev }} --profile full --profile runner --profile web --profile traefik --profile nginx down --remove-orphans
 
-[doc('Run all code generators (sqlc, buf, gqlgen, graphql-codegen, config reference)')]
+[doc('Run all code generators (sqlc, buf, gqlgen, graphql-codegen, config reference, deploy/compose/)')]
 [group('dev')]
 [script]
 gen:
@@ -210,20 +210,34 @@ gen:
     else
         note "graphql-codegen: not available yet (task 0.8)"
     fi
+    info "compose files (deploy/compose/, rendered from docker-compose.yml)"
+    scripts/gen_compose.sh deploy/compose
     (( ran )) || not_yet "code generation" "0.4 / 0.8 / 1.2"
 
 # ---------------------------------------------------------------------------
 # quality
 # ---------------------------------------------------------------------------
 
-[doc('Lint Go (golangci-lint incl. gosec), proto (buf lint/format/breaking) and, if present, web (eslint + tsc)')]
+[doc('Lint Go (golangci-lint incl. gosec, also for Linux), shell scripts (shellcheck), proto (buf lint/format/breaking) and, if present, web (eslint + tsc)')]
 [group('quality')]
 [script]
 lint:
     {{ lib }}
-    need_cmd golangci-lint "brew install golangci-lint (https://golangci-lint.run/welcome/install/)"
-    info "golangci-lint"
-    golangci-lint run --build-tags integration ./...
+    need_golangci_lint
+    # CI lints on Linux: OS-specific files (field types, build tags) only
+    # show up there, so GOOS=linux always runs, with and without the
+    # integration tag (some files are !integration). On other hosts the
+    # native pass runs too.
+    if [[ $(go env GOHOSTOS) != linux ]]; then
+        info "golangci-lint ($(go env GOHOSTOS), integration tag)"
+        golangci-lint run --build-tags integration ./...
+    fi
+    info "golangci-lint (GOOS=linux, integration tag)"
+    GOOS=linux golangci-lint run --build-tags integration ./...
+    info "golangci-lint (GOOS=linux, no tags)"
+    GOOS=linux golangci-lint run ./...
+    info "shellcheck"
+    scripts/shellcheck.sh
     if [[ -f sqlc.yaml ]]; then
         sqlc=$(tool sqlc) || die "sqlc not found (pin it with: go get -tool github.com/sqlc-dev/sqlc/cmd/sqlc)"
         info "sqlc vet"
@@ -272,12 +286,13 @@ test: test-scripts
         note "vitest: not available yet (task 0.8)"
     fi
 
-[doc('Test the release helper scripts (semver math, bump refusals and happy path, publish)')]
+[doc('Test the release helper scripts (semver math, bump refusals and happy path, publish, release workflow logic)')]
 [group('quality')]
 test-scripts:
     @scripts/semver_test.sh
     @scripts/bump_test.sh
     @scripts/publish_test.sh
+    @scripts/release_ci_test.sh
 
 [doc('Run integration tests (testcontainers; needs Docker)')]
 [group('quality')]
@@ -354,6 +369,31 @@ build:
     mkdir -p bin
     CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o bin/bekup ./cmd/bekup
     info "built bin/bekup"
+
+[doc('Render the compose file variants into dist/compose/ (gitignored; [image] pins x-bekup-image, D-205)')]
+[group('build')]
+[script]
+compose-examples image="":
+    {{ lib }}
+    out=dist/compose
+    mkdir -p "$out"
+    args=()
+    if [[ -n "$1" ]]; then
+        args=(--image "$1")
+    fi
+    go build -o "$out/.bekup" ./cmd/bekup
+    trap 'rm -f "$out/.bekup"' EXIT
+    for v in traefik traefik-external npm full; do
+        case $v in
+        traefik) name=compose.yaml ;;
+        *) name="compose.$v.yaml" ;;
+        esac
+        "$out/.bekup" setup compose --variant "$v" ${args[@]+"${args[@]}"} >"$out/$name"
+        info "$out/$name"
+    done
+    if [[ -z "$1" ]]; then
+        note "x-bekup-image takes the image from BEKUP_IMAGE (like the committed deploy/compose/ files, which just gen writes); pass a pinned image to render release-style files"
+    fi
 
 [doc('Build the bekup container image (tagged bekup:<version> and bekup:dev)')]
 [group('build')]

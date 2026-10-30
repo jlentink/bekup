@@ -1,0 +1,16 @@
+# bekup compose file for a setup-first install (`bekup setup init
+# --write-compose --variant full`, D-203, D-205): every service of the
+# repository compose file. The reverse proxy is chosen with
+# COMPOSE_PROFILES in .env: traefik, nginx, or empty for your own proxy on
+# the `frontend` network.
+# Docs: https://github.com/jlentink/bekup/blob/main/docs/installation/compose.md#alternative-setup-first
+#
+# Put local changes into compose.override.yaml (`bekup setup check` lints
+# it). setup writes the compose variables to .env.
+#
+# Components and trust boundaries:
+#   reverse proxy (profiles traefik | nginx) ──frontend──> serve
+#   serve ──backend (TLS, verify-full)──> postgres  (role bekup_app; migrations as bekup_owner)
+#   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
+#   runner ──targets──> target databases   (runner only; serve can never reach them)
+#   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)

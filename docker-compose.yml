@@ -1,4 +1,5 @@
-# bekup production example (task 0.7). Documentation: docs/installation/compose.md
+# bekup compose file: the SOURCE of every deployment variant (task 0.7,
+# D-203, D-205). Documentation: docs/installation/compose.md
 #
 # Components and trust boundaries (plan "Components & trust boundaries"):
 #
@@ -8,7 +9,24 @@
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
 #
-# Before the first `docker compose up -d`:
+# Production installs do not use this file directly (D-205). They use a
+# variant rendered from it: compose.yaml (own Traefik),
+# compose.traefik-external.yaml (behind your Traefik) or compose.npm.yaml
+# (behind Nginx Proxy Manager), as a release asset (pinned by digest,
+# attested) or as the committed copy in deploy/compose/ (image from
+# BEKUP_IMAGE; written by `just gen`, never edited by hand), saved as
+# compose.yaml, then `docker compose run --rm setup` (docs/installation/
+# compose.md). The variants are overlays of this file
+# (internal/setup/variants, `bekup setup compose`, `just compose-examples`);
+# `bekup setup init --write-compose --variant full` writes this file itself
+# (setup-first). Rules for this file (tests enforce them):
+#   - the bekup image appears ONLY in the x-bekup-image line below (release
+#     and setup replace exactly that line with the pinned reference);
+#   - never use `build:`;
+#   - every ./deploy/... bind uses the long syntax with
+#     `create_host_path: false` and stays below deploy/{postgres,traefik,nginx}.
+#
+# From a source checkout (development), before the first `docker compose up -d`:
 #   1. Create ./bekup.toml and ./runner.toml from the *.example.toml files.
 #   2. Create the secret files in ./secrets/ (see the docs; `just keygen`).
 #      BEKUP_KEYS_DIR (compose variable) moves that directory elsewhere.
@@ -22,16 +40,22 @@
 #        docker compose run --rm admin create --email you@example.com --display-name "You"
 #
 # Every image is pinned by tag AND digest; Renovate keeps the digests current
-# (renovate.json, D-061). Set BEKUP_IMAGE to a released, digest-pinned
-# ghcr.io/jlentink/bekup reference in production.
+# (renovate.json, D-061; run `just gen` on its PRs to refresh deploy/compose/).
+# Set BEKUP_IMAGE to a released, digest-pinned
+# ghcr.io/jlentink/bekup reference when running this file directly.
 
 name: bekup
+
+# The bekup image: the ONLY place it is named (setup and the release replace
+# this one line with the digest-pinned reference, `just gen` with the
+# BEKUP_IMAGE placeholder of deploy/compose/; D-205).
+x-bekup-image: &bekup-image ${BEKUP_IMAGE:-bekup:dev}
 
 # ---------------------------------------------------------------------------
 # Shared hardening for every bekup container (merged with `<<:`).
 # ---------------------------------------------------------------------------
 x-bekup-hardening: &bekup-hardening
-  image: ${BEKUP_IMAGE:-bekup:dev}
+  image: *bekup-image
   # distroless "nonroot" UID/GID; never root.
   user: "65532:65532"
   # Immutable root filesystem: a compromised process cannot drop binaries or
@@ -53,6 +77,57 @@ x-bekup-hardening: &bekup-hardening
       max-file: "5"
 
 services:
+  # -------------------------------------------------------------------------
+  # setup: the one-shot installer `bekup setup` (D-203, D-205). Run it
+  # explicitly in this directory; `docker compose up` never starts it:
+  #   DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup
+  #   docker compose run --rm setup upgrade    (after replacing compose.yaml)
+  #   docker compose run --rm setup check
+  # It writes .env, bekup.toml, runner.toml, the secrets and certificates,
+  # deploy/** and reference/* here; it never writes compose.yaml. Root, but
+  # with CAP_CHOWN only (it hands every file to the container user that
+  # reads it), no network, a read-only root and no logs (the passphrase
+  # prompt never reaches Docker's log files). Keep the CA key offline: mount
+  # the media for the run, e.g.
+  #   docker compose run --rm -v /media/usb/bekup-ca:/deploy/secrets/certs/ca setup
+  # `bekup setup check` requires this service exactly as shipped.
+  # -------------------------------------------------------------------------
+  setup:
+    image: *bekup-image
+    profiles: [setup]
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/bekup", "setup"]
+    command: ["init"]
+    environment:
+      # A container cannot know its own digest: setup compares this with the
+      # x-bekup-image line of compose.yaml.
+      BEKUP_IMAGE: *bekup-image
+      # Group of the Docker socket on the host: stat -c %g /var/run/docker.sock
+      DOCKER_GID: ${DOCKER_GID:-}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
+    logging:
+      driver: none
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: .
+        target: /deploy
+        bind:
+          create_host_path: false
+    restart: "no"
+    deploy:
+      resources:
+        # scrypt sealing of the CA key needs about 256 MiB.
+        limits: { cpus: "1.00", memory: 512M, pids: 64 }
+
   # -------------------------------------------------------------------------
   # certs-init: one-shot generation of the private CA and per-component mTLS
   # certificates (task 0.6, `bekup certs init`). Run it explicitly:
@@ -134,7 +209,7 @@ services:
   # mount the file: `run --rm -v "$PWD/pw:/run/pw:ro" admin create ...
   # --password-file /run/pw`). A separate service because `docker compose
   # run serve ...` cannot start next to the running serve: both would claim
-  # serve's fixed `frontend` address. Same role as serve (bekup_app, D-054),
+  # serve's fixed network address. Same role as serve (bekup_app, D-054),
   # but only the `backend` network and only the DB URL + DB CA: no master
   # key, no mTLS client certificate, no ports.
   # -------------------------------------------------------------------------
@@ -162,8 +237,9 @@ services:
 
   # -------------------------------------------------------------------------
   # serve: GraphQL API, UI, scheduler and River workers.
-  # Plain HTTP on the internal `frontend` network only; TLS is terminated by
-  # the reverse proxy (D-017). Its port is deliberately NOT published.
+  # Plain HTTP on one internal network shared only with the reverse proxy;
+  # TLS is terminated by the proxy (D-017). Its port is deliberately NOT
+  # published.
   # -------------------------------------------------------------------------
   serve:
     <<: *bekup-hardening
@@ -200,7 +276,8 @@ services:
       metrics:
         # Fixed address for [metrics] listen = "10.213.252.10:9464": the
         # Prometheus endpoint (task 5.6) is reachable only from this
-        # internal network, never from frontend/backend/egress/runner-ctl.
+        # internal network, never from the proxy, backend, egress or
+        # runner-ctl networks.
         # Attach your Prometheus here (docs/operations.md#metrics).
         ipv4_address: ${SERVE_METRICS_IP:-10.213.252.10}
     # NO `ports:`. Never publish serve; only the reverse proxy reaches it,
@@ -353,9 +430,19 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       # Creates bekup_owner / bekup_app and the bekup database on first start.
-      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+      - type: bind
+        source: ./deploy/postgres/init
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind:
+          create_host_path: false
       # TLS wrapper around the image's docker-entrypoint.sh.
-      - ./deploy/postgres/entrypoint.sh:/usr/local/bin/bekup-entrypoint.sh:ro
+      - type: bind
+        source: ./deploy/postgres/entrypoint.sh
+        target: /usr/local/bin/bekup-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
     networks: [backend]
     # NO `ports:`: only serve and migrate reach the database.
     healthcheck:
@@ -432,7 +519,12 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./deploy/traefik:/etc/traefik/bekup:ro
+      - type: bind
+        source: ./deploy/traefik
+        target: /etc/traefik/bekup
+        read_only: true
+        bind:
+          create_host_path: false
       # acme.json (account key + certificates), 0600 inside a 0700 dir.
       - traefik-acme:/acme
     ports:
@@ -501,8 +593,18 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./deploy/nginx:/etc/nginx/bekup:ro
+      - type: bind
+        source: ./deploy/nginx/nginx.conf
+        target: /etc/nginx/nginx.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./deploy/nginx
+        target: /etc/nginx/bekup
+        read_only: true
+        bind:
+          create_host_path: false
       - nginx-certs:/etc/letsencrypt:ro
       - nginx-acme-webroot:/var/www/acme:ro
     ports:
@@ -548,7 +650,12 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - ./deploy/nginx/certbot.sh:/opt/bekup/certbot.sh:ro
+      - type: bind
+        source: ./deploy/nginx/certbot.sh
+        target: /opt/bekup/certbot.sh
+        read_only: true
+        bind:
+          create_host_path: false
       - nginx-certs:/etc/letsencrypt
       - nginx-acme-webroot:/var/www/acme
     # Outbound only (ACME API). Not on `frontend`.

@@ -129,6 +129,17 @@ check() { # check <description> <command...>
 	fi
 }
 
+file_lacks() { # file_lacks <description> <grep args...>: grep finds no match (status 1; 2 = unreadable fails too)
+	local desc=$1 rc=0
+	shift
+	count=$((count + 1))
+	grep -q "$@" || rc=$?
+	if ((rc != 1)); then
+		printf 'FAIL: %s\n' "$desc" >&2
+		fail=1
+	fi
+}
+
 new_repo r
 R="$tmp/r"
 short=$(git -C "$R" rev-parse --short=12 HEAD)
@@ -158,10 +169,10 @@ succeeds "nested path" "$R" registry.example.com/team/sub/bekup-db_x.y --dry-run
 succeeds "docker.io" "$R" docker.io/someone/bekup --dry-run
 count=$((count + 1))
 BEKUP_PLATFORMS='linux/amd64;rm -rf /' run "$R" localhost:5000/bekup --dry-run
-((rc != 0)) && [[ $out == *"invalid BEKUP_PLATFORMS"* ]] || {
+if ((rc == 0)) || [[ $out != *"invalid BEKUP_PLATFORMS"* ]]; then
 	printf 'FAIL: invalid platforms accepted: %s\n' "$out" >&2
 	fail=1
-}
+fi
 
 # --- tags and dry run ----------------------------------------------------------
 succeeds "clean dry run" "$R" localhost:5000/bekup --dry-run
@@ -296,6 +307,7 @@ got=$(
 	fail=1
 }
 count=$((count + 1))
+# shellcheck source=scripts/lib.bash
 if ! (source "$scripts/lib.bash" && load_local_env "$tmp/missing.env"); then
 	echo "FAIL: load_local_env: a missing file must be fine" >&2
 	fail=1
@@ -306,8 +318,7 @@ if (: </dev/tty) 2>/dev/null; then
 	printf 'publish_test: note: a terminal is attached, skipping the no-terminal confirmation case\n'
 else
 	refuses "confirmation needs a terminal" "pass --yes" "$R" localhost:5000/bekup
-	# shellcheck disable=SC2016 # $1 is expanded by the inner bash
-	check "no build without confirmation" bash -c '! grep -Eq "^buildx (build|create)" "$1"' _ "$tmp/docker.log"
+	file_lacks "no build without confirmation" -E "^buildx (build|create)" "$tmp/docker.log"
 fi
 
 printf 'local\n' >"$R/local-only.cfg"
@@ -316,11 +327,12 @@ check "builder created on the local context" grep -qx 'buildx create --name beku
 check "build run" grep -q '^buildx build --builder bekup-publish ' "$tmp/docker.log"
 check "no git info in provenance" grep -qx 'BUILDX_GIT_INFO=false' "$tmp/docker.log"
 check "context is the export of HEAD" grep -qx './VERSION' "$tmp/docker.log.context"
-check "ignored files stay out of the context" bash -c '! grep -q local-only "$1"' _ "$tmp/docker.log.context"
-check "no .git in the context" bash -c '! grep -qx ./.git "$1"' _ "$tmp/docker.log.context"
+file_lacks "ignored files stay out of the context" local-only "$tmp/docker.log.context"
+file_lacks "no .git in the context" -x ./.git "$tmp/docker.log.context"
 rm "$R/local-only.cfg"
 has "digest printed" "Digest: $digest"
-has "pin hint" "BEKUP_IMAGE=localhost:5000/bekup@$digest"
+has "pin hint" "BEKUP_IMAGE=localhost:5000/bekup:1.2.3@$digest"
+has "pin hint: version mismatch noted" "needs --allow-version-mismatch"
 has "pushed tags listed" "  localhost:5000/bekup:sha-$short"
 
 count=$((count + 1))

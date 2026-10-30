@@ -1,0 +1,340 @@
+package setup
+
+import (
+	"bufio"
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+
+	"github.com/jlentink/bekup/internal/certs"
+	"github.com/jlentink/bekup/internal/imageref"
+)
+
+// Terminal is the operator's terminal. Prompts are only shown when
+// IsTerminal is true (stdin is a TTY); passwords are read without echo.
+type Terminal struct {
+	In         *bufio.Reader
+	Out        io.Writer
+	IsTerminal bool
+	// ReadPassword reads one line without echo (prompt already printed).
+	ReadPassword func() ([]byte, error)
+}
+
+// maxAnswerLen bounds one typed answer.
+const maxAnswerLen = 4096
+
+// ErrNoTerminal is returned when an answer is missing and there is no
+// terminal to ask on.
+var ErrNoTerminal = errors.New("no terminal")
+
+func (t *Terminal) line(prompt string) (string, error) {
+	if t == nil || !t.IsTerminal {
+		return "", ErrNoTerminal
+	}
+	if _, err := fmt.Fprint(t.Out, prompt); err != nil {
+		return "", err
+	}
+	s, err := t.In.ReadString('\n')
+	if err != nil && (!errors.Is(err, io.EOF) || s == "") {
+		return "", fmt.Errorf("reading the answer: %w", err)
+	}
+	if len(s) > maxAnswerLen {
+		return "", errors.New("answer too long")
+	}
+	return strings.TrimSpace(s), nil
+}
+
+// Ask prompts until validate accepts the answer (an empty answer takes
+// def when def is not empty).
+func (t *Terminal) Ask(label, def string, validate func(string) error) (string, error) {
+	prompt := label + ": "
+	if def != "" {
+		prompt = fmt.Sprintf("%s [%s]: ", label, def)
+	}
+	for range 5 {
+		s, err := t.line(prompt)
+		if err != nil {
+			return "", err
+		}
+		if s == "" {
+			s = def
+		}
+		if err := validate(s); err != nil {
+			fmt.Fprintf(t.Out, "  %v\n", err)
+			continue
+		}
+		return s, nil
+	}
+	return "", fmt.Errorf("%s: too many invalid answers", label)
+}
+
+// AskList prompts for a comma-separated list (empty = none).
+func (t *Terminal) AskList(label string, validate func(string) error) ([]string, error) {
+	for range 5 {
+		s, err := t.line(label + " (comma-separated, empty for none): ")
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		var bad error
+		for _, item := range strings.Split(s, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			if err := validate(item); err != nil {
+				bad = err
+				break
+			}
+			out = append(out, item)
+		}
+		if bad != nil {
+			fmt.Fprintf(t.Out, "  %v\n", bad)
+			continue
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("%s: too many invalid answers", label)
+}
+
+// NewPassphrase asks twice (no echo) for a new CA key passphrase.
+func (t *Terminal) NewPassphrase() ([]byte, error) {
+	if t == nil || !t.IsTerminal || t.ReadPassword == nil {
+		return nil, ErrNoTerminal
+	}
+	for range 3 {
+		fmt.Fprint(t.Out, "New CA key passphrase (min 16 characters): ")
+		first, err := t.ReadPassword()
+		if err != nil {
+			return nil, err
+		}
+		if err := certs.ValidatePassphrase(first); err != nil {
+			clear(first)
+			fmt.Fprintf(t.Out, "  %v\n", err)
+			continue
+		}
+		fmt.Fprint(t.Out, "Repeat the passphrase: ")
+		second, err := t.ReadPassword()
+		if err != nil {
+			clear(first)
+			return nil, err
+		}
+		same := bytes.Equal(first, second)
+		clear(second)
+		if !same {
+			clear(first)
+			fmt.Fprintln(t.Out, "  the passphrases do not match")
+			continue
+		}
+		return first, nil
+	}
+	return nil, errors.New("no valid CA key passphrase entered")
+}
+
+// Confirm requires the operator to type want exactly.
+func (t *Terminal) Confirm(warning, want string) error {
+	if t == nil || !t.IsTerminal {
+		return fmt.Errorf("%w: this needs a typed confirmation on a terminal", ErrNoTerminal)
+	}
+	fmt.Fprintln(t.Out, warning)
+	s, err := t.line(fmt.Sprintf("Type %q to continue: ", want))
+	if err != nil {
+		return err
+	}
+	if s != want {
+		return errors.New("not confirmed")
+	}
+	return nil
+}
+
+// Given tells which answers came from flags (or the environment).
+type Given struct {
+	Image, Proxy, Domain, TLSMode, ACMEEmail, ACMEStaging, DockerGID, Targets, TrustedProxy bool
+	// ComposeFirst: compose.yaml exists and decided Image and Variant;
+	// only the deployment's own values are asked (D-205: domain, ACME
+	// e-mail for the bundled proxy, Docker GID), the rest comes from
+	// flags or defaults.
+	ComposeFirst bool
+}
+
+// Complete fills the answers that were not given: on a terminal by asking,
+// otherwise (and always with nonInteractive) it fails and names the missing
+// flags. imageRaw is the --image / BEKUP_IMAGE value (may be empty;
+// ignored compose-first, where a.Image is set). a.Variant must be set.
+func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive bool) error {
+	var missing []string
+	need := func(flag string) { missing = append(missing, flag) }
+	ask := !nonInteractive && t != nil && t.IsTerminal
+	if want := a.Variant.proxy(); want != "" && !g.Proxy {
+		a.Proxy = want
+		g.Proxy = true
+	}
+	if g.ComposeFirst {
+		if a.Proxy == ProxyTraefik && !g.TLSMode {
+			a.TLSMode, g.TLSMode = TLSACME, true
+		}
+		g.ACMEStaging, g.Targets = true, true
+	}
+
+	switch {
+	case g.ComposeFirst:
+	case imageRaw != "":
+	case ask:
+		s, err := t.Ask("bekup image (pinned: repo[:tag]@sha256:...)", "", func(s string) error { _, err := imageref.ParsePinned(s); return err })
+		if err != nil {
+			return err
+		}
+		imageRaw = s
+	default:
+		return pinHelp(errors.New("no image: pass --image or set BEKUP_IMAGE"))
+	}
+	if !g.ComposeFirst {
+		ref, err := imageref.ParsePinned(imageRaw)
+		if err != nil {
+			return pinHelp(err)
+		}
+		a.Image = ref
+	}
+
+	if !g.Proxy {
+		if ask {
+			s, err := t.Ask("Reverse proxy (traefik, nginx, none)", string(ProxyTraefik), func(s string) error {
+				switch Proxy(s) {
+				case ProxyTraefik, ProxyNginx, ProxyNone:
+					return nil
+				default:
+					return errors.New("traefik, nginx or none")
+				}
+			})
+			if err != nil {
+				return err
+			}
+			a.Proxy = Proxy(s)
+		} else {
+			need("--proxy")
+		}
+	}
+	if !g.Domain {
+		if ask {
+			s, err := t.Ask("Public host name of the UI (e.g. backup.example.com)", "", ValidateDomain)
+			if err != nil {
+				return err
+			}
+			a.Domain = s
+		} else {
+			need("--domain")
+		}
+	}
+	if a.Proxy == ProxyTraefik || a.Proxy == ProxyNginx {
+		if !g.TLSMode {
+			if ask {
+				s, err := t.Ask("Proxy TLS (acme = Let's Encrypt, static = your own certificate)", string(TLSACME), func(s string) error {
+					if TLSMode(s) == TLSACME || TLSMode(s) == TLSStatic {
+						return nil
+					}
+					return errors.New("acme or static")
+				})
+				if err != nil {
+					return err
+				}
+				a.TLSMode = TLSMode(s)
+			} else {
+				need("--tls-mode")
+			}
+		}
+		if a.TLSMode == TLSACME && !g.ACMEEmail {
+			if ask {
+				s, err := t.Ask("ACME account e-mail", "", ValidateEmail)
+				if err != nil {
+					return err
+				}
+				a.ACMEEmail = s
+			} else {
+				need("--acme-email")
+			}
+		}
+		if a.TLSMode == TLSACME && !g.ACMEStaging && ask {
+			s, err := t.Ask("Use the Let's Encrypt staging CA while testing? (yes/no)", "no", func(s string) error {
+				if s == "yes" || s == "no" {
+					return nil
+				}
+				return errors.New("yes or no")
+			})
+			if err != nil {
+				return err
+			}
+			a.ACMEStaging = s == "yes"
+		}
+	}
+	if a.Proxy == ProxyNone && !g.TrustedProxy {
+		if ask {
+			s, err := t.Ask("CIDR of your own reverse proxy on the frontend network (e.g. 10.213.250.5/32)", "", func(s string) error {
+				return checkScopedPrefix("trusted-proxy", s)
+			})
+			if err != nil {
+				return err
+			}
+			a.TrustedProxies = []string{s}
+		} else {
+			need("--trusted-proxy")
+		}
+	}
+	if !g.DockerGID {
+		if ask {
+			s, err := t.Ask("Group ID of the Docker socket on the host (stat -c %g /var/run/docker.sock)", "", func(s string) error {
+				n, err := strconv.Atoi(s)
+				if err != nil || n < 0 || n > maxGID {
+					return errors.New("a numeric group ID")
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if a.DockerGID, err = strconv.Atoi(s); err != nil {
+				return err
+			}
+		} else {
+			need("--docker-gid")
+		}
+	}
+	if !g.Targets && ask {
+		cidrs, err := t.AskList("Target database networks the runner may reach (CIDRs)", func(s string) error {
+			return checkScopedPrefix("target-cidr", s)
+		})
+		if err != nil {
+			return err
+		}
+		hosts, err := t.AskList("Target database host names", func(s string) error {
+			b := Answers{TargetHosts: []string{s}}
+			return validateTargetHosts(b.TargetHosts)
+		})
+		if err != nil {
+			return err
+		}
+		a.TargetCIDRs, a.TargetHosts = cidrs, hosts
+	}
+	if len(missing) > 0 {
+		why := "--non-interactive"
+		if !nonInteractive {
+			why = "no terminal"
+		}
+		return fmt.Errorf("%s: missing %s", why, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// PinHelp explains how to obtain a digest-pinned reference.
+func PinHelp(err error) error { return pinHelp(err) }
+
+// pinHelp explains how to obtain a digest-pinned reference.
+func pinHelp(err error) error {
+	return fmt.Errorf(`%w
+The image must be pinned by digest. Get the digest of the image you deploy with:
+  docker image inspect --format '{{index .RepoDigests 0}}' <repo>:<tag>
+  (or: docker buildx imagetools inspect <repo>:<tag>)
+and pass it as --image <repo>:<tag>@sha256:<digest> (or BEKUP_IMAGE)`, err)
+}

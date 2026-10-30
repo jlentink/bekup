@@ -14,8 +14,13 @@ There are two ways to run bekup with Docker Compose:
   natively on `http://localhost:8080`; no reverse proxy needed. The `full`
   profile adds the containerised app, runner, sample databases and
   destinations.
-- **Production:** `docker-compose.yml` with one reverse-proxy profile
-  (`traefik` or `nginx`) for HTTPS.
+- **Production:** one compose file, saved as `compose.yaml`:
+  `compose.yaml` (bekup with its own Traefik), `compose.traefik-external.yaml`
+  (behind your Traefik) or `compose.npm.yaml` (behind Nginx Proxy Manager),
+  either the committed copy from `deploy/compose/` (image from
+  `BEKUP_IMAGE`) or the release asset (pinned by digest and attested);
+  `docker compose run --rm setup` writes the rest
+  ([installation](installation/compose.md)).
 
 ## Development quick start
 
@@ -96,23 +101,49 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 The detailed steps are in [installation/compose.md](installation/compose.md)
 and [installation/reverse-proxy.md](installation/reverse-proxy.md):
 
-1. Create `bekup.toml` and `runner.toml` from the `*.example.toml` files
-   (see [configuration.md](configuration.md)). On Linux they must be owned
-   by root (or UID 65532) and not group- or world-writable.
-2. Create the secret files in `secrets/`: database role passwords and URLs,
-   and the master key with `just keygen` (or `bekup keys generate`). Escrow
-   the master key offline ([key management](security/key-management.md)).
-3. Create the mTLS certificates once:
-   `docker compose --profile setup run --rm certs-init`, then move
-   `secrets/certs/ca/` offline ([mTLS certificates](security/mtls-certs.md)).
-4. Set `DOCKER_GID`, `BEKUP_DOMAIN` and `ACME_EMAIL`, and start the stack
-   with exactly one proxy profile:
-   `docker compose --profile traefik up -d` (or `--profile nginx`).
-   `migrate` applies the database migrations before `serve` starts.
-5. Create the first admin on the host with `bekup admin create`
-   ([first admin](#first-admin)), sign in, enroll a passkey or TOTP, then add
-   a connection, a destination and a backup job in the web UI
+The server needs only Docker and one compose file, no source
+checkout (`bekup setup`, D-203, D-205). The short version is the
+[README quick start](../README.md#quick-start):
+
+1. Download the compose file for your proxy (`compose.yaml` with bekup's
+   own Traefik, `compose.traefik-external.yaml` behind your Traefik,
+   `compose.npm.yaml` behind Nginx Proxy Manager) into an empty directory
+   and save it as `compose.yaml`: the committed copy from
+   `https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/<file>`,
+   or, once releases exist, the release asset, verified with
+   `gh attestation verify compose.yaml --repo jlentink/bekup`. Behind your
+   own proxy, create the `bekup-proxy` link network once
+   ([reverse proxy](installation/reverse-proxy.md#existing-traefik)).
+2. `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
+   (with the committed copy prefixed by
+   `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`; setup writes
+   it to `.env`) runs `bekup setup init` from the pinned image (root with only
+   `CAP_CHOWN`, no network, no logs). It asks for the host name, the ACME
+   e-mail (own Traefik only) and the CA key passphrase, and writes `.env`,
+   minimal `bekup.toml`/`runner.toml`, the database passwords, the master
+   key and the mTLS certificates with the right owners; never
+   `compose.yaml`. Mount your offline media at `/deploy/secrets/certs/ca`
+   for the run ([details](installation/compose.md#install-with-bekup-setup-container-only)).
+3. Escrow the master key offline ([key management](security/key-management.md))
+   and record the printed certificate fingerprints. Keep the CA directory
+   offline ([mTLS certificates](security/mtls-certs.md)).
+4. `docker compose up -d`. `migrate` applies the database migrations before
+   `serve` starts.
+5. Create the first admin with
+   `docker compose run --rm admin create --email you@example.com --display-name "You"`
+   ([first admin](#first-admin)), sign in, enroll a passkey or TOTP, then
+   allow your databases in `runner.toml` `[targets]` (empty = deny all) and
+   add a connection, a destination and a backup job in the web UI
    ([your first backup](#your-first-backup)).
+6. Run `docker compose -f compose.yaml run --rm setup check` after every
+   change (`-f compose.yaml` keeps the override out of the checking
+   container; the check still lints it); upgrade by
+   replacing `compose.yaml` and running `docker compose run --rm setup
+   upgrade` (committed copy: `BEKUP_IMAGE=<new image> docker compose run
+   --rm setup upgrade`; [upgrades](installation/upgrades.md)).
+
+nginx, your own proxy or every service: the setup-first install
+([compose.md](installation/compose.md#alternative-setup-first)).
 
 Running production without a proxy over plain HTTP requires an explicit
 `server.allow_insecure_http = true` and raises a startup warning, a UI

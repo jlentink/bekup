@@ -153,8 +153,7 @@ ALTER TYPE public.job_verification OWNER TO bekup_owner;
 CREATE TYPE public.notification_channel AS ENUM (
     'inbox',
     'email',
-    'webhook',
-    'push'
+    'webhook'
 );
 
 ALTER TYPE public.notification_channel OWNER TO bekup_owner;
@@ -338,8 +337,7 @@ ALTER TYPE public.test_restore_trigger OWNER TO bekup_owner;
 --
 
 CREATE TYPE public.user_channel_type AS ENUM (
-    'webhook',
-    'push'
+    'webhook'
 );
 
 ALTER TYPE public.user_channel_type OWNER TO bekup_owner;

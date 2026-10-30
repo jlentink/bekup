@@ -82,3 +82,12 @@ secrets/
 /scratch/
 /data/
 /.mcp.json
+
+# ---------------------------------------------------------------------------
+# A deployment directory created in the checkout by `bekup setup` (never
+# commit it: it holds the deployment's state next to its secrets)
+# ---------------------------------------------------------------------------
+/compose.yaml
+/compose.override.yaml
+/reference/
+/bekup-setup.json

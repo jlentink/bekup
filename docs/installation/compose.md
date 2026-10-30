@@ -14,12 +14,41 @@
 > ([reverse-proxy.md](reverse-proxy.md)); the dev stack works without a
 > proxy over plain HTTP on `127.0.0.1:8080`.
 
-bekup ships three files at the repository root:
+A production install uses one compose file, always named `compose.yaml` in
+the deployment directory (local changes go into `compose.override.yaml`).
+Each release publishes three variants of it, pinned to the release image by
+digest and attested (D-205):
+
+| Release asset | Variant | Reverse proxy |
+|---|---|---|
+| `compose.yaml` | `traefik` | bekup's own Traefik (ports 80/443, Let's Encrypt or a static certificate) |
+| `compose.traefik-external.yaml` | `traefik-external` | your existing Traefik on the `bekup-proxy` link network |
+| `compose.npm.yaml` | `npm` | Nginx Proxy Manager on the `bekup-proxy` link network |
+
+All three are rendered from the repository's `docker-compose.yml` (overlays
+in `internal/setup/variants`, never copies; `bekup setup compose --variant
+<v>` prints one, `just compose-examples` writes them to `dist/compose/`).
+The same three files are **committed** in
+[`deploy/compose/`](../../deploy/compose/) (D-205 amendment 3), generated
+by `just gen` and never edited by hand. They differ from the release assets
+only in the `x-bekup-image` line: instead of the pinned literal it reads
+`${BEKUP_IMAGE:?...}`, so the image comes from `BEKUP_IMAGE` (a
+digest-pinned reference that setup checks and writes to `.env`). Use them
+before a release exists, for your own image, or when you prefer to pin the
+image yourself; the release assets are the attested choice once releases
+exist.
+Save one as `compose.yaml` and let `bekup setup` do the rest
+([Install](#install-with-bekup-setup-container-only)). The setup-first
+alternative lets `setup` write the file itself, including the `full`
+variant with nginx or your own proxy
+([Alternative: setup-first](#alternative-setup-first)).
+
+The repository root holds the sources:
 
 | File | Purpose |
 |---|---|
 | `Dockerfile` | One image for every component: web build → static Go build → distroless `nonroot`. Plus a `dev` target (air hot reload) used only by the dev override. |
-| `docker-compose.yml` | Production example: `certs-init`, `migrate`, `serve`, `runner`, `postgres`, plus the reverse-proxy profiles `traefik` and `nginx`. |
+| `docker-compose.yml` | The source of every variant (the `full` variant): `setup`, `certs-init`, `migrate`, `admin`, `serve`, `runner`, `postgres`, plus the reverse-proxy profiles `traefik` and `nginx`. The bekup image appears only in its `x-bekup-image` line. |
 | `docker-compose.dev.yml` | Development override: by default only the app Postgres (published on loopback), mailpit and adminer for a natively running bekup; profile `full` adds hot reload, the runner, sample databases, destinations and an SSH bastion (D-114). |
 
 ## Architecture in compose
@@ -35,10 +64,43 @@ traefik | nginx ──frontend──> serve ──backend──> postgres
 |---|---|---|---|
 | `frontend` | yes | reverse proxy (fixed `10.213.250.5`), `serve` (fixed `10.213.250.10`) | the only way to reach the UI; fixed proxy address for `trusted_proxies` |
 | `edge` | no | reverse proxy, `certbot` | published ports 80/443 and outbound ACME (a published port needs a non-internal network) |
-| `backend` | yes | `serve`, `migrate`, `postgres` | the app database is unreachable from everything else |
+| `backend` | yes | `serve`, `migrate`, `admin`, `postgres` | the app database is unreachable from everything else |
 | `runner-ctl` | yes | `serve`, `runner` | mTLS gRPC only; fixed subnet so the runner can bind to it |
 | `targets` | no | `runner` | dump traffic to target databases and SSH bastions; the runner's target allowlist decides what is reachable |
 | `egress` | no | `serve` | uploads to destinations, SMTP and webhooks, every dial checked by the SSRF guard |
+| `metrics` | yes | `serve` (fixed `10.213.252.10`), your Prometheus | `/metrics` only, never published |
+
+This is the `traefik` variant (and `full`). The `traefik-external` and
+`npm` variants have no bundled proxy, no `frontend` or `edge` network and
+publish no ports; `serve` joins the operator's link network instead:
+
+| Network | Internal | Members | Why |
+|---|---|---|---|
+| `bekup-proxy` (external, created once by you) | yes | your Traefik / NPM (fixed `10.213.253.5`), `serve` (fixed `10.213.253.10`) | the only way to reach the UI; `trusted_proxies = ["10.213.253.5/32"]` |
+| `backend` | yes | `serve`, `migrate`, `admin`, `postgres` | as above |
+| `runner-ctl` | yes | `serve` (`10.213.251.x`), `runner` (fixed `10.213.251.10`) | as above |
+| `targets` | no | `runner` | as above |
+| `egress` | no | `serve` | as above |
+| `metrics` | yes | `serve` (fixed `10.213.252.10`) | as above |
+
+```sh
+# once per host, before `docker compose up` (setup itself needs no network)
+docker network create --internal --subnet 10.213.253.0/28 \
+  --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+```
+
+`--ip-range` keeps Docker's automatic addresses to `.12`–`.15`, so no other
+container that joins the network first can take the fixed addresses `.5`
+and `.10`. Your proxy attaches with `ipv4_address: 10.213.253.5` next to
+the networks it already has (and declares the network `external: true`);
+see [reverse-proxy.md](reverse-proxy.md#existing-traefik). Another name,
+subnet or addresses: `setup init --proxy-network --proxy-subnet --proxy-ip
+--serve-ip` (a private IPv4 subnet between /8 and /29 that overlaps neither
+`runner-ctl` nor `metrics`; both addresses inside it, distinct, never the
+network, gateway `.1` or broadcast address). `.env` then carries
+`BEKUP_PROXY_NETWORK` and `SERVE_PROXY_IP`, and setup prints the matching
+`docker network create` command (with an `--ip-range` that excludes both
+addresses).
 
 `serve` can never reach a target database or Docker, and the runner can never
 reach the app database. `serve`'s port is **not published**: only the
@@ -170,120 +232,505 @@ Likewise bind the Prometheus endpoint to serve's address on the internal
 `metrics` network (`[metrics] listen = "10.213.252.10:9464"`); it is never
 published (see [Operations: metrics](../operations.md#metrics)).
 
+## Install with `bekup setup` (container only)
+
+A production host needs **only Docker and one compose file**: no source
+checkout, no `just`, no Go. The compose file names the bekup image in its
+single `x-bekup-image` line (the release asset: pinned by digest; the
+committed file: `BEKUP_IMAGE`), and its `setup` service runs `bekup setup`
+from exactly that image (compose-first, D-205).
+Setup writes everything else from the files embedded in the image
+(`deploy/**` for the variant, the example configs, `.env`, minimal
+`bekup.toml` / `runner.toml`), generates every secret and certificate, and
+hands each file to the container user that reads it. It **never writes
+`compose.yaml`**.
+
+With the committed file (works today, also for your own image):
+
+```sh
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+# compose.yaml (own Traefik), compose.traefik-external.yaml or compose.npm.yaml
+sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.yaml
+BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest> \
+  DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup
+docker compose up -d
+docker compose run --rm admin create --email you@example.com --display-name "You"
+```
+
+`BEKUP_IMAGE` must be pinned by digest and its tag must name the version of
+the image (setup refuses anything else; `--allow-version-mismatch`
+overrides the version check). Get the digest from the output of
+`just publish` (your own image), from the release notes, or with
+`docker image inspect --format '{{index .RepoDigests 0}}' <repo>:<tag>`
+after a `docker pull` (that prints `<repo>@sha256:...`; put the tag back in
+front of the `@`). Without `BEKUP_IMAGE` docker compose itself refuses to
+start (`required variable BEKUP_IMAGE is missing a value`). Setup writes
+`BEKUP_IMAGE=<the pinned reference>` into `.env`, so later commands
+(`docker compose up -d`, `setup check`) need no shell variable; a
+`BEKUP_IMAGE` set in the shell overrides `.env`, and `setup check` reports
+that as an error. Pin the file to a commit or tag in the URL
+(`.../bekup/<tag>/deploy/compose/...`) to get exactly the file of the image
+you deploy; the file of a newer commit may need a newer image.
+
+With the release asset (once releases exist; pinned and attested):
+
+```sh
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.yaml
+gh attestation verify compose.yaml --repo jlentink/bekup
+DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup
+docker compose up -d
+docker compose run --rm admin create --email you@example.com --display-name "You"
+```
+
+For the external variants create the link network first
+([above](#architecture-in-compose)); `setup` itself runs without it.
+
+**Verify the release file before running it.** `gh attestation verify` checks the
+GitHub build provenance (made by the release workflow for a `vX.Y.Z` tag;
+it needs a signed-in GitHub CLI, `gh auth login`). Without the GitHub CLI, download `compose.yaml.sigstore.json` from the same
+release and use cosign v3:
+
+```sh
+cosign verify-blob --bundle compose.yaml.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  compose.yaml
+```
+
+Every release also publishes `SHA256SUMS` over the three compose files
+(with its own bundle and attestation). The release workflow renders the
+files by running the published, scanned and signed image
+(`setup compose --image <ref>`, no network, read-only, UID 65532) and checks
+that each names exactly that image once and pins every other image. A
+tampered compose file could run anything as root, so never skip the check;
+the image it pins is verified like any release image
+([Verifying release images](#verifying-release-images)).
+
+The `setup` service is a one-shot root container with **only
+`CAP_CHOWN`**, no network, a read-only root file system and **no logs**
+(`logging: none`: the passphrase prompt and a generated passphrase never
+reach Docker's log files). It belongs to the `setup` profile, so `docker
+compose up` never starts it, and `setup check` requires it exactly as
+shipped. The same service runs `upgrade` and `check`. Run the check with
+`-f compose.yaml`, so that `compose.override.yaml` cannot change the
+container that runs it (the check still reads and lints the override):
+`docker compose -f compose.yaml run --rm setup check`.
+
+**What setup asks** (on a terminal; `-T` and flags otherwise):
+
+| Variant | Prompts |
+|---|---|
+| `traefik` | public host name, ACME e-mail, CA key passphrase (twice, no echo) |
+| `traefik-external`, `npm` | public host name, CA key passphrase |
+
+The Docker socket's group comes from `DOCKER_GID` (the compose file passes
+it into the container), otherwise setup asks. Everything else has defaults
+or flags: `--tls-mode static` (own certificate in `proxy-tls/`, see
+[reverse-proxy.md](reverse-proxy.md)), `--acme-staging`,
+`--traefik-entrypoint` / `--traefik-certresolver` (traefik-external,
+defaults `websecure` / `letsencrypt`), `--proxy-network`,
+`--proxy-subnet`, `--proxy-ip`, `--serve-ip`, `--target-cidr` /
+`--target-host` (the runner may reach no database until you allow one in
+`runner.toml` or here), `--keys-dir`, `--ownership`, and the passphrase
+sources `--ca-passphrase-file`, `--ca-passphrase-stdin`,
+`--generate-ca-passphrase`. With `--non-interactive` every answer must come
+from flags. All answers are validated against strict patterns, so nothing
+can be injected into `.env` or the TOML files. Full reference:
+[`bekup setup init`](../reference/cli/bekup_setup_init.md).
+
+- **Image and variant:** setup takes the image from the `x-bekup-image`
+  line (the setup service's `BEKUP_IMAGE` must match; a container cannot
+  verify its own digest, so a tag that names another version than the
+  running binary is refused, `--allow-version-mismatch` overrides). With
+  the committed file the line is exactly the `${BEKUP_IMAGE:?...}`
+  placeholder and the image is the `BEKUP_IMAGE` docker compose resolved
+  (shell, else `.env`); it must be digest-pinned, setup writes it to
+  `.env` and records `image_source: env` in `bekup-setup.json`. It
+  recognizes the variant by rendering each release variant with that
+  image (the committed file: with the placeholder): **exact** (byte-equal)
+  or **model** (same YAML, only comments or formatting differ) are
+  accepted; a **customized** file needs `--variant <the file it is based
+  on>`, gets a warning and must pass the hardening lint (below). Any other
+  `x-bekup-image` line (`${BEKUP_IMAGE:-bekup:dev}` of the repository's
+  `docker-compose.yml`, another default or message) is refused, and
+  `BEKUP_IMAGE` may appear nowhere else in `compose.yaml` or the override.
+- **What it writes:** see the [manifest](#file-ownership-and-permissions).
+  `deploy/**`, `reference/*.example.toml` and `bekup-setup.json` are
+  *generated*: `setup upgrade` rewrites them, so do not edit them.
+  `compose.yaml`, `.env`, `bekup.toml`, `runner.toml` and
+  `compose.override.yaml` are *yours*: setup never writes `compose.yaml`,
+  writes the others once and afterwards only validates them. The TOML files
+  are minimal, so safer defaults of new releases keep applying.
+- **Local changes** go into `compose.override.yaml` (docker compose merges
+  it automatically), never into `compose.yaml`: then an upgrade is a plain
+  file replacement.
+- **Secrets:** three 32-byte random database passwords (base64url) and the
+  two connection URLs, the master keyring (`bekup keys generate` format) and
+  the private CA with the runner, serve and postgres certificates. The CA
+  key is age-encrypted with your passphrase; there is no unencrypted option.
+  `--generate-ca-passphrase` creates one and shows it once, only on a
+  terminal.
+- **Evidence instead of audit:** setup runs before the database exists and
+  has no network, so it is not audited. It prints the certificate
+  fingerprints and the master key ID: record them, and **escrow the master
+  key** (see [key management](../security/key-management.md)).
+- **Existing files** are never overwritten: `--keep-existing` creates only
+  missing files, `--force` rewrites the non-secret files, and
+  `--regenerate-secrets` (terminal and typed confirmation) replaces every
+  secret. A failed run removes everything it created.
+- **Keys directory:** `--keys-dir` (default `secrets`) is a path inside the
+  deployment directory; mount another (encrypted) volume there to keep the
+  secrets elsewhere. `.env` sets `BEKUP_KEYS_DIR` to match.
+- **Other compose files** next to `compose.yaml` (`compose.yml`,
+  `docker-compose.yaml`, `docker-compose.yml`, `compose.override.yml`,
+  `docker-compose.override.y{a,}ml`) are refused: docker compose would read
+  them instead of or next to the checked files.
+
+### The override file and the hardening lint
+
+`setup check` (and `setup init`/`upgrade`) lints the project docker compose
+would actually run: `compose.yaml` and `compose.override.yaml` are loaded
+with compose-go, the loader of Docker Compose itself, so every YAML
+document, merge key (`<<`), alias, `!reset`/`!override` tag, `extends` and
+`${VAR}` (from `.env`) is resolved first, and the lint checks the result.
+A file with more than one YAML document (`---`) is refused outright.
+
+**The lint is a guardrail, not a proof** (D-205 amendment 2). A deployment
+is *verified* only when `compose.yaml` is the attested release file byte
+for byte (recognized as *exact*), there is **no** `compose.override.yaml`,
+and setup recorded the file's `x-bekup-image`. The committed file from
+`deploy/compose/` is recognized as *exact* too, but it is not attested:
+compare it with the repository at the tag of your image (for example
+`git diff <tag> -- deploy/compose/` in a checkout) when that matters. Everything else is linted
+best-effort: the lint models compose-go v2.16.2 (verified with Docker
+Compose v5.6.0; **minimum Docker Compose v2.24.4**, which the documented
+`!override`/`!reset` overrides need; keep Compose current, older versions
+may merge differently), and it cannot see variables that exist only in
+the shell where you run `docker compose`. A check that runs inside a
+container the checked file defines (`docker compose run --rm setup check`)
+is not trustworthy for a **tampered** file: that file also defines the
+checking container. To check a file you do not trust, run the image of
+the **attested release** (take its digest from the release notes or a
+verified release `compose.yaml`, not from the file under suspicion) with
+the setup service's hardening and the directory read-only:
+
+```sh
+docker run --rm --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v "$PWD":/deploy:ro ghcr.io/jlentink/bekup:<version>@sha256:<digest> setup check
+```
+
+Errors:
+
+- **bekup's services are pinned.** Every service the variant ships
+  (`setup`, `certs-init`, `migrate`, `admin`, `serve`, `runner`,
+  `postgres`, and `traefik`/`traefik-init` or `nginx`/`nginx-init`/
+  `certbot` where shipped) must equal the shipped definition, resolved
+  with the same `.env`, in every attribute: image, entrypoint, command,
+  environment, `env_file`, user, `group_add`, capabilities,
+  `security_opt`, `read_only`, tmpfs, volumes (bind options, SELinux),
+  networks (aliases, addresses), `network_mode`, namespaces, ports,
+  labels, logging, healthcheck, `working_dir`, `extra_hosts`, `dns`,
+  `links`/`external_links`, ulimits, `oom_score_adj`, `shm_size`,
+  `sysctls`, devices, `privileged`, `x-*` keys, and every other compose
+  attribute. Only these **operator-tunable** attributes may differ:
+
+  | Service | Tunable |
+  |---|---|
+  | every service but `setup` | `deploy.resources` cpus/memory/pids (limits and reservations; nothing else under `deploy`, no unlimited pids; the shipped limits may change but not be removed or set to 0, so `deploy: !reset null` is an error), `cpus`, `mem_limit`, `mem_reservation`, `pids_limit` (> 0; `pids_limit: 0` is an error), `restart`, `stop_grace_period` |
+  | `traefik`, `traefik-init`, `nginx`, `nginx-init`, `certbot` | `profiles` (e.g. certbot off in static TLS mode) |
+  | `traefik`, `nginx` | `PROXY_TLS_MODE` (`acme`/`static`) and `PROXY_HTTPS_PUBLIC_PORT` in `environment`; a read-only `./proxy-tls` bind at `/certs`; the published address/port of `ports` (same container ports, tcp) |
+  | `runner` | the Docker socket source (`/var/run/docker.sock`, `/run/docker.sock`, `/run/user/<uid>/docker.sock`; read-only at `/var/run/docker.sock`, no bind options or SELinux relabeling); `userns_mode: host` (a warning, for userns-remap daemons) |
+  | `serve` | the source of its backups/scratch mounts and extra mounts below `/var/lib/bekup/backups/` (disk destinations): named volumes other than bekup's other volumes, or binds inside the deployment directory outside bekup's files |
+
+  The `setup` service has no tunables (root with `CAP_CHOWN` only, no
+  network, no logs). The shipped networks (`internal`, driver, subnets,
+  name, the external link network), volumes, secrets, configs and the
+  project name are pinned too (the name also as written: no variables in
+  `name:`).
+- **Compose variables:** only bekup's own (`ACME_CA_SERVER`, `ACME_EMAIL`,
+  `BEKUP_DOMAIN`, `BEKUP_KEYS_DIR`, `BEKUP_PROXY_NETWORK`, `DOCKER_GID`,
+  `FRONTEND_SUBNET`, `METRICS_SUBNET`, `PROXY_FRONTEND_IP`,
+  `PROXY_TLS_MODE`, `RUNNER_CTL_IP`, `RUNNER_CTL_SUBNET`,
+  `SERVE_FRONTEND_IP`, `SERVE_METRICS_IP`, `SERVE_PROXY_IP`,
+  `TRAEFIK_CERTRESOLVER`, `TRAEFIK_ENTRYPOINT`), and only where the shipped
+  file uses them; any other `${VAR}`/`$VAR`, a `$` that is not `$$` or a
+  reference, and any variable in a service, network, volume, secret or
+  config you add are errors: write literal values. Explicit YAML tags
+  are limited to `!!str`, `!!int`, `!!bool`, `!!float`, `!!null`,
+  `!!map`, `!!seq`, `!reset` and `!override` (`!!binary` and custom tags
+  are errors).
+- **Services you add** (for example a Prometheus): a digest-pinned image
+  (`x-bekup-image` for anything on the bekup repository), no `build`;
+  `read_only: true`, `cap_drop: [ALL]`, `security_opt` with
+  `no-new-privileges:true` and nothing else, a numeric non-root `user`,
+  `cap_add` only `NET_BIND_SERVICE`; no `privileged` (hooks included, which
+  must not run as root either), `devices`, `device_cgroup_rules`,
+  `volumes_from`, `gpus`, `pre_start`, `provider`, `develop`,
+  `use_api_socket`, `runtime`, `cgroup_parent`, `isolation`,
+  `storage_opt`, `volume_driver`, `sysctls`, `group_add`,
+  `external_links`, `oom_kill_disable`, negative `oom_score_adj`,
+  real-time CPU settings or unlimited pids; `ulimits` only `nofile`
+  (≤ 1048576) and `nproc` (≤ 65536); `shm_size` ≤ 1 GiB; logging only
+  `json-file`, `local` or `none` with size/rotation options; no
+  `traefik.*` or `com.docker.*` labels; `network_mode` only `none`, no
+  `pid`/`uts`/host `ipc`/`cgroup`, no `userns_mode` (`host` is allowed only
+  on the runner); bind mounts only from **relative** paths inside the
+  deployment directory (an absolute path, even `/opt/bekup/x`, is a host
+  path), never of `secrets/` (or `BEKUP_KEYS_DIR`), `bekup-setup.json`,
+  `.env`, the TOML or compose files, `deploy/` or `proxy-tls/`; no
+  propagation other than `private`, no SELinux relabeling, no
+  `image`/`npipe`/`cluster` mounts; none of bekup's named volumes,
+  secrets or configs; networks only their own, `metrics` (for a
+  Prometheus) and, in the `full` variant, `frontend` (your own proxy with
+  `--proxy none`), without aliases, `container_name` or `mac_address` on
+  bekup's networks and without fixed addresses (`ipv4_address`,
+  `ipv6_address`, `mac_address`, `link_local_ips`) there, except on
+  `frontend` in the `full` variant, where the address must differ from
+  the ones bekup's services use (`PROXY_FRONTEND_IP`,
+  `SERVE_FRONTEND_IP`); `ports` never (only the bundled proxy
+  publishes).
+- **Top-level objects you add:** volumes only `local` without
+  `driver_opts`, not external, no `name:`; networks only `bridge` without
+  `driver_opts` or another IPAM driver, not external, no `name:`;
+  secrets/configs only from files inside the directory (not bekup's own),
+  not external, no drivers, no `environment:`; no `include`, `extends`
+  from another file, `jobs` or `models`.
+- **Paths:** a symlink on the way to any bind source, `env_file`,
+  `label_file` or secret/config file inside the directory is an error
+  (init and upgrade too); `setup check` refuses every symlink below the
+  directory and every managed file with more than one hard link.
+
+The recognition levels use the same resolved model: a file counts as the
+release file (*model*) only when both its YAML and the project docker
+compose resolves from it (with the same `.env`) equal the release file's,
+so a merge-key or `!reset` trick is always *customized* and linted.
+Keep compose variables in `.env`: variables set only in the shell are
+invisible to the setup container, and `setup check` warns about the ones
+it can see that override `.env`. `DOCKER_HOST`, `DOCKER_CONTEXT`,
+`DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH` and `DOCKER_CONFIG` in `.env` are
+errors (docker compose would deploy to another daemon or with another
+client configuration). compose-go's own error messages may quote
+interpolated values (bounded; `.env` holds no secrets).
+
+Typical allowed overrides: resource limits, a disk for disk destinations
+(`./backups:/var/lib/bekup/backups/disk` with your disk mounted at
+`./backups`, or a named volume), the rootless Docker socket and
+`userns_mode: host` on the runner
+([rootless-docker.md](rootless-docker.md)), static TLS and `ports:
+!override` on the proxy ([reverse-proxy.md](reverse-proxy.md)), a
+hardened Prometheus on `metrics` ([operations.md](../operations.md#metrics)).
+
+## Alternative: setup-first
+
+With `--write-compose --variant traefik|traefik-external|npm|full`, setup
+also writes `compose.yaml` itself (generated-upgradable, with a "GENERATED"
+header). Use it for the `full` variant (every service of the repository
+file; `--proxy traefik`, `nginx`, or `none` for your own proxy on the
+`frontend` network with `--trusted-proxy <cidr>`), or when you cannot
+download the release file. Run setup with `docker run` and the same
+hardening as the compose service:
+
+```sh
+# The image you deploy, pinned by digest (never a bare tag); verify it first.
+IMAGE=ghcr.io/jlentink/bekup:1.0.0@sha256:<digest from the release notes>
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -e BEKUP_IMAGE="$IMAGE" -v /opt/bekup:/deploy \
+  -v /media/usb/bekup-ca:/deploy/secrets/certs/ca \
+  "$IMAGE" setup init --write-compose --variant full \
+  --docker-gid "$(stat -c %g /var/run/docker.sock)"
+docker compose up -d
+docker compose run --rm admin create --email you@example.com --display-name "You"
+```
+
+Run it only from an image whose signature verified: in this mode setup
+writes the compose file too. `.env` selects the proxy of the `full` variant
+with `COMPOSE_PROFILES` (`traefik`, `nginx`, or empty). Upgrades need
+`setup upgrade --write-compose --image <new>`
+([upgrades.md](upgrades.md#setup-first-installs)); setup refuses local edits
+of the generated `compose.yaml` (use `compose.override.yaml`).
+
+### The CA key stays offline
+
+Mount your offline media (encrypted USB stick) at
+`/deploy/secrets/certs/ca` while setup runs: the CA key is then written
+there and never touches the server's disk.
+
+```sh
+docker compose run --rm -v /media/usb/bekup-ca:/deploy/secrets/certs/ca setup
+```
+
+Setup detects the mount. Without it, setup and `setup check` warn until
+`secrets/certs/ca/` is moved off the host. Bring the media back only for
+[certificate rotation](../security/mtls-certs.md).
+
+### Ownership modes
+
+`--ownership` decides how files get their owners (the chosen mode is always
+printed):
+
+| Mode | Effect |
+|---|---|
+| `auto` (default) | `none` on Docker Desktop file systems (`fakeowner`, `virtiofs`, `fuse.grpcfuse`, `osxfs`, `9p`), `chown` when running as root, else `print` |
+| `chown` | chmod, then `lchown` every entry (needs only `CAP_CHOWN`) |
+| `print` | chmod, then print the `chown` commands to run on the host as root |
+| `none` | chmod only (Docker Desktop maps ownership itself) |
+
+Platform notes: rootless Docker works unchanged (the container's root and
+UIDs map into your subordinate range consistently). With userns-remap, the
+deployment directory must belong to the remapped root UID. On SELinux hosts
+add `:z` to the bind mounts of the setup container.
+
+### Check and upgrade
+
+```sh
+# Read-only; never reads secret contents. Exits non-zero on errors.
+# -f compose.yaml: the override never shapes the checking container.
+docker compose -f compose.yaml run --rm setup check [--fix-ownership]
+```
+
+Without compose (or to rule out the compose files entirely), run the image
+pinned in the `x-bekup-image` line with the setup service's hardening (for
+a file you do not trust, use the digest of the attested release instead,
+see [the hardening lint](#the-override-file-and-the-hardening-lint)):
+
+```sh
+IMAGE=$(sed -n 's/^x-bekup-image: &bekup-image //p' compose.yaml)
+# the committed file (deploy/compose/): the image is in .env
+case $IMAGE in '${BEKUP_IMAGE'*) IMAGE=$(sed -n 's/^BEKUP_IMAGE=//p' .env) ;; esac
+docker run --rm --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v "$PWD":/deploy:ro "$IMAGE" setup check
+```
+
+(`--fix-ownership` needs the mount without `:ro`.)
+
+`setup check` verifies the manifest (presence, type, mode, owner, no
+symlinks), that every image (and the `x-bekup-image` line) is
+digest-pinned and the generated files are unchanged (with the committed
+file: `BEKUP_IMAGE` in `.env` is pinned and equals the recorded image, no
+`BEKUP_IMAGE` in the environment overrides it, and every bekup service
+resolves to it), that `compose.yaml`
+is still the recorded variant (a switch is an error; an image newer than
+the one setup last ran with asks for `setup upgrade`, an older one is an
+error), the [hardening lint](#the-override-file-and-the-hardening-lint),
+that `bekup.toml`/`runner.toml` validate and agree with `.env`
+(`base_url` and `BEKUP_DOMAIN`, `trusted_proxies` exactly the proxy's /32,
+listen addresses, the link network of the external variants, both Docker
+GIDs), certificate expiry, variables that
+would override `.env` from the environment, and whether the CA key is still
+on disk. `--fix-ownership` re-applies the manifest (for example after
+`certs rotate`). Upgrades: [upgrades.md](upgrades.md#container-only-installs-bekup-setup).
+
 ## Configuration files
 
-`bekup.toml` (serve, migrate) and `runner.toml` (runner) are mounted
-read-only at `/etc/bekup/` as compose `configs`. Create them next to the
-compose file from `bekup.example.toml` / `runner.example.toml` (see
-[configuration.md](../configuration.md)). They contain no secrets.
+`bekup.toml` (serve, migrate, admin) and `runner.toml` (runner) are mounted
+read-only at `/etc/bekup/` as compose `configs`. `bekup setup` writes
+minimal ones; every key is documented in `reference/*.example.toml` and
+[configuration.md](../configuration.md). They contain no secrets.
 
 ### File ownership and permissions
 
 Compose bind-mounts `configs` and file-based `secrets` with their **host**
 ownership and mode. On Linux hosts, bekup's file safety checks (D-041) only
-read a config or secret file that is:
+read a config or secret file that is owned by **root** or the reading
+container UID (65532 for bekup, 70 for the app Postgres), **not group- or
+world-writable**, and for secrets also **not world-readable**. Otherwise
+bekup refuses to start, so a file that another local user could edit can
+never become bekup's configuration.
 
-- owned by **root** or by the **container UID 65532** (the user bekup runs
-  as; the app Postgres reads its secrets as UID 70);
-- **not group- or world-writable**;
-- for secret files additionally **not world-readable**.
+`bekup setup` applies exactly this manifest (generated from
+`internal/setup/manifest.go`; a test keeps the table in sync):
 
-Otherwise bekup refuses to start, so a file that another local user could
-edit can never become bekup's configuration. Recommended:
+<!-- setup-manifest:begin -->
+| Path | Class | Owner (UID:GID) | Mode |
+|---|---|---|---|
+| `./` (the deployment directory) | operator | 0:0 | at most 0755 |
+| `compose.yaml` (yours; generated-upgradable with `--write-compose`) | operator | 0:0 | 0644 |
+| `bekup-setup.json` | generated-upgradable | 0:0 | 0644 |
+| `.env` | operator | 0:0 | 0644 |
+| `bekup.toml` | operator | 0:0 | 0644 |
+| `runner.toml` | operator | 0:0 | 0644 |
+| `compose.override.yaml` (static TLS only) | operator | 0:0 | 0644 |
+| `proxy-tls/` | operator | 0:0 | 0755 |
+| `reference/` | generated-upgradable | 0:0 | 0755 |
+| `reference/bekup.example.toml` | generated-upgradable | 0:0 | 0644 |
+| `reference/runner.example.toml` | generated-upgradable | 0:0 | 0644 |
+| `deploy/**` (`*.sh` and directories 0755) | generated-upgradable | 0:0 | 0644 |
+| `secrets/` | secret | 0:0 | 0711 |
+| `secrets/bekup_master_key` | secret | 65532:65532 | 0400 |
+| `secrets/bekup_database_url` | secret | 65532:65532 | 0400 |
+| `secrets/bekup_database_owner_url` | secret | 65532:65532 | 0400 |
+| `secrets/postgres_password` | secret | 70:70 | 0400 |
+| `secrets/bekup_owner_password` | secret | 70:70 | 0400 |
+| `secrets/bekup_app_password` | secret | 70:70 | 0400 |
+| `secrets/certs/` | secret | 0:0 | 0711 |
+| `secrets/certs/serve/` | secret | 0:0 | 0711 |
+| `secrets/certs/serve/serve.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/serve/ca.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/serve/serve.key` | secret | 65532:65532 | 0400 |
+| `secrets/certs/runner/` | secret | 0:0 | 0711 |
+| `secrets/certs/runner/runner.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/runner/ca.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/runner/runner.key` | secret | 65532:65532 | 0400 |
+| `secrets/certs/postgres/` | secret | 0:0 | 0711 |
+| `secrets/certs/postgres/postgres.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/postgres/ca.crt` | secret | 0:0 | 0644 |
+| `secrets/certs/postgres/postgres.key` | secret | 70:70 | 0400 |
+| `secrets/certs/ca/` (offline) | secret | 0:0 | 0700 |
+| `secrets/certs/ca/ca.crt` (offline) | secret | 0:0 | 0644 |
+| `secrets/certs/ca/ca.key` (offline) | secret | 0:0 | 0600 |
+<!-- setup-manifest:end -->
 
-```sh
-sudo chown root:root bekup.toml runner.toml && sudo chmod 0644 bekup.toml runner.toml
-```
-
-The secret files follow in [Secrets](#secrets). Docker Desktop
-(macOS/Windows) maps ownership itself; files owned by your user work there.
-For the dev stack, `sudo deploy/dev/gen-dev-keys.sh --chown` applies the
-same rules to the dev secrets and the dev TOML files.
+Docker Desktop (macOS/Windows) maps ownership itself. For the dev stack,
+`sudo deploy/dev/gen-dev-keys.sh --chown` applies the same rules to the dev
+secrets.
 
 ## Secrets
 
-Secrets are file-based Docker secrets from `./secrets/` (gitignored), mounted
-at `/run/secrets/<name>`. To keep them elsewhere (for example on an
-encrypted volume outside the project directory), set the compose variable
-`BEKUP_KEYS_DIR` (shell or `.env`; absolute, or relative to the compose
-file); the paths below are then relative to it, including the `certs/`
-directory that `certs-init` writes. They never appear in environment variables, argv or
-the TOML files (D-019). Each service only receives what it needs:
+Secrets are file-based Docker secrets below `BEKUP_KEYS_DIR` (default
+`./secrets`), mounted at `/run/secrets/<name>`. They never appear in
+environment variables, argv or the TOML files (D-019). Each service only
+receives what it needs:
 
 | Secret file | Used by | Content |
 |---|---|---|
 | `secrets/bekup_master_key` | serve | master keyring (`bekup keys generate`, task 0.5) |
-| `secrets/bekup_database_url` | serve | `postgres://bekup_app:…@postgres:5432/bekup` |
+| `secrets/bekup_database_url` | serve, admin | `postgres://bekup_app:…@postgres:5432/bekup` |
 | `secrets/bekup_database_owner_url` | migrate | `postgres://bekup_owner:…@postgres:5432/bekup` |
 | `secrets/postgres_password` | postgres | bootstrap superuser password |
 | `secrets/bekup_owner_password`, `secrets/bekup_app_password` | postgres (init only) | role passwords (must match the URLs) |
 | `secrets/certs/serve/{serve.crt,serve.key,ca.crt}` | serve | client certificate + CA bundle (as `bekup_client.{crt,key}`, `bekup_ca.crt`) |
 | `secrets/certs/runner/{runner.crt,runner.key,ca.crt}` | runner | server certificate + CA bundle (as `runner.{crt,key}`, `bekup_ca.crt`) |
 | `secrets/certs/postgres/{postgres.crt,postgres.key}` | postgres | app DB TLS server certificate + key (as `postgres.{crt,key}`) |
-| `secrets/certs/postgres/ca.crt` | postgres, serve, migrate | CA bundle (as `postgres_ca.crt` / `bekup_db_ca.crt`, the `tls_ca_file` default) |
+| `secrets/certs/postgres/ca.crt` | postgres, serve, migrate, admin | CA bundle (as `postgres_ca.crt` / `bekup_db_ca.crt`, the `tls_ca_file` default) |
 
-The CA private key (`secrets/certs/ca/ca.key`, age-encrypted) is only ever
-mounted into the one-shot `certs-init` container; no long-running service sees
-it. Move `secrets/certs/ca/` offline after `certs-init` and bring it back only
-for rotation (see [mTLS certificates](../security/mtls-certs.md)).
-
-Compose bind-mounts file secrets with their host ownership, so on Linux each
-file must be readable by the UID of the container that uses it, without being
-world-readable (bekup rejects world-readable secret files):
-
-```sh
-sudo chown 65532:65532 secrets/bekup_*
-sudo chown -R 65532:65532 secrets/certs/serve secrets/certs/runner
-sudo chown 70:70 secrets/postgres_password secrets/bekup_owner_password secrets/bekup_app_password
-sudo chown -R 70:70 secrets/certs/postgres   # key 0600; ca.crt stays 0644 for serve/migrate
-sudo chmod 0400 secrets/bekup_* secrets/postgres_password
-sudo chmod 0711 secrets secrets/certs
-```
-
-Docker Desktop maps ownership itself; `0600` files owned by your user work
-there.
-
-The URLs in `bekup_database_url` / `bekup_database_owner_url` need no
-`sslmode`: TLS comes from `[database] tls_mode` (default `verify-full`), and
-an `sslmode` stricter than it is rejected (see
+The CA private key (`secrets/certs/ca/ca.key`, age-encrypted) is never
+mounted into a long-running service. The URLs need no `sslmode`: TLS comes
+from `[database] tls_mode` (default `verify-full`; see
 [App DB TLS](../security/app-db-tls.md)).
 
-## First start (target flow)
+### From a source checkout (development)
 
-1. Create `bekup.toml` and `runner.toml` (see above).
-2. Create the database passwords and URLs in `secrets/` (32 random bytes
-   each, e.g. `head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '='`),
-   and the master key with `just keygen` (task 0.5).
-3. Generate the mTLS certificates once (task 0.6). `secrets/certs` must exist
-   and be writable by UID 65532; you are prompted for a CA key passphrase:
-   ```sh
-   mkdir -p -m 0700 secrets/certs && sudo chown 65532:65532 secrets/certs   # Linux
-   docker compose --profile setup run --rm certs-init
-   ```
-   Then move `secrets/certs/ca/` offline (see
-   [mTLS certificates](../security/mtls-certs.md)).
-4. Set `DOCKER_GID` and start the stack:
-   ```sh
-   docker compose up -d
-   ```
-5. Start it with a reverse-proxy profile to reach the UI over HTTPS (see
-   [below](#reverse-proxy-profiles)):
-   ```sh
-   BEKUP_DOMAIN=backup.example.com ACME_EMAIL=ops@example.com \
-     docker compose --profile traefik up -d      # or --profile nginx
-   ```
-
-6. Create the first admin (D-113) with the one-shot `admin` service (see
-   [Account administration](#account-administration-admin)), then sign in.
-
-Pin `BEKUP_IMAGE` (a compose variable) to a released, digest-pinned
-`ghcr.io/jlentink/bekup` reference; the default `bekup:dev` is a locally
-built image (`just docker`).
+The repository's `docker-compose.yml` is the `full` variant with the
+variable image line `${BEKUP_IMAGE:-bekup:dev}`. Without `bekup setup`,
+create the same files by hand: the TOMLs from the
+examples, the passwords and URLs, `just keygen`, and the certificates with
+`docker compose --profile setup run --rm certs-init`; then apply the
+manifest above with `chown`/`chmod`. Set `BEKUP_IMAGE` (shell or `.env`)
+to a digest-pinned reference; the repository compose file defaults to the
+locally built `bekup:dev`. Production installs should use `bekup setup`.
 
 ## Reverse-proxy profiles
 
-TLS for the UI is terminated by one of two compose profiles. Enable exactly
-one of them; full details are in [reverse-proxy.md](reverse-proxy.md).
+In the `traefik` variant Traefik starts with the stack (no profile). In the
+`full` variant (setup-first, or the repository file) TLS for the UI is
+terminated by one of two compose profiles; enable exactly one of them. The
+external variants use your own Traefik or Nginx Proxy Manager. Full details
+are in [reverse-proxy.md](reverse-proxy.md).
 
 | Profile | Services | Notes |
 |---|---|---|
@@ -321,6 +768,39 @@ The web stage builds `web/` with pnpm (`--frozen-lockfile`) when
 image always builds. The version comes from `--build-arg VERSION` or the
 `VERSION` file and is validated as SemVer before it is passed to `-ldflags`.
 
+### Verifying release images
+
+Official images are built only by the release workflow from a signed
+`vX.Y.Z` tag on `main` (D-204) and published as
+`ghcr.io/jlentink/bekup:X.Y.Z` (multi-arch: `linux/amd64`, `linux/arm64`).
+The workflow pushes by digest, scans the image with Trivy, signs it with
+cosign (keyless, GitHub OIDC, logged in the public Rekor transparency log),
+attests an SPDX SBOM per platform and GitHub build provenance, and only then
+tags it. `latest` follows the highest released version, but deploy by digest
+only: the release notes of every version list the digest and the exact
+commands.
+
+```sh
+IMAGE=ghcr.io/jlentink/bekup:X.Y.Z@sha256:<digest from the release notes>
+# Signature: made by release.yml for a vX.Y.Z tag of jlentink/bekup.
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$IMAGE"
+# Or GitHub's build provenance attestation:
+gh attestation verify "oci://$IMAGE" --repo jlentink/bekup
+# SBOM of one platform (attested to that platform's manifest digest):
+cosign verify-attestation --type spdxjson \
+  --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/jlentink/bekup@sha256:<platform manifest digest>
+```
+
+The release notes give the exact identity of the version
+(`…/release.yml@refs/tags/vX.Y.Z`); prefer it over the regular expression
+when you verify a specific release. Platform manifest digests are listed by
+`docker buildx imagetools inspect "$IMAGE"`.
+
 ### Using your own image
 
 To run an image you built and pushed yourself (for example with
@@ -329,9 +809,19 @@ pin it by digest, never by a mutable tag (a `sha-…-dirty` tag in particular
 is overwritten by the next dirty build of the same commit):
 
 ```sh
-# .env next to docker-compose.yml (or the environment)
+# compose-first, simplest: the committed file from deploy/compose/ and
+# BEKUP_IMAGE=registry.example.com/team/bekup:<tag>@sha256:<digest> docker compose run --rm setup
+# compose-first, pinned file: render compose.yaml pinned to it with the image itself
+docker run --rm --network none registry.example.com/team/bekup@sha256:<digest> \
+  setup compose --variant traefik --image registry.example.com/team/bekup@sha256:<digest> >compose.yaml
+# setup-first: pass it as --image / BEKUP_IMAGE to `setup init --write-compose` or `setup upgrade --write-compose`
+IMAGE=registry.example.com/team/bekup@sha256:<digest printed by just publish>
+# Source checkout without setup: .env next to docker-compose.yml
 BEKUP_IMAGE=registry.example.com/team/bekup@sha256:<digest printed by just publish>
 ```
+
+A `sha-…` tag does not equal the binary version, so `setup` needs
+`--allow-version-mismatch` for it (or pin the digest without a tag).
 
 On a private registry, run `docker login registry.example.com` on the host
 before `docker compose pull`. Verify what you pin with
