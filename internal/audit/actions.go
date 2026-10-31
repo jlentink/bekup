@@ -88,6 +88,10 @@ const (
 	// mode in single-account mode (database.single_account; one account
 	// for migrations and the app, D-207).
 	ActionSecurityInsecureDBRoles Action = "security.insecure_db_roles"
+	// ActionSecurityUnpinnedImage: serve or worker started outside dev
+	// mode with the bekup image following a tag instead of a digest
+	// (BEKUP_IMAGE_MODE=following, D-212).
+	ActionSecurityUnpinnedImage Action = "security.unpinned_image"
 
 	// bekup itself (startup posture, D-095).
 	ActionSystemInsecureTransportStarted Action = "system.insecure_transport_started"
@@ -366,6 +370,7 @@ var catalog = []Action{
 	ActionSessionRevoked, ActionSessionsRevoked,
 	ActionSecretChanged, ActionSettingChanged,
 	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS, ActionSecurityInsecureDBRoles,
+	ActionSecurityUnpinnedImage,
 	ActionSystemInsecureTransportStarted,
 	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
 	ActionCLIAdminDisabled, ActionCLIRunImported, ActionCLIDBBootstrap,

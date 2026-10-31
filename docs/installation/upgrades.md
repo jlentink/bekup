@@ -90,8 +90,10 @@ checks it); better move it into the override.
 - rewrites only the generated files: `deploy/**` (assets the new version no
   longer ships are removed), `reference/*.example.toml` and
   `bekup-setup.json`;
-- never touches `.env` (except the `BEKUP_IMAGE` line with the committed
-  file, below), `bekup.toml`, `runner.toml`, the override file or an
+- never touches `.env` except the `BEKUP_SETUP_VERSION` and
+  `BEKUP_IMAGE_MODE` lines ([the version guard](#the-version-guard)) and
+  the `BEKUP_IMAGE` line with the committed file (below); never
+  `bekup.toml`, `runner.toml`, the override file or an
   existing secret; it re-validates the TOML files with the new version's
   validators first (fix them before upgrading: unknown keys are rejected)
   and generates only secrets that are new in the ownership manifest;
@@ -153,6 +155,97 @@ one set in the shell that overrides `.env`, as an error. Switching between
 the committed file and a release file of the same variant is an upgrade
 too: replace `compose.yaml` and run `setup upgrade` (with a release file it
 removes the `BEKUP_IMAGE` line from `.env`).
+
+### The version guard
+
+Setup writes `BEKUP_SETUP_VERSION=<version>` to `.env` at every init and
+upgrade (D-212); the compose files pass it (with `BEKUP_IMAGE_MODE`) to
+`migrate`, `serve` and `runner`. `bekup migrate up`, `bekup db bootstrap`
+(run through the `migrate` service), `bekup serve`, `bekup worker` and
+`bekup runner` compare it with their own version before they connect to
+anything (the runner before it opens the Docker socket or its gRPC
+listener) and **refuse to start** when it differs, in both directions:
+
+- a newer image (a moved `:latest` tag, a replaced `compose.yaml`, a
+  `BEKUP_IMAGE` in the shell) runs neither its migrations nor its startup
+  until `docker compose run --rm setup upgrade` has prepared the
+  deployment for it (`serve` waits for `migrate`, and the runner checks
+  for itself, so nothing of the new version runs; the runner does not
+  wait for `migrate`, it does not use the app database);
+- an older image (a downgrade) is refused too: run the image the
+  deployment was set up for, or restore a matching database backup and run
+  `setup upgrade --allow-downgrade` from the older image.
+
+The comparison is exact (a leading `v` is ignored): pre-release and build
+metadata count, so a development build (`0.0.0-dev`, `0.0.0+<commit>`)
+never runs against a deployment set up by another build; run
+`setup upgrade` from that image first. Without the variable (deployments
+set up before D-212, or run without setup) the processes start and log a
+warning; `setup check` reports it, and one `docker compose run --rm setup
+upgrade` records it. A followed image (`BEKUP_IMAGE_MODE=following`)
+without the variable is refused outside dev mode: there would be nothing
+to stop a moved tag. With a digest-pinned image nothing changes in
+practice: setup runs from the image it pins, so the versions match.
+
+### Following `:latest`
+
+A deployment set up with `ghcr.io/jlentink/bekup:latest` (the README quick
+start, D-212) names that tag in `compose.yaml` (setup-first) or in
+`BEKUP_IMAGE` (the committed file) and records `image_mode: following`.
+`docker compose pull` fetches whatever release `:latest` points to, but
+the [version guard](#the-version-guard) keeps the upgrade a deliberate
+step:
+
+```sh
+cd /opt/bekup
+sudo docker compose pull                         # the new release
+sudo docker compose run --rm setup upgrade       # the new image prepares the deployment (guided, asks for a backup)
+sudo docker compose up -d
+sudo docker compose -f compose.yaml run --rm setup check
+```
+
+`setup upgrade` needs no flags here: it rewrites the generated files for
+the followed tag and writes the new `BEKUP_SETUP_VERSION`. A bare
+`docker compose pull && docker compose up -d` stops at `migrate`, which
+refuses with the command above; the old containers are replaced, so the UI
+is down until you run it (back up before every pull).
+
+Following is an explicit weakening: whoever controls the tag decides what
+runs. `setup check` warns about it, serve and worker log a warning and
+record `security.unpinned_image` in the audit log at every start, every
+admin gets a daily security alert, and the admin configuration page shows
+the image as **not pinned**. serve and worker do not rely on
+`BEKUP_IMAGE_MODE` alone: the runner reads the image reference of its own
+container from Docker and reports in its Health answer whether it carries
+a digest. An unpinned runner image counts as following whatever
+`BEKUP_IMAGE_MODE` says (a shell or `.env` override cannot hide it); when
+the runner is not ready at startup, serve and worker start anyway and
+re-check every minute until the runner answers (then hourly, and with
+every health snapshot and security check), then warn, audit and alert. Verify a release before you upgrade
+([cosign verify](compose.md#verifying-release-images) against the release
+workflow's identity), and keep a backup.
+
+**Pinning a digest again:** run `setup upgrade` **from the image you pin**
+(or one of the same version), so the version it records matches what then
+runs. Setup-first (the README quick start):
+
+```sh
+PINNED=ghcr.io/jlentink/bekup:<version>@sha256:<digest>
+cd /opt/bekup
+sudo docker run --rm --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v /opt/bekup:/deploy "$PINNED" setup upgrade --write-compose --image "$PINNED"
+sudo docker compose up -d
+sudo docker compose -f compose.yaml run --rm setup check
+```
+
+It rewrites `compose.yaml` and removes `BEKUP_IMAGE_MODE` from `.env`.
+With the committed file, `BEKUP_IMAGE=<pinned> docker compose run --rm
+setup upgrade` (the setup service then runs from the pinned image), then
+`docker compose up -d`. The digest: `docker image inspect --format
+'{{index .RepoDigests 0}}' ghcr.io/jlentink/bekup:<version>` after a
+`docker pull` (keep `:<version>` in front of the `@`). Switching to
+following works the same way with the `:latest` reference.
 
 ### Setup-first installs
 

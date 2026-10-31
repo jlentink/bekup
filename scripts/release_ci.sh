@@ -371,7 +371,8 @@ compose_assets() {
 		[ "$line" = "x-bekup-image: &bekup-image $ref" ] ||
 			die "$name: the x-bekup-image line does not name $ref"
 		# shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE is searched for
-		if grep -v '^[[:space:]]*#' "$f" | grep -q '\${BEKUP_IMAGE'; then
+		# (not BEKUP_IMAGE_MODE, D-212)
+		if grep -v '^[[:space:]]*#' "$f" | grep -Eq '\$\{BEKUP_IMAGE([^A-Za-z0-9_]|$)'; then
 			die "$name: a \${BEKUP_IMAGE} reference remains"
 		fi
 		if grep -Eq '^[[:space:]]*build:' "$f"; then
@@ -390,7 +391,7 @@ compose_assets() {
 # placeholder: the x-bekup-image line of the committed compose files
 # (internal/setup ComposePlaceholderLine; a Go test keeps them equal).
 # shellcheck disable=SC2016 # the literal ${BEKUP_IMAGE...} line
-placeholder='x-bekup-image: &bekup-image ${BEKUP_IMAGE:?set BEKUP_IMAGE to the digest-pinned bekup image repo:tag@sha256:digest, see the README}'
+placeholder='x-bekup-image: &bekup-image ${BEKUP_IMAGE:?set BEKUP_IMAGE to the bekup image, digest-pinned repo:tag@sha256:digest or ghcr.io/jlentink/bekup:latest, see the README}'
 
 committed_compose() {
 	dir=$1 committed=$2

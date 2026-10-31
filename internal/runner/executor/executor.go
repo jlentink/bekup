@@ -343,6 +343,15 @@ func (e *Executor) SelfID() string {
 	return e.self.ID
 }
 
+// ImagePinned reports whether the runner's own container was created from
+// a digest-pinned image reference (D-212); known is false before Init
+// succeeded (the own container is not detected yet).
+func (e *Executor) ImagePinned() (pinned, known bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.self.ImagePinned, e.ready
+}
+
 // Ready reports whether Init succeeded.
 func (e *Executor) Ready() bool {
 	e.mu.Lock()
@@ -440,7 +449,8 @@ func (e *Executor) Init(ctx context.Context) error {
 	e.log.InfoContext(ctx, "runner executor ready",
 		slog.String("self_container", shortID(self.ID)),
 		slog.String("docker_version", ver),
-		slog.Int("own_networks", len(base)))
+		slog.Int("own_networks", len(base)),
+		slog.Bool("image_pinned", self.ImagePinned))
 	return nil
 }
 

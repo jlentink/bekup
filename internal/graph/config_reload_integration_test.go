@@ -55,7 +55,13 @@ type reloadRequestGQL struct {
 // a reloader of its own bekup.toml (task 6.13, D-200).
 func newReloadGraphEnv(t *testing.T) (*runEnv, string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "bekup.toml")
+	// A directory name that cannot occur in an ID by chance (t.TempDir's
+	// own "001" can: the leak check below looks for the directory name).
+	dir := filepath.Join(t.TempDir(), "reload-cfg-dir")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "bekup.toml")
 	if err := os.WriteFile(path, []byte(reloadBaseTOML), 0o600); err != nil {
 		t.Fatal(err)
 	}

@@ -1396,8 +1396,14 @@ type HealthResponse struct {
 	MaxConcurrentRuns uint32       `protobuf:"varint,6,opt,name=max_concurrent_runs,json=maxConcurrentRuns,proto3" json:"max_concurrent_runs,omitempty"`
 	// Expiry of the runner's own server certificate.
 	CertificateNotAfter *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=certificate_not_after,json=certificateNotAfter,proto3" json:"certificate_not_after,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Whether the image reference the runner's own container was created
+	// from carries a sha256 digest (D-212). Unset while unknown (Docker not
+	// ready, own container not detected yet, an older runner). serve treats
+	// false as a followed image whatever BEKUP_IMAGE_MODE says. Only the
+	// verdict, never the reference itself.
+	ImagePinned   *bool `protobuf:"varint,8,opt,name=image_pinned,json=imagePinned,proto3,oneof" json:"image_pinned,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *HealthResponse) Reset() {
@@ -1477,6 +1483,13 @@ func (x *HealthResponse) GetCertificateNotAfter() *timestamppb.Timestamp {
 		return x.CertificateNotAfter
 	}
 	return nil
+}
+
+func (x *HealthResponse) GetImagePinned() bool {
+	if x != nil && x.ImagePinned != nil {
+		return *x.ImagePinned
+	}
+	return false
 }
 
 type ProbeRequest struct {
@@ -4706,7 +4719,7 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x03pem\x18\v \x01(\tR\x03pem\x12,\n" +
 	"\x12spki_sha256_base64\x18\f \x01(\tR\x10spkiSha256Base64\x12&\n" +
 	"\x0fspki_sha256_hex\x18\r \x01(\tR\rspkiSha256Hex\"\x0f\n" +
-	"\rHealthRequest\"\xd3\x02\n" +
+	"\rHealthRequest\"\x8c\x03\n" +
 	"\x0eHealthResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1f\n" +
 	"\vapi_version\x18\x02 \x01(\tR\n" +
@@ -4716,7 +4729,9 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\vactive_runs\x18\x05 \x01(\rR\n" +
 	"activeRuns\x12.\n" +
 	"\x13max_concurrent_runs\x18\x06 \x01(\rR\x11maxConcurrentRuns\x12N\n" +
-	"\x15certificate_not_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x13certificateNotAfter\"b\n" +
+	"\x15certificate_not_after\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x13certificateNotAfter\x12&\n" +
+	"\fimage_pinned\x18\b \x01(\bH\x00R\vimagePinned\x88\x01\x01B\x0f\n" +
+	"\r_image_pinned\"b\n" +
 	"\fProbeRequest\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
 	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\"\x95\x02\n" +
@@ -5219,6 +5234,7 @@ func file_runner_v1_runner_proto_init() {
 	if File_runner_v1_runner_proto != nil {
 		return
 	}
+	file_runner_v1_runner_proto_msgTypes[10].OneofWrappers = []any{}
 	file_runner_v1_runner_proto_msgTypes[19].OneofWrappers = []any{
 		(*VersionQuery_Preset)(nil),
 		(*VersionQuery_CustomSql)(nil),

@@ -48,15 +48,18 @@ const (
 	KindInsecureTransport       = "insecure_transport"
 	KindInsecureDBTLS           = "insecure_db_tls"
 	KindInsecureDBRoles         = "insecure_db_roles"
-	KindAuditHeadExportFailed   = "audit_head_export_failed"
-	KindCLIAction               = "cli_action"
-	KindLoginBurstAddress       = "login_burst_address"
-	KindLoginBurstAccount       = "login_burst_account"
-	KindLoginBurstGlobal        = "login_burst_global"
-	KindCertExpiring            = "cert_expiring"
-	KindCertExpired             = "cert_expired"
-	KindPinExpiring             = "pin_expiring"
-	KindPinExpired              = "pin_expired"
+	// KindUnpinnedImage: serve or worker runs a bekup image that follows
+	// a tag instead of a digest (BEKUP_IMAGE_MODE=following, D-212).
+	KindUnpinnedImage         = "unpinned_image"
+	KindAuditHeadExportFailed = "audit_head_export_failed"
+	KindCLIAction             = "cli_action"
+	KindLoginBurstAddress     = "login_burst_address"
+	KindLoginBurstAccount     = "login_burst_account"
+	KindLoginBurstGlobal      = "login_burst_global"
+	KindCertExpiring          = "cert_expiring"
+	KindCertExpired           = "cert_expired"
+	KindPinExpiring           = "pin_expiring"
+	KindPinExpired            = "pin_expired"
 	// KindSSRFAllowlistWidened: an admin added entries to the runtime
 	// SSRF allowlist (D-196).
 	KindSSRFAllowlistWidened = "ssrf_allowlist_widened"
@@ -97,6 +100,7 @@ var securitySystemKinds = map[audit.Action]string{
 	audit.ActionSecurityInsecureHTTP:           KindInsecureTransport,
 	audit.ActionSecurityInsecureDBTLS:          KindInsecureDBTLS,
 	audit.ActionSecurityInsecureDBRoles:        KindInsecureDBRoles,
+	audit.ActionSecurityUnpinnedImage:          KindUnpinnedImage,
 	audit.ActionAuditHeadExportFailed:          KindAuditHeadExportFailed,
 }
 
@@ -137,6 +141,7 @@ var systemSeverity = map[string]Severity{
 	KindInsecureTransport:           SeverityError,
 	KindInsecureDBTLS:               SeverityError,
 	KindInsecureDBRoles:             SeverityError,
+	KindUnpinnedImage:               SeverityWarning,
 	KindAuditHeadExportFailed:       SeverityError,
 	KindCLIAction:                   SeverityWarning,
 	KindLoginBurstAddress:           SeverityError,
@@ -327,7 +332,7 @@ func day(now time.Time) string { return now.UTC().Format("2006-01-02") }
 func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 	p := "security.system:" + kind + ":"
 	switch kind {
-	case KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles, KindAuditHeadExportFailed:
+	case KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles, KindUnpinnedImage, KindAuditHeadExportFailed:
 		return p + day(now)
 	case KindTLSPinMismatch, KindSSHHostKeyMismatch, KindDestinationHostKeyMismatch:
 		return p + dedupPart(ev.TargetID) + ":" + day(now)
@@ -355,7 +360,8 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 }
 
 // PostureDedupKey is the once-per-day key of a posture alert
-// (KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles): the
+// (KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles,
+// KindUnpinnedImage): the
 // startup audit entry and the periodic reminder share it.
 func PostureDedupKey(kind string, now time.Time) string {
 	return "security.system:" + kind + ":" + day(now)

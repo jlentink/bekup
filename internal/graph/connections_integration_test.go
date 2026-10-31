@@ -247,11 +247,26 @@ func (h *crHarness) ensureImage(ref string) {
 	if _, err := h.c.ImageInspect(h.t.Context(), ref); err == nil {
 		return
 	}
-	resp, err := h.c.ImagePull(h.t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		h.t.Fatal(err)
+	// Registries rate-limit bursts of pulls (CI: "toomanyrequests"):
+	// retry those with a growing pause, fail on anything else.
+	var err error
+	for attempt := range 5 {
+		if attempt > 0 {
+			select {
+			case <-h.t.Context().Done():
+				h.t.Fatal(h.t.Context().Err())
+			case <-time.After(time.Duration(attempt) * 3 * time.Second):
+			}
+		}
+		var resp client.ImagePullResponse
+		if resp, err = h.c.ImagePull(h.t.Context(), ref, client.ImagePullOptions{}); err == nil {
+			err = resp.Wait(h.t.Context())
+		}
+		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "toomanyrequests") {
+			break
+		}
 	}
-	if err := resp.Wait(h.t.Context()); err != nil {
+	if err != nil {
 		h.t.Fatal(err)
 	}
 }

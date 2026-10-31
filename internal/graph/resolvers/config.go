@@ -34,7 +34,7 @@ func (r *Resolver) configStatus(ctx context.Context) (*model.ConfigStatus, error
 		return nil, err
 	}
 	out := &model.ConfigStatus{
-		Database: databasePostureModel(v.Database),
+		Database: databasePostureModel(v.Database), Image: imagePostureModel(v.Image),
 		LiveKeys: nonNil(v.LiveKeys), Processes: processModels(v.Processes), ListeningProcesses: v.Listening,
 	}
 	if v.LastRequest != nil {
@@ -76,6 +76,15 @@ func databasePostureModel(p configreload.DatabasePosture) *model.DatabasePosture
 		mode = model.DatabaseConfigModeSingleAccount
 	}
 	return &model.DatabasePosture{Mode: mode, TLSMode: p.TLSMode, InsecureTransport: p.TLSWeakened, SingleAccount: p.SingleAccount}
+}
+
+func imagePostureModel(p configreload.ImagePosture) *model.ImagePosture {
+	out := &model.ImagePosture{Following: p.Following, Version: p.Version}
+	if p.SetupVersion != "" {
+		v := p.SetupVersion
+		out.SetupVersion = &v
+	}
+	return out
 }
 
 func reloadRequestModel(v *configreload.RequestView) *model.ConfigReloadRequest {

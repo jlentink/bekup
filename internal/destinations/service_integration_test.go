@@ -107,12 +107,20 @@ func TestServiceCRUD(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 
-	// Duplicate name (case-insensitive; another prefix: the location of
-	// "Offsite" is taken, D-209).
-	in2 := validS3()
-	in2.Prefix = "dup"
-	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "offsite", Type: TypeS3, S3: in2}); !errors.Is(err, ErrNameTaken) {
-		t.Fatalf("duplicate: %v", err)
+	// Duplicate name (case-insensitive), on another bucket and on the
+	// taken location: the name is checked first, so both report the name
+	// (D-209; TestLocationOverlapRefused covers the location rule).
+	for _, bucket := range []string{"dup-bucket", "backups"} {
+		in2 := validS3()
+		in2.Bucket = bucket
+		if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "offsite", Type: TypeS3, S3: in2}); !errors.Is(err, ErrNameTaken) {
+			t.Fatalf("duplicate on %s: %v", bucket, err)
+		}
+	}
+	// Another name on the taken location: the location rule.
+	var locErr *FieldError
+	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "Elsewhere", Type: TypeS3, S3: validS3()}); !errors.As(err, &locErr) || locErr.Field != "s3.prefix" {
+		t.Fatalf("same location: %v", err)
 	}
 
 	// Update without a secret keeps the stored one.
@@ -218,7 +226,7 @@ func TestServiceCRUD(t *testing.T) {
 		t.Fatalf("second delete: %v", err)
 	}
 	reuse := validS3()
-	reuse.Prefix = "reuse" // "Other" owns the bucket root (D-209)
+	reuse.Bucket = "reuse-bucket" // "Other" owns the root of "backups" (D-209)
 	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "Offsite", Type: TypeS3, S3: reuse}); err != nil {
 		t.Fatalf("name reuse: %v", err)
 	}

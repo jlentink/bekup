@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/pelletier/go-toml/v2"
+
+	"github.com/jlentink/bekup/internal/imageref"
 )
 
 func TestAnswersValidate(t *testing.T) {
@@ -21,7 +23,8 @@ func TestAnswersValidate(t *testing.T) {
 		{name: "nginx static", proxy: ProxyNginx, mut: func(a *Answers) { a.TLSMode, a.ACMEEmail = TLSStatic, "" }},
 		{name: "none", proxy: ProxyNone},
 		{name: "staging", proxy: ProxyTraefik, mut: func(a *Answers) { a.ACMEStaging = true }},
-		{name: "no image", proxy: ProxyTraefik, mut: func(a *Answers) { a.Image.Digest = "" }, field: "image"},
+		{name: "no image", proxy: ProxyTraefik, mut: func(a *Answers) { a.Image = imageref.Ref{} }, field: "image"},
+		{name: "unpinned third-party image", proxy: ProxyTraefik, mut: func(a *Answers) { a.Image = imageref.Ref{Repo: "registry.example.com/bekup", Tag: "1.2.3"} }, field: "image"},
 		{name: "bad proxy", proxy: ProxyTraefik, mut: func(a *Answers) { a.Proxy = "caddy" }, field: "proxy"},
 		{name: "domain without dot", proxy: ProxyTraefik, mut: func(a *Answers) { a.Domain = "localhost" }, field: "domain"},
 		{name: "domain newline", proxy: ProxyTraefik, mut: func(a *Answers) { a.Domain = "a.example.com\nX=1" }, field: "domain"},
@@ -153,7 +156,7 @@ func FuzzAnswers(f *testing.F) {
 					t.Fatalf("accepted %q", s)
 				}
 			}
-			for _, v := range envVars(&a) {
+			for _, v := range envVars(&a, "1.2.3") {
 				line := v.Key + "=" + v.Value
 				if strings.ContainsAny(v.Value, forbidden) || strings.Count(line, "=") < 1 {
 					t.Fatalf(".env line %q", line)

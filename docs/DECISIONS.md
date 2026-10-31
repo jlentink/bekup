@@ -234,6 +234,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-209](#d-209-retention-visibility-and-disk-cleanup-live-keep-estimate-retention-holds-and-retentionblocked-interrupted-runs-empty-folder-pruning-unrecorded-files-and-fixed-destination-locations) | Retention visibility and disk cleanup: live keep estimate, retention holds and `retention.blocked`, interrupted runs, empty-folder pruning, unrecorded files and fixed destination locations | proposed |
 | [D-210](#d-210-schema-version-per-database-framework-presets-and-a-bounded-custom-query-read-on-the-dumps-snapshot) | Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot | proposed |
 | [D-211](#d-211-web-dev-tooling-minimatch-forced-to-the-fixed-11x-line-with-a-pnpm-patch-for-eslint-plugin-jsx-a11y) | Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y | proposed |
+| [D-212](#d-212-follow-ghcriojlentinkbekuplatest-an-opt-in-mutable-tag-for-the-bekup-image-with-a-setup-version-guard) | Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard | proposed |
 
 ---
 
@@ -12672,3 +12673,126 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   whose hash pnpm pins in the lockfile.
 - **Related:** D-021, D-061, D-065; `web/pnpm-workspace.yaml`,
   `web/patches/`, `web/pnpm-lock.yaml`, `Dockerfile`.
+
+## D-212: Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard
+
+- **Date:** 2026-10-31
+- **Status:** proposed
+- **Decided by:** user (follow `:latest` from the README and in
+  `compose.yaml`, after the risks were explained: auto-upgrades bypassing
+  `setup upgrade`, mixed versions, a moved tag deciding what runs); agent
+  (the guard details below; plan Part L)
+- **Context:** D-203/D-205 accept only digest-pinned image references, so
+  the README quick start needed a digest looked up first. The user wants to
+  start from `ghcr.io/jlentink/bekup:latest`, which the release workflow
+  moves to the newest release (D-204), and keep following it. Following a
+  tag weakens D-001: `docker compose pull` can fetch new code at any time,
+  and a bare `pull && up -d` would run a new version's migrations and
+  startup without the deploy assets and config checks of `setup upgrade`,
+  or leave services of different versions running.
+- **Decision:**
+  1. `imageref.ParseFollowing` (separate from `ParsePinned`) accepts
+     `ghcr.io/jlentink/bekup:<tag>` without a digest (`Ref.IsMutable`),
+     `ParseBekup` either form. Only the bekup image may follow, only a tag
+     of the official repository; third-party, dump and own-registry images
+     stay digest-pinned, release assets (`setup compose --image`) stay
+     pinned.
+  2. Setup (flags, wizard, compose-first and the committed placeholder
+     files) accepts it when the operator names it and writes it as is
+     (`x-bekup-image`, or `BEKUP_IMAGE` in `.env`); the state records
+     `image_mode: following`. `CheckVersionTag` treats `latest` as "follow
+     the newest release". The wizard shows one explanation screen with
+     "follow" as the default for a tag (and asks for the digest when the
+     operator picks "pin"); with a digest there is no question.
+  3. Weakening treatment: `setup check` WARNING; setup writes
+     `BEKUP_IMAGE_MODE=following` to `.env`, the compose files pass it to
+     `migrate`, `serve` and `runner`; serve and worker log a WARN, record
+     `security.unpinned_image` (fail closed, once per start, outside dev
+     mode; detail `source`: `env`, `runner` or `env_and_runner`), the
+     security check alerts daily (`unpinned_image`, warning) and the admin
+     configuration page shows it (`ConfigStatus.image`).
+  4. Version guard (applies to every deployment, not only following
+     ones; `deployguard.Check`): setup writes
+     `BEKUP_SETUP_VERSION=<its version>` to `.env` at init and upgrade;
+     the compose files pass it to `migrate`, `serve` and `runner`;
+     `bekup migrate up`, `bekup db bootstrap` (run through the `migrate`
+     service), `serve`, `worker` and `runner` refuse to start when their
+     version differs (upgrades and downgrades; the message names
+     `docker compose run --rm setup upgrade`), before they connect to
+     anything: migrate/bootstrap before the database, serve/worker before
+     the database, the runner before it opens the Docker socket or its
+     gRPC listener. The compare is exact after stripping a leading `v`:
+     pre-release and build metadata count, so development builds
+     (`0.0.0-dev`, `0.0.0+<sha>`) never run against a deployment set up by
+     another build. An unset or empty variable (deployments before D-212,
+     custom ones) only warns (silent in dev mode), except that outside dev
+     mode `BEKUP_IMAGE_MODE=following` without it refuses (a followed tag
+     without the guard would let any moved tag run); a malformed one
+     refuses. The runner does not get `depends_on: migrate` (it does not
+     use the app database and has its own guard; coupling it to the
+     database health would only delay target operations). `setup upgrade`
+     in a following setup-first deployment needs no flags and rewrites the
+     generated files, `BEKUP_SETUP_VERSION` and `BEKUP_IMAGE_MODE`.
+  5. The hardening lint allows the followed tag only when the deployment
+     is recorded as following (init/upgrade, where the operator names the
+     image, record it); otherwise every bekup service is an ERROR.
+  6. Switching back: `setup upgrade --image <repo>:<tag>@sha256:<digest>`
+     run from that pinned image (or one of the same version, so the
+     recorded `BEKUP_SETUP_VERSION` matches what runs; with the committed
+     file `BEKUP_IMAGE=<pinned> docker compose run --rm setup upgrade`)
+     pins again and removes `BEKUP_IMAGE_MODE`.
+  7. The mode is not only self-declared: `BEKUP_IMAGE_MODE` comes from
+     `.env` or the shell and could be overridden to hide the weakening.
+     The runner runs from the same `x-bekup-image` and already inspects
+     its own container (docker.self_container detection); it reads that
+     container's `Config.Image` and reports only the verdict as the
+     additive Health field `optional bool image_pinned` (true when the
+     reference parses with `imageref.ParsePinned`; unset while unknown:
+     Docker not ready, own container not found, an older runner; never the
+     reference itself). serve and worker treat the image as following when
+     `BEKUP_IMAGE_MODE=following` OR the runner reports `false` (so
+     `pinned`/unset plus an unpinned runner image is following) for the
+     startup WARN, the fail-closed audit, the daily alert and the badge.
+     The runner is asked once at startup with a 3 s bound (an unavailable
+     runner never blocks startup), then by every Health call of the health
+     snapshot and the hourly security check and by an image watch (every
+     minute while unknown, hourly after); a verdict that turns up after
+     startup is warned and audited once per process (an audit failure is
+     logged and retried at the next check) and the alert follows from the
+     audit observer and the daily reminder. Dev mode ignores the verdict
+     (development images are never pinned).
+- **Alternatives considered:** README with a digest placeholder only
+  (rejected by the user: the first step needs a lookup); following without
+  a guard (rejected: silent upgrades, mixed versions); resolving the tag to
+  a digest at setup time (rejected: the setup container has no network, and
+  the user wants `compose.yaml` to follow `:latest`); refusing only
+  upgrades and allowing downgrades (rejected: an older binary against a
+  newer schema is refused by the schema check anyway, and a downgrade of
+  deploy assets is as unprepared as an upgrade); comparing versions by
+  SemVer precedence (rejected: build metadata would let two different
+  builds pass).
+- **Consequences:** the README starts from `:latest`; upgrades of a
+  following deployment are `docker compose pull`, `docker compose run --rm
+  setup upgrade`, `docker compose up -d`; a bare `pull && up -d` stops at
+  migrate and the runner (the UI is down until setup upgrade ran). Security impact: a
+  compromised publisher (or GHCR account) that moves `:latest` decides the
+  code of the operator's next upgrade (residual risk, SECURITY.md CL-16;
+  mitigations: `cosign verify` of the release identity, digest mode). The
+  guard also protects digest-pinned deployments from a replaced
+  `compose.yaml` or a shell `BEKUP_IMAGE` that names another version. New
+  audit action `security.unpinned_image`, alert kind `unpinned_image`,
+  GraphQL type `ImagePosture` (admin only, through `configStatus`), compose
+  variables `BEKUP_SETUP_VERSION` / `BEKUP_IMAGE_MODE` (allowlisted), runner
+  Health field `image_pinned` (additive; a compromised runner could lie
+  about it, but it already holds the Docker socket). Residual: an
+  unpinned image found only after startup is audited and alerted but does
+  not stop the running processes; a runner that never becomes ready leaves
+  only the self-declared mode.
+- **Related:** D-001, D-061, D-190, D-203, D-204, D-205, D-208;
+  `internal/imageref`, `internal/deployguard`, `internal/setup`,
+  `internal/app`, `cmd/bekup/migrate_cmd.go`, README,
+  `docs/installation/upgrades.md`, `docs/installation/compose.md`,
+  SECURITY.md (B10, CL-16); `cmd/bekup/runner_cmd.go`,
+  `cmd/bekup/db_cmd.go`, `internal/runner/executor/self.go`,
+  `internal/app/image.go`, `proto/runner/v1/runner.proto`
+  (`HealthResponse.image_pinned`).

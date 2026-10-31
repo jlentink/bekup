@@ -95,6 +95,8 @@ read by the compose files, the dev tooling or the tests, not by bekup:
 | Variable | Used by |
 |---|---|
 | `BEKUP_IMAGE` | compose: image reference |
+| `BEKUP_SETUP_VERSION` | compose (written by `bekup setup` to `.env`): the version setup prepared the deployment for; `migrate up`, `db bootstrap`, `serve`, `worker` and `runner` refuse to start with another version (D-212) |
+| `BEKUP_IMAGE_MODE` | compose (written by `bekup setup`): `following` when the bekup image follows a tag; serve and worker warn, audit and alert, and outside dev mode every guarded command refuses it without `BEKUP_SETUP_VERSION` (D-212). serve and worker also treat the image as following when the runner reports an unpinned own image |
 | `BEKUP_DOMAIN` | compose proxy profiles: public host name |
 | `BEKUP_DEV_BASE_URL`, `BEKUP_DEV_TLS_DIR` | dev compose |
 | `BEKUP_DEV_BACKEND`, `BEKUP_WEB_BUILD`, `BEKUP_WEB_OUT_DIR` | web dev server and build |

@@ -15,7 +15,8 @@ changed (--reset-passwords sets their passwords); existing roles are only accept
 --adopt-existing-roles, and other members or ADMIN OPTION holders of them are refused. Then it
 runs the role checks and the migrate preflight. With database.single_account = true it uses the
 single account itself (weakened). The admin connection needs tls_mode verify-full unless
---allow-insecure-admin-connection is given.
+--allow-insecure-admin-connection is given. Like migrate up it refuses to run on another
+version than BEKUP_SETUP_VERSION (D-212).
 
 ```
 bekup db bootstrap [flags]

@@ -101,6 +101,16 @@ ORDER BY lower(d.name), d.id;
 -- name: DestinationHasPresentArtifacts :one
 SELECT EXISTS (SELECT 1 FROM artifacts WHERE destination_id = $1 AND state = 'present')::boolean;
 
+-- DestinationNameTaken reports another destination that is not deleted
+-- with the same name (case-insensitively, like destinations_name_active_key).
+-- Checked before the location so that a duplicate name is reported as
+-- such; the unique index stays the authority under concurrency.
+-- name: DestinationNameTaken :one
+SELECT EXISTS (
+    SELECT 1 FROM destinations
+    WHERE lower(name) = lower(@name::text) AND deleted_at IS NULL AND id <> @id
+)::boolean;
+
 -- LockDestinationLocations serializes the location checks of creates and
 -- location changes (transaction-scoped advisory lock, D-209).
 -- name: LockDestinationLocations :exec

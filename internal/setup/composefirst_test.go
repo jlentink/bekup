@@ -98,7 +98,7 @@ func TestInspectComposeRecognition(t *testing.T) {
 	// The image line.
 	for name, bad := range map[string]string{
 		"example":   strings.Replace(string(src), variantImage, ComposeImageVar, 1),
-		"unpinned":  strings.Replace(string(src), variantImage, "ghcr.io/jlentink/bekup:1.2.3", 1),
+		"unpinned":  strings.Replace(string(src), variantImage, "registry.example.com/bekup:1.2.3", 1),
 		"two lines": strings.Replace(string(src), "name: bekup\n", "name: bekup\nx-bekup-image: &other x\n", 1),
 		"no anchor": strings.Replace(string(src), "x-bekup-image: &bekup-image ", "x-bekup-image: ", 1),
 		"indented":  strings.Replace(string(src), "x-bekup-image: &bekup-image ", "x-bekup-image:  &bekup-image ", 1),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/app"
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/web"
 )
 
@@ -21,10 +22,11 @@ func newServeCmd(g *globalFlags) *cobra.Command {
 		Long: "Run the HTTP server (embedded web UI, GraphQL API, health endpoints), the scheduler loop\n" +
 			"(scheduler.enabled) and the River background workers as bekup_app. --no-worker runs serve\n" +
 			"without workers (scale them out with `bekup worker`). Refuses to start when the database role\n" +
-			"is privileged, the schema version differs from this binary (run `bekup migrate` first) or the\n" +
-			"master keyring does not match. SIGINT/SIGTERM drain in-flight requests within\n" +
-			"server.shutdown_timeout and running jobs within workers.shutdown_timeout. SIGHUP re-reads\n" +
-			"bekup.toml and applies the keys that are safe to change at runtime (D-200).",
+			"is privileged, the schema version differs from this binary (run `bekup migrate` first), the\n" +
+			"master keyring does not match or BEKUP_SETUP_VERSION names another version (D-212).\n" +
+			"SIGINT/SIGTERM drain in-flight requests within server.shutdown_timeout and running jobs\n" +
+			"within workers.shutdown_timeout. SIGHUP re-reads bekup.toml and applies the keys that are\n" +
+			"safe to change at runtime (D-200).",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			res, err := config.LoadBekup(g.options(c))
@@ -42,10 +44,15 @@ func newServeCmd(g *globalFlags) *cobra.Command {
 			defer stop()
 			hup, stopHUP := reloadSignals()
 			defer stopHUP()
+			dep, err := deployguard.FromEnv(lookupEnv)
+			if err != nil {
+				return fmt.Errorf("refusing to start: %w", err)
+			}
 			return app.Run(ctx, app.Options{
 				Config:        res.Config,
 				Dev:           res.Dev,
 				Logger:        logger,
+				Deployment:    dep,
 				UI:            web.DistFS(),
 				Version:       version,
 				NoWorker:      noWorker,
@@ -68,7 +75,7 @@ func newWorkerCmd(g *globalFlags) *cobra.Command {
 		Long: "Run only the River background workers (backups, restores, retention, notifications,\n" +
 			"housekeeping) as bekup_app, without HTTP and without the scheduler, to scale work out next to\n" +
 			"`bekup serve --no-worker`. Same startup checks as serve (database role, schema version,\n" +
-			"master keyring). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within\n" +
+			"master keyring, setup version). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within\n" +
 			"workers.shutdown_timeout, then cancel them. SIGHUP re-reads bekup.toml and applies the\n" +
 			"keys that are safe to change at runtime (D-200).",
 		Args: cobra.NoArgs,
@@ -86,10 +93,15 @@ func newWorkerCmd(g *globalFlags) *cobra.Command {
 			defer stop()
 			hup, stopHUP := reloadSignals()
 			defer stopHUP()
+			dep, err := deployguard.FromEnv(lookupEnv)
+			if err != nil {
+				return fmt.Errorf("refusing to start: %w", err)
+			}
 			return app.Run(ctx, app.Options{
 				Config:        res.Config,
 				Dev:           res.Dev,
 				Logger:        logger,
+				Deployment:    dep,
 				Version:       version,
 				Mode:          app.ModeWorker,
 				LoadOptions:   g.options(c),

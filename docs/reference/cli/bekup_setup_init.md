@@ -69,7 +69,7 @@ bekup setup init [flags]
       --frontend-subnet string          advanced: FRONTEND_SUBNET (default 10.213.250.0/24; not traefik-external/npm)
       --generate-ca-passphrase          generate a passphrase and show it ONCE on stderr (only when stderr is a terminal; run with --log-driver none)
   -h, --help                            help for init
-      --image string                    bekup image pinned by digest, repo[:tag]@sha256:<digest> (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)
+      --image string                    bekup image pinned by digest, repo[:tag]@sha256:<digest>, or ghcr.io/jlentink/bekup:latest to follow the releases (D-212, an explicit weakening) (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)
       --import-master-key string        import an existing master keyring (a file inside --dir, e.g. restored from escrow) instead of generating one
       --keep-existing                   keep existing files and create only the missing ones
       --keys-dir string                 secrets directory, relative to --dir (mount another volume there to keep secrets elsewhere) (default "secrets")

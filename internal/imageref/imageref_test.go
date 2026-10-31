@@ -82,3 +82,81 @@ func FuzzParsePinned(f *testing.F) {
 		}
 	})
 }
+
+func TestParseFollowing(t *testing.T) {
+	tests := []struct {
+		in, tag string
+		wantErr bool
+	}{
+		{in: "ghcr.io/jlentink/bekup:latest", tag: "latest"},
+		{in: "ghcr.io/jlentink/bekup:0.0.3", tag: "0.0.3"},
+		{in: "ghcr.io/jlentink/bekup:v1.2.3-rc.1", tag: "v1.2.3-rc.1"},
+		{in: "", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup:", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup:latest@" + dg, wantErr: true},
+		{in: "ghcr.io/other/bekup:latest", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup-fork:latest", wantErr: true},
+		{in: "evil.example/ghcr.io/jlentink/bekup:latest", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup/sub:latest", wantErr: true},
+		{in: "postgres:latest", wantErr: true},
+		{in: "bekup:latest", wantErr: true},
+		{in: "GHCR.IO/jlentink/bekup:latest", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup:latest\n", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup:${TAG}", wantErr: true},
+		{in: "ghcr.io/jlentink/bekup:" + strings.Repeat("a", 129), wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			r, err := ParseFollowing(tc.in)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("ParseFollowing(%q) = %+v, want error", tc.in, r)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseFollowing(%q): %v", tc.in, err)
+			}
+			if r.Repo != OfficialRepo || r.Tag != tc.tag || r.Digest != "" || !r.IsMutable() || r.String() != tc.in {
+				t.Fatalf("got %+v (%q)", r, r.String())
+			}
+		})
+	}
+}
+
+func TestParseBekup(t *testing.T) {
+	pinned := "ghcr.io/jlentink/bekup:1.0.0@" + dg
+	if r, err := ParseBekup(pinned); err != nil || r.IsMutable() || r.String() != pinned {
+		t.Fatalf("pinned: %+v %v", r, err)
+	}
+	if r, err := ParseBekup("ghcr.io/jlentink/bekup:latest"); err != nil || !r.IsMutable() || r.Tag != LatestTag {
+		t.Fatalf("latest: %+v %v", r, err)
+	}
+	// Third-party images and other repositories need a digest.
+	for _, s := range []string{"postgres:17", "ghcr.io/someone/bekup:latest", "127.0.0.1:5001/bekup:0.0.3"} {
+		if _, err := ParseBekup(s); !errors.Is(err, ErrNotPinned) {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	if (Ref{}).IsMutable() || !(Ref{}).IsZero() || (Ref{}).String() != "" {
+		t.Fatal("zero Ref")
+	}
+}
+
+func FuzzParseFollowing(f *testing.F) {
+	f.Add("ghcr.io/jlentink/bekup:latest")
+	f.Add("ghcr.io/jlentink/bekup:1@" + dg)
+	f.Fuzz(func(t *testing.T, s string) {
+		r, err := ParseFollowing(s)
+		if err != nil {
+			return
+		}
+		if r.String() != s || r.Repo != OfficialRepo || r.Digest != "" {
+			t.Fatalf("round trip: %q -> %+v", s, r)
+		}
+		if strings.ContainsAny(s, " \t\r\n\"'$#`\\@") {
+			t.Fatalf("accepted unsafe characters: %q", s)
+		}
+	})
+}

@@ -36,10 +36,20 @@ func UpgradeConfirm(ui UI) func(*setup.UpgradeSummary) error {
 		if s.EnvImage {
 			b.WriteString(".env: BEKUP_IMAGE is updated\n")
 		}
+		if s.EnvDeployment {
+			fmt.Fprintf(&b, ".env: BEKUP_SETUP_VERSION=%s (migrate, serve, worker and runner start only with it)\n", strings.TrimPrefix(s.NewVersion, "v"))
+		}
+		if s.Following {
+			b.WriteString("The image follows a tag (NOT pinned by digest, D-212).\n")
+		}
 		for _, f := range s.Findings {
 			fmt.Fprintf(&b, "%s\n", f)
 		}
-		b.WriteString("Restart: every service (docker compose pull && docker compose up -d);\nbekup.toml and runner.toml are re-validated, never rewritten.")
+		if s.Following {
+			b.WriteString("Restart: every service (docker compose up -d: the image you pulled);\nbekup.toml and runner.toml are re-validated, never rewritten.")
+		} else {
+			b.WriteString("Restart: every service (docker compose pull && docker compose up -d);\nbekup.toml and runner.toml are re-validated, never rewritten.")
+		}
 		if err := ui.Note("Upgrade", b.String()); err != nil {
 			return err
 		}

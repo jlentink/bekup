@@ -293,6 +293,8 @@ broken other-repo compose.yaml "ghcr.io/evil/bekup:1.2.3@$digest"
 # shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE...} is the point
 broken variable compose.yaml '${BEKUP_IMAGE:-bekup:dev}'
 broken second-line compose.yaml "$cref" "x-bekup-image: &x $cref"
+# shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE} outside the image line
+broken variable-elsewhere compose.yaml "$cref" 'x-extra: ${BEKUP_IMAGE}'
 broken unpinned-image compose.traefik-external.yaml "$cref" '  traefik:
     image: traefik:v3'
 # shellcheck disable=SC2016 # literal variable reference

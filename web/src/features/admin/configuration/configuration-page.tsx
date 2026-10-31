@@ -3,6 +3,7 @@ import {
   Database,
   FileCog,
   Loader2,
+  Package,
   RotateCw,
   Server,
   ShieldAlert,
@@ -205,7 +206,84 @@ const T = {
   dbSingleTitle: "Single-account mode is on",
   dbSingleLead:
     "bekup runs migrations and the app with one database account, so a compromised server process could change the schema and the audit log. Create the two least-privilege roles with bekup db bootstrap.",
+  imageTitle: "Image",
+  imageLead:
+    "How the bekup image of the serve process that answered is referenced, and the version bekup setup prepared the deployment for.",
+  imageRef: "Reference",
+  imagePinned: "Pinned by digest",
+  imageFollowing: "Follows a tag",
+  imageWeakened: "Not pinned",
+  imageSetupVersion: "Set up for",
+  imageVersion: "Running",
+  imageUnknown: "not recorded",
+  imageFollowingTitle: "The image follows a tag instead of a digest",
+  imageFollowingLead:
+    "Whoever moves the tag decides which code runs. Processes refuse to start until bekup setup upgrade has prepared a new version, every start is audited and admins are alerted daily. Pin a digest with bekup setup upgrade --image <repo>:<tag>@sha256:<digest>.",
+  imageUnknownTitle: "The setup version is not recorded",
+  imageUnknownLead:
+    "BEKUP_SETUP_VERSION is not set, so bekup cannot refuse an image that setup has not prepared. Run docker compose run --rm setup upgrade once to record it.",
 } as const;
+
+interface ImagePosture {
+  following: boolean;
+  setupVersion?: string | null;
+  version: string;
+}
+
+/** Image posture (D-212): pinned or following, setup vs running version. */
+function ImageSection({ posture }: { posture: ImagePosture | undefined }) {
+  return (
+    <Section
+      icon={Package}
+      title={T.imageTitle}
+      lead={T.imageLead}
+      status={posture?.following ? <Tag tone="insecure">{T.imageWeakened}</Tag> : null}
+    >
+      {!posture ? (
+        <Skeleton className="h-8 w-full" />
+      ) : (
+        <div className="flex flex-col gap-4" data-testid="config-image">
+          <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+            <dt className="eyebrow self-center">{T.imageRef}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {posture.following ? (
+                <Tag tone="insecure">{T.imageFollowing}</Tag>
+              ) : (
+                <Tag tone="success">{T.imagePinned}</Tag>
+              )}
+            </dd>
+            <dt className="eyebrow self-center">{T.imageSetupVersion}</dt>
+            <dd>
+              {posture.setupVersion ? (
+                <code className="font-mono text-xs">{posture.setupVersion}</code>
+              ) : (
+                <span className="text-muted-foreground">{T.imageUnknown}</span>
+              )}
+            </dd>
+            <dt className="eyebrow self-center">{T.imageVersion}</dt>
+            <dd>
+              <code className="font-mono text-xs">{posture.version}</code>
+            </dd>
+          </dl>
+          {posture.following ? (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{T.imageFollowingTitle}</AlertTitle>
+              <AlertDescription>{T.imageFollowingLead}</AlertDescription>
+            </Alert>
+          ) : null}
+          {!posture.setupVersion ? (
+            <Alert>
+              <ShieldAlert aria-hidden="true" />
+              <AlertTitle>{T.imageUnknownTitle}</AlertTitle>
+              <AlertDescription>{T.imageUnknownLead}</AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      )}
+    </Section>
+  );
+}
 
 interface DatabasePosture {
   mode: DatabaseConfigMode;
@@ -394,6 +472,8 @@ export function ConfigurationPage() {
       </Section>
 
       <DatabaseSection posture={status?.database} />
+
+      <ImageSection posture={status?.image} />
 
       <Section icon={Zap} title={T.liveTitle} lead={T.liveLead}>
         {!status ? (

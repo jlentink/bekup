@@ -163,6 +163,9 @@ func TestDestinationsS3Minio(t *testing.T) {
 		}
 		return m
 	}
+	// One location per destination (D-209): the wrong-key destination
+	// gets its own prefix in the same bucket.
+	wrongPrefix := map[string]any{"prefix": "bekup/wrong-key"}
 	var plain, locked, wrong destModel
 	e.mustGQL(adminC, createDestMut, map[string]any{"in": map[string]any{"name": "minio", "type": "S3", "s3": s3In("plain-bucket", minioRootPass, nil)}}).
 		field(t, "createDestination", &plain)
@@ -172,7 +175,7 @@ func TestDestinationsS3Minio(t *testing.T) {
 	e.mustGQL(adminC, createDestMut, map[string]any{"in": map[string]any{"name": "minio locked", "type": "S3",
 		"s3": s3In("locked-bucket", minioRootPass, map[string]any{"objectLockMode": "GOVERNANCE", "objectLockRetentionDays": 1})}}).
 		field(t, "createDestination", &locked)
-	e.mustGQL(adminC, createDestMut, map[string]any{"in": map[string]any{"name": "minio wrong key", "type": "S3", "s3": s3In("plain-bucket", "not-the-right-secret", nil)}}).
+	e.mustGQL(adminC, createDestMut, map[string]any{"in": map[string]any{"name": "minio wrong key", "type": "S3", "s3": s3In("plain-bucket", "not-the-right-secret", wrongPrefix)}}).
 		field(t, "createDestination", &wrong)
 
 	var res testResultModel
@@ -201,7 +204,7 @@ func TestDestinationsS3Minio(t *testing.T) {
 		t.Fatalf("no-delete test: %+v", res)
 	}
 	// A destination with the CA removed fails TLS: the custom CA is used.
-	e.mustGQL(adminC, updateDestMut, map[string]any{"id": wrong.ID, "in": map[string]any{"s3": s3In("plain-bucket", minioRootPass, map[string]any{"caBundlePem": nil})}})
+	e.mustGQL(adminC, updateDestMut, map[string]any{"id": wrong.ID, "in": map[string]any{"s3": s3In("plain-bucket", minioRootPass, map[string]any{"caBundlePem": nil, "prefix": "bekup/wrong-key"})}})
 	e.mustGQL(adminC, testDestMut, map[string]any{"id": wrong.ID}).field(t, "testDestination", &res)
 	if res.OK || res.Steps[0].Code != "network" {
 		t.Fatalf("test without the CA: %+v", res)

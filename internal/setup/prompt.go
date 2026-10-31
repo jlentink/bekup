@@ -225,7 +225,7 @@ func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive 
 	case g.ComposeFirst:
 	case imageRaw != "":
 	case ask:
-		s, err := t.Ask("bekup image (pinned: repo[:tag]@sha256:...)", "", func(s string) error { _, err := imageref.ParsePinned(s); return err })
+		s, err := t.Ask("bekup image (pinned: repo[:tag]@sha256:..., or "+imageref.OfficialRepo+":"+imageref.LatestTag+" to follow the releases)", "", func(s string) error { _, err := imageref.ParseBekup(s); return err })
 		if err != nil {
 			return err
 		}
@@ -234,7 +234,7 @@ func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive 
 		return pinHelp(errors.New("no image: pass --image or set BEKUP_IMAGE"))
 	}
 	if !g.ComposeFirst {
-		ref, err := imageref.ParsePinned(imageRaw)
+		ref, err := imageref.ParseBekup(imageRaw)
 		if err != nil {
 			return pinHelp(err)
 		}
@@ -446,11 +446,14 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 // PinHelp explains how to obtain a digest-pinned reference.
 func PinHelp(err error) error { return pinHelp(err) }
 
-// pinHelp explains how to obtain a digest-pinned reference.
+// pinHelp explains how to obtain a digest-pinned reference (and how to
+// follow the releases instead).
 func pinHelp(err error) error {
 	return fmt.Errorf(`%w
 The image must be pinned by digest. Get the digest of the image you deploy with:
   docker image inspect --format '{{index .RepoDigests 0}}' <repo>:<tag>
   (or: docker buildx imagetools inspect <repo>:<tag>)
-and pass it as --image <repo>:<tag>@sha256:<digest> (or BEKUP_IMAGE)`, err)
+and pass it as --image <repo>:<tag>@sha256:<digest> (or BEKUP_IMAGE);
+to follow the releases instead (an explicit weakening), pass %s:%s
+(other repositories and third-party images always need a digest, D-212)`, err, imageref.OfficialRepo, imageref.LatestTag)
 }

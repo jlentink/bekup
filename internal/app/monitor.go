@@ -25,7 +25,7 @@ func (a *App) newHealth() error {
 	cfg := a.opts.Config
 	h, err := monitor.NewHealth(monitor.HealthOptions{
 		DB:     a.pool,
-		Runner: a.runner,
+		Runner: a.runnerHealth(),
 		Certs: []monitor.CertFile{
 			{Component: monitor.CertRunnerClient, Path: cfg.Runner.CertFile},
 			{Component: monitor.CertRunnerCA, Path: cfg.Runner.CAFile},

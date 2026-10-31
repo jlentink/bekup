@@ -75,7 +75,7 @@ func TestVariantServiceSets(t *testing.T) {
 					t.Errorf("%s runs %q, not the x-bekup-image", name, img)
 				}
 			}
-			if strings.Contains(string(out), "${BEKUP_IMAGE") {
+			if imageVarRefRe.MatchString(string(out)) {
 				t.Error("a ${BEKUP_IMAGE reference remains")
 			}
 			// The proxy services of the bundled variant start with the stack.
@@ -295,9 +295,10 @@ func TestOverlaysHaveNoImage(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		// BEKUP_IMAGE may appear only in comments (the headers explain it).
+		// BEKUP_IMAGE may appear only in comments (the headers explain it;
+		// BEKUP_IMAGE_MODE is another variable, D-212).
 		code := regexp.MustCompile(`(?m)^\s*#.*$`).ReplaceAllString(string(b), "")
-		if regexp.MustCompile(`(?m)^\s*(-\s+)?(image|build)\s*:`).Match(b) || strings.Contains(code, "BEKUP_IMAGE") {
+		if regexp.MustCompile(`(?m)^\s*(-\s+)?(image|build)\s*:`).Match(b) || regexp.MustCompile(`BEKUP_IMAGE([^A-Za-z0-9_]|$)`).MatchString(code) {
 			t.Errorf("%s names an image or a build", p)
 		}
 		return nil
@@ -331,7 +332,7 @@ func TestOverlaysHaveNoImage(t *testing.T) {
 // Base style lint for the repository compose file.
 func TestBaseComposeStyle(t *testing.T) {
 	src := string(readFile(t, repoRoot(t), composeSource))
-	if strings.Count(src, "\n"+ComposeImageLine+"\n") != 1 || strings.Count(src, "${BEKUP_IMAGE") != 1 {
+	if strings.Count(src, "\n"+ComposeImageLine+"\n") != 1 || len(imageVarRefRe.FindAllStringIndex(src, -1)) != 1 {
 		t.Fatal("the image must appear only in the x-bekup-image line")
 	}
 	if !strings.Contains(src, "\n  image: *bekup-image\n") {

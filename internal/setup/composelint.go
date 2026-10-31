@@ -64,6 +64,9 @@ type lintOptions struct {
 	realRoot string
 	// image is the x-bekup-image reference: every bekup service must use it.
 	image string
+	// following permits image to be a followed tag of the official
+	// repository (D-212); otherwise every image must be digest-pinned.
+	following bool
 	// keysDir is the keys directory from BEKUP_KEYS_DIR (when relative).
 	keysDir string
 	// expected is the shipped variant resolved with the same environment,
@@ -108,7 +111,7 @@ func lintComposeFiles(in *composeInput, env map[string]string, v Variant, image 
 		return append(out, Finding{Severity: SeverityError, Path: label, Msg: "resolving the shipped " + string(v) + " variant: " + err.Error()})
 	}
 	o := lintOptions{
-		label: label, variant: v, root: lintRoot, realRoot: in.realRoot(), image: image,
+		label: label, variant: v, root: lintRoot, realRoot: in.realRoot(), image: image, following: in.following,
 		keysDir: keysDirRel(env), expected: exp, expectedRaw: expRaw, override: in.override != nil,
 	}
 	if o.raw, err = loadRawProject(in.root, in.docs()...); err != nil {
@@ -158,6 +161,9 @@ func lintProject(p *types.Project, o lintOptions) []Finding {
 		add(SeverityError, "`models` are not allowed")
 	}
 	img, imgErr := imageref.ParsePinned(o.image)
+	if imgErr != nil && o.following {
+		img, imgErr = imageref.ParseFollowing(o.image)
+	}
 	for _, svc := range allServices(p) {
 		lintService(svc, o, imgErr == nil, img, add)
 		if o.expected == nil {
@@ -185,12 +191,19 @@ func lintService(svc *types.ServiceConfig, o lintOptions, haveImage bool, bekupI
 			add(SeverityError, "service %q: `%s` is not allowed (host access or a bypass of the hardening)", shown, key)
 		}
 	}
-	// Image.
+	// Image. Only the x-bekup-image may follow a tag, and only when the
+	// deployment follows the releases (D-212).
 	ref, err := imageref.ParsePinned(svc.Image)
+	if err != nil && haveImage && bekupImage.IsMutable() && svc.Image == bekupImage.String() {
+		ref, err = bekupImage, nil
+	}
 	isBekup := slices.Contains(bekupServices, name) || haveImage && err == nil && ref.Repo == bekupImage.Repo
+	_, followErr := imageref.ParseFollowing(svc.Image)
 	switch {
 	case svc.Image == "":
 		add(SeverityError, "service %q has no image (a digest-pinned reference is required)", shown)
+	case err != nil && followErr == nil && !o.following:
+		add(SeverityError, "service %q: image %q follows a tag, but this deployment is recorded as digest-pinned: pin a digest, or switch to following the releases with `docker compose run --rm setup upgrade` (D-212)", shown, bounded(svc.Image))
 	case err != nil:
 		add(SeverityError, "service %q: image %q is not digest-pinned", shown, bounded(svc.Image))
 	case isBekup && haveImage && svc.Image != bekupImage.String():

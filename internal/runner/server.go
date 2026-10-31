@@ -57,6 +57,10 @@ const (
 // DockerStatusFunc reports the state of the Docker daemon (task 2.6).
 type DockerStatusFunc func(ctx context.Context) runnerpb.DockerStatus
 
+// ImagePinnedFunc reports whether the runner's own container image is
+// pinned by digest (D-212); known is false while that is not determined.
+type ImagePinnedFunc func() (pinned, known bool)
+
 // Options configures a Server.
 type Options struct {
 	Config  *config.Runner
@@ -66,6 +70,9 @@ type Options struct {
 	// Docker reports the daemon state for Health; nil = UNKNOWN (or the
 	// executor's status when DockerClient is set).
 	Docker DockerStatusFunc
+	// ImagePinned reports the own image's pinning for Health; nil = the
+	// executor's verdict when DockerClient is set, else unknown.
+	ImagePinned ImagePinnedFunc
 	// DockerClient enables the Docker executor (task 2.6): New builds it
 	// with the validator's target guard, Serve starts its initialization
 	// and orphan reaper. nil = no executor (tests).
@@ -166,6 +173,10 @@ func New(opts Options) (*Server, error) {
 	if docker == nil && exec != nil {
 		docker = exec.Status
 	}
+	imagePinned := opts.ImagePinned
+	if imagePinned == nil && exec != nil {
+		imagePinned = exec.ImagePinned
+	}
 	s := &Server{
 		exec:      exec,
 		runPool:   runPool.Masked(),
@@ -210,6 +221,7 @@ func New(opts Options) (*Server, error) {
 	impl := opts.impl
 	if impl == nil {
 		svc := newService(opts.Version, docker, s.limits, s.certEnd)
+		svc.imagePinned = imagePinned
 		checker := pinning.New(pinning.Options{})
 		var runner runExecutor
 		if exec != nil {

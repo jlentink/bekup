@@ -138,10 +138,33 @@ type DatabasePosture {
   singleAccount: Boolean!
 }
 
+"""
+How the bekup image of the serve process that answered is referenced
+(D-212; versions only).
+"""
+type ImagePosture {
+  """
+  True when the image follows a tag such as :latest instead of a digest
+  (BEKUP_IMAGE_MODE=following, or the runner reports that its own container
+  image has no digest; the latter can turn true after startup): an explicit
+  weakening, warned, audited and alerted daily.
+  """
+  following: Boolean!
+  """
+  The version bekup setup prepared the deployment for (BEKUP_SETUP_VERSION;
+  null when not set): processes of another version refuse to start.
+  """
+  setupVersion: String
+  "The version of the serve process that answered."
+  version: String!
+}
+
 "The configuration page."
 type ConfigStatus {
   "The app database posture of the serve process that answered."
   database: DatabasePosture!
+  "The image posture of the serve process that answered (D-212)."
+  image: ImagePosture!
   "Keys a reload applies without a restart (`section.key`)."
   liveKeys: [String!]!
   """

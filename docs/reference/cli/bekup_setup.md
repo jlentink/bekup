@@ -14,14 +14,19 @@ summary and writes everything, compose.yaml included (it is kept when it
 exists). In an existing deployment it offers check, upgrade and certificate
 renewal. The main path, in an empty directory:
 
+  IMAGE=ghcr.io/jlentink/bekup:latest
   docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
     --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
     -e BEKUP_IMAGE="$IMAGE" -e DOCKER_GID="$(stat -c %g /var/run/docker.sock)" \
     -v "$PWD":/deploy "$IMAGE" setup
   docker compose up -d
 
---log-driver none keeps the container's output (a generated passphrase) out
-of Docker's logs. The wizard needs stdin and stdout on a terminal (a
+With a tag such as :latest the wizard offers to follow it (compose.yaml names
+the tag; D-212, an explicit weakening: migrate, serve, worker and runner
+then refuse to start on a version setup has not prepared, so upgrade with
+docker compose pull, docker compose run --rm setup upgrade, docker compose
+up -d) or to pin a digest. --log-driver none keeps the container's output (a generated
+passphrase) out of Docker's logs. The wizard needs stdin and stdout on a terminal (a
 generated passphrase is shown once on the alternate screen, never into a
 pipe or the scrollback). NO_COLOR and TERM=dumb drop the colors; --plain
 uses a plain-text interface (numbered choices, no escape sequences; a

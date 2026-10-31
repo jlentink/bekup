@@ -340,6 +340,8 @@ type ConfigReloadRequest struct {
 type ConfigStatus struct {
 	// The app database posture of the serve process that answered.
 	Database *DatabasePosture `json:"database"`
+	// The image posture of the serve process that answered (D-212).
+	Image *ImagePosture `json:"image"`
 	// Keys a reload applies without a restart (`section.key`).
 	LiveKeys []string `json:"liveKeys"`
 	// The newest row of every process listening now (any age) and of every
@@ -766,6 +768,21 @@ type GeneratedJobPassphrase struct {
 	Encryption *JobEncryption `json:"encryption"`
 	Version    int            `json:"version"`
 	Passphrase string         `json:"passphrase"`
+}
+
+// How the bekup image of the serve process that answered is referenced
+// (D-212; versions only).
+type ImagePosture struct {
+	// True when the image follows a tag such as :latest instead of a digest
+	// (BEKUP_IMAGE_MODE=following, or the runner reports that its own container
+	// image has no digest; the latter can turn true after startup): an explicit
+	// weakening, warned, audited and alerted daily.
+	Following bool `json:"following"`
+	// The version bekup setup prepared the deployment for (BEKUP_SETUP_VERSION;
+	// null when not set): processes of another version refuse to start.
+	SetupVersion *string `json:"setupVersion,omitempty"`
+	// The version of the serve process that answered.
+	Version string `json:"version"`
 }
 
 type ImagePrePullResult struct {

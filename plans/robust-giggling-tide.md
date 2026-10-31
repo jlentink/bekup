@@ -156,12 +156,46 @@ User decisions:
   - authz matrix rows; web tests.
 - **Docs:** `docs/guides/jobs-and-schedules.md` (schema version section with the preset list), the runner API notes, D-210.
 
+## Part L: follow `ghcr.io/jlentink/bekup:latest` (D-212, proposed; user decision)
+
+**Context.** The user wants the README to start from `ghcr.io/jlentink/bekup:latest` without looking up a digest, and wants `compose.yaml` to reference `:latest` (an explicit choice after the risks were explained: auto-upgrades bypassing `setup upgrade`, mixed versions, a moved tag deciding what runs). The release workflow keeps moving `:latest` to the newest release, as it does today (the D-204 `latest` rule).
+
+**What changes:**
+1. **README quick start.** `IMAGE=ghcr.io/jlentink/bekup:latest` and exactly the user's block (pull, then hardened `docker run … "$IMAGE" setup`, then `docker compose up -d`, then `admin create`). Also a note that the image exists after the first release, and that `--log-driver none` stays.
+2. **Setup accepts a mutable tag for the bekup image.**
+   - `imageref` gets a separate path, `ParseFollowing` / `IsMutable`, that accepts `ghcr.io/jlentink/bekup:latest` (any official repo tag) only for the bekup image. Third-party images stay digest-pinned.
+   - Setup writes it as is into `compose.yaml` (`x-bekup-image`) or `.env` (`BEKUP_IMAGE`, placeholder mode).
+   - The state records `image_mode: following` with the setup version. The wizard shows a one-screen explanation with "follow latest (simpler)" as the default when the image is `:latest`; there's no question when a digest is given.
+   - The version check: `CheckVersionTag` treats `latest` as "follow the newest release" (no mismatch error).
+3. **The weakening treatment** (D-001):
+   - `setup check`: a WARNING "bekup image follows :latest (not pinned)".
+   - Compose passes `BEKUP_IMAGE_MODE=following` to serve, worker and migrate, through an allowed variable set by setup in `.env`. That gives a startup WARN, the audit action `security.unpinned_image` (fail closed, once per start), a daily security alert (`KindUnpinnedImage`, warning) and the admin config page badge (`ConfigStatus.image`).
+   - Docs: a security note.
+4. **Guardrail against silent upgrades** (keeps "follow latest" safe to use):
+   - Setup writes `BEKUP_SETUP_VERSION=<version>` into `.env`, passed to `migrate`, `serve` and `worker`.
+   - `bekup migrate up` refuses when its own version differs from `BEKUP_SETUP_VERSION` ("this image is vX.Y.Z but the deployment was set up for vA.B.C: run `docker compose run --rm setup upgrade` first"). So a bare `docker compose pull && up -d` never runs new migrations or new deploy scripts unprepared; serve waits on migrate as today. Downgrades are refused the same way.
+   - `setup upgrade` (running the new image through the `setup` service) updates the deploy assets and config checks, writes the new `BEKUP_SETUP_VERSION`, then the operator runs `docker compose up -d`.
+   - serve and worker log an ERROR and refuse to start on a mismatch too, so a mixed set of versions doesn't run.
+   - With digest pins nothing changes (the versions always match).
+5. **The lint** (`composepin`/`composelint`) allows the mutable bekup image only when `.env`/state say following; still an ERROR otherwise. Release assets stay digest-pinned; the committed placeholder files accept `BEKUP_IMAGE=ghcr.io/jlentink/bekup:latest`.
+6. **Docs and governance:**
+   - D-212 (proposed): the choice, risks, mitigations, how to switch back to digest pinning (`setup upgrade --image <repo>@sha256:…`).
+   - Updates to README, compose.md, upgrades.md (follow-latest flow: `docker compose pull`, then `docker compose run --rm setup upgrade`, then `up -d`), SECURITY.md (residual risk: tag moved by a compromised publisher; mitigation: cosign verify, digest mode), AGENTS.md.
+7. **Tests:**
+   - imageref following;
+   - setup init/upgrade/check in following mode (state, `.env`, lint allowance, warning);
+   - migrate/serve version guard (match, mismatch, downgrade, digest mode unaffected);
+   - audit, alert and badge;
+   - the wizard explanation screen;
+   - an integration run of `docker compose config -q` with `:latest`.
+
 ## Order
 
 1. Part E (one agent; running).
 2. After E: Part S and Part R in parallel (separate packages; R owns retention, storage, destinations and the job/destination web pages; S owns setup, cmd, compose and the wizard).
 3. Part V after R: it shares the job editor and run detail pages, the migrations and the runner proto.
 4. Full checks, then the security and code reviews, the fixes and the handover.
+5. Part L after the running full check (one agent; touches setup, imageref, migrate/serve startup, compose, README). Then a short re-check and the final full run.
 
 Migrations: every agent takes the next free number at write time.
 

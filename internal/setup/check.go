@@ -21,6 +21,7 @@ import (
 	"github.com/jlentink/bekup"
 	"github.com/jlentink/bekup/internal/certs"
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/imageref"
 )
 
@@ -342,7 +343,7 @@ func (c *checker) generated() {
 			c.add(SeverityError, ComposeFile, "line %d: image %q is not digest-pinned", line, bounded(m[1]))
 		}
 	}
-	img, err := imageref.ParsePinned(c.st.Image)
+	img, err := c.st.image()
 	if err != nil {
 		return
 	}
@@ -385,7 +386,7 @@ func (c *checker) upgradeHint() string {
 // one setup last ran with, or newer), and the resolved project
 // (compose.yaml + compose.override.yaml + .env) passes the hardening lint.
 func (c *checker) operatorCompose() {
-	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.st.dbMode(), c.env, c.opts.LookupEnv)
+	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.st.dbMode(), c.env, c.opts.LookupEnv, c.st.following())
 	if err != nil {
 		c.add(SeverityError, ComposeFile, "%v", err)
 		return
@@ -406,7 +407,7 @@ func (c *checker) operatorCompose() {
 		c.envImage(info)
 		return
 	}
-	switch rec, err := imageref.ParsePinned(c.st.Image); {
+	switch rec, err := c.st.image(); {
 	case err != nil:
 	case info.Image.String() == rec.String():
 		if info.Hash != c.st.ComposeSHA256 && info.Level == RecognizedCustom {
@@ -425,7 +426,7 @@ func (c *checker) operatorCompose() {
 // bekup service resolves to it (info.Image is the resolved value; the lint
 // has required every bekup service to use it).
 func (c *checker) envImage(info *ComposeInfo) {
-	rec, err := imageref.ParsePinned(c.st.Image)
+	rec, err := c.st.image()
 	if err != nil {
 		return // reported by the state validation
 	}
@@ -435,10 +436,12 @@ func (c *checker) envImage(info *ComposeInfo) {
 		c.add(SeverityError, EnvFile, "%s is missing: %s takes the bekup image from it; add %s=%s (the recorded image)", ImageEnvVar, ComposeFile, ImageEnvVar, rec)
 		return
 	case dot != rec.String():
-		img, err := imageref.ParsePinned(dot)
+		img, err := imageref.ParseBekup(dot)
 		switch {
 		case err != nil:
 			c.add(SeverityError, EnvFile, "%s=%q is not digest-pinned (want %s)", ImageEnvVar, bounded(dot), rec)
+		case img.IsMutable() != rec.IsMutable():
+			c.add(SeverityError, EnvFile, "%s=%s, but setup last ran with %s: run `docker compose run --rm setup upgrade` before `docker compose up -d` (it records whether the image follows a tag, D-212)", ImageEnvVar, img, rec)
 		case IsDowngrade(rec.Tag, img.Tag):
 			c.add(SeverityError, EnvFile, "%s=%s is older than the image setup last ran with (%s): downgrades can break the database schema; restore %s=%s", ImageEnvVar, img, rec, ImageEnvVar, rec)
 		default:
@@ -489,11 +492,12 @@ func (c *checker) composeFiles() {
 	case in.override == nil:
 		in.override = []byte{}
 	}
-	img, err := imageref.ParsePinned(c.st.Image)
+	img, err := c.st.image()
 	if err != nil {
 		c.add(SeverityError, StateFileName, "the recorded image is not digest-pinned")
 		return
 	}
+	in.following = c.st.following()
 	expected, err := RenderGenerated(c.opts.assets, c.st.Variant, c.st.dbMode(), img)
 	if err != nil {
 		c.add(SeverityError, "", "rendering the embedded compose file: %v", err)
@@ -507,6 +511,41 @@ func (c *checker) composeFiles() {
 	}
 	env := projectEnv(in.dotenv, in.lookup, in.docs()...)
 	c.findings = append(c.findings, lintComposeFiles(&in, env, c.st.Variant, img.String(), expected, false)...)
+}
+
+// deploymentEnv checks the deployment lines of .env (D-212): the setup
+// version migrate/serve/worker compare with, the image mode, and that a
+// followed image runs the version setup prepared.
+func (c *checker) deploymentEnv(env map[string]string) {
+	want := strings.TrimPrefix(c.st.BekupVersion, "v")
+	switch got, ok := env[deployguard.EnvSetupVersion]; {
+	case (!ok || got == "") && c.st.following():
+		c.add(SeverityError, EnvFile, "%s is missing, but the image follows a tag: migrate, serve, worker and runner refuse to start without it (D-212); run `docker compose run --rm setup upgrade` to add %s=%s", deployguard.EnvSetupVersion, deployguard.EnvSetupVersion, want)
+	case !ok || got == "":
+		c.add(SeverityWarning, EnvFile, "%s is missing: migrate, serve, worker and runner cannot tell whether setup prepared the deployment for their version (they only warn); run `docker compose run --rm setup upgrade` to add %s=%s", deployguard.EnvSetupVersion, deployguard.EnvSetupVersion, want)
+	case strings.TrimPrefix(got, "v") != want:
+		c.add(SeverityError, EnvFile, "%s=%s, but setup last ran as bekup %s: migrate, serve, worker and runner refuse to start with another version than %s; run `docker compose run --rm setup upgrade`", deployguard.EnvSetupVersion, bounded(got), want, deployguard.EnvSetupVersion)
+	}
+	mode := env[deployguard.EnvImageMode]
+	switch {
+	case c.st.following() && mode != deployguard.ImageModeFollowing:
+		c.add(SeverityError, EnvFile, "%s=%q, but the image follows %s: serve would warn, audit and alert about the unpinned image only once the runner reports it; set %s=%s (setup upgrade writes it)", deployguard.EnvImageMode, bounded(mode), c.st.Image, deployguard.EnvImageMode, deployguard.ImageModeFollowing)
+	case !c.st.following() && mode != "" && mode != deployguard.ImageModePinned:
+		c.add(SeverityWarning, EnvFile, "%s=%q, but the image is pinned by digest: remove the line (setup upgrade does)", deployguard.EnvImageMode, bounded(mode))
+	}
+	if c.st.following() {
+		c.add(SeverityWarning, "", "the bekup image follows %s (NOT pinned by digest, D-212): whoever moves the tag decides what runs; upgrade with `docker compose pull`, `docker compose run --rm setup upgrade`, `docker compose up -d`, verify releases with cosign, or pin a digest (docs/installation/upgrades.md)", c.st.Image)
+	}
+	// The check container runs the deployment's image (the setup service
+	// uses the x-bekup-image): another version than the recorded one is
+	// what migrate/serve/worker/runner would run, and refuse.
+	if v := strings.TrimPrefix(c.opts.Version, "v"); v != want && env[deployguard.EnvSetupVersion] != "" {
+		why := "compose.yaml names another image"
+		if c.st.following() {
+			why = "the followed tag has moved"
+		}
+		c.add(SeverityError, "", "this image is bekup %s, but setup prepared the deployment for %s (%s): run `docker compose run --rm setup upgrade` before `docker compose up -d` (migrate, serve, worker and runner refuse to start until then)", v, want, why)
+	}
 }
 
 // dotenv parses .env (KEY=value lines only).
@@ -544,6 +583,7 @@ func (c *checker) dotenv() map[string]string {
 	if env[ImageEnvVar] != "" && c.st.ImageSource != ImageSourceEnv {
 		c.add(SeverityWarning, EnvFile, "%s has no effect: the image is pinned in %s", ImageEnvVar, ComposeFile)
 	}
+	c.deploymentEnv(env)
 	want := ""
 	if c.st.Variant == VariantFull && c.st.Proxy != ProxyNone {
 		want = string(c.st.Proxy)
@@ -741,7 +781,8 @@ func (c *checker) shellOverrides(env map[string]string) {
 	keys := sortedKeys(env)
 	netVars := (&Network{}).vars()
 	more := make([]string, 0, 7+len(netVars))
-	more = append(more, "BEKUP_PROXY_NETWORK", "SERVE_PROXY_IP", "TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER", "BEKUP_DOMAIN", "DOCKER_GID", "BEKUP_KEYS_DIR")
+	more = append(more, "BEKUP_PROXY_NETWORK", "SERVE_PROXY_IP", "TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER", "BEKUP_DOMAIN", "DOCKER_GID", "BEKUP_KEYS_DIR",
+		deployguard.EnvSetupVersion, deployguard.EnvImageMode)
 	for _, v := range netVars {
 		more = append(more, v.name)
 	}

@@ -7,7 +7,7 @@ Run background workers only
 Run only the River background workers (backups, restores, retention, notifications,
 housekeeping) as bekup_app, without HTTP and without the scheduler, to scale work out next to
 `bekup serve --no-worker`. Same startup checks as serve (database role, schema version,
-master keyring). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within
+master keyring, setup version). SIGINT/SIGTERM stop fetching jobs, let running jobs finish within
 workers.shutdown_timeout, then cancel them. SIGHUP re-reads bekup.toml and applies the
 keys that are safe to change at runtime (D-200).
 

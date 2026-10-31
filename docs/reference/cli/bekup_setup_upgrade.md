@@ -27,6 +27,18 @@ image's setup, which rewrites the BEKUP_IMAGE line of .env:
 Setup-first: --write-compose --image <new pinned image> also rewrites
 compose.yaml (run with docker run, see bekup setup --help).
 
+Following a tag (D-212; ghcr.io/jlentink/bekup:latest): pull first, then
+let the new image's setup prepare the deployment (it writes the new
+BEKUP_SETUP_VERSION to .env, without which migrate, serve, worker and
+runner refuse to start), then start:
+
+  docker compose pull
+  docker compose run --rm setup upgrade
+  docker compose up -d
+
+Pin a digest again with --image <repo>:<tag>@sha256:<digest> (setup-first;
+with the committed file BEKUP_IMAGE=<pinned> in the shell).
+
 On a terminal the upgrade is guided (D-208): it shows the versions, the
 compose changes, new secrets and the restart, asks for the backup and then
 for confirmation before writing anything (--non-interactive skips it).
@@ -46,7 +58,7 @@ bekup setup upgrade [flags]
       --force                       replace locally edited generated files (a .bak-<timestamp> copy is kept)
       --generate-ca-passphrase      generate a passphrase and show it ONCE on stderr (only when stderr is a terminal; run with --log-driver none)
   -h, --help                        help for upgrade
-      --image string                the new bekup image pinned by digest (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)
+      --image string                the new bekup image pinned by digest, or ghcr.io/jlentink/bekup:latest to follow the releases (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)
       --non-interactive             no guided confirmation on a terminal
       --ownership string            auto, chown, print or none (default "auto")
       --plain                       plain-text interface for the guided upgrade (NO_COLOR only drops the colors)

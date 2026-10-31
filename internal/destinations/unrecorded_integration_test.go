@@ -370,9 +370,10 @@ func TestLocationChangeRefused(t *testing.T) {
 			t.Fatalf("%s change: %v", field, err)
 		}
 	}
-	// The same location spelled differently is no change.
+	// The same location spelled differently is no change (the base path
+	// must be clean, sftp.ValidateTarget; the directory is trimmed).
 	same := sftpIn()
-	same.BasePath, same.Dir = "/upload/", "/nightly/"
+	same.Dir = "/nightly/"
 	if _, err := e.svc.Update(ctx, e.actor, sd.ID, UpdateInput{SFTP: same, Name: ptr("NAS 2")}); err != nil {
 		t.Fatalf("same sftp location: %v", err)
 	}

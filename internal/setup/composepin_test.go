@@ -115,9 +115,13 @@ func shippedEdit(t testing.TB, v Variant, anchor, add string) string {
 }
 
 const (
-	serveAnchor  = "    command: [serve]\n"
-	runnerAnchor = "    command: [runner]\n"
-	hardened     = "    user: \"1000:1000\"\n    read_only: true\n    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n"
+	serveAnchor = "    command: [serve]\n"
+	// serveEnvAnchor opens serve's environment map (D-212 variables).
+	serveEnvAnchor = serveAnchor + "    environment:\n"
+	runnerAnchor   = "    command: [runner]\n"
+	// runnerEnvAnchor opens the runner's environment map (D-212 variables).
+	runnerEnvAnchor = runnerAnchor + "    environment:\n"
+	hardened        = "    user: \"1000:1000\"\n    read_only: true\n    cap_drop: [ALL]\n    security_opt: [\"no-new-privileges:true\"]\n"
 )
 
 // addedService is a hardened service the operator adds, with extra lines.
@@ -145,7 +149,7 @@ func TestStructuralLint(t *testing.T) {
 			over: "services:\n" + addedService("    volumes: [\"${XDG_RUNTIME_DIR:-./data}:/x\"]\n"), want: "${XDG_RUNTIME_DIR} is not one of bekup's compose variables"},
 		{name: "H1 XDG bind uses vars", anchor: "services:\n", compose: addedService("    volumes: [\"${XDG_RUNTIME_DIR:-./data}:/x\"]\n"),
 			over: "services:\n" + addedService("    volumes: [\"${XDG_RUNTIME_DIR:-./data}:/x\"]\n"), want: "cannot be checked for ${...} variables"},
-		{name: "H1 SSH agent on runner", anchor: runnerAnchor, compose: "    environment: {SSH_AUTH_SOCK: /ssh-agent}\n",
+		{name: "H1 SSH agent on runner", anchor: runnerEnvAnchor, compose: "      SSH_AUTH_SOCK: /ssh-agent\n",
 			over: "services:\n  runner:\n    volumes: [\"${SSH_AUTH_SOCK:-./a}:/ssh-agent\"]\n", want: `service "runner"`},
 		{name: "H1 allowed var in a new place", anchor: "services:\n", compose: addedService("    volumes: [\"${BEKUP_KEYS_DIR:-./data}:/x\"]\n"),
 			over: "services:\n" + addedService("    volumes: [\"${BEKUP_KEYS_DIR:-./data}:/x\"]\n"), want: "cannot be checked for ${...} variables"},
@@ -156,13 +160,13 @@ func TestStructuralLint(t *testing.T) {
 		{name: "H1 runner socket var", anchor: "services:\n", compose: "",
 			over: "services:\n  runner:\n    volumes: !override [{type: bind, source: \"/run/user/${DOCKER_GID:-1000}/docker.sock\", target: /var/run/docker.sock, read_only: true}]\n", want: "volumes use ${...} variables"},
 		// H2: environment/command/entrypoint on bekup services.
-		{name: "H2 BEKUP_DEV", anchor: serveAnchor, compose: "    environment: {BEKUP_DEV: \"1\"}\n",
+		{name: "H2 BEKUP_DEV", anchor: serveEnvAnchor, compose: "      BEKUP_DEV: \"1\"\n",
 			over: "services:\n  serve:\n    environment: {BEKUP_DEV: \"1\"}\n", want: `"serve"`},
-		{name: "H2 allow cidrs", anchor: runnerAnchor, compose: "    environment: {BEKUP_TARGETS_ALLOW_CIDRS: 0.0.0.0/0}\n",
+		{name: "H2 allow cidrs", anchor: runnerEnvAnchor, compose: "      BEKUP_TARGETS_ALLOW_CIDRS: 0.0.0.0/0\n",
 			over: "services:\n  runner:\n    environment: {BEKUP_TARGETS_ALLOW_CIDRS: 0.0.0.0/0}\n", want: "in: environment"},
-		{name: "H2 client CA", anchor: serveAnchor, compose: "    environment: {BEKUP_TLS_CLIENT_CA_FILE: /tmp/ca}\n",
+		{name: "H2 client CA", anchor: serveEnvAnchor, compose: "      BEKUP_TLS_CLIENT_CA_FILE: /tmp/ca\n",
 			over: "services:\n  serve:\n    environment: {BEKUP_TLS_CLIENT_CA_FILE: /tmp/ca}\n", want: "environment"},
-		{name: "H2 images extra", anchor: runnerAnchor, compose: "    environment: {BEKUP_IMAGES_EXTRA_FILE: /tmp/x}\n",
+		{name: "H2 images extra", anchor: runnerEnvAnchor, compose: "      BEKUP_IMAGES_EXTRA_FILE: /tmp/x\n",
 			over: "services:\n  runner:\n    environment: {BEKUP_IMAGES_EXTRA_FILE: /tmp/x}\n", want: "environment"},
 		{name: "H2 --dev", anchor: "", over: "services:\n  serve:\n    command: [serve, --dev]\n", want: "in: command"},
 		{name: "H2 entrypoint", anchor: "", over: "services:\n  migrate:\n    entrypoint: [/bin/sh]\n", want: "in: entrypoint"},

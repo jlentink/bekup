@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -95,8 +96,12 @@ tls_ca_file = %q
 	if err != nil || len(page.Entries) != 1 || page.Entries[0].ActorKind != audit.ActorCLI {
 		t.Fatalf("audit: %v %+v", err, page)
 	}
+	var details map[string]any
+	if err := json.Unmarshal(page.Entries[0].Details, &details); err != nil {
+		t.Fatal(err)
+	}
 	if d := string(page.Entries[0].Details); !strings.Contains(d, "set the password of role bekup_app") || strings.Contains(d, "SCRAM") ||
-		!strings.Contains(d, `"rotated_logins":true`) || !strings.Contains(d, `"adopted_roles":true`) {
+		details["rotated_logins"] != true || details["adopted_roles"] != true {
 		t.Fatalf("details %s", d)
 	}
 

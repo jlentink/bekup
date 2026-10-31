@@ -109,6 +109,9 @@ type ContainerInfo struct {
 	Labels  map[string]string
 	Created time.Time
 	Running bool
+	// Image is the image reference the container was created from
+	// (Config.Image, as given to Docker; ContainerInspect only).
+	Image string
 	// Networks maps network names to the container's endpoints.
 	Networks map[string]NetEndpoint
 }
@@ -359,6 +362,7 @@ func (m *mobyDocker) ContainerInspect(ctx context.Context, id string) (Container
 	}
 	if c.Config != nil {
 		info.Labels = c.Config.Labels
+		info.Image = c.Config.Image
 	}
 	if c.NetworkSettings != nil {
 		info.Networks = endpoints(c.NetworkSettings.Networks)

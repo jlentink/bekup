@@ -14,6 +14,8 @@ var NonKeyEnvVars = []string{
 	EnvConfig,             // explicit config file (like --config)
 	EnvDev,                // dev mode alias (like --dev)
 	"BEKUP_IMAGE",         // compose: image reference
+	"BEKUP_IMAGE_MODE",    // compose/setup: "following" when the image follows a tag (D-212)
+	"BEKUP_SETUP_VERSION", // compose/setup: the version setup prepared the deployment for (D-212)
 	"BEKUP_DOMAIN",        // compose/proxy profiles: public host name
 	"BEKUP_DEV_BASE_URL",  // dev compose: base URL passed to serve
 	"BEKUP_DEV_TLS_DIR",   // dev compose: local TLS certificates

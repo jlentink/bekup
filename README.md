@@ -135,11 +135,11 @@ name for the UI. Every step runs as root (or a member of the `docker`
 group) in the deployment directory.
 
 **One command: the setup wizard.** In an empty directory, run the setup
-wizard of the image you deploy (pinned by digest, its tag naming the
-version), then start the stack:
+wizard of the bekup image, then start the stack:
 
 ```sh
-IMAGE=<registry>/bekup:<version>@sha256:<digest>
+IMAGE=ghcr.io/jlentink/bekup:latest
+sudo docker pull "$IMAGE"
 sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
 sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
   --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
@@ -148,6 +148,10 @@ sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /t
 sudo docker compose up -d
 sudo docker compose run --rm admin create --email you@example.com --display-name "Your Name"
 ```
+
+The image exists once the first release is published (the release workflow
+moves `:latest` to the newest release); before that, build and publish your
+own with `just publish` and use its reference.
 
 The wizard asks for the reverse proxy (bekup's own Traefik, your Traefik,
 Nginx Proxy Manager or none), the domain, the database (bundled, or your
@@ -160,6 +164,22 @@ before `up -d`, usually
 `sudo docker compose run --rm migrate db bootstrap --admin-user <admin>`
 ([docs/installation/external-database.md](docs/installation/external-database.md)).
 Details: [docs/installation/compose.md](docs/installation/compose.md#install-with-the-setup-wizard).
+
+**Following `:latest` or pinning a digest.** With `:latest` the wizard
+explains the choice and defaults to *following* the tag: `compose.yaml`
+names `ghcr.io/jlentink/bekup:latest`, so `docker compose pull` fetches new
+releases. This is an explicit weakening (D-212): whoever moves the tag
+decides what runs. bekup keeps upgrades a deliberate step: migrate, serve,
+worker and the runner refuse to start on a version setup has not prepared,
+so upgrade with `sudo docker compose pull`, `sudo docker compose run --rm
+setup upgrade`, `sudo docker compose up -d`. serve warns at every start,
+audits it and alerts every admin daily. For strict change control choose
+*pin a digest* in the wizard (or set
+`IMAGE=ghcr.io/jlentink/bekup:<version>@sha256:<digest>`). To pin later,
+run `setup upgrade --write-compose --image <pinned>` from **that pinned
+image** (or one of the same version, so the recorded version matches what
+runs), with the same `docker run` options as above; the recipe is in
+[docs/installation/upgrades.md](docs/installation/upgrades.md#following-latest).
 
 ### Advanced: start from a compose file
 
@@ -177,8 +197,10 @@ image comes from `BEKUP_IMAGE`) and, once releases exist, also published
 with every release with the bekup image pinned by digest and attested.
 
 **The image.** With the committed file, step 2 names the bekup image pinned
-by digest, `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`; setup
-refuses anything unpinned and keeps it in `.env` for every later command.
+by digest, `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`, or
+`BEKUP_IMAGE=ghcr.io/jlentink/bekup:latest` to follow the releases (an
+explicit weakening, D-212; no other unpinned reference is accepted); setup
+keeps it in `.env` for every later command.
 The digest comes from the output of `just publish` (your own registry), the
 release notes, or `docker image inspect --format '{{index .RepoDigests 0}}'
 <registry>/bekup:<version>` after a `docker pull` (it prints
@@ -312,10 +334,12 @@ Setup asks for the domain, the ACME e-mail (own Traefik only) and a
 passphrase for the CA key, writes everything except `compose.yaml` and
 hands every file to the container user that reads it. Escrow the master key
 offline and move the CA directory to offline media (`setup` prints how).
-Upgrades of a wizard install (setup wrote `compose.yaml`): run the wizard
-command above with the **new** image; in an existing deployment it offers
-the guided upgrade (it shows the changes and asks for a backup first), then
-`docker compose pull` and `docker compose up -d`. With a downloaded file:
+Upgrades of a wizard install (setup wrote `compose.yaml`) that follows
+`:latest`: `docker compose pull`, `docker compose run --rm setup upgrade`
+(the guided upgrade: it shows the changes and asks for a backup first),
+`docker compose up -d`. With a pinned digest run the wizard command above
+with the **new** image; in an existing deployment it offers the guided
+upgrade, then `docker compose pull` and `docker compose up -d`. With a downloaded file:
 replace `compose.yaml` with the new release file, then
 `docker compose run --rm setup upgrade`, `docker compose pull` and
 `docker compose up -d`; with the committed file run

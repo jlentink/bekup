@@ -37,6 +37,7 @@ type fakeDocker struct {
 	conts      map[string]*fakeContainer
 	foreign    []NetworkInfo
 	inspect    map[string]ContainerInfo // extra containers for ContainerInspect
+	selfImage  string                   // Config.Image of the runner's own container
 	proc       func(p *fakeProc)
 	ignoreTerm bool
 	seq        int
@@ -339,7 +340,7 @@ func (f *fakeDocker) ContainerInspect(_ context.Context, id string) (ContainerIn
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if id == selfID || id == "runnerhost" || id == selfID[:12] {
-		return ContainerInfo{ID: selfID, Name: "runner", Running: true, Networks: map[string]NetEndpoint{
+		return ContainerInfo{ID: selfID, Name: "runner", Running: true, Image: f.selfImage, Networks: map[string]NetEndpoint{
 			"ctl": {NetworkID: ctlNetID, IP: netip.MustParseAddr(selfIP)},
 		}}, nil
 	}

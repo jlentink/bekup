@@ -166,6 +166,11 @@ verify it with `[database] tls_mode = "verify-full"` against
 receives the owner credentials, so the long-running `serve` (role
 `bekup_app`) can never alter the schema or the audit-log protections (D-054,
 D-078).
+`migrate`, `serve` and `runner` receive `BEKUP_SETUP_VERSION` and
+`BEKUP_IMAGE_MODE` from `.env` (written by setup): `migrate` (also for
+`db bootstrap`), `serve` and `runner` refuse to start on another version
+than setup prepared the directory for
+([the version guard](upgrades.md#the-version-guard), D-212).
 
 ### Account administration (`admin`)
 
@@ -246,12 +251,14 @@ published (see [Operations: metrics](../operations.md#metrics)).
 ## Install with the setup wizard
 
 The main path: in an empty directory, run the wizard of the image you
-deploy (pinned by digest, its tag naming the version; verify it first,
-[Verifying release images](#verifying-release-images)), then start the
-stack:
+deploy, then start the stack. `ghcr.io/jlentink/bekup:latest` is the
+simplest start (it exists once the first release is published); for strict
+change control use the image pinned by digest, its tag naming the version
+(verify it first, [Verifying release images](#verifying-release-images)):
 
 ```sh
-IMAGE=ghcr.io/jlentink/bekup:<version>@sha256:<digest from the release notes>
+IMAGE=ghcr.io/jlentink/bekup:latest   # or ghcr.io/jlentink/bekup:<version>@sha256:<digest from the release notes>
+sudo docker pull "$IMAGE"
 sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
 sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
   --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
@@ -272,6 +279,12 @@ digest; without it the wizard asks), `DOCKER_GID` the Docker socket's group.
 One question per screen; **Esc goes back, Ctrl+C quits**, and nothing is
 written before the summary:
 
+0. only for a tag such as `:latest`: one screen explains following the tag
+   (the default: `compose.yaml` names the tag, `docker compose pull`
+   fetches new releases, an explicit weakening, D-212) versus pinning a
+   digest (it then asks for `repo:tag@sha256:<digest>`); with a digest
+   there is no question
+   ([Following `:latest`](upgrades.md#following-latest));
 1. the reverse proxy: bekup's own Traefik, your existing Traefik (its HTTPS
    entrypoint and certificate resolver are asked, defaults `websecure` and
    `letsencrypt`), Nginx Proxy Manager, or none (your own proxy joins the
@@ -952,9 +965,10 @@ Official images are built only by the release workflow from a signed
 The workflow pushes by digest, scans the image with Trivy, signs it with
 cosign (keyless, GitHub OIDC, logged in the public Rekor transparency log),
 attests an SPDX SBOM per platform and GitHub build provenance, and only then
-tags it. `latest` follows the highest released version, but deploy by digest
-only: the release notes of every version list the digest and the exact
-commands.
+tags it. `latest` follows the highest released version; following it is a
+supported, explicitly weakened mode ([Following `:latest`](#following-latest-d-212));
+for strict change control deploy by digest: the release notes of every
+version list the digest and the exact commands.
 
 ```sh
 IMAGE=ghcr.io/jlentink/bekup:X.Y.Z@sha256:<digest from the release notes>
@@ -976,6 +990,33 @@ The release notes give the exact identity of the version
 (`…/release.yml@refs/tags/vX.Y.Z`); prefer it over the regular expression
 when you verify a specific release. Platform manifest digests are listed by
 `docker buildx imagetools inspect "$IMAGE"`.
+
+### Following `:latest` (D-212)
+
+The one exception to "deploy by digest" is the bekup image itself, and only
+a tag of the official repository: setup accepts
+`ghcr.io/jlentink/bekup:latest` (any tag of `ghcr.io/jlentink/bekup`)
+without a digest when you name it explicitly, writes it as is into
+`compose.yaml` (`x-bekup-image`) or `.env` (`BEKUP_IMAGE`, the committed
+file), records `image_mode: following` in `bekup-setup.json` and
+`BEKUP_IMAGE_MODE=following` in `.env`. Every other image (PostgreSQL,
+Traefik, nginx, the dump images, your own registry) stays digest-pinned,
+and the hardening lint accepts the followed tag only when the deployment
+is recorded as following. Release assets are always pinned.
+
+What protects you: `migrate`, `serve`, `worker` and `runner` refuse to
+start on another version than `BEKUP_SETUP_VERSION`
+([the version guard](upgrades.md#the-version-guard)), and a followed
+image without it, so pulling a moved tag never runs new migrations,
+deploy assets or a new runner unprepared; `setup check` warns, serve and
+worker audit `security.unpinned_image` at every start, admins get a daily
+security alert and the configuration page shows the badge. serve and
+worker also ask the runner whether its own container image carries a
+digest, so an unpinned image is treated as following even if
+`BEKUP_IMAGE_MODE` says otherwise. What it
+cannot prevent: a compromised publisher that moves `:latest` decides what
+your next `setup upgrade` runs. Verify releases with cosign before
+upgrading, or pin a digest.
 
 ### Using your own image
 

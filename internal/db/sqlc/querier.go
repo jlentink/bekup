@@ -179,6 +179,11 @@ type Querier interface {
 	// DestinationHasPresentArtifacts reports whether backup files are recorded as
 	// present on the destination (its location must not change then, D-209).
 	DestinationHasPresentArtifacts(ctx context.Context, destinationID uuid.UUID) (bool, error)
+	// DestinationNameTaken reports another destination that is not deleted
+	// with the same name (case-insensitively, like destinations_name_active_key).
+	// Checked before the location so that a duplicate name is reported as
+	// such; the unique index stays the authority under concurrency.
+	DestinationNameTaken(ctx context.Context, arg DestinationNameTakenParams) (bool, error)
 	// DestinationUsage returns, per destination that is not deleted, the
 	// bytes and number of the present artifacts stored on it (one grouped
 	// query; D-196).

@@ -235,8 +235,11 @@ The setup container has no network: it never connects anywhere.`, st.env.Dir)
 	return st.ui.Note("bekup setup", body)
 }
 
+// checkImage accepts the bekup image: digest-pinned (its tag must name
+// this version unless AllowVersionMismatch) or a followed tag of the
+// official repository (D-212).
 func (st *initState) checkImage(s string) error {
-	ref, err := imageref.ParsePinned(s)
+	ref, err := imageref.ParseBekup(s)
 	if err != nil {
 		return err
 	}
@@ -246,19 +249,93 @@ func (st *initState) checkImage(s string) error {
 	return nil
 }
 
+// checkPinned accepts a digest-pinned image only (the "pin" choice).
+func (st *initState) checkPinned(s string) error {
+	if _, err := imageref.ParsePinned(s); err != nil {
+		return err
+	}
+	return st.checkImage(s)
+}
+
+// Image mode choices (D-212).
+const (
+	imageFollow = "follow"
+	imagePin    = "pin"
+)
+
 func (st *initState) image() error {
 	if st.env.Image != "" {
 		if err := st.checkImage(st.env.Image); err != nil {
 			return fmt.Errorf("BEKUP_IMAGE: %w", err)
 		}
-		ref, err := imageref.ParsePinned(st.env.Image)
+		ref, err := imageref.ParseBekup(st.env.Image)
 		if err != nil {
 			return err
+		}
+		if ref.IsMutable() {
+			return st.imageMode(ref)
 		}
 		st.a.Image = ref
 		return nil
 	}
-	s, err := st.ui.Input("bekup image", "The image you run, pinned by digest: repo:tag@sha256:<digest>\n(docker image inspect --format '{{index .RepoDigests 0}}' <image>)", st.a.Image.String(), st.checkImage)
+	s, err := st.ui.Input("bekup image", "The image you run, pinned by digest: repo:tag@sha256:<digest>\n(in a second terminal on the host: docker image inspect --format\n'{{index .RepoDigests 0}}' <image>; this container has no Docker access),\nor "+imageref.OfficialRepo+":"+imageref.LatestTag+" to follow the releases", st.a.Image.String(), st.checkImage)
+	if err != nil {
+		return err
+	}
+	ref, err := imageref.ParseBekup(s)
+	if err != nil {
+		return err
+	}
+	if ref.IsMutable() {
+		return st.imageMode(ref)
+	}
+	st.a.Image = ref
+	return nil
+}
+
+// imageMode explains following a tag (D-212) and lets the operator pin a
+// digest instead. Following is the default for the tag they started with.
+func (st *initState) imageMode(ref imageref.Ref) error {
+	def := imageFollow
+	if !st.a.Image.IsZero() && !st.a.Image.IsMutable() {
+		def = imagePin // back from a later screen after pinning
+	}
+	body := fmt.Sprintf(`The image is %s: a tag, not a digest.
+
+Follow it (simpler): compose.yaml names the tag and `+"`docker compose pull`"+`
+fetches whatever release the tag points to. Whoever moves the tag decides
+what runs. Upgrades stay a deliberate step: migrate, serve, worker and
+runner refuse to start on a version setup has not prepared, so after a pull run
+`+"`docker compose run --rm setup upgrade`"+`, then `+"`docker compose up -d`"+`.
+bekup warns at every start, audits it and alerts every admin daily.
+
+Pin a digest (strict change control): compose.yaml names exactly one image;
+an upgrade changes it. To pin later, run setup upgrade --image <pinned> from
+the pinned image (docs/installation/upgrades.md).`, ref)
+	v, err := st.ui.Select("Image updates", body, []Option{
+		{imageFollow, "follow " + ref.String() + " (simpler; not pinned)"},
+		{imagePin, "pin a digest: repo:tag@sha256:<digest>"},
+	}, def)
+	if err != nil {
+		return err
+	}
+	if v == imageFollow {
+		st.a.Image = ref
+		return nil
+	}
+	cur := ""
+	if !st.a.Image.IsMutable() {
+		cur = st.a.Image.String()
+	}
+	s, err := st.ui.Input("Pinned bekup image", "The image pinned by digest: repo:tag@sha256:<digest>.\n"+
+		"This setup container has no Docker or network access: in a second terminal\n"+
+		"on the host, run\n"+
+		"  docker image inspect --format '{{index .RepoDigests 0}}' "+ref.String()+"\n"+
+		"(after docker pull "+ref.String()+" if the image is not there yet). It prints\n"+
+		"repo@sha256:<digest>; keep :"+ref.Tag+" in front of the @.", cur, st.checkPinned)
+	if errors.Is(err, ErrBack) {
+		return errRepeat
+	}
 	if err != nil {
 		return err
 	}
@@ -828,7 +905,11 @@ func (st *initState) summary() error {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Directory:  %s\n", st.env.Dir)
-	fmt.Fprintf(&b, "Image:      %s\n", a.Image)
+	if a.Image.IsMutable() {
+		fmt.Fprintf(&b, "Image:      %s (follows the tag; NOT pinned by digest)\n", a.Image)
+	} else {
+		fmt.Fprintf(&b, "Image:      %s\n", a.Image)
+	}
 	if st.compose != nil {
 		fmt.Fprintf(&b, "Compose:    compose.yaml (the %s variant; kept)\n", a.Variant)
 	} else {
@@ -896,7 +977,7 @@ func (st *initState) flags() []string {
 		if a.DB.External() {
 			f = append(f, "--database", "external")
 		}
-		if st.env.Image == "" {
+		if st.env.Image != a.Image.String() {
 			f = append(f, "--image", a.Image.String())
 		}
 	}

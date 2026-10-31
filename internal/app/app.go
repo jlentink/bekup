@@ -26,6 +26,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/downloads"
 	"github.com/jlentink/bekup/internal/egress"
@@ -84,6 +85,12 @@ type Options struct {
 	Dev bool
 	// Logger is the redacting process logger.
 	Logger *slog.Logger
+	// Deployment are the facts setup handed over (BEKUP_SETUP_VERSION,
+	// BEKUP_IMAGE_MODE; D-212): New refuses to start when SetupVersion
+	// names another version than Version (or, outside dev mode, when the
+	// image follows a tag without a SetupVersion), and audits a followed
+	// image (also when the runner reports an unpinned own image).
+	Deployment deployguard.Deployment
 	// UI is the embedded SPA (web.DistFS()); nil serves no UI.
 	UI fs.FS
 	// Listener replaces binding server.listen (tests).
@@ -198,6 +205,10 @@ type App struct {
 	reloadAPI      *configreload.API
 	instanceID     uuid.UUID
 	startedAt      time.Time
+
+	// image is the image posture: the runner's verdict on its own image
+	// and whether security.unpinned_image was recorded (D-212).
+	image imageState
 }
 
 // New runs the startup checks and prepares the components. Close the App
@@ -214,6 +225,9 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	}()
 	if opts.Mode == ModeWorker && opts.NoWorker {
 		return nil, errors.New("app: a worker process cannot disable its workers")
+	}
+	if err := a.checkDeployment(ctx); err != nil {
+		return nil, err
 	}
 	if err := a.openDB(ctx); err != nil {
 		return nil, err
@@ -272,6 +286,11 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 		return nil, err
 	}
 	if a.connections, err = a.newConnections(); err != nil {
+		return nil, err
+	}
+	// D-212: with the runner client, the image posture includes the
+	// runner's verdict on its own image; audited fail closed.
+	if err := a.startImagePosture(ctx); err != nil {
 		return nil, err
 	}
 	a.policy = a.newPolicy()
@@ -358,6 +377,9 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 		return err
 	}
 	if a.connections, err = a.newConnections(); err != nil {
+		return err
+	}
+	if err := a.startImagePosture(ctx); err != nil {
 		return err
 	}
 	a.policy = a.newPolicy()
@@ -452,6 +474,35 @@ func (a *App) logDBConnection(ctx context.Context, o db.TLSOptions, login string
 	}
 	a.opts.Logger.WarnContext(ctx, "app database single-account mode: one account runs migrations and the app and can alter the schema and the audit log (database.single_account, D-207)",
 		slog.Any("login_role_findings", a.dbLoginFindings))
+	return nil
+}
+
+// checkDeployment is the setup version guard (D-212), before anything
+// connects: another version than the one setup prepared the deployment
+// for (a moved tag, a pulled image without `setup upgrade`, a downgrade)
+// refuses to start, so a mix of versions never runs, and so does a
+// followed image without a setup version (outside dev mode); an unset
+// BEKUP_SETUP_VERSION only warns (outside dev mode). A followed image is
+// warned about here and audited once the runner client exists
+// (startImagePosture).
+func (a *App) checkDeployment(ctx context.Context) error {
+	d, log := a.opts.Deployment, a.opts.Logger
+	warn, err := d.Check(a.opts.Version, a.opts.Dev)
+	if err != nil {
+		log.ErrorContext(ctx, "refusing to start: the deployment guard failed (D-212)",
+			slog.String("version", a.opts.Version), slog.String("setup_version", d.SetupVersion),
+			slog.Bool("image_following", d.ImageFollowing), slog.String("process", a.processName()))
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	if a.opts.Dev {
+		return nil
+	}
+	if warn != "" {
+		log.WarnContext(ctx, "setup version unknown", slog.String("warning", warn))
+	}
+	if d.ImageFollowing {
+		log.WarnContext(ctx, "the bekup image follows a tag instead of a digest (BEKUP_IMAGE_MODE=following, D-212): whoever moves the tag decides what runs; pin a digest with `bekup setup upgrade --image <repo>:<tag>@sha256:<digest>`")
+	}
 	return nil
 }
 

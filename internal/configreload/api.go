@@ -58,7 +58,24 @@ type APIOptions struct {
 	// Database is this process's app database posture (restart-only
 	// settings, D-207).
 	Database DatabasePosture
-	Logger   *slog.Logger
+	// Image returns this process's current image posture (D-212; nil:
+	// the zero posture).
+	Image  func() ImagePosture
+	Logger *slog.Logger
+}
+
+// ImagePosture is how the answering process's image is referenced
+// (D-212): following a tag (set up so, or reported by the runner), and
+// the version setup prepared the deployment for. Versions only; no image
+// names from the environment.
+type ImagePosture struct {
+	// Following: BEKUP_IMAGE_MODE=following (an explicit weakening), or
+	// the runner reports that its own container image has no digest.
+	Following bool
+	// SetupVersion is BEKUP_SETUP_VERSION ("" when unset).
+	SetupVersion string
+	// Version is this process's version.
+	Version string
 }
 
 // DatabasePosture is the app database posture shown on the configuration
@@ -141,6 +158,7 @@ type RequestView struct {
 // newest UI request.
 type StatusView struct {
 	Database    DatabasePosture
+	Image       ImagePosture
 	LiveKeys    []string
 	Processes   []ProcessResult
 	Listening   int
@@ -229,7 +247,11 @@ func (a *API) Status(ctx context.Context) (*StatusView, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configreload: list processes: %w", err)
 	}
-	out := &StatusView{Database: a.o.Database, LiveKeys: config.LiveKeys(), Processes: make([]ProcessResult, 0, len(rows)), Listening: len(listening)}
+	var image ImagePosture
+	if a.o.Image != nil {
+		image = a.o.Image()
+	}
+	out := &StatusView{Database: a.o.Database, Image: image, LiveKeys: config.LiveKeys(), Processes: make([]ProcessResult, 0, len(rows)), Listening: len(listening)}
 	for i := range rows {
 		out.Processes = append(out.Processes, processResult(&rows[i].ConfigReloadResult, rows[i].RequestTrigger, listening))
 	}

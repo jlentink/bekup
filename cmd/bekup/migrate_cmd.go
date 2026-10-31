@@ -14,6 +14,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
+	"github.com/jlentink/bekup/internal/deployguard"
 )
 
 // errDownOneNeedsDev is returned by `migrate down-one` outside dev mode:
@@ -59,6 +60,14 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	logLoaded(c, logger, res.Path, res.Warnings)
 	if action == "down-one" && !res.Dev {
 		return errDownOneNeedsDev
+	}
+	if action == "up" {
+		// D-212: never run the migrations of an image setup has not
+		// prepared the deployment for (a moved tag, a replaced compose
+		// file without `setup upgrade`), and never those of an older one.
+		if err := checkDeployment(c, logger, res.Dev, "migrate"); err != nil {
+			return err
+		}
 	}
 
 	ctx := c.Context()
@@ -121,6 +130,34 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 		}
 		return err
 	}
+}
+
+// checkDeployment applies the setup version guard (D-212) for the commands
+// without the app (migrate up, db bootstrap, runner), before they connect
+// to anything: a version mismatch refuses to run, and so does (outside dev
+// mode) a followed image without a setup version; an unset
+// BEKUP_SETUP_VERSION only warns (outside dev mode). command names the
+// command in the log and the error ("migrate", "db bootstrap", "runner").
+func checkDeployment(c *cobra.Command, logger *slog.Logger, dev bool, command string) error {
+	d, err := deployguard.FromEnv(lookupEnv)
+	if err != nil {
+		return fmt.Errorf("refusing to run %s: %w", command, err)
+	}
+	warn, err := d.Check(version, dev)
+	if err != nil {
+		logger.ErrorContext(c.Context(), "refusing to run: the deployment guard failed (D-212)",
+			slog.String("command", command), slog.String("version", version), slog.String("setup_version", d.SetupVersion),
+			slog.Bool("image_following", d.ImageFollowing))
+		return fmt.Errorf("refusing to run %s: %w", command, err)
+	}
+	if warn != "" {
+		logger.WarnContext(c.Context(), "setup version unknown", slog.String("command", command), slog.String("warning", warn))
+	}
+	if d.ImageFollowing && !dev {
+		logger.WarnContext(c.Context(), "the bekup image follows a tag instead of a digest (BEKUP_IMAGE_MODE=following, D-212): whoever moves the tag decides what runs",
+			slog.String("command", command))
+	}
+	return nil
 }
 
 // openMigrator connects as bekup_owner (or the single account acting as

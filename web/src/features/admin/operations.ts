@@ -392,6 +392,11 @@ export const ConfigStatusQuery = graphql(`
         insecureTransport
         singleAccount
       }
+      image {
+        following
+        setupVersion
+        version
+      }
       liveKeys
       listeningProcesses
       processes {

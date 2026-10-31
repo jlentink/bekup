@@ -99,6 +99,8 @@ func TestSecurityAlertsFromAudit(t *testing.T) {
 			[]want{{SecuritySystem, KindInsecureDBTLS, SeverityError, Subject{}, true}}},
 		{"single-account db roles startup", audit.Event{Actor: sys, Action: audit.ActionSecurityInsecureDBRoles, TargetType: "server"},
 			[]want{{SecuritySystem, KindInsecureDBRoles, SeverityError, Subject{}, true}}},
+		{"unpinned image startup", audit.Event{Actor: sys, Action: audit.ActionSecurityUnpinnedImage, TargetType: "server"},
+			[]want{{SecuritySystem, KindUnpinnedImage, SeverityWarning, Subject{}, true}}},
 		{"db bootstrap via cli", audit.CLIEvent(audit.ActionCLIDBBootstrap, "database", "bekup", nil),
 			[]want{{SecuritySystem, KindCLIAction, SeverityWarning, Subject{}, false}}},
 		{"head export failed", audit.Event{Actor: sys, Action: audit.ActionAuditHeadExportFailed},

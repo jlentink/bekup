@@ -16,6 +16,11 @@ import (
 // -ldflags "-X main.version=<x.y.z>" (see the justfile, task 0.1b).
 var version = "0.0.0-dev"
 
+// lookupEnv reads the deployment variables of migrate, db bootstrap,
+// serve, worker and runner
+// (BEKUP_SETUP_VERSION, BEKUP_IMAGE_MODE; D-212). A variable for tests.
+var lookupEnv = os.LookupEnv
+
 func main() {
 	if err := newRootCmd().ExecuteContext(context.Background()); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "bekup: %s\n", errorMessage(err))

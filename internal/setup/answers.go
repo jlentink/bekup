@@ -200,6 +200,9 @@ func (n Network) withDefaults() Network {
 // backslashes or spaces), so nothing can be injected into .env, TOML or
 // YAML.
 type Answers struct {
+	// Image is the bekup image: digest-pinned, or a tag of the official
+	// repository to follow (Image.IsMutable, D-212: an explicit
+	// weakening setup records as image_mode following).
 	Image imageref.Ref
 	// Variant is the compose variant (default full); it decides Proxy for
 	// every variant but full.
@@ -518,10 +521,10 @@ func validateTargetHosts(hosts []string) error {
 // Validate checks every answer and fills defaults (keys directory,
 // network). It returns the first problem as a *FieldError.
 func (a *Answers) Validate() error {
-	if a.Image.Digest == "" {
-		return fieldErr("image", "is required (a digest-pinned reference)")
+	if a.Image.IsZero() {
+		return fieldErr("image", "is required (a digest-pinned reference, or %s:%s to follow the releases)", imageref.OfficialRepo, imageref.LatestTag)
 	}
-	if _, err := imageref.ParsePinned(a.Image.String()); err != nil {
+	if _, err := imageref.ParseBekup(a.Image.String()); err != nil {
 		return fieldErr("image", "%v", err)
 	}
 	if a.ImageInEnv && !validEnvValue(a.Image.String()) {

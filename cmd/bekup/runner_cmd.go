@@ -24,11 +24,19 @@ func newRunnerCmd(g *globalFlags) *cobra.Command {
 			"and the standard gRPC health service on listen.health_socket for `bekup healthcheck runner`.\n" +
 			"It runs dump/restore containers on per-run internal networks through the Docker socket\n" +
 			"(docker.host) and removes leftovers of earlier runs at startup and every 5 minutes.\n" +
+			"It refuses to start, before it touches Docker or listens, on another version than\n" +
+			"BEKUP_SETUP_VERSION (and, outside dev mode, on BEKUP_IMAGE_MODE=following without it; D-212).\n" +
 			"SIGINT/SIGTERM drain in-flight calls for up to 45s.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			res, logger, err := loadRunnerConfig(c, g)
 			if err != nil {
+				return err
+			}
+			// D-212: the setup version guard before Docker or the gRPC
+			// listener is touched: a runner of another version than setup
+			// prepared (a moved tag, a pulled image) never starts.
+			if err := checkDeployment(c, logger, res.Dev, "runner"); err != nil {
 				return err
 			}
 			// Docker over the unix socket of docker.host only. The client does

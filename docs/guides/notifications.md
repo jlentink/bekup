@@ -104,6 +104,7 @@ description and repeat rule, D-198).
 | A download link presented after use, after expiry, by another session or without access | warning | once per link |
 | bekup running over plain HTTP outside dev mode, or with a weakened app-database TLS mode (D-095, D-100) | error | at startup and once a day |
 | bekup running in single-account database mode (`insecure_db_roles`: one database account runs migrations and the app, so a compromised server process could alter the schema and the audit log; D-207) | error | at startup and once a day |
+| bekup running an image that follows a tag instead of a digest (`unpinned_image`: `ghcr.io/jlentink/bekup:latest`, so whoever moves the tag decides which code runs; set up so, or reported by the runner for its own container image; D-212) | warning | at startup (or when the runner first reports it) and once a day |
 | Failed sign-in burst: ≥ 20 failures from one address, ≥ 10 on one account or ≥ 100 in total within 15 minutes | error | once per address / account / instance and 15 minutes |
 | An internal certificate (runner mTLS client and CA, app-database CA and client certificate, the runner's server certificate) or a pinned database certificate expires within 30 days (warning), within 7 days (error) or expired | warning / error / critical | once per threshold and certificate |
 | A break-glass command on the host (`bekup admin …`, `bekup certs rotate`, `bekup audit sign-head`, `bekup reindex --import`) | warning | every time |

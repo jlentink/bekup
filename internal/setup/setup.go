@@ -106,7 +106,7 @@ type plan struct {
 
 // newPlan lists what one run writes; dbCA is the operator's CA bundle
 // (external database only).
-func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte) (*plan, error) {
+func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte, version string) (*plan, error) {
 	assets, err := assetFiles(fsys, a.Variant.assetDirs(a.DB.Mode))
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte) (*plan, err
 	}
 	static := a.bundledProxy() && a.TLSMode == TLSStatic
 	layout := Layout{KeysDir: a.KeysDir}
-	op := operatorFiles(a)
+	op := operatorFiles(a, version)
 	if a.DB.External() {
 		op[layout.keys(dbCAName)] = dbCA
 	}
@@ -175,7 +175,7 @@ func Init(opts Options) (retErr error) {
 		if err != nil {
 			return err
 		}
-		if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, nil, os.LookupEnv); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, nil, os.LookupEnv, true); err != nil {
 			return err
 		}
 		if a.Variant == "" {
@@ -184,7 +184,7 @@ func Init(opts Options) (retErr error) {
 		if a.DB.Mode == "" {
 			a.DB.Mode = compose.DB
 		}
-		if a.Image.Digest == "" {
+		if a.Image.IsZero() {
 			a.Image = compose.Image
 		}
 		a.ImageInEnv = compose.FromEnv
@@ -212,7 +212,7 @@ func Init(opts Options) (retErr error) {
 			return err
 		}
 	}
-	p, err := newPlan(opts.assets, a, opts.WriteCompose, dbCA)
+	p, err := newPlan(opts.assets, a, opts.WriteCompose, dbCA, opts.Version)
 	if err != nil {
 		return err
 	}
@@ -368,12 +368,16 @@ func Init(opts Options) (retErr error) {
 	if err := write(p.operator, p.entries); err != nil {
 		return err
 	}
+	// The deployment lines of .env (D-212), also when .env existed
+	// already: the setup version migrate/serve/worker compare with and the
+	// image mode; with ImageInEnv compose.yaml takes the image from
+	// BEKUP_IMAGE, which .env must carry for `docker compose up`.
+	envLines := deploymentEnv(opts.Version, imageModeOf(a.Image))
 	if a.ImageInEnv {
-		// compose.yaml takes the image from BEKUP_IMAGE: .env must carry
-		// it for `docker compose up`, also when .env existed already.
-		if _, err := syncEnvImage(w, a.Image.String()); err != nil {
-			return err
-		}
+		envLines = append(envLines, EnvVar{ImageEnvVar, a.Image.String()})
+	}
+	if _, err := syncEnv(w, envLines); err != nil {
+		return err
 	}
 
 	// Secrets: only groups that are entirely missing.
@@ -416,7 +420,7 @@ func Init(opts Options) (retErr error) {
 	// State file (rewritten only when missing or forced).
 	st := &State{
 		Schema: StateSchema, ManifestVersion: ManifestVersion, BekupVersion: opts.Version,
-		Image: a.Image.String(), ComposeMode: ComposeGenerated, Variant: a.Variant,
+		Image: a.Image.String(), ImageMode: imageModeOf(a.Image), ComposeMode: ComposeGenerated, Variant: a.Variant,
 		Proxy: a.Proxy, TLSMode: a.TLSMode, KeysDir: a.KeysDir,
 		Ownership: mode, Assets: map[string]string{}, SecretGroups: secretGroups(p.entries),
 		DatabaseMode: stateDBMode(a.DB.Mode),
@@ -671,7 +675,11 @@ func report(out io.Writer, r *reportData) error {
 	mode, why, keyID, newCerts, env := r.mode, r.why, r.keyID, r.newCerts, r.env
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nbekup setup: deployment directory %s\n", root)
-	fmt.Fprintf(&b, "  image:      %s\n", a.Image)
+	if a.Image.IsMutable() {
+		fmt.Fprintf(&b, "  image:      %s (follows the tag: NOT pinned by digest, D-212)\n", a.Image)
+	} else {
+		fmt.Fprintf(&b, "  image:      %s\n", a.Image)
+	}
 	fmt.Fprintf(&b, "  variant:    %s\n", a.Variant)
 	proxy := string(a.Proxy)
 	switch {
@@ -698,6 +706,9 @@ func report(out io.Writer, r *reportData) error {
 	}
 	if r.chownCmds != "" {
 		b.WriteString("\nOwnership is NOT applied yet (--ownership print). " + r.chownCmds)
+	}
+	if a.Image.IsMutable() {
+		b.WriteString(followingWarning)
 	}
 	if a.DB.External() && a.DB.Auth == DBAuthSingleAccount {
 		fmt.Fprintf(&b, "\nWARNING: single-account mode (D-207) is an EXPLICIT WEAKENING: %s runs migrations\n  and the app, so a compromised serve can alter the schema and the audit log. bekup\n  warns at every start, audits it and alerts every admin daily. Prefer bootstrap.\n", a.DB.User)
@@ -784,6 +795,21 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 	_, err := io.WriteString(out, b.String())
 	return err
 }
+
+// followingWarning explains the image mode following (D-212) in the
+// reports of init and upgrade.
+const followingWarning = `
+WARNING: the bekup image follows a tag instead of a digest (D-212). Whoever
+  moves the tag decides what runs, and ` + "`docker compose pull`" + ` fetches new
+  releases. migrate, serve, worker and runner refuse to start on a version
+  setup has not prepared (BEKUP_SETUP_VERSION in .env), so upgrade with:
+    docker compose pull
+    docker compose run --rm setup upgrade
+    docker compose up -d
+  serve warns at every start, audits it and alerts every admin daily. Verify
+  releases with cosign (docs/installation/upgrades.md); pin a digest with
+  ` + "`setup upgrade --image <repo>:<tag>@sha256:<digest>`" + ` to switch back.
+`
 
 // onMount reports whether abs is a mount point of its own.
 func onMount(env sysEnv, abs string) bool {

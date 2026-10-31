@@ -170,7 +170,7 @@ func TestInspectComposePlaceholder(t *testing.T) {
 	if _, err := inspectComposeData(fsys, composeInput{compose: src}, "", ""); err == nil || !strings.Contains(err.Error(), "it is not set") {
 		t.Fatalf("missing: %v", err)
 	}
-	for _, bad := range []string{"ghcr.io/jlentink/bekup:1.2.3", "bekup:dev", "ghcr.io/jlentink/bekup@sha256:12"} {
+	for _, bad := range []string{"registry.example.com/bekup:1.2.3", "bekup:dev", "ghcr.io/jlentink/bekup@sha256:12"} {
 		_, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: map[string]string{ImageEnvVar: bad}}, "", "")
 		if err == nil || !strings.Contains(err.Error(), "not digest-pinned") || !strings.Contains(err.Error(), "RepoDigests") {
 			t.Errorf("unpinned %q: %v", bad, err)
@@ -268,7 +268,7 @@ func TestInitPlaceholderRefusals(t *testing.T) {
 	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err == nil || !strings.Contains(err.Error(), "it is not set") {
 		t.Fatalf("missing: %v", err)
 	}
-	t.Setenv(ImageEnvVar, "ghcr.io/jlentink/bekup:1.2.3")
+	t.Setenv(ImageEnvVar, "registry.example.com/bekup:1.2.3")
 	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err == nil || !strings.Contains(err.Error(), "not digest-pinned") {
 		t.Fatalf("unpinned: %v", err)
 	}
@@ -281,14 +281,14 @@ func TestInitPlaceholderRefusals(t *testing.T) {
 	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
 		t.Fatalf("refused init wrote files: %d entries (%v)", len(entries), err)
 	}
-	// --keep-existing with an existing .env: the line is added.
+	// --keep-existing with an existing .env: the lines are added.
 	if err := os.WriteFile(pathIn(dir, EnvFile), []byte("# mine\nBEKUP_DOMAIN=backup.example.com\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := composeFirstInit(t, dir, VariantNPM, func(o *Options) { o.KeepExisting = true }); err != nil {
 		t.Fatal(err)
 	}
-	if env := string(readFile(t, dir, EnvFile)); env != "# mine\nBEKUP_DOMAIN=backup.example.com\nBEKUP_IMAGE="+variantImage+"\n" {
+	if env := string(readFile(t, dir, EnvFile)); env != "# mine\nBEKUP_DOMAIN=backup.example.com\nBEKUP_SETUP_VERSION=1.2.3\nBEKUP_IMAGE="+variantImage+"\n" {
 		t.Fatalf(".env:\n%s", env)
 	}
 }
@@ -312,7 +312,7 @@ func TestCheckPlaceholder(t *testing.T) {
 	}{
 		{"missing in .env", replaceIn(EnvFile, ImageEnvVar+"="+variantImage+"\n", ""), nil, "but it is not set"},
 		{"missing in .env, set in the shell", replaceIn(EnvFile, ImageEnvVar+"="+variantImage+"\n", ""), map[string]string{ImageEnvVar: variantImage}, "BEKUP_IMAGE is missing"},
-		{"unpinned in .env", replaceIn(EnvFile, ImageEnvVar+"="+variantImage, ImageEnvVar+"=ghcr.io/jlentink/bekup:1.2.3"), nil, "is not digest-pinned"},
+		{"unpinned in .env", replaceIn(EnvFile, ImageEnvVar+"="+variantImage, ImageEnvVar+"=registry.example.com/bekup:1.2.3"), nil, "is not digest-pinned"},
 		{"newer in .env", replaceIn(EnvFile, ImageEnvVar+"="+variantImage, ImageEnvVar+"="+newer), nil, "run `docker compose run --rm setup upgrade`"},
 		{"older in .env", replaceIn(EnvFile, ImageEnvVar+"="+variantImage, ImageEnvVar+"=ghcr.io/jlentink/bekup:1.2.2@"+testDigest2), nil, "is older than the image setup last ran with"},
 		{"shell override", func(*testing.T, string) {}, map[string]string{ImageEnvVar: newer}, "overrides .env"},
@@ -403,7 +403,7 @@ func TestUpgradePlaceholder(t *testing.T) {
 		t.Fatalf("check: %v\n%s", err, report)
 	}
 	// An unpinned BEKUP_IMAGE is refused before anything changes.
-	t.Setenv(ImageEnvVar, "ghcr.io/jlentink/bekup:1.2.3")
+	t.Setenv(ImageEnvVar, "registry.example.com/bekup:1.2.3")
 	before = snapshot(t, dir)
 	o = opts(next)
 	o.Image = mustRef(t, next)

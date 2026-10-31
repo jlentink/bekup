@@ -7,11 +7,19 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/deployguard"
+	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
 func TestNewRequiresConfigAndLogger(t *testing.T) {
@@ -162,5 +170,92 @@ func TestRunStopsAllOnFirstFailure(t *testing.T) {
 	}
 	if !ok.stopped.Load() {
 		t.Fatal("healthy component not stopped")
+	}
+}
+
+// D-212: another version than BEKUP_SETUP_VERSION refuses to start before
+// anything connects.
+func TestNewRefusesSetupVersionMismatch(t *testing.T) {
+	cfg := config.DefaultBekup()
+	_, err := New(t.Context(), Options{
+		Config: &cfg, Logger: slog.New(slog.DiscardHandler), Version: "1.2.4",
+		Deployment: deployguard.Deployment{SetupVersion: "1.2.3"},
+	})
+	if !errors.Is(err, deployguard.ErrVersionMismatch) || !strings.Contains(err.Error(), "setup upgrade") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// D-212 L1: a followed image without a setup version refuses to start
+// outside dev mode (before anything connects); dev mode only skips it.
+func TestNewRefusesFollowingWithoutSetupVersion(t *testing.T) {
+	cfg := config.DefaultBekup()
+	for _, mode := range []Mode{ModeServe, ModeWorker} {
+		_, err := New(t.Context(), Options{
+			Config: &cfg, Logger: slog.New(slog.DiscardHandler), Version: "1.2.4", Mode: mode,
+			Deployment: deployguard.Deployment{ImageFollowing: true},
+		})
+		if !errors.Is(err, deployguard.ErrFollowingUnversioned) {
+			t.Fatalf("mode %v: err = %v", mode, err)
+		}
+	}
+}
+
+// D-212 M2: the runner's verdict on its own image ORs with
+// BEKUP_IMAGE_MODE: an unpinned runner image counts as following whatever
+// the variable says, an unset verdict changes nothing, dev mode ignores it.
+func TestRunnerImageVerdict(t *testing.T) {
+	cfg := config.DefaultBekup()
+	cfg.Server.BaseURL = "https://backup.example.com"
+	newApp := func(dev, envFollowing bool) *App {
+		return &App{opts: Options{Config: &cfg, Dev: dev, Logger: slog.New(slog.DiscardHandler), Version: "1.2.4",
+			Deployment: deployguard.Deployment{SetupVersion: "1.2.4", ImageFollowing: envFollowing}}}
+	}
+	pinned := func(v bool) *runnerpb.HealthResponse { return &runnerpb.HealthResponse{ImagePinned: proto.Bool(v)} }
+	hasKind := func(a *App) bool { return slices.Contains(a.weakenedPosture(), notify.KindUnpinnedImage) }
+
+	a := newApp(false, false)
+	if a.imageFollowing() || hasKind(a) || a.imagePosture().Following {
+		t.Fatal("following without any evidence")
+	}
+	if a.setRunnerImage(t.Context(), &runnerpb.HealthResponse{}) || a.imageFollowing() {
+		t.Fatal("an unset verdict changed the posture")
+	}
+	if a.setRunnerImage(t.Context(), pinned(true)) || a.imageFollowing() {
+		t.Fatal("a pinned runner image counts as following")
+	}
+	if !a.setRunnerImage(t.Context(), pinned(false)) || !a.imageFollowing() || !hasKind(a) || !a.imagePosture().Following || a.imageSource() != "runner" {
+		t.Fatal("an unpinned runner image does not count as following")
+	}
+	if a.setRunnerImage(t.Context(), pinned(false)) {
+		t.Fatal("the same verdict reported as new")
+	}
+	if a.setRunnerImage(t.Context(), &runnerpb.HealthResponse{}) || !a.imageFollowing() {
+		t.Fatal("an unset verdict cleared the last one")
+	}
+	// A later pinned verdict (the runner was re-created pinned) ends it.
+	if a.setRunnerImage(t.Context(), pinned(true)) || a.imageFollowing() {
+		t.Fatal("a pinned verdict did not end following")
+	}
+
+	env := newApp(false, true)
+	if env.setRunnerImage(t.Context(), pinned(false)) || !env.imageFollowing() || env.imageSource() != "env_and_runner" {
+		t.Fatal("set-up following: the runner verdict is not new evidence")
+	}
+	env.setRunnerImage(t.Context(), pinned(true))
+	if !env.imageFollowing() || env.imageSource() != "env" {
+		t.Fatal("a pinned runner image hides BEKUP_IMAGE_MODE=following")
+	}
+
+	dev := newApp(true, false)
+	if dev.setRunnerImage(t.Context(), pinned(false)) || dev.imageFollowing() || hasKind(dev) {
+		t.Fatal("dev mode took the runner verdict")
+	}
+	// Without an auditor (no database) observing never panics and never
+	// marks the audit as done.
+	obs := newApp(false, false)
+	obs.observeRunnerImage(t.Context(), pinned(false))
+	if !obs.imageFollowing() || obs.image.audited {
+		t.Fatal("observe")
 	}
 }

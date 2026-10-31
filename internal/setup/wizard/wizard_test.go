@@ -577,3 +577,68 @@ func TestNewPassphraseAskedTwice(t *testing.T) {
 		t.Fatalf("%q %v %v", pass, err, s.Screens)
 	}
 }
+
+// D-212: a followed tag gets one explanation screen; following is the
+// default, pinning a digest asks for it.
+func TestInitWizardFollowLatest(t *testing.T) {
+	const latest = "ghcr.io/jlentink/bekup:latest"
+	head := func(mode ...Answer) []Answer {
+		out := append([]Answer{{Title: "bekup setup"}}, mode...)
+		out = append(out,
+			Answer{Title: "Reverse proxy", Value: proxyOwnTraefik},
+			Answer{Title: "Domain", Value: "backup.example.com"},
+			Answer{Title: "Let's Encrypt e-mail", Value: "ops@example.com"},
+			Answer{Title: "Let's Encrypt staging?", Value: "no"},
+			Answer{Title: "Database", Value: "bundled"},
+		)
+		out = append(out, tail()...)
+		out = append(out, finish(Answer{Title: "Bundled database secrets", Value: "yes"})...)
+		return append(out, Answer{Title: "CA key passphrase (shown ONCE)"})
+	}
+	t.Run("follow", func(t *testing.T) {
+		s := &Script{}
+		env := testEnv(t, s)
+		env.Image = latest
+		s.Answers = head(Answer{Title: "Image updates", Value: imageFollow})
+		p := run(t, env)
+		if a := p.Options.Answers; a.Image.String() != latest || !a.Image.IsMutable() {
+			t.Fatalf("image %v", a.Image)
+		}
+		if slices.Contains(p.Flags, "--image") {
+			t.Fatalf("flags %v", p.Flags)
+		}
+		if !strings.Contains(s.Text.String(), "Whoever moves the tag decides") || !strings.Contains(s.Text.String(), "NOT pinned by digest") {
+			t.Fatal("the explanation or the summary note is missing")
+		}
+	})
+	t.Run("pin", func(t *testing.T) {
+		s := &Script{}
+		env := testEnv(t, s)
+		env.Image = latest
+		s.Answers = head(Answer{Title: "Image updates", Value: imagePin}, Answer{Title: "Pinned bekup image", Value: testImage})
+		p := run(t, env)
+		if a := p.Options.Answers; a.Image.String() != testImage {
+			t.Fatalf("image %v", a.Image)
+		}
+		if i := slices.Index(p.Flags, "--image"); i < 0 || p.Flags[i+1] != testImage {
+			t.Fatalf("flags %v", p.Flags)
+		}
+		// The setup container has no Docker access: the digest lookup
+		// runs in a second terminal on the host.
+		if txt := s.Text.String(); !strings.Contains(txt, "second terminal") ||
+			!strings.Contains(txt, "docker image inspect --format '{{index .RepoDigests 0}}' "+latest) {
+			t.Fatalf("pin screen lacks the host lookup:\n%s", txt)
+		}
+	})
+	t.Run("digest: no question", func(t *testing.T) {
+		s := &Script{}
+		env := testEnv(t, s)
+		s.Answers = head()
+		run(t, env)
+		for _, sc := range s.Screens {
+			if strings.Contains(sc, "Image updates") {
+				t.Fatalf("asked about image updates for a digest: %v", s.Screens)
+			}
+		}
+	})
+}

@@ -65,6 +65,12 @@ function status(over: Record<string, unknown> = {}) {
         insecureTransport: false,
         singleAccount: false,
       },
+      image: {
+        __typename: "ImagePosture",
+        following: false,
+        setupVersion: "1.2.3",
+        version: "1.2.3",
+      },
       liveKeys: ["logging.level", "workers.max_concurrent_runs", "retention.dry_run"],
       listeningProcesses: 3,
       processes: [
@@ -495,6 +501,39 @@ describe("configuration page", () => {
     ).toBeInTheDocument();
     expect(within(section).queryByRole("alert")).toBeNull();
     expect(within(section).queryByText("Single-account mode is on")).toBeNull();
+  });
+
+  it("shows a pinned image without warnings", async () => {
+    renderApp(PATH, handlers({}));
+    const section = await screen.findByTestId("config-image");
+    expect(within(section).getByText("Pinned by digest")).toBeInTheDocument();
+    expect(within(section).getAllByText("1.2.3")).toHaveLength(2);
+    expect(within(section).queryByRole("alert")).toBeNull();
+  });
+
+  it("flags an image that follows a tag and an unrecorded setup version", async () => {
+    renderApp(
+      PATH,
+      handlers({
+        AdminConfigStatus: () =>
+          status({
+            image: {
+              __typename: "ImagePosture",
+              following: true,
+              setupVersion: null,
+              version: "1.2.4",
+            },
+          }),
+      }),
+    );
+    const section = await screen.findByTestId("config-image");
+    expect(within(section).getByText("Follows a tag")).toBeInTheDocument();
+    expect(within(section).getByText("not recorded")).toBeInTheDocument();
+    expect(
+      within(section).getByText("The image follows a tag instead of a digest"),
+    ).toBeInTheDocument();
+    expect(within(section).getByText("The setup version is not recorded")).toBeInTheDocument();
+    expect(screen.getByText("Not pinned")).toBeInTheDocument();
   });
 
   it("denies non-admins without querying", async () => {

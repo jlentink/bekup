@@ -372,6 +372,9 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Dest
 	mode, days := st.lockColumns()
 	var out *record
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
+		if err := checkName(ctx, q, id, name); err != nil {
+			return err
+		}
 		if err := checkLocation(ctx, q, id, st); err != nil {
 			return err
 		}
@@ -461,6 +464,11 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		if !locked.row.UpdatedAt.Equal(cur.row.UpdatedAt) {
 			return ErrConflict
 		}
+		if st.name != cur.row.Name {
+			if err := checkName(ctx, q, id, st.name); err != nil {
+				return err
+			}
+		}
 		if moved := locationChange(cur, st); moved != "" {
 			// D-209: bekup would lose track of the files at the old
 			// location (retention, restores and downloads address them
@@ -518,6 +526,20 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		return Destination{}, err
 	}
 	return out.view(), nil
+}
+
+// checkName reports ErrNameTaken when another destination that is not
+// deleted has the name (before the location check, so a duplicate name is
+// reported as such; the unique index decides under concurrency).
+func checkName(ctx context.Context, q *sqlc.Queries, id uuid.UUID, name string) error {
+	taken, err := q.DestinationNameTaken(ctx, sqlc.DestinationNameTakenParams{Name: name, ID: id})
+	if err != nil {
+		return fmt.Errorf("destinations: check name: %w", err)
+	}
+	if taken {
+		return ErrNameTaken
+	}
+	return nil
 }
 
 // checkLocation refuses a location that is, contains or lies inside the

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -25,8 +26,10 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/instancekeys"
+	"github.com/jlentink/bekup/internal/notify"
 )
 
 func TestMain(m *testing.M) { os.Exit(dbtest.Main(m)) }
@@ -485,6 +488,129 @@ func TestServeAuditsInsecureDBTLS(t *testing.T) {
 	}
 	if got[0].ActorKind != audit.ActorSystem || details["tls_mode"] != "require" || details["chain_verified"] != true {
 		t.Fatalf("entry %+v details %s", got[0], got[0].Details)
+	}
+}
+
+// D-212: a followed image outside dev mode is audited at every startup
+// (security.unpinned_image, fail closed), dev mode and digest pins are
+// not; another version than BEKUP_SETUP_VERSION refuses to start before
+// anything connects, and the configuration page shows the image posture.
+func TestServeUnpinnedImageAndSetupVersion(t *testing.T) {
+	d := dbtest.Migrated(t)
+	entries := func() []audit.ListEntry {
+		t.Helper()
+		page, err := audit.New(d.AppPool(t), audit.Options{}).List(t.Context(),
+			audit.Filter{Action: audit.ActionSecurityUnpinnedImage}, 0, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return page.Entries
+	}
+	start := func(logs *syncBuffer, mutate func(*app.Options)) (*app.App, error) {
+		t.Helper()
+		o := options(t, d.AppURL, logs)
+		o.Config.Server.BaseURL = "https://backup.example.com"
+		o.Config.Server.TrustedProxies = []string{"10.0.0.1/32"}
+		mutate(&o)
+		return app.New(t.Context(), o)
+	}
+	for _, mut := range []func(*app.Options){
+		func(o *app.Options) { o.Dev = false; o.Deployment.SetupVersion = "9.9.9" },
+		func(o *app.Options) {
+			o.Deployment = deployguard.Deployment{SetupVersion: "9.9.9", ImageFollowing: true}
+		}, // dev mode
+	} {
+		a, err := start(&syncBuffer{}, mut)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.Close()
+	}
+	if n := len(entries()); n != 0 {
+		t.Fatalf("%d entries without a followed image in production", n)
+	}
+	logs := &syncBuffer{}
+	a, err := start(logs, func(o *app.Options) {
+		o.Dev = false
+		o.Deployment = deployguard.Deployment{SetupVersion: "9.9.9", ImageFollowing: true}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := app.ImagePosture(a); !p.Following || p.SetupVersion != "9.9.9" || p.Version != "9.9.9" {
+		t.Fatalf("posture %+v", p)
+	}
+	if !slices.Contains(app.WeakenedPosture(a), notify.KindUnpinnedImage) {
+		t.Fatalf("posture kinds %v", app.WeakenedPosture(a))
+	}
+	a.Close()
+	got := entries()
+	if len(got) != 1 {
+		t.Fatalf("%d entries, want 1", len(got))
+	}
+	var details map[string]any
+	if err := json.Unmarshal(got[0].Details, &details); err != nil {
+		t.Fatal(err)
+	}
+	if got[0].ActorKind != audit.ActorSystem || details["image_mode"] != "following" || details["setup_version"] != "9.9.9" || details["process"] != "serve" ||
+		details["source"] != "env" {
+		t.Fatalf("entry %+v details %s", got[0], got[0].Details)
+	}
+	if !strings.Contains(logs.String(), "follows a tag instead of a digest") {
+		t.Fatalf("no startup warning:\n%s", logs)
+	}
+	// M2: set up as pinned (the runner is unavailable at startup: the
+	// verdict is unknown and startup is not blocked), then the runner
+	// reports an unpinned own image: following, audited once (source
+	// runner), shown and reminded of; a repeated verdict is not audited
+	// again.
+	logs = &syncBuffer{}
+	a, err = start(logs, func(o *app.Options) { o.Dev = false; o.Deployment.SetupVersion = "9.9.9" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if app.ImagePosture(a).Following || len(entries()) != 1 {
+		t.Fatalf("following before the runner reported: %+v", app.ImagePosture(a))
+	}
+	app.ObserveRunnerImage(t.Context(), a, true)
+	if app.ImagePosture(a).Following || len(entries()) != 1 {
+		t.Fatal("a pinned runner image counts as following")
+	}
+	app.ObserveRunnerImage(t.Context(), a, false)
+	app.ObserveRunnerImage(t.Context(), a, false)
+	if !app.ImagePosture(a).Following || !slices.Contains(app.WeakenedPosture(a), notify.KindUnpinnedImage) {
+		t.Fatalf("posture %+v / %v", app.ImagePosture(a), app.WeakenedPosture(a))
+	}
+	a.Close()
+	got = entries()
+	if len(got) != 2 {
+		t.Fatalf("%d entries, want 2", len(got))
+	}
+	details = nil
+	if err := json.Unmarshal(got[0].Details, &details); err != nil {
+		t.Fatal(err)
+	}
+	if details["source"] != "runner" || details["process"] != "serve" {
+		t.Fatalf("runner entry %s", got[0].Details)
+	}
+	if !strings.Contains(logs.String(), "runner reports that the bekup image follows a tag") {
+		t.Fatalf("no warning:\n%s", logs)
+	}
+	// A version mismatch refuses to start (an upgrade without setup
+	// upgrade, a downgrade), in dev mode too.
+	for _, setupVersion := range []string{"9.9.8", "10.0.0"} {
+		logs := &syncBuffer{}
+		_, err := start(logs, func(o *app.Options) { o.Deployment.SetupVersion = setupVersion })
+		if !errors.Is(err, deployguard.ErrVersionMismatch) || !strings.Contains(logs.String(), "refusing to start") {
+			t.Fatalf("setup version %s: %v\n%s", setupVersion, err, logs)
+		}
+	}
+	// The worker refuses too.
+	if _, err := start(&syncBuffer{}, func(o *app.Options) {
+		o.Mode = app.ModeWorker
+		o.Deployment.SetupVersion = "9.9.8"
+	}); !errors.Is(err, deployguard.ErrVersionMismatch) {
+		t.Fatalf("worker: %v", err)
 	}
 }
 

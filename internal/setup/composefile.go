@@ -41,8 +41,9 @@ const (
 
 // ComposeInfo describes the operator's compose.yaml (compose-first).
 type ComposeInfo struct {
-	// Image is the digest-pinned x-bekup-image value (FromEnv: the
-	// BEKUP_IMAGE value docker compose resolves it to).
+	// Image is the x-bekup-image value (FromEnv: the BEKUP_IMAGE value
+	// docker compose resolves it to): digest-pinned, or a followed tag of
+	// the official repository (Image.IsMutable, D-212).
 	Image imageref.Ref
 	// FromEnv: the x-bekup-image line is ComposeImagePlaceholder (the
 	// committed copy in deploy/compose/): the image comes from BEKUP_IMAGE
@@ -97,7 +98,7 @@ func InspectCompose(dir string, requested Variant, requestedDB DBMode) (*Compose
 	if err != nil {
 		return nil, err
 	}
-	return inspectCompose(root, bekup.Assets(), requested, requestedDB, nil, os.LookupEnv)
+	return inspectCompose(root, bekup.Assets(), requested, requestedDB, nil, os.LookupEnv, true)
 }
 
 // composeInput is what docker compose would read in the deployment
@@ -108,6 +109,10 @@ type composeInput struct {
 	override []byte // nil: no compose.override.yaml
 	dotenv   map[string]string
 	lookup   func(string) (string, bool)
+	// following permits the bekup image to follow a tag of the official
+	// repository (D-212): init and upgrade, where the operator names the
+	// image explicitly, and check of a deployment recorded as following.
+	following bool
 }
 
 // realRoot is the deployment directory on disk (for the symlink scan).
@@ -122,8 +127,9 @@ func (in *composeInput) docs() []composeSrc {
 }
 
 // inspectCompose reads compose.yaml, compose.override.yaml and (when
-// dotenv is nil) .env below root.
-func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMode, dotenv map[string]string, lookup func(string) (string, bool)) (*ComposeInfo, error) {
+// dotenv is nil) .env below root. following permits a followed tag of the
+// official repository as the bekup image (D-212).
+func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMode, dotenv map[string]string, lookup func(string) (string, bool), following bool) (*ComposeInfo, error) {
 	data, err := readManaged(root, ComposeFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, noComposeError(root)
@@ -145,16 +151,18 @@ func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMo
 			return nil, err
 		}
 	}
-	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup}, requested, requestedDB)
+	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup, following: following}, requested, requestedDB)
 }
 
 var composeImageLineRe = regexp.MustCompile(`^x-bekup-image: &bekup-image (\S.*)$`)
 
-// composeImage returns the pinned reference of the single x-bekup-image
-// line, which must also be the YAML value of the top-level key of the
-// file's only YAML document. A line that is exactly ComposePlaceholderLine
-// (the committed files in deploy/compose/) returns placeholder true and no
-// reference: the image then comes from BEKUP_IMAGE.
+// composeImage returns the reference of the single x-bekup-image line
+// (digest-pinned, or a followed tag of the official repository, D-212;
+// lintService decides whether following is allowed), which must also be
+// the YAML value of the top-level key of the file's only YAML document. A
+// line that is exactly ComposePlaceholderLine (the committed files in
+// deploy/compose/) returns placeholder true and no reference: the image
+// then comes from BEKUP_IMAGE.
 func composeImage(data []byte) (img imageref.Ref, placeholder bool, err error) {
 	if err := singleDocument(ComposeFile, data); err != nil {
 		return imageref.Ref{}, false, err
@@ -183,7 +191,7 @@ func composeImage(data []byte) (img imageref.Ref, placeholder bool, err error) {
 	case strings.Contains(value, "$"):
 		return imageref.Ref{}, false, fmt.Errorf("%s: the x-bekup-image line must be a digest-pinned reference or exactly the line of the committed file in deploy/compose/ (`%s`)", ComposeFile, ComposePlaceholderLine)
 	default:
-		if img, err = imageref.ParsePinned(value); err != nil {
+		if img, err = imageref.ParseBekup(value); err != nil {
 			return imageref.Ref{}, false, fmt.Errorf("%s: the x-bekup-image %q is not digest-pinned: %w", ComposeFile, bounded(value), err)
 		}
 	}
@@ -199,13 +207,14 @@ func composeImage(data []byte) (img imageref.Ref, placeholder bool, err error) {
 
 // envImage returns the BEKUP_IMAGE value docker compose resolves the
 // placeholder line to (env: .env overridden by the environment), which
-// must be digest-pinned.
+// must be digest-pinned or a followed tag of the official repository
+// (D-212).
 func envImage(env map[string]string) (imageref.Ref, error) {
 	raw, ok := env[ImageEnvVar]
 	if !ok || raw == "" {
-		return imageref.Ref{}, fmt.Errorf("%s takes the bekup image from %s (the committed file from deploy/compose/), but it is not set: run `%s=<repo>:<tag>@sha256:<digest> docker compose run --rm setup` (docker compose itself refuses to start without it); setup then keeps it in %s", ComposeFile, ImageEnvVar, ImageEnvVar, EnvFile)
+		return imageref.Ref{}, fmt.Errorf("%s takes the bekup image from %s (the committed file from deploy/compose/), but it is not set: run `%s=<repo>:<tag>@sha256:<digest> docker compose run --rm setup` (or %s=%s:%s to follow the releases, D-212; docker compose itself refuses to start without it); setup then keeps it in %s", ComposeFile, ImageEnvVar, ImageEnvVar, ImageEnvVar, imageref.OfficialRepo, imageref.LatestTag, EnvFile)
 	}
-	img, err := imageref.ParsePinned(raw)
+	img, err := imageref.ParseBekup(raw)
 	if err != nil {
 		return imageref.Ref{}, pinHelp(fmt.Errorf("%s=%q (used by the x-bekup-image line of %s) is not digest-pinned: %w", ImageEnvVar, bounded(raw), ComposeFile, err))
 	}

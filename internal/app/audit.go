@@ -11,6 +11,7 @@ import (
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/instancekeys"
 )
 
@@ -146,6 +147,49 @@ func (a *App) auditInsecureDBRoles(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
+	return nil
+}
+
+// auditUnpinnedImage records a startup with the bekup image following a
+// tag instead of a digest (BEKUP_IMAGE_MODE=following, or the runner
+// reports an unpinned own image; D-212), once per process. Outside dev
+// mode, fail closed like auditInsecureDBRoles; the audit observer raises
+// the security.system alert (once a day, with the periodic reminder of
+// the security check). A runner verdict that arrives after startup is
+// audited by observeRunnerImage.
+func (a *App) auditUnpinnedImage(ctx context.Context) error {
+	a.image.mu.Lock()
+	defer a.image.mu.Unlock()
+	if a.opts.Dev || a.image.audited || !a.imageFollowing() {
+		return nil
+	}
+	if err := a.recordUnpinnedImage(ctx); err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	return nil
+}
+
+// recordUnpinnedImage records security.unpinned_image and marks it done;
+// the caller holds a.image.mu.
+func (a *App) recordUnpinnedImage(ctx context.Context) error {
+	cctx, cancel := context.WithTimeout(ctx, startupTimeout(a.opts.Config))
+	defer cancel()
+	_, err := a.auditor.Record(cctx, audit.Event{
+		Actor:      audit.SystemActor(),
+		Action:     audit.ActionSecurityUnpinnedImage,
+		TargetType: "server",
+		Details: audit.Details{
+			"image_mode":    deployguard.ImageModeFollowing,
+			"source":        a.imageSource(),
+			"version":       a.opts.Version,
+			"setup_version": a.opts.Deployment.SetupVersion,
+			"process":       a.processName(),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	a.image.audited = true
 	return nil
 }
 

@@ -65,7 +65,7 @@ type SecurityOptions struct {
 	Runner RunnerHealth
 	// Posture returns the posture kinds that are weakened now
 	// (notify.KindInsecureTransport, notify.KindInsecureDBTLS,
-	// notify.KindInsecureDBRoles).
+	// notify.KindInsecureDBRoles, notify.KindUnpinnedImage).
 	Posture func() []string
 	Now     func() time.Time
 	Logger  *slog.Logger

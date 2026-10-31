@@ -219,8 +219,17 @@ func (a *App) newReloader() error {
 	a.reloadAPI, err = configreload.NewAPI(configreload.APIOptions{
 		DB: a.pool, Auditor: a.auditor, Policy: a.policy, Reloader: r, Logger: a.opts.Logger,
 		Database: configreload.DatabasePostureOf(&a.opts.Config.Database),
+		Image:    a.imagePosture,
 	})
 	return err
+}
+
+// imagePosture is this process's image posture for the configuration
+// page (D-212): following when set up so or reported by the runner.
+func (a *App) imagePosture() configreload.ImagePosture {
+	return configreload.ImagePosture{
+		Following: a.imageFollowing(), SetupVersion: a.opts.Deployment.SetupVersion, Version: a.opts.Version,
+	}
 }
 
 // startReload records this process's startup row (the process registry)

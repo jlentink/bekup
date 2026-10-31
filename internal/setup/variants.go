@@ -255,7 +255,7 @@ func externalDBEdits(v Variant) []edit {
 		replaceComment(dbNoteMarker, "external-db/db-note.yaml"),
 		replaceLead("services/certs-init", "external-db/certs-init-lead.yaml"),
 		replace("services/certs-init/command", "external-db/certs-init-command.yaml"),
-		remove("services/migrate/environment"),
+		replace("services/migrate/environment", "external-db/migrate-environment.yaml"),
 		replace("services/migrate/secrets", "external-db/migrate-mounts.yaml"),
 		remove("services/migrate/depends_on"),
 		replace("services/admin/secrets", "external-db/admin-mounts.yaml"),
@@ -288,8 +288,9 @@ const ImageEnvVar = "BEKUP_IMAGE"
 // ComposeImagePlaceholder is the value of the x-bekup-image line of the
 // committed compose files in deploy/compose/ (D-205 amendment 3): no
 // default, so docker compose refuses to run without BEKUP_IMAGE; setup
-// requires it to be digest-pinned and writes it to .env.
-const ComposeImagePlaceholder = "${BEKUP_IMAGE:?set BEKUP_IMAGE to the digest-pinned bekup image repo:tag@sha256:digest, see the README}"
+// requires it to be digest-pinned (or a followed tag of the official
+// repository, D-212) and writes it to .env.
+const ComposeImagePlaceholder = "${BEKUP_IMAGE:?set BEKUP_IMAGE to the bekup image, digest-pinned repo:tag@sha256:digest or ghcr.io/jlentink/bekup:latest, see the README}"
 
 // composeImagePrefix starts the single line of a compose file that names
 // the bekup image. Release and setup replace exactly that line.
@@ -303,6 +304,10 @@ const ComposeImageLine = composeImagePrefix + ComposeImageVar
 const ComposePlaceholderLine = composeImagePrefix + ComposeImagePlaceholder
 
 var imageLineAnyRe = regexp.MustCompile(`(?m)^x-bekup-image:`)
+
+// imageVarRefRe matches a reference to the BEKUP_IMAGE compose variable
+// (not BEKUP_IMAGE_MODE).
+var imageVarRefRe = regexp.MustCompile(`\$\{BEKUP_IMAGE(?:[^A-Za-z0-9_]|$)`)
 
 // applyEdits renders the overlay of v (and the database mode db) onto src.
 func applyEdits(src []byte, v Variant, db DBMode) (string, error) {
@@ -383,11 +388,11 @@ func RenderVariant(src []byte, v Variant, db DBMode, img *imageref.Ref) ([]byte,
 	if n != 1 || len(imageLineAnyRe.FindAllStringIndex(out, -1)) != 1 {
 		return nil, fmt.Errorf("compose source: expected exactly one %q line", ComposeImageLine)
 	}
-	if strings.Count(out, "${BEKUP_IMAGE") != 1 {
+	if len(imageVarRefRe.FindAllStringIndex(out, -1)) != 1 {
 		return nil, errors.New("compose source: a further ${BEKUP_IMAGE...} reference exists")
 	}
 	if img != nil {
-		if _, err := imageref.ParsePinned(img.String()); err != nil {
+		if _, err := imageref.ParseBekup(img.String()); err != nil {
 			return nil, err
 		}
 	}

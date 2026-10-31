@@ -708,6 +708,39 @@ func TestDetectSelfRequiresOwnAddress(t *testing.T) {
 	}
 }
 
+// D-212: the executor reports whether its own container image is pinned
+// by digest, and only after Init found the container.
+func TestImagePinned(t *testing.T) {
+	const digest = "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	for _, tc := range []struct {
+		image  string
+		pinned bool
+	}{
+		{"ghcr.io/jlentink/bekup:0.0.3" + digest, true},
+		{"ghcr.io/jlentink/bekup" + digest, true},
+		{"ghcr.io/jlentink/bekup:latest", false},
+		{"bekup:dev", false},
+		{"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", false},
+		{"", false},
+	} {
+		t.Run(tc.image, func(t *testing.T) {
+			fd := newFakeDocker()
+			fd.selfImage = tc.image
+			fresh, err := New(Options{Config: testConfig(), Docker: fd, Guard: testGuard(t), Logger: discardLogger()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, known := fresh.ImagePinned(); known {
+				t.Fatal("known before Init")
+			}
+			e := newTestExecutor(t, fd)
+			if pinned, known := e.ImagePinned(); !known || pinned != tc.pinned {
+				t.Fatalf("ImagePinned = %v, %v", pinned, known)
+			}
+		})
+	}
+}
+
 func TestSelfCandidates(t *testing.T) {
 	mi := "100 90 0:50 /docker/containers/" + selfID + "/resolv.conf /etc/resolv.conf rw - ext4 /dev/vda1 rw\n" +
 		"101 90 0:50 /docker/containers/" + selfID + "/hostname /etc/hostname rw - ext4 /dev/vda1 rw\n" +

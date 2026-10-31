@@ -70,7 +70,7 @@ Trust boundaries:
 | `serve` → app DB | one connection builder, TLS verify-full by default (D-100) with SCRAM-only auth and channel binding, least-privilege roles checked by `session_user`, envelope-encrypted secrets, append-only audit log (D-046, D-054); external PostgreSQL in fields mode, single-account mode only as an audited weakening (D-207); its compose files make `backend` non-internal, the operator firewalls the DB (D-208) |
 | Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
 | External proxy (operator's Traefik / NPM) → `serve` | only over the external, internal `bekup-proxy` link network (/28): proxy at a fixed address, `serve` the only bekup member, no published ports, `trusted_proxies` exactly the proxy's /32 (`setup check` errors otherwise), untrusted `X-Forwarded-For` ignored and logged (D-205) |
-| Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image; writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
+| Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image (or, opt-in, the official `:latest` tag with the setup version guard, D-212); writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
 
 `serve` can **never** reach target DBs or Docker.
 
@@ -219,7 +219,11 @@ internal/
                   internal /metrics listener; 5.5: security.go hourly
                   security_check: cert/pin expiry, audit chain, posture)
                 imageref (digest-pinned image reference grammar, shared
-                  with engine's catalog: D-203)
+                  with engine's catalog: D-203; ParseFollowing for the
+                  bekup image's official tags: D-212)
+                deployguard (BEKUP_SETUP_VERSION / BEKUP_IMAGE_MODE: the
+                  setup version guard of migrate/bootstrap/serve/worker/
+                  runner: D-212)
                 setup (`bekup setup init|upgrade|check|compose`: container-only
                   compose install, ownership manifest, state file: 6.14;
                   compose-first 6.14b: outline.go line editor, variants.go +
@@ -1389,7 +1393,8 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   a CA it did not create (`refuseExistingCerts`; `--regenerate-secrets`
   sets old secrets aside until success), validates TOMLs only with the
   config loaders, and accepts images only via `imageref.ParsePinned`
-  (tagless references need `--allow-version-mismatch`). `setup check`
+  (tagless references need `--allow-version-mismatch`); the one exception
+  is the bekup image itself (`imageref.ParseBekup`, see D-212 below). `setup check`
   lints the resolved project (see the next item) and refuses compose-file
   switches (`COMPOSE_FILE`, `COMPOSE_PATH_SEPARATOR`,
   `COMPOSE_PROJECT_DIRECTORY`, `COMPOSE_ENV_FILES`, other compose file
@@ -1446,6 +1451,41 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `.env` (`syncEnvImage`, state `image_source: env`) and `BEKUP_IMAGE` is
   allowed nowhere else; never embed `deploy/compose/` or add it to the
   variant asset directories.
+- Following `:latest` and the version guard (D-212, proposed): only the
+  bekup image may follow a tag, only of `imageref.OfficialRepo`
+  (`imageref.ParseFollowing` / `ParseBekup`, `Ref.IsMutable`); every other
+  image, release asset and `setup compose --image` stays digest-pinned
+  (`ParsePinned`). Setup records `image_mode: following` (`State.image()`
+  parses by mode) and keeps the `.env` lines `BEKUP_SETUP_VERSION` and
+  `BEKUP_IMAGE_MODE` current at every init and upgrade (`deploymentEnv`,
+  `syncEnv`); the compose files pass both to `migrate`, `serve` and
+  `runner` (in both database modes:
+  `variants/external-db/migrate-environment.yaml`), and both are in
+  `composeVarAllowlist` and `config.NonKeyEnvVars`. The lint accepts the
+  followed tag only with `composeInput.following` (init/upgrade, and check
+  of a following state). `migrate up`, `db bootstrap`, serve, worker and
+  runner read them only through `internal/deployguard` (`FromEnv`,
+  `Deployment.Check`: exact version compare, unset only warns, malformed
+  refuses, and outside dev mode `following` without a setup version
+  refuses) before anything connects (cmd `checkDeployment`,
+  `App.checkDeployment`; the runner before Docker and its listener). The
+  image posture is `App.imageFollowing()`: `BEKUP_IMAGE_MODE=following`
+  OR the runner's `HealthResponse.image_pinned = false` (the runner reads
+  its own container's `Config.Image` via `executor.ImagePinned`, only the
+  verdict leaves it; unset while unknown; ignored in dev mode). serve and
+  worker probe it at startup (`startImagePosture`, 3 s bound, never
+  blocking), then through `observedRunner` (health snapshot, security
+  check) and the image watch (every minute while unknown, hourly after);
+  use `a.runnerHealth()` (never `a.runner` directly) for anything that
+  calls Health. A followed image is warned, audited
+  (`security.unpinned_image`, fail closed at startup, once per process
+  when found later, detail `source`), alerted daily
+  (`notify.KindUnpinnedImage` via `weakenedPosture`) and shown in
+  `ConfigStatus.image` (`configreload.APIOptions.Image` is a func: the
+  posture can change after startup). Never add a second path that runs
+  migrations, bootstrap or starts serve/worker/runner without the guard. A compose variable
+  whose name starts with `BEKUP_IMAGE` must not be counted as
+  `BEKUP_IMAGE` (`imageVarRefRe`).
 - Setup database dimension, wizard and renewal (D-208, proposed): every
   variant renders with `DBMode` bundled and external (`externalDBEdits`,
   `variants/external-db/`; six release and committed files): a change to

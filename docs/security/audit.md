@@ -335,6 +335,15 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   mode (`database.single_account`, D-207), with `single_account`, `process`
   and `login_role_findings` (dangerous attributes and memberships of the one
   account, e.g. `CREATEROLE`); fail closed like the entries above.
+- `security.unpinned_image` (actor `system`, target `server`) is recorded
+  at every `serve` and `worker` startup outside dev mode when the bekup
+  image follows a tag instead of a digest (`BEKUP_IMAGE_MODE=following`, or
+  the runner reports that its own container image has no digest; D-212),
+  with `image_mode`, `source` (`env`, `runner` or `env_and_runner`),
+  `version`, `setup_version` and `process`; fail closed like the entries
+  above. When the runner's verdict arrives only after startup (the runner
+  was not ready), the process records it once then (a failure is logged and
+  retried at the next runner check).
 - `cli.db.bootstrap` (actor `cli`, target `database`, the database name) is
   recorded by `bekup db bootstrap` when it created or changed roles, the
   database or citext of an installation whose schema is already migrated

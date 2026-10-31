@@ -231,7 +231,7 @@ func TestRenderedConfigsValidate(t *testing.T) {
 				t.Fatal(err)
 			}
 			dir := t.TempDir()
-			for f, data := range operatorFiles(&a) {
+			for f, data := range operatorFiles(&a, "1.2.3") {
 				if err := os.WriteFile(pathIn(dir, f), data, 0o600); err != nil {
 					t.Fatal(err)
 				}
@@ -250,24 +250,31 @@ func TestEnvFile(t *testing.T) {
 	if err := a.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	env := string(renderEnv(&a))
+	env := string(renderEnv(&a, "1.2.3"))
 	for _, l := range []string{
 		"COMPOSE_PROFILES=traefik", "BEKUP_DOMAIN=backup.example.com", "PROXY_TLS_MODE=acme",
 		"ACME_EMAIL=ops@example.com", "ACME_CA_SERVER=" + ACMEStagingURL, "DOCKER_GID=999",
 		"BEKUP_KEYS_DIR=./secrets", "RUNNER_CTL_SUBNET=172.30.2.0/24", "RUNNER_CTL_IP=172.30.2.10",
+		"BEKUP_SETUP_VERSION=1.2.3",
 	} {
 		if !hasLine(env, l) {
 			t.Errorf(".env lacks %q:\n%s", l, env)
 		}
 	}
-	if strings.Contains(env, "FRONTEND_SUBNET") || strings.Contains(env, "BEKUP_IMAGE") {
+	if strings.Contains(env, "FRONTEND_SUBNET") || strings.Contains(env, "\nBEKUP_IMAGE=") || strings.Contains(env, "\nBEKUP_IMAGE_MODE=") {
 		t.Errorf("unexpected variables:\n%s", env)
+	}
+	// D-212: following a tag records the image mode.
+	f := a
+	f.Image = mustRef(t, "ghcr.io/jlentink/bekup:latest")
+	if env := string(renderEnv(&f, "v1.2.3")); !hasLine(env, "BEKUP_IMAGE_MODE=following") || !hasLine(env, "BEKUP_SETUP_VERSION=1.2.3") {
+		t.Errorf("following .env:\n%s", env)
 	}
 	n := testAnswers(t, ProxyNone)
 	if err := n.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	env = string(renderEnv(&n))
+	env = string(renderEnv(&n, "1.2.3"))
 	if !hasLine(env, "COMPOSE_PROFILES=") || strings.Contains(env, "ACME") || strings.Contains(env, "PROXY_TLS_MODE") {
 		t.Errorf("proxy none .env:\n%s", env)
 	}
@@ -276,7 +283,7 @@ func TestEnvFile(t *testing.T) {
 func TestOverrideOnlyForStaticTLS(t *testing.T) {
 	a := testAnswers(t, ProxyNginx)
 	a.TLSMode, a.ACMEEmail = TLSStatic, ""
-	files := operatorFiles(&a)
+	files := operatorFiles(&a, "1.2.3")
 	ov, ok := files[OverrideFile]
 	if !ok {
 		t.Fatal("no override for static TLS")
@@ -288,7 +295,7 @@ func TestOverrideOnlyForStaticTLS(t *testing.T) {
 	if !strings.Contains(string(ov), "target: /certs") || !strings.Contains(string(ov), "certbot:") {
 		t.Fatalf("override:\n%s", ov)
 	}
-	if _, ok := operatorFiles(&Answers{Proxy: ProxyTraefik, TLSMode: TLSACME})[OverrideFile]; ok {
+	if _, ok := operatorFiles(&Answers{Proxy: ProxyTraefik, TLSMode: TLSACME}, "1.2.3")[OverrideFile]; ok {
 		t.Fatal("override for ACME")
 	}
 }

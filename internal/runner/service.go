@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/jlentink/bekup/internal/runnerpb"
@@ -17,8 +18,10 @@ type service struct {
 
 	version string
 	docker  DockerStatusFunc
-	limits  *limiter
-	certEnd time.Time
+	// imagePinned reports the own image's pinning (nil: unknown).
+	imagePinned ImagePinnedFunc
+	limits      *limiter
+	certEnd     time.Time
 	// ops serves every RPC except Health (ops*.go).
 	ops *operations
 }
@@ -34,7 +37,7 @@ func (s *service) Health(ctx context.Context, _ *runnerpb.HealthRequest) (*runne
 	if s.docker != nil {
 		docker = s.docker(ctx)
 	}
-	return &runnerpb.HealthResponse{
+	resp := &runnerpb.HealthResponse{
 		Version:             s.version,
 		ApiVersion:          runnerpb.APIVersion,
 		CallerIdentity:      CallerFromContext(ctx),
@@ -42,7 +45,14 @@ func (s *service) Health(ctx context.Context, _ *runnerpb.HealthRequest) (*runne
 		ActiveRuns:          clampUint32(s.limits.activeRuns()),
 		MaxConcurrentRuns:   clampUint32(s.limits.maxRuns()),
 		CertificateNotAfter: timestamppb.New(s.certEnd),
-	}, nil
+	}
+	// D-212: the verdict only (unset while unknown), never the reference.
+	if s.imagePinned != nil {
+		if pinned, known := s.imagePinned(); known {
+			resp.ImagePinned = proto.Bool(pinned)
+		}
+	}
+	return resp, nil
 }
 
 func clampUint32(n int) uint32 {

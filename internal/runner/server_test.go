@@ -173,11 +173,38 @@ func TestHealthOverMTLS(t *testing.T) {
 	}
 	if resp.GetCallerIdentity() != "spiffe://bekup/serve" || resp.GetVersion() != "1.2.3" || resp.GetApiVersion() != "v1" ||
 		resp.GetDockerStatus() != runnerpb.DockerStatus_DOCKER_STATUS_UNKNOWN || resp.GetMaxConcurrentRuns() != 4 ||
-		resp.GetActiveRuns() != 0 || !resp.GetCertificateNotAfter().AsTime().Equal(ts.srv.certEnd) {
+		resp.GetActiveRuns() != 0 || !resp.GetCertificateNotAfter().AsTime().Equal(ts.srv.certEnd) ||
+		resp.ImagePinned != nil {
 		t.Fatalf("unexpected health: %v", resp)
 	}
 	if !strings.Contains(ts.logs.String(), `"caller":"spiffe://bekup/serve"`) {
 		t.Errorf("call not logged: %s", ts.logs.String())
+	}
+}
+
+// D-212: Health carries the own image's pinning verdict once it is known
+// (unset before), and nothing else about the image.
+func TestHealthImagePinned(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		pinned, known bool
+	}{
+		{"unknown", false, false},
+		{"pinned", true, true},
+		{"unpinned", false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := startServer(t, func(o *Options) {
+				o.ImagePinned = func() (bool, bool) { return tc.pinned, tc.known }
+			})
+			resp, err := ts.client(t, ts.pki.clientTLS(t, certs.ComponentServe)).Health(ctxTimeout(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (resp.ImagePinned != nil) != tc.known || resp.GetImagePinned() != tc.pinned {
+				t.Fatalf("image_pinned = %v", resp.ImagePinned)
+			}
+		})
 	}
 }
 

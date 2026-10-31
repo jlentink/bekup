@@ -20,8 +20,10 @@
 # (internal/setup/variants, `bekup setup compose`, `just compose-examples`);
 # `bekup setup init --write-compose --variant full` writes this file itself
 # (setup-first). Rules for this file (tests enforce them):
-#   - the bekup image appears ONLY in the x-bekup-image line below (release
-#     and setup replace exactly that line with the pinned reference);
+#   - the bekup image appears ONLY in the x-bekup-image line below (the
+#     release replaces exactly that line with the digest-pinned reference,
+#     setup with the image the operator names: pinned, or the followed
+#     ghcr.io/jlentink/bekup:latest; D-212);
 #   - never use `build:`;
 #   - every ./deploy/... bind uses the long syntax with
 #     `create_host_path: false` and stays below deploy/{postgres,traefik,nginx}.
@@ -39,16 +41,19 @@
 #   5. Create the first admin (D-113):
 #        docker compose run --rm admin create --email you@example.com --display-name "You"
 #
-# Every image is pinned by tag AND digest; Renovate keeps the digests current
-# (renovate.json, D-061; run `just gen` on its PRs to refresh deploy/compose/).
-# Set BEKUP_IMAGE to a released, digest-pinned
-# ghcr.io/jlentink/bekup reference when running this file directly.
+# Every third-party image is pinned by tag AND digest; Renovate keeps the
+# digests current (renovate.json, D-061; run `just gen` on its PRs to refresh
+# deploy/compose/). Set BEKUP_IMAGE to a released, digest-pinned
+# ghcr.io/jlentink/bekup:<tag>@sha256:<digest> reference when running this
+# file directly (ghcr.io/jlentink/bekup:latest follows the newest release
+# instead: an explicit weakening, D-212).
 
 name: bekup
 
-# The bekup image: the ONLY place it is named (setup and the release replace
-# this one line with the digest-pinned reference, `just gen` with the
-# BEKUP_IMAGE placeholder of deploy/compose/; D-205).
+# The bekup image: the ONLY place it is named (the release replaces this one
+# line with the digest-pinned reference, setup with the image the operator
+# names (digest-pinned, or ghcr.io/jlentink/bekup:latest to follow; D-212),
+# `just gen` with the BEKUP_IMAGE placeholder of deploy/compose/; D-205).
 x-bekup-image: &bekup-image ${BEKUP_IMAGE:-bekup:dev}
 
 # ---------------------------------------------------------------------------
@@ -191,6 +196,12 @@ services:
       # default). migrate never receives the bekup_app URL, and serve never
       # receives this owner secret.
       BEKUP_DATABASE_OWNER_URL_FILE: /run/secrets/bekup_database_owner_url
+      # Written to .env by `bekup setup` (D-212): migrate refuses to run
+      # when its version differs from the one setup prepared this directory
+      # for (run `docker compose run --rm setup upgrade` first); "following"
+      # when the image follows a tag instead of a digest.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
     configs:
       - source: bekup_toml
         target: /etc/bekup/bekup.toml
@@ -253,6 +264,13 @@ services:
   serve:
     <<: *bekup-hardening
     command: [serve]
+    environment:
+      # Written to .env by `bekup setup` (D-212): serve refuses to start on
+      # another version than setup prepared; with "following" (or when the
+      # runner reports an unpinned image) it warns, audits and alerts about
+      # the unpinned image.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
     configs:
       - source: bekup_toml
         target: /etc/bekup/bekup.toml
@@ -322,6 +340,14 @@ services:
   runner:
     <<: *bekup-hardening
     command: [runner]
+    environment:
+      # Written to .env by `bekup setup` (D-212): the runner refuses to start
+      # on another version than setup prepared, before it opens Docker or
+      # its gRPC listener; "following" needs BEKUP_SETUP_VERSION. Whether its
+      # own image is pinned the runner reads from Docker (Health), not from
+      # here.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
     # Do not set `hostname:`: the runner detects its own container through
     # the default hostname (container ID) to join per-run networks. If that
     # fails, set runner.toml [docker] self_container

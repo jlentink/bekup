@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 )
 
@@ -48,7 +49,12 @@ func TestUnrecordedFilesGraphQL(t *testing.T) {
 	e.mustGQL(adminC, createDestMut, map[string]any{"in": map[string]any{
 		"name": "Local disk", "type": "DISK", "disk": map[string]any{"path": "local"},
 	}}).field(t, "createDestination", &disk)
-	key := "nightly/2026-01-01T000000Z/orphan.dump"
+	// The scan covers the directories of known job slugs only (D-209).
+	job, err := dbtest.InsertJob(t.Context(), e.pool, dbtest.JobRow{DestinationIDs: []uuid.UUID{uuid.MustParse(disk.ID)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := "job-" + job.String()[:8] + "/2026-01-01T000000Z/orphan.dump"
 	p := filepath.Join(e.root, "local", filepath.FromSlash(key))
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		t.Fatal(err)

@@ -44,6 +44,29 @@ func (q *Queries) DestinationHasPresentArtifacts(ctx context.Context, destinatio
 	return column_1, err
 }
 
+const destinationNameTaken = `-- name: DestinationNameTaken :one
+SELECT EXISTS (
+    SELECT 1 FROM destinations
+    WHERE lower(name) = lower($1::text) AND deleted_at IS NULL AND id <> $2
+)::boolean
+`
+
+type DestinationNameTakenParams struct {
+	Name string    `json:"name"`
+	ID   uuid.UUID `json:"id"`
+}
+
+// DestinationNameTaken reports another destination that is not deleted
+// with the same name (case-insensitively, like destinations_name_active_key).
+// Checked before the location so that a duplicate name is reported as
+// such; the unique index stays the authority under concurrency.
+func (q *Queries) DestinationNameTaken(ctx context.Context, arg DestinationNameTakenParams) (bool, error) {
+	row := q.db.QueryRow(ctx, destinationNameTaken, arg.Name, arg.ID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const destinationUsage = `-- name: DestinationUsage :many
 SELECT d.id, d.name, d.type,
        COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,

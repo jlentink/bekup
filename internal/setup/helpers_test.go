@@ -25,7 +25,7 @@ const (
 
 func mustRef(t testing.TB, s string) imageref.Ref {
 	t.Helper()
-	r, err := imageref.ParsePinned(s)
+	r, err := imageref.ParseBekup(s)
 	if err != nil {
 		t.Fatal(err)
 	}

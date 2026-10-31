@@ -240,6 +240,7 @@ type ComplexityRoot struct {
 
 	ConfigStatus struct {
 		Database           func(childComplexity int) int
+		Image              func(childComplexity int) int
 		LastRequest        func(childComplexity int) int
 		ListeningProcesses func(childComplexity int) int
 		LiveKeys           func(childComplexity int) int
@@ -447,6 +448,12 @@ type ComplexityRoot struct {
 		Encryption func(childComplexity int) int
 		Passphrase func(childComplexity int) int
 		Version    func(childComplexity int) int
+	}
+
+	ImagePosture struct {
+		Following    func(childComplexity int) int
+		SetupVersion func(childComplexity int) int
+		Version      func(childComplexity int) int
 	}
 
 	ImagePrePullResult struct {
@@ -2606,6 +2613,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ConfigStatus.Database(childComplexity), true
+	case "ConfigStatus.image":
+		if e.ComplexityRoot.ConfigStatus.Image == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConfigStatus.Image(childComplexity), true
 	case "ConfigStatus.lastRequest":
 		if e.ComplexityRoot.ConfigStatus.LastRequest == nil {
 			break
@@ -3440,6 +3453,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.GeneratedJobPassphrase.Version(childComplexity), true
+
+	case "ImagePosture.following":
+		if e.ComplexityRoot.ImagePosture.Following == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImagePosture.Following(childComplexity), true
+	case "ImagePosture.setupVersion":
+		if e.ComplexityRoot.ImagePosture.SetupVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImagePosture.SetupVersion(childComplexity), true
+	case "ImagePosture.version":
+		if e.ComplexityRoot.ImagePosture.Version == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ImagePosture.Version(childComplexity), true
 
 	case "ImagePrePullResult.alreadyPresent":
 		if e.ComplexityRoot.ImagePrePullResult.AlreadyPresent == nil {
@@ -9546,10 +9578,33 @@ type DatabasePosture {
   singleAccount: Boolean!
 }
 
+"""
+How the bekup image of the serve process that answered is referenced
+(D-212; versions only).
+"""
+type ImagePosture {
+  """
+  True when the image follows a tag such as :latest instead of a digest
+  (BEKUP_IMAGE_MODE=following, or the runner reports that its own container
+  image has no digest; the latter can turn true after startup): an explicit
+  weakening, warned, audited and alerted daily.
+  """
+  following: Boolean!
+  """
+  The version bekup setup prepared the deployment for (BEKUP_SETUP_VERSION;
+  null when not set): processes of another version refuse to start.
+  """
+  setupVersion: String
+  "The version of the serve process that answered."
+  version: String!
+}
+
 "The configuration page."
 type ConfigStatus {
   "The app database posture of the serve process that answered."
   database: DatabasePosture!
+  "The image posture of the serve process that answered (D-212)."
+  image: ImagePosture!
   "Keys a reload applies without a restart (` + "`" + `section.key` + "`" + `)."
   liveKeys: [String!]!
   """
@@ -13982,6 +14037,8 @@ func (ec *executionContext) childFields_ConfigStatus(ctx context.Context, field 
 	switch field.Name {
 	case "database":
 		return ec.fieldContext_ConfigStatus_database(ctx, field)
+	case "image":
+		return ec.fieldContext_ConfigStatus_image(ctx, field)
 	case "liveKeys":
 		return ec.fieldContext_ConfigStatus_liveKeys(ctx, field)
 	case "processes":
@@ -14398,6 +14455,18 @@ func (ec *executionContext) childFields_GeneratedJobPassphrase(ctx context.Conte
 		return ec.fieldContext_GeneratedJobPassphrase_passphrase(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type GeneratedJobPassphrase", field.Name)
+}
+
+func (ec *executionContext) childFields_ImagePosture(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "following":
+		return ec.fieldContext_ImagePosture_following(ctx, field)
+	case "setupVersion":
+		return ec.fieldContext_ImagePosture_setupVersion(ctx, field)
+	case "version":
+		return ec.fieldContext_ImagePosture_version(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ImagePosture", field.Name)
 }
 
 func (ec *executionContext) childFields_ImagePrePullResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -22056,6 +22125,38 @@ func (ec *executionContext) fieldContext_ConfigStatus_database(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _ConfigStatus_image(ctx context.Context, field graphql.CollectedField, obj *model.ConfigStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConfigStatus_image(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Image, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.ImagePosture) graphql.Marshaler {
+			return ec.marshalNImagePosture2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐImagePosture(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConfigStatus_image(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConfigStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ImagePosture(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ConfigStatus_liveKeys(ctx context.Context, field graphql.CollectedField, obj *model.ConfigStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25375,6 +25476,75 @@ func (ec *executionContext) _GeneratedJobPassphrase_passphrase(ctx context.Conte
 }
 func (ec *executionContext) fieldContext_GeneratedJobPassphrase_passphrase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("GeneratedJobPassphrase", field, false, false, "String")
+}
+
+func (ec *executionContext) _ImagePosture_following(ctx context.Context, field graphql.CollectedField, obj *model.ImagePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ImagePosture_following(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Following, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ImagePosture_following(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ImagePosture", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ImagePosture_setupVersion(ctx context.Context, field graphql.CollectedField, obj *model.ImagePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ImagePosture_setupVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SetupVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ImagePosture_setupVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ImagePosture", field, false, false, "String")
+}
+
+func (ec *executionContext) _ImagePosture_version(ctx context.Context, field graphql.CollectedField, obj *model.ImagePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ImagePosture_version(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Version, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ImagePosture_version(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ImagePosture", field, false, false, "String")
 }
 
 func (ec *executionContext) _ImagePrePullResult_imageRef(ctx context.Context, field graphql.CollectedField, obj *model.ImagePrePullResult) (ret graphql.Marshaler) {
@@ -55700,6 +55870,11 @@ func (ec *executionContext) _ConfigStatus(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "image":
+			out.Values[i] = ec._ConfigStatus_image(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "liveKeys":
 			out.Values[i] = ec._ConfigStatus_liveKeys(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -57044,6 +57219,49 @@ func (ec *executionContext) _GeneratedJobPassphrase(ctx context.Context, sel ast
 			}
 		case "passphrase":
 			out.Values[i] = ec._GeneratedJobPassphrase_passphrase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var imagePostureImplementors = []string{"ImagePosture"}
+
+func (ec *executionContext) _ImagePosture(ctx context.Context, sel ast.SelectionSet, obj *model.ImagePosture) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, imagePostureImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ImagePosture")
+		case "following":
+			out.Values[i] = ec._ImagePosture_following(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setupVersion":
+			out.Values[i] = ec._ImagePosture_setupVersion(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "version":
+			out.Values[i] = ec._ImagePosture_version(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -65597,6 +65815,14 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 		graphql.AddInvalidNullFromMarshaler(ctx, "ID!")
 	}
 	return res
+}
+
+func (ec *executionContext) marshalNImagePosture2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐImagePosture(ctx context.Context, sel ast.SelectionSet, v *model.ImagePosture) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ImagePosture!")
+		return graphql.Null
+	}
+	return ec._ImagePosture(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNImagePrePullResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐImagePrePullResult(ctx context.Context, sel ast.SelectionSet, v *model.ImagePrePullResult) graphql.Marshaler {

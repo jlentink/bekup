@@ -4,6 +4,7 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"strings"
@@ -53,6 +54,9 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		// BEKUP_IMAGE in .env (D-205 amendment 3).
 		placeholder bool
 		db          DBMode
+		// image is the bekup image ("" = the pinned test image); a tag of
+		// the official repository follows the releases (D-212).
+		image string
 	}
 	cases := map[string]tc{}
 	for name, mk := range variants {
@@ -60,6 +64,13 @@ func TestIntegrationComposeConfig(t *testing.T) {
 	}
 	cases["setup-first-external-db"] = tc{answers: func() Answers { return testAnswers(t, ProxyNginx) }, db: DBExternal}
 	cases["setup-first-external-db-single-account"] = tc{answers: func() Answers { return testAnswers(t, ProxyNone) }, db: DBExternal}
+	following := func() Answers {
+		a := testAnswers(t, ProxyTraefik)
+		a.Image = mustRef(t, "ghcr.io/jlentink/bekup:latest")
+		return a
+	}
+	cases["setup-first-following"] = tc{answers: following, image: "ghcr.io/jlentink/bekup:latest"}
+	cases["placeholder-following"] = tc{answers: func() Answers { return variantAnswers(VariantTraefik) }, variant: VariantTraefik, placeholder: true, image: "ghcr.io/jlentink/bekup:latest"}
 	for _, v := range ReleaseVariants {
 		for _, db := range DBModes {
 			suffix := string(v)
@@ -73,6 +84,10 @@ func TestIntegrationComposeConfig(t *testing.T) {
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
+			image := c.image
+			if image == "" {
+				image = "ghcr.io/jlentink/bekup:1.2.3@" + testDigest
+			}
 			var dbAnswers Database
 			if c.db == DBExternal {
 				testDBCA(t, dir, "db-ca.pem", time.Now(), 0)
@@ -94,7 +109,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 				}
 			case c.placeholder:
 				writePlaceholderDB(t, dir, c.variant, c.db)
-				t.Setenv(ImageEnvVar, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest)
+				t.Setenv(ImageEnvVar, image)
 				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
 					t.Fatalf("init: %v\n%s", err, out)
 				}
@@ -127,8 +142,46 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("docker compose config --images: %v\n%s", err, out)
 			}
-			if !containsLine(string(out), "ghcr.io/jlentink/bekup:1.2.3@"+testDigest) || containsLine(string(out), "evil:latest") {
+			if !containsLine(string(out), image) || containsLine(string(out), "evil:latest") {
 				t.Fatalf("images:\n%s", out)
+			}
+			// migrate, serve and runner receive the deployment facts
+			// (D-212); other services do not.
+			cmd = exec.CommandContext(ctx, "docker", "compose", "config", "--format", "json")
+			cmd.Dir = dir
+			cmd.Env = append(cmd.Env[:0:0], "PATH="+os.Getenv("PATH"), "HOME="+os.Getenv("HOME"))
+			if out, err = cmd.Output(); err != nil {
+				t.Fatalf("docker compose config --format json: %v\n%s", err, out)
+			}
+			var project struct {
+				Services map[string]struct {
+					Environment map[string]*string `json:"environment"`
+				} `json:"services"`
+			}
+			if err := json.Unmarshal(out, &project); err != nil {
+				t.Fatal(err)
+			}
+			wantMode := ""
+			if c.image != "" {
+				wantMode = "following"
+			}
+			for name, svc := range project.Services {
+				ver, mode := svc.Environment["BEKUP_SETUP_VERSION"], svc.Environment["BEKUP_IMAGE_MODE"]
+				switch name {
+				case "migrate", "serve", "runner":
+					if ver == nil || *ver != "1.2.3" || mode == nil || *mode != wantMode {
+						t.Fatalf("%s: BEKUP_SETUP_VERSION %v, BEKUP_IMAGE_MODE %v (want 1.2.3, %q)", name, ver, mode, wantMode)
+					}
+				default:
+					if ver != nil || mode != nil {
+						t.Fatalf("%s receives the deployment facts", name)
+					}
+				}
+			}
+			for _, name := range []string{"migrate", "serve", "runner"} {
+				if _, ok := project.Services[name]; !ok {
+					t.Fatalf("no %s service", name)
+				}
 			}
 			if !c.placeholder {
 				return
@@ -145,7 +198,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			cmd = exec.CommandContext(ctx, "docker", "compose", "config", "-q")
 			cmd.Dir = dir
 			cmd.Env = append(cmd.Env[:0:0], "PATH="+os.Getenv("PATH"), "HOME="+os.Getenv("HOME"))
-			if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "required variable BEKUP_IMAGE is missing a value: set BEKUP_IMAGE to the digest-pinned bekup image") {
+			if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "required variable BEKUP_IMAGE is missing a value: set BEKUP_IMAGE to the bekup image") {
 				t.Fatalf("config without BEKUP_IMAGE: %v\n%s", err, out)
 			}
 		})

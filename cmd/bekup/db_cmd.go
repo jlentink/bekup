@@ -127,7 +127,8 @@ func newDBBootstrapCmd(g *globalFlags) *cobra.Command {
 			"--adopt-existing-roles, and other members or ADMIN OPTION holders of them are refused. Then it\n" +
 			"runs the role checks and the migrate preflight. With database.single_account = true it uses the\n" +
 			"single account itself (weakened). The admin connection needs tls_mode verify-full unless\n" +
-			"--allow-insecure-admin-connection is given.",
+			"--allow-insecure-admin-connection is given. Like migrate up it refuses to run on another\n" +
+			"version than BEKUP_SETUP_VERSION (D-212).",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error { return runBootstrap(c, g, &bf) },
 	}
@@ -170,6 +171,12 @@ func runBootstrap(c *cobra.Command, g *globalFlags, bf *bootstrapFlags) error {
 		return err
 	}
 	logLoaded(c, logger, res.Path, res.Warnings)
+	// D-212: the migrate service runs bootstrap with the deployment facts;
+	// never prepare a database with an image setup has not prepared the
+	// deployment for (checked before anything connects).
+	if err := checkDeployment(c, logger, res.Dev, "db bootstrap"); err != nil {
+		return err
+	}
 	cfg := res.Config
 	d := &cfg.Database
 	if !d.FieldsMode() {

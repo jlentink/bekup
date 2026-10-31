@@ -263,6 +263,12 @@ message HealthResponse {
   uint32 max_concurrent_runs = 6;
   // Expiry of the runner's own server certificate.
   google.protobuf.Timestamp certificate_not_after = 7;
+  // Whether the image reference the runner's own container was created
+  // from carries a sha256 digest (D-212). Unset while unknown (Docker not
+  // ready, own container not detected yet, an older runner). serve treats
+  // false as a followed image whatever BEKUP_IMAGE_MODE says. Only the
+  // verdict, never the reference itself.
+  optional bool image_pinned = 8;
 }
 
 message ProbeRequest {

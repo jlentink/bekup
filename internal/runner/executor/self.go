@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/jlentink/bekup/internal/imageref"
 )
 
 // selfInfo is the runner's own container.
@@ -19,6 +21,17 @@ type selfInfo struct {
 	ID       string
 	Name     string
 	Networks map[string]NetEndpoint
+	// ImagePinned: the container's image reference carries a sha256
+	// digest (D-212; the reference itself is not kept).
+	ImagePinned bool
+}
+
+// imageRefPinned reports whether ref (a container's Config.Image) is a
+// digest-pinned reference. Anything else (a tag, an image ID, a local
+// name) counts as not pinned.
+func imageRefPinned(ref string) bool {
+	_, err := imageref.ParsePinned(ref)
+	return err == nil
 }
 
 // containerMountRE finds the runner's container ID in /proc/self/mountinfo:
@@ -77,7 +90,7 @@ func detectSelf(ctx context.Context, d Docker, candidates []string, local []neti
 		}
 		for _, ep := range info.Networks {
 			if ep.IP.IsValid() && slices.Contains(local, ep.IP.Unmap()) {
-				return selfInfo{ID: info.ID, Name: info.Name, Networks: info.Networks}, nil
+				return selfInfo{ID: info.ID, Name: info.Name, Networks: info.Networks, ImagePinned: imageRefPinned(info.Image)}, nil
 			}
 		}
 		errs = append(errs, fmt.Errorf("container %q has none of this process's addresses", ref))

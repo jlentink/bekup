@@ -45,16 +45,17 @@ func (a *App) registerSecurityChecks(ws *queue.Workers) error {
 }
 
 // runnerHealth is the runner client as a monitor.RunnerHealth (nil when
-// this process has none; an untyped nil keeps the interface nil).
+// this process has none; an untyped nil keeps the interface nil). Every
+// answer feeds the image posture (D-212).
 func (a *App) runnerHealth() monitor.RunnerHealth {
 	if a.runner == nil {
 		return nil
 	}
-	return a.runner
+	return observedRunner{a}
 }
 
 // weakenedPosture lists the weakened settings of this configuration that
-// the startup audits too (D-095, D-100, D-207): never in dev mode.
+// the startup audits too (D-095, D-100, D-207, D-212): never in dev mode.
 func (a *App) weakenedPosture() []string {
 	if a.opts.Dev {
 		return nil
@@ -68,6 +69,9 @@ func (a *App) weakenedPosture() []string {
 	}
 	if a.opts.Config.Database.SingleAccount {
 		out = append(out, notify.KindInsecureDBRoles)
+	}
+	if a.imageFollowing() {
+		out = append(out, notify.KindUnpinnedImage)
 	}
 	return out
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/jlentink/bekup"
 	"github.com/jlentink/bekup/internal/certs"
 	"github.com/jlentink/bekup/internal/crypto"
+	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/imageref"
 )
 
@@ -22,9 +23,11 @@ import (
 type UpgradeOptions struct {
 	Dir     string
 	Version string
-	// Image is the new digest-pinned image: required setup-first; in a
-	// compose-first deployment it comes from compose.yaml and must match
-	// when set (BEKUP_IMAGE of the setup service).
+	// Image is the new image (digest-pinned, or a followed tag of the
+	// official repository, D-212): required setup-first unless the
+	// deployment follows a tag (then the recorded one); in a compose-first
+	// deployment it comes from compose.yaml and must match when set
+	// (BEKUP_IMAGE of the setup service).
 	Image imageref.Ref
 	// WriteCompose rewrites compose.yaml (setup-first deployments only;
 	// required there, refused compose-first).
@@ -72,14 +75,25 @@ type UpgradeSummary struct {
 	NewSecretGroups []string
 	// EnvImage: the BEKUP_IMAGE line of .env changes.
 	EnvImage bool
+	// EnvDeployment: the BEKUP_SETUP_VERSION / BEKUP_IMAGE_MODE lines of
+	// .env change (D-212).
+	EnvDeployment bool
+	// Following: the new image follows a tag (D-212).
+	Following bool
 	// Findings are the compose lint findings (warnings).
 	Findings []Finding
 }
 
 // CheckVersionTag refuses an image tag that names another version than the
 // running binary (a container cannot verify its own digest; D-203), and an
-// image without a tag (nothing to compare; --allow-version-mismatch).
+// image without a tag (nothing to compare; --allow-version-mismatch). A
+// followed "latest" tag (D-212) names whatever release is newest: there is
+// nothing to compare, and the version guard of migrate/serve/worker
+// (BEKUP_SETUP_VERSION) catches an image setup has not prepared.
 func CheckVersionTag(img imageref.Ref, version string) error {
+	if img.IsMutable() && img.Tag == imageref.LatestTag {
+		return nil
+	}
 	if img.Tag == "" {
 		return fmt.Errorf("the image reference has no tag, so this bekup %s cannot check that it names the same version: use <repo>:%s@sha256:<digest> (or pass --allow-version-mismatch)", version, strings.TrimPrefix(version, "v"))
 	}
@@ -147,7 +161,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		if opts.WriteCompose {
 			return fmt.Errorf("this deployment is compose-first: setup never writes %s. Replace it with the new release file (%s) and run `docker compose run --rm setup upgrade`", ComposeFile, ReleaseURL)
 		}
-		if compose, err = inspectCompose(root, opts.assets, st.Variant, "", nil, os.LookupEnv); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, st.Variant, "", nil, os.LookupEnv, true); err != nil {
 			return err
 		}
 		if compose.Variant != st.Variant {
@@ -156,10 +170,10 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		if compose.DB != st.dbMode() {
 			return fmt.Errorf("%s now uses the %s database, but this deployment was set up with the %s database: switching between the bundled and an external database is not supported by upgrade (use the %s file of the new release; moving the data is a dump and restore, docs/installation/upgrades.md)", ComposeFile, compose.DB, st.dbMode(), dbFileHint(st.dbMode()))
 		}
-		if compose.FromEnv && opts.Image.Digest != "" && opts.Image.String() != compose.Image.String() {
+		if compose.FromEnv && !opts.Image.IsZero() && opts.Image.String() != compose.Image.String() {
 			return fmt.Errorf("--image %s does not match %s=%s, which docker compose resolved for this setup container (the old image keeps running setup): run `%s=%s docker compose run --rm setup upgrade`, so the new image's setup runs and writes it to %s", opts.Image, ImageEnvVar, compose.Image, ImageEnvVar, opts.Image, EnvFile)
 		}
-		if opts.Image.Digest != "" && opts.Image.String() != compose.Image.String() {
+		if !opts.Image.IsZero() && opts.Image.String() != compose.Image.String() {
 			return fmt.Errorf("the image %s does not match the x-bekup-image line of %s (%s): run setup from that file (`docker compose run --rm setup upgrade`)", opts.Image, ComposeFile, compose.Image)
 		}
 		if err := composeMatches(compose, &Answers{Image: compose.Image, Variant: st.Variant, ImageInEnv: compose.FromEnv, DB: Database{Mode: st.dbMode()}}); err != nil {
@@ -167,14 +181,25 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		}
 		opts.Image = compose.Image
 	default:
+		if st.following() {
+			// D-212: compose.yaml names the followed tag, so the plain
+			// `docker compose run --rm setup upgrade` rewrites it (for the
+			// recorded tag, or --image to switch back to a digest).
+			opts.WriteCompose = true
+			if opts.Image.IsZero() {
+				if opts.Image, err = st.image(); err != nil {
+					return err
+				}
+			}
+		}
 		if !opts.WriteCompose {
 			return fmt.Errorf("this deployment is setup-first (setup writes %s): pass --write-compose --image <new pinned image>", ComposeFile)
 		}
-		if opts.Image.Digest == "" {
+		if opts.Image.IsZero() {
 			return errors.New("--image is required (the new digest-pinned image; or BEKUP_IMAGE)")
 		}
 	}
-	if _, err := imageref.ParsePinned(opts.Image.String()); err != nil {
+	if _, err := imageref.ParseBekup(opts.Image.String()); err != nil {
 		return pinHelp(err)
 	}
 	if !opts.AllowVersionMismatch {
@@ -307,6 +332,12 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 				sum.EnvImage = true
 			}
 		}
+		cur, nextEnv, err := envWithLines(root, deploymentEnv(opts.Version, imageModeOf(opts.Image)))
+		if err != nil {
+			return err
+		}
+		sum.EnvDeployment = !bytes.Equal(cur, nextEnv)
+		sum.Following = opts.Image.IsMutable()
 		if err := opts.Confirm(sum); err != nil {
 			return err
 		}
@@ -381,6 +412,12 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 			return err
 		}
 	}
+	// The deployment lines (D-212): the version migrate/serve/worker now
+	// accept and the image mode.
+	deployChanged, err := syncEnv(w, deploymentEnv(opts.Version, imageModeOf(opts.Image)))
+	if err != nil {
+		return err
+	}
 
 	for _, g := range newGroups {
 		if err := generateGroup(w, layout, entries, g, st, opts); err != nil {
@@ -393,6 +430,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	next.ManifestVersion = ManifestVersion
 	next.BekupVersion = opts.Version
 	next.Image = opts.Image.String()
+	next.ImageMode = imageModeOf(opts.Image)
 	if compose != nil {
 		next.ComposeSHA256 = compose.Hash
 		next.ImageSource = ImageSourceCompose
@@ -431,7 +469,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	for _, msg := range warnings {
 		fmt.Fprintf(&b, "  WARNING: %s\n", msg)
 	}
-	if changed == 0 && !envChanged && bytes.Equal(newState, oldState) {
+	if changed == 0 && !envChanged && !deployChanged && bytes.Equal(newState, oldState) {
 		b.WriteString("  no changes\n")
 	} else {
 		fmt.Fprintf(&b, "  %d generated file(s) changed, %d removed, %d backed up\n", changed-len(stale)-len(newGroups), len(stale), len(backups))
@@ -454,13 +492,28 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 			fmt.Fprintf(&b, "  %s: removed %s (compose.yaml pins the image)\n", EnvFile, ImageEnvVar)
 		}
 	}
+	if deployChanged {
+		fmt.Fprintf(&b, "  %s: %s=%s", EnvFile, deployguard.EnvSetupVersion, strings.TrimPrefix(opts.Version, "v"))
+		if opts.Image.IsMutable() {
+			fmt.Fprintf(&b, ", %s=%s", deployguard.EnvImageMode, ImageModeFollowing)
+		}
+		b.WriteString(" (migrate, serve, worker and runner start only with this version)\n")
+	}
+	if st.following() && !opts.Image.IsMutable() {
+		fmt.Fprintf(&b, "  the image is pinned by digest again (it followed %s)\n", st.Image)
+	}
 	if compose != nil {
 		fmt.Fprintf(&b, "  %s: the %s variant (%s), never written by setup\n", ComposeFile, compose.Variant, compose.Level)
 		for _, f := range compose.Findings {
 			fmt.Fprintf(&b, "  %s\n", f)
 		}
 	}
-	b.WriteString("\nNext: back up (docs/installation/upgrades.md), then `docker compose pull && docker compose up -d` and `docker compose -f compose.yaml run --rm setup check`.\n")
+	if opts.Image.IsMutable() {
+		b.WriteString(followingWarning)
+		b.WriteString("\nNext: back up (docs/installation/upgrades.md), then `docker compose up -d` (the image you pulled before this upgrade) and `docker compose -f compose.yaml run --rm setup check`.\n")
+	} else {
+		b.WriteString("\nNext: back up (docs/installation/upgrades.md), then `docker compose pull && docker compose up -d` and `docker compose -f compose.yaml run --rm setup check`.\n")
+	}
 	_, err = io.WriteString(opts.Out, b.String())
 	return err
 }

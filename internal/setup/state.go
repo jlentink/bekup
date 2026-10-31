@@ -47,19 +47,42 @@ const (
 	ImageSourceEnv ImageSource = "env"
 )
 
+// ImageMode records how the bekup image is referenced (D-212).
+type ImageMode string
+
+// Image modes.
+const (
+	// ImageModePinned (empty): the image is pinned by digest.
+	ImageModePinned ImageMode = ""
+	// ImageModeFollowing: the image follows a tag of the official
+	// repository (ghcr.io/jlentink/bekup:latest): an explicit weakening.
+	ImageModeFollowing ImageMode = "following"
+)
+
+// imageModeOf is the mode of a bekup image reference.
+func imageModeOf(img imageref.Ref) ImageMode {
+	if img.IsMutable() {
+		return ImageModeFollowing
+	}
+	return ImageModePinned
+}
+
 // State is bekup-setup.json: what setup generated, for upgrade and check.
 // It holds no secrets (paths, versions and SHA-256 hashes of public files).
 type State struct {
-	Schema          int           `json:"schema"`
-	ManifestVersion int           `json:"manifest_version"`
-	BekupVersion    string        `json:"bekup_version"`
-	Image           string        `json:"image"`
-	ComposeMode     ComposeMode   `json:"compose_mode"`
-	Variant         Variant       `json:"variant"`
-	Proxy           Proxy         `json:"proxy"`
-	TLSMode         TLSMode       `json:"tls_mode,omitempty"`
-	KeysDir         string        `json:"keys_dir"`
-	Ownership       OwnershipMode `json:"ownership"`
+	Schema          int    `json:"schema"`
+	ManifestVersion int    `json:"manifest_version"`
+	BekupVersion    string `json:"bekup_version"`
+	Image           string `json:"image"`
+	// ImageMode is "following" when Image follows a tag (D-212); empty
+	// for a digest-pinned image.
+	ImageMode   ImageMode     `json:"image_mode,omitempty"`
+	ComposeMode ComposeMode   `json:"compose_mode"`
+	Variant     Variant       `json:"variant"`
+	Proxy       Proxy         `json:"proxy"`
+	TLSMode     TLSMode       `json:"tls_mode,omitempty"`
+	KeysDir     string        `json:"keys_dir"`
+	Ownership   OwnershipMode `json:"ownership"`
 	// The bekup-proxy link network (external variants only).
 	ProxyNetwork string `json:"proxy_network,omitempty"`
 	ProxySubnet  string `json:"proxy_subnet,omitempty"`
@@ -141,7 +164,7 @@ func (s *State) validate() error {
 	if !versionRe.MatchString(s.BekupVersion) {
 		return fmt.Errorf("invalid bekup_version %q", bounded(s.BekupVersion))
 	}
-	if _, err := imageref.ParsePinned(s.Image); err != nil {
+	if _, err := s.image(); err != nil {
 		return err
 	}
 	if _, err := ParseVariant(string(s.Variant)); err != nil {
@@ -239,6 +262,21 @@ func (s *State) validate() error {
 	}
 	return nil
 }
+
+// image parses the recorded image: digest-pinned, or (image_mode
+// following) a tag of the official repository.
+func (s *State) image() (imageref.Ref, error) {
+	switch s.ImageMode {
+	case ImageModePinned:
+		return imageref.ParsePinned(s.Image)
+	case ImageModeFollowing:
+		return imageref.ParseFollowing(s.Image)
+	}
+	return imageref.Ref{}, fmt.Errorf("invalid image_mode %q", bounded(string(s.ImageMode)))
+}
+
+// following reports image_mode following.
+func (s *State) following() bool { return s.ImageMode == ImageModeFollowing }
 
 // maxImportedFiles bounds State.ImportedFiles (two password files and a
 // keyring).

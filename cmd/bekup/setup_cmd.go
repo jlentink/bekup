@@ -77,14 +77,19 @@ summary and writes everything, compose.yaml included (it is kept when it
 exists). In an existing deployment it offers check, upgrade and certificate
 renewal. The main path, in an empty directory:
 
+  IMAGE=ghcr.io/jlentink/bekup:latest
   docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
     --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
     -e BEKUP_IMAGE="$IMAGE" -e DOCKER_GID="$(stat -c %g /var/run/docker.sock)" \
     -v "$PWD":/deploy "$IMAGE" setup
   docker compose up -d
 
---log-driver none keeps the container's output (a generated passphrase) out
-of Docker's logs. The wizard needs stdin and stdout on a terminal (a
+With a tag such as :latest the wizard offers to follow it (compose.yaml names
+the tag; D-212, an explicit weakening: migrate, serve, worker and runner
+then refuse to start on a version setup has not prepared, so upgrade with
+docker compose pull, docker compose run --rm setup upgrade, docker compose
+up -d) or to pin a digest. --log-driver none keeps the container's output (a generated
+passphrase) out of Docker's logs. The wizard needs stdin and stdout on a terminal (a
 generated passphrase is shown once on the alternate screen, never into a
 pipe or the scrollback). NO_COLOR and TERM=dumb drop the colors; --plain
 uses a plain-text interface (numbered choices, no escape sequences; a
@@ -203,7 +208,7 @@ func runSetupHub(ui wizard.UI, dir string, mode setup.OwnershipMode, allowVersio
 		}
 		var img imageref.Ref
 		if raw := strings.TrimSpace(os.Getenv(envSetupImage)); raw != "" {
-			if img, err = imageref.ParsePinned(raw); err != nil {
+			if img, err = imageref.ParseBekup(raw); err != nil {
 				return setup.PinHelp(err)
 			}
 		}
@@ -438,7 +443,7 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f.BoolVar(&fl.writeCompose, "write-compose", false, "setup-first: also write compose.yaml (needs --variant); default is compose-first (compose.yaml exists, never written)")
 	f.StringVar(&fl.variant, "variant", "", "traefik, traefik-external, npm or full (--write-compose; compose-first only to name the base of a customized compose.yaml)")
 	f.StringVar(&fl.database, "database", "", "bundled (the postgres service, default) or external (your own PostgreSQL, D-208; compose-first: must match compose.yaml)")
-	f.StringVar(&fl.imageRaw, "image", "", "bekup image pinned by digest, repo[:tag]@sha256:<digest> (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)")
+	f.StringVar(&fl.imageRaw, "image", "", "bekup image pinned by digest, repo[:tag]@sha256:<digest>, or ghcr.io/jlentink/bekup:latest to follow the releases (D-212, an explicit weakening) (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)")
 	f.BoolVar(&fl.nonInteractive, "non-interactive", false, "never prompt; every answer must come from flags")
 	f.StringVar(&fl.proxy, "proxy", "", "variant full: reverse proxy traefik, nginx or none (your own proxy on the frontend network)")
 	f.StringVar(&fl.domain, "domain", "", "public host name of the UI (base_url https://<domain>)")
@@ -669,6 +674,18 @@ image's setup, which rewrites the BEKUP_IMAGE line of .env:
 Setup-first: --write-compose --image <new pinned image> also rewrites
 compose.yaml (run with docker run, see bekup setup --help).
 
+Following a tag (D-212; ghcr.io/jlentink/bekup:latest): pull first, then
+let the new image's setup prepare the deployment (it writes the new
+BEKUP_SETUP_VERSION to .env, without which migrate, serve, worker and
+runner refuse to start), then start:
+
+  docker compose pull
+  docker compose run --rm setup upgrade
+  docker compose up -d
+
+Pin a digest again with --image <repo>:<tag>@sha256:<digest> (setup-first;
+with the committed file BEKUP_IMAGE=<pinned> in the shell).
+
 On a terminal the upgrade is guided (D-208): it shows the versions, the
 compose changes, new secrets and the restart, asks for the backup and then
 for confirmation before writing anything (--non-interactive skips it).`,
@@ -680,7 +697,7 @@ for confirmation before writing anything (--non-interactive skips it).`,
 			var img imageref.Ref
 			if imageRaw != "" {
 				var err error
-				if img, err = imageref.ParsePinned(imageRaw); err != nil {
+				if img, err = imageref.ParseBekup(imageRaw); err != nil {
 					return setup.PinHelp(err)
 				}
 			}
@@ -708,7 +725,7 @@ for confirmation before writing anything (--non-interactive skips it).`,
 	f := cmd.Flags()
 	f.StringVar(&dir, "dir", setupDefaultDir, "deployment directory created by setup init")
 	f.BoolVar(&writeCompose, "write-compose", false, "setup-first deployments: rewrite compose.yaml for --image (refused compose-first)")
-	f.StringVar(&imageRaw, "image", "", "the new bekup image pinned by digest (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)")
+	f.StringVar(&imageRaw, "image", "", "the new bekup image pinned by digest, or ghcr.io/jlentink/bekup:latest to follow the releases (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)")
 	f.BoolVar(&allowDowngrade, "allow-downgrade", false, "allow a bekup version older than the recorded one")
 	f.BoolVar(&allowVersionMismatch, "allow-version-mismatch", false, "accept an image tag that differs from this bekup version")
 	f.BoolVar(&force, "force", false, "replace locally edited generated files (a .bak-<timestamp> copy is kept)")
