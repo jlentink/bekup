@@ -40,12 +40,40 @@ type UpgradeOptions struct {
 	Ownership OwnershipMode
 	// CAPassphrase is called only if a new manifest adds certificates.
 	CAPassphrase func() ([]byte, error)
-	Out          io.Writer
-	Now          func() time.Time
+	// Confirm is called with the summary of the upgrade before anything is
+	// written (the guided upgrade shows it and asks); an error aborts
+	// without changes.
+	Confirm func(*UpgradeSummary) error
+	Out     io.Writer
+	Now     func() time.Time
 
 	assets    fs.FS
 	sys       *sysEnv
 	certsInit certsInitFunc
+}
+
+// UpgradeSummary is what an upgrade will change (for the guided upgrade).
+type UpgradeSummary struct {
+	Root                   string
+	OldImage, NewImage     string
+	OldVersion, NewVersion string
+	ComposeMode            ComposeMode
+	Variant                Variant
+	DB                     DBMode
+	// ComposeDiff is the line diff of compose.yaml (setup-first only).
+	ComposeDiff string
+	// ComposeLevel is how compose.yaml matched the new release (compose-
+	// first only).
+	ComposeLevel Recognition
+	// Changed and Removed are the generated files that change or go away;
+	// BackedUp are locally edited (or foreign) files replaced with --force.
+	Changed, Removed, BackedUp []string
+	// NewSecretGroups are generated because the new manifest adds them.
+	NewSecretGroups []string
+	// EnvImage: the BEKUP_IMAGE line of .env changes.
+	EnvImage bool
+	// Findings are the compose lint findings (warnings).
+	Findings []Finding
 }
 
 // CheckVersionTag refuses an image tag that names another version than the
@@ -119,11 +147,14 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		if opts.WriteCompose {
 			return fmt.Errorf("this deployment is compose-first: setup never writes %s. Replace it with the new release file (%s) and run `docker compose run --rm setup upgrade`", ComposeFile, ReleaseURL)
 		}
-		if compose, err = inspectCompose(root, opts.assets, st.Variant, nil, os.LookupEnv); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, st.Variant, "", nil, os.LookupEnv); err != nil {
 			return err
 		}
 		if compose.Variant != st.Variant {
 			return fmt.Errorf("%s is now the %s variant, but this deployment was set up as %s: switching variants is not supported by upgrade (set up a new directory and move the data, docs/installation/upgrades.md)", ComposeFile, compose.Variant, st.Variant)
+		}
+		if compose.DB != st.dbMode() {
+			return fmt.Errorf("%s now uses the %s database, but this deployment was set up with the %s database: switching between the bundled and an external database is not supported by upgrade (use the %s file of the new release; moving the data is a dump and restore, docs/installation/upgrades.md)", ComposeFile, compose.DB, st.dbMode(), dbFileHint(st.dbMode()))
 		}
 		if compose.FromEnv && opts.Image.Digest != "" && opts.Image.String() != compose.Image.String() {
 			return fmt.Errorf("--image %s does not match %s=%s, which docker compose resolved for this setup container (the old image keeps running setup): run `%s=%s docker compose run --rm setup upgrade`, so the new image's setup runs and writes it to %s", opts.Image, ImageEnvVar, compose.Image, ImageEnvVar, opts.Image, EnvFile)
@@ -131,7 +162,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		if opts.Image.Digest != "" && opts.Image.String() != compose.Image.String() {
 			return fmt.Errorf("the image %s does not match the x-bekup-image line of %s (%s): run setup from that file (`docker compose run --rm setup upgrade`)", opts.Image, ComposeFile, compose.Image)
 		}
-		if err := composeMatches(compose, &Answers{Image: compose.Image, Variant: st.Variant, ImageInEnv: compose.FromEnv}); err != nil {
+		if err := composeMatches(compose, &Answers{Image: compose.Image, Variant: st.Variant, ImageInEnv: compose.FromEnv, DB: Database{Mode: st.dbMode()}}); err != nil {
 			return err
 		}
 		opts.Image = compose.Image
@@ -159,11 +190,11 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		return fmt.Errorf("fix the configuration before upgrading: %w", err)
 	}
 
-	gen, err := generatedFiles(opts.assets, opts.Image, st.Variant, st.ComposeMode == ComposeGenerated)
+	gen, err := generatedFiles(opts.assets, opts.Image, st.Variant, st.dbMode(), st.ComposeMode == ComposeGenerated)
 	if err != nil {
 		return err
 	}
-	assets, err := assetFiles(opts.assets, st.Variant.assetDirs())
+	assets, err := assetFiles(opts.assets, st.Variant.assetDirs(st.dbMode()))
 	if err != nil {
 		return err
 	}
@@ -215,6 +246,72 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	}
 	backups := append(append([]string(nil), edited...), foreign...)
 
+	// Secret groups that are new in this manifest (checked before writing).
+	known := map[string]bool{}
+	for _, g := range st.SecretGroups {
+		known[g] = true
+	}
+	groups, err := secretGroupStates(root, entries)
+	if err != nil {
+		return err
+	}
+	var newGroups []string
+	for _, g := range secretGroups(entries) {
+		if known[g] {
+			continue
+		}
+		gs := groups[g]
+		if gs != nil && !gs.empty() {
+			return fmt.Errorf("the new %s secrets partly exist already (%s); remove them or restore the rest", g, strings.Join(gs.paths, ", "))
+		}
+		newGroups = append(newGroups, g)
+	}
+	var oldCompose []byte
+	if compose == nil {
+		if oldCompose, err = readManaged(root, ComposeFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	if opts.Confirm != nil {
+		sum := &UpgradeSummary{
+			Root: root, OldImage: st.Image, NewImage: opts.Image.String(), OldVersion: st.BekupVersion, NewVersion: opts.Version,
+			ComposeMode: st.ComposeMode, Variant: st.Variant, DB: st.dbMode(), BackedUp: backups, NewSecretGroups: newGroups,
+		}
+		for _, p := range sortedKeys(gen) {
+			cur, err := readManaged(root, p)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			if err != nil || hashOf(cur) != hashOf(gen[p]) {
+				sum.Changed = append(sum.Changed, p)
+			}
+		}
+		for _, p := range st.assetPaths() {
+			if _, ok := gen[p]; !ok {
+				sum.Removed = append(sum.Removed, p)
+			}
+		}
+		if compose == nil {
+			sum.ComposeDiff = LineDiff(string(oldCompose), string(gen[ComposeFile]), 40)
+		} else {
+			sum.ComposeLevel, sum.Findings = compose.Level, compose.Findings
+			img := ""
+			if compose.FromEnv {
+				img = opts.Image.String()
+			}
+			cur, err := readManaged(root, EnvFile)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			if next, err := setEnvImageLine(cur, img); err == nil && !bytes.Equal(next, cur) && (cur != nil || img != "") {
+				sum.EnvImage = true
+			}
+		}
+		if err := opts.Confirm(sum); err != nil {
+			return err
+		}
+	}
+
 	defer func() {
 		if retErr != nil {
 			if rbErr := w.rollback(); rbErr != nil {
@@ -233,12 +330,6 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		}
 	}
 
-	var oldCompose []byte
-	if compose == nil {
-		if oldCompose, err = readManaged(root, ComposeFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-	}
 	changed := 0
 	for _, e := range entries {
 		if e.Kind == KindDir && e.Class == ClassGenerated {
@@ -291,28 +382,8 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		}
 	}
 
-	// Secret groups that are new in this manifest.
-	known := map[string]bool{}
-	for _, g := range st.SecretGroups {
-		known[g] = true
-	}
-	groups, err := secretGroupStates(root, entries)
-	if err != nil {
-		return err
-	}
-	var newGroups []string
-	for _, g := range secretGroups(entries) {
-		if known[g] {
-			continue
-		}
-		gs := groups[g]
-		if gs != nil && !gs.empty() {
-			return fmt.Errorf("the new %s secrets partly exist already (%s); remove them or restore the rest", g, strings.Join(gs.paths, ", "))
-		}
-		newGroups = append(newGroups, g)
-	}
 	for _, g := range newGroups {
-		if err := generateGroup(w, layout, entries, g, opts); err != nil {
+		if err := generateGroup(w, layout, entries, g, st, opts); err != nil {
 			return err
 		}
 		changed++
@@ -396,7 +467,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 
 // generateGroup creates the secrets of one group (upgrade: groups new in
 // the manifest).
-func generateGroup(w *writer, l Layout, entries []Entry, group string, opts UpgradeOptions) error {
+func generateGroup(w *writer, l Layout, entries []Entry, group string, st *State, opts UpgradeOptions) error {
 	for _, e := range entries {
 		if e.Group == group && e.Kind == KindDir {
 			if err := w.mkdirAll(e.Path, e.Mode); err != nil {
@@ -410,6 +481,10 @@ func generateGroup(w *writer, l Layout, entries []Entry, group string, opts Upgr
 		return err
 	case groupDatabase:
 		return generateDatabase(w, l)
+	case groupDatabaseExternal:
+		// Never new for an existing deployment (the database mode cannot
+		// change); the passwords belong to roles on the operator's server.
+		return errors.New("the external database password files are missing: restore them from your escrow (setup never invents passwords for existing roles)")
 	case groupCerts:
 		if opts.CAPassphrase == nil {
 			return errors.New("new certificates need a CA key passphrase")
@@ -419,7 +494,7 @@ func generateGroup(w *writer, l Layout, entries []Entry, group string, opts Upgr
 			return err
 		}
 		defer crypto.Zero(pass)
-		return generateCerts(w, l, pass, opts.certsInit)
+		return generateCerts(w, l, certComponentsFor(st.dbMode()), pass, opts.certsInit)
 	}
 	return fmt.Errorf("unknown secret group %q", group)
 }

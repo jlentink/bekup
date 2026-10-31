@@ -36,7 +36,12 @@ const (
 
 	// Retention & storage.
 	// RetentionSummary is the daily digest of a job's retention removals.
-	RetentionSummary      EventType = "retention.summary"
+	RetentionSummary EventType = "retention.summary"
+	// RetentionBlocked: retention keeps incomplete backups on a
+	// destination that no keep rule would keep (no complete backup there,
+	// or the newer ones are incomplete; D-209). Deduplicated per job,
+	// destination and UTC day.
+	RetentionBlocked      EventType = "retention.blocked"
 	ArtifactMissing       EventType = "artifact.missing"
 	DestinationTestFailed EventType = "destination.test_failed"
 
@@ -195,6 +200,7 @@ var catalog = func() map[EventType]Meta {
 		jobEvent(TestRestoreFailed, GroupRestore, authz.OpTestRestoreView, true, SeverityError, "Test restore failed"),
 
 		jobEvent(RetentionSummary, GroupRetention, authz.OpArtifactView, false, SeverityInfo, "Retention summary"),
+		jobEvent(RetentionBlocked, GroupRetention, authz.OpArtifactView, true, SeverityWarning, "Retention blocked by incomplete backups"),
 		jobEvent(ArtifactMissing, GroupRetention, authz.OpArtifactView, true, SeverityError, "Backup file missing"),
 		{
 			Type: DestinationTestFailed, Group: GroupRetention, Audience: AudienceStaff, Problem: true,

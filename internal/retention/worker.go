@@ -71,6 +71,20 @@ type partialCleaner interface {
 	CleanupPartials(ctx context.Context, olderThan time.Duration) (int, error)
 }
 
+// RunReaper fails the runs no worker will finish (runstate.Store; D-209):
+// a run left queued or running after its last River attempt ended. The
+// daily sweep calls it first, so retention then sees their files.
+type RunReaper interface {
+	FailAbandonedRuns(ctx context.Context) (int, error)
+}
+
+// UnrecordedScanner prunes empty directories of bekup's layout and records
+// the files no artifact row references on one open destination
+// (*destinations.Service; D-209).
+type UnrecordedScanner interface {
+	ScanUnrecorded(ctx context.Context, id uuid.UUID, d storage.Destination) error
+}
+
 // Options configure New.
 type Options struct {
 	DB      DB
@@ -93,6 +107,10 @@ type Options struct {
 	MaxDeletions int
 	// PartialCleanupAge is retention.partial_cleanup_age.
 	PartialCleanupAge time.Duration
+	// Runs fails abandoned runs before the daily fan-out (nil: none).
+	Runs RunReaper
+	// Unrecorded scans every non-deleted destination daily (nil: none).
+	Unrecorded UnrecordedScanner
 	// Metrics counts the outcome of every job sweep (nil: none; task 5.6).
 	Metrics Metrics
 	Logger  *slog.Logger
@@ -220,7 +238,22 @@ func (w *Worker) Daily(ctx context.Context, dryRun bool) error {
 }
 
 func (w *Worker) daily(ctx context.Context, dryRun bool, lim Limits) error {
+	if w.o.Runs != nil && !dryRun {
+		// Runs no worker will finish become failed (interrupted) first, so
+		// the per-job sweeps below see their files.
+		n, err := w.o.Runs.FailAbandonedRuns(ctx)
+		if err != nil {
+			w.o.Logger.WarnContext(ctx, "failing abandoned runs failed", slog.Int("failed", n), slog.Any("error", err))
+		} else if n > 0 {
+			w.o.Logger.InfoContext(ctx, "abandoned runs marked interrupted", slog.Int("runs", n))
+		}
+	}
 	q := sqlc.New(w.o.DB)
+	if n, err := q.DeleteStaleRetentionHolds(ctx); err != nil {
+		w.o.Logger.WarnContext(ctx, "dropping stale retention holds failed", slog.Any("error", err))
+	} else if n > 0 {
+		w.o.Logger.InfoContext(ctx, "stale retention holds dropped", slog.Int64("holds", n))
+	}
 	ids, err := q.ListRetentionJobIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("retention: list jobs: %w", err)
@@ -249,36 +282,73 @@ func (w *Worker) daily(ctx context.Context, dryRun bool, lim Limits) error {
 	if dryRun {
 		return nil
 	}
-	return w.cleanupPartials(ctx, lim.PartialCleanupAge)
+	return w.maintainDestinations(ctx, lim.PartialCleanupAge)
 }
 
-func (w *Worker) cleanupPartials(ctx context.Context, age time.Duration) error {
-	ids, err := sqlc.New(w.o.DB).ListPartialCleanupDestinations(ctx)
+// maxDestinationBudget bounds the daily maintenance of one destination
+// when the attempt has no deadline of its own.
+const maxDestinationBudget = 30 * time.Minute
+
+// destinationBudget is the context of one destination's daily maintenance:
+// an equal share of the attempt's remaining time among the destinations
+// left (time a fast destination leaves over goes to the later ones), so a
+// slow or hanging destination never starves the rest (D-209).
+func destinationBudget(ctx context.Context, left int) (context.Context, context.CancelFunc) {
+	if dl, ok := ctx.Deadline(); ok && left > 0 {
+		return context.WithTimeout(ctx, time.Until(dl)/time.Duration(left))
+	}
+	return context.WithTimeout(ctx, maxDestinationBudget)
+}
+
+// maintainDestinations removes leftover temporary files (disk and SFTP,
+// deleted destinations with present artifacts included) and runs the
+// unrecorded-file scan with empty-directory pruning on every non-deleted
+// destination (D-209), each within its share of the time
+// (destinationBudget). A destination that fails is logged and skipped.
+func (w *Worker) maintainDestinations(ctx context.Context, age time.Duration) error {
+	rows, err := sqlc.New(w.o.DB).ListDailyMaintenanceDestinations(ctx)
 	if err != nil {
 		return fmt.Errorf("retention: list destinations: %w", err)
 	}
-	for _, id := range ids {
+	for i, row := range rows {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		log := w.o.Logger.With(slog.String("destination_id", id.String()))
-		d, err := w.o.Destinations.Open(ctx, id)
-		if err != nil {
-			log.WarnContext(ctx, "partial cleanup: destination unavailable", slog.String("code", string(storage.Classify(err))))
-			continue
-		}
-		if c, ok := d.(partialCleaner); ok {
-			n, err := c.CleanupPartials(ctx, age)
-			switch {
-			case err != nil:
-				log.WarnContext(ctx, "partial cleanup failed", slog.Int("removed", n), slog.String("code", string(storage.Classify(err))))
-			case n > 0:
-				log.InfoContext(ctx, "leftover temporary files removed", slog.Int("removed", n))
-			}
-		}
-		closeQuietly(ctx, log, d)
+		dctx, cancel := destinationBudget(ctx, len(rows)-i)
+		w.maintainDestination(dctx, row, age)
+		cancel()
 	}
 	return nil
+}
+
+// maintainDestination is the daily maintenance of one destination.
+func (w *Worker) maintainDestination(ctx context.Context, row sqlc.ListDailyMaintenanceDestinationsRow, age time.Duration) {
+	scan := w.o.Unrecorded != nil && !row.Deleted
+	partials := row.Type == sqlc.DestinationTypeDisk || row.Type == sqlc.DestinationTypeSftp
+	if !scan && !partials {
+		return
+	}
+	log := w.o.Logger.With(slog.String("destination_id", row.ID.String()))
+	d, err := w.o.Destinations.Open(ctx, row.ID)
+	if err != nil {
+		log.WarnContext(ctx, "daily destination maintenance: destination unavailable", slog.String("code", string(storage.Classify(err))))
+		return
+	}
+	if c, ok := d.(partialCleaner); ok && partials {
+		n, err := c.CleanupPartials(ctx, age)
+		switch {
+		case err != nil:
+			log.WarnContext(ctx, "partial cleanup failed", slog.Int("removed", n), slog.String("code", string(storage.Classify(err))))
+		case n > 0:
+			log.InfoContext(ctx, "leftover temporary files removed", slog.Int("removed", n))
+		}
+	}
+	if scan {
+		if err := w.o.Unrecorded.ScanUnrecorded(ctx, row.ID, d); err != nil {
+			log.WarnContext(ctx, "unrecorded-file scan failed", slog.String("code", string(storage.Classify(err))))
+		}
+	}
+	closeQuietly(ctx, log, d)
 }
 
 func closeQuietly(ctx context.Context, log *slog.Logger, d storage.Destination) {
@@ -362,7 +432,12 @@ func (w *Worker) sweep(ctx context.Context, jobID uuid.UUID, reason queue.Retent
 	}
 	maxDeletions := lim.MaxDeletions
 	budget := maxDeletions
-	for _, p := range Plan(in) {
+	plans := Plan(in)
+	if err := w.recordHolds(ctx, &job, plans); err != nil {
+		// The holds are informational: deletions go on.
+		log.WarnContext(ctx, "retention: recording the retention holds failed", slog.Any("error", err))
+	}
+	for _, p := range plans {
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
@@ -731,7 +806,7 @@ func (w *Worker) markMissingTx(ctx context.Context, q *sqlc.Queries, jobID uuid.
 		TargetType: AuditArtifactTargetType, TargetID: a.ID.String(),
 		Details: audit.Details{
 			"job_id": jobID.String(), "run_id": a.RunID.String(), "destination_id": a.DestinationID.String(),
-			"object_key": a.Key, "newest_complete": newest,
+			"object": a.Key, "newest_complete": newest,
 		},
 	})
 	return err

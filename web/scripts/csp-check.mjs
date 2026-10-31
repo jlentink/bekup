@@ -238,6 +238,7 @@ const INFRA_CERT = {
   spkiSha256Hex: "ab42df",
 };
 
+const INFRA_DEST_ID = "0b6c3f7e-0000-4000-8000-0000000000f0";
 const INFRA_OPERATIONS = {
   ConnectionsList: () => ({ data: { connections: [INFRA_CONNECTION] } }),
   ConnectionDetail: () => ({ data: { connection: INFRA_CONNECTION } }),
@@ -273,6 +274,66 @@ const INFRA_OPERATIONS = {
     },
   }),
   DestinationsList: () => ({ data: { destinations: [] } }),
+  // Destination detail with unrecorded files (D-209): banner, list, delete.
+  DestinationDetail: () => ({
+    data: {
+      destination: {
+        __typename: "Destination",
+        id: INFRA_DEST_ID,
+        name: "local-disk",
+        type: "DISK",
+        noDelete: false,
+        objectLockMode: null,
+        objectLockRetentionDays: null,
+        ready: true,
+        notReadyReason: null,
+        createdAt: "2026-10-01T10:00:00Z",
+        updatedAt: "2026-10-02T10:00:00Z",
+        lastTest: null,
+        settings: {
+          __typename: "DestinationSettings",
+          disk: { __typename: "DiskDestinationSettings", path: "nightly" },
+          s3: null,
+          sftp: null,
+        },
+      },
+    },
+  }),
+  DestinationUnrecordedFiles: () => ({
+    data: {
+      destinationUnrecordedFiles: {
+        __typename: "UnrecordedFiles",
+        destinationId: INFRA_DEST_ID,
+        scannedAt: "2026-10-28T02:00:00Z",
+        totalCount: 2,
+        totalBytes: 3_221_225_472,
+        truncated: true,
+        prunedDirectories: 4,
+        files: [
+          {
+            __typename: "UnrecordedFile",
+            id: "0b6c3f7e-0000-4000-8000-0000000000f1",
+            key: "billing-db/20261001T030000Z/billing.dump.zst.age",
+            size: 2_147_483_648,
+            modifiedAt: "2026-10-01T03:10:00Z",
+            firstSeenAt: "2026-10-03T02:00:00Z",
+            lastSeenAt: "2026-10-28T02:00:00Z",
+          },
+        ],
+        nextCursor: "c1",
+      },
+    },
+  }),
+  DeleteUnrecordedFile: () => ({
+    data: {
+      deleteUnrecordedFile: {
+        __typename: "UnrecordedFileDeleteResult",
+        ok: false,
+        code: "permission_denied",
+        message: "The destination refused the request.",
+      },
+    },
+  }),
 };
 
 /* Restore wizard (6.7) and calendar (6.11): just enough data to walk them. */
@@ -597,7 +658,49 @@ const JR_JOB = {
     queuedAt: jrSoon(-18),
     finishedAt: jrSoon(-17.9),
     warnings: [{ __typename: "RunWarning", code: "insufficient_privileges" }],
+    items: [
+      {
+        __typename: "RunItem",
+        id: "0b6c3f7e-0000-4000-8000-0000000000b6",
+        kind: "DATABASE",
+        database: "billing",
+        position: 0,
+        schemaVersion: "42 (dirty)",
+        schemaVersionStatus: "OK",
+      },
+      {
+        __typename: "RunItem",
+        id: "0b6c3f7e-0000-4000-8000-0000000000b7",
+        kind: "DATABASE",
+        database: "ledger",
+        position: 1,
+        schemaVersion: null,
+        schemaVersionStatus: "UNAVAILABLE",
+      },
+    ],
   },
+  schemaVersion: {
+    __typename: "JobSchemaVersion",
+    mode: "CUSTOM",
+    preset: null,
+    presetLabel: null,
+    schema: "public",
+    customSql: "SELECT max(version)::text FROM public.schema_migrations",
+  },
+  retentionHolds: [
+    {
+      __typename: "RetentionHold",
+      destinationId: JR_IDS.dest,
+      destinationName: "vault-s3",
+      destinationType: "S3",
+      destinationDeleted: false,
+      reason: "NO_COMPLETE_RUN",
+      heldRuns: 3,
+      since: jrSoon(-72),
+      newestCompleteAt: null,
+      checkedAt: jrSoon(-1),
+    },
+  ],
   testRestore: {
     __typename: "JobTestRestore",
     enabled: true,
@@ -729,6 +832,8 @@ const JR_RUN = {
       database: "billing",
       position: 0,
       status: "SUCCESS",
+      schemaVersion: "42 (dirty)",
+      schemaVersionStatus: "OK",
       rawSize: 1048576,
       storedSize: 262144,
       sha256: "ab".repeat(32),
@@ -872,6 +977,20 @@ const JOBS_RUNS_OPERATIONS = {
   }),
   PreviewSchedule: () => JR_PREVIEW(),
   JobNextOccurrences: () => JR_PREVIEW(),
+  PreviewRetention: () => ({
+    data: {
+      previewSchedule: {
+        __typename: "SchedulePreview",
+        retention: {
+          __typename: "RetentionEstimate",
+          kept: 30,
+          byKeepLast: 7,
+          byKeepDays: 30,
+          atLeast: false,
+        },
+      },
+    },
+  }),
   UserPickerCandidates: () => ({
     data: {
       userDirectory: {
@@ -901,6 +1020,21 @@ const JOBS_RUNS_OPERATIONS = {
           },
         ],
       },
+    },
+  }),
+  SchemaVersionPresets: () => ({
+    data: {
+      schemaVersionPresets: [
+        {
+          __typename: "SchemaVersionPreset",
+          name: "golang-migrate",
+          label: "golang-migrate",
+          description: "The version in schema_migrations, marked (dirty) after a failed migration.",
+          postgresTable: "schema_migrations",
+          mysqlTable: "schema_migrations",
+          engines: ["POSTGRES", "MYSQL", "MARIADB"],
+        },
+      ],
     },
   }),
   TestRestoreTargets: () => ({
@@ -1162,6 +1296,7 @@ const DASH_JOB = (id, name, extra = {}) => ({
   scheduleDescription: "Every day at 03:00 (UTC)",
   missed: false,
   missedSince: null,
+  retentionHolds: [],
   connection: { __typename: "JobConnectionRef", id: "c1", name: "billing-pg", deleted: false },
   encryption: {
     __typename: "JobEncryption",
@@ -1226,6 +1361,18 @@ const DASHBOARD_OPERATIONS = {
               optedOut: true,
             },
             nextRunAt: dashAgo(3_600_000),
+            retentionHolds: [
+              {
+                __typename: "RetentionHold",
+                destinationId: "0b6c3f7e-0000-4000-8000-0000000000f4",
+                destinationName: "vault-s3",
+                destinationDeleted: false,
+                reason: "NEWER_THAN_NEWEST_COMPLETE",
+                heldRuns: 2,
+                since: dashAgo(3 * 86_400_000),
+                newestCompleteAt: dashAgo(4 * 86_400_000),
+              },
+            ],
           }),
           DASH_JOB("0b6c3f7e-0000-4000-8000-0000000000e4", "Archive", {
             enabled: false,
@@ -1794,6 +1941,13 @@ const ADMIN_OPERATIONS = {
     data: {
       configStatus: {
         __typename: "ConfigStatus",
+        database: {
+          __typename: "DatabasePosture",
+          mode: "FIELDS",
+          tlsMode: "require",
+          insecureTransport: true,
+          singleAccount: false,
+        },
         liveKeys: ["logging.level", "retention.dry_run", "workers.max_concurrent_runs"],
         listeningProcesses: 3,
         processes: [
@@ -2199,6 +2353,7 @@ async function exercise(page, base, colorScheme) {
   await page.getByTestId("upcoming-run").first().waitFor();
   await page.getByTestId("active-restore").waitFor();
   await page.getByText("Certificate pin mismatch on billing-pg").waitFor();
+  await page.locator('[data-testid="attention-item"][data-kind="retention"]').waitFor();
   // Connections (6.3): list, detail and the certificate pinning dialog;
   // destinations (6.4): the empty list and the form with its switches.
   await page.goto(`${base}/connections`);
@@ -2213,6 +2368,17 @@ async function exercise(page, base, colorScheme) {
   await page.goto(`${base}/destinations/new`);
   await page.getByRole("switch", { name: "Lock every upload" }).click();
   await page.getByLabel("Retention (days)").waitFor();
+  await page.goto(`${base}/destinations/${INFRA_DEST_ID}`);
+  await page.getByTestId("unrecorded-banner").waitFor();
+  await page.getByTestId("unrecorded-file").first().waitFor();
+  await page.getByRole("button", { name: /^Delete billing-db\// }).click();
+  await page
+    .getByRole("dialog", { name: "Delete this unrecorded file?" })
+    .getByRole("button", { name: "Delete file" })
+    .click();
+  await page.getByText(/was not deleted: The destination refused/).waitFor();
+  await page.goto(`${base}/destinations/${INFRA_DEST_ID}/edit`);
+  await page.getByTestId("location-note").waitFor();
   // Restore wizard (6.7): target, identity, the privileged-target preview,
   // the AAL2 step-up and the result; the history; the calendar (6.11).
   await page.goto(`${base}/restore?artifactId=${RC_IDS.artifact}`);
@@ -2259,6 +2425,7 @@ async function exercise(page, base, colorScheme) {
   await page.getByTestId("early-following").waitFor();
   await page.keyboard.press("Escape");
   await page.getByText("Latest verdict").waitFor();
+  await page.getByTestId("retention-holds").waitFor();
   await page.getByRole("list", { name: "Differences" }).waitFor();
   // Test-restore history and detail (6.12 follow-up).
   await page.getByRole("link", { name: "All test restores" }).click();
@@ -2268,6 +2435,7 @@ async function exercise(page, base, colorScheme) {
   // The job's schedule builder comes first; the test-restore settings
   // have their own (cron) builder further down.
   await page.getByTestId("schedule-description").first().waitFor();
+  await page.getByTestId("retention-estimate").waitFor();
   await page.getByRole("radio", { name: /Cron/ }).first().check({ force: true });
   await page.getByTestId("target-verdict").waitFor();
   await page.getByRole("list", { name: "Add backup owners" }).getByText("Uma User").waitFor();

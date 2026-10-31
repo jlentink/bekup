@@ -11,6 +11,7 @@ import (
 	"github.com/jlentink/bekup/internal/runner/dbprobe"
 	"github.com/jlentink/bekup/internal/runner/validate"
 	"github.com/jlentink/bekup/internal/runnerpb"
+	"github.com/jlentink/bekup/internal/schemaversion"
 )
 
 // Source statistics of a dump (task 3.10, D-141, D-151). For PostgreSQL the
@@ -143,12 +144,60 @@ func (o *operations) captureStats(ctx context.Context, d *validate.DatabaseOp, r
 	}
 	sc.msg = buildStats(d.Kind, deep, cat, counts)
 	sc.msg.SameSnapshot = pg && snap != ""
+	if d.Version != nil {
+		// Same transaction (PostgreSQL: the dump's snapshot), D-210.
+		if r := o.captureVersion(ctx, sc.src, d, sc.msg); r.SessionLost && pg {
+			// The statistics transaction (and its exported snapshot) is
+			// gone: the dump takes its own snapshot instead of failing on
+			// the import, and the stats no longer claim the same one.
+			sc.msg.SameSnapshot = false
+			sc.close(ctx)
+			sc.snapshot = ""
+		}
+	}
 	if !pg {
 		// The dump tool takes its own snapshot: nothing to hold.
 		sc.close(ctx)
 		sc.snapshot = ""
 	}
 	return sc
+}
+
+// captureVersion reads the schema version into the stats message (D-210).
+// The log line carries the query kind, the status and a fixed
+// classification only, never the query, a server message or the value.
+func (o *operations) captureVersion(ctx context.Context, src dbprobe.StatsSource, d *validate.DatabaseOp, msg *runnerpb.DumpStats) dbprobe.VersionResult {
+	r := src.SchemaVersion(ctx, d.Database, dbprobe.VersionQuery{Preset: d.Version.Preset, Custom: d.Version.Custom, Schema: d.Version.Schema})
+	msg.VersionStatus = versionStatus(r.Status)
+	if msg.VersionStatus == runnerpb.VersionStatus_VERSION_STATUS_OK {
+		msg.SchemaVersion = r.Value
+	}
+	query := "custom"
+	if d.Version.Preset != nil {
+		query = "preset:" + d.Version.Preset.Name
+	}
+	level := slog.LevelInfo
+	if r.Status != schemaversion.StatusOK && r.Status != schemaversion.StatusNone {
+		level = slog.LevelWarn
+	}
+	o.log.LogAttrs(ctx, level, "runner_schema_version", slog.String("query", query),
+		slog.String("status", string(r.Status)), slog.String("detail", r.Detail), slog.Bool("session_lost", r.SessionLost))
+	return r
+}
+
+// versionStatus maps a capture status to the API enum (unknown:
+// unavailable).
+func versionStatus(s schemaversion.Status) runnerpb.VersionStatus {
+	switch s {
+	case schemaversion.StatusOK:
+		return runnerpb.VersionStatus_VERSION_STATUS_OK
+	case schemaversion.StatusNone:
+		return runnerpb.VersionStatus_VERSION_STATUS_NONE
+	case schemaversion.StatusInvalid:
+		return runnerpb.VersionStatus_VERSION_STATUS_INVALID
+	default:
+		return runnerpb.VersionStatus_VERSION_STATUS_UNAVAILABLE
+	}
 }
 
 // captureGlobalStats counts the roles and tablespaces before a globals
@@ -375,5 +424,6 @@ func statsAudit(m *runnerpb.DumpStats) []slog.Attr {
 		slog.Bool("same_snapshot", m.GetSameSnapshot()),
 		slog.Uint64("tables_total", uint64(m.GetTablesTotal())),
 		slog.Int("stats_warnings", len(m.GetWarnings())),
+		slog.String("version_status", m.GetVersionStatus().String()),
 	}
 }

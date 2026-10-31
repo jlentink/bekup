@@ -21,7 +21,7 @@ import (
 
 func TestPoolConfig(t *testing.T) {
 	reg := logging.NewRegistry()
-	cfg, err := poolConfig([]byte("postgres://bekup_app:s3cret-pass@db:5432/bekup?sslmode=verify-full"), PoolOptions{
+	cfg, err := poolConfig(config.DBCredentials{URL: []byte("postgres://bekup_app:s3cret-pass@db:5432/bekup?sslmode=verify-full")}, PoolOptions{
 		MaxConns: 7, MinConns: 9, StatementTimeout: 2 * time.Second, ApplicationName: "bekup-serve", Registry: reg,
 		TLS: TLSOptions{Mode: config.DBTLSVerifyFull, RootCAs: x509.NewCertPool()},
 	})
@@ -57,7 +57,7 @@ func TestPoolConfigInvalidURLDoesNotLeak(t *testing.T) {
 		"postgres://user:hunter2-secret@[::1/db",
 		"host=x password=hunter2-secret port=abc",
 	} {
-		_, err := poolConfig([]byte(u), PoolOptions{Registry: logging.NewRegistry(), TLS: TLSOptions{Mode: config.DBTLSDisable}})
+		_, err := poolConfig(config.DBCredentials{URL: []byte(u)}, PoolOptions{Registry: logging.NewRegistry(), TLS: TLSOptions{Mode: config.DBTLSDisable}})
 		if !errors.Is(err, ErrInvalidURL) || strings.Contains(err.Error(), "hunter2") {
 			t.Errorf("%q: %v", u, err)
 		}

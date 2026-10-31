@@ -22,7 +22,7 @@ see and run only their own jobs (see [Who may do what](#who-may-do-what)).
 | `includeGlobals` | PostgreSQL only: also dump the cluster globals (roles, tablespaces) as a separate file. Default on for PostgreSQL; MySQL/MariaDB jobs refuse it. |
 | `schedule` | Manual, interval or cron (below). The next run (`nextRunAt`) is computed on save; a changed schedule is re-planned from now. |
 | `enabled` | Default on. A disabled job has no scheduled **and no manual** runs. Enabling plans the next run from now (missed periods are not caught up). |
-| `retention` | `keepLast` (1–10000 backups) and/or `keepDays` (1–36500 days); at least one. Applied per destination after every successful/partial run and daily; the newest complete backup on each destination is never deleted (see [Retention](retention.md)). |
+| `retention` | `keepLast` (1–10000 backups) and/or `keepDays` (1–36500 days); at least one. The two rules add up: a backup is kept while either keeps it. Applied per destination after every successful/partial run, right after a retention change and daily; the newest complete backup on each destination is never deleted. The editor shows a live estimate of the backups kept per destination and defaults new jobs to keep last 7 (see [Retention](retention.md)). |
 | `timeoutSeconds` | Optional run timeout, 60 seconds up to `workers.backup_timeout` (the queue cap, default 6h); empty means the cap. |
 | `expectedWindowSeconds` | Optional missed-backup alert window, 60 seconds to 366 days: how long after each planned time a backup must have succeeded before `backup.missed` is sent (see [Missed-backup alerts](#missed-backup-alerts)). Empty means derived: twice the run timeout plus one hour (13 h with the defaults). |
 | `verification` | `STANDARD` (object counts and row estimates) or `DEEP` (exact per-table row counts, PostgreSQL only; MySQL/MariaDB always use estimates); completeness evidence of task 3.10. |
@@ -75,6 +75,8 @@ audit history stay. Its name can be reused; its slug cannot.
 | Assign / remove owners (step-up) | yes | yes, not themselves | – | – |
 | Change keys, opt back in, choose a key at creation (step-up) | yes | – | – | – |
 | Opt out of encryption, export passphrases (step-up) | yes | – | – | – |
+| [Schema version](#schema-version): off or a preset | yes | yes | – | – |
+| Schema version: a custom query (step-up; read it back) | yes | yes | – | – |
 
 Owner rights apply to accounts with the **user** role only: a maintainer or
 admin listed as an owner gains nothing from it (D-067). Every owner change
@@ -474,6 +476,145 @@ with their object names, a note when the table list was truncated, and the
 per-table row counts with an `exact`, `estimate` or `unknown` badge (plus
 `approximate` for MySQL/MariaDB). Long table lists show the first 50
 tables with a filter and "show all".
+
+### Schema version
+
+A job can record the **schema (migration) version** of every database it
+backs up (D-210), so a run shows which schema each backup holds (useful
+before a restore into an application of a known version). It is off by
+default. In the job editor (section **Schema version**, admins and
+maintainers) choose:
+
+- **Off**: nothing is read.
+- **Framework preset**: bekup's own reviewed query for a migration tool.
+  The job stores only the preset's name; the SQL ships with bekup. For
+  PostgreSQL choose the **schema** of the framework's table (default
+  `public`).
+- **Custom query**: one `SELECT` or `WITH` statement of at most 2048
+  bytes. The first column of the first row becomes the version. See
+  [what a custom query may not contain](#what-a-custom-query-may-not-contain).
+
+| Preset | Table (PostgreSQL / MySQL, MariaDB) | Version |
+|---|---|---|
+| `golang-migrate` | `schema_migrations` | `version`, plus ` (dirty)` when `dirty` is set (e.g. `42 (dirty)`) |
+| `goose` | `goose_db_version` | the newest applied `version_id` (versions rolled back later are skipped) |
+| `flyway` | `flyway_schema_history` | `version` of the newest successful versioned migration (by `installed_rank`); undo rows (`UNDO_*`) are skipped and a version undone by a later successful undo no longer counts |
+| `liquibase` | `databasechangelog` / `DATABASECHANGELOG` | `id` of the newest changeset executed for the first time (`EXECUTED`, `MARK_RAN`); `RERAN` rows of `runAlways` / `runOnChange` changesets are skipped (Liquibase moves their date to the re-run, so a housekeeping changeset would otherwise look like the newest migration) |
+| `rails` | `schema_migrations` | the highest `version` (numeric order) |
+| `django` | `django_migrations` | the newest applied migration as `app.name` |
+| `laravel` | `migrations` | `migration` of the newest batch |
+| `alembic` | `alembic_version` | `version_num` (several heads joined with commas) |
+| `prisma` | `_prisma_migrations` | `migration_name` of the newest finished, not rolled-back migration |
+| `knex` | `knex_migrations` | `name` of the newest migration |
+| `sequelize` | `SequelizeMeta` | the highest `name` |
+
+Every preset works on PostgreSQL, MySQL and MariaDB. MySQL/MariaDB table
+names are matched exactly first and case-insensitively otherwise
+(`lower_case_table_names`).
+
+**How the version is read.** The runner reads it in the statistics
+transaction of each database dump (see
+[completeness evidence](#completeness-evidence-verification-levels-and-warnings)):
+on PostgreSQL inside the exported `REPEATABLE READ READ ONLY` snapshot the
+dump itself uses, so the version always matches the backup; on
+MySQL/MariaDB in the read-only consistent-snapshot transaction right before
+the dump. It is limited to 5 seconds (`statement_timeout` /
+`max_execution_time` / `max_statement_time`) and 2 seconds of lock waits,
+and runs in a savepoint (PostgreSQL) that is rolled back afterwards, so the
+statistics and the dump are never affected (if the session breaks, the
+dump takes its own snapshot instead). A custom query runs as
+`SELECT * FROM (<your query>) … LIMIT 1`; only the first column of the
+first row is read, at most 1 MiB is received, and the result must be at
+most 64 printable ASCII characters.
+
+A preset first locks its table (PostgreSQL, `ACCESS SHARE`, within the
+2-second lock limit) and checks that it is a plain table (not a view or
+foreign table) and that every column it reads has a built-in type, so no
+code of the database's owner runs (D-152); presets truncate their result
+in SQL. PostgreSQL sessions resolve
+names only in `pg_catalog`: a **custom query must schema-qualify its
+tables** (`SELECT max(version)::text FROM public.schema_migrations`); on
+MySQL/MariaDB unqualified tables are those of the dumped database. On a
+PostgreSQL server without `restrict_nonsystem_relation_kind` (before the
+August 2024 security releases) the version is `UNAVAILABLE`.
+
+**Results.** Each database of a run gets a `schemaVersionStatus`
+(`RunItem.schemaVersion`, `RunItem.schemaVersionStatus`; also
+`stats.databases.<db>.schema_version` / `schema_version_status` in the
+signed manifest):
+
+| Status | Meaning | Warning |
+|---|---|---|
+| `OK` | the version was captured | none |
+| `NONE` | the table (or database) does not exist, has no row, or the value is NULL or empty | none |
+| `UNAVAILABLE` | the query failed: missing privilege, time limit, unexpected table layout, server without the D-152 safeguards, any error | `version_unavailable` |
+| `INVALID` | the result was longer than 64 characters or not printable ASCII | `version_invalid` |
+
+A failed capture never fails the backup: the run stays `SUCCESS` (with
+**has warnings**). The messages are fixed texts, never server output.
+Versions are recorded for complete, stored dumps only. The run page shows
+the version (or its status in words) next to each database, and the job
+page shows the capture mode with the versions of the last run.
+
+**Who may change it.** Admins and maintainers (`setJobSchemaVersion`,
+`job.version_query_edit`); backup owners see the mode and the versions but
+never a custom query. Saving a **custom query** additionally needs a
+step-up within the last 5 minutes (`job.version_query_custom_edit`): the
+query runs on every backed-up database with the backup role's rights.
+Moving a job that has a custom query to another connection needs the same
+step-up and raises the alert again. Every change is audited
+(`job.version_query_changed` with the mode, the preset, the schema and the
+SHA-256 of a custom query, never the query) and setting or changing a
+custom query raises the security alert `job_custom_version_query`. The
+presets are listed by `schemaVersionPresets` (admins and maintainers).
+
+#### What a custom query may not contain
+
+bekup checks a custom query when it is saved, before each backup and again
+in the runner. The rules are strict and apply to the **whole text**,
+including string literals and quoted identifiers (case-insensitive, whole
+words); the error names the offending word or character:
+
+- at most 2048 bytes of printable ASCII, spaces, tabs and newlines (no
+  carriage return, NUL or other control character, nothing outside ASCII);
+- it starts with `SELECT` or `WITH`;
+- no `;` (not even at the end), no comment (`--`, `/*`, `*/`, `#`), no
+  backslash, no `$`, no `U&` escape; quotes must be closed and parentheses
+  balanced;
+- none of these words: `UNION`, `INTERSECT`, `EXCEPT`, `INSERT`, `UPDATE`,
+  `DELETE`, `MERGE`, `REPLACE`, `INTO`, `COPY`, `LOAD`, `OUTFILE`,
+  `DUMPFILE`, `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `RENAME`, `COMMENT`,
+  `GRANT`, `REVOKE`, `SET`, `RESET`, `DO`, `CALL`, `EXECUTE`, `EXEC`,
+  `PREPARE`, `DEALLOCATE`, `DECLARE`, `BEGIN`, `COMMIT`, `ROLLBACK`,
+  `SAVEPOINT`, `RELEASE`, `START`, `TRANSACTION`, `LOCK`, `UNLOCK`,
+  `SHARE`, `LISTEN`, `NOTIFY`, `UNLISTEN`, `DISCARD`, `VACUUM`, `ANALYZE`,
+  `REINDEX`, `CLUSTER`, `REFRESH`, `IMPORT`, `ATTACH`, `DETACH`,
+  `INSTALL`, `UNINSTALL`, `KILL`, `FLUSH`, `PURGE`, `SHUTDOWN`,
+  `HANDLER`, `SECURITY`, `SLEEP`, `BENCHMARK`, `UESCAPE` (a word glued to
+  a number, like `1union`, counts too);
+- none of these functions, also inside strings: `pg_read_file`,
+  `pg_read_binary_file`, `pg_stat_file`, `pg_ls_*`, `pg_file_*`,
+  `pg_terminate_backend`, `pg_cancel_backend`, `pg_reload_conf`,
+  `pg_rotate_logfile`, `pg_switch_wal`, `pg_promote`, `pg_notify`,
+  `set_config`, `pg_backup_start`, `pg_backup_stop`,
+  `pg_log_backend_memory_contexts`, `pg_advisory*`, `pg_try_advisory*`,
+  `pg_logical_*`, `pg_replication_*`, `pg_create_*` (replication slots,
+  restore points), `pg_drop_replication_slot`, `pg_stat_reset*`,
+  `pg_import_system_collations`, `pg_sleep*`, `lo_*`, `dblink*`,
+  `query_to_xml*`, `table_to_xml*`, `schema_to_xml*`, `database_to_xml*`,
+  `cursor_to_xml*`, `*_to_xmlschema`, `ts_stat`, `ts_rewrite`,
+  `LOAD_FILE`, `GET_LOCK`, `RELEASE_LOCK`, `RELEASE_ALL_LOCKS`, `xp_*`,
+  `sys_*`.
+
+**This list is a guardrail, not the protection.** What keeps a custom
+query harmless is how it runs: read-only, inside the dump's snapshot, with
+statement and lock time limits, one statement, and only a short result
+kept. A database may hold functions the list does not know, and a
+privileged backup role can still read server files or signal other
+sessions through such a query: prefer a preset, and back up with a
+least-privilege role. A stored query that later rules refuse is not run;
+the run then reports the version as `UNAVAILABLE` (`version_unavailable`)
+until the query is changed.
 
 ### Canceling a run
 

@@ -218,6 +218,45 @@ describe("attentionItems", () => {
     const last = items[2];
     expect(last?.kind === "missed" ? last.job.name : null).toBe("Long");
   });
+
+  it("adds one retention item per job and destination, ordered by the oldest held backup", () => {
+    const hold = (destinationId: string, since: string) => ({
+      destinationId,
+      destinationName: destinationId,
+      destinationDeleted: false,
+      reason: "NO_COMPLETE_RUN" as const,
+      heldRuns: 2,
+      since,
+    });
+    const health = [
+      jobHealth(
+        job({
+          id: "j5",
+          name: "Held",
+          enabled: false,
+          retentionHolds: [hold("d1", iso(-3 * DAY_MS)), hold("d2", iso(-HOUR_MS))],
+        }),
+        { now: NOW },
+      ),
+      jobHealth(job({ id: "j6", name: "Fine" }), { now: NOW }),
+    ];
+    const failure: LiveRun = {
+      id: "r1",
+      status: "FAILED",
+      queuedAt: iso(-3 * HOUR_MS),
+      finishedAt: iso(-2 * HOUR_MS),
+      job: { id: "j1", name: "Billing" },
+    };
+    const items = attentionItems([failure], health, NOW);
+    expect(items.map((i) => (i.kind === "retention" ? i.hold.destinationId : i.kind))).toEqual([
+      "d2",
+      "failed",
+      "d1",
+    ]);
+    // A paused job still shows its holds; health has no state for them.
+    expect(health[0]?.state).toBe("paused");
+    expect(health[0]?.holds).toHaveLength(2);
+  });
 });
 
 describe("mergeRestores", () => {

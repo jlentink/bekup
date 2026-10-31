@@ -34,6 +34,182 @@ func (q *Queries) CurrentRoleName(ctx context.Context) (string, error) {
 	return role_name, err
 }
 
+const preflightCitext = `-- name: PreflightCitext :one
+SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_extension AS e WHERE e.extname = 'citext')::boolean AS installed,
+       EXISTS (SELECT 1 FROM pg_catalog.pg_available_extensions AS a WHERE a.name = 'citext')::boolean AS available,
+       coalesce((SELECT v.trusted
+                 FROM pg_catalog.pg_available_extension_versions AS v
+                 JOIN pg_catalog.pg_available_extensions AS a
+                   ON a.name = v.name AND a.default_version = v.version
+                 WHERE v.name = 'citext'), false)::boolean AS trusted,
+       (pg_catalog.current_setting('azure.extensions', true) IS NOT NULL)::boolean AS azure_allowlist,
+       coalesce(pg_catalog.current_setting('azure.extensions', true), '')::text AS azure_extensions
+`
+
+type PreflightCitextRow struct {
+	Installed       bool   `json:"installed"`
+	Available       bool   `json:"available"`
+	Trusted         bool   `json:"trusted"`
+	AzureAllowlist  bool   `json:"azureAllowlist"`
+	AzureExtensions string `json:"azureExtensions"`
+}
+
+// PreflightCitext reports whether citext (migration 00004) is installed in
+// this database, available on the server, and trusted (then the database
+// owner can create it). azure_extensions is Azure's extension allow-list
+// (azure_allowlist false elsewhere).
+func (q *Queries) PreflightCitext(ctx context.Context) (PreflightCitextRow, error) {
+	row := q.db.QueryRow(ctx, preflightCitext)
+	var i PreflightCitextRow
+	err := row.Scan(
+		&i.Installed,
+		&i.Available,
+		&i.Trusted,
+		&i.AzureAllowlist,
+		&i.AzureExtensions,
+	)
+	return i, err
+}
+
+const preflightConnectableDatabases = `-- name: PreflightConnectableDatabases :many
+SELECT d.datname::text AS name
+FROM pg_catalog.pg_database AS d
+WHERE d.datname <> pg_catalog.current_database()
+  AND d.datallowconn
+  AND pg_catalog.has_database_privilege($1::text, d.oid, 'CONNECT')
+ORDER BY d.datname
+LIMIT 50
+`
+
+// PreflightConnectableDatabases lists other databases the role may connect
+// to (at most 50).
+func (q *Queries) PreflightConnectableDatabases(ctx context.Context, roleName string) ([]string, error) {
+	rows, err := q.db.Query(ctx, preflightConnectableDatabases, roleName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const preflightDatabase = `-- name: PreflightDatabase :one
+SELECT d.datname::text AS name,
+       pg_catalog.pg_get_userbyid(d.datdba)::text AS owner,
+       pg_catalog.pg_encoding_to_char(d.encoding)::text AS encoding
+FROM pg_catalog.pg_database AS d
+WHERE d.datname = pg_catalog.current_database()
+`
+
+type PreflightDatabaseRow struct {
+	Name     string `json:"name"`
+	Owner    string `json:"owner"`
+	Encoding string `json:"encoding"`
+}
+
+func (q *Queries) PreflightDatabase(ctx context.Context) (PreflightDatabaseRow, error) {
+	row := q.db.QueryRow(ctx, preflightDatabase)
+	var i PreflightDatabaseRow
+	err := row.Scan(&i.Name, &i.Owner, &i.Encoding)
+	return i, err
+}
+
+const preflightPublicSchemaCreate = `-- name: PreflightPublicSchemaCreate :one
+SELECT pg_catalog.has_schema_privilege('public', 'CREATE')::boolean AS can_create
+`
+
+// PreflightPublicSchemaCreate: may the session (bekup_owner) create objects
+// in the public schema? (PostgreSQL 15 denies it to a NOINHERIT database
+// owner while pg_database_owner owns the schema.)
+func (q *Queries) PreflightPublicSchemaCreate(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, preflightPublicSchemaCreate)
+	var can_create bool
+	err := row.Scan(&can_create)
+	return can_create, err
+}
+
+const preflightPublicSchemaOwner = `-- name: PreflightPublicSchemaOwner :one
+SELECT pg_catalog.pg_get_userbyid(n.nspowner)::text AS owner
+FROM pg_catalog.pg_namespace AS n
+WHERE n.nspname = 'public'
+`
+
+// PreflightPublicSchemaOwner: no row means the public schema is missing.
+func (q *Queries) PreflightPublicSchemaOwner(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, preflightPublicSchemaOwner)
+	var owner string
+	err := row.Scan(&owner)
+	return owner, err
+}
+
+const preflightRoleSettings = `-- name: PreflightRoleSettings :many
+SELECT coalesce(r.rolname::text, 'ALL') AS role_name,
+       coalesce(d.datname::text, 'ALL') AS database_name
+FROM pg_catalog.pg_db_role_setting AS s
+LEFT JOIN pg_catalog.pg_roles AS r ON r.oid = s.setrole
+LEFT JOIN pg_catalog.pg_database AS d ON d.oid = s.setdatabase
+WHERE (s.setrole = 0 OR r.rolname::text = ANY ($1::text[]))
+  AND (s.setdatabase = 0 OR d.datname = pg_catalog.current_database())
+ORDER BY 1, 2
+`
+
+type PreflightRoleSettingsRow struct {
+	RoleName     interface{} `json:"roleName"`
+	DatabaseName interface{} `json:"databaseName"`
+}
+
+// PreflightRoleSettings lists ALTER ROLE / ALTER DATABASE ... SET entries
+// that apply to the given roles in this database (names only, never the
+// values).
+func (q *Queries) PreflightRoleSettings(ctx context.Context, roleNames []string) ([]PreflightRoleSettingsRow, error) {
+	rows, err := q.db.Query(ctx, preflightRoleSettings, roleNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PreflightRoleSettingsRow
+	for rows.Next() {
+		var i PreflightRoleSettingsRow
+		if err := rows.Scan(&i.RoleName, &i.DatabaseName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const preflightServerVersion = `-- name: PreflightServerVersion :one
+
+SELECT pg_catalog.current_setting('server_version_num')::int AS version_num,
+       pg_catalog.current_setting('server_version')::text AS version
+`
+
+type PreflightServerVersionRow struct {
+	VersionNum int32  `json:"versionNum"`
+	Version    string `json:"version"`
+}
+
+// Preflight of `bekup migrate check` (D-207).
+func (q *Queries) PreflightServerVersion(ctx context.Context) (PreflightServerVersionRow, error) {
+	row := q.db.QueryRow(ctx, preflightServerVersion)
+	var i PreflightServerVersionRow
+	err := row.Scan(&i.VersionNum, &i.Version)
+	return i, err
+}
+
 const releaseMigrationLock = `-- name: ReleaseMigrationLock :one
 SELECT pg_advisory_unlock(7090191340504172871)
 `
@@ -43,6 +219,54 @@ func (q *Queries) ReleaseMigrationLock(ctx context.Context) (bool, error) {
 	var pg_advisory_unlock bool
 	err := row.Scan(&pg_advisory_unlock)
 	return pg_advisory_unlock, err
+}
+
+const roleMemberships = `-- name: RoleMemberships :many
+SELECT g.rolname::text AS role_name,
+       m.rolname::text AS member_name,
+       am.admin_option::boolean AS admin_option,
+       m.rolsuper::boolean AS member_superuser
+FROM pg_catalog.pg_auth_members AS am
+JOIN pg_catalog.pg_roles AS g ON g.oid = am.roleid
+JOIN pg_catalog.pg_roles AS m ON m.oid = am.member
+WHERE g.rolname::text = ANY ($1::text[])
+ORDER BY 1, 2, 3
+`
+
+type RoleMembershipsRow struct {
+	RoleName        string `json:"roleName"`
+	MemberName      string `json:"memberName"`
+	AdminOption     bool   `json:"adminOption"`
+	MemberSuperuser bool   `json:"memberSuperuser"`
+}
+
+// RoleMemberships lists who may act as or administer the given roles
+// (D-207): every direct pg_auth_members row with the role as the granted
+// role, the member's name, whether it holds ADMIN OPTION and whether the
+// member is a superuser. Names only.
+func (q *Queries) RoleMemberships(ctx context.Context, roleNames []string) ([]RoleMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, roleMemberships, roleNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoleMembershipsRow
+	for rows.Next() {
+		var i RoleMembershipsRow
+		if err := rows.Scan(
+			&i.RoleName,
+			&i.MemberName,
+			&i.AdminOption,
+			&i.MemberSuperuser,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const roleSecurityCheck = `-- name: RoleSecurityCheck :one
@@ -96,4 +320,50 @@ func (q *Queries) RoleSecurityCheck(ctx context.Context, arg RoleSecurityCheckPa
 		&i.DangerousMemberships,
 	)
 	return i, err
+}
+
+const sessionRoles = `-- name: SessionRoles :one
+SELECT session_user::text AS session_role,
+       current_user::text AS active_role,
+       coalesce((SELECT r.rolsuper FROM pg_catalog.pg_roles AS r
+                 WHERE r.rolname = session_user), true)::boolean AS session_superuser,
+       pg_catalog.current_setting('server_version_num')::int AS server_version_num
+`
+
+type SessionRolesRow struct {
+	SessionRole      string `json:"sessionRole"`
+	ActiveRole       string `json:"activeRole"`
+	SessionSuperuser bool   `json:"sessionSuperuser"`
+	ServerVersionNum int32  `json:"serverVersionNum"`
+}
+
+// SessionRoles returns the login role of the session, the role it acts as
+// (different only after SET ROLE: single-account mode, or a role setting
+// someone attached to the login role) and whether the login role is a
+// superuser (D-099, D-207).
+func (q *Queries) SessionRoles(ctx context.Context) (SessionRolesRow, error) {
+	row := q.db.QueryRow(ctx, sessionRoles)
+	var i SessionRolesRow
+	err := row.Scan(
+		&i.SessionRole,
+		&i.ActiveRole,
+		&i.SessionSuperuser,
+		&i.ServerVersionNum,
+	)
+	return i, err
+}
+
+const sessionSystemUser = `-- name: SessionSystemUser :one
+SELECT coalesce(SYSTEM_USER, '')::text AS system_user
+`
+
+// SessionSystemUser (PostgreSQL 16+ only: SYSTEM_USER is a syntax error on
+// 15) returns the authenticated identity of the session as
+// "<auth method>:<identity>", e.g. "scram-sha-256:bekup_app" (D-207): unlike
+// session_user it cannot be changed after authentication.
+func (q *Queries) SessionSystemUser(ctx context.Context) (string, error) {
+	row := q.db.QueryRow(ctx, sessionSystemUser)
+	var system_user string
+	err := row.Scan(&system_user)
+	return system_user, err
 }

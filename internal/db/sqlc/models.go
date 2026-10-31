@@ -616,6 +616,67 @@ func AllJobVerificationValues() []JobVerification {
 	}
 }
 
+type JobVersionQueryMode string
+
+const (
+	JobVersionQueryModeNone   JobVersionQueryMode = "none"
+	JobVersionQueryModePreset JobVersionQueryMode = "preset"
+	JobVersionQueryModeCustom JobVersionQueryMode = "custom"
+)
+
+func (e *JobVersionQueryMode) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JobVersionQueryMode(s)
+	case string:
+		*e = JobVersionQueryMode(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JobVersionQueryMode: %T", src)
+	}
+	return nil
+}
+
+type NullJobVersionQueryMode struct {
+	JobVersionQueryMode JobVersionQueryMode `json:"jobVersionQueryMode"`
+	Valid               bool                `json:"valid"` // Valid is true if JobVersionQueryMode is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJobVersionQueryMode) Scan(value interface{}) error {
+	if value == nil {
+		ns.JobVersionQueryMode, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JobVersionQueryMode.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJobVersionQueryMode) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JobVersionQueryMode), nil
+}
+
+func (e JobVersionQueryMode) Valid() bool {
+	switch e {
+	case JobVersionQueryModeNone,
+		JobVersionQueryModePreset,
+		JobVersionQueryModeCustom:
+		return true
+	}
+	return false
+}
+
+func AllJobVersionQueryModeValues() []JobVersionQueryMode {
+	return []JobVersionQueryMode{
+		JobVersionQueryModeNone,
+		JobVersionQueryModePreset,
+		JobVersionQueryModeCustom,
+	}
+}
+
 type NotificationChannel string
 
 const (
@@ -1839,37 +1900,41 @@ type InstanceKey struct {
 }
 
 type Job struct {
-	ID                          uuid.UUID       `json:"id"`
-	Enabled                     bool            `json:"enabled"`
-	Schedule                    json.RawMessage `json:"schedule"`
-	NextRunAt                   *time.Time      `json:"nextRunAt"`
-	LastScheduledAt             *time.Time      `json:"lastScheduledAt"`
-	DeletedAt                   *time.Time      `json:"deletedAt"`
-	CreatedAt                   time.Time       `json:"createdAt"`
-	UpdatedAt                   time.Time       `json:"updatedAt"`
-	Name                        string          `json:"name"`
-	Slug                        string          `json:"slug"`
-	Description                 string          `json:"description"`
-	ConnectionID                uuid.UUID       `json:"connectionId"`
-	DbMode                      JobDbMode       `json:"dbMode"`
-	Databases                   []string        `json:"databases"`
-	Exclude                     []string        `json:"exclude"`
-	IncludeGlobals              bool            `json:"includeGlobals"`
-	RetentionKeepLast           *int32          `json:"retentionKeepLast"`
-	RetentionKeepDays           *int32          `json:"retentionKeepDays"`
-	TimeoutSeconds              *int32          `json:"timeoutSeconds"`
-	Verification                JobVerification `json:"verification"`
-	ExpectedWindowSeconds       *int32          `json:"expectedWindowSeconds"`
-	CreatedBy                   *uuid.UUID      `json:"createdBy"`
-	UpdatedBy                   *uuid.UUID      `json:"updatedBy"`
-	TestRestoreEnabled          bool            `json:"testRestoreEnabled"`
-	TestRestoreSchedule         json.RawMessage `json:"testRestoreSchedule"`
-	TestRestoreConnectionID     *uuid.UUID      `json:"testRestoreConnectionId"`
-	TestRestoreNextAt           *time.Time      `json:"testRestoreNextAt"`
-	TestRestoreTargetPrivileges *string         `json:"testRestoreTargetPrivileges"`
-	TestRestorePrivilegeReasons []string        `json:"testRestorePrivilegeReasons"`
-	TestRestorePrivilegedAckBy  *uuid.UUID      `json:"testRestorePrivilegedAckBy"`
-	TestRestorePrivilegedAckAt  *time.Time      `json:"testRestorePrivilegedAckAt"`
+	ID                          uuid.UUID           `json:"id"`
+	Enabled                     bool                `json:"enabled"`
+	Schedule                    json.RawMessage     `json:"schedule"`
+	NextRunAt                   *time.Time          `json:"nextRunAt"`
+	LastScheduledAt             *time.Time          `json:"lastScheduledAt"`
+	DeletedAt                   *time.Time          `json:"deletedAt"`
+	CreatedAt                   time.Time           `json:"createdAt"`
+	UpdatedAt                   time.Time           `json:"updatedAt"`
+	Name                        string              `json:"name"`
+	Slug                        string              `json:"slug"`
+	Description                 string              `json:"description"`
+	ConnectionID                uuid.UUID           `json:"connectionId"`
+	DbMode                      JobDbMode           `json:"dbMode"`
+	Databases                   []string            `json:"databases"`
+	Exclude                     []string            `json:"exclude"`
+	IncludeGlobals              bool                `json:"includeGlobals"`
+	RetentionKeepLast           *int32              `json:"retentionKeepLast"`
+	RetentionKeepDays           *int32              `json:"retentionKeepDays"`
+	TimeoutSeconds              *int32              `json:"timeoutSeconds"`
+	Verification                JobVerification     `json:"verification"`
+	ExpectedWindowSeconds       *int32              `json:"expectedWindowSeconds"`
+	CreatedBy                   *uuid.UUID          `json:"createdBy"`
+	UpdatedBy                   *uuid.UUID          `json:"updatedBy"`
+	TestRestoreEnabled          bool                `json:"testRestoreEnabled"`
+	TestRestoreSchedule         json.RawMessage     `json:"testRestoreSchedule"`
+	TestRestoreConnectionID     *uuid.UUID          `json:"testRestoreConnectionId"`
+	TestRestoreNextAt           *time.Time          `json:"testRestoreNextAt"`
+	TestRestoreTargetPrivileges *string             `json:"testRestoreTargetPrivileges"`
+	TestRestorePrivilegeReasons []string            `json:"testRestorePrivilegeReasons"`
+	TestRestorePrivilegedAckBy  *uuid.UUID          `json:"testRestorePrivilegedAckBy"`
+	TestRestorePrivilegedAckAt  *time.Time          `json:"testRestorePrivilegedAckAt"`
+	VersionQueryMode            JobVersionQueryMode `json:"versionQueryMode"`
+	VersionPreset               *string             `json:"versionPreset"`
+	VersionCustomSql            *string             `json:"versionCustomSql"`
+	VersionSchema               string              `json:"versionSchema"`
 }
 
 type JobDestination struct {
@@ -2039,6 +2104,17 @@ type RestoreLog struct {
 	Line      string       `json:"line"`
 }
 
+type RetentionHold struct {
+	JobID            uuid.UUID  `json:"jobId"`
+	DestinationID    uuid.UUID  `json:"destinationId"`
+	Reason           string     `json:"reason"`
+	HeldRuns         int32      `json:"heldRuns"`
+	HeldSince        time.Time  `json:"heldSince"`
+	NewestCompleteAt *time.Time `json:"newestCompleteAt"`
+	FirstSeenAt      time.Time  `json:"firstSeenAt"`
+	CheckedAt        time.Time  `json:"checkedAt"`
+}
+
 type RiverJob struct {
 	ID           int64             `json:"id"`
 	State        RiverJobState     `json:"state"`
@@ -2111,22 +2187,24 @@ type Run struct {
 }
 
 type RunItem struct {
-	ID           uuid.UUID       `json:"id"`
-	RunID        uuid.UUID       `json:"runId"`
-	Kind         RunItemKind     `json:"kind"`
-	DbName       *string         `json:"dbName"`
-	Position     int32           `json:"position"`
-	Status       RunItemStatus   `json:"status"`
-	RawSize      int64           `json:"rawSize"`
-	StoredSize   int64           `json:"storedSize"`
-	RawSha256    []byte          `json:"rawSha256"`
-	Sha256       []byte          `json:"sha256"`
-	Verified     bool            `json:"verified"`
-	StartedAt    time.Time       `json:"startedAt"`
-	FinishedAt   *time.Time      `json:"finishedAt"`
-	ErrorCode    *string         `json:"errorCode"`
-	ErrorMessage *string         `json:"errorMessage"`
-	Warnings     json.RawMessage `json:"warnings"`
+	ID                  uuid.UUID       `json:"id"`
+	RunID               uuid.UUID       `json:"runId"`
+	Kind                RunItemKind     `json:"kind"`
+	DbName              *string         `json:"dbName"`
+	Position            int32           `json:"position"`
+	Status              RunItemStatus   `json:"status"`
+	RawSize             int64           `json:"rawSize"`
+	StoredSize          int64           `json:"storedSize"`
+	RawSha256           []byte          `json:"rawSha256"`
+	Sha256              []byte          `json:"sha256"`
+	Verified            bool            `json:"verified"`
+	StartedAt           time.Time       `json:"startedAt"`
+	FinishedAt          *time.Time      `json:"finishedAt"`
+	ErrorCode           *string         `json:"errorCode"`
+	ErrorMessage        *string         `json:"errorMessage"`
+	Warnings            json.RawMessage `json:"warnings"`
+	SchemaVersion       *string         `json:"schemaVersion"`
+	SchemaVersionStatus *string         `json:"schemaVersionStatus"`
 }
 
 type RunLog struct {
@@ -2234,6 +2312,24 @@ type TestRestoreItem struct {
 	Diff           json.RawMessage   `json:"diff"`
 	StartedAt      time.Time         `json:"startedAt"`
 	FinishedAt     *time.Time        `json:"finishedAt"`
+}
+
+type UnrecordedFile struct {
+	ID            uuid.UUID  `json:"id"`
+	DestinationID uuid.UUID  `json:"destinationId"`
+	ObjectKey     string     `json:"objectKey"`
+	Size          int64      `json:"size"`
+	ModifiedAt    *time.Time `json:"modifiedAt"`
+	FirstSeenAt   time.Time  `json:"firstSeenAt"`
+	LastSeenAt    time.Time  `json:"lastSeenAt"`
+}
+
+type UnrecordedFileScan struct {
+	DestinationID  uuid.UUID `json:"destinationId"`
+	ScannedAt      time.Time `json:"scannedAt"`
+	ScannedObjects int32     `json:"scannedObjects"`
+	Truncated      bool      `json:"truncated"`
+	PrunedDirs     int32     `json:"prunedDirs"`
 }
 
 type User struct {

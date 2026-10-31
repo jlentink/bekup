@@ -386,6 +386,12 @@ export const ConfigReloadRequestFields = graphql(`
 export const ConfigStatusQuery = graphql(`
   query AdminConfigStatus {
     configStatus {
+      database {
+        mode
+        tlsMode
+        insecureTransport
+        singleAccount
+      }
       liveKeys
       listeningProcesses
       processes {

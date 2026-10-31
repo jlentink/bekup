@@ -52,10 +52,12 @@ Components (one Go binary, several subcommands; D-025):
   stdin preamble only.
 - **Postgres app DB** (`internal/db`): sqlc + goose (embedded migrations,
   River schema vendored, migrations only as `bekup_owner` via
-  `database.owner_url_file`); the app connects as `bekup_app` with DML only
-  and INSERT/SELECT on the hash-chained `audit_log` (D-042, D-054, D-092).
-  The bootstrap superuser is rejected on TCP and only usable over the
-  container-local socket (D-096).
+  `database.owner_url_file` or fields-mode `owner_password_file`); the app
+  connects as `bekup_app` with DML only and INSERT/SELECT on the
+  hash-chained `audit_log` (D-042, D-054, D-092). The bundled server's
+  bootstrap superuser is rejected on TCP and only usable over the
+  container-local socket (D-096); an operator's own PostgreSQL 15-17 is
+  supported in fields mode, set up with `bekup db bootstrap` (D-207).
 
 Trust boundaries:
 
@@ -65,7 +67,7 @@ Trust boundaries:
 | `serve` → runner | mTLS (TLS 1.3, private CA, SAN check), typed RPCs only (D-030) |
 | runner → Docker / target DBs | image allowlist, fixed container spec, per-run isolated networks, target allowlist, DB certificate pinning (D-029, D-031, D-034) |
 | `serve` → destinations, SMTP, webhooks | dial-time SSRF guard (one guard per scope; personal webhooks only through entries scoped to them, D-198), TLS ≥1.2, no redirects (D-049, D-055); SMTP TLS follows the server and may be unencrypted in `auto`/`none` (D-180) |
-| `serve` → app DB | TLS verify-full by default (D-100), least-privilege roles, envelope-encrypted secrets, append-only audit log (D-046, D-054) |
+| `serve` → app DB | one connection builder, TLS verify-full by default (D-100) with SCRAM-only auth and channel binding, least-privilege roles checked by `session_user`, envelope-encrypted secrets, append-only audit log (D-046, D-054); external PostgreSQL in fields mode, single-account mode only as an audited weakening (D-207); its compose files make `backend` non-internal, the operator firewalls the DB (D-208) |
 | Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
 | External proxy (operator's Traefik / NPM) → `serve` | only over the external, internal `bekup-proxy` link network (/28): proxy at a fixed address, `serve` the only bekup member, no published ports, `trusted_proxies` exactly the proxy's /32 (`setup check` errors otherwise), untrusted `X-Forwarded-For` ignored and logged (D-205) |
 | Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image; writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
@@ -128,7 +130,8 @@ internal/
                 graph/streams (SSE subscription streams: 2.13)
                 authz (1.4)  auth (passwords, sessions, lockout: 1.5; factors 1.7-1.9)
                 pubsub (LISTEN/NOTIFY bridge + in-process bus: 1.10)
-                destinations (destination CRUD, Open/Test, host keys: 2.12)
+                destinations (destination CRUD, Open/Test, host keys: 2.12;
+                  unrecorded-file scan/list/delete unrecorded.go: D-209)
                 connections (connection CRUD, pins, host keys, runner request builder: 2.11)
                 netguard (dial-time SSRF guard: 2.3)
                 egress (admin SSRF allowlist in settings with scopes + per-process sync: D-196, D-198)
@@ -161,10 +164,12 @@ internal/
                   RunnerStats completeness evidence: 3.10)
                 runstate (run tables writer, EnqueueTx, run events, run slots,
                   batched/capped/redacted run logs: 3.6; artifact state
-                  + finish hook: 3.8; read-only Reader for the API: 3.7)
+                  + finish hook: 3.8; read-only Reader for the API: 3.7;
+                  abandoned.go FailAbandonedRuns: D-209)
                 retention (per-destination policy Plan, retention_sweep
                   worker, daily fan-out + partial cleanup: 3.8; Expiries
-                  projection: 3.14)
+                  projection: 3.14; holds.go retention holds +
+                  retention.blocked, estimate.go EstimateKept: D-209)
                 calendar (read-only job calendar: planned/runs/skips/
                   expiries, batched + bounded: 3.14)
                 downloads (download tickets, GET /api/download/{ticket},
@@ -190,7 +195,9 @@ internal/
                   mysqlit/ holds the MySQL/MariaDB integration harness
                 testutil (test-only helpers: dockertest skip policy,
                   runnertest.WaitDockerOK for real-runner harnesses);
-                  storage/sftp/sftptest (atmoz/sftp test server)
+                  storage/sftp/sftptest (atmoz/sftp test server);
+                  db/externaltest (plain PostgreSQL 15-17 with a test CA
+                  for the external-database tests, D-207)
                 notify/email (5.1: SMTP settings, sender, message
                   builder + templates, e-mail verification)
                 notify/webhook (5.2: URL validation, signed sender,
@@ -204,6 +211,9 @@ internal/
                   api_prefs.go, api_inbox.go)
                 notify/missed (5.4: dead-man detector, evaluate.go pure
                   outage logic, detector.go periodic missed_backup_check)
+                schemaversion (D-210: preset catalog presets.go, custom
+                  query rules custom.go, statuses, value check; pure, used
+                  by jobs, graph and the runner)
                 monitor (5.6: metrics.go registry + event counters,
                   health.go snapshot, collector.go gauges, server.go
                   internal /metrics listener; 5.5: security.go hourly
@@ -215,7 +225,9 @@ internal/
                   compose-first 6.14b: outline.go line editor, variants.go +
                   variants/ overlays, composefile.go recognition, composemodel.go
                   compose-go loading, composelint.go allowlist lint on the
-                  resolved project; entryfd_*.go descriptor chmod/chown)
+                  resolved project; entryfd_*.go descriptor chmod/chown;
+                  D-208: database.go external DB, renew.go `setup renew`)
+                setup/wizard (Bubble Tea/huh wizard, Plain UI, renew + upgrade screens: D-208)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
   src/app/              providers, route table (router.tsx), RootLayout (step-up host)
   src/features/<area>/  routes.tsx, pages, operations.ts, model.ts, own strings + tests:
@@ -305,6 +317,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   server markup (the TOTP QR code is re-rendered by `lib/qr-svg.ts`).
   Flow tests use `renderApp` (`src/test/mock-api.tsx`); keep
   `pnpm csp-check` green.
+- Dependency fixes (D-211, proposed): fix a vulnerable transitive dev
+  dependency with a pnpm `overrides` entry in `web/pnpm-workspace.yaml`
+  (comment with the advisory and the removal condition); adapt a dependent
+  that breaks only through `patchedDependencies` (`web/patches/`, copied by
+  the Dockerfile before `pnpm install`), never by ignoring the advisory.
 
 **Security**
 
@@ -342,7 +359,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   or with `server.allow_insecure_http`, always with a startup warning and UI
   banner (D-095).
 - App DB roles: `bekup migrate` re-checks the full role/privilege state on
-  every run; `serve` must call `db.CheckAppRole` at startup (D-099).
+  every run; `serve` must call `db.CheckAppRole` at startup (D-099; it also
+  checks that the session logged in as the role itself, on PostgreSQL 16+
+  also by `SYSTEM_USER`, D-207).
 - HTTP layer (`internal/httpserver`, D-102): every response carries the
   exact D-082 CSP and the security headers; forwarded headers are used only
   from `trusted_proxies` and then stripped (use `httpserver.ClientIP(ctx)`,
@@ -545,7 +564,27 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `secret.changed`); `testDestination`/`fetchDestinationHostKey` are
   single-root, rate limited and return normalized results only. SFTP host
   keys are pinned only by `ConfirmHostKey`; a host/port change clears the
-  pin. Jobs (3.5) must fill the `checkUnused` delete hook.
+  pin. Jobs (3.5) must fill the `checkUnused` delete hook. The location
+  (disk path; S3 endpoint/region/bucket/prefix; SFTP host/port/user/base
+  path/dir) never changes while artifacts are `present` there or a run of
+  a job using it is queued or running (`locationChange`, VALIDATION), and
+  no two destinations share or nest a location (`checkLocation` with
+  `location.overlaps`, also against soft-deleted ones with present
+  artifacts; D-209).
+  Unrecorded files (D-209): only `destinations` touches `unrecorded_files`
+  / `unrecorded_file_scans`; `ScanUnrecorded` (called by the daily
+  retention fan-out with the open backend) prunes empty layout directories
+  through `storage.DirPruner` (not in no-delete mode) and records layout
+  keys (`storage.ParseLayoutKey`) below known job slugs only, older than
+  `UnrecordedMinAge`, without an artifact row on any destination and
+  outside queued/running run directories (bounded: `MaxScanObjects`,
+  `MaxUnrecordedPerDestination`; each destination within its share of
+  the daily attempt's time). Nothing is deleted automatically;
+  `DeleteUnrecordedFile` (admin + step-up, single root, rate limited)
+  checks the file, re-checks the records under the row lock and commits
+  `destination.unrecorded_file_deleted` (fail closed) before deleting the
+  file outside the transaction, then removes the row; it refuses
+  no-delete destinations.
 - Connections (`internal/connections`, D-135): only the service touches
   the `connections` table.
   Credentials (DB password, SSH password/key + passphrase, TLS client key)
@@ -864,7 +903,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
 - Audit: record through `internal/audit` only (`Record`, or `RecordTx` inside
   the action's `db.Tx`); audit failures fail the operation (fail closed);
   actions come from the typed catalog; details are redacted but still never
-  put secrets in them; CLI break-glass events use `audit.CLIEvent` (D-069,
+  put secrets in them; detail names must not look like secrets to
+  `logging.IsSecretKey` (`object`, not `object_key`; enforced by
+  `TestDetailNamesNotRedacted`), or the value is blanked; CLI break-glass events use `audit.CLIEvent` (D-069,
   D-101). Weakened startup posture is audited fail closed
   (`system.insecure_transport_started`, `security.insecure_db_tls`);
   `bekup certs rotate` records `certs.rotated` (D-118). Unused catalog
@@ -878,6 +919,40 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   roles. SCRAM channel binding is required (D-104): the postgres cert is an
   ECDSA P-256 leaf under a one-time ECDSA issuer (key discarded); the CA
   has path length 1 but runner mTLS accepts only direct chains.
+- External app DB (D-207, proposed): `[database]` has a URL mode
+  (`url_file`/`owner_url_file`) and a fields mode (`host` selects it;
+  `port`, `name`, `user`, `password_file`, `owner_user`,
+  `owner_password_file`, `tls_server_name`), mutually exclusive
+  (`normalizeBekup` errors on mixing, never a precedence). Read the logins
+  only with `cfg.AppDBCredentials()` / `OwnerDBCredentials()`
+  (`config.DBCredentials`, `Zero()` after use) and connect only through
+  `db.NewPool` / `db.NewConnector` / `db.NewMigrator`, which share the one
+  builder `connConfig` (fields mode never builds a DSN string and ignores
+  every `PG*` variable and service-file setting incl. pgx's cache/exec
+  mode; URL mode takes only the allowlisted query parameters
+  `allowedURLParams`; SCRAM-only `require_auth`; `search_path=public`;
+  the TLS policy for both modes). Never format credentials into a
+  connection string. The session check compares `session_user` and, on
+  PostgreSQL 16+, `SYSTEM_USER` (`SessionSystemUser`; sqlc knows it only
+  through the types-only stub in `internal/db/sqlcschema/`). Bootstrap
+  adopts existing roles only with `--adopt-existing-roles`, refuses foreign
+  members/`ADMIN OPTION` holders of the bekup roles (`migrate check` warns),
+  revokes its temporary `bekup_owner` grant on a detached context (manual
+  `REVOKE` hint on failure) and needs `--allow-insecure-admin-connection`
+  for a `tls_mode` below verify-full. Audit detail keys must pass
+  `logging.IsSecretKey` unredacted (no "pass", "key", "secret", ...). Role names are fixed (`config.DBOwnerRole` /
+  `DBAppRole`); the only hand-built SQL is the role/database DDL in
+  `internal/db/rolesql.go` (constants, `config.ValidDBName`, verifiers from
+  `db.SCRAMVerifier`), executed by `db.Bootstrap` and printed by
+  `bekup db roles-sql` (verifiers only, stdout only). `bekup migrate up`
+  runs the `migrate check` preflight (`Migrator.Check`) first. Single-account
+  mode (`database.single_account`, fields mode only) is an explicit
+  weakening: the sessions `SET ROLE` to the NOLOGIN roles (creds.SetRole),
+  superuser logins are refused, every start WARNs and records
+  `security.insecure_db_roles` (fail closed), the security check alerts
+  daily (`notify.KindInsecureDBRoles`) and the admin configuration page shows
+  it (`ConfigStatus.database`). A new kind of app DB connection must use
+  the builder and pass both role checks.
 - Outbound connections from `serve` to admin- or user-supplied endpoints
   (S3, SFTP, SMTP, webhooks) go only through `internal/netguard` (D-055,
   D-120): `Guard.DialContext` (or `Guard.Dialer()` for libraries that need
@@ -954,7 +1029,8 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `just gen` (buf + protoc plugins are go.mod tools; never edit
   `internal/runnerpb/*.pb.go`); `just lint` runs buf lint/format and
   `buf breaking` against main. No free-form command/arg/env/image/path
-  fields; credentials are `bytes` with `[(runner.v1.secret) = true]`
+  fields (the only SQL field is the bounded `VersionQuery.custom_sql`,
+  D-210; a test refuses any other); credentials are `bytes` with `[(runner.v1.secret) = true]`
   (a test enforces it) and are zeroed with `runnerpb.ZeroSecrets`. A new
   RPC needs a class in `internal/runner` `methodClasses` (run/control/
   unlimited; unknown = denied; a test checks coverage). Every call needs a
@@ -1195,7 +1271,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `retention_sweep` (`job_id` optional + unique, `reason`, `dry_run`),
   enqueued by the `runstate.Store` finish hook (`retention.PostRunHook`,
   success/partial, under a savepoint) and by the daily periodic fan-out
-  (no job id; also removes old `*.partial` files on disk/SFTP).
+  (no job id; first fails abandoned runs via `runstate.Store.FailAbandonedRuns`
+  (code `interrupted`), then per destination removes old `*.partial`
+  files on disk/SFTP and calls the `UnrecordedScanner`), and by
+  `jobs.Service.Update` when the retention changed (reason
+  `policy_changed`, in the update's transaction; D-209).
   `retention.Plan` is the pure policy: per destination, a run is complete
   when every item has a present verified artifact there plus the manifest;
   keep = newest complete (always) ∪ newest N ∪ younger than X days ∪
@@ -1214,9 +1294,15 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   Audit: `retention.deletion_planned` (before, fail closed) +
   `retention.swept` per destination, `retention.aborted`.
   Keep rules live once in `internal/retention` (`keepLastCovers`,
-  `keepDaysUntil`, `newerNeeded`): `Plan` and the calendar's
-  `retention.Expiries` share them (a property test ties both); change a
-  keep rule there, never in a copy.
+  `keepDaysUntil`, `newerNeeded`, `heldOnly`): `Plan`, the calendar's
+  `retention.Expiries` and the editor's `EstimateKept` share them
+  (property tests tie them to `Plan`); change a keep rule there, never in
+  a copy. Retention holds (D-209): `Plan` reports `DestinationPlan.Hold`
+  (incomplete runs kept only by the newer-incomplete/no-complete rule);
+  every sweep writes `retention_holds` (only the retention worker) and
+  emits `retention.blocked` with `HoldDedupKey` (one per job, destination
+  and UTC day); `Job.retentionHolds` reads them batch-loaded
+  (`retention.HoldReader`).
 - Calendar (`internal/calendar`, D-156, D-159, D-160 proposed): `calendar(from,
   to, timezone, jobIds)`, `calendar.view` for every role + `JobScope`
   (invisible ids dropped silently). Four batched, index-bounded queries
@@ -1245,7 +1331,41 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   (`TestPGQueriesQualified` enforces it). Never read data or call user
   functions. MySQL/MariaDB: never run a statement on a user table or
   view (stats are `information_schema` estimates and grants only; `deep`
-  equals `standard` there, D-153).
+  equals `standard` there, D-153). The one exception is the
+  schema-version capture below (D-210).
+- Schema version (D-210, proposed): the version query is the **only
+  user-defined SQL bekup runs on targets**. Presets live in
+  `internal/schemaversion` (reviewed SQL per engine, `TablePlaceholder`
+  quoted by the engine helpers, schema-qualified on PostgreSQL and added
+  to `TestPGVersionQueriesQualified`, a formatter, the read columns);
+  jobs store only the preset name. A new preset needs both engines, the
+  read columns with built-in types (`TypeAllowed*`), a row in the
+  integration seed (`ops_version_integration_inner_test.go`) and in the
+  docs table; presets truncate text output in SQL (`pgText` / `myText`).
+  Custom queries are validated with `schemaversion.ValidateCustomSQL` (a
+  strict check over the whole text, strings included: no `;`, comment,
+  `\r`/control character, denied word or function anywhere; the error
+  names the offender) by `jobs.Service.SetSchemaVersion`, by the worker
+  before each dump (`versionQuery`: a refused stored query is not sent,
+  `version_unavailable`) and by `validate.VersionQuery`; never loosen
+  the rules into a quote- or comment-aware lexer. The denylist is a
+  guardrail; safety comes from the execution. Captures run only through
+  `dbprobe.StatsSource.SchemaVersion` on the stats session inside the
+  statistics transaction (PostgreSQL: restricted sessions only,
+  savepoint + `SET LOCAL` timeouts always rolled back with a fresh
+  context, preset table `LOCK`ed and its result types described before
+  the read, `SessionLost` stops sharing the snapshot with pg_dump;
+  MySQL/MariaDB: session limits, READ ONLY transaction, layout re-checked
+  after the read, a 1 MiB read budget), custom queries wrapped as
+  `SELECT * FROM (...) LIMIT 1`, first row (custom: first column) only,
+  `schemaversion.CleanValue`; never log the query, a server message or
+  the value (the value travels only in `DumpStats`). Changes are
+  `job.version_query_edit`, a custom query (and moving a job with one to
+  another connection) also `job.version_query_custom_edit` (step-up);
+  audit only the digest (`custom_sql_sha256`);
+  `JobSchemaVersion.customSql` is staff only.
+  Failed captures are the item warnings `version_unavailable` /
+  `version_invalid` and never change the run status.
 - Container-only install (`internal/setup`, D-203, proposed): the
   production compose file is embedded (`embed.go`) and written by `bekup
   setup`, so: compose never uses `build:`; its assets live only below
@@ -1326,6 +1446,41 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `.env` (`syncEnvImage`, state `image_source: env`) and `BEKUP_IMAGE` is
   allowed nowhere else; never embed `deploy/compose/` or add it to the
   variant asset directories.
+- Setup database dimension, wizard and renewal (D-208, proposed): every
+  variant renders with `DBMode` bundled and external (`externalDBEdits`,
+  `variants/external-db/`; six release and committed files): a change to
+  `docker-compose.yml` or an overlay must work in both modes (the
+  `postgres` service, its secrets and `backend` are what the external form
+  rewrites). External-database files go through the manifest
+  (`ManifestOptions.ExternalDB`, group `database-external`) and check;
+  setup itself never connects to a database (it prints `docker compose run
+  --rm migrate db bootstrap ...`). The wizard (`internal/setup/wizard`)
+  only asks: it must produce exactly the `setup.Options` of the equivalent
+  flags (`InitPlan.Flags`, `TestSetupWizardMatchesFlags`), so a new init
+  option needs a flag, a wizard step and a case there; secrets only as
+  `[]byte` from `UI.Secret` (never huh inputs or strings), zeroed; a
+  secret is shown only with `UI.Sensitive(title, secret []byte, body)`
+  (written as bytes, never through `fmt` or a string; the TUI uses the
+  alternate screen) and the wizard runs only with stdin and stdout on a
+  terminal (`--plain` is the only way to the plain interface, which warns
+  that a generated passphrase stays in the scrollback). Operator input
+  files (CA bundle, password files, a keyring to import) are read only
+  through `readInput` (`os.Root` + `openat(O_NOFOLLOW)` per component, type
+  checked on the descriptor); copied secret sources are recorded in the
+  state (`imported_files`) and `setup check` warns while they exist. Never
+  rely on color; every screen supports back. Only the `charm.land/*/v2`
+  modules (bubbletea v1 queries the terminal in a package `init`, which
+  would run in every bekup command of the binary), and
+  `github.com/atotto/clipboard` is replaced by the inert
+  `third_party/clipboard` module (no `init`, every call fails): keep the
+  `replace` and copy `third_party/` before `go mod download` in the
+  Dockerfile; `scripts/licenses.sh` (`just sec`) allows only
+  MIT/BSD/Apache-2.0/ISC there and fails on a `go list` error or an empty
+  set. `setup renew` uses `certs.ExpiryWarnDays` (shared with
+  `monitor.ExpiryThresholds`) and re-applies the manifest's owners; it is
+  not audited (setup has no network or database access): it prints the
+  new fingerprints as evidence, and `bekup certs rotate` where the app
+  database is reachable stays the audited path.
 - Runner mTLS: clients are identified only by the URI SAN
   `spiffe://bekup/<component>`; the runner cert uses DNS `runner`; the CA is
   name-constrained, its key age-encrypted and kept offline; CA rotation is

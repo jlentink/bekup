@@ -16,8 +16,14 @@ import (
 // renderedVariant renders a shipped variant with the test image.
 func renderedVariant(t testing.TB, v Variant) string {
 	t.Helper()
+	return renderedVariantDB(t, v, DBBundled)
+}
+
+// renderedVariantDB renders a shipped variant with a database mode.
+func renderedVariantDB(t testing.TB, v Variant, db DBMode) string {
+	t.Helper()
 	img := mustRef(t, variantImage)
-	b, err := renderEmbedded(bekup.Assets(), v, &img)
+	b, err := renderEmbedded(bekup.Assets(), v, db, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,15 +36,17 @@ func renderedVariant(t testing.TB, v Variant) string {
 func TestComposeVarAllowlist(t *testing.T) {
 	got := map[string]bool{}
 	for _, v := range AllVariants {
-		vars, bad, err := composeVarRefs([]byte(renderedVariant(t, v)), false)
-		if err != nil || bad {
-			t.Fatalf("%s: %v bad=%v", v, err, bad)
-		}
-		for k := range vars {
-			got[k] = true
-		}
-		if fs := interpolationFindings(ComposeFile, []byte(renderedVariant(t, v)), false); len(fs) > 0 {
-			t.Fatalf("%s: %v", v, fs)
+		for _, db := range DBModes {
+			vars, bad, err := composeVarRefs([]byte(renderedVariantDB(t, v, db)), false)
+			if err != nil || bad {
+				t.Fatalf("%s/%s: %v bad=%v", v, db, err, bad)
+			}
+			for k := range vars {
+				got[k] = true
+			}
+			if fs := interpolationFindings(ComposeFile, []byte(renderedVariantDB(t, v, db)), false); len(fs) > 0 {
+				t.Fatalf("%s/%s: %v", v, db, fs)
+			}
 		}
 	}
 	keys := sortedKeys(got)
@@ -385,9 +393,11 @@ func TestShippedVariantsPass(t *testing.T) {
 		"DOCKER_GID": "998", "BEKUP_DOMAIN": "b.example.com", "BEKUP_KEYS_DIR": "./keys",
 	}
 	for _, v := range AllVariants {
-		for _, e := range []map[string]string{nil, env} {
-			if fs := lintWith(t, nil, nil, v, e); len(fs) > 0 {
-				t.Errorf("%s (%v): %v", v, e, fs)
+		for _, db := range DBModes {
+			for _, e := range []map[string]string{nil, env} {
+				if fs := lintWithDB(t, nil, nil, v, db, e); len(fs) > 0 {
+					t.Errorf("%s/%s (%v): %v", v, db, e, fs)
+				}
 			}
 		}
 	}
@@ -408,7 +418,7 @@ func TestLintSymlinkedBindSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	img := mustRef(t, variantImage)
-	expected, err := renderEmbedded(bekup.Assets(), VariantTraefik, &img)
+	expected, err := renderEmbedded(bekup.Assets(), VariantTraefik, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}

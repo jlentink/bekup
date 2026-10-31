@@ -73,6 +73,9 @@ models:
         resolver: true
       missedSince:
         resolver: true
+      # Retention holds of the sweep, batch-loaded per page (D-209).
+      retentionHolds:
+        resolver: true
       # Shared channels attached to the job, staff only, batch-loaded
       # per page (D-198).
       sharedChannelAttachments:
@@ -86,6 +89,14 @@ models:
       artifacts:
         resolver: true
       manifest:
+        resolver: true
+  # The custom query is staff only (D-210): a field resolver reads it from
+  # the hand-written model.
+  JobSchemaVersion:
+    model:
+      - github.com/jlentink/bekup/internal/graph/model.JobSchemaVersion
+    fields:
+      customSql:
         resolver: true
   RunItem:
     fields:

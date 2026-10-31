@@ -179,6 +179,69 @@ keys must be owned by the reading container UID (65532, postgres 70), which
 `bekup setup` applies; see
 [compose installation](../installation/compose.md).
 
+## Renewal with `bekup setup renew`
+
+For a `bekup setup` deployment directory, `bekup setup renew` (D-208) is the
+simple way to renew certificates: guided on a terminal, flags otherwise. It
+runs in the same hardened one-shot container as setup, with the offline CA
+media mounted at `secrets/certs/ca` for this run only:
+
+```sh
+cd /opt/bekup
+sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -v "$PWD":/deploy -v /media/usb/bekup-ca:/deploy/secrets/certs/ca \
+  "$IMAGE" setup renew
+```
+
+The guided run lists the internal certificates (runner, serve and, with the
+bundled database, postgres, plus the CA) with their expiry, offers to renew
+the expiring ones, every leaf, or a CA rotation phase, shows what will
+change and the services to recreate, and asks for the CA key's passphrase
+only then. Without a terminal (or with `--non-interactive`):
+
+```sh
+setup renew --list                          # the certificates and the CA rotation state; changes nothing
+setup renew --ca-passphrase-stdin           # renew the leaves that expire within 30 days
+setup renew --all --ca-passphrase-file f    # renew every leaf certificate
+setup renew --component serve               # exactly these (repeatable)
+setup renew --ca stage|promote|finish       # one phase of the CA rotation (below)
+```
+
+- **Threshold.** A certificate counts as expiring 30 days before its end
+  (`--warn-days` changes it): the same threshold as `setup check` and the
+  hourly security check that alerts every admin (`certs.ExpiryWarnDays`,
+  task 5.5). `setup check` and those alerts point to `setup renew`.
+- **The CA key stays offline.** Nothing renews automatically. Every run
+  needs the CA directory mounted at `<keys>/certs/ca`: leaf renewals,
+  `--ca stage` and `--ca promote` with `ca.crt` and `ca.key` and the key's
+  passphrase; `--ca finish` reads only `ca.crt` and `ca.prev.crt` (no key,
+  no passphrase), but still needs them there, because the files of the CA
+  directory tell the rotation state. Unmount the media afterwards.
+- **Owners and modes.** New keys are written root-owned 0600 by the
+  certificate code; `setup renew` then re-applies the ownership manifest
+  (keys 0400 for the consuming container's UID).
+- **Restart.** The certificates reach the containers as file secrets, which
+  are bind mounts of the replaced files, so the containers must be
+  recreated. `setup renew` prints exactly the command for the affected
+  services, for example
+  `docker compose up -d --force-recreate serve` after renewing serve, or all
+  of `runner serve postgres` after a CA phase.
+- **CA rotation, one phase per run.** `--ca stage`, then (after recreating
+  every service) `--ca promote`, then `--ca finish`, as in the
+  [overlap procedure](#ca-rotation-overlap-procedure). It is resumable: the
+  files in the CA directory (`ca.next.crt` after stage, `ca.prev.crt` after
+  promote) tell which phase comes next, and `setup renew --list` shows it.
+  Leaf renewals are refused while a rotation is in progress.
+- **Not audited.** The setup container has no network and no database
+  access, so a renewal is not recorded in the audit log. It prints the new
+  SHA-256 fingerprints as evidence: keep them with your change records. For
+  an audited rotation run `bekup certs rotate` (below) where the app
+  database is reachable.
+
+`bekup setup init --use-existing-ca` issues the certificates of a new
+deployment from an existing CA mounted the same way (the CA is only read).
+
 ## Rotation
 
 Rotation needs the CA key: restore `ca/` temporarily, rotate, then move it
@@ -228,17 +291,19 @@ only because the CA key is age-encrypted with its passphrase. Writing the
 certificates may still fail on such media unless it is mounted so that
 chmod succeeds (vfat `quiet`).
 
-`bekup setup init` never reuses, overwrites or rolls back an existing CA:
-with `ca.crt`/`ca.key` already in `secrets/certs/ca` (for example the media of
-an earlier install) it refuses before writing anything. Issue the runner,
-serve and postgres certificates from that CA with `certs rotate` and re-run
-`setup init --keep-existing`, or move the CA away. `--regenerate-secrets`
+`bekup setup init` never overwrites or rolls back an existing CA: with
+`ca.crt`/`ca.key` already in `secrets/certs/ca` (for example the media of
+an earlier install) it refuses before writing anything, unless you pass
+`--use-existing-ca` (or choose "use my existing CA" in the wizard): then it
+issues the runner, serve and (bundled database) postgres certificates from
+that CA and only reads it. Otherwise move the CA away. `--regenerate-secrets`
 replaces the CA too, **including an offline CA mounted there**; the old files
 are kept aside until the run succeeded and restored on any failure.
 
 Record the rotation in the audit log afterwards (it ran with `--no-audit`
-because the container has no database access). A `setup rotate-certs`
-wrapper is planned.
+because the container has no database access). `bekup setup renew`
+([above](#renewal-with-bekup-setup-renew)) does the same in one step and
+re-applies the ownership manifest itself.
 
 Each rotation creates a new key and certificate from the existing CA; the CA
 and the other components are untouched. The runner's extra names are kept

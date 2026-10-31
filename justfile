@@ -323,6 +323,8 @@ test-e2e:
 [script]
 sec:
     {{ lib }}
+    info "licenses of the setup wizard's dependencies (MIT/BSD/Apache-2.0/ISC; D-208)"
+    scripts/licenses.sh
     missing=()
     if govulncheck=$(tool govulncheck); then
         info "govulncheck"
@@ -384,12 +386,16 @@ compose-examples image="":
     go build -o "$out/.bekup" ./cmd/bekup
     trap 'rm -f "$out/.bekup"' EXIT
     for v in traefik traefik-external npm full; do
-        case $v in
-        traefik) name=compose.yaml ;;
-        *) name="compose.$v.yaml" ;;
-        esac
-        "$out/.bekup" setup compose --variant "$v" ${args[@]+"${args[@]}"} >"$out/$name"
-        info "$out/$name"
+        for db in bundled external; do
+            case $v in
+            traefik) name=compose ;;
+            *) name="compose.$v" ;;
+            esac
+            [[ $db == external ]] && name+=.external-db
+            name+=.yaml
+            "$out/.bekup" setup compose --variant "$v" --database "$db" ${args[@]+"${args[@]}"} >"$out/$name"
+            info "$out/$name"
+        done
     done
     if [[ -z "$1" ]]; then
         note "x-bekup-image takes the image from BEKUP_IMAGE (like the committed deploy/compose/ files, which just gen writes); pass a pinned image to render release-style files"

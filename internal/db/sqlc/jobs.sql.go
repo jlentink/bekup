@@ -52,7 +52,7 @@ func (q *Queries) DeleteJobOwner(ctx context.Context, arg DeleteJobOwnerParams) 
 }
 
 const getJob = `-- name: GetJob :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema FROM jobs WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetJob(ctx context.Context, id uuid.UUID) (Job, error) {
@@ -90,6 +90,10 @@ func (q *Queries) GetJob(ctx context.Context, id uuid.UUID) (Job, error) {
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }
@@ -120,7 +124,7 @@ func (q *Queries) GetJobConnectionInfo(ctx context.Context, id uuid.UUID) (GetJo
 }
 
 const getJobForShare = `-- name: GetJobForShare :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR SHARE
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR SHARE
 `
 
 // GetJobForShare locks a job that is not deleted against concurrent
@@ -160,12 +164,16 @@ func (q *Queries) GetJobForShare(ctx context.Context, id uuid.UUID) (Job, error)
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }
 
 const getJobForUpdate = `-- name: GetJobForUpdate :one
-SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema FROM jobs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetJobForUpdate locks a job that is not deleted.
@@ -204,6 +212,10 @@ func (q *Queries) GetJobForUpdate(ctx context.Context, id uuid.UUID) (Job, error
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }
@@ -248,7 +260,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7::text[], $8::text[],
         $9, $10::int, $11::int,
         $12::int, $13, $14::int,
         $15, $16, $17::timestamptz, $18, $18)
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema
 `
 
 type InsertJobParams struct {
@@ -330,6 +342,10 @@ func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (Job, erro
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }
@@ -556,7 +572,7 @@ func (q *Queries) ListJobOwners(ctx context.Context, jobID uuid.UUID) ([]ListJob
 }
 
 const listJobs = `-- name: ListJobs :many
-SELECT j.id, j.enabled, j.schedule, j.next_run_at, j.last_scheduled_at, j.deleted_at, j.created_at, j.updated_at, j.name, j.slug, j.description, j.connection_id, j.db_mode, j.databases, j.exclude, j.include_globals, j.retention_keep_last, j.retention_keep_days, j.timeout_seconds, j.verification, j.expected_window_seconds, j.created_by, j.updated_by, j.test_restore_enabled, j.test_restore_schedule, j.test_restore_connection_id, j.test_restore_next_at, j.test_restore_target_privileges, j.test_restore_privilege_reasons, j.test_restore_privileged_ack_by, j.test_restore_privileged_ack_at FROM jobs j
+SELECT j.id, j.enabled, j.schedule, j.next_run_at, j.last_scheduled_at, j.deleted_at, j.created_at, j.updated_at, j.name, j.slug, j.description, j.connection_id, j.db_mode, j.databases, j.exclude, j.include_globals, j.retention_keep_last, j.retention_keep_days, j.timeout_seconds, j.verification, j.expected_window_seconds, j.created_by, j.updated_by, j.test_restore_enabled, j.test_restore_schedule, j.test_restore_connection_id, j.test_restore_next_at, j.test_restore_target_privileges, j.test_restore_privilege_reasons, j.test_restore_privileged_ack_by, j.test_restore_privileged_ack_at, j.version_query_mode, j.version_preset, j.version_custom_sql, j.version_schema FROM jobs j
 WHERE j.deleted_at IS NULL
   AND ($1::boolean OR EXISTS (
         SELECT 1 FROM job_owners o WHERE o.job_id = j.id AND o.user_id = $2::uuid))
@@ -640,6 +656,10 @@ func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, erro
 			&i.TestRestorePrivilegeReasons,
 			&i.TestRestorePrivilegedAckBy,
 			&i.TestRestorePrivilegedAckAt,
+			&i.VersionQueryMode,
+			&i.VersionPreset,
+			&i.VersionCustomSql,
+			&i.VersionSchema,
 		); err != nil {
 			return nil, err
 		}
@@ -839,7 +859,7 @@ SET enabled = $1,
     next_run_at = $2::timestamptz,
     updated_by = $3
 WHERE id = $4 AND deleted_at IS NULL
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema
 `
 
 type SetJobEnabledParams struct {
@@ -889,6 +909,81 @@ func (q *Queries) SetJobEnabled(ctx context.Context, arg SetJobEnabledParams) (J
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
+	)
+	return i, err
+}
+
+const setJobVersionQuery = `-- name: SetJobVersionQuery :one
+UPDATE jobs
+SET version_query_mode = $1,
+    version_preset = $2::text,
+    version_custom_sql = $3::text,
+    version_schema = $4::text,
+    updated_by = $5
+WHERE id = $6 AND deleted_at IS NULL
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema
+`
+
+type SetJobVersionQueryParams struct {
+	Mode       JobVersionQueryMode `json:"mode"`
+	Preset     *string             `json:"preset"`
+	CustomSql  *string             `json:"customSql"`
+	SchemaName string              `json:"schemaName"`
+	UpdatedBy  *uuid.UUID          `json:"updatedBy"`
+	ID         uuid.UUID           `json:"id"`
+}
+
+// SetJobVersionQuery changes a job's schema-version capture (D-210).
+func (q *Queries) SetJobVersionQuery(ctx context.Context, arg SetJobVersionQueryParams) (Job, error) {
+	row := q.db.QueryRow(ctx, setJobVersionQuery,
+		arg.Mode,
+		arg.Preset,
+		arg.CustomSql,
+		arg.SchemaName,
+		arg.UpdatedBy,
+		arg.ID,
+	)
+	var i Job
+	err := row.Scan(
+		&i.ID,
+		&i.Enabled,
+		&i.Schedule,
+		&i.NextRunAt,
+		&i.LastScheduledAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.ConnectionID,
+		&i.DbMode,
+		&i.Databases,
+		&i.Exclude,
+		&i.IncludeGlobals,
+		&i.RetentionKeepLast,
+		&i.RetentionKeepDays,
+		&i.TimeoutSeconds,
+		&i.Verification,
+		&i.ExpectedWindowSeconds,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.TestRestoreEnabled,
+		&i.TestRestoreSchedule,
+		&i.TestRestoreConnectionID,
+		&i.TestRestoreNextAt,
+		&i.TestRestoreTargetPrivileges,
+		&i.TestRestorePrivilegeReasons,
+		&i.TestRestorePrivilegedAckBy,
+		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }
@@ -932,7 +1027,7 @@ SET name = $1,
     next_run_at = $14::timestamptz,
     updated_by = $15
 WHERE id = $16 AND deleted_at IS NULL
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema
 `
 
 type UpdateJobParams struct {
@@ -1006,6 +1101,10 @@ func (q *Queries) UpdateJob(ctx context.Context, arg UpdateJobParams) (Job, erro
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }

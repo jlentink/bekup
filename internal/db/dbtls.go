@@ -31,6 +31,10 @@ type TLSOptions struct {
 	RootCAs *x509.CertPool
 	// Certificates is the optional client certificate.
 	Certificates []tls.Certificate
+	// ServerName, when set, is the name the server certificate is
+	// verified against (verify-full) and the SNI value, instead of the
+	// connection host (database.tls_server_name, D-207).
+	ServerName string
 }
 
 // LoadTLSOptions reads the database.tls_* files of a validated config. The
@@ -38,7 +42,7 @@ type TLSOptions struct {
 // the parsed tls.Certificate.
 func LoadTLSOptions(c *config.Bekup) (TLSOptions, error) {
 	d := &c.Database
-	o := TLSOptions{Mode: d.TLSMode}
+	o := TLSOptions{Mode: d.TLSMode, ServerName: d.TLSServerName}
 	if d.TLSMode == config.DBTLSDisable {
 		return o, nil
 	}
@@ -83,6 +87,9 @@ func (o TLSOptions) validate() error {
 			return errors.New(`database TLS mode "verify-full" needs a CA (database.tls_ca_file)`)
 		}
 	case config.DBTLSRequire, config.DBTLSDisable:
+		if o.ServerName != "" {
+			return fmt.Errorf("database.tls_server_name only applies with tls_mode = %q", config.DBTLSVerifyFull)
+		}
 	case "":
 		return errors.New("database TLS mode not set (database.tls_mode)")
 	default:
@@ -97,14 +104,25 @@ var sslModeRank = map[string]int{
 }
 
 // tlsURLParams are libpq TLS parameters that bekup takes from the config
-// only; they are rejected in the URL so that nobody believes they apply.
-var tlsURLParams = []string{"sslrootcert", "sslcert", "sslkey", "sslpassword", "sslcertmode", "sslcrl", "sslcrldir"}
+// only; the error for them points to the database.tls_* keys.
+var tlsURLParams = []string{"sslrootcert", "sslcert", "sslkey", "sslpassword", "sslcertmode", "sslcrl", "sslcrldir", "sslsni", "sslnegotiation"}
+
+// allowedURLParams are the only query parameters a database URL may carry
+// (D-207, an allowlist; besides ?host= naming a Unix-socket directory): sslmode and channel_binding (only as strict as the
+// configured TLS policy), require_auth (only scram-sha-256), the connect
+// timeout, target_session_attrs and application_name. Everything else is
+// refused, in particular session settings (options, search_path, role,
+// session_authorization, any other run-time parameter), service and
+// password files, Kerberos, pool settings and pgx's statement cache knobs:
+// bekup sets the session itself and a URL value would be ambiguous or
+// weaken it.
+var allowedURLParams = []string{"sslmode", "channel_binding", "require_auth", "connect_timeout", "target_session_attrs", "application_name"}
 
 // checkURLTLS rejects connection strings that are not postgres:// URLs,
-// that carry TLS file parameters, or whose sslmode is stricter than the
-// configured mode (an ambiguous intent; a weaker sslmode is simply
-// overridden by the configured one). It returns the URL's query parameters.
-// Errors never echo the URL.
+// that carry a parameter outside allowedURLParams, or whose sslmode is
+// stricter than the configured mode (an ambiguous intent; a weaker sslmode
+// is simply overridden by the configured one). It returns the URL's query
+// parameters. Errors never echo the URL or a parameter value.
 func checkURLTLS(raw []byte, mode string) (url.Values, error) {
 	u, err := url.Parse(string(raw))
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
@@ -114,10 +132,32 @@ func checkURLTLS(raw []byte, mode string) (url.Values, error) {
 	if err != nil {
 		return nil, ErrInvalidURL
 	}
-	for _, p := range tlsURLParams {
-		if q.Has(p) {
+	keys := make([]string, 0, len(q))
+	for p := range q {
+		keys = append(keys, p)
+	}
+	slices.Sort(keys)
+	for _, p := range keys {
+		switch {
+		case p == "host":
+			// The only address part libpq takes from the query: a Unix-socket
+			// directory (tls_mode = "disable"); network hosts belong in the
+			// URL's authority.
+			if len(q[p]) != 1 || !isSocket(q.Get(p)) {
+				return nil, errors.New("database URL: ?host= may only name a Unix-socket directory (an absolute path); put a network host into the URL itself")
+			}
+		case slices.Contains(tlsURLParams, p):
 			return nil, fmt.Errorf("database URL: parameter %s is not supported; configure TLS with the database.tls_* keys", p)
+		case !validURLParamName(p):
+			return nil, fmt.Errorf("database URL: a parameter is not supported (allowed: %s)", strings.Join(allowedURLParams, ", "))
+		case !slices.Contains(allowedURLParams, p):
+			return nil, fmt.Errorf("database URL: parameter %s is not supported (allowed: %s; bekup sets the session and pool settings itself)", p, strings.Join(allowedURLParams, ", "))
+		case len(q[p]) != 1:
+			return nil, fmt.Errorf("database URL: parameter %s is given more than once", p)
 		}
+	}
+	if q.Has("require_auth") && q.Get("require_auth") != requireAuth {
+		return nil, fmt.Errorf("database URL: require_auth must be %s (anything else would weaken the required SCRAM-SHA-256 authentication); remove it from the URL", requireAuth)
 	}
 	if !q.Has("sslmode") {
 		return q, nil
@@ -154,6 +194,16 @@ func applyTLS(cc *pgconn.Config, raw []byte, o TLSOptions) error {
 	if err != nil {
 		return err
 	}
+	return applyTLSPolicy(cc, q, o)
+}
+
+// applyTLSPolicy applies the TLS policy o to cc (both modes, D-207). q are
+// the query parameters of a connection URL (nil in fields mode), already
+// checked by checkURLTLS.
+func applyTLSPolicy(cc *pgconn.Config, q url.Values, o TLSOptions) error {
+	if err := o.validate(); err != nil {
+		return err
+	}
 	cb := q.Get("channel_binding")
 	if o.Mode == config.DBTLSDisable {
 		if cb == "require" {
@@ -184,6 +234,20 @@ func applyTLS(cc *pgconn.Config, raw []byte, o TLSOptions) error {
 	return nil
 }
 
+// validURLParamName reports whether a URL parameter name is plain enough to
+// appear in an error message (it is chosen by whoever wrote the URL).
+func validURLParamName(p string) bool {
+	if p == "" || len(p) > 40 {
+		return false
+	}
+	for _, c := range p {
+		if (c < 'a' || c > 'z') && c != '_' {
+			return false
+		}
+	}
+	return true
+}
+
 func isSocket(host string) bool { return strings.HasPrefix(host, "/") }
 
 func hostKey(host string, port uint16) string {
@@ -195,10 +259,14 @@ func (o TLSOptions) clientConfig(host string) *tls.Config {
 	if o.Mode == config.DBTLSDisable || isSocket(host) {
 		return nil
 	}
+	name := host
+	if o.ServerName != "" {
+		name = o.ServerName
+	}
 	c := &tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		Certificates: o.Certificates,
-		ServerName:   host,
+		ServerName:   name,
 	}
 	switch {
 	case o.Mode == config.DBTLSVerifyFull:

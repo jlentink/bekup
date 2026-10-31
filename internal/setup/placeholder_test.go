@@ -28,36 +28,42 @@ func TestCommittedComposeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != len(ReleaseVariants) {
-		t.Errorf("%s holds %d entries, want exactly the %d variant files", committedDir, len(entries), len(ReleaseVariants))
+	if len(entries) != len(ReleaseVariants)*len(DBModes) {
+		t.Errorf("%s holds %d entries, want exactly the %d variant files", committedDir, len(entries), len(ReleaseVariants)*len(DBModes))
 	}
 	for _, v := range ReleaseVariants {
-		want, err := RenderRelease(v, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := readFile(t, root, committedDir+"/"+v.AssetName())
-		if !bytes.Equal(got, want) {
-			t.Errorf("%s/%s is out of date (or was edited by hand): run `just gen`\n%s", committedDir, v.AssetName(), LineDiff(string(got), string(want), 20))
-			continue
-		}
-		if !strings.Contains(string(got), "GENERATED from the repository's docker-compose.yml by `just gen`; never\n# edit it by hand.") {
-			t.Errorf("%s: no generated-file header", v.AssetName())
-		}
-		if !hasLine(string(got), ComposePlaceholderLine) {
-			t.Errorf("%s: no placeholder line", v.AssetName())
-		}
-		rel, err := RenderRelease(v, &img)
-		if err != nil {
-			t.Fatal(err)
-		}
-		gl, rl := strings.Split(string(got), "\n"), strings.Split(string(rel), "\n")
-		if len(gl) != len(rl) {
-			t.Fatalf("%s: %d lines, release file %d", v.AssetName(), len(gl), len(rl))
-		}
-		for i := range gl {
-			if gl[i] != rl[i] && (gl[i] != ComposePlaceholderLine || rl[i] != composeImagePrefix+variantImage) {
-				t.Errorf("%s line %d differs from the release file beyond the image line", v.AssetName(), i+1)
+		for _, db := range DBModes {
+			name := v.AssetName(db)
+			want, err := RenderRelease(v, db, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := readFile(t, root, committedDir+"/"+name)
+			if !bytes.Equal(got, want) {
+				t.Errorf("%s/%s is out of date (or was edited by hand): run `just gen`\n%s", committedDir, name, LineDiff(string(got), string(want), 20))
+				continue
+			}
+			if !strings.Contains(string(got), "GENERATED from the repository's docker-compose.yml by `just gen`; never\n# edit it by hand.") {
+				t.Errorf("%s: no generated-file header", name)
+			}
+			if !hasLine(string(got), ComposePlaceholderLine) {
+				t.Errorf("%s: no placeholder line", name)
+			}
+			rel, err := RenderRelease(v, db, &img)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gl, rl := strings.Split(string(got), "\n"), strings.Split(string(rel), "\n")
+			if len(gl) != len(rl) {
+				t.Fatalf("%s: %d lines, release file %d", name, len(gl), len(rl))
+			}
+			for i := range gl {
+				if gl[i] != rl[i] && (gl[i] != ComposePlaceholderLine || rl[i] != composeImagePrefix+variantImage) {
+					t.Errorf("%s line %d differs from the release file beyond the image line", name, i+1)
+				}
+			}
+			if !strings.Contains(string(readFile(t, root, "scripts/gen_compose.sh")), name) {
+				t.Errorf("scripts/gen_compose.sh does not write %s", name)
 			}
 		}
 	}
@@ -66,9 +72,11 @@ func TestCommittedComposeFiles(t *testing.T) {
 		t.Errorf("%s is embedded (%v)", committedDir, err)
 	}
 	for _, v := range AllVariants {
-		for _, d := range v.assetDirs() {
-			if strings.HasPrefix(committedDir, d) || strings.HasPrefix(d, committedDir) {
-				t.Errorf("variant %s ships %s", v, d)
+		for _, db := range DBModes {
+			for _, d := range v.assetDirs(db) {
+				if strings.HasPrefix(committedDir, d) || strings.HasPrefix(d, committedDir) {
+					t.Errorf("variant %s/%s ships %s", v, db, d)
+				}
 			}
 		}
 	}
@@ -88,7 +96,13 @@ func TestCommittedComposeFiles(t *testing.T) {
 // writePlaceholder saves the committed file of v as compose.yaml.
 func writePlaceholder(t *testing.T, dir string, v Variant) []byte {
 	t.Helper()
-	data := readFile(t, repoRoot(t), committedDir+"/"+v.AssetName())
+	return writePlaceholderDB(t, dir, v, DBBundled)
+}
+
+// writePlaceholderDB saves the committed file of v with db as compose.yaml.
+func writePlaceholderDB(t *testing.T, dir string, v Variant, db DBMode) []byte {
+	t.Helper()
+	data := readFile(t, repoRoot(t), committedDir+"/"+v.AssetName(db))
 	if err := os.WriteFile(pathIn(dir, ComposeFile), data, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +113,7 @@ func writePlaceholder(t *testing.T, dir string, v Variant) []byte {
 }
 
 func TestComposeImagePlaceholder(t *testing.T) {
-	src, err := RenderRelease(VariantNPM, nil)
+	src, err := RenderRelease(VariantNPM, DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,12 +141,12 @@ func TestComposeImagePlaceholder(t *testing.T) {
 
 func TestInspectComposePlaceholder(t *testing.T) {
 	fsys := bekup.Assets()
-	src, err := RenderRelease(VariantTraefikExternal, nil)
+	src, err := RenderRelease(VariantTraefikExternal, DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dotenv := map[string]string{ImageEnvVar: variantImage}
-	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: dotenv}, "")
+	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: dotenv}, "", "")
 	if err != nil || !info.FromEnv || info.Level != RecognizedExact || info.Variant != VariantTraefikExternal || info.Image.String() != variantImage || len(info.Findings) > 0 {
 		t.Fatalf("exact: %+v %v", info, err)
 	}
@@ -144,20 +158,20 @@ func TestInspectComposePlaceholder(t *testing.T) {
 		}
 		return "", false
 	}
-	if info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: dotenv, lookup: lookup}, ""); err != nil || info.Image.String() != other || len(info.Findings) > 0 {
+	if info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: dotenv, lookup: lookup}, "", ""); err != nil || info.Image.String() != other || len(info.Findings) > 0 {
 		t.Fatalf("environment: %+v %v", info, err)
 	}
 	// Formatting only: model.
 	reformatted := strings.Replace(string(src), "cap_drop: [ALL]", "cap_drop:\n      - ALL", 1)
-	if info, err := inspectComposeData(fsys, composeInput{compose: []byte(reformatted), dotenv: dotenv}, ""); err != nil || info.Level != RecognizedModel || !info.FromEnv {
+	if info, err := inspectComposeData(fsys, composeInput{compose: []byte(reformatted), dotenv: dotenv}, "", ""); err != nil || info.Level != RecognizedModel || !info.FromEnv {
 		t.Fatalf("model: %+v %v", info, err)
 	}
 	// Missing or unpinned BEKUP_IMAGE.
-	if _, err := inspectComposeData(fsys, composeInput{compose: src}, ""); err == nil || !strings.Contains(err.Error(), "it is not set") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: src}, "", ""); err == nil || !strings.Contains(err.Error(), "it is not set") {
 		t.Fatalf("missing: %v", err)
 	}
 	for _, bad := range []string{"ghcr.io/jlentink/bekup:1.2.3", "bekup:dev", "ghcr.io/jlentink/bekup@sha256:12"} {
-		_, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: map[string]string{ImageEnvVar: bad}}, "")
+		_, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: map[string]string{ImageEnvVar: bad}}, "", "")
 		if err == nil || !strings.Contains(err.Error(), "not digest-pinned") || !strings.Contains(err.Error(), "RepoDigests") {
 			t.Errorf("unpinned %q: %v", bad, err)
 		}
@@ -167,22 +181,22 @@ func TestInspectComposePlaceholder(t *testing.T) {
 	if custom == string(src) {
 		t.Fatal("edit did not apply")
 	}
-	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom), dotenv: dotenv}, VariantTraefikExternal)
+	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom), dotenv: dotenv}, VariantTraefikExternal, "")
 	if err != nil || !hasFinding(info.Findings, SeverityError, "${BEKUP_IMAGE} is not one of bekup's compose variables") {
 		t.Fatalf("extra reference: %+v %v", info, err)
 	}
 	override := []byte("services:\n  serve:\n    image: ${BEKUP_IMAGE}\n")
-	info, err = inspectComposeData(fsys, composeInput{compose: src, override: override, dotenv: dotenv}, "")
+	info, err = inspectComposeData(fsys, composeInput{compose: src, override: override, dotenv: dotenv}, "", "")
 	if err != nil || !hasFinding(info.Findings, SeverityError, "compose.override.yaml: ${BEKUP_IMAGE} is not one of bekup's compose variables") {
 		t.Fatalf("override reference: %+v %v", info, err)
 	}
 	// The release file (literal) keeps working and is not FromEnv.
 	img := mustRef(t, variantImage)
-	rel, err := RenderRelease(VariantTraefikExternal, &img)
+	rel, err := RenderRelease(VariantTraefikExternal, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info, err := inspectComposeData(fsys, composeInput{compose: rel, dotenv: map[string]string{ImageEnvVar: other}}, ""); err != nil || info.FromEnv || info.Image.String() != variantImage || info.Level != RecognizedExact {
+	if info, err := inspectComposeData(fsys, composeInput{compose: rel, dotenv: map[string]string{ImageEnvVar: other}}, "", ""); err != nil || info.FromEnv || info.Image.String() != variantImage || info.Level != RecognizedExact {
 		t.Fatalf("literal: %+v %v", info, err)
 	}
 }

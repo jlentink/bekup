@@ -1,0 +1,4 @@
+    secrets:
+      - bekup_database_password
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt

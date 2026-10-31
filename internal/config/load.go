@@ -87,18 +87,22 @@ func LoadBekup(opts Options) (*Result[Bekup], error) {
 		if dev && c.Server.BaseURL == "" {
 			c.Server.BaseURL = DevBaseURL
 		}
-	}, validateBekup, (*Bekup).warnings)
+	}, normalizeBekup, validateBekup, (*Bekup).warnings)
 }
 
 // LoadRunner locates, parses, overrides and validates runner.toml.
 func LoadRunner(opts Options) (*Result[Runner], error) {
 	cfg := DefaultRunner()
-	return load(&cfg, RunnerFileName, opts, nil, validateRunner, (*Runner).warnings)
+	return load(&cfg, RunnerFileName, opts, nil, nil, validateRunner, (*Runner).warnings)
 }
 
 const devEnabledPath = "dev.enabled"
 
+// load runs the pipeline: defaults, file, env, flags, dev defaults, then
+// normalize (which may look at the source of each key, e.g. to tell an
+// explicit key from a default; D-207), then validate.
 func load[T any](cfg *T, name string, opts Options, devDefaults func(*T, bool),
+	normalize func(*T, map[string]Source) []error,
 	validate func(*T, bool) []error, warnings func(*T, bool) []string,
 ) (*Result[T], error) {
 	lookup := opts.LookupEnv
@@ -175,6 +179,9 @@ func load[T any](cfg *T, name string, opts Options, devDefaults func(*T, bool),
 			continue
 		}
 		res.Warnings = append(res.Warnings, fmt.Sprintf("dev mode: using inline secret %s; use %s_file outside dev mode", f.Path, f.Key))
+	}
+	if normalize != nil {
+		errs = append(errs, normalize(cfg, sources)...)
 	}
 	errs = append(errs, validate(cfg, dev)...)
 	if len(errs) > 0 {

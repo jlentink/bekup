@@ -116,6 +116,47 @@ func (a *App) auditInsecureDBTLS(ctx context.Context) error {
 	return nil
 }
 
+// auditInsecureDBRoles records a startup in single-account mode
+// (database.single_account, D-207): one account runs migrations and the
+// app, so a compromised process can alter the schema and the audit log.
+// Outside dev mode, fail closed like auditInsecureDBTLS; the audit
+// observer raises the security.system alert (once a day, with the periodic
+// reminder of the security check).
+func (a *App) auditInsecureDBRoles(ctx context.Context) error {
+	cfg := a.opts.Config
+	if a.opts.Dev || !cfg.Database.SingleAccount {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, startupTimeout(cfg))
+	defer cancel()
+	findings := a.dbLoginFindings
+	if findings == nil {
+		findings = []string{}
+	}
+	_, err := a.auditor.Record(cctx, audit.Event{
+		Actor:      audit.SystemActor(),
+		Action:     audit.ActionSecurityInsecureDBRoles,
+		TargetType: "server",
+		Details: audit.Details{
+			"single_account":      true,
+			"login_role_findings": findings,
+			"process":             a.processName(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	return nil
+}
+
+// processName is "serve" or "worker" (audit details).
+func (a *App) processName() string {
+	if a.opts.Mode == ModeWorker {
+		return "worker"
+	}
+	return "serve"
+}
+
 // headSignerComponent periodically signs the audit chain head (task 1.3).
 // Signing failures are logged by the signer and never stop serve.
 type headSignerComponent struct {

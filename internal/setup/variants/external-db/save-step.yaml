@@ -1,0 +1,2 @@
+#   1. Save this file there as compose.yaml, and your PostgreSQL's CA bundle
+#      (PEM) next to it: setup asks for its path and copies it.

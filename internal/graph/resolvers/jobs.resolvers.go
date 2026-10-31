@@ -27,6 +27,10 @@ func (r *jobResolver) MissedSince(ctx context.Context, obj *model.Job) (*time.Ti
 	return &m.Since, nil
 }
 
+func (r *jobResolver) RetentionHolds(ctx context.Context, obj *model.Job) ([]model.RetentionHold, error) {
+	return r.jobRetentionHolds(ctx, obj)
+}
+
 func (r *jobResolver) Encryption(ctx context.Context, obj *model.Job) (*model.JobEncryption, error) {
 	return r.jobEncryption(ctx, obj)
 }
@@ -107,8 +111,8 @@ func (r *queryResolver) Job(ctx context.Context, id uuid.UUID) (*model.Job, erro
 	return r.job(ctx, id)
 }
 
-func (r *queryResolver) PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int) (*model.SchedulePreview, error) {
-	return r.previewSchedule(ctx, input, count)
+func (r *queryResolver) PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int, retention *model.JobRetentionInput) (*model.SchedulePreview, error) {
+	return r.previewSchedule(ctx, input, count, retention)
 }
 
 func (r *Resolver) Job() generated.JobResolver { return &jobResolver{r} }

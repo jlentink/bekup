@@ -243,11 +243,11 @@ func TestLoadTLSOptions(t *testing.T) {
 }
 
 func TestPoolConfigRequiresTLSMode(t *testing.T) {
-	_, err := poolConfig([]byte("postgres://u:pw@db/bekup"), PoolOptions{Registry: logging.NewRegistry()})
+	_, err := poolConfig(config.DBCredentials{URL: []byte("postgres://u:pw@db/bekup")}, PoolOptions{Registry: logging.NewRegistry()})
 	if err == nil || !strings.Contains(err.Error(), "TLS mode not set") {
 		t.Fatalf("got %v", err)
 	}
-	_, err = poolConfig([]byte("postgres://u:pw@db/bekup?sslmode=verify-full"), PoolOptions{
+	_, err = poolConfig(config.DBCredentials{URL: []byte("postgres://u:pw@db/bekup?sslmode=verify-full")}, PoolOptions{
 		Registry: logging.NewRegistry(), TLS: TLSOptions{Mode: config.DBTLSRequire},
 	})
 	if err == nil || errors.Is(err, ErrInvalidURL) || !strings.Contains(err.Error(), "stricter") {

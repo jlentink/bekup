@@ -24,8 +24,10 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
+	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/scheduler"
+	"github.com/jlentink/bekup/internal/schemaversion"
 )
 
 // Errors of the service. Presentable messages live in the API layer.
@@ -220,6 +222,7 @@ func (s *Service) view(ctx context.Context, q *sqlc.Queries, row *sqlc.Job) (Job
 	if j.TestRestore, err = testRestoreView(ctx, q, row); err != nil {
 		return Job{}, err
 	}
+	j.SchemaVersion = schemaVersionView(row)
 	return j, nil
 }
 
@@ -360,6 +363,43 @@ func (s *Service) PreviewSchedule(sched scheduler.Schedule, n int) (Preview, err
 	}
 	p.Next = next
 	return p, nil
+}
+
+// EstimateRetention validates a schedule and a retention policy and
+// estimates how many backups each destination keeps in the steady state
+// (the job editor's preview, D-209), with the keep rules of the retention
+// worker.
+func (s *Service) EstimateRetention(sched scheduler.Schedule, r Retention) (retention.Estimate, error) {
+	canon, _, err := checkSchedule(sched, s.o.Limits)
+	if err != nil {
+		return retention.Estimate{}, err
+	}
+	if err := checkRetention(r); err != nil {
+		return retention.Estimate{}, err
+	}
+	var p retention.Policy
+	if r.KeepLast != nil {
+		p.KeepLast = *r.KeepLast
+	}
+	if r.KeepDays != nil {
+		p.KeepDays = *r.KeepDays
+	}
+	plan, err := scheduler.Compile(canon)
+	if err != nil {
+		return retention.Estimate{}, scheduleErr(err)
+	}
+	next := func(t time.Time) (time.Time, error) {
+		n, err := plan.Next(t)
+		if errors.Is(err, scheduler.ErrManual) || errors.Is(err, scheduler.ErrNoOccurrence) || errors.Is(err, scheduler.ErrOutOfRange) {
+			return time.Time{}, retention.ErrNoOccurrence
+		}
+		return n, err
+	}
+	e, err := retention.EstimateKept(p, s.o.Now(), next)
+	if err != nil {
+		return retention.Estimate{}, scheduleErr(err)
+	}
+	return e, nil
 }
 
 // nextRun is the next_run_at of an (enabled) job: nil for manual schedules
@@ -628,7 +668,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		}
 	}
 	var out Job
-	err := db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
+	err := db.TxWith(ctx, s.o.DB, func(tx pgx.Tx, q *sqlc.Queries) error {
 		cur, err := q.GetJobForUpdate(ctx, id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound
@@ -643,6 +683,16 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		if len(changed) == 0 {
 			out, err = s.view(ctx, q, &cur)
 			return err
+		}
+		// A custom schema-version query pointed at another connection runs
+		// on other databases: the same fresh step-up as saving one, and
+		// the security alert again (D-210).
+		_, retarget := changed["connection_id"]
+		retarget = retarget && schemaversion.Mode(cur.VersionQueryMode) == schemaversion.ModeCustom
+		if retarget {
+			if err := s.authorize(ctx, actor, authz.OpJobVersionQueryCustomEdit, authz.Job{ID: id}); err != nil {
+				return err
+			}
 		}
 		p.ID, p.UpdatedBy = id, &actor.UserID
 		row, err := q.UpdateJob(ctx, p)
@@ -662,8 +712,17 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
-		if err := s.record(ctx, q, actor, audit.ActionJobUpdated, id, audit.Details{"name": row.Name, "fields": keys, "changes": changed}); err != nil {
+		details := audit.Details{"name": row.Name, "fields": keys, "changes": changed}
+		if retarget {
+			details["custom_version_query_retargeted"] = true
+		}
+		if err := s.record(ctx, q, actor, audit.ActionJobUpdated, id, details); err != nil {
 			return err
+		}
+		if _, ok := changed["retention"]; ok {
+			if err := s.enqueueRetentionSweep(ctx, tx, id); err != nil {
+				return err
+			}
 		}
 		out, err = s.view(ctx, q, &row)
 		return err
@@ -672,6 +731,22 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		return Job{}, err
 	}
 	return out, nil
+}
+
+// enqueueRetentionSweep applies a changed retention policy right away
+// (D-209): a retention sweep of the job in the update's transaction. A
+// sweep of the job that is already queued or running makes it a no-op
+// (the queue's uniqueness rules; a running one then applies the new
+// policy with the next post-run or daily sweep). Without a queue (tests)
+// nothing is enqueued.
+func (s *Service) enqueueRetentionSweep(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	if s.o.Queue == nil {
+		return nil
+	}
+	if _, err := s.o.Queue.InsertTx(ctx, tx, queue.RetentionSweepArgs{JobID: &id, Reason: queue.RetentionPolicyChanged}, queue.InsertOptions{}); err != nil {
+		return fmt.Errorf("jobs: enqueue retention sweep: %w", err)
+	}
+	return nil
 }
 
 // change is an audited old/new pair.

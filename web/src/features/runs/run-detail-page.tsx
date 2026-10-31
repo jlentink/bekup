@@ -43,6 +43,7 @@ import { useRunLogs } from "./use-run-logs";
 import { CancelRunMutation, RunActivitySubscription, RunDetailQuery } from "./operations";
 import { TRIGGERS } from "./run-history-model";
 import { RunStatusBadge } from "./run-status";
+import { SchemaVersionValue } from "./schema-version";
 import { isActive } from "./run-status-model";
 
 type Run = NonNullable<RunDetailResult["run"]>;
@@ -471,6 +472,7 @@ function ItemsSection({
                 )}
                 {item.verified ? T.verified : T.unverified}
               </span>
+              <SchemaVersionValue version={item.schemaVersion} status={item.schemaVersionStatus} />
               <span className="ml-auto font-mono text-xs text-muted-foreground">
                 {formatBytes(item.rawSize)} → {formatBytes(item.storedSize)} ·{" "}
                 {formatDuration(item.durationSeconds)}

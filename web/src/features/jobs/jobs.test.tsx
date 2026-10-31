@@ -13,6 +13,7 @@ import {
   jobListNode,
   jobsList,
   noTestRestores,
+  retentionHold,
 } from "./test-fixtures";
 
 const detailHandlers = (job = jobDetail()) => ({
@@ -284,6 +285,94 @@ describe("job editor", () => {
     expect(within(preview).getByText(/only runs when someone starts it/)).toBeInTheDocument();
   });
 
+  it("estimates the backups kept per destination live (D-209)", async () => {
+    const estimate = (v: Vars) => {
+      const r = v["retention"] as { keepLast?: number; keepDays?: number };
+      const input = v["input"] as { kind: string };
+      const byLast = r.keepLast ?? 0;
+      const byDays = input.kind === "MANUAL" && r.keepDays ? null : (r.keepDays ?? 0);
+      return ok({
+        previewSchedule: {
+          __typename: "SchedulePreview",
+          retention: {
+            __typename: "RetentionEstimate",
+            kept: byDays === null ? null : Math.max(byLast, byDays),
+            byKeepLast: byLast,
+            byKeepDays: byDays,
+            atLeast: false,
+          },
+        },
+      });
+    };
+    const { user, callsOf } = renderApp("/jobs/new", {
+      ...baseHandlers(),
+      ...editorHandlers,
+      PreviewSchedule: () =>
+        ok({
+          previewSchedule: {
+            __typename: "SchedulePreview",
+            description: "Every day at 03:00 (UTC)",
+            next: ["2026-10-29T03:00:00Z"],
+            schedule: { __typename: "Schedule", kind: "INTERVAL", timezone: "UTC" },
+          },
+        }),
+      PreviewRetention: estimate,
+    });
+    // Defaults of a new job: newest 7, no day limit.
+    const keepLast = await screen.findByLabelText("Keep the newest");
+    const keepDays = screen.getByLabelText("Keep backups younger than");
+    expect(keepLast).toHaveValue("7");
+    expect(keepDays).toHaveValue("");
+    const rules = screen.getByRole("list", { name: "How retention decides" });
+    expect(
+      within(rules).getByText(/a backup is kept while either rule keeps it/),
+    ).toBeInTheDocument();
+    expect(
+      within(rules).getByText(/newest complete backup on a destination is always kept/),
+    ).toBeInTheDocument();
+    expect(
+      within(rules).getByText(/Incomplete backups newer than the newest complete one/),
+    ).toBeInTheDocument();
+    // Only an existing job's edit page mentions the immediate sweep.
+    expect(within(rules).queryByText(/applies it right away/)).toBeNull();
+
+    const panel = screen.getByRole("region", { name: "Backups kept per destination" });
+    await waitFor(() => {
+      expect(within(panel).getByTestId("retention-estimate")).toHaveTextContent(
+        "With these settings about 7 backups per destination are kept.",
+      );
+    });
+    expect(callsOf("PreviewRetention")[0]?.variables["retention"]).toEqual({ keepLast: 7 });
+    expect(within(panel).getByTestId("retention-rule-days")).toHaveTextContent("off");
+
+    await user.type(keepDays, "30");
+    await waitFor(() => {
+      expect(within(panel).getByTestId("retention-estimate")).toHaveTextContent("about 30 backups");
+    });
+    expect(callsOf("PreviewRetention").at(-1)?.variables["retention"]).toEqual({
+      keepLast: 7,
+      keepDays: 30,
+    });
+    // The rules add up: each rule's own count and the union.
+    expect(within(panel).getByTestId("retention-rule-last")).toHaveTextContent("7");
+    expect(within(panel).getByTestId("retention-rule-days")).toHaveTextContent(
+      "Younger than 30 days30",
+    );
+    expect(within(panel).getByTestId("retention-rule-total")).toHaveTextContent("30");
+
+    // A manual schedule with a day limit cannot be estimated.
+    await user.click(screen.getByRole("radio", { name: /Manual/ }));
+    await waitFor(() => {
+      expect(within(panel).getByTestId("retention-estimate")).toHaveTextContent(
+        /Unknown with a manual schedule and a day limit.*keeps 7 backups/,
+      );
+    });
+
+    await user.clear(keepLast);
+    await user.clear(keepDays);
+    expect(await within(panel).findByText(/Enter valid limits/)).toBeInTheDocument();
+  });
+
   it("offers only permanent connections and shows the deep-verification note", async () => {
     renderApp("/jobs/new", {
       ...baseHandlers(),
@@ -350,7 +439,8 @@ describe("job editor", () => {
     const input = callsOf("CreateJob")[0]?.variables["input"] as Record<string, unknown>;
     expect(input["encryption"]).toBeUndefined();
     expect(input["destinationIds"]).toEqual([DEST_ID]);
-    expect(input["retention"]).toEqual({ keepLast: 7, keepDays: 30 });
+    // New jobs default to the newest 7 and no day limit (D-209).
+    expect(input["retention"]).toEqual({ keepLast: 7 });
     expect(input["dbMode"]).toBe("SELECTED");
     expect(input["databases"]).toEqual(["billing"]);
     expect(input["exclude"]).toBeUndefined();
@@ -440,6 +530,48 @@ describe("job detail", () => {
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       /Only one occurrence can be pulled forward/,
     );
+  });
+
+  it("warns when retention keeps incomplete backups (D-209)", async () => {
+    renderApp(`/jobs/${JOB_ID}`, {
+      ...baseHandlers(meFixture({}, "USER")),
+      ...detailHandlers(
+        jobDetail({
+          owners: null,
+          retentionHolds: [
+            retentionHold(),
+            retentionHold({
+              destinationId: "d-2",
+              destinationName: "nas-sftp",
+              destinationType: "SFTP",
+              reason: "NEWER_THAN_NEWEST_COMPLETE",
+              heldRuns: 1,
+              newestCompleteAt: "2026-10-18T03:00:00Z",
+            }),
+          ],
+        }),
+      ),
+    });
+    const alert = await screen.findByTestId("retention-holds");
+    expect(alert).toHaveAttribute("role", "alert");
+    const lines = within(alert).getAllByRole("listitem");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toHaveTextContent(
+      /^Retention is holding 3 incomplete backups on vault-s3 since .+: no complete backup there\.$/,
+    );
+    expect(lines[1]).toHaveTextContent(
+      /holding 1 incomplete backup on nas-sftp since .+: no complete backup there since .+\./,
+    );
+    expect(within(alert).getByRole("link", { name: "Show the run history" })).toHaveAttribute(
+      "href",
+      "#job-history",
+    );
+  });
+
+  it("shows no retention warning while retention works normally", async () => {
+    renderApp(`/jobs/${JOB_ID}`, { ...baseHandlers(), ...detailHandlers() });
+    await screen.findByRole("heading", { level: 1, name: "Billing DB" });
+    expect(screen.queryByTestId("retention-holds")).toBeNull();
   });
 
   it("disables starting early for a disabled job and shows the banner", async () => {
@@ -553,6 +685,7 @@ describe("encryption panel", () => {
         }),
     });
     expect(await screen.findByText(/Only administrators can change keys/)).toBeInTheDocument();
+    expect(screen.getByText(/Saving a retention change applies it right away/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Generate passphrase" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Turn encryption off" })).toBeNull();
     // Maintainers pick owners with the shared UserPicker over the staff

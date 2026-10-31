@@ -48,8 +48,9 @@ const (
 )
 
 // ExpiryThresholds are the days-left thresholds of the expiry alerts
-// (descending).
-var ExpiryThresholds = []int{30, 7}
+// (descending). The first is certs.ExpiryWarnDays, which `bekup setup check`
+// and `bekup setup renew` share.
+var ExpiryThresholds = []int{certs.ExpiryWarnDays, 7}
 
 // SecurityOptions configure NewSecurityChecker.
 type SecurityOptions struct {
@@ -63,7 +64,8 @@ type SecurityOptions struct {
 	// Runner reports the runner's server certificate (nil: not checked).
 	Runner RunnerHealth
 	// Posture returns the posture kinds that are weakened now
-	// (notify.KindInsecureTransport, notify.KindInsecureDBTLS).
+	// (notify.KindInsecureTransport, notify.KindInsecureDBTLS,
+	// notify.KindInsecureDBRoles).
 	Posture func() []string
 	Now     func() time.Time
 	Logger  *slog.Logger

@@ -241,7 +241,7 @@ func newTestDB(t *testing.T) testDB {
 
 func (d testDB) migrator(t *testing.T) *db.Migrator {
 	t.Helper()
-	m, err := db.NewMigrator(t.Context(), []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
+	m, err := db.NewMigrator(t.Context(), config.DBCredentials{URL: []byte(d.ownerURL)}, tlsVerify, logging.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func (d testDB) ownerPool(t *testing.T) *pgxpool.Pool {
 
 func (d testDB) pool(t *testing.T, url string) *pgxpool.Pool {
 	t.Helper()
-	p, err := db.NewPool(t.Context(), []byte(url), db.PoolOptions{
+	p, err := db.NewPool(t.Context(), config.DBCredentials{URL: []byte(url)}, db.PoolOptions{
 		MaxConns:        20,
 		ApplicationName: "bekup-test",
 		Registry:        logging.NewRegistry(),

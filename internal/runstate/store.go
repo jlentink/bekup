@@ -349,6 +349,17 @@ type Job struct {
 	// Verification is the completeness evidence level (task 3.10):
 	// standard (estimates) or deep (exact row counts).
 	Verification sqlc.JobVerification
+	// SchemaVersion is the job's schema-version capture (D-210).
+	SchemaVersion SchemaVersionQuery
+}
+
+// SchemaVersionQuery is a job's schema-version capture (D-210): Mode none
+// (no capture), preset (Preset, Schema) or custom (CustomSQL).
+type SchemaVersionQuery struct {
+	Mode      sqlc.JobVersionQueryMode
+	Preset    string
+	CustomSQL string
+	Schema    string
 }
 
 // JobDestination is one destination of a job.
@@ -375,6 +386,13 @@ func (s *Store) Job(ctx context.Context, id uuid.UUID) (Job, error) {
 		Engine: engine.Kind(row.ConnectionEngine), VersionKey: row.ConnectionImageKey,
 		AllDatabases: j.DbMode == sqlc.JobDbModeAll, Databases: j.Databases, Exclude: j.Exclude,
 		IncludeGlobals: j.IncludeGlobals,
+		SchemaVersion:  SchemaVersionQuery{Mode: j.VersionQueryMode, Schema: j.VersionSchema},
+	}
+	if j.VersionPreset != nil {
+		out.SchemaVersion.Preset = *j.VersionPreset
+	}
+	if j.VersionCustomSql != nil {
+		out.SchemaVersion.CustomSQL = *j.VersionCustomSql
 	}
 	if j.TimeoutSeconds != nil {
 		out.Timeout = time.Duration(*j.TimeoutSeconds) * time.Second
@@ -548,6 +566,11 @@ type ItemResult struct {
 	Verified   bool
 	Failure    *Failure
 	Warnings   []Warning
+	// SchemaVersionStatus is the schema-version capture's status (D-210:
+	// ok, none, unavailable, invalid; empty when the job captures none)
+	// and SchemaVersion the version (status ok only).
+	SchemaVersionStatus string
+	SchemaVersion       string
 }
 
 // FinishItem records the outcome of a running item.
@@ -557,11 +580,19 @@ func (s *Store) FinishItem(ctx context.Context, r Ref, itemID uuid.UUID, res Ite
 		return err
 	}
 	code, msg := failureCols(res.Failure)
+	// The version exists exactly with status ok (a CHECK constraint).
+	switch {
+	case res.SchemaVersionStatus != "ok":
+		res.SchemaVersion = ""
+	case res.SchemaVersion == "":
+		res.SchemaVersionStatus = "none"
+	}
 	return db.Tx(ctx, s.db, func(q *sqlc.Queries) error {
 		_, err := q.FinishRunItem(ctx, sqlc.FinishRunItemParams{
 			ID: itemID, Status: res.Status, FinishedAt: s.now(), RawSize: max(res.RawSize, 0), StoredSize: max(res.StoredSize, 0),
 			RawSha256: nilIfEmpty(res.RawSHA256), Sha256: nilIfEmpty(res.SHA256), Verified: res.Verified,
 			ErrorCode: code, ErrorMessage: msg, Warnings: ws,
+			SchemaVersion: optString(res.SchemaVersion), SchemaVersionStatus: optString(res.SchemaVersionStatus),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotActive

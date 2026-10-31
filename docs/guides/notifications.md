@@ -51,7 +51,7 @@ problem events (✱) also go to e-mail; webhooks are opt-in.**
 |---|---|---|
 | Backup | `backup.started` (low priority), `backup.started_early`, `backup.succeeded`, `backup.succeeded_with_warnings` ✱, `backup.partial` ✱, `backup.failed` ✱, `backup.canceled`, `backup.missed` ✱ | admins, maintainers, the job's owners |
 | Restore | `restore.started` (low priority), `restore.completed`, `restore.failed` ✱, `test_restore.passed`, `test_restore.warnings` ✱, `test_restore.failed` ✱ | admins, maintainers, the job's owners |
-| Retention & storage | `retention.summary` (daily digest), `artifact.missing` ✱ | admins, maintainers, the job's owners |
+| Retention & storage | `retention.summary` (daily digest), `retention.blocked` ✱, `artifact.missing` ✱ | admins, maintainers, the job's owners |
 | | `destination.test_failed` ✱ | admins, maintainers |
 | Job & configuration | `job.created`, `job.updated`, `job.disabled`, `job.enabled`, `job.deleted`, `job.encryption_changed` ✱ | admins, maintainers, the job's owners |
 | | `connection.pin_changed` ✱, `connection.tls_downgraded` ✱, `connection.host_key_changed` ✱ | admins, maintainers |
@@ -96,12 +96,14 @@ description and repeat rule, D-198).
 | Retention stopped by a safety check (newest backup missing or changed) | error | once per job, destination and day |
 | A restore into a privileged (or unverified) database role requested with the acknowledgement; a restore refused because the role became privileged; a privileged test-restore scratch target set | warning | every time |
 | A restore switched SECURITY DEFINER functions to SECURITY INVOKER | warning | every time |
+| A job's custom schema-version query set or changed, or a job with one moved to another connection (`job_custom_version_query`; it runs on the backed-up databases with the backup role's rights, D-210) | warning | every time |
 | The 2FA policy weakened | error | every time |
 | The SSRF allowlist widened (an admin added CIDRs or host names, or scopes to an entry, that outbound connections may reach; the alert says so when users' personal webhooks gained access; D-196, D-198) | error | every time |
 | A configuration reload weakened security (`config_reload_weakened`: an applied `bekup.toml` change widened `trusted_proxies` or the `[netguard]` list, raised a rate, size or GraphQL limit, raised the lockout threshold or shortened a lockout, lowered a password bound, raised the retention deletion cap or the webhook failure threshold, shortened the partial cleanup age or turned `retention.dry_run` off; the alert names the keys, never values; D-200) | error | once per reload request and set of keys |
 | A passkey with a backwards signature counter (possible clone) | error | every time |
 | A download link presented after use, after expiry, by another session or without access | warning | once per link |
 | bekup running over plain HTTP outside dev mode, or with a weakened app-database TLS mode (D-095, D-100) | error | at startup and once a day |
+| bekup running in single-account database mode (`insecure_db_roles`: one database account runs migrations and the app, so a compromised server process could alter the schema and the audit log; D-207) | error | at startup and once a day |
 | Failed sign-in burst: ≥ 20 failures from one address, ≥ 10 on one account or ≥ 100 in total within 15 minutes | error | once per address / account / instance and 15 minutes |
 | An internal certificate (runner mTLS client and CA, app-database CA and client certificate, the runner's server certificate) or a pinned database certificate expires within 30 days (warning), within 7 days (error) or expired | warning / error / critical | once per threshold and certificate |
 | A break-glass command on the host (`bekup admin …`, `bekup certs rotate`, `bekup audit sign-head`, `bekup reindex --import`) | warning | every time |
@@ -134,6 +136,12 @@ weakened startup settings.
 - **Retention is a daily digest:** removals by retention are never reported
   per file; once a day each job with removals gets one `retention.summary`
   (backups, files and bytes removed on that day).
+- **Blocked retention at most once a day:** `retention.blocked` is sent when
+  retention keeps incomplete backups on a destination that no keep rule
+  would keep (the destination has no complete backup, or the backups after
+  the newest complete one are incomplete), at most once per job,
+  destination and UTC day while that lasts (details:
+  [Retention](retention.md#when-incomplete-backups-block-retention)).
 - Inbox entries are kept for 180 days; delivery records for 90 days.
 
 ### Delivery status

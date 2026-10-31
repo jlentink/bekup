@@ -47,7 +47,7 @@ func TestInitWritesDeployment(t *testing.T) {
 			if err := a.Validate(); err != nil {
 				t.Fatal(err)
 			}
-			p, err := newPlan(testOptionsAssets(), &a, true)
+			p, err := newPlan(testOptionsAssets(), &a, true, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

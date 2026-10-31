@@ -113,6 +113,11 @@ const (
 	OpDestinationHostKeyConfirm Operation = "destination.host_key_confirm"
 	OpDestinationSSHKeyGenerate Operation = "destination.ssh_key_generate"
 	OpStorageUsageView          Operation = "destination.usage_view"
+	// Unrecorded files (D-209): files in bekup's layout without a backup
+	// record, found by the daily scan. Admins only; a delete needs
+	// step-up (it removes data from the destination).
+	OpDestinationUnrecordedView   Operation = "destination.unrecorded_files_view"
+	OpDestinationUnrecordedDelete Operation = "destination.unrecorded_file_delete"
 
 	// Jobs (tasks 3.2, 3.5, 4.6). Owners see their own jobs only.
 	OpJobList            Operation = "job.list"
@@ -134,6 +139,14 @@ const (
 	OpJobPassphraseExport   Operation = "job.passphrase_export"    // every passphrase version, offline recovery (admin)
 	OpJobTestRestoreEdit    Operation = "job.test_restore_edit"
 	OpJobSharedChannelsEdit Operation = "job.shared_channels_edit"
+	// Schema version (D-210). OpJobVersionQueryEdit changes a job's
+	// schema-version capture (off or a preset) and reads the stored custom
+	// query (JobSchemaVersion.customSql: staff only, null for owners);
+	// saving a custom query additionally needs OpJobVersionQueryCustomEdit
+	// (a fresh step-up: the query runs on the target as the backup role),
+	// checked by jobs.Service.SetSchemaVersion.
+	OpJobVersionQueryEdit       Operation = "job.version_query_edit"
+	OpJobVersionQueryCustomEdit Operation = "job.version_query_custom_edit"
 
 	// Runs (tasks 3.6, 3.7).
 	OpRunList     Operation = "run.list"
@@ -334,17 +347,19 @@ var policy = map[Operation]Rule{
 	OpTemporaryConnectionExtend: {Roles: adminOnly, Fresh: FreshStepUp},
 	OpTemporaryConnectionDelete: {Roles: adminOnly, Fresh: FreshStepUp},
 
-	OpDestinationList:           {Roles: staff},
-	OpDestinationView:           {Roles: staff},
-	OpDestinationCreate:         {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationUpdate:         {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationSecretUpdate:   {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationDelete:         {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationTest:           {Roles: staff},
-	OpDestinationHostKeyFetch:   {Roles: adminOnly},
-	OpDestinationHostKeyConfirm: {Roles: adminOnly, Fresh: FreshStepUp},
-	OpDestinationSSHKeyGenerate: {Roles: adminOnly, Fresh: FreshStepUp},
-	OpStorageUsageView:          {Roles: staff},
+	OpDestinationList:             {Roles: staff},
+	OpDestinationView:             {Roles: staff},
+	OpDestinationCreate:           {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationUpdate:           {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationSecretUpdate:     {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationDelete:           {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationTest:             {Roles: staff},
+	OpDestinationHostKeyFetch:     {Roles: adminOnly},
+	OpDestinationHostKeyConfirm:   {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationSSHKeyGenerate:   {Roles: adminOnly, Fresh: FreshStepUp},
+	OpStorageUsageView:            {Roles: staff},
+	OpDestinationUnrecordedView:   {Roles: adminOnly},
+	OpDestinationUnrecordedDelete: {Roles: adminOnly, Fresh: FreshStepUp},
 
 	OpJobList:            {Roles: staff, Owner: OwnerList},
 	OpJobView:            {Roles: staff, Owner: OwnerJob},
@@ -364,6 +379,10 @@ var policy = map[Operation]Rule{
 	// fresh second factor as restore.artifact.
 	OpJobTestRestoreEdit:    {Roles: staff, Fresh: FreshAAL2},
 	OpJobSharedChannelsEdit: {Roles: adminOnly},
+	// D-210 (user decision): admins and maintainers; a custom query needs
+	// step-up and every change is audited.
+	OpJobVersionQueryEdit:       {Roles: staff},
+	OpJobVersionQueryCustomEdit: {Roles: staff, Fresh: FreshStepUp},
 
 	OpRunList:       {Roles: staff, Owner: OwnerList},
 	OpRunView:       {Roles: staff, Owner: OwnerJob},

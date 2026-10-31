@@ -1,6 +1,6 @@
 import { useMutation } from "@apollo/client/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Cloud, FolderTree, Loader2, Server } from "lucide-react";
+import { Cloud, FolderTree, Loader2, MapPinned, Server } from "lucide-react";
 import { useId, useMemo } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
@@ -61,6 +61,30 @@ const textarea =
 const TYPE_ICON = { S3: Cloud, SFTP: Server, DISK: FolderTree } as const;
 
 type FormApi = ReturnType<typeof useForm<DestinationFormValues>>;
+
+/**
+ * D-209: every destination owns its location (no two destinations share
+ * or nest one), and the server refuses a location change (path, bucket,
+ * prefix, endpoint, region, host, port, user, base path, subdirectory)
+ * while backups are stored there or a run is writing to it.
+ */
+const LOCATION_NOTE = {
+  own: "Use a location of its own: never the same path, bucket prefix or directory as another destination, nor one inside another. To take over backups already stored somewhere, run bekup reindex --import.",
+  fixed:
+    "The location can only change while no backups are stored here and no run is writing here: bekup would lose track of the files already there.",
+} as const;
+
+function LocationNote({ editing = true }: { editing?: boolean }) {
+  return (
+    <p data-testid="location-note" className="flex items-start gap-2 text-xs text-muted-foreground">
+      <MapPinned aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+      <span>
+        {editing ? `${LOCATION_NOTE.fixed} ` : null}
+        {LOCATION_NOTE.own}
+      </span>
+    </p>
+  );
+}
 
 function TextField({
   form,
@@ -190,6 +214,7 @@ function S3Fields({ form, original }: { form: FormApi; original: Original | unde
           description="Optional; empty writes to the bucket root."
           mono
         />
+        <LocationNote editing={Boolean(original)} />
         <FormField
           control={form.control}
           name="s3.pathStyle"
@@ -411,6 +436,7 @@ function SftpFields({ form, original }: { form: FormApi; original: Original | un
             mono
           />
         </div>
+        <LocationNote editing={Boolean(original)} />
       </FormGroup>
       <FormGroup legend="Sign-in" lead="Credentials are write-only.">
         {reentry ? (
@@ -574,6 +600,7 @@ export function DestinationForm({ original }: { original?: Original }) {
               description="Relative to storage.disk_root on the server; no “..”."
               mono
             />
+            <LocationNote editing={editing} />
           </FormGroup>
         ) : null}
         {type === "S3" ? <S3Fields form={form} original={original} /> : null}

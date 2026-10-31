@@ -38,15 +38,15 @@ func checkExample(t *testing.T, name string, newCfg func() any, load func(Option
 	all := fieldsOf(newCfg())
 	for i := range all {
 		f := &all[i]
-		if f.InlineSecret {
+		if f.InlineSecret || commentedExampleKeys[f.Path] {
 			// Inline secrets are dev-only: they must be documented as a
 			// commented-out line in their section, never set.
 			if _, set := doc[f.Section][f.Key]; set {
-				t.Errorf("%s sets the inline secret %s", name, f.Path)
+				t.Errorf("%s sets the inline secret or alternative-mode key %s", name, f.Path)
 			}
 			re := regexp.MustCompile(`(?m)^#\s*` + regexp.QuoteMeta(f.Key) + `\s*=`)
 			if !re.MatchString(sectionText(content, f.Section)) {
-				t.Errorf("%s does not document the dev-only key %s as a comment", name, f.Path)
+				t.Errorf("%s does not document the dev-only or alternative-mode key %s as a comment", name, f.Path)
 			}
 			continue
 		}
@@ -57,6 +57,16 @@ func checkExample(t *testing.T, name string, newCfg func() any, load func(Option
 	if len(fields) == 0 {
 		t.Fatal("no fields")
 	}
+}
+
+// commentedExampleKeys are keys of the alternative [database] mode (fields
+// mode, D-207: they cannot be combined with the URL files the example
+// sets) and optional keys without a sensible example value. The example
+// documents them as commented-out lines.
+var commentedExampleKeys = map[string]bool{
+	"database.host": true, "database.port": true, "database.name": true, "database.user": true,
+	"database.password_file": true, "database.owner_user": true, "database.owner_password_file": true,
+	"database.single_account": true, "database.tls_server_name": true,
 }
 
 // sectionText returns the text of [section] up to the next section header.

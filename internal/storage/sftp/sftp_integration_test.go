@@ -389,3 +389,38 @@ func TestIntegrationSymlinkEscape(t *testing.T) {
 		t.Fatalf("outside directory changed: %s", out)
 	}
 }
+
+// TestIntegrationPruneEmptyDirs: on a real (chrooted OpenSSH) server, only
+// empty, old run and job directories of bekup's layout are removed; fresh,
+// non-empty, foreign and linked directories and the base stay.
+func TestIntegrationPruneEmptyDirs(t *testing.T) {
+	a := startAtmoz(t)
+	dir := uniqueDir(t)
+	d := mustOpen(t, a.config(t, dir))
+	if _, err := d.Stat(ctxT(t), storage.MustParseKey("none")); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatal(err)
+	}
+	fs := atmozFSUpload + "/" + dir
+	a.exec(t, "cd "+fs+
+		" && mkdir -p gone/2026-01-01T000000Z fresh/2026-01-02T000000Z full/2026-01-03T000000Z other/not-a-timestamp ../"+dir+"-out/2026-01-04T000000Z"+
+		" && echo x > full/2026-01-03T000000Z/db.dump"+
+		" && mkdir linked && ln -s ../../"+dir+"-out/2026-01-04T000000Z linked/2026-01-04T000000Z"+
+		" && touch -d '2020-01-01' gone/2026-01-01T000000Z gone full/2026-01-03T000000Z full other/not-a-timestamp other fresh linked ../"+dir+"-out/2026-01-04T000000Z"+
+		" && chown -R 1001:1001 . ../"+dir+"-out")
+	n, err := d.PruneEmptyDirs(ctxT(t), 24*time.Hour, nil)
+	if err != nil || n != 2 {
+		t.Fatalf("prune = %d, %v", n, err)
+	}
+	out := a.exec(t, "cd "+fs+" && find . | sort && ls -d ../"+dir+"-out/2026-01-04T000000Z")
+	for _, gone := range []string{"./gone\n", "./gone/2026-01-01T000000Z"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("%q kept:\n%s", gone, out)
+		}
+	}
+	for _, kept := range []string{"./fresh/2026-01-02T000000Z", "./full/2026-01-03T000000Z/db.dump", "./other/not-a-timestamp",
+		"./linked/2026-01-04T000000Z", dir + "-out/2026-01-04T000000Z"} {
+		if !strings.Contains(out, kept) {
+			t.Errorf("%q removed:\n%s", kept, out)
+		}
+	}
+}

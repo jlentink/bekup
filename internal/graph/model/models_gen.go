@@ -338,6 +338,8 @@ type ConfigReloadRequest struct {
 
 // The configuration page.
 type ConfigStatus struct {
+	// The app database posture of the serve process that answered.
+	Database *DatabasePosture `json:"database"`
 	// Keys a reload applies without a restart (`section.key`).
 	LiveKeys []string `json:"liveKeys"`
 	// The newest row of every process listening now (any age) and of every
@@ -610,6 +612,19 @@ type CreatedUser struct {
 	TemporaryPassword *TemporaryPassword `json:"temporaryPassword"`
 }
 
+// The app database posture of the serve process that answered (restart-only
+// settings; no host names or credentials).
+type DatabasePosture struct {
+	Mode DatabaseConfigMode `json:"mode"`
+	// database.tls_mode: verify-full, require or disable.
+	TLSMode string `json:"tlsMode"`
+	// True when tls_mode is weaker than verify-full (D-100): the server identity
+	// is not fully verified, or the connection is not encrypted.
+	InsecureTransport bool `json:"insecureTransport"`
+	// True in single-account mode (D-207).
+	SingleAccount bool `json:"singleAccount"`
+}
+
 // A backup destination.
 type Destination struct {
 	ID   uuid.UUID       `json:"id"`
@@ -791,10 +806,13 @@ type Job struct {
 	// run.
 	Missed bool `json:"missed"`
 	// The first missed occurrence of the current outage (null when not missed).
-	MissedSince  *time.Time          `json:"missedSince,omitempty"`
-	Verification JobVerification     `json:"verification"`
-	Destinations []JobDestinationRef `json:"destinations"`
-	Encryption   *JobEncryption      `json:"encryption"`
+	MissedSince *time.Time `json:"missedSince,omitempty"`
+	// Destinations on which retention keeps incomplete backups that no keep
+	// rule would keep on its own (D-209); empty when retention works normally.
+	RetentionHolds []RetentionHold     `json:"retentionHolds"`
+	Verification   JobVerification     `json:"verification"`
+	Destinations   []JobDestinationRef `json:"destinations"`
+	Encryption     *JobEncryption      `json:"encryption"`
 	// Admins and maintainers only (null for backup owners).
 	Owners    []JobOwner `json:"owners,omitempty"`
 	CreatedAt time.Time  `json:"createdAt"`
@@ -805,6 +823,8 @@ type Job struct {
 	LastRun *Run `json:"lastRun,omitempty"`
 	// The newest runs of the job, newest first (`first` 1-20, default 5).
 	RecentRuns []Run `json:"recentRuns"`
+	// The schema-version capture (D-210).
+	SchemaVersion *JobSchemaVersion `json:"schemaVersion"`
 	// Scheduled test-restore settings (task 4.6).
 	TestRestore *JobTestRestore `json:"testRestore"`
 }
@@ -928,6 +948,17 @@ type JobRetention struct {
 type JobRetentionInput struct {
 	KeepLast *int `json:"keepLast,omitempty"`
 	KeepDays *int `json:"keepDays,omitempty"`
+}
+
+// A job's new schema-version capture.
+type JobSchemaVersionInput struct {
+	Mode SchemaVersionMode `json:"mode"`
+	// Required for PRESET.
+	Preset *string `json:"preset,omitempty"`
+	// PostgreSQL schema of the preset's table (PRESET only; default public).
+	Schema *string `json:"schema,omitempty"`
+	// Required for CUSTOM: a single SELECT or WITH statement, at most 2048 bytes. PostgreSQL tables must be schema-qualified.
+	CustomSQL *string `json:"customSql,omitempty"`
 }
 
 // A shared channel attached to a job.
@@ -1439,6 +1470,41 @@ type RestoreWarning struct {
 	Message string `json:"message"`
 }
 
+// An estimate of the backups kept per destination in the steady state
+// (D-209). "Keep last" and "keep days" add up: a backup is kept when either
+// rule keeps it, so the total is the larger of the two counts.
+type RetentionEstimate struct {
+	// Backups kept per destination; null when unknown (a manual schedule with a day limit).
+	Kept *int `json:"kept,omitempty"`
+	// Backups the keep-last rule keeps on its own (0 when off).
+	ByKeepLast int `json:"byKeepLast"`
+	// Backups the keep-days rule keeps on its own (0 when off; null when unknown for a manual schedule).
+	ByKeepDays *int `json:"byKeepDays,omitempty"`
+	// The projection stopped at its limit: at least `kept` backups are kept.
+	AtLeast bool `json:"atLeast"`
+}
+
+// Retention is holding incomplete backups on one destination that no keep
+// rule would keep on its own (D-209). Written by the retention sweep (after
+// every backup, after a retention change and daily); cleared once a complete
+// backup exists there again.
+type RetentionHold struct {
+	DestinationID   uuid.UUID       `json:"destinationId"`
+	DestinationName string          `json:"destinationName"`
+	DestinationType DestinationType `json:"destinationType"`
+	// The destination was deleted (its files are still kept).
+	DestinationDeleted bool                `json:"destinationDeleted"`
+	Reason             RetentionHoldReason `json:"reason"`
+	// The incomplete backups kept only for this reason.
+	HeldRuns int `json:"heldRuns"`
+	// The time of the oldest held backup.
+	Since time.Time `json:"since"`
+	// The newest complete backup on this destination (null: none).
+	NewestCompleteAt *time.Time `json:"newestCompleteAt,omitempty"`
+	// When a retention sweep last confirmed the hold.
+	CheckedAt time.Time `json:"checkedAt"`
+}
+
 // A backup run.
 type Run struct {
 	ID      uuid.UUID  `json:"id"`
@@ -1555,6 +1621,10 @@ type RunItem struct {
 	// the source statistics taken for it. Null when none was recorded (failed
 	// or unverified dumps, statistics unavailable).
 	Stats *RunItemStats `json:"stats,omitempty"`
+	// The schema version captured for this database (status OK only).
+	SchemaVersion *string `json:"schemaVersion,omitempty"`
+	// The outcome of the capture; null when the job captures none or the dump did not complete.
+	SchemaVersionStatus *SchemaVersionStatus `json:"schemaVersionStatus,omitempty"`
 }
 
 // The completeness evidence of one run item (backup_stats, D-141/D-151/D-153).
@@ -1739,6 +1809,24 @@ type SchedulePreview struct {
 	Description string `json:"description"`
 	// The next occurrences after now (empty for MANUAL).
 	Next []time.Time `json:"next"`
+	// How many backups each destination keeps with the `retention` argument of
+	// previewSchedule once the schedule has run long enough (null when the
+	// argument is not set). Assumes every planned run succeeds.
+	Retention *RetentionEstimate `json:"retention,omitempty"`
+}
+
+// A fixed version query for one migration framework.
+type SchemaVersionPreset struct {
+	// The name stored on the job.
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	// What the captured version is.
+	Description string `json:"description"`
+	// The framework table on PostgreSQL.
+	PostgresTable string `json:"postgresTable"`
+	// The framework table on MySQL and MariaDB.
+	MysqlTable string           `json:"mysqlTable"`
+	Engines    []DatabaseEngine `json:"engines"`
 }
 
 // The result of resetUserSecondFactors.
@@ -2214,6 +2302,49 @@ type TwoFactorStatus struct {
 	TotpEnrollmentPending bool `json:"totpEnrollmentPending"`
 	// Unused recovery codes left.
 	RecoveryCodesRemaining int `json:"recoveryCodesRemaining"`
+}
+
+// A file in bekup's layout on a destination that no backup record references (D-209).
+type UnrecordedFile struct {
+	ID uuid.UUID `json:"id"`
+	// The object key below the destination root (`{job slug}/{timestamp}/{file}`).
+	Key string `json:"key"`
+	// Size in bytes as the destination reported it.
+	Size float64 `json:"size"`
+	// The modification time the destination reported (null: unknown).
+	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
+	// When the daily scan first found the file.
+	FirstSeenAt time.Time `json:"firstSeenAt"`
+	// When the daily scan last found the file.
+	LastSeenAt time.Time `json:"lastSeenAt"`
+}
+
+// The outcome of deleteUnrecordedFile (normalized code and fixed message only).
+type UnrecordedFileDeleteResult struct {
+	Ok bool `json:"ok"`
+	// A storage error class (as DestinationTestStep.code); `ok` on success.
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// The unrecorded files of one destination (D-209).
+type UnrecordedFiles struct {
+	DestinationID uuid.UUID `json:"destinationId"`
+	// When the daily scan last finished on this destination (null: never).
+	ScannedAt *time.Time `json:"scannedAt,omitempty"`
+	// Number of recorded unrecorded files.
+	TotalCount int `json:"totalCount"`
+	// Sum of their sizes (bytes).
+	TotalBytes float64 `json:"totalBytes"`
+	// The scan found more files than it records, or stopped at its object
+	// limit: the list is incomplete.
+	Truncated bool `json:"truncated"`
+	// Empty directories the last scan removed.
+	PrunedDirectories int `json:"prunedDirectories"`
+	// This page, ordered by key.
+	Files []UnrecordedFile `json:"files"`
+	// Pass as `after` for the next page (null: last page).
+	NextCursor *string `json:"nextCursor,omitempty"`
 }
 
 // Fields to change; unset fields stay unchanged. The engine and TLS mode cannot change here.
@@ -3016,6 +3147,68 @@ func (e *ConnectionTLSMode) UnmarshalJSON(b []byte) error {
 }
 
 func (e ConnectionTLSMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How the answering serve process connects to bekup's own database (D-207).
+type DatabaseConfigMode string
+
+const (
+	// Connection URL files (the bundled stack).
+	DatabaseConfigModeURL DatabaseConfigMode = "URL"
+	// host, port, name, user and password files (an external PostgreSQL).
+	DatabaseConfigModeFields DatabaseConfigMode = "FIELDS"
+	// One account for migrations and the app (database.single_account): an
+	// explicit weakening, warned at every start and alerted daily.
+	DatabaseConfigModeSingleAccount DatabaseConfigMode = "SINGLE_ACCOUNT"
+)
+
+var AllDatabaseConfigMode = []DatabaseConfigMode{
+	DatabaseConfigModeURL,
+	DatabaseConfigModeFields,
+	DatabaseConfigModeSingleAccount,
+}
+
+func (e DatabaseConfigMode) IsValid() bool {
+	switch e {
+	case DatabaseConfigModeURL, DatabaseConfigModeFields, DatabaseConfigModeSingleAccount:
+		return true
+	}
+	return false
+}
+
+func (e DatabaseConfigMode) String() string {
+	return string(e)
+}
+
+func (e *DatabaseConfigMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DatabaseConfigMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DatabaseConfigMode", str)
+	}
+	return nil
+}
+
+func (e DatabaseConfigMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DatabaseConfigMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DatabaseConfigMode) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -3975,6 +4168,66 @@ func (e RestoreStatus) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Why retention keeps incomplete backups on a destination (D-209).
+type RetentionHoldReason string
+
+const (
+	// The destination holds no complete backup of the job, so retention deletes nothing there.
+	RetentionHoldReasonNoCompleteRun RetentionHoldReason = "NO_COMPLETE_RUN"
+	// The backups newer than the newest complete backup on the destination are
+	// incomplete; retention keeps them (they may hold the only copy of some
+	// database) until a newer complete backup exists.
+	RetentionHoldReasonNewerThanNewestComplete RetentionHoldReason = "NEWER_THAN_NEWEST_COMPLETE"
+)
+
+var AllRetentionHoldReason = []RetentionHoldReason{
+	RetentionHoldReasonNoCompleteRun,
+	RetentionHoldReasonNewerThanNewestComplete,
+}
+
+func (e RetentionHoldReason) IsValid() bool {
+	switch e {
+	case RetentionHoldReasonNoCompleteRun, RetentionHoldReasonNewerThanNewestComplete:
+		return true
+	}
+	return false
+}
+
+func (e RetentionHoldReason) String() string {
+	return string(e)
+}
+
+func (e *RetentionHoldReason) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RetentionHoldReason(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RetentionHoldReason", str)
+	}
+	return nil
+}
+
+func (e RetentionHoldReason) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RetentionHoldReason) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RetentionHoldReason) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Roles of bekup users (D-011).
 type Role string
 
@@ -4698,6 +4951,131 @@ func (e *ScheduleUnit) UnmarshalJSON(b []byte) error {
 }
 
 func (e ScheduleUnit) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How a job captures the schema version of its databases.
+type SchemaVersionMode string
+
+const (
+	// No capture (the default).
+	SchemaVersionModeNone SchemaVersionMode = "NONE"
+	// A preset for a migration framework.
+	SchemaVersionModePreset SchemaVersionMode = "PRESET"
+	// A custom SELECT or WITH query.
+	SchemaVersionModeCustom SchemaVersionMode = "CUSTOM"
+)
+
+var AllSchemaVersionMode = []SchemaVersionMode{
+	SchemaVersionModeNone,
+	SchemaVersionModePreset,
+	SchemaVersionModeCustom,
+}
+
+func (e SchemaVersionMode) IsValid() bool {
+	switch e {
+	case SchemaVersionModeNone, SchemaVersionModePreset, SchemaVersionModeCustom:
+		return true
+	}
+	return false
+}
+
+func (e SchemaVersionMode) String() string {
+	return string(e)
+}
+
+func (e *SchemaVersionMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SchemaVersionMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SchemaVersionMode", str)
+	}
+	return nil
+}
+
+func (e SchemaVersionMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SchemaVersionMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SchemaVersionMode) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// The outcome of a schema-version capture.
+type SchemaVersionStatus string
+
+const (
+	// A version was captured.
+	SchemaVersionStatusOk SchemaVersionStatus = "OK"
+	// No version: the table does not exist, has no row or the value is empty.
+	SchemaVersionStatusNone SchemaVersionStatus = "NONE"
+	// The query failed (missing privilege, time limit, unexpected table layout or error).
+	SchemaVersionStatusUnavailable SchemaVersionStatus = "UNAVAILABLE"
+	// The result was longer than 64 characters or not printable ASCII.
+	SchemaVersionStatusInvalid SchemaVersionStatus = "INVALID"
+)
+
+var AllSchemaVersionStatus = []SchemaVersionStatus{
+	SchemaVersionStatusOk,
+	SchemaVersionStatusNone,
+	SchemaVersionStatusUnavailable,
+	SchemaVersionStatusInvalid,
+}
+
+func (e SchemaVersionStatus) IsValid() bool {
+	switch e {
+	case SchemaVersionStatusOk, SchemaVersionStatusNone, SchemaVersionStatusUnavailable, SchemaVersionStatusInvalid:
+		return true
+	}
+	return false
+}
+
+func (e SchemaVersionStatus) String() string {
+	return string(e)
+}
+
+func (e *SchemaVersionStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SchemaVersionStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SchemaVersionStatus", str)
+	}
+	return nil
+}
+
+func (e SchemaVersionStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SchemaVersionStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SchemaVersionStatus) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

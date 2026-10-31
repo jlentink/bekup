@@ -84,6 +84,10 @@ const (
 	// ActionSecurityInsecureDBTLS: serve started outside dev mode with a
 	// weakened database.tls_mode (require or disable; D-100).
 	ActionSecurityInsecureDBTLS Action = "security.insecure_db_tls"
+	// ActionSecurityInsecureDBRoles: serve or worker started outside dev
+	// mode in single-account mode (database.single_account; one account
+	// for migrations and the app, D-207).
+	ActionSecurityInsecureDBRoles Action = "security.insecure_db_roles"
 
 	// bekup itself (startup posture, D-095).
 	ActionSystemInsecureTransportStarted Action = "system.insecure_transport_started"
@@ -97,6 +101,10 @@ const (
 	// ActionCLIRunImported: `bekup reindex --import` recorded a run from
 	// a destination's signed manifest (task 4.7; target type run).
 	ActionCLIRunImported Action = "cli.run.imported"
+	// ActionCLIDBBootstrap: `bekup db bootstrap` changed the roles or the
+	// database of an installation whose audit log already exists (D-207;
+	// recorded through bekup_app after the change; target type database).
+	ActionCLIDBBootstrap Action = "cli.db.bootstrap"
 
 	// Keys, certificates and the audit chain itself.
 	// ActionKeysRotated: serve found master keys without a stored
@@ -164,6 +172,10 @@ const (
 	// host key than the pinned one during a test (security event, D-140;
 	// alerted in task 5.5).
 	ActionDestinationHostKeyMismatch Action = "destination.ssh_host_key_mismatch"
+	// ActionDestinationUnrecordedFileDeleted: an admin deleted a file in
+	// bekup's layout that no artifact row referenced (D-209). Details: the
+	// destination name, the object key and its size.
+	ActionDestinationUnrecordedFileDeleted Action = "destination.unrecorded_file_deleted"
 
 	// Job encryption (task 3.2, D-142). Details carry versions, modes and
 	// public recipients only, never a passphrase or an identity. An opt-out
@@ -269,6 +281,10 @@ const (
 	// ActionJobTestRestoreUpdated: setJobTestRestore changed a job's
 	// test-restore settings (enabled, schedule, scratch target).
 	ActionJobTestRestoreUpdated Action = "job.test_restore_updated"
+	// ActionJobVersionQueryChanged: setJobSchemaVersion changed a job's
+	// schema-version capture (D-210): mode, preset, schema and the SHA-256
+	// of a custom query, never the query itself.
+	ActionJobVersionQueryChanged Action = "job.version_query_changed"
 	// ActionTestRestoreRequested: a test restore was queued (user actor
 	// for runTestRestoreNow, system actor for the schedule).
 	ActionTestRestoreRequested Action = "test_restore.requested"
@@ -349,10 +365,10 @@ var catalog = []Action{
 	ActionUserSecondFactorsReset,
 	ActionSessionRevoked, ActionSessionsRevoked,
 	ActionSecretChanged, ActionSettingChanged,
-	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS,
+	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS, ActionSecurityInsecureDBRoles,
 	ActionSystemInsecureTransportStarted,
 	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
-	ActionCLIAdminDisabled, ActionCLIRunImported,
+	ActionCLIAdminDisabled, ActionCLIRunImported, ActionCLIDBBootstrap,
 	ActionKeysRotated, ActionKeysCheckValueStored, ActionInstanceKeyCreated, ActionCertsRotated,
 	ActionAuditVerifyFailed, ActionAuditHeadExportFailed,
 	ActionDownloadTicketCreated, ActionDownloadTicketRejected, ActionDownloadStarted, ActionDownloadCompleted,
@@ -364,6 +380,7 @@ var catalog = []Action{
 	ActionConnectionTemporaryExpired,
 	ActionDestinationCreated, ActionDestinationUpdated, ActionDestinationDeleted,
 	ActionDestinationHostKeyConfirmed, ActionDestinationSSHKeyGenerated, ActionDestinationHostKeyMismatch,
+	ActionDestinationUnrecordedFileDeleted,
 	ActionJobEncryptionPassphraseSet, ActionJobEncryptionRecipientSet, ActionJobEncryptionOptedOut,
 	ActionJobEncryptionOptedIn, ActionJobPassphrasesExported,
 	ActionJobCreated, ActionJobUpdated, ActionJobDeleted, ActionJobEnabled, ActionJobDisabled,
@@ -373,7 +390,7 @@ var catalog = []Action{
 	ActionRestoreVerificationFailed, ActionRestoreStarted, ActionRestoreFinished,
 	ActionRestoreRequested, ActionRestoreCancelRequested, ActionRestoreAbandoned,
 	ActionRestoreSecdefNeutralized, ActionRestorePrivilegedTarget,
-	ActionJobTestRestoreUpdated, ActionTestRestoreRequested, ActionTestRestoreFinished, ActionTestRestoreAbandoned,
+	ActionJobTestRestoreUpdated, ActionJobVersionQueryChanged, ActionTestRestoreRequested, ActionTestRestoreFinished, ActionTestRestoreAbandoned,
 	ActionTestRestoreScratchKept,
 	ActionSMTPTestSent, ActionUserEmailVerificationRequested, ActionUserEmailVerified,
 	ActionUserEmailVerificationFailed,

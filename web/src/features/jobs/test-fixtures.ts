@@ -142,7 +142,17 @@ export function jobDetail(overrides: Record<string, unknown> = {}) {
       status: "SUCCESS",
       queuedAt: "2026-10-28T03:00:00Z",
       finishedAt: "2026-10-28T03:04:00Z",
+      items: [],
     },
+    schemaVersion: {
+      __typename: "JobSchemaVersion",
+      mode: "NONE",
+      preset: null,
+      presetLabel: null,
+      schema: "public",
+      customSql: null,
+    },
+    retentionHolds: [],
     testRestore: {
       __typename: "JobTestRestore",
       enabled: false,
@@ -155,6 +165,23 @@ export function jobDetail(overrides: Record<string, unknown> = {}) {
     },
     createdAt: "2026-10-01T00:00:00Z",
     updatedAt: "2026-10-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+/** A Job.retentionHolds entry (D-209). */
+export function retentionHold(overrides: Record<string, unknown> = {}) {
+  return {
+    __typename: "RetentionHold",
+    destinationId: DEST_ID,
+    destinationName: "vault-s3",
+    destinationType: "S3",
+    destinationDeleted: false,
+    reason: "NO_COMPLETE_RUN",
+    heldRuns: 3,
+    since: "2026-10-20T03:00:00Z",
+    newestCompleteAt: null,
+    checkedAt: "2026-10-28T03:05:00Z",
     ...overrides,
   };
 }
@@ -303,6 +330,8 @@ export function runDetail(overrides: Record<string, unknown> = {}) {
         database: "billing",
         position: 0,
         status: "SUCCESS",
+        schemaVersion: "20241001120000",
+        schemaVersionStatus: "OK",
         rawSize: 1048576,
         storedSize: 262144,
         sha256: "ab".repeat(32),

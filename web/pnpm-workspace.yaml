@@ -16,3 +16,14 @@ allowBuilds:
 peerDependencyRules:
   allowedVersions:
     eslint-plugin-jsx-a11y>eslint: "10"
+# GHSA-g3hv-75wg-m249 (minimatch globparts amplification DoS): only 11.0.1+
+# is fixed, and the 3.x/10.x lines get no backport. Every consumer here is dev
+# tooling (eslint, @eslint/config-array, typescript-estree, graphql-config) and
+# uses only `minimatch()` / `new Minimatch().match()`, which 11 keeps.
+# eslint-plugin-jsx-a11y 6.10.2 still default-imports minimatch 3 (a CJS
+# function); the patch below switches it to the named export. Remove both once
+# the dependents ship minimatch >= 11.0.1 themselves.
+overrides:
+  minimatch: 11.0.2
+patchedDependencies:
+  eslint-plugin-jsx-a11y@6.10.2: patches/eslint-plugin-jsx-a11y@6.10.2.patch

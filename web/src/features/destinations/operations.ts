@@ -173,3 +173,40 @@ export const GenerateDestinationSshKeypairMutation = graphql(`
     }
   }
 `);
+
+/**
+ * Unrecorded files of a destination (D-209, admins only): files in bekup's
+ * layout that no backup record references, found by the daily scan.
+ */
+export const DestinationUnrecordedFilesQuery = graphql(`
+  query DestinationUnrecordedFiles($destinationId: UUID!, $first: Int, $after: String) {
+    destinationUnrecordedFiles(destinationId: $destinationId, first: $first, after: $after) {
+      destinationId
+      scannedAt
+      totalCount
+      totalBytes
+      truncated
+      prunedDirectories
+      files {
+        id
+        key
+        size
+        modifiedAt
+        firstSeenAt
+        lastSeenAt
+      }
+      nextCursor
+    }
+  }
+`);
+
+/** Deletes one unrecorded file (admin + step-up); the only root field of its request. */
+export const DeleteUnrecordedFileMutation = graphql(`
+  mutation DeleteUnrecordedFile($destinationId: UUID!, $id: UUID!) {
+    deleteUnrecordedFile(destinationId: $destinationId, id: $id) {
+      ok
+      code
+      message
+    }
+  }
+`);

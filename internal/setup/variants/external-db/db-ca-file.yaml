@@ -1,0 +1,5 @@
+  # CA bundle (PEM) of your PostgreSQL's server certificate ([database]
+  # tls_ca_file), copied by setup from the file you named; public, not a
+  # secret (serve, admin, migrate).
+  bekup_db_ca_crt:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_ca.crt

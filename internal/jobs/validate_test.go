@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/scheduler"
+	"github.com/jlentink/bekup/internal/schemaversion"
 	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
@@ -242,4 +243,32 @@ func FuzzCheckSelection(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestCheckSchemaVersion(t *testing.T) {
+	got, err := checkSchemaVersion(SchemaVersionInput{Mode: schemaversion.ModePreset, Preset: "goose"})
+	if err != nil || got.Schema != "public" || got.Preset != "goose" {
+		t.Fatalf("default schema: %+v %v", got, err)
+	}
+	got, err = checkSchemaVersion(SchemaVersionInput{Mode: schemaversion.ModeNone, Preset: "goose", CustomSQL: "SELECT 1", Schema: "x"})
+	if err != nil || got.Preset != "" || got.CustomSQL != "" || got.Schema != "public" {
+		t.Fatalf("none clears: %+v %v", got, err)
+	}
+	got, err = checkSchemaVersion(SchemaVersionInput{Mode: schemaversion.ModeCustom, CustomSQL: "SELECT 1", Preset: "goose", Schema: "x"})
+	if err != nil || got.Preset != "" || got.CustomSQL != "SELECT 1" || got.Schema != "public" {
+		t.Fatalf("custom: %+v %v", got, err)
+	}
+	for field, in := range map[string]SchemaVersionInput{
+		"preset":    {Mode: schemaversion.ModePreset},
+		"schema":    {Mode: schemaversion.ModePreset, Preset: "goose", Schema: "1x"},
+		"customSql": {Mode: schemaversion.ModeCustom, CustomSQL: "SELECT pg_read_file('/etc/passwd')"},
+		"mode":      {Mode: ""},
+	} {
+		if _, err := checkSchemaVersion(in); fieldOf(t, err) != field {
+			t.Errorf("%s: %v", field, err)
+		}
+	}
+	if sqlDigest("") != "" || len(sqlDigest("SELECT 1")) != 64 {
+		t.Error("digest")
+	}
 }

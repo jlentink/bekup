@@ -2,6 +2,8 @@ package sshpolicy
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
@@ -35,8 +37,9 @@ type Conn struct {
 // before the handshake finished. On success the deadline is left in place
 // for the caller's own setup (clear it with conn.SetDeadline(time.Time{})).
 //
-// When ctx ended during the handshake the error is ctx.Err() (so callers
-// can tell a timeout or cancellation from a protocol failure); otherwise
+// When ctx ended during the handshake, or conn's deadline (ctx's) fired
+// first, the error matches ctx.Err() / context.DeadlineExceeded (so
+// callers can tell a timeout or cancellation from a protocol failure); otherwise
 // it is x/crypto/ssh's error. Handshake does not close conn on failure.
 func Handshake(ctx context.Context, conn net.Conn, addr string, cfg *ssh.ClientConfig) (*Conn, error) {
 	if deadline, ok := ctx.Deadline(); ok {
@@ -54,9 +57,28 @@ func Handshake(ctx context.Context, conn net.Conn, addr string, cfg *ssh.ClientC
 		return nil, ctx.Err()
 	}
 	if err != nil {
-		return nil, err
+		return nil, deadlineErr(ctx, err)
 	}
 	return &Conn{Conn: sc, Chans: chans, Reqs: reqs}, nil
+}
+
+// deadlineErr reports a handshake error caused by ctx's deadline as such.
+// conn's deadline equals ctx's, so the read can time out a moment before
+// ctx's own timer fires; that timeout is ctx's deadline too, and callers
+// must be able to tell it from a protocol failure (errors.Is
+// context.DeadlineExceeded).
+func deadlineErr(ctx context.Context, err error) error {
+	if cerr := ctx.Err(); cerr != nil {
+		return cerr
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) || !ne.Timeout() {
+		return err
+	}
+	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+		return fmt.Errorf("%w: %w", context.DeadlineExceeded, err)
+	}
+	return err
 }
 
 // DefaultKeepaliveMisses is the number of keepalive intervals without a

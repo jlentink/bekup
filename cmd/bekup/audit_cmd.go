@@ -166,14 +166,14 @@ func openAppDB(c *cobra.Command, g *globalFlags, appName string) (*pgxpool.Pool,
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("database TLS: %w", err)
 	}
-	url, err := res.Config.DatabaseURL()
+	creds, err := res.Config.AppDBCredentials()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("read database URL: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("read database credentials: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(c.Context(), res.Config.Database.ConnectTimeout.D())
-	pool, err := db.NewPool(ctx, url, opts)
+	pool, err := db.NewPool(ctx, creds, opts)
 	cancel()
-	config.Zero(url)
+	creds.Zero()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

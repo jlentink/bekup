@@ -18,6 +18,7 @@ import (
 	"github.com/jlentink/bekup/internal/pipeline"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/runstate"
+	"github.com/jlentink/bekup/internal/schemaversion"
 )
 
 // Completeness evidence (task 3.10, D-141, D-151). The backup worker opens a
@@ -41,7 +42,18 @@ type StatsInput struct {
 	Database string
 	// Deep: the job's verification level is "deep" (exact row counts).
 	Deep bool
+	// Version is the job's schema-version query (D-210; nil: none). Only
+	// database dumps carry one.
+	Version *runnerpb.VersionQuery
+	// VersionRefused: the job asks for a version but its stored query no
+	// longer passes the rules, so none was sent; the item reports the
+	// version as unavailable.
+	VersionRefused bool
 }
+
+// versionWanted reports a schema-version capture the item must account
+// for (sent or refused before sending).
+func (in StatsInput) versionWanted() bool { return in.Version != nil || in.VersionRefused }
 
 // StatsResult is the evidence of one dump.
 type StatsResult struct {
@@ -49,6 +61,10 @@ type StatsResult struct {
 	// or nil.
 	Stats    json.RawMessage
 	Warnings []runstate.Warning
+	// SchemaVersionStatus / SchemaVersion are the schema-version capture
+	// of a complete dump (D-210; empty without a version query).
+	SchemaVersionStatus schemaversion.Status
+	SchemaVersion       string
 }
 
 // DumpOutcome is what the worker saw of a dump.
@@ -140,6 +156,7 @@ func durationMillis(d time.Duration) uint32 {
 func (s *runnerStatsSession) PrepareDump(db *runnerpb.DumpRequest, globals *runnerpb.DumpGlobalsRequest) {
 	if db != nil {
 		db.Stats = s.options()
+		db.VersionQuery = s.in.Version
 	}
 	if globals != nil {
 		globals.Stats = s.options()
@@ -149,21 +166,35 @@ func (s *runnerStatsSession) PrepareDump(db *runnerpb.DumpRequest, globals *runn
 func (s *runnerStatsSession) End(ctx context.Context, d DumpOutcome) (StatsResult, error) {
 	if d.Stats == nil {
 		// A missing stats message is reported by the runner's
-		// stats_unavailable result warning.
+		// stats_unavailable result warning; a requested version is then
+		// unavailable too.
+		if s.in.versionWanted() && d.OK {
+			return s.versionOutcome(schemaversion.StatusUnavailable, ""), nil
+		}
 		return StatsResult{}, nil
 	}
 	ev, err := encodeStats(s.in, d.Stats, d.Result)
 	if err != nil {
-		return StatsResult{Warnings: []runstate.Warning{{Code: "stats_invalid", Message: "the runner's statistics were malformed and were discarded", Database: s.in.Database}}}, nil
+		res := StatsResult{Warnings: []runstate.Warning{{Code: "stats_invalid", Message: "the runner's statistics were malformed and were discarded", Database: s.in.Database}}}
+		if s.in.versionWanted() && d.OK {
+			v := s.versionOutcome(schemaversion.StatusUnavailable, "")
+			res.SchemaVersionStatus, res.Warnings = v.SchemaVersionStatus, append(res.Warnings, v.Warnings...)
+		}
+		return res, nil
 	}
 	if !d.OK {
 		// A failed or unverified dump keeps its validated completeness
 		// warnings (they often explain the failure, e.g. missing
-		// privileges), but gets no evidence: no backup_stats row and no
-		// stats in the manifest.
+		// privileges), but gets no evidence: no backup_stats row, no stats
+		// in the manifest and no schema version.
 		return StatsResult{Warnings: ev.warnings}, nil
 	}
 	res := StatsResult{Stats: ev.canonical, Warnings: ev.warnings}
+	if s.in.versionWanted() {
+		v := s.versionOutcome(ev.versionStatus, ev.version)
+		res.SchemaVersionStatus, res.SchemaVersion = v.SchemaVersionStatus, v.SchemaVersion
+		res.Warnings = append(res.Warnings, v.Warnings...)
+	}
 	if s.r.Store != nil && s.in.ItemID != uuid.Nil {
 		level := sqlc.JobVerificationStandard
 		if s.in.Deep {
@@ -218,6 +249,90 @@ type evidence struct {
 	canonical   json.RawMessage
 	consistency string
 	warnings    []runstate.Warning
+	// versionStatus / version: the validated schema-version capture
+	// (status empty when none was requested).
+	versionStatus schemaversion.Status
+	version       string
+}
+
+// Schema-version warning codes (D-210): fixed texts, never server output.
+const (
+	CodeVersionUnavailable = "version_unavailable"
+	CodeVersionInvalid     = "version_invalid"
+)
+
+// versionRefusedText is the version_unavailable text of a stored query
+// that no longer passes the rules (it was not sent).
+const versionRefusedText = "the job's stored schema-version query no longer passes the rules and was not run; edit the job's schema-version setting; the backup is not affected"
+
+// versionOutcome is versionOutcome for the session's database, with the
+// refused-query text when the query was not sent.
+func (s *runnerStatsSession) versionOutcome(st schemaversion.Status, v string) StatsResult {
+	res := versionOutcome(s.in.Database, st, v)
+	if s.in.VersionRefused {
+		for i := range res.Warnings {
+			if res.Warnings[i].Code == CodeVersionUnavailable {
+				res.Warnings[i].Message = versionRefusedText
+			}
+		}
+	}
+	return res
+}
+
+// versionOutcome is the item result of a schema-version capture: the
+// status, the version (ok only) and the warning of a failed capture. The
+// backup itself is unaffected.
+func versionOutcome(db string, st schemaversion.Status, v string) StatsResult {
+	res := StatsResult{SchemaVersionStatus: st}
+	switch st {
+	case schemaversion.StatusOK:
+		res.SchemaVersion = v
+	case schemaversion.StatusUnavailable:
+		res.Warnings = []runstate.Warning{{Code: CodeVersionUnavailable,
+			Message: "the schema version could not be read (missing privilege, time limit, unexpected table layout or error); the backup is not affected", Database: db}}
+	case schemaversion.StatusInvalid:
+		res.Warnings = []runstate.Warning{{Code: CodeVersionInvalid,
+			Message: "the schema version query returned more than 64 characters or characters other than printable ASCII; the value was discarded", Database: db}}
+	case schemaversion.StatusNone:
+	}
+	return res
+}
+
+// versionFromStats validates the schema version of a stats message: a
+// requested version with an unknown or missing status is unavailable; an
+// unrequested one must be absent.
+func versionFromStats(in StatsInput, st *runnerpb.DumpStats) (schemaversion.Status, string, error) {
+	if in.Version == nil {
+		if st.GetVersionStatus() != runnerpb.VersionStatus_VERSION_STATUS_UNSPECIFIED || st.GetSchemaVersion() != "" {
+			return "", "", errors.New("jobs: unrequested schema version")
+		}
+		if in.VersionRefused {
+			return schemaversion.StatusUnavailable, "", nil
+		}
+		return "", "", nil
+	}
+	switch st.GetVersionStatus() {
+	case runnerpb.VersionStatus_VERSION_STATUS_OK:
+		if !schemaversion.ValidValue(st.GetSchemaVersion()) {
+			return "", "", errors.New("jobs: invalid schema version")
+		}
+		return schemaversion.StatusOK, st.GetSchemaVersion(), nil
+	case runnerpb.VersionStatus_VERSION_STATUS_NONE:
+		if st.GetSchemaVersion() != "" {
+			return "", "", errors.New("jobs: schema version without status ok")
+		}
+		return schemaversion.StatusNone, "", nil
+	case runnerpb.VersionStatus_VERSION_STATUS_INVALID:
+		if st.GetSchemaVersion() != "" {
+			return "", "", errors.New("jobs: schema version without status ok")
+		}
+		return schemaversion.StatusInvalid, "", nil
+	default:
+		if st.GetSchemaVersion() != "" {
+			return "", "", errors.New("jobs: schema version without status ok")
+		}
+		return schemaversion.StatusUnavailable, "", nil
+	}
 }
 
 // encodeStats validates the runner's stats and builds the canonical stats
@@ -232,9 +347,14 @@ type evidence struct {
 // (MySQL/MariaDB: the encoded name only). "count" is exact, estimate or
 // unknown (no "rows"); "approximate":1 marks MySQL/MariaDB tables. Flags
 // are the integer 1 and omitted when false: canonical JSON allows integers
-// and strings only.
+// and strings only. A job with a schema-version query (D-210) adds
+// "schema_version_status" (ok, none, unavailable, invalid) and, with ok,
+// "schema_version" (at most 64 printable ASCII characters).
 func encodeStats(in StatsInput, st *runnerpb.DumpStats, res *runnerpb.DumpResult) (evidence, error) {
-	var ev evidence
+	var (
+		ev  evidence
+		err error
+	)
 	if len(st.GetTables()) > maxStatsTables || len(st.GetWarnings()) > maxStatsWarnings {
 		return ev, errors.New("jobs: stats exceed the bounds")
 	}
@@ -246,6 +366,15 @@ func encodeStats(in StatsInput, st *runnerpb.DumpStats, res *runnerpb.DumpResult
 		out["level"] = "standard"
 	default:
 		return ev, fmt.Errorf("jobs: stats level %v", st.GetLevel())
+	}
+	if ev.versionStatus, ev.version, err = versionFromStats(in, st); err != nil {
+		return ev, err
+	}
+	if ev.versionStatus != "" {
+		out["schema_version_status"] = string(ev.versionStatus)
+		if ev.version != "" {
+			out["schema_version"] = ev.version
+		}
 	}
 	ev.consistency = "approximate"
 	if st.GetSameSnapshot() && in.Engine == engine.KindPostgres && in.Kind == pipeline.KindDatabase {

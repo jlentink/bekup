@@ -11,7 +11,9 @@ import (
 // ManifestVersion is the version of the ownership manifest. Bump it when an
 // entry is added or changes owner/mode; `setup upgrade` then generates new
 // secrets and re-applies ownership.
-const ManifestVersion = 1
+//
+// Version 2 (D-208): the external-database entries (ManifestOptions.ExternalDB).
+const ManifestVersion = 2
 
 // Container UIDs/GIDs the files are handed to.
 const (
@@ -142,6 +144,10 @@ type ManifestOptions struct {
 	// setup never writes it, D-205); otherwise it is generated
 	// (setup-first, --write-compose).
 	ComposeOperator bool
+	// ExternalDB replaces the bundled postgres entries (the URL files, the
+	// UID 70 passwords, certs/postgres/) with the external database's
+	// password files and the copied CA bundle (D-208).
+	ExternalDB bool
 }
 
 // Manifest returns every entry of a deployment directory: the fixed files
@@ -211,18 +217,35 @@ func Manifest(l Layout, assets []string, o ManifestOptions) []Entry {
 
 	// Secrets. Directories are traversable but not listable (0711).
 	add(Entry{Path: l.KeysDir, Kind: KindDir, Mode: 0o711, Class: ClassSecret})
-	add(secretFile(l.keys(masterKeyName), UIDBekup, groupMasterKey),
-		secretFile(l.keys(appURLName), UIDBekup, groupDatabase),
-		secretFile(l.keys(ownerURLName), UIDBekup, groupDatabase),
-		secretFile(l.keys(postgresPassName), UIDPostgres, groupDatabase),
-		secretFile(l.keys(ownerPassName), UIDPostgres, groupDatabase),
-		secretFile(l.keys(appPassName), UIDPostgres, groupDatabase))
-
-	add(Entry{Path: l.keys(certsDirName), Kind: KindDir, Mode: 0o711, Class: ClassSecret})
-	for _, c := range []struct {
+	add(secretFile(l.keys(masterKeyName), UIDBekup, groupMasterKey))
+	components := []struct {
 		name string
 		uid  int
-	}{{"serve", UIDBekup}, {"runner", UIDBekup}, {"postgres", UIDPostgres}} {
+	}{{"serve", UIDBekup}, {"runner", UIDBekup}}
+	if o.ExternalDB {
+		// The operator's PostgreSQL: both password files are read by the
+		// bekup containers (the owner file is empty in single-account
+		// mode); the CA bundle is public and the operator may replace it.
+		add(secretFile(l.keys(dbPasswordName), UIDBekup, groupDatabaseExternal),
+			secretFile(l.keys(dbOwnerPasswordName), UIDBekup, groupDatabaseExternal),
+			rootFile(l.keys(dbCAName), 0o644, ClassOperator),
+			// The roles SQL for a DBA (dba-sql): root only, deleted by the
+			// operator once it ran (setup check warns while it exists).
+			Entry{Path: l.keys(dbRolesSQLName), Kind: KindFile, Mode: 0o600, Class: ClassSecret, Secret: true, Optional: true})
+	} else {
+		add(secretFile(l.keys(appURLName), UIDBekup, groupDatabase),
+			secretFile(l.keys(ownerURLName), UIDBekup, groupDatabase),
+			secretFile(l.keys(postgresPassName), UIDPostgres, groupDatabase),
+			secretFile(l.keys(ownerPassName), UIDPostgres, groupDatabase),
+			secretFile(l.keys(appPassName), UIDPostgres, groupDatabase))
+		components = append(components, struct {
+			name string
+			uid  int
+		}{"postgres", UIDPostgres})
+	}
+
+	add(Entry{Path: l.keys(certsDirName), Kind: KindDir, Mode: 0o711, Class: ClassSecret})
+	for _, c := range components {
 		add(Entry{Path: l.keys(certsDirName, c.name), Kind: KindDir, Mode: 0o711, Class: ClassSecret, Group: groupCerts},
 			Entry{Path: l.keys(certsDirName, c.name, c.name+".crt"), Kind: KindFile, Mode: 0o644, Class: ClassSecret, Group: groupCerts},
 			Entry{Path: l.keys(certsDirName, c.name, "ca.crt"), Kind: KindFile, Mode: 0o644, Class: ClassSecret, Group: groupCerts},
@@ -240,7 +263,24 @@ func Manifest(l Layout, assets []string, o ManifestOptions) []Entry {
 func ManifestTable(l Layout) string {
 	var b strings.Builder
 	b.WriteString("| Path | Class | Owner (UID:GID) | Mode |\n|---|---|---|---|\n")
-	for _, e := range Manifest(l, []string{"deploy/x"}, ManifestOptions{StaticTLS: true, ComposeOperator: true}) {
+	bundled := Manifest(l, []string{"deploy/x"}, ManifestOptions{StaticTLS: true, ComposeOperator: true})
+	external := Manifest(l, []string{"deploy/x"}, ManifestOptions{StaticTLS: true, ComposeOperator: true, ExternalDB: true})
+	in := func(es []Entry, p string) bool {
+		for _, e := range es {
+			if e.Path == p {
+				return true
+			}
+		}
+		return false
+	}
+	rows := make([]Entry, 0, len(bundled)+8)
+	rows = append(rows, bundled...)
+	for _, e := range external {
+		if !in(bundled, e.Path) {
+			rows = append(rows, e)
+		}
+	}
+	for _, e := range rows {
 		cell := "`" + e.Path + "`"
 		mode := fmt.Sprintf("%04o", e.Mode.Perm())
 		if e.ModeIsMax {
@@ -256,6 +296,16 @@ func ManifestTable(l Layout) string {
 			cell = "`deploy/**` (`*.sh` and directories 0755)"
 		case e.Kind == KindDir:
 			cell = "`" + e.Path + "/`"
+		}
+		switch {
+		case !in(external, e.Path):
+			cell += " (bundled database)"
+		case !in(bundled, e.Path):
+			cell += " (external database"
+			if e.Optional {
+				cell += ", `dba-sql` only"
+			}
+			cell += ")"
 		}
 		switch {
 		case e.Offline:

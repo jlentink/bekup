@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/logging"
 )
@@ -143,7 +144,7 @@ func TestMigratorChecksRolesOnEveryRun(t *testing.T) {
 	for _, w := range weakenings {
 		t.Run(w.name, func(t *testing.T) {
 			weaken(ctx, t, w.apply, w.revert)
-			m, err := db.NewMigrator(ctx, []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
+			m, err := db.NewMigrator(ctx, config.DBCredentials{URL: []byte(d.ownerURL)}, tlsVerify, logging.NewRegistry())
 			if err == nil {
 				t.Fatal(errors.Join(errors.New("migrator accepted a weakened role"), m.Close(ctx)))
 			}
@@ -153,7 +154,7 @@ func TestMigratorChecksRolesOnEveryRun(t *testing.T) {
 		})
 	}
 	// After every revert, migrating works again.
-	m, err := db.NewMigrator(ctx, []byte(d.ownerURL), tlsVerify, logging.NewRegistry())
+	m, err := db.NewMigrator(ctx, config.DBCredentials{URL: []byte(d.ownerURL)}, tlsVerify, logging.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,13 +167,13 @@ func TestCheckAppRole(t *testing.T) {
 	ctx := withTimeout(t, 2*time.Minute)
 	d := migratedDB(t)
 	app := d.appPool(t)
-	if err := db.CheckAppRole(ctx, app); err != nil {
+	if err := db.CheckAppRole(ctx, app, ""); err != nil {
 		t.Fatalf("plain bekup_app rejected: %v", err)
 	}
-	if err := db.CheckAppRole(ctx, d.ownerPool(t)); err == nil || !strings.Contains(err.Error(), "must connect as bekup_app") {
+	if err := db.CheckAppRole(ctx, d.ownerPool(t), ""); err == nil || !strings.Contains(err.Error(), "must connect as bekup_app") {
 		t.Fatalf("owner connection: %v", err)
 	}
-	if err := db.CheckAppRole(ctx, d.pool(t, urlFor(superUser, superPassword, d.name))); err == nil || !strings.Contains(err.Error(), "must connect as bekup_app") {
+	if err := db.CheckAppRole(ctx, d.pool(t, urlFor(superUser, superPassword, d.name)), ""); err == nil || !strings.Contains(err.Error(), "must connect as bekup_app") {
 		t.Fatalf("superuser connection: %v", err)
 	}
 	for _, w := range weakenings {
@@ -181,7 +182,7 @@ func TestCheckAppRole(t *testing.T) {
 		}
 		t.Run(w.name, func(t *testing.T) {
 			weaken(ctx, t, w.apply, w.revert)
-			err := db.CheckAppRole(ctx, app)
+			err := db.CheckAppRole(ctx, app, "")
 			if err == nil || !strings.Contains(err.Error(), w.want) {
 				t.Fatalf("got %v, want %q", err, w.want)
 			}

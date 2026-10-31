@@ -1,0 +1,4 @@
+#   3. Once, create bekup's roles and database on your PostgreSQL (setup
+#      prints the exact command; docs/installation/external-database.md), e.g.
+#      docker compose run --rm migrate db bootstrap --admin-user <admin>
+#   4. docker compose up -d

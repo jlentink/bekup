@@ -24,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/queue"
+	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
 
@@ -76,7 +77,7 @@ func newJobEnv(t *testing.T) *jobEnv {
 	gql, err := graph.New(graph.Options{
 		Logger: logger, MaxComplexity: 2000, MaxDepth: 12, MaxBodyBytes: 1 << 16,
 		Access: graph.NewPolicyAccess(pol), Policy: pol, AuditLog: e.auditor, Auth: svc,
-		Jobs: js, JobKeys: keys,
+		Jobs: js, JobKeys: keys, RetentionHolds: retention.HoldReader{DB: e.pool},
 	})
 	if err != nil {
 		t.Fatal(err)

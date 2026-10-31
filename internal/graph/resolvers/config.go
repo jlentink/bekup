@@ -33,7 +33,10 @@ func (r *Resolver) configStatus(ctx context.Context) (*model.ConfigStatus, error
 	if err != nil {
 		return nil, err
 	}
-	out := &model.ConfigStatus{LiveKeys: nonNil(v.LiveKeys), Processes: processModels(v.Processes), ListeningProcesses: v.Listening}
+	out := &model.ConfigStatus{
+		Database: databasePostureModel(v.Database),
+		LiveKeys: nonNil(v.LiveKeys), Processes: processModels(v.Processes), ListeningProcesses: v.Listening,
+	}
 	if v.LastRequest != nil {
 		out.LastRequest = reloadRequestModel(v.LastRequest)
 	}
@@ -62,6 +65,17 @@ func (r *Resolver) reloadConfig(ctx context.Context) (*model.ConfigReloadRequest
 		return nil, err
 	}
 	return reloadRequestModel(v), nil
+}
+
+func databasePostureModel(p configreload.DatabasePosture) *model.DatabasePosture {
+	mode := model.DatabaseConfigModeURL
+	switch p.Mode {
+	case "fields":
+		mode = model.DatabaseConfigModeFields
+	case "single_account":
+		mode = model.DatabaseConfigModeSingleAccount
+	}
+	return &model.DatabasePosture{Mode: mode, TLSMode: p.TLSMode, InsecureTransport: p.TLSWeakened, SingleAccount: p.SingleAccount}
 }
 
 func reloadRequestModel(v *configreload.RequestView) *model.ConfigReloadRequest {

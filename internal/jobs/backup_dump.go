@@ -16,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/pipeline"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/runstate"
+	"github.com/jlentink/bekup/internal/schemaversion"
 )
 
 var (
@@ -230,10 +231,14 @@ func (e *runExec) dumpItem(ctx context.Context, kind pipeline.EntryKind, db stri
 		return nil
 	}
 
-	session, err := e.o.Stats.Begin(ctx, StatsInput{
+	in := StatsInput{
 		RunID: e.run.RunID, JobID: e.job.ID, ItemID: item.ID, Engine: e.job.Engine, VersionKey: e.job.VersionKey, Kind: kind, Database: db,
 		Deep: e.job.Verification == sqlc.JobVerificationDeep,
-	})
+	}
+	if kind == pipeline.KindDatabase {
+		in.Version, in.VersionRefused = versionQuery(e.job.SchemaVersion)
+	}
+	session, err := e.o.Stats.Begin(ctx, in)
 	if err != nil {
 		e.log.WarnContext(ctx, "capturing source statistics failed", slog.Any("error", err))
 		it.warnings = append(it.warnings, runstate.Warning{Code: "stats_unavailable", Message: "source statistics could not be captured", Database: db})
@@ -275,6 +280,7 @@ func (e *runExec) dumpItem(ctx context.Context, kind pipeline.EntryKind, db stri
 	} else {
 		it.stats = st.Stats
 		it.warnings = append(it.warnings, st.Warnings...)
+		it.versionStatus, it.version = st.SchemaVersionStatus, st.SchemaVersion
 	}
 
 	// Destination outcomes (only if the pipeline ran).
@@ -504,6 +510,8 @@ func (e *runExec) finishItem(ctx context.Context, item runstate.Item, it *itemSt
 	if it.entry != nil {
 		res.RawSize, res.StoredSize = it.raw, it.stored
 		res.RawSHA256, res.SHA256 = it.rawSum, it.sum
+		// The version of a stored backup only (D-210).
+		res.SchemaVersionStatus, res.SchemaVersion = string(it.versionStatus), it.version
 	}
 	if res.Status == "" || res.Status == runstate.ItemRunning {
 		res.Status = runstate.ItemFailed
@@ -512,6 +520,34 @@ func (e *runExec) finishItem(ctx context.Context, item runstate.Item, it *itemSt
 	defer cancel()
 	if err := e.o.Store.FinishItem(fctx, e.run.Ref, item.ID, res); err != nil {
 		e.log.ErrorContext(ctx, "recording a run item failed", slog.Any("error", err))
+	}
+}
+
+// versionQuery is the runner request of a job's schema-version capture
+// (D-210; nil: none). The stored setting is validated again with the
+// rules the runner applies (they may have become stricter since it was
+// saved): a refused one is not sent (refused=true: the item reports the
+// version as unavailable) instead of failing the whole dump.
+func versionQuery(q runstate.SchemaVersionQuery) (_ *runnerpb.VersionQuery, refused bool) {
+	switch q.Mode {
+	case sqlc.JobVersionQueryModePreset:
+		if q.Preset == "" {
+			return nil, false
+		}
+		if schemaversion.ValidatePreset(q.Preset) != nil || (q.Schema != "" && schemaversion.ValidateSchema(q.Schema) != nil) {
+			return nil, true
+		}
+		return &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: q.Preset}, Schema: q.Schema}, false
+	case sqlc.JobVersionQueryModeCustom:
+		if q.CustomSQL == "" {
+			return nil, false
+		}
+		if schemaversion.ValidateCustomSQL(q.CustomSQL) != nil {
+			return nil, true
+		}
+		return &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_CustomSql{CustomSql: q.CustomSQL}}, false
+	default:
+		return nil, false
 	}
 }
 

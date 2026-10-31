@@ -1,0 +1,10 @@
+    secrets:
+      # [database] owner_password_file (bekup_owner: migrations) and
+      # password_file (bekup_app: `db bootstrap` creates the role with its
+      # SCRAM verifier). serve never receives the owner password.
+      - bekup_database_owner_password
+      - bekup_database_password
+      # CA bundle of your PostgreSQL's server certificate: [database]
+      # tls_ca_file (default path), verified with tls_mode = "verify-full".
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt

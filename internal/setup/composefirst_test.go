@@ -13,8 +13,15 @@ import (
 // writeRelease saves the release file of v for image as compose.yaml.
 func writeRelease(t *testing.T, dir string, v Variant, image string) []byte {
 	t.Helper()
+	return writeReleaseDB(t, dir, v, DBBundled, image)
+}
+
+// writeReleaseDB saves the release file of v with db for image as
+// compose.yaml.
+func writeReleaseDB(t *testing.T, dir string, v Variant, db DBMode, image string) []byte {
+	t.Helper()
 	img := mustRef(t, image)
-	data, err := RenderRelease(v, &img)
+	data, err := RenderRelease(v, db, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,12 +58,12 @@ func composeFirstInit(t *testing.T, dir string, v Variant, mut func(*Options)) (
 
 func TestInspectComposeRecognition(t *testing.T) {
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantNPM, &img)
+	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fsys := bekup.Assets()
-	info, err := inspectComposeData(fsys, composeInput{compose: src}, "")
+	info, err := inspectComposeData(fsys, composeInput{compose: src}, "", "")
 	if err != nil || info.Variant != VariantNPM || info.Level != RecognizedExact || len(info.Findings) > 0 {
 		t.Fatalf("exact: %+v %v", info, err)
 	}
@@ -66,7 +73,7 @@ func TestInspectComposeRecognition(t *testing.T) {
 	// Comments and formatting only: same YAML model.
 	reformatted := strings.ReplaceAll(string(src), "\n  # serve/migrate <-> postgres.\n", "\n")
 	reformatted = strings.Replace(reformatted, "cap_drop: [ALL]", "cap_drop:\n      - ALL", 1)
-	if info, err := inspectComposeData(fsys, composeInput{compose: []byte(reformatted)}, ""); err != nil || info.Variant != VariantNPM || info.Level != RecognizedModel {
+	if info, err := inspectComposeData(fsys, composeInput{compose: []byte(reformatted)}, "", ""); err != nil || info.Variant != VariantNPM || info.Level != RecognizedModel {
 		t.Fatalf("model: %+v %v", info, err)
 	}
 	// Customized: needs --variant, then the lint decides.
@@ -74,18 +81,18 @@ func TestInspectComposeRecognition(t *testing.T) {
 	if custom == string(src) {
 		t.Fatal("test edit did not apply")
 	}
-	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(custom)}, ""); err == nil || !strings.Contains(err.Error(), "customized") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(custom)}, "", ""); err == nil || !strings.Contains(err.Error(), "customized") {
 		t.Fatalf("customized without variant: %v", err)
 	}
-	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom)}, VariantNPM)
+	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom)}, VariantNPM, "")
 	if err != nil || info.Level != RecognizedCustom || info.Variant != VariantNPM || info.HasErrors() {
 		t.Fatalf("customized: %+v %v", info, err)
 	}
 	// A recognized file must match a given variant; full is setup-first.
-	if _, err := inspectComposeData(fsys, composeInput{compose: src}, VariantTraefik); err == nil || !strings.Contains(err.Error(), "is the npm variant") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: src}, VariantTraefik, ""); err == nil || !strings.Contains(err.Error(), "is the npm variant") {
 		t.Fatalf("mismatch: %v", err)
 	}
-	if _, err := inspectComposeData(fsys, composeInput{compose: src}, VariantFull); err == nil || !strings.Contains(err.Error(), "setup-first") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: src}, VariantFull, ""); err == nil || !strings.Contains(err.Error(), "setup-first") {
 		t.Fatalf("full: %v", err)
 	}
 	// The image line.
@@ -97,7 +104,7 @@ func TestInspectComposeRecognition(t *testing.T) {
 		"indented":  strings.Replace(string(src), "x-bekup-image: &bekup-image ", "x-bekup-image:  &bekup-image ", 1),
 		"not yaml":  "x-bekup-image: &bekup-image " + variantImage + "\nservices: [\n",
 	} {
-		if _, err := inspectComposeData(fsys, composeInput{compose: []byte(bad)}, VariantNPM); err == nil {
+		if _, err := inspectComposeData(fsys, composeInput{compose: []byte(bad)}, VariantNPM, ""); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
@@ -105,7 +112,7 @@ func TestInspectComposeRecognition(t *testing.T) {
 
 func FuzzInspectCompose(f *testing.F) {
 	img := mustRef(f, variantImage)
-	src, err := RenderRelease(VariantNPM, &img)
+	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -113,7 +120,7 @@ func FuzzInspectCompose(f *testing.F) {
 	f.Add("x-bekup-image: &bekup-image " + variantImage + "\nservices:\n  setup: {}\n")
 	fsys := bekup.Assets()
 	f.Fuzz(func(t *testing.T, s string) {
-		info, err := inspectComposeData(fsys, composeInput{compose: []byte(s)}, VariantNPM)
+		info, err := inspectComposeData(fsys, composeInput{compose: []byte(s)}, VariantNPM, "")
 		if err == nil && info.Level == RecognizedExact && s != string(src) {
 			t.Fatal("a different file was recognized as exact")
 		}
@@ -122,7 +129,7 @@ func FuzzInspectCompose(f *testing.F) {
 
 func TestLintCompose(t *testing.T) {
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantTraefik, &img)
+	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}

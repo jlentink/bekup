@@ -75,6 +75,14 @@ x-bekup-hardening: &bekup-hardening
       max-size: "10m"
       max-file: "5"
 
+# ---------------------------------------------------------------------------
+# App database: the bundled `postgres` service below (TLS for the bekup
+# roles, least-privilege roles bekup_owner / bekup_app; D-054, D-100). The
+# external-database variants (compose.external-db.yaml, ...; D-208) replace
+# this note, drop the postgres service and connect to your own PostgreSQL
+# (docs/installation/external-database.md).
+# ---------------------------------------------------------------------------
+
 services:
   # -------------------------------------------------------------------------
   # setup: the one-shot installer `bekup setup` (D-203, D-205). Run it
@@ -135,7 +143,7 @@ services:
   # writes below ${BEKUP_KEYS_DIR:-./secrets}/certs (docs/security/mtls-certs.md):
   #   ca/ca.crt, ca/ca.key (age-encrypted)  -> move ca/ OFFLINE afterwards
   #   runner/{runner.crt,runner.key,ca.crt}, serve/{serve.crt,serve.key,ca.crt}
-  #   postgres/{postgres.crt,postgres.key,ca.crt}  (app DB TLS, D-100)
+  #   postgres/{postgres.crt,postgres.key,ca.crt}  (bundled app DB TLS, D-100)
   # It is the ONLY container that ever sees the CA private key. serve,
   # runner and postgres each receive only their own directory's files as
   # Docker secrets (see `secrets:`); serve and migrate also get
@@ -209,8 +217,9 @@ services:
   # --password-file /run/pw`). A separate service because `docker compose
   # run serve ...` cannot start next to the running serve: both would claim
   # serve's fixed network address. Same role as serve (bekup_app, D-054),
-  # but only the `backend` network and only the DB URL + DB CA: no master
-  # key, no mTLS client certificate, no ports.
+  # but only the `backend` network and only the DB login (URL, or the
+  # password file with an external database) + DB CA: no master key, no
+  # mTLS client certificate, no ports.
   # -------------------------------------------------------------------------
   admin:
     <<: *bekup-hardening

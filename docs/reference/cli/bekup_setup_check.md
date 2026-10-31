@@ -69,5 +69,5 @@ bekup setup check [flags]
 
 ### SEE ALSO
 
-* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory
+* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory (wizard on a terminal)
 

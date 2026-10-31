@@ -147,6 +147,18 @@ CREATE TYPE public.job_verification AS ENUM (
 ALTER TYPE public.job_verification OWNER TO bekup_owner;
 
 --
+-- Name: job_version_query_mode; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.job_version_query_mode AS ENUM (
+    'none',
+    'preset',
+    'custom'
+);
+
+ALTER TYPE public.job_version_query_mode OWNER TO bekup_owner;
+
+--
 -- Name: notification_channel; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -1349,6 +1361,10 @@ CREATE TABLE public.jobs (
     test_restore_privilege_reasons text[] DEFAULT '{}'::text[] NOT NULL,
     test_restore_privileged_ack_by uuid,
     test_restore_privileged_ack_at timestamp with time zone,
+    version_query_mode public.job_version_query_mode DEFAULT 'none'::public.job_version_query_mode NOT NULL,
+    version_preset text,
+    version_custom_sql text,
+    version_schema text DEFAULT 'public'::text NOT NULL,
     CONSTRAINT jobs_databases_mode CHECK ((((db_mode = 'all'::public.job_db_mode) AND (cardinality(databases) = 0)) OR ((db_mode = 'selected'::public.job_db_mode) AND ((cardinality(databases) >= 1) AND (cardinality(databases) <= 256)) AND (cardinality(exclude) = 0)))),
     CONSTRAINT jobs_description_length CHECK ((char_length(description) <= 1000)),
     CONSTRAINT jobs_exclude_count CHECK ((cardinality(exclude) <= 256)),
@@ -1363,7 +1379,11 @@ CREATE TABLE public.jobs (
     CONSTRAINT jobs_test_restore_privileges_value CHECK (((test_restore_target_privileges IS NULL) OR (test_restore_target_privileges = ANY (ARRAY['not_privileged'::text, 'privileged'::text, 'unknown'::text])))),
     CONSTRAINT jobs_test_restore_schedule_object CHECK (((jsonb_typeof(test_restore_schedule) = 'object'::text) AND (octet_length((test_restore_schedule)::text) <= 1024))),
     CONSTRAINT jobs_test_restore_target CHECK (((NOT test_restore_enabled) OR (test_restore_connection_id IS NOT NULL))),
-    CONSTRAINT jobs_timeout_range CHECK (((timeout_seconds IS NULL) OR ((timeout_seconds >= 60) AND (timeout_seconds <= 604800))))
+    CONSTRAINT jobs_timeout_range CHECK (((timeout_seconds IS NULL) OR ((timeout_seconds >= 60) AND (timeout_seconds <= 604800)))),
+    CONSTRAINT jobs_version_custom_sql_length CHECK (((version_custom_sql IS NULL) OR ((octet_length(version_custom_sql) >= 1) AND (octet_length(version_custom_sql) <= 2048)))),
+    CONSTRAINT jobs_version_preset_format CHECK (((version_preset IS NULL) OR (version_preset ~ '^[a-z][a-z0-9-]{0,31}$'::text))),
+    CONSTRAINT jobs_version_query_fields CHECK ((((version_query_mode = 'none'::public.job_version_query_mode) AND (version_preset IS NULL) AND (version_custom_sql IS NULL)) OR ((version_query_mode = 'preset'::public.job_version_query_mode) AND (version_preset IS NOT NULL) AND (version_custom_sql IS NULL)) OR ((version_query_mode = 'custom'::public.job_version_query_mode) AND (version_preset IS NULL) AND (version_custom_sql IS NOT NULL)))),
+    CONSTRAINT jobs_version_schema_format CHECK ((version_schema ~ '^[A-Za-z_][A-Za-z0-9_]{0,62}$'::text))
 );
 
 ALTER TABLE public.jobs OWNER TO bekup_owner;
@@ -1565,6 +1585,26 @@ CREATE TABLE public.restores (
 ALTER TABLE public.restores OWNER TO bekup_owner;
 
 --
+-- Name: retention_holds; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.retention_holds (
+    job_id uuid NOT NULL,
+    destination_id uuid NOT NULL,
+    reason text NOT NULL,
+    held_runs integer NOT NULL,
+    held_since timestamp with time zone NOT NULL,
+    newest_complete_at timestamp with time zone,
+    first_seen_at timestamp with time zone NOT NULL,
+    checked_at timestamp with time zone NOT NULL,
+    CONSTRAINT retention_holds_newest CHECK (((reason = 'no_complete_run'::text) = (newest_complete_at IS NULL))),
+    CONSTRAINT retention_holds_reason CHECK ((reason = ANY (ARRAY['no_complete_run'::text, 'newer_than_newest_complete'::text]))),
+    CONSTRAINT retention_holds_runs CHECK ((held_runs > 0))
+);
+
+ALTER TABLE public.retention_holds OWNER TO bekup_owner;
+
+--
 -- Name: river_job; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -1698,12 +1738,16 @@ CREATE TABLE public.run_items (
     error_code text,
     error_message text,
     warnings jsonb DEFAULT '[]'::jsonb NOT NULL,
+    schema_version text,
+    schema_version_status text,
     CONSTRAINT run_items_db_name CHECK ((((kind = 'globals'::public.run_item_kind) AND (db_name IS NULL)) OR ((kind = 'database'::public.run_item_kind) AND (db_name IS NOT NULL) AND ((octet_length(db_name) >= 1) AND (octet_length(db_name) <= 255))))),
     CONSTRAINT run_items_error_code_format CHECK (((error_code IS NULL) OR (error_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
     CONSTRAINT run_items_error_message_length CHECK (((error_message IS NULL) OR (char_length(error_message) <= 1000))),
     CONSTRAINT run_items_finished CHECK (((status = 'running'::public.run_item_status) = (finished_at IS NULL))),
     CONSTRAINT run_items_hashes CHECK ((((raw_sha256 IS NULL) OR (octet_length(raw_sha256) = 32)) AND ((sha256 IS NULL) OR (octet_length(sha256) = 32)))),
     CONSTRAINT run_items_position_range CHECK ((("position" >= 0) AND ("position" <= 100000))),
+    CONSTRAINT run_items_schema_version CHECK ((((schema_version IS NULL) OR (schema_version ~ '^[ -~]{1,64}$'::text)) AND ((schema_version IS NOT NULL) = (NOT (schema_version_status IS DISTINCT FROM 'ok'::text))))),
+    CONSTRAINT run_items_schema_version_status CHECK (((schema_version_status IS NULL) OR (schema_version_status = ANY (ARRAY['ok'::text, 'none'::text, 'unavailable'::text, 'invalid'::text])))),
     CONSTRAINT run_items_sizes CHECK (((raw_size >= 0) AND (stored_size >= 0))),
     CONSTRAINT run_items_warnings_array CHECK (((jsonb_typeof(warnings) = 'array'::text) AND (octet_length((warnings)::text) <= 65536)))
 );
@@ -1960,6 +2004,40 @@ CREATE TABLE public.test_restores (
 );
 
 ALTER TABLE public.test_restores OWNER TO bekup_owner;
+
+--
+-- Name: unrecorded_file_scans; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.unrecorded_file_scans (
+    destination_id uuid NOT NULL,
+    scanned_at timestamp with time zone NOT NULL,
+    scanned_objects integer NOT NULL,
+    truncated boolean NOT NULL,
+    pruned_dirs integer NOT NULL,
+    CONSTRAINT unrecorded_file_scans_counts CHECK (((scanned_objects >= 0) AND (pruned_dirs >= 0)))
+);
+
+ALTER TABLE public.unrecorded_file_scans OWNER TO bekup_owner;
+
+--
+-- Name: unrecorded_files; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.unrecorded_files (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    destination_id uuid NOT NULL,
+    object_key text NOT NULL,
+    size bigint NOT NULL,
+    modified_at timestamp with time zone,
+    first_seen_at timestamp with time zone NOT NULL,
+    last_seen_at timestamp with time zone NOT NULL,
+    CONSTRAINT unrecorded_files_key CHECK ((((octet_length(object_key) >= 1) AND (octet_length(object_key) <= 1024)) AND (object_key ~ '^[A-Za-z0-9_~%+=@-][A-Za-z0-9._~%+=@-]*(/[A-Za-z0-9_~%+=@-][A-Za-z0-9._~%+=@-]*)*$'::text))),
+    CONSTRAINT unrecorded_files_seen CHECK ((last_seen_at >= first_seen_at)),
+    CONSTRAINT unrecorded_files_size CHECK ((size >= 0))
+);
+
+ALTER TABLE public.unrecorded_files OWNER TO bekup_owner;
 
 --
 -- Name: user_channels; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -2364,6 +2442,13 @@ ALTER TABLE ONLY public.restores
     ADD CONSTRAINT restores_pkey PRIMARY KEY (id);
 
 --
+-- Name: retention_holds retention_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.retention_holds
+    ADD CONSTRAINT retention_holds_pkey PRIMARY KEY (job_id, destination_id);
+
+--
 -- Name: river_job river_job_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2469,6 +2554,20 @@ ALTER TABLE ONLY public.test_restores
     ADD CONSTRAINT test_restores_pkey PRIMARY KEY (id);
 
 --
+-- Name: unrecorded_file_scans unrecorded_file_scans_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.unrecorded_file_scans
+    ADD CONSTRAINT unrecorded_file_scans_pkey PRIMARY KEY (destination_id);
+
+--
+-- Name: unrecorded_files unrecorded_files_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.unrecorded_files
+    ADD CONSTRAINT unrecorded_files_pkey PRIMARY KEY (id);
+
+--
 -- Name: user_channels user_channels_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2551,6 +2650,12 @@ CREATE INDEX artifacts_item_idx ON public.artifacts USING btree (run_item_id) WH
 --
 
 CREATE INDEX artifacts_job_destination_idx ON public.artifacts USING btree (job_id, destination_id, created_at DESC) WHERE (state = 'present'::public.artifact_state);
+
+--
+-- Name: artifacts_object_key_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX artifacts_object_key_idx ON public.artifacts USING btree (object_key);
 
 --
 -- Name: artifacts_run_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -3019,6 +3124,12 @@ CREATE UNIQUE INDEX test_restores_active_idx ON public.test_restores USING btree
 --
 
 CREATE INDEX test_restores_job_idx ON public.test_restores USING btree (job_id, created_at DESC, id DESC);
+
+--
+-- Name: unrecorded_files_destination_key_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX unrecorded_files_destination_key_idx ON public.unrecorded_files USING btree (destination_id, object_key);
 
 --
 -- Name: user_channels_user_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -3631,6 +3742,20 @@ ALTER TABLE ONLY public.restores
     ADD CONSTRAINT restores_target_connection_id_fkey FOREIGN KEY (target_connection_id) REFERENCES public.connections(id);
 
 --
+-- Name: retention_holds retention_holds_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.retention_holds
+    ADD CONSTRAINT retention_holds_destination_id_fkey FOREIGN KEY (destination_id) REFERENCES public.destinations(id) ON DELETE CASCADE;
+
+--
+-- Name: retention_holds retention_holds_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.retention_holds
+    ADD CONSTRAINT retention_holds_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
+
+--
 -- Name: run_items run_items_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -3741,6 +3866,20 @@ ALTER TABLE ONLY public.test_restores
 
 ALTER TABLE ONLY public.test_restores
     ADD CONSTRAINT test_restores_target_connection_id_fkey FOREIGN KEY (target_connection_id) REFERENCES public.connections(id);
+
+--
+-- Name: unrecorded_file_scans unrecorded_file_scans_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.unrecorded_file_scans
+    ADD CONSTRAINT unrecorded_file_scans_destination_id_fkey FOREIGN KEY (destination_id) REFERENCES public.destinations(id) ON DELETE CASCADE;
+
+--
+-- Name: unrecorded_files unrecorded_files_destination_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.unrecorded_files
+    ADD CONSTRAINT unrecorded_files_destination_id_fkey FOREIGN KEY (destination_id) REFERENCES public.destinations(id) ON DELETE CASCADE;
 
 --
 -- Name: user_channels user_channels_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -4324,6 +4463,42 @@ GRANT UPDATE(log_lines_dropped) ON TABLE public.restores TO bekup_app;
 GRANT UPDATE(warnings) ON TABLE public.restores TO bekup_app;
 
 --
+-- Name: TABLE retention_holds; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: COLUMN retention_holds.reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(reason) ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: COLUMN retention_holds.held_runs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(held_runs) ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: COLUMN retention_holds.held_since; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(held_since) ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: COLUMN retention_holds.newest_complete_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(newest_complete_at) ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: COLUMN retention_holds.checked_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(checked_at) ON TABLE public.retention_holds TO bekup_app;
+
+--
 -- Name: TABLE river_job; Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -4616,6 +4791,60 @@ GRANT UPDATE(failed) ON TABLE public.test_restores TO bekup_app;
 --
 
 GRANT UPDATE(updated_at) ON TABLE public.test_restores TO bekup_app;
+
+--
+-- Name: TABLE unrecorded_file_scans; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.unrecorded_file_scans TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_file_scans.scanned_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(scanned_at) ON TABLE public.unrecorded_file_scans TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_file_scans.scanned_objects; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(scanned_objects) ON TABLE public.unrecorded_file_scans TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_file_scans.truncated; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(truncated) ON TABLE public.unrecorded_file_scans TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_file_scans.pruned_dirs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(pruned_dirs) ON TABLE public.unrecorded_file_scans TO bekup_app;
+
+--
+-- Name: TABLE unrecorded_files; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT,DELETE ON TABLE public.unrecorded_files TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_files.size; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(size) ON TABLE public.unrecorded_files TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_files.modified_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(modified_at) ON TABLE public.unrecorded_files TO bekup_app;
+
+--
+-- Name: COLUMN unrecorded_files.last_seen_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_seen_at) ON TABLE public.unrecorded_files TO bekup_app;
 
 --
 -- Name: TABLE user_channels; Type: ACL; Schema: public; Owner: bekup_owner

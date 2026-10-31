@@ -21,7 +21,8 @@
 #       Prints the GitHub release notes: the changelog section, the pinned
 #       image, pull/verify commands and the compose-first install (verify
 #       the compose file under its release name, save it as compose.yaml,
-#       the three steps, the link network of the external variants).
+#       the three steps, the link network of the external variants, the
+#       external-database files) and the wizard (`docker run ... setup`).
 #   release_ci.sh sbom-generator [publish.sh]
 #       Prints the digest-pinned SBOM generator (single pin in publish.sh,
 #       D-202).
@@ -35,13 +36,16 @@
 #       Reads `git cat-file tag <ref>` from stdin and prints the tag name
 #       recorded in the annotated tag object (header `tag` line).
 #   release_ci.sh render-compose <repo:x.y.z@sha256:digest> <dir>
-#       Renders the release compose files (D-205) into <dir> by running the
+#       Renders the six release compose files (D-205, D-208: three proxy
+#       variants, each with the bundled and an external database) into
+#       <dir> by running the
 #       published image itself (`bekup setup compose`) with no network, a
 #       read-only root, UID 65532 and no capabilities ($RELEASE_CI_DOCKER
 #       replaces docker in tests), then checks them with compose-assets.
 #   release_ci.sh compose-assets <repo:x.y.z@sha256:digest> <dir>
 #       Checks the compose files in <dir>: each of compose.yaml,
-#       compose.traefik-external.yaml and compose.npm.yaml exists, has
+#       compose.traefik-external.yaml, compose.npm.yaml and their
+#       *.external-db.yaml forms exists, has
 #       exactly one x-bekup-image line naming exactly the release reference,
 #       no ${BEKUP_IMAGE} left, no build:, and every image: line pinned by
 #       digest.
@@ -53,7 +57,7 @@
 #       committed files are the release assets without the pinned image.
 #   release_ci.sh assets-digest <dir>
 #       Prints one SHA-256 over the sha256sum lines of the release assets in
-#       <dir> (the three compose files, SHA256SUMS and their .sigstore.json
+#       <dir> (the six compose files, SHA256SUMS and their .sigstore.json
 #       bundles; each must be a regular file). The compose job publishes it
 #       as a job output and the release job recomputes it before uploading.
 #
@@ -234,13 +238,31 @@ with a cosign bundle each):
 | \`compose.yaml\` | bekup with its own Traefik (ports 80/443, Let's Encrypt) |
 | \`compose.traefik-external.yaml\` | behind your existing Traefik |
 | \`compose.npm.yaml\` | behind Nginx Proxy Manager |
+| \`compose.external-db.yaml\` | own Traefik, your own PostgreSQL 15-17 |
+| \`compose.traefik-external.external-db.yaml\` | your Traefik, your own PostgreSQL |
+| \`compose.npm.external-db.yaml\` | Nginx Proxy Manager, your own PostgreSQL |
+
+The easiest path needs no download: the setup wizard of the image asks for
+the proxy, the domain and the database and writes everything, compose.yaml
+included (docs/installation/compose.md):
+
+\`\`\`sh
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \\
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \\
+  -e BEKUP_IMAGE=$repo:$version@$digest -e DOCKER_GID="\$(stat -c %g /var/run/docker.sock)" \\
+  -v "\$PWD":/deploy $repo:$version@$digest setup
+sudo docker compose up -d
+\`\`\`
+
+Or with a compose file of this release:
 
 1. Download it under its release name into an empty directory, verify it,
    then save it as \`compose.yaml\` (\`f\` is the file you picked):
 
    \`\`\`sh
    sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
-   f=compose.yaml   # or compose.traefik-external.yaml / compose.npm.yaml
+   f=compose.yaml   # or one of the other five files above
    sudo curl -fsSLO $url/releases/download/v$version/\$f
    gh attestation verify "\$f" --repo $gh_repo
    [ "\$f" = compose.yaml ] || sudo mv "\$f" compose.yaml
@@ -265,6 +287,12 @@ with a cosign bundle each):
 2. \`DOCKER_GID=\$(stat -c %g /var/run/docker.sock) docker compose run --rm setup\`
 3. \`docker compose up -d\`, then
    \`docker compose run --rm admin create --email you@example.com --display-name "Your Name"\`
+
+With your own PostgreSQL (an \`*.external-db.yaml\` file), put its CA bundle
+into the directory first; setup asks for the host and prints the one command
+that creates bekup's roles before step 3
+(\`docker compose run --rm migrate db bootstrap --admin-user <admin>\`;
+docs/installation/external-database.md).
 
 Behind your own proxy, create the link network once first
 (\`docker network create --internal --subnet 10.213.253.0/28 --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy\`;
@@ -311,8 +339,17 @@ tag_object_name() {
 	printf '%s\n' "$name"
 }
 
-# compose_variants: "<variant>:<asset file>" pairs of the release assets.
-compose_variants='traefik:compose.yaml traefik-external:compose.traefik-external.yaml npm:compose.npm.yaml'
+# compose_variants: "<variant>:<database>:<asset file>" triples of the
+# release assets (D-205, D-208).
+compose_variants='traefik:bundled:compose.yaml traefik-external:bundled:compose.traefik-external.yaml npm:bundled:compose.npm.yaml traefik:external:compose.external-db.yaml traefik-external:external:compose.traefik-external.external-db.yaml npm:external:compose.npm.external-db.yaml'
+
+# compose_file and compose_variant split a triple.
+compose_file() { printf '%s\n' "${1##*:}"; }
+compose_variant() { printf '%s\n' "${1%%:*}"; }
+compose_database() {
+	rest=${1#*:}
+	printf '%s\n' "${rest%%:*}"
+}
 
 valid_release_ref() {
 	matches "$1" '^ghcr\.io/[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*:[0-9]+\.[0-9]+\.[0-9]+@sha256:[a-f0-9]{64}$'
@@ -323,28 +360,29 @@ compose_assets() {
 	valid_release_ref "$ref" || die "invalid release image reference '$ref'"
 	[ -d "$dir" ] || die "'$dir' is not a directory"
 	for pair in $compose_variants; do
-		f="$dir/${pair#*:}"
+		name=$(compose_file "$pair")
+		f="$dir/$name"
 		if [ ! -f "$f" ] || [ -L "$f" ]; then
-			die "${pair#*:} is missing or not a regular file"
+			die "$name is missing or not a regular file"
 		fi
 		n=$(grep -c '^x-bekup-image:' "$f" || true)
-		[ "$n" = 1 ] || die "${pair#*:}: want exactly one x-bekup-image line, found $n"
+		[ "$n" = 1 ] || die "$name: want exactly one x-bekup-image line, found $n"
 		line=$(grep '^x-bekup-image:' "$f")
 		[ "$line" = "x-bekup-image: &bekup-image $ref" ] ||
-			die "${pair#*:}: the x-bekup-image line does not name $ref"
+			die "$name: the x-bekup-image line does not name $ref"
 		# shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE is searched for
 		if grep -v '^[[:space:]]*#' "$f" | grep -q '\${BEKUP_IMAGE'; then
-			die "${pair#*:}: a \${BEKUP_IMAGE} reference remains"
+			die "$name: a \${BEKUP_IMAGE} reference remains"
 		fi
 		if grep -Eq '^[[:space:]]*build:' "$f"; then
-			die "${pair#*:}: build: is not allowed"
+			die "$name: build: is not allowed"
 		fi
 		# Every image: value that is not an alias is pinned by digest.
 		bad=$(grep -E '^[[:space:]]*(-[[:space:]]+)?image:' "$f" |
 			sed -E 's/^[[:space:]]*(-[[:space:]]+)?image:[[:space:]]*(&[A-Za-z0-9_-]+[[:space:]]+)?//' |
 			grep -v '^\*' | grep -Ev '^[a-z0-9]+([._/:-][a-z0-9]+)*@sha256:[a-f0-9]{64}[[:space:]]*$' || true)
-		[ -z "$bad" ] || die "${pair#*:}: image not pinned by digest: $(printf '%s' "$bad" | head -n 1)"
-		grep -q '^services:' "$f" || die "${pair#*:}: no services"
+		[ -z "$bad" ] || die "$name: image not pinned by digest: $(printf '%s' "$bad" | head -n 1)"
+		grep -q '^services:' "$f" || die "$name: no services"
 	done
 	printf 'release_ci: compose assets pinned to %s\n' "$ref"
 }
@@ -359,7 +397,7 @@ committed_compose() {
 	[ -d "$dir" ] || die "'$dir' is not a directory"
 	[ -d "$committed" ] || die "'$committed' is not a directory"
 	for pair in $compose_variants; do
-		name=${pair#*:}
+		name=$(compose_file "$pair")
 		f="$dir/$name" c="$committed/$name"
 		for x in "$f" "$c"; do
 			if [ ! -f "$x" ] || [ -L "$x" ]; then
@@ -392,10 +430,12 @@ render_compose() {
 	docker=${RELEASE_CI_DOCKER:-docker}
 	bydigest="${ref%%:*}@${ref#*@}"
 	for pair in $compose_variants; do
+		name=$(compose_file "$pair")
 		"$docker" run --rm --network none --read-only --user 65532:65532 --cap-drop ALL \
 			--security-opt no-new-privileges --log-driver none "$bydigest" \
-			setup compose --variant "${pair%%:*}" --image "$ref" >"$dir/${pair#*:}" ||
-			die "rendering ${pair#*:} failed"
+			setup compose --variant "$(compose_variant "$pair")" --database "$(compose_database "$pair")" \
+			--image "$ref" >"$dir/$name" ||
+			die "rendering $name failed"
 	done
 	compose_assets "$ref" "$dir"
 }
@@ -405,7 +445,8 @@ assets_digest() {
 	[ -d "$dir" ] || die "'$dir' is not a directory"
 	set --
 	for pair in $compose_variants; do
-		set -- "$@" "${pair#*:}" "${pair#*:}.sigstore.json"
+		name=$(compose_file "$pair")
+		set -- "$@" "$name" "$name.sigstore.json"
 	done
 	set -- "$@" SHA256SUMS SHA256SUMS.sigstore.json
 	for f in "$@"; do

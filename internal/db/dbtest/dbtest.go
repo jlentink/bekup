@@ -209,7 +209,7 @@ func Migrated(t testing.TB) DB {
 	); err != nil {
 		t.Fatal(err)
 	}
-	m, err := db.NewMigrator(ctx, []byte(d.OwnerURL), tlsVerify, logging.NewRegistry())
+	m, err := db.NewMigrator(ctx, config.DBCredentials{URL: []byte(d.OwnerURL)}, tlsVerify, logging.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func Migrated(t testing.TB) DB {
 // AppPool returns a pool connected as bekup_app (closed on cleanup).
 func (d DB) AppPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
-	p, err := db.NewPool(t.Context(), []byte(d.AppURL), db.PoolOptions{
+	p, err := db.NewPool(t.Context(), config.DBCredentials{URL: []byte(d.AppURL)}, db.PoolOptions{
 		MaxConns: 20, ApplicationName: "bekup-test", Registry: logging.NewRegistry(), TLS: tlsVerify,
 	})
 	if err != nil {

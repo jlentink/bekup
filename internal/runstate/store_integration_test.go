@@ -138,11 +138,23 @@ func TestEnqueueBeginAndLifecycle(t *testing.T) {
 	}
 	sum := sha256.Sum256([]byte("x"))
 	if err := e.store.FinishItem(ctx, run.Ref, item.ID, ItemResult{Status: ItemSuccess, RawSize: 10, StoredSize: 5, RawSHA256: sum[:], SHA256: sum[:], Verified: true,
-		Warnings: []Warning{{Code: "non_innodb_tables", Message: "m", Database: "shop"}}}); err != nil {
+		Warnings: []Warning{{Code: "non_innodb_tables", Message: "m", Database: "shop"}}, SchemaVersionStatus: "ok", SchemaVersion: "42 (dirty)"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.store.FinishItem(ctx, run.Ref, g.ID, ItemResult{Status: ItemFailed, Failure: &Failure{Code: "dump_failed", Message: "pg_dumpall exited with code 1"}}); err != nil {
+	// A version without status ok is never stored (D-210).
+	if err := e.store.FinishItem(ctx, run.Ref, g.ID, ItemResult{Status: ItemFailed, Failure: &Failure{Code: "dump_failed", Message: "pg_dumpall exited with code 1"},
+		SchemaVersionStatus: "unavailable", SchemaVersion: "leak"}); err != nil {
 		t.Fatal(err)
+	}
+	items, err := e.q.ListRunItems(ctx, run.RunID)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items %v", err)
+	}
+	if v, st := items[0].SchemaVersion, items[0].SchemaVersionStatus; v == nil || *v != "42 (dirty)" || st == nil || *st != "ok" {
+		t.Fatalf("item version %v %v", v, st)
+	}
+	if v, st := items[1].SchemaVersion, items[1].SchemaVersionStatus; v != nil || st == nil || *st != "unavailable" {
+		t.Fatalf("globals version %v %v", v, st)
 	}
 	if err := e.store.FinishItem(ctx, run.Ref, g.ID, ItemResult{Status: ItemSuccess}); !errors.Is(err, ErrNotActive) {
 		t.Fatalf("second item finish: %v", err)

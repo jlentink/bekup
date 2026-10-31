@@ -12,6 +12,7 @@ import type {
   DestinationType,
   JobEncryptionMode,
   RestoreStatus,
+  RetentionHoldReason,
   RunStatus,
   TargetPrivilegeStatus,
   TlsPinStatus,
@@ -47,6 +48,19 @@ export interface JobInput {
   /** The missed-backup check's ongoing outage (Job.missed, D-196). */
   missed: boolean;
   missedSince?: string | null;
+  /** Destinations where retention keeps incomplete backups (D-209). */
+  retentionHolds?: readonly RetentionHoldRef[];
+}
+
+/** One destination where retention keeps incomplete backups (Job.retentionHolds, D-209). */
+export interface RetentionHoldRef {
+  destinationId: string;
+  destinationName: string;
+  destinationDeleted: boolean;
+  reason: RetentionHoldReason;
+  heldRuns: number;
+  since: string;
+  newestCompleteAt?: string | null;
 }
 
 export type HealthState =
@@ -77,6 +91,8 @@ export interface JobHealth {
   missedSince: string | null;
   warnings: number;
   unencrypted: boolean;
+  /** Retention holds of the job (shown under "Needs attention"; no health state). */
+  holds: readonly RetentionHoldRef[];
 }
 
 export function isActiveRun(status: RunStatus): boolean {
@@ -155,6 +171,7 @@ export function jobHealth(job: JobInput, ctx: HealthContext): JobHealth {
     missedSince: missed ? since : null,
     warnings,
     unencrypted: isUnencrypted(job.encryption),
+    holds: job.retentionHolds ?? [],
   };
 }
 
@@ -204,7 +221,7 @@ export function sortActive<T extends LiveRun>(runs: Iterable<T>): T[] {
 }
 
 /* ------------------------------------------------------------------ */
-/* Needs attention: failures and ongoing missed backups                */
+/* Needs attention: failures, missed backups and retention holds       */
 /* ------------------------------------------------------------------ */
 
 export interface CalendarEventInput {
@@ -222,11 +239,20 @@ export interface CalendarEventInput {
 
 export type AttentionItem =
   | { kind: "failed"; at: string; run: LiveRun }
-  | { kind: "missed"; at: string | null; job: { id: string; name: string } };
+  | { kind: "missed"; at: string | null; job: { id: string; name: string } }
+  | {
+      kind: "retention";
+      /** The oldest held backup. */
+      at: string;
+      job: { id: string; name: string };
+      hold: RetentionHoldRef;
+    };
 
 /**
  * Failures of the last 7 days merged with the jobs in an ongoing
- * missed-backup outage (any age), newest first; at most `limit`.
+ * missed-backup outage (any age) and the destinations where retention
+ * keeps incomplete backups (any age, one item per job and destination),
+ * newest first; at most `limit`.
  */
 export function attentionItems(
   failures: readonly LiveRun[],
@@ -246,6 +272,8 @@ export function attentionItems(
   for (const h of health) {
     if (h.missed)
       items.push({ kind: "missed", at: h.missedSince, job: { id: h.id, name: h.name } });
+    for (const hold of h.holds)
+      items.push({ kind: "retention", at: hold.since, job: { id: h.id, name: h.name }, hold });
   }
   const t = (i: AttentionItem) => (i.at ? time(i.at) : Number.POSITIVE_INFINITY);
   return items.sort((a, b) => t(b) - t(a)).slice(0, limit);

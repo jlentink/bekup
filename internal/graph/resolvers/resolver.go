@@ -14,6 +14,10 @@
 package resolvers
 
 import (
+	"context"
+
+	"github.com/google/uuid"
+
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
@@ -29,6 +33,7 @@ import (
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
+	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -109,4 +114,13 @@ type Resolver struct {
 	// ConfigReload backs configStatus, configReloadRequest and
 	// reloadConfig (task 6.13, D-200; nil: the fields fail).
 	ConfigReload *configreload.API
+	// RetentionHolds backs Job.retentionHolds (D-209; nil: the field
+	// reads as empty).
+	RetentionHolds RetentionHoldSource
+}
+
+// RetentionHoldSource batch-loads the recorded retention holds of jobs
+// (retention.HoldReader).
+type RetentionHoldSource interface {
+	HoldsForJobs(ctx context.Context, jobIDs []uuid.UUID) (map[uuid.UUID][]retention.HoldView, error)
 }

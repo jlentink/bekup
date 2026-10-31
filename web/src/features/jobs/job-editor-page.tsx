@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   BellRing,
   FlaskConical,
+  GitCommitVertical,
   KeyRound,
   Loader2,
   ShieldCheck,
@@ -52,8 +53,10 @@ import {
 } from "./operations";
 import { JobNotificationsPanel } from "./notifications-panel";
 import { OwnersPanel } from "./owners-panel";
+import { SchemaVersionSettings } from "./schema-version-settings";
 import { TestRestoreSettings } from "./test-restore-settings";
 import { DatabasePicker, DestinationPicker } from "./pickers";
+import { RetentionEstimatePanel } from "./retention-estimate";
 import { useRoleFlags } from "./roles";
 import { defaultDraft, draftFromSchedule, draftToInput, type ScheduleDraft } from "./schedule";
 import { ScheduleBuilder } from "./schedule-builder";
@@ -78,6 +81,7 @@ const T = {
     encryption: "Encryption",
     owners: "Backup owners",
     testRestore: "Test restores",
+    schemaVersion: "Schema version",
     notifications: "Notifications",
   },
   leads: {
@@ -86,12 +90,15 @@ const T = {
     source:
       "The connection and the databases to dump. Temporary restore connections are not offered.",
     schedule: "When bekup runs the job on its own. You can always start it by hand.",
-    retention: "How many backups each destination keeps. At least one limit is required.",
+    retention:
+      "How many backups each destination keeps. Set at least one limit; a backup is kept while either rule keeps it.",
     destinations: "Uploads fan out in this order. 1 to 16 destinations.",
     encryption: "Backups are always encrypted with age unless an administrator turns it off.",
     owners: "Owners with role User can view and run this job and download its backups.",
     testRestore:
       "Prove the backups restore: a regular restore into a scratch database, compared with the source statistics.",
+    schemaVersion:
+      "Record each database's migration version with its backup, read in the same snapshot as the dump.",
     notifications:
       "Shared channels that receive this job's events, and a shortcut to your own per-job preferences.",
   },
@@ -110,7 +117,15 @@ const T = {
   keepLast: "Keep the newest",
   keepLastHint: "backups",
   keepDays: "Keep backups younger than",
-  keepDaysHint: "days",
+  keepDaysHint: "days; empty: no day limit",
+  retentionRulesLabel: "How retention decides",
+  retentionRules: [
+    "The two rules add up: a backup is kept while either rule keeps it, so the larger one wins.",
+    "The newest complete backup on a destination is always kept, whatever the limits say.",
+    "Incomplete backups newer than the newest complete one are kept too, until a newer complete backup exists.",
+  ],
+  retentionApplies:
+    "Saving a retention change applies it right away: bekup checks this job's backups again and deletes what the new limits no longer keep.",
   retentionRequired: "Set at least one limit.",
   positive: "Enter a whole number of 1 or more.",
   timeout: "Run timeout (minutes)",
@@ -226,7 +241,8 @@ function defaults(job?: Job): Values {
     exclude: job ? [...job.exclude] : [],
     includeGlobals: job?.includeGlobals ?? true,
     keepLast: job?.retention.keepLast != null ? String(job.retention.keepLast) : job ? "" : "7",
-    keepDays: job?.retention.keepDays != null ? String(job.retention.keepDays) : job ? "" : "30",
+    // New jobs: keep the newest 7 and no day limit (D-209).
+    keepDays: job?.retention.keepDays != null ? String(job.retention.keepDays) : "",
     timeoutMinutes: job?.timeoutSeconds != null ? String(Math.ceil(job.timeoutSeconds / 60)) : "",
     verification: job?.verification ?? "STANDARD",
     destinationIds: job
@@ -346,6 +362,8 @@ function JobEditor({ job }: { job?: Job }) {
   const connectionId = useWatch({ control: form.control, name: "connectionId" });
   const dbMode = useWatch({ control: form.control, name: "dbMode" });
   const keyChoice = useWatch({ control: form.control, name: "keyChoice" });
+  const keepLast = useWatch({ control: form.control, name: "keepLast" });
+  const keepDays = useWatch({ control: form.control, name: "keepDays" });
   const connections = (options.data?.connections ?? []).filter((c) => !c.temporary);
   const engine =
     connections.find((c) => c.id === connectionId)?.engine ??
@@ -415,7 +433,9 @@ function JobEditor({ job }: { job?: Job }) {
       if (JSON.stringify(draftToInput(initialDraft)) !== JSON.stringify(schedule)) {
         input.schedule = schedule;
       }
-      await updateJob({ variables: { id: job.id, input } });
+      // Moving a job with a custom schema-version query to another
+      // connection needs a fresh confirmation (D-210).
+      await withStepUp(() => updateJob({ variables: { id: job.id, input } }));
       toast.success(T.saved);
       void navigate(`/jobs/${job.id}`);
     } catch (err) {
@@ -671,6 +691,21 @@ function JobEditor({ job }: { job?: Job }) {
                 )}
               />
             </div>
+            <ul
+              aria-label={T.retentionRulesLabel}
+              className="-mt-1 flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground marker:text-border-strong"
+            >
+              {T.retentionRules.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+              {job ? <li>{T.retentionApplies}</li> : null}
+            </ul>
+            <RetentionEstimatePanel
+              draft={draft}
+              keepLast={keepLast}
+              keepDays={keepDays}
+              scheduleProblem={scheduleProblem}
+            />
             <FormField
               control={form.control}
               name="verification"
@@ -865,6 +900,13 @@ function JobEditor({ job }: { job?: Job }) {
             icon={<FlaskConical aria-hidden="true" className="size-4 text-muted-foreground" />}
           >
             <TestRestoreSettings job={job} admin={flags.admin} />
+          </EditorSection>
+          <EditorSection
+            title={T.sections.schemaVersion}
+            lead={T.leads.schemaVersion}
+            icon={<GitCommitVertical aria-hidden="true" className="size-4 text-muted-foreground" />}
+          >
+            <SchemaVersionSettings job={job} />
           </EditorSection>
           <EditorSection
             title={T.sections.notifications}

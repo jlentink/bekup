@@ -17,6 +17,7 @@ function jobNode(id: string, name: string, overrides: Record<string, unknown> = 
     scheduleDescription: "Every day at 03:00",
     missed: false,
     missedSince: null,
+    retentionHolds: [],
     connection: { __typename: "JobConnectionRef", id: "c1", name: "pg-main", deleted: false },
     encryption: {
       __typename: "JobEncryption",
@@ -366,6 +367,45 @@ describe("dashboard tiles", () => {
     expect(shop).toHaveAttribute("data-state", "missed");
     // Only the upcoming calendar slice is read; no past-skips query.
     expect(callsOf("DashboardCalendar")).toHaveLength(1);
+  });
+
+  it("lists retention holds under needs attention for backup owners (D-209)", async () => {
+    renderApp(
+      "/",
+      handlers(
+        {
+          DashboardJobs: () =>
+            jobs([
+              jobNode("j1", "Billing DB", {
+                retentionHolds: [
+                  {
+                    __typename: "RetentionHold",
+                    destinationId: "d1",
+                    destinationName: "vault-disk",
+                    destinationDeleted: false,
+                    reason: "NEWER_THAN_NEWEST_COMPLETE",
+                    heldRuns: 2,
+                    since: iso(-30 * HOUR),
+                    newestCompleteAt: iso(-48 * HOUR),
+                  },
+                ],
+              }),
+            ]),
+        },
+        "USER",
+      ),
+    );
+    const attention = await screen.findByTestId("tile-attention");
+    const item = await within(attention).findByTestId("attention-item");
+    expect(item).toHaveAttribute("data-kind", "retention");
+    expect(within(item).getByRole("link", { name: "Billing DB" })).toHaveAttribute(
+      "href",
+      "/jobs/j1",
+    );
+    expect(item).toHaveTextContent(
+      /Retention · keeps 2 backups incomplete on vault-disk: no complete backup there since/,
+    );
+    expect(within(item).getByText(/^since /)).toBeInTheDocument();
   });
 
   it("never links an alert outside the app", async () => {

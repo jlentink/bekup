@@ -8,7 +8,10 @@ Print one compose file variant rendered from the compose file embedded in this
 binary (D-205): traefik (bekup with its own Traefik; release asset
 compose.yaml), traefik-external (behind your Traefik;
 compose.traefik-external.yaml), npm (behind Nginx Proxy Manager;
-compose.npm.yaml) or full (every service; setup-first).
+compose.npm.yaml) or full (every service; setup-first). --database external
+(D-208) renders the form for your own PostgreSQL (no postgres service; release
+assets compose.external-db.yaml, compose.traefik-external.external-db.yaml,
+compose.npm.external-db.yaml).
 
 With --image the x-bekup-image line names that digest-pinned reference (the
 release workflow renders its assets this way); without it the line takes the
@@ -18,15 +21,16 @@ digest-pinned and keeps it in .env). just compose-examples writes all
 variants to dist/compose/.
 
 ```
-bekup setup compose --variant traefik|traefik-external|npm|full [--image <pinned>] [flags]
+bekup setup compose --variant traefik|traefik-external|npm|full [--database bundled|external] [--image <pinned>] [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help             help for compose
-      --image string     pin the x-bekup-image line to this repo[:tag]@sha256:<digest>
-      --variant string   traefik, traefik-external, npm or full (required)
+      --database string   bundled (the postgres service) or external (your own PostgreSQL, D-208) (default "bundled")
+  -h, --help              help for compose
+      --image string      pin the x-bekup-image line to this repo[:tag]@sha256:<digest>
+      --variant string    traefik, traefik-external, npm or full (required)
 ```
 
 ### Options inherited from parent commands
@@ -39,5 +43,5 @@ bekup setup compose --variant traefik|traefik-external|npm|full [--image <pinned
 
 ### SEE ALSO
 
-* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory
+* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory (wizard on a terminal)
 

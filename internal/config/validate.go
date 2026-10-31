@@ -315,8 +315,10 @@ func validateBekup(c *Bekup, dev bool) []error {
 	v.duration("graphql.stream_session_check_ttl", c.GraphQL.StreamSessionCheckTTL, time.Second, max(c.GraphQL.StreamRevalidateInterval.D(), time.Second))
 
 	// [database]
-	v.absPath("database.url_file", c.Database.URLFile, !dev || c.Database.URL == "")
-	v.absPath("database.owner_url_file", c.Database.OwnerURLFile, !dev || c.Database.OwnerURL == "")
+	if !c.Database.FieldsMode() {
+		v.absPath("database.url_file", c.Database.URLFile, !dev || c.Database.URL == "")
+		v.absPath("database.owner_url_file", c.Database.OwnerURLFile, !dev || c.Database.OwnerURL == "")
+	}
 	v.positive("database.max_conns", int64(c.Database.MaxConns))
 	if c.Database.MinConns < 0 || c.Database.MinConns > c.Database.MaxConns {
 		v.addf("database.min_conns", "must be between 0 and database.max_conns (got %d)", c.Database.MinConns)
@@ -326,6 +328,8 @@ func validateBekup(c *Bekup, dev bool) []error {
 	v.duration("database.connect_timeout", c.Database.ConnectTimeout, time.Second, 0)
 	v.duration("database.statement_timeout", c.Database.StatementTimeout, time.Second, time.Hour)
 	validateDatabaseTLS(&v, &c.Database)
+	validateDatabaseFields(&v, &c.Database)
+	validateTLSServerName(&v, &c.Database)
 
 	// [security]
 	v.absPath("security.master_key_file", c.Security.MasterKeyFile, !dev || c.Security.MasterKey == "")

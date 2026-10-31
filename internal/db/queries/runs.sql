@@ -74,7 +74,8 @@ UPDATE run_items
 SET status = @status, finished_at = @finished_at::timestamptz, raw_size = @raw_size, stored_size = @stored_size,
     raw_sha256 = sqlc.narg(raw_sha256)::bytea, sha256 = sqlc.narg(sha256)::bytea, verified = @verified,
     error_code = sqlc.narg(error_code)::text, error_message = sqlc.narg(error_message)::text,
-    warnings = @warnings::jsonb
+    warnings = @warnings::jsonb,
+    schema_version = sqlc.narg(schema_version)::text, schema_version_status = sqlc.narg(schema_version_status)::text
 WHERE id = @id AND status = 'running'
 RETURNING *;
 
@@ -150,3 +151,29 @@ SELECT count(*)::bigint FROM run_slots;
 -- of a run whose job waits for a retry; internal/queue only).
 -- name: LockRiverJobState :one
 SELECT state::text AS state FROM river_job WHERE id = $1 FOR UPDATE;
+
+-- ListAbandonedRuns finds queued or running runs that no worker will finish
+-- (D-209): unchanged since @idle_before while their River job is gone or
+-- already finalized (the last attempt crashed or was discarded). A retry
+-- that is still pending finishes its predecessor itself (Store.Begin).
+-- name: ListAbandonedRuns :many
+SELECT r.id, r.job_id
+FROM runs r
+LEFT JOIN river_job rj ON rj.id = r.river_job_id
+WHERE r.status IN ('queued', 'running')
+  AND r.updated_at < @idle_before::timestamptz
+  AND (rj.id IS NULL OR rj.state::text IN ('completed', 'discarded', 'cancelled'))
+ORDER BY r.created_at, r.id
+LIMIT @max_rows::int;
+
+-- IsRunAbandoned re-checks ListAbandonedRuns' condition for one run under
+-- its row lock.
+-- name: IsRunAbandoned :one
+SELECT EXISTS (
+    SELECT 1 FROM runs r
+    LEFT JOIN river_job rj ON rj.id = r.river_job_id
+    WHERE r.id = @id
+      AND r.status IN ('queued', 'running')
+      AND r.updated_at < @idle_before::timestamptz
+      AND (rj.id IS NULL OR rj.state::text IN ('completed', 'discarded', 'cancelled'))
+)::boolean;

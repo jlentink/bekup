@@ -123,6 +123,10 @@ type StatsSource interface {
 	// relation, which must not be able to run code of the database owner
 	// (PostgreSQL: restrict_nonsystem_relation_kind in effect).
 	SafeRowCounts() bool
+	// SchemaVersion reads the schema version of db inside the
+	// transaction (D-210, see version.go). It never fails: problems are
+	// reported as the result's status. The transaction stays usable.
+	SchemaVersion(ctx context.Context, db string, q VersionQuery) VersionResult
 	// EndStats ends the transaction (rollback).
 	EndStats(ctx context.Context) error
 }

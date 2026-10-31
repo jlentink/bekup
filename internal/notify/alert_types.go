@@ -36,6 +36,7 @@ var alertDescriptions = map[string]string{
 var alertRepeat = map[string]string{
 	KindInsecureTransport:          "once a day",
 	KindInsecureDBTLS:              "once a day",
+	KindInsecureDBRoles:            "once a day",
 	KindAuditHeadExportFailed:      "once a day",
 	KindTLSPinMismatch:             "once per connection and day",
 	KindSSHHostKeyMismatch:         "once per connection and day",

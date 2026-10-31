@@ -54,7 +54,7 @@ func (a *App) runnerHealth() monitor.RunnerHealth {
 }
 
 // weakenedPosture lists the weakened settings of this configuration that
-// the startup audits too (D-095, D-100): never in dev mode.
+// the startup audits too (D-095, D-100, D-207): never in dev mode.
 func (a *App) weakenedPosture() []string {
 	if a.opts.Dev {
 		return nil
@@ -65,6 +65,9 @@ func (a *App) weakenedPosture() []string {
 	}
 	if a.opts.Config.Database.TLSWeakened() {
 		out = append(out, notify.KindInsecureDBTLS)
+	}
+	if a.opts.Config.Database.SingleAccount {
+		out = append(out, notify.KindInsecureDBRoles)
 	}
 	return out
 }

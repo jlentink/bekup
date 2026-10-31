@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 
@@ -70,6 +71,17 @@ type State struct {
 	// ImageSource is "env" when compose.yaml takes the image from
 	// BEKUP_IMAGE in .env (compose-first only).
 	ImageSource ImageSource `json:"image_source,omitempty"`
+	// DatabaseMode is "external" for the operator's PostgreSQL (D-208);
+	// empty for the bundled postgres service.
+	DatabaseMode DBMode `json:"database_mode,omitempty"`
+	// DatabaseAuth records how the external database's roles were set up
+	// (bootstrap, existing-roles, dba-sql, single-account).
+	DatabaseAuth DBAuth `json:"database_auth,omitempty"`
+	// ImportedFiles are the operator's secret source files that setup
+	// copied below the keys directory (--db-password-file,
+	// --db-owner-password-file, --import-master-key), relative to the
+	// deployment directory; setup check warns while they still exist.
+	ImportedFiles []string `json:"imported_files,omitempty"`
 	// Assets maps every generated-upgradable file (deploy/**, reference/*
 	// and, setup-first, compose.yaml) to the SHA-256 (hex) of the content
 	// setup wrote.
@@ -196,15 +208,41 @@ func (s *State) validate() error {
 	if _, ok := s.Assets[ComposeFile]; ok != (s.ComposeMode == ComposeGenerated) {
 		return fmt.Errorf("assets must list %s exactly with compose_mode generated", ComposeFile)
 	}
+	switch s.DatabaseMode {
+	case "":
+		if s.DatabaseAuth != "" {
+			return errors.New("database_auth applies to database_mode external only")
+		}
+	case DBExternal:
+		if _, err := ParseDBAuth(string(s.DatabaseAuth)); err != nil {
+			return fmt.Errorf("invalid database_auth %q", bounded(string(s.DatabaseAuth)))
+		}
+	default:
+		return fmt.Errorf("invalid database_mode %q (empty for the bundled database, or external)", bounded(string(s.DatabaseMode)))
+	}
+	if len(s.ImportedFiles) > maxImportedFiles {
+		return errors.New("too many imported_files")
+	}
+	seen := map[string]bool{}
+	for _, f := range s.ImportedFiles {
+		if checkSourcePath("imported_files", f) != nil || seen[f] {
+			return fmt.Errorf("invalid imported_files entry %q", bounded(f))
+		}
+		seen[f] = true
+	}
 	for _, g := range s.SecretGroups {
 		switch g {
-		case groupMasterKey, groupDatabase, groupCerts:
+		case groupMasterKey, groupDatabase, groupDatabaseExternal, groupCerts:
 		default:
 			return fmt.Errorf("unknown secret group %q", bounded(g))
 		}
 	}
 	return nil
 }
+
+// maxImportedFiles bounds State.ImportedFiles (two password files and a
+// keyring).
+const maxImportedFiles = 3
 
 // assetPaths returns the asset paths in sorted order.
 func (s *State) assetPaths() []string {
@@ -228,7 +266,19 @@ func (s *State) link() LinkNetwork {
 
 // manifestOptions returns the manifest options of the deployment.
 func (s *State) manifestOptions() ManifestOptions {
-	return ManifestOptions{StaticTLS: s.staticTLS(), ComposeOperator: s.ComposeMode == ComposeOperator}
+	return ManifestOptions{StaticTLS: s.staticTLS(), ComposeOperator: s.ComposeMode == ComposeOperator, ExternalDB: s.DatabaseMode == DBExternal}
+}
+
+// dbMode returns the recorded database mode (DBBundled for an empty one).
+func (s *State) dbMode() DBMode { return s.DatabaseMode.OrBundled() }
+
+// stateDBMode is the recorded form of a database mode: empty for the
+// bundled database, so states of bundled deployments stay unchanged.
+func stateDBMode(d DBMode) DBMode {
+	if d == DBExternal {
+		return DBExternal
+	}
+	return ""
 }
 
 // readState reads bekup-setup.json below root.
@@ -265,4 +315,14 @@ func secretGroups(entries []Entry) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ReadState reads and validates bekup-setup.json of the deployment
+// directory dir.
+func ReadState(dir string) (*State, error) {
+	root, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, err
+	}
+	return readState(root)
 }

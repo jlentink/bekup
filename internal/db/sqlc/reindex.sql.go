@@ -198,7 +198,7 @@ INSERT INTO run_items (run_id, kind, db_name, position, status, started_at, fini
                        raw_sha256, sha256, verified)
 VALUES ($1, $2, $3::text, $4, $5, $6::timestamptz,
         $6::timestamptz, $7, $8, $9, $10, $11)
-RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings
+RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings, schema_version, schema_version_status
 `
 
 type ImportRunItemParams struct {
@@ -247,6 +247,8 @@ func (q *Queries) ImportRunItem(ctx context.Context, arg ImportRunItemParams) (R
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.Warnings,
+		&i.SchemaVersion,
+		&i.SchemaVersionStatus,
 	)
 	return i, err
 }

@@ -104,6 +104,30 @@ describe("completeness evidence", () => {
 });
 
 describe("run detail", () => {
+  it("shows the schema version of each database with words for its status", async () => {
+    const base = runDetail();
+    const item = base.items[0]!;
+    const run = runDetail({
+      items: [
+        item,
+        {
+          ...item,
+          id: "item-2",
+          database: "ledger",
+          position: 1,
+          schemaVersion: null,
+          schemaVersionStatus: "UNAVAILABLE",
+          artifacts: [],
+          warnings: [],
+        },
+      ],
+    });
+    renderApp(`/runs/${RUN_ID}`, { ...baseHandlers(), ...runHandlers(run) });
+    const items = await screen.findAllByTestId("run-item");
+    expect(within(items[0]!).getByTestId("schema-version")).toHaveTextContent("20241001120000");
+    expect(within(items[1]!).getByTestId("schema-version")).toHaveTextContent("Unavailable");
+  });
+
   it("styles warnings and notices apart and shows the evidence", async () => {
     renderApp(`/runs/${RUN_ID}`, { ...baseHandlers(), ...runHandlers() });
     const warnings = await screen.findByRole("region", { name: /^Warnings/ });

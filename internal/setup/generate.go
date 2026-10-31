@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,8 +18,14 @@ import (
 // passwordBytes is the entropy of every generated database password.
 const passwordBytes = 32
 
-// certComponents are the certificates of a compose deployment.
-var certComponents = []string{"runner", "serve", "postgres"}
+// certComponentsFor returns the certificates of a compose deployment: the
+// postgres server certificate only for the bundled database.
+func certComponentsFor(db DBMode) []string {
+	if db == DBExternal {
+		return []string{"runner", "serve"}
+	}
+	return []string{"runner", "serve", "postgres"}
+}
 
 // randomPassword returns passwordBytes from crypto/rand, base64url encoded
 // without padding (URL-safe in a connection URL's userinfo). Zero it after
@@ -114,12 +121,12 @@ type certsInitFunc func(certs.InitOptions) (*certs.Result, error)
 // certTargets returns every file certs.Init writes for a compose
 // deployment (relative to the deployment directory), including the CA's
 // rotation state.
-func certTargets(w *writer, l Layout) ([]string, error) {
+func certTargets(w *writer, l Layout, comps []string) ([]string, error) {
 	dir, err := w.abs(l.keys(certsDirName))
 	if err != nil {
 		return nil, err
 	}
-	abs, err := certs.InitTargets(dir, certComponents)
+	abs, err := certs.InitTargets(dir, comps)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +143,8 @@ func certTargets(w *writer, l Layout) ([]string, error) {
 
 // existingCertTargets returns the certs.Init targets that exist (symlinks
 // are refused).
-func existingCertTargets(w *writer, l Layout) ([]string, error) {
-	targets, err := certTargets(w, l)
+func existingCertTargets(w *writer, l Layout, comps []string) ([]string, error) {
+	targets, err := certTargets(w, l, comps)
 	if err != nil {
 		return nil, err
 	}
@@ -157,15 +164,15 @@ func existingCertTargets(w *writer, l Layout) ([]string, error) {
 // refuseExistingCerts fails before anything is written when certs.Init
 // would meet existing files, above all an existing (offline) CA: setup
 // never reuses, overwrites or rolls back a CA it did not create.
-func refuseExistingCerts(w *writer, l Layout) error {
-	existing, err := existingCertTargets(w, l)
+func refuseExistingCerts(w *writer, l Layout, comps []string) error {
+	existing, err := existingCertTargets(w, l, comps)
 	if err != nil || len(existing) == 0 {
 		return err
 	}
 	caDir := l.keys(certsDirName, caDirName)
 	for _, p := range existing {
 		if strings.HasPrefix(p, caDir+"/") {
-			return fmt.Errorf("existing CA found in %s (%s): setup never reuses or overwrites a CA. Reuse it by issuing the runner, serve and postgres certificates with `bekup certs rotate` first and re-run with --keep-existing (docs/security/mtls-certs.md), or remove it (move it away; keep it until the new deployment works) and re-run",
+			return fmt.Errorf("existing CA found in %s (%s): setup never overwrites a CA. Issue the certificates from it with --use-existing-ca (its passphrase is asked), or remove it (move it away; keep it until the new deployment works) and re-run (docs/security/mtls-certs.md)",
 				caDir, strings.Join(existing, ", "))
 		}
 	}
@@ -177,17 +184,17 @@ func refuseExistingCerts(w *writer, l Layout) error {
 // refuses to start while any file certs.Init writes exists, so every path
 // it tracks for the rollback was absent before (an existing offline CA is
 // never deleted by a rollback).
-func generateCerts(w *writer, l Layout, pass []byte, initFn certsInitFunc) error {
+func generateCerts(w *writer, l Layout, comps []string, pass []byte, initFn certsInitFunc) error {
 	if len(pass) == 0 {
 		return errors.New("a CA key passphrase is required")
 	}
 	if err := certs.ValidatePassphrase(pass); err != nil {
 		return err
 	}
-	if err := refuseExistingCerts(w, l); err != nil {
+	if err := refuseExistingCerts(w, l, comps); err != nil {
 		return err
 	}
-	targets, err := certTargets(w, l)
+	targets, err := certTargets(w, l, comps)
 	if err != nil {
 		return err
 	}
@@ -201,7 +208,7 @@ func generateCerts(w *writer, l Layout, pass []byte, initFn certsInitFunc) error
 			w.track(d)
 		}
 	}
-	for _, c := range certComponents {
+	for _, c := range comps {
 		d := l.keys(certsDirName, c)
 		fi, err := w.lstat(d)
 		if err != nil {
@@ -216,9 +223,144 @@ func generateCerts(w *writer, l Layout, pass []byte, initFn certsInitFunc) error
 	if err != nil {
 		return err
 	}
-	_, err = initFn(certs.InitOptions{Dir: dir, Components: certComponents, Passphrase: pass})
+	_, err = initFn(certs.InitOptions{Dir: dir, Components: comps, Passphrase: pass})
 	if err != nil {
 		return fmt.Errorf("creating the certificates: %w", err)
 	}
 	return nil
+}
+
+// certsRotateFunc is certs.Rotate (replaceable in tests).
+type certsRotateFunc func(certs.RotateOptions) (*certs.Result, error)
+
+// checkExistingCA requires the CA mounted at <keys>/certs/ca (certificate
+// and key, no staged rotation) and no leaf files yet: --use-existing-ca
+// issues only the leaves and never touches the CA.
+func checkExistingCA(w *writer, l Layout, comps []string) error {
+	caDir := l.keys(certsDirName, caDirName)
+	for _, f := range []string{"ca.crt", caKeyName} {
+		fi, err := w.lstat(path.Join(caDir, f))
+		if err != nil {
+			return err
+		}
+		if fi == nil || !fi.Mode().IsRegular() {
+			return fmt.Errorf("--use-existing-ca: %s/%s is missing: mount the CA media at %s (e.g. -v /media/usb/bekup-ca:/deploy/%s)", caDir, f, caDir, caDir)
+		}
+	}
+	for _, f := range []string{"ca.next.crt", "ca.next.key", "ca.prev.crt"} {
+		if fi, err := w.lstat(path.Join(caDir, f)); err != nil || fi != nil {
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("--use-existing-ca: a CA rotation is in progress (%s/%s exists): finish it with `bekup setup renew` first", caDir, f)
+		}
+	}
+	var existing []string
+	for _, c := range comps {
+		for _, f := range []string{c + ".crt", c + ".key", "ca.crt"} {
+			p := l.keys(certsDirName, c, f)
+			fi, err := w.lstat(p)
+			if err != nil {
+				return err
+			}
+			if fi != nil {
+				existing = append(existing, p)
+			}
+		}
+	}
+	if len(existing) > 0 {
+		return fmt.Errorf("--use-existing-ca: certificate files exist already (%s): renew them with `bekup setup renew` instead", strings.Join(existing, ", "))
+	}
+	return nil
+}
+
+// issueFromExistingCA issues the leaf certificates of comps from the CA
+// mounted at <keys>/certs/ca (its key decrypted with pass), tracking every
+// new file and directory for the rollback; the CA itself is only read.
+func issueFromExistingCA(w *writer, l Layout, comps []string, pass []byte, rotateFn certsRotateFunc) error {
+	if err := checkExistingCA(w, l, comps); err != nil {
+		return err
+	}
+	for _, c := range comps {
+		d := l.keys(certsDirName, c)
+		fi, err := w.lstat(d)
+		if err != nil {
+			return err
+		}
+		if fi == nil {
+			w.track(d)
+		}
+		w.track(l.keys(certsDirName, c, c+".key"), l.keys(certsDirName, c, c+".crt"), l.keys(certsDirName, c, "ca.crt"))
+	}
+	dir, err := w.abs(l.keys(certsDirName))
+	if err != nil {
+		return err
+	}
+	if _, err := rotateFn(certs.RotateOptions{Dir: dir, Components: comps, Passphrase: pass}); err != nil {
+		return fmt.Errorf("issuing the certificates from the existing CA: %w", err)
+	}
+	return nil
+}
+
+// maxKeyringFile bounds an imported master keyring.
+const maxKeyringFile = 64 << 10
+
+// readImportKey reads and parses a master keyring to import (a file below
+// root, no symlinks) and returns it re-marshaled; with wantKCV set the
+// key-check value must match. The caller zeroes the result.
+func readImportKey(root, rel, wantKCV string) ([]byte, error) {
+	if err := checkSourcePath("import-master-key", rel); err != nil {
+		return nil, err
+	}
+	raw, err := readInput(root, rel, maxKeyringFile)
+	if err != nil {
+		return nil, fmt.Errorf("--import-master-key %s: %w", rel, err)
+	}
+	defer crypto.Zero(raw)
+	k, err := crypto.ParseKeyring(raw)
+	if err != nil {
+		return nil, fmt.Errorf("--import-master-key %s: not a bekup master keyring: %w", rel, err)
+	}
+	defer k.Destroy()
+	if wantKCV != "" {
+		if err := k.VerifyKeyCheckValue(wantKCV); err != nil {
+			return nil, fmt.Errorf("--import-master-key %s: the key-check value does not match (%w): this is not the keyring of that installation", rel, err)
+		}
+	}
+	return k.Marshal()
+}
+
+// writeImportedKey writes an imported keyring and returns its primary key
+// ID.
+func writeImportedKey(w *writer, l Layout, data []byte) (string, error) {
+	k, err := crypto.ParseKeyring(data)
+	if err != nil {
+		return "", err
+	}
+	defer k.Destroy()
+	if err := w.create(l.keys(masterKeyName), data, 0o400); err != nil {
+		return "", err
+	}
+	return k.PrimaryID().String(), nil
+}
+
+// InspectKeyring reads a master keyring to import (a file relative to the
+// deployment directory dir) and returns its primary key ID; with kcv set
+// the key-check value must match. Nothing is written.
+func InspectKeyring(dir, rel, kcv string) (string, error) {
+	root, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	data, err := readImportKey(root, rel, kcv)
+	if err != nil {
+		return "", err
+	}
+	defer crypto.Zero(data)
+	k, err := crypto.ParseKeyring(data)
+	if err != nil {
+		return "", err
+	}
+	defer k.Destroy()
+	return k.PrimaryID().String(), nil
 }

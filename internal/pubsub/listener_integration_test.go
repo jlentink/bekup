@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/auth"
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/db/sqlc"
@@ -27,7 +28,7 @@ var errRollback = errors.New("roll back")
 
 func startListener(t *testing.T, d dbtest.DB, bus *pubsub.Bus) *pubsub.Listener {
 	t.Helper()
-	connect, err := db.NewConnector([]byte(d.AppURL), db.PoolOptions{
+	connect, err := db.NewConnector(config.DBCredentials{URL: []byte(d.AppURL)}, db.PoolOptions{
 		ApplicationName: listenerApp, TLS: dbtest.TLS(), Registry: logging.NewRegistry(),
 	})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -39,18 +40,35 @@ type Options struct {
 	// it, requires its variant and pinned image to equal the answers' and
 	// never writes it.
 	WriteCompose bool
-	// CAPassphrase supplies the passphrase that seals the new CA key. It
-	// is called only when certificates are generated, before any file is
-	// written; Init zeroes the result.
+	// CAPassphrase supplies the passphrase that seals the new CA key (with
+	// UseExistingCA: the passphrase of the existing CA key). It is called
+	// only when certificates are generated, before any file is written;
+	// Init zeroes the result.
 	CAPassphrase func() ([]byte, error)
+	// UseExistingCA issues the runner/serve(/postgres) certificates from
+	// the CA mounted at <keys>/certs/ca (offline media) instead of creating
+	// a new CA; the CA is only read.
+	UseExistingCA bool
+	// ImportMasterKey copies an existing master keyring (a file relative to
+	// the deployment directory, e.g. restored from escrow) instead of
+	// generating one. MasterKeyCheckValue, when set, must be its key-check
+	// value (serve verifies the stored values at startup either way).
+	ImportMasterKey     string
+	MasterKeyCheckValue string
+	// DBPassword asks for an external database password that is neither
+	// generated nor read from Answers.DB's files (existing roles, single
+	// account); role names the role. Called before any file is written;
+	// Init zeroes the result. nil refuses such passwords.
+	DBPassword func(role string) ([]byte, error)
 	// Out receives the report (never a secret value).
 	Out io.Writer
 	// Now defaults to time.Now.
 	Now func() time.Time
 
-	assets    fs.FS
-	sys       *sysEnv
-	certsInit certsInitFunc
+	assets      fs.FS
+	sys         *sysEnv
+	certsInit   certsInitFunc
+	certsRotate certsRotateFunc
 }
 
 func (o *Options) defaults() {
@@ -73,6 +91,9 @@ func (o *Options) defaults() {
 	if o.certsInit == nil {
 		o.certsInit = certs.Init
 	}
+	if o.certsRotate == nil {
+		o.certsRotate = certs.Rotate
+	}
 }
 
 // plan is what one run writes.
@@ -83,20 +104,27 @@ type plan struct {
 	assets    []string
 }
 
-func newPlan(fsys fs.FS, a *Answers, writeCompose bool) (*plan, error) {
-	assets, err := assetFiles(fsys, a.Variant.assetDirs())
+// newPlan lists what one run writes; dbCA is the operator's CA bundle
+// (external database only).
+func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte) (*plan, error) {
+	assets, err := assetFiles(fsys, a.Variant.assetDirs(a.DB.Mode))
 	if err != nil {
 		return nil, err
 	}
-	gen, err := generatedFiles(fsys, a.Image, a.Variant, writeCompose)
+	gen, err := generatedFiles(fsys, a.Image, a.Variant, a.DB.Mode, writeCompose)
 	if err != nil {
 		return nil, err
 	}
 	static := a.bundledProxy() && a.TLSMode == TLSStatic
+	layout := Layout{KeysDir: a.KeysDir}
+	op := operatorFiles(a)
+	if a.DB.External() {
+		op[layout.keys(dbCAName)] = dbCA
+	}
 	return &plan{
-		entries:   Manifest(Layout{KeysDir: a.KeysDir}, assets, ManifestOptions{StaticTLS: static, ComposeOperator: !writeCompose}),
+		entries:   Manifest(layout, assets, ManifestOptions{StaticTLS: static, ComposeOperator: !writeCompose, ExternalDB: a.DB.External()}),
 		generated: gen,
-		operator:  operatorFiles(a),
+		operator:  op,
 		assets:    assets,
 	}, nil
 }
@@ -147,11 +175,14 @@ func Init(opts Options) (retErr error) {
 		if err != nil {
 			return err
 		}
-		if compose, err = inspectCompose(root, opts.assets, a.Variant, nil, os.LookupEnv); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, nil, os.LookupEnv); err != nil {
 			return err
 		}
 		if a.Variant == "" {
 			a.Variant = compose.Variant
+		}
+		if a.DB.Mode == "" {
+			a.DB.Mode = compose.DB
 		}
 		if a.Image.Digest == "" {
 			a.Image = compose.Image
@@ -175,11 +206,18 @@ func Init(opts Options) (retErr error) {
 			return err
 		}
 	}
-	p, err := newPlan(opts.assets, a, opts.WriteCompose)
+	var dbCA []byte
+	if a.DB.External() {
+		if dbCA, err = readDBCA(root, a.DB.CAFile); err != nil {
+			return err
+		}
+	}
+	p, err := newPlan(opts.assets, a, opts.WriteCompose, dbCA)
 	if err != nil {
 		return err
 	}
 	layout := Layout{KeysDir: a.KeysDir}
+	comps := certComponentsFor(a.DB.Mode)
 
 	// What exists already?
 	var existing []string
@@ -216,13 +254,45 @@ func Init(opts Options) (retErr error) {
 	if opts.RegenerateSecrets && opts.KeepExisting {
 		return errors.New("--regenerate-secrets and --keep-existing are mutually exclusive")
 	}
+	if opts.RegenerateSecrets && (opts.UseExistingCA || opts.ImportMasterKey != "") {
+		return errors.New("--regenerate-secrets creates a new CA and master key: it cannot be combined with --use-existing-ca or --import-master-key")
+	}
 	needCerts := opts.RegenerateSecrets || groups[groupCerts].empty()
-	if needCerts && !opts.RegenerateSecrets {
-		// Before anything is written: an existing (offline) CA is never
-		// reused, overwritten or touched by a rollback.
-		if err := refuseExistingCerts(w, layout); err != nil {
+	switch {
+	case opts.UseExistingCA && !needCerts:
+		return errors.New("--use-existing-ca: the certificates exist already (renew them with `bekup setup renew`)")
+	case opts.UseExistingCA:
+		// The CA is only read; the leaves must not exist yet.
+		if err := checkExistingCA(w, layout, comps); err != nil {
 			return err
 		}
+	case needCerts && !opts.RegenerateSecrets:
+		// Before anything is written: an existing (offline) CA is never
+		// overwritten or touched by a rollback.
+		if err := refuseExistingCerts(w, layout, comps); err != nil {
+			return err
+		}
+	}
+	// The master key to import, read and checked before anything is
+	// written.
+	var importKey []byte
+	if opts.ImportMasterKey != "" {
+		if !groups[groupMasterKey].empty() {
+			return fmt.Errorf("--import-master-key: %s exists already (remove the flag to keep it)", layout.keys(masterKeyName))
+		}
+		if importKey, err = readImportKey(root, opts.ImportMasterKey, opts.MasterKeyCheckValue); err != nil {
+			return err
+		}
+		defer crypto.Zero(importKey)
+	}
+	// External database passwords: collected (asked, read or generated)
+	// before anything is written.
+	var dbPw *dbPasswords
+	if a.DB.External() && (opts.RegenerateSecrets || groups[groupDatabaseExternal].empty()) {
+		if dbPw, err = resolveDBPasswords(root, &a.DB, opts.DBPassword); err != nil {
+			return err
+		}
+		defer dbPw.destroy()
 	}
 	var pass []byte
 	if needCerts {
@@ -252,7 +322,7 @@ func Init(opts Options) (retErr error) {
 	if opts.RegenerateSecrets {
 		// The old secrets are moved aside, not deleted: a failure below
 		// moves them back; they are deleted only after the run succeeded.
-		if err := setAsideSecrets(w, layout, p.entries); err != nil {
+		if err := setAsideSecrets(w, layout, p.entries, comps); err != nil {
 			return err
 		}
 		for _, g := range groups {
@@ -308,18 +378,33 @@ func Init(opts Options) (retErr error) {
 
 	// Secrets: only groups that are entirely missing.
 	var keyID string
-	if groups[groupMasterKey].empty() {
+	switch {
+	case importKey != nil:
+		if keyID, err = writeImportedKey(w, layout, importKey); err != nil {
+			return err
+		}
+	case groups[groupMasterKey].empty():
 		if keyID, err = generateMasterKey(w, layout, opts.Now()); err != nil {
 			return err
 		}
 	}
-	if groups[groupDatabase].empty() {
+	switch {
+	case dbPw != nil:
+		if err := generateExternalDatabase(w, layout, &a.DB, dbPw); err != nil {
+			return err
+		}
+	case !a.DB.External() && groups[groupDatabase].empty():
 		if err := generateDatabase(w, layout); err != nil {
 			return err
 		}
 	}
-	if needCerts {
-		if err := generateCerts(w, layout, pass, opts.certsInit); err != nil {
+	switch {
+	case needCerts && opts.UseExistingCA:
+		if err := issueFromExistingCA(w, layout, comps, pass, opts.certsRotate); err != nil {
+			return err
+		}
+	case needCerts:
+		if err := generateCerts(w, layout, comps, pass, opts.certsInit); err != nil {
 			return err
 		}
 	}
@@ -334,7 +419,12 @@ func Init(opts Options) (retErr error) {
 		Image: a.Image.String(), ComposeMode: ComposeGenerated, Variant: a.Variant,
 		Proxy: a.Proxy, TLSMode: a.TLSMode, KeysDir: a.KeysDir,
 		Ownership: mode, Assets: map[string]string{}, SecretGroups: secretGroups(p.entries),
+		DatabaseMode: stateDBMode(a.DB.Mode),
 	}
+	if a.DB.External() {
+		st.DatabaseAuth = a.DB.Auth
+	}
+	st.ImportedFiles = importedFiles(a.DB, dbPw != nil, opts.ImportMasterKey, importKey != nil)
 	if compose != nil {
 		st.ComposeMode, st.ComposeSHA256 = ComposeOperator, compose.Hash
 		if compose.FromEnv {
@@ -369,7 +459,16 @@ func Init(opts Options) (retErr error) {
 	rd := &reportData{
 		root: root, a: a, l: layout, entries: p.entries, w: w, mode: mode, why: why,
 		chownCmds: chownCmds.String(), keyID: keyID, newCerts: needCerts, env: *opts.sys,
-		created: countCreatedFiles(w),
+		created: countCreatedFiles(w), importedKey: importKey != nil, existingCA: opts.UseExistingCA,
+		newDBPasswords: dbPw != nil,
+	}
+	for _, f := range []string{a.DB.PasswordFile, a.DB.OwnerPasswordFile} {
+		if f != "" && dbPw != nil {
+			warnings = append(warnings, fmt.Sprintf("%s was copied into %s/: delete it now, the copy there is the one bekup uses (setup check warns while it exists)", f, layout.KeysDir))
+		}
+	}
+	if importKey != nil {
+		warnings = append(warnings, fmt.Sprintf("%s was imported as %s: delete the source copy from the deployment directory (keep your escrow copy offline; setup check warns while it exists)", opts.ImportMasterKey, layout.keys(masterKeyName)))
 	}
 	// The run succeeded: delete the old secrets that were moved aside. From
 	// here on nothing is rolled back.
@@ -379,6 +478,23 @@ func Init(opts Options) (retErr error) {
 	}
 	rd.warnings = warnings
 	return report(opts.Out, rd)
+}
+
+// importedFiles lists the secret source files this run copied (recorded
+// in the state so that setup check keeps reminding to delete them).
+func importedFiles(d Database, dbCopied bool, keyFile string, keyCopied bool) []string {
+	var out []string
+	if dbCopied {
+		for _, f := range []string{d.PasswordFile, d.OwnerPasswordFile} {
+			if f != "" {
+				out = append(out, f)
+			}
+		}
+	}
+	if keyCopied && keyFile != "" && !slices.Contains(out, keyFile) {
+		out = append(out, keyFile)
+	}
+	return out
 }
 
 // composeMatches requires the operator's compose.yaml (compose-first) to
@@ -392,6 +508,9 @@ func composeMatches(c *ComposeInfo, a *Answers) error {
 	}
 	if c.Variant != a.Variant {
 		return fmt.Errorf("%s is the %s variant, not %s", ComposeFile, c.Variant, a.Variant)
+	}
+	if c.DB != a.DB.Mode.OrBundled() {
+		return fmt.Errorf("%s uses the %s database, not %s (%s)", ComposeFile, c.DB, a.DB.Mode.OrBundled(), dbFileHint(c.DB))
 	}
 	if c.HasErrors() {
 		var b strings.Builder
@@ -473,7 +592,7 @@ func writeState(w *writer, st *State, force bool) error {
 // every file certs.Init writes (including an offline CA mounted at the CA
 // directory) aside for --regenerate-secrets: restored by the rollback,
 // deleted only after the run succeeded.
-func setAsideSecrets(w *writer, l Layout, entries []Entry) error {
+func setAsideSecrets(w *writer, l Layout, entries []Entry, comps []string) error {
 	seen := map[string]bool{}
 	var paths []string
 	for _, e := range entries {
@@ -481,7 +600,7 @@ func setAsideSecrets(w *writer, l Layout, entries []Entry) error {
 			paths = append(paths, e.Path)
 		}
 	}
-	targets, err := certTargets(w, l)
+	targets, err := certTargets(w, l, comps)
 	if err != nil {
 		return err
 	}
@@ -541,6 +660,10 @@ type reportData struct {
 	env       sysEnv
 	created   int
 	warnings  []string
+	// importedKey: the master key was imported; existingCA: the leaves
+	// were issued from an existing CA; newDBPasswords: the external
+	// database passwords were written by this run.
+	importedKey, existingCA, newDBPasswords bool
 }
 
 func report(out io.Writer, r *reportData) error {
@@ -563,6 +686,11 @@ func report(out io.Writer, r *reportData) error {
 	}
 	fmt.Fprintf(&b, "  proxy:      %s\n", proxy)
 	fmt.Fprintf(&b, "  domain:     https://%s\n", a.Domain)
+	if a.DB.External() {
+		fmt.Fprintf(&b, "  database:   your PostgreSQL at %s, database %s (%s; TLS verify-full against %s)\n", a.DB.dbAddress(), a.DB.Name, a.DB.Auth, l.keys(dbCAName))
+	} else {
+		b.WriteString("  database:   the bundled postgres service\n")
+	}
 	fmt.Fprintf(&b, "  ownership:  %s (%s)\n", mode, why)
 	fmt.Fprintf(&b, "  files:      %d created, %d replaced\n", r.created, len(w.replaced))
 	for _, msg := range r.warnings {
@@ -571,7 +699,12 @@ func report(out io.Writer, r *reportData) error {
 	if r.chownCmds != "" {
 		b.WriteString("\nOwnership is NOT applied yet (--ownership print). " + r.chownCmds)
 	}
-	if keyID != "" {
+	if a.DB.External() && a.DB.Auth == DBAuthSingleAccount {
+		fmt.Fprintf(&b, "\nWARNING: single-account mode (D-207) is an EXPLICIT WEAKENING: %s runs migrations\n  and the app, so a compromised serve can alter the schema and the audit log. bekup\n  warns at every start, audits it and alerts every admin daily. Prefer bootstrap.\n", a.DB.User)
+	}
+	if keyID != "" && r.importedKey {
+		fmt.Fprintf(&b, "\nMaster key: %s imported (primary key ID %s). serve compares it with the key-check\n  values stored in the database at startup and refuses to start on a mismatch.\n", l.keys(masterKeyName), keyID)
+	} else if keyID != "" {
 		fmt.Fprintf(&b, "\nMaster key: %s (primary key ID %s)\n", l.keys(masterKeyName), keyID)
 		b.WriteString(`  ESCROW IT NOW: store a copy offline (password manager, encrypted USB stick
   in a safe), separate from this host and from the backups. Without it every
@@ -579,7 +712,11 @@ func report(out io.Writer, r *reportData) error {
 `)
 	}
 	if newCerts {
-		b.WriteString("\nCertificates (SHA-256 fingerprints; record them as evidence):\n")
+		if r.existingCA {
+			b.WriteString("\nCertificates issued from your existing CA (SHA-256 fingerprints; record them as evidence):\n")
+		} else {
+			b.WriteString("\nCertificates (SHA-256 fingerprints; record them as evidence):\n")
+		}
 		for _, e := range entries {
 			if e.Group != groupCerts || e.Kind != KindFile || !strings.HasSuffix(e.Path, ".crt") || strings.HasSuffix(e.Path, "/ca.crt") && !e.Offline {
 				continue
@@ -626,13 +763,24 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 `, step, a.Link.CreateCommand(), a.Link.Name, a.Link.ProxyIP, a.Link.Name)
 		step++
 	}
+	if a.DB.External() {
+		for _, cmd := range dbNextSteps(&a.DB, l) {
+			fmt.Fprintf(&b, "  %d. %s\n", step, cmd)
+			step++
+		}
+	}
 	fmt.Fprintf(&b, "  %d. docker compose config -q && docker compose up -d\n", step)
 	fmt.Fprintf(&b, "  %d. docker compose run --rm admin create --email you@example.com --display-name \"You\"\n", step+1)
 	if a.Variant == VariantNPM {
 		fmt.Fprintf(&b, "  %d. In Nginx Proxy Manager: a Proxy Host for %s -> http://%s:8080 (Websockets off, SSL + Force SSL + HTTP/2, HSTS off, the Advanced block from the docs)\n", step+2, a.Domain, a.Link.ServeIP)
 		step++
 	}
-	fmt.Fprintf(&b, "  %d. docker compose -f compose.yaml run --rm setup check   (re-run after every change;\n     -f compose.yaml keeps compose.override.yaml away from the checking container, check still lints it)\ndocs/installation/compose.md\n", step+2)
+	fmt.Fprintf(&b, "  %d. docker compose -f compose.yaml run --rm setup check   (re-run after every change;\n     -f compose.yaml keeps compose.override.yaml away from the checking container, check still lints it)\n", step+2)
+	if a.DB.External() {
+		b.WriteString("docs/installation/compose.md, docs/installation/external-database.md\n")
+	} else {
+		b.WriteString("docs/installation/compose.md\n")
+	}
 	_, err := io.WriteString(out, b.String())
 	return err
 }

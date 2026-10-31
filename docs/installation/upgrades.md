@@ -59,7 +59,8 @@ let the new image's setup service do the rest:
 
 ```sh
 cd /opt/bekup
-# the same asset you installed: compose.yaml, compose.traefik-external.yaml or compose.npm.yaml
+# the same asset you installed: compose.yaml, compose.traefik-external.yaml, compose.npm.yaml
+# or their *.external-db.yaml forms
 sudo curl -fsSLo compose.yaml.new https://github.com/jlentink/bekup/releases/download/vX.Y.Z/compose.yaml
 gh attestation verify compose.yaml.new --repo jlentink/bekup
 diff -u compose.yaml compose.yaml.new     # review: the image line and any service changes
@@ -82,6 +83,10 @@ checks it); better move it into the override.
   `--write-compose` is refused;
 - refuses a variant switch (for example from `npm` to `traefik`): set up a
   new directory instead and move the data;
+- refuses a switch between the bundled database and your own PostgreSQL
+  (a release file with or without `.external-db`, D-208): that moves bekup's
+  database, which is a dump and restore into a new deployment directory,
+  not an upgrade (keep the master key: the stored credentials need it);
 - rewrites only the generated files: `deploy/**` (assets the new version no
   longer ships are removed), `reference/*.example.toml` and
   `bekup-setup.json`;
@@ -99,6 +104,25 @@ checks it); better move it into the override.
 
 Until you run `setup upgrade`, `setup check` reports the newer image in
 `compose.yaml` as a warning; an older image is an error.
+
+**Guided on a terminal** (D-208): when `setup upgrade` runs on a terminal
+(`docker compose run --rm setup upgrade` allocates one), it first shows
+what it will do, before writing anything: the old and new version and
+image, the variant and database mode, the compose changes (setup-first: a
+line diff; compose-first: how your release file was recognized), the
+generated files that change or go away, files of yours it would back up
+with `--force`, new secret groups and the `.env` image line. It then asks
+whether you have a current backup of bekup's database and of the secrets
+directory (no backup: it stops) and for a final confirmation. Afterwards
+restart everything with `docker compose pull && docker compose up -d`;
+`bekup.toml` and `runner.toml` are re-validated, never rewritten.
+`--non-interactive` skips the questions (scripts, CI). When the new
+version adds certificates, it asks for a new CA key passphrase twice (or
+takes `--ca-passphrase-file` / `--ca-passphrase-stdin`). The guided screens
+need stdin and stdout on a terminal; otherwise the upgrade runs unguided,
+as with `--non-interactive`. In an existing deployment, `bekup setup`
+without a subcommand offers the same upgrade (with
+`--allow-version-mismatch` passed on when you gave it).
 
 **Compose-first with the committed file** (`deploy/compose/`, D-205
 amendment 3): `compose.yaml` takes the image from `BEKUP_IMAGE`, which setup

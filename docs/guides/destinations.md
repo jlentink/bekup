@@ -46,6 +46,55 @@ letters, digits, `_` and `-` stay as they are, every other byte becomes
 Job slugs, database names and timestamps are visible to whoever can list
 the destination (the contents are encrypted).
 
+## One location per destination
+
+Every destination owns its location: bekup's retention, empty-folder
+cleanup and unrecorded-file scan treat every backup file there as the
+destination's own. Two destinations therefore may not share a location,
+and neither may lie inside the other (D-209). Creating or moving a
+destination onto another one's location fails with `VALIDATION` on the
+location field, naming the other destination; a deleted destination keeps
+its location while it still holds backups. "The same location" means:
+
+| Type | Compared |
+|---|---|
+| Local disk | the directory below `storage.disk_root` (`nightly` and `nightly/db` overlap, `nightly` and `nightly2` do not) |
+| S3 | the endpoint (empty and every `*.amazonaws.com` endpoint are AWS) and the bucket, then the key prefix (an empty prefix contains every other one) |
+| SFTP | the host and port (plus the user when the base path is relative to the user's home), then base path + subdirectory |
+
+To take over backups that already exist at a location (for example
+written by another bekup installation), import them with
+[`bekup reindex --import`](../reference/cli/bekup_reindex.md) instead of creating
+a second destination on top of them.
+
+## Changing the location
+
+The location of a destination (the disk directory; the S3 endpoint,
+region, bucket and prefix; the SFTP host, port, user, base path and
+directory) can only change while **no backup files are recorded as present
+there** and **no run of a job using the destination is queued or
+running**. Otherwise the update fails with `VALIDATION` on that field
+(D-209): bekup addresses every backup by its key below the location, so
+after a move retention, downloads and restores would look in the wrong
+place and the old files would stay behind forever. To move backups
+elsewhere, create a new destination and point the jobs at it; the old one
+empties as retention removes its backups (or delete the old destination
+once its backups are no longer needed). Moving the files on the storage
+yourself and keeping the location unchanged (for example a new disk
+mounted at the same path) is fine. Other settings (name, credentials,
+no-delete, storage class, ...) can change at any time. After a location
+change the destination's unrecorded-file list starts empty.
+
+## Unrecorded files
+
+Once a day bekup lists the job folders on every destination and records
+files in its layout that have no backup record (for example the leftovers of a backup that
+was interrupted after writing a file). Admins see them on the destination
+page under **Unrecorded files** and can delete them one by one (step-up,
+audited, re-checked; never automatic and never in no-delete mode). Empty
+backup folders are removed at the same time. Details:
+[Retention](retention.md#unrecorded-files-and-empty-folders).
+
 ## Local disk
 
 Disk destinations live below `storage.disk_root` in `bekup.toml` (default
@@ -404,6 +453,8 @@ GraphQL operations (all POST to `/graphql`):
 | `fetchDestinationHostKey(id)` | admin | Show the host key the SFTP destination's stored host presents (trust on first use; nothing is stored) |
 | `confirmDestinationHostKey(id, authorizedKey, expectedHost, expectedPort)` | admin, step-up | Pin the host key of an SFTP destination (fails with `CONFLICT` if host/port changed since the fetch) |
 | `generateDestinationSshKeypair(id)` | admin, step-up | New ed25519 key for an SFTP destination; returns the public key only |
+| `destinationUnrecordedFiles(destinationId, first, after)` | admin | The unrecorded files found by the daily scan (paged by key), with totals and the last scan time (D-209) |
+| `deleteUnrecordedFile(destinationId, id)` | admin, step-up | Delete one unrecorded file (re-checked, audited; refused in no-delete mode); only field of its request |
 
 Validation happens when you save: names are unique (case-insensitive);
 disk paths must be relative paths below `storage.disk_root` without `..`;

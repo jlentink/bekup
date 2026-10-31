@@ -92,6 +92,8 @@ type Options struct {
 	// destination.test_failed notification, task 5.3; nil: none). It
 	// receives the first failing step's code only and must not block.
 	TestFailed func(ctx context.Context, id uuid.UUID, code storage.ErrorCode)
+	// Now overrides the clock (tests; nil: time.Now).
+	Now func() time.Time
 }
 
 // Actor is the admin (or maintainer, for tests) performing an action.
@@ -120,12 +122,17 @@ func New(o Options) (*Service, error) {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
 	}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
 	lim, err := serviceutil.NewLimiter(o.MaxConcurrent, o.Limiter)
 	if err != nil {
 		return nil, fmt.Errorf("destinations: %w", err)
 	}
 	return &Service{o: o, limiter: lim}, nil
 }
+
+func (s *Service) now() time.Time { return s.o.Now() }
 
 // --- reading ---------------------------------------------------------------
 
@@ -365,6 +372,9 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Dest
 	mode, days := st.lockColumns()
 	var out *record
 	err = db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {
+		if err := checkLocation(ctx, q, id, st); err != nil {
+			return err
+		}
 		row, err := q.InsertDestination(ctx, sqlc.InsertDestinationParams{
 			ID: id, Name: name, Type: sqlc.DestinationType(st.typ), Config: cfg, SecretEnc: sealed,
 			NoDelete: st.noDelete, ObjectLockMode: mode, ObjectLockRetentionDays: days, CreatedBy: &actor.UserID,
@@ -451,6 +461,35 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		if !locked.row.UpdatedAt.Equal(cur.row.UpdatedAt) {
 			return ErrConflict
 		}
+		if moved := locationChange(cur, st); moved != "" {
+			// D-209: bekup would lose track of the files at the old
+			// location (retention, restores and downloads address them
+			// by key below the destination's location), and a run in
+			// progress would write to both.
+			active, err := q.DestinationHasActiveRuns(ctx, id)
+			if err != nil {
+				return fmt.Errorf("destinations: check active runs: %w", err)
+			}
+			if active {
+				return fieldErr(moved, "the location cannot change while a backup run is writing to this destination; "+
+					"wait until the queued and running runs of its jobs have finished")
+			}
+			present, err := q.DestinationHasPresentArtifacts(ctx, id)
+			if err != nil {
+				return fmt.Errorf("destinations: check present artifacts: %w", err)
+			}
+			if present {
+				return fieldErr(moved, "the location cannot change while backups are stored there: "+
+					"bekup would lose track of them; create a new destination instead, or move the jobs "+
+					"to another destination and wait until retention has removed every backup here")
+			}
+			if err := checkLocation(ctx, q, id, st); err != nil {
+				return err
+			}
+			if err := q.ClearUnrecordedFiles(ctx, id); err != nil {
+				return fmt.Errorf("destinations: clear unrecorded files: %w", err)
+			}
+		}
 		row, err := q.UpdateDestination(ctx, sqlc.UpdateDestinationParams{
 			ID: id, Name: st.name, Config: cfg, SecretEnc: sealed, NoDelete: st.noDelete,
 			ObjectLockMode: mode, ObjectLockRetentionDays: days, ClearHostKey: st.clearHostKey,
@@ -479,6 +518,38 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		return Destination{}, err
 	}
 	return out.view(), nil
+}
+
+// checkLocation refuses a location that is, contains or lies inside the
+// location of another destination (every non-deleted one, and soft-deleted
+// ones that still hold present backups; D-209): the scan, the pruning and
+// retention of each would take the other's files for their own. The
+// advisory lock serializes concurrent creates and moves.
+func checkLocation(ctx context.Context, q *sqlc.Queries, id uuid.UUID, st *state) error {
+	mine, ok := locationOf(st.disk, st.s3, st.sftp)
+	if !ok {
+		return nil
+	}
+	if err := q.LockDestinationLocations(ctx); err != nil {
+		return fmt.Errorf("destinations: lock locations: %w", err)
+	}
+	others, err := q.ListDestinationLocations(ctx, id)
+	if err != nil {
+		return fmt.Errorf("destinations: list locations: %w", err)
+	}
+	for _, o := range others {
+		r, err := decode(sqlc.Destination{ID: o.ID, Type: o.Type, Config: o.Config})
+		if err != nil {
+			return err
+		}
+		loc, ok := locationOf(r.disk, r.s3, r.sftp)
+		if ok && loc.overlaps(mine) {
+			return fieldErr(locationField(st.typ), "this location is, contains or lies inside the location of the destination %q; "+
+				"two destinations must not share files (each would take the other's backups for its own); choose another location. "+
+				"To take over backups that are already stored there, run bekup reindex --import (see the destinations guide)", o.Name)
+		}
+	}
+	return nil
 }
 
 // onlyInputFor checks that only the input of typ is set (and, when

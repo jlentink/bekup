@@ -814,6 +814,17 @@ worker (River backup queue, serve or `bekup worker`)
   the manifest's `stats` object and stores them insert-only in
   `backup_stats`. A stats failure only adds `stats_unavailable`; the dump
   still counts.
+- **Schema version (D-210):** `RunnerStats` also puts the job's
+  `VersionQuery` (preset name + schema, or the custom query) on database
+  `Dump` requests. The runner reads it on the stats session inside the
+  statistics transaction (`dbprobe.StatsSource.SchemaVersion`: savepoint +
+  `SET LOCAL` timeouts on PostgreSQL, session limits on MySQL/MariaDB,
+  preset table-layout check first, first row only) and returns it in
+  `DumpStats`; the worker re-validates it, writes it into the canonical
+  stats (`schema_version`, `schema_version_status`) and onto
+  `run_items.schema_version` / `schema_version_status`, and adds
+  `version_unavailable` / `version_invalid` as item warnings without
+  changing the run status.
 
 ## Web UI (`web/`)
 
@@ -908,7 +919,12 @@ result), `VerifyDump` (client stream: header, then chunks), `Restore`
 `CreateDatabase`, `RenameSwapDatabase`, `DropTempDatabase`, `ScratchStats`, `DropScratchDatabase`, `PrePull` and `ListImages`. There is no field for
 a command, argument, environment variable, image or path; images are chosen
 by engine + allowlisted version key and container specs are built by the
-runner. Credential fields are `bytes` annotated `[(runner.v1.secret) =
+runner. The one field carrying SQL text is `VersionQuery.custom_sql` of a
+`Dump` (D-210, at most 2 KiB, revalidated by the runner and run read-only
+on the stats snapshot); a preset travels by name only (the runner owns the
+preset SQL, `internal/schemaversion`), and `DumpStats` returns
+`schema_version` / `version_status`. A test fails for any other field
+named like SQL. Credential fields are `bytes` annotated `[(runner.v1.secret) =
 true]`; `runnerpb.ZeroSecrets` zeroes them and a test fails for an
 unannotated credential-looking field. Go code is generated into
 `internal/runnerpb` by `just gen` (buf and the protoc plugins are go.mod

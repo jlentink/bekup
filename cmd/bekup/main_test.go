@@ -162,7 +162,7 @@ func TestMigrateMissingOwnerURL(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "owner_url")
 	p := writeConfig(t, "bekup.toml", validConfig+"\n[database]\nowner_url_file = \""+missing+"\"\n")
 	_, _, err := run(t, "--config", p, "migrate", "status")
-	if err == nil || !strings.Contains(err.Error(), "read database owner URL") {
+	if err == nil || !strings.Contains(err.Error(), "read database owner credentials") {
 		t.Fatalf("got %v", err)
 	}
 }

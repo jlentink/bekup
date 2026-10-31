@@ -154,7 +154,7 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `newest_complete_missing`, `newest_complete_changed`,
   `plan_invariant_violated`) and `retention.artifact_missing` (target type
   `artifact`, the artifact id; `job_id`, `run_id`, `destination_id`,
-  `object_key`, `newest_complete`) for an object that vanished without
+  `object` (the object key), `newest_complete`) for an object that vanished without
   bekup deleting it. Dry runs and sweeps with nothing to delete record
   nothing; per-object outcomes are the artifact rows' state.
 - Restores (task 4.1, D-162; system actor, target type `restore`, target id
@@ -163,7 +163,7 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   dump_digest_mismatch, manifest_bad_signature, manifest_unknown_key,
   manifest_replayed, manifest_binding_mismatch, manifest_malformed,
   manifest_invalid, decrypt_failed; `artifact_id`, `job_id`, `run_id`,
-  `destination_id`, `object_key`). It is also raised as a security alert.
+  `destination_id`, `object` (the object key)). It is also raised as a security alert.
   The restore worker (task 4.2, D-166) records `restore.started` when it
   takes a queued restore (`job_id`, `artifact_id`,
   `target_connection_id`, `target_database`, `mode`, `no_owner`,
@@ -194,6 +194,11 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `privileged_target_acknowledged`, `target_privileges`,
   `target_privilege_reasons`, `refusal`) when the worker's re-check found
   a privileged or unknown role the request did not acknowledge (D-173).
+- Schema version (D-210): `job.version_query_changed` (user actor,
+  target the job: `name`, `mode`, `previous_mode`, `custom_sql_changed`;
+  presets `preset`, `schema`; custom queries `custom_sql_sha256` and
+  `custom_sql_bytes`, never the query itself). Setting or changing a
+  custom query raises the security alert `job_custom_version_query`.
 - Test restores (task 4.6, D-169): `job.test_restore_updated` (user
   actor, target the job: `name`, `enabled`, `schedule`,
   `target_connection_id`, `target_connection`,
@@ -221,7 +226,10 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   moves an SFTP destination lists the re-entered password in
   `reentered_for_new_endpoint`. Credential changes are listed by name only and
   additionally recorded as `secret.changed` (`fields`, `via`). No-op
-  updates record nothing.
+  updates record nothing. `destination.unrecorded_file_deleted` (D-209):
+  an admin deleted an unrecorded file (`name`, `object` (the object key), `size`);
+  recorded in the transaction of the delete, so a failed delete leaves no
+  entry and an audit failure refuses the delete.
 - Connections (task 2.11, D-135): `connection.created` (settings without
   credentials, `credentials_set` names), `connection.updated` (`changed`
   field names, `values` old/new for short non-secret fields,
@@ -253,10 +261,13 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   break-glass CLI records `cli.admin.created` (also for the first admin,
   D-113), `cli.admin.password_reset`, `cli.admin.mfa_reset`,
   `cli.admin.unlocked` and `cli.admin.disabled` with actor `cli`.
-  Passwords and temporary passwords are never recorded. `bekup reindex
+  Passwords and temporary passwords are never recorded; `user.created`
+  and `user.password_reset` say only whether one was issued
+  (`temporary_login_issued`). `bekup reindex
   --import` (task 4.7) records `cli.run.imported` per imported run (target
-  the run id; job, destination, manifest key and SHA-256, signing key,
-  artifact and verified counts). (The `setup.*`
+  the run id; `job_id`, `job_slug`, `destination_id`, `run_timestamp`,
+  `manifest` (the manifest's object key), `manifest_sha256`,
+  `signing_key_id`, `artifacts`). (The `setup.*`
   actions of the removed web setup flow no longer exist.)
 - SSRF allowlist (D-196): `setting.changed` (target `setting`/
   `netguard.allowlist`; details `setting`, `added_cidrs`, `removed_cidrs`,
@@ -319,6 +330,18 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   at every `serve` startup outside dev mode with `database.tls_mode`
   `require` or `disable` (D-100, D-118), with `tls_mode`, `ca_file_set`
   and `chain_verified`; fail closed like the entry above.
+- `security.insecure_db_roles` (actor `system`, target `server`) is recorded
+  at every `serve` and `worker` startup outside dev mode in single-account
+  mode (`database.single_account`, D-207), with `single_account`, `process`
+  and `login_role_findings` (dangerous attributes and memberships of the one
+  account, e.g. `CREATEROLE`); fail closed like the entries above.
+- `cli.db.bootstrap` (actor `cli`, target `database`, the database name) is
+  recorded by `bekup db bootstrap` when it created or changed roles, the
+  database or citext of an installation whose schema is already migrated
+  (through `bekup_app`, after the change; details: `actions`, `admin_role`,
+  `single_account`, `reset_passwords`; never passwords or verifiers). Before
+  the first migration there is no audit log; the command's printed report
+  is the record (D-207).
 - `certs.rotated` (actor `cli`) is recorded by `bekup certs rotate` and by
   `bekup certs init --force` (details: `operation` = `leaf`, `ca_stage`,
   `ca_promote`, `ca_finish` or `init_force`, `dir`, `components`). The

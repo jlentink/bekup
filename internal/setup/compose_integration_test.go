@@ -14,8 +14,10 @@ import (
 )
 
 // TestIntegrationComposeConfig writes a deployment directory per proxy
-// choice (setup-first) and per release variant (compose-first, D-205) and
-// lets docker compose validate it with every profile enabled.
+// choice (setup-first) and per release variant (compose-first, D-205), each
+// with the bundled and an external database (D-208: all six release and
+// committed files), and lets docker compose validate it with every profile
+// enabled.
 func TestIntegrationComposeConfig(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		dockertest.Skipf(t, "docker CLI not found: %v", err)
@@ -50,30 +52,55 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		// placeholder: the committed file (deploy/compose/), image from
 		// BEKUP_IMAGE in .env (D-205 amendment 3).
 		placeholder bool
+		db          DBMode
 	}
 	cases := map[string]tc{}
 	for name, mk := range variants {
 		cases["setup-first-"+name] = tc{answers: mk}
 	}
+	cases["setup-first-external-db"] = tc{answers: func() Answers { return testAnswers(t, ProxyNginx) }, db: DBExternal}
+	cases["setup-first-external-db-single-account"] = tc{answers: func() Answers { return testAnswers(t, ProxyNone) }, db: DBExternal}
 	for _, v := range ReleaseVariants {
-		cases["compose-first-"+string(v)] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v}
-		cases["placeholder-"+string(v)] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, placeholder: true}
+		for _, db := range DBModes {
+			suffix := string(v)
+			if db == DBExternal {
+				suffix += "-external-db"
+			}
+			cases["compose-first-"+suffix] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, db: db}
+			cases["placeholder-"+suffix] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, placeholder: true, db: db}
+		}
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
+			var dbAnswers Database
+			if c.db == DBExternal {
+				testDBCA(t, dir, "db-ca.pem", time.Now(), 0)
+				dbAnswers = Database{Mode: DBExternal, Host: "db.example.com", CAFile: "db-ca.pem"}
+				if strings.HasSuffix(name, "single-account") {
+					dbAnswers.Auth, dbAnswers.User, dbAnswers.PasswordFile = DBAuthSingleAccount, "acct", "acct.pw"
+					if err := os.WriteFile(pathIn(dir, "acct.pw"), []byte(testAppPW), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			withDB := func(o *Options) { o.Answers.DB = dbAnswers }
 			switch {
 			case c.variant == "":
-				mustInit(t, dir, c.answers()) //nolint:contextcheck // Init has no context (synchronous CLI)
+				o := testOptions(t, dir, c.answers())
+				withDB(&o)
+				if err := Init(o); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+					t.Fatalf("init: %v", err)
+				}
 			case c.placeholder:
-				writePlaceholder(t, dir, c.variant)
+				writePlaceholderDB(t, dir, c.variant, c.db)
 				t.Setenv(ImageEnvVar, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest)
-				if out, err := composeFirstInit(t, dir, c.variant, nil); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
 					t.Fatalf("init: %v\n%s", err, out)
 				}
 			default:
-				writeRelease(t, dir, c.variant, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest)
-				if out, err := composeFirstInit(t, dir, c.variant, nil); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+				writeReleaseDB(t, dir, c.variant, c.db, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest)
+				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
 					t.Fatalf("init: %v\n%s", err, out)
 				}
 			}

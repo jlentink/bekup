@@ -1,0 +1,6 @@
+    command:
+      - certs
+      - init
+      - --dir=/certs
+      - --component=runner
+      - --component=serve

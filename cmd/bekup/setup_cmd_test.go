@@ -199,7 +199,7 @@ func TestSetupComposeFirstCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := setup.RenderRelease(setup.VariantNPM, &img)
+	data, err := setup.RenderRelease(setup.VariantNPM, setup.DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestSetupComposeCmd(t *testing.T) {
 // takes the image from BEKUP_IMAGE; init writes it to .env, upgrade
 // rewrites it.
 func TestSetupPlaceholderCLI(t *testing.T) {
-	data, err := setup.RenderRelease(setup.VariantTraefik, nil)
+	data, err := setup.RenderRelease(setup.VariantTraefik, setup.DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

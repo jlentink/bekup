@@ -19,7 +19,7 @@ import (
 )
 
 func connectWith(ctx context.Context, url string, o db.TLSOptions) (*pgxpool.Pool, error) {
-	return db.NewPool(ctx, []byte(url), db.PoolOptions{
+	return db.NewPool(ctx, config.DBCredentials{URL: []byte(url)}, db.PoolOptions{
 		MaxConns: 2, ConnectTimeout: 10 * time.Second, Registry: logging.NewRegistry(), TLS: o,
 	})
 }
@@ -77,7 +77,7 @@ func TestTLSRejectsCertificateFromAnotherCA(t *testing.T) {
 	} else if !strings.Contains(err.Error(), "certificate signed by unknown authority") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, err := db.NewMigrator(ctx, []byte(d.ownerURL), o, logging.NewRegistry()); err == nil ||
+	if _, err := db.NewMigrator(ctx, config.DBCredentials{URL: []byte(d.ownerURL)}, o, logging.NewRegistry()); err == nil ||
 		!strings.Contains(err.Error(), "unknown authority") {
 		t.Fatalf("migrator: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestTLSDisableRefusedForBekupRoles(t *testing.T) {
 			t.Fatalf("%s: unexpected error: %v", name, err)
 		}
 	}
-	if _, err := db.NewMigrator(ctx, []byte(d.ownerURL), o, logging.NewRegistry()); err == nil {
+	if _, err := db.NewMigrator(ctx, config.DBCredentials{URL: []byte(d.ownerURL)}, o, logging.NewRegistry()); err == nil {
 		t.Fatal("migrator connected without TLS")
 	}
 }

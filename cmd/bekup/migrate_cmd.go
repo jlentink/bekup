@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -23,13 +24,15 @@ func newMigrateCmd(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Apply database migrations (as bekup_owner); default action: up",
-		Long: "Apply the embedded database migrations as bekup_owner, using database.owner_url_file.\n" +
-			"An advisory lock ensures only one instance migrates at a time; others wait.",
+		Long: "Apply the embedded database migrations as bekup_owner, using database.owner_url_file (URL mode)\n" +
+			"or database.owner_user/owner_password_file (fields mode). An advisory lock ensures only one\n" +
+			"instance migrates at a time; others wait. `up` first runs the same preflight as `check`.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error { return runMigrate(c, g, "up") },
 	}
 	for _, sub := range []struct{ name, short string }{
-		{"up", "Apply all pending migrations (default)"},
+		{"up", "Run the preflight, then apply all pending migrations (default)"},
+		{"check", "Preflight: server version, database owner, citext, role checks, TLS facts (changes nothing)"},
 		{"status", "Show applied and pending migrations"},
 		{"down-one", "Roll back the most recent migration (dev mode only)"},
 	} {
@@ -59,19 +62,7 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	}
 
 	ctx := c.Context()
-	url, err := res.Config.DatabaseOwnerURL()
-	if err != nil {
-		return fmt.Errorf("read database owner URL: %w", err)
-	}
-	tlsOpts, err := db.LoadTLSOptions(res.Config)
-	if err != nil {
-		config.Zero(url)
-		return fmt.Errorf("database TLS: %w", err)
-	}
-	connectCtx, cancel := context.WithTimeout(ctx, res.Config.Database.ConnectTimeout.D())
-	m, err := db.NewMigrator(connectCtx, url, tlsOpts, nil)
-	cancel()
-	config.Zero(url)
+	m, err := openMigrator(ctx, res.Config)
 	if err != nil {
 		return err
 	}
@@ -83,6 +74,15 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 
 	out := c.OutOrStdout()
 	switch action {
+	case "check":
+		rep, err := m.Check(ctx)
+		if werr := writePreflight(out, rep, err); werr != nil {
+			return werr
+		}
+		if err != nil {
+			return errors.New("preflight failed")
+		}
+		return nil
 	case "status":
 		st, err := m.Status(ctx)
 		if err != nil {
@@ -96,6 +96,22 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 		}
 		return err
 	default:
+		rep, err := m.Check(ctx)
+		f := rep.TLS
+		logger.InfoContext(ctx, "app database connected",
+			slog.String("config_mode", res.Config.Database.DatabaseMode()),
+			slog.String("tls_mode", f.Mode), slog.Bool("encrypted", f.Encrypted), slog.String("tls_version", f.Version),
+			slog.Bool("chain_verified", f.ChainVerified), slog.Bool("host_verified", f.HostVerified),
+			slog.Bool("channel_binding", f.ChannelBinding))
+		for _, w := range rep.Warnings {
+			logger.WarnContext(ctx, "migrate preflight warning", slog.String("warning", w))
+		}
+		if err != nil {
+			if werr := writePreflight(c.ErrOrStderr(), rep, err); werr != nil {
+				return werr
+			}
+			return errors.New("preflight failed; nothing was migrated (details above; `bekup migrate check` repeats them)")
+		}
 		rs, err := m.Up(ctx)
 		for _, r := range rs {
 			logger.InfoContext(ctx, "migration applied", resultAttrs(r)...)
@@ -105,6 +121,85 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 		}
 		return err
 	}
+}
+
+// openMigrator connects as bekup_owner (or the single account acting as
+// bekup_owner, D-207) with the configured TLS policy and runs the role
+// checks.
+func openMigrator(ctx context.Context, cfg *config.Bekup) (*db.Migrator, error) {
+	creds, err := cfg.OwnerDBCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("read database owner credentials: %w", err)
+	}
+	tlsOpts, err := db.LoadTLSOptions(cfg)
+	if err != nil {
+		creds.Zero()
+		return nil, fmt.Errorf("database TLS: %w", err)
+	}
+	connectCtx, cancel := context.WithTimeout(ctx, cfg.Database.ConnectTimeout.D())
+	m, err := db.NewMigrator(connectCtx, creds, tlsOpts, nil)
+	cancel()
+	creds.Zero()
+	return m, err
+}
+
+// writePreflight prints the preflight report and the failed checks (facts
+// only: no host names, no credentials).
+func writePreflight(w io.Writer, r *db.PreflightReport, checkErr error) error {
+	var b strings.Builder
+	if r != nil {
+		fmt.Fprintf(&b, "server:          PostgreSQL %s\n", r.ServerVersion)
+		fmt.Fprintf(&b, "database:        %s\n", r.Database)
+		fmt.Fprintf(&b, "citext:          %s\n", r.Citext)
+		fmt.Fprintf(&b, "tls:             %s\n", tlsFactsLine(r.TLS))
+		if r.SingleAccount {
+			b.WriteString("roles:           SINGLE-ACCOUNT MODE (weakened: one account runs migrations and the app, D-207)\n")
+			for _, f := range r.LoginFindings {
+				fmt.Fprintf(&b, "  login role:    %s\n", f)
+			}
+		} else {
+			b.WriteString("roles:           bekup_owner and bekup_app checked (no dangerous attributes or memberships)\n")
+		}
+		for _, wn := range r.Warnings {
+			fmt.Fprintf(&b, "WARNING: %s\n", wn)
+		}
+	}
+	if checkErr != nil {
+		for _, e := range splitErrors(checkErr) {
+			fmt.Fprintf(&b, "FAILED: %s\n", e)
+		}
+	} else {
+		b.WriteString("preflight OK\n")
+	}
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// tlsFactsLine renders db.TLSFacts in one line.
+func tlsFactsLine(f db.TLSFacts) string {
+	if !f.Encrypted {
+		return fmt.Sprintf("NOT ENCRYPTED (tls_mode %s)", f.Mode)
+	}
+	s := fmt.Sprintf("%s, tls_mode %s, chain verified: %t, host verified: %t", f.Version, f.Mode, f.ChainVerified, f.HostVerified)
+	if f.ServerNameOverride {
+		s += " (against tls_server_name)"
+	}
+	if f.ChannelBinding {
+		s += ", SCRAM channel binding required"
+	}
+	return s
+}
+
+// splitErrors flattens errors.Join trees into their messages.
+func splitErrors(err error) []string {
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		out := make([]string, 0, len(j.Unwrap()))
+		for _, e := range j.Unwrap() {
+			out = append(out, splitErrors(e)...)
+		}
+		return out
+	}
+	return []string{err.Error()}
 }
 
 func resultAttrs(r db.MigrationResult) []any {

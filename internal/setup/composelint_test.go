@@ -15,8 +15,14 @@ import (
 // none) resolved with dotenv, like check does in /deploy.
 func lintWith(t testing.TB, compose, override []byte, v Variant, dotenv map[string]string) []Finding {
 	t.Helper()
+	return lintWithDB(t, compose, override, v, DBBundled, dotenv)
+}
+
+// lintWithDB is lintWith for a database mode.
+func lintWithDB(t testing.TB, compose, override []byte, v Variant, db DBMode, dotenv map[string]string) []Finding {
+	t.Helper()
 	img := mustRef(t, variantImage)
-	expected, err := renderEmbedded(bekup.Assets(), v, &img)
+	expected, err := renderEmbedded(bekup.Assets(), v, db, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +53,7 @@ func insertLineAfter(t testing.TB, s, line, add string) string {
 // compose.override.yaml (D-205 amendment).
 func TestLintBypasses(t *testing.T) {
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantTraefik, &img)
+	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +173,7 @@ func TestLintBypasses(t *testing.T) {
 // resolves them.
 func TestLintResolvedModel(t *testing.T) {
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantTraefik, &img)
+	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,10 +203,10 @@ func TestLintResolvedModel(t *testing.T) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
 			}
 			// Never recognized as a release file.
-			if _, err := inspectComposeData(fsys, composeInput{compose: []byte(tc.compose)}, ""); err == nil || !strings.Contains(err.Error(), "customized") {
+			if _, err := inspectComposeData(fsys, composeInput{compose: []byte(tc.compose)}, "", ""); err == nil || !strings.Contains(err.Error(), "customized") {
 				t.Fatalf("recognized: %v", err)
 			}
-			info, err := inspectComposeData(fsys, composeInput{compose: []byte(tc.compose)}, VariantTraefik)
+			info, err := inspectComposeData(fsys, composeInput{compose: []byte(tc.compose)}, VariantTraefik, "")
 			if err != nil || info.Level != RecognizedCustom || !info.HasErrors() {
 				t.Fatalf("customized: %+v %v", info, err)
 			}
@@ -235,11 +241,11 @@ func TestLintResolvedModel(t *testing.T) {
 		})
 	}
 	// A multi-document compose.yaml is refused before anything else.
-	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(s + "---\nservices:\n  serve:\n    privileged: true\n")}, VariantTraefik); err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(s + "---\nservices:\n  serve:\n    privileged: true\n")}, VariantTraefik, ""); err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
 		t.Fatalf("multi-document compose.yaml: %v", err)
 	}
 	// ... and so is a multi-document override at init/upgrade.
-	if _, err := inspectComposeData(fsys, composeInput{compose: src, override: []byte("{}\n---\n{}\n")}, ""); err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: src, override: []byte("{}\n---\n{}\n")}, "", ""); err == nil || !strings.Contains(err.Error(), "more than one YAML document") {
 		t.Fatalf("multi-document override: %v", err)
 	}
 	// Allowed: the documented runner overrides.
@@ -266,13 +272,13 @@ func TestLintResolvedModel(t *testing.T) {
 // for referenced variables.
 func TestComposeEnvInterpolation(t *testing.T) {
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantNPM, &img)
+	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fsys := bekup.Assets()
 	env := map[string]string{"SERVE_PROXY_IP": "10.213.253.11"}
-	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: env}, "")
+	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: env}, "", "")
 	if err != nil || info.Level != RecognizedExact || len(info.Findings) > 0 {
 		t.Fatalf("%+v %v", info, err)
 	}
@@ -282,7 +288,7 @@ func TestComposeEnvInterpolation(t *testing.T) {
 	if lit == string(src) {
 		t.Fatal("edit did not apply")
 	}
-	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(lit), dotenv: env}, ""); err == nil || !strings.Contains(err.Error(), "customized") {
+	if _, err := inspectComposeData(fsys, composeInput{compose: []byte(lit), dotenv: env}, "", ""); err == nil || !strings.Contains(err.Error(), "customized") {
 		t.Fatalf("literal with a different .env: %v", err)
 	}
 	got := projectEnv(map[string]string{"A": "1", "B": "2"}, func(k string) (string, bool) {

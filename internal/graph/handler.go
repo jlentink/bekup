@@ -137,6 +137,8 @@ type Options struct {
 	AuditChain resolvers.AuditChainSource
 	// ConfigReload backs the runtime config reload fields (task 6.13).
 	ConfigReload *configreload.API
+	// RetentionHolds backs Job.retentionHolds (D-209; nil: empty).
+	RetentionHolds resolvers.RetentionHoldSource
 }
 
 // Handler is the /graphql endpoint.
@@ -196,6 +198,7 @@ func New(opts Options) (*Handler, error) {
 			Egress:          opts.Egress,
 			AuditChain:      opts.AuditChain,
 			ConfigReload:    opts.ConfigReload,
+			RetentionHolds:  opts.RetentionHolds,
 		},
 		Directives: directives(opts.Access),
 	})

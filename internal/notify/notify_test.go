@@ -43,6 +43,7 @@ func TestCatalogMetadata(t *testing.T) {
 		TestRestoreWarnings:         {GroupRestore, AudienceJob, true, false, false, authz.OpTestRestoreView},
 		TestRestoreFailed:           {GroupRestore, AudienceJob, true, false, false, authz.OpTestRestoreView},
 		RetentionSummary:            {GroupRetention, AudienceJob, false, false, false, authz.OpArtifactView},
+		RetentionBlocked:            {GroupRetention, AudienceJob, true, false, false, authz.OpArtifactView},
 		ArtifactMissing:             {GroupRetention, AudienceJob, true, false, false, authz.OpArtifactView},
 		DestinationTestFailed:       {GroupRetention, AudienceStaff, true, false, false, authz.OpDestinationView},
 		JobCreated:                  {GroupConfig, AudienceJob, false, false, false, authz.OpJobView},
@@ -405,5 +406,34 @@ func TestDisplayName(t *testing.T) {
 	}
 	if displayName("  ") != "(unnamed)" {
 		t.Fatal("empty name")
+	}
+}
+
+// TestRenderRetentionBlocked: retention.blocked names the destination, the
+// held count, the start and the cause (D-209).
+func TestRenderRetentionBlocked(t *testing.T) {
+	s := testService(t)
+	job, dest := uuid.New(), uuid.New()
+	m, _ := Lookup(RetentionBlocked)
+	for _, c := range []struct {
+		detail string
+		want   []string
+	}{
+		{`{"reason":"newer_than_newest_complete","held_runs":3,"since":"2026-10-01","newest_complete":"2026-09-30"}`,
+			[]string{"3 incomplete backup(s)", `"offsite"`, "since 2026-10-01", "after 2026-09-30 are incomplete"}},
+		{`{"reason":"no_complete_run","held_runs":1,"since":"2026-10-02"}`,
+			[]string{"1 incomplete backup(s)", "holds no complete backup"}},
+	} {
+		ev := &sqlc.NotificationEvent{ID: uuid.New(), Type: string(RetentionBlocked), Severity: "warning", JobID: &job,
+			DestinationID: &dest, Detail: json.RawMessage(c.detail), CreatedAt: time.Now()}
+		got := s.render(ev, m, names{job: "nightly", destination: "offsite"})
+		for _, w := range c.want {
+			if !strings.Contains(got.Body, w) {
+				t.Errorf("body %q lacks %q", got.Body, w)
+			}
+		}
+		if got.Link != "https://bekup.example.com/app/jobs/"+job.String() {
+			t.Errorf("link %q", got.Link)
+		}
 	}
 }

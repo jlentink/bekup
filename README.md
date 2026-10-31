@@ -132,8 +132,46 @@ Components, networks and data flows are described in
 
 You need a Linux host with Docker Engine 26+ and Compose 2.24+, and a DNS
 name for the UI. Every step runs as root (or a member of the `docker`
-group) in the deployment directory. Pick the variant that matches your
-reverse proxy. Each variant is one compose file, committed in
+group) in the deployment directory.
+
+**One command: the setup wizard.** In an empty directory, run the setup
+wizard of the image you deploy (pinned by digest, its tag naming the
+version), then start the stack:
+
+```sh
+IMAGE=<registry>/bekup:<version>@sha256:<digest>
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -e BEKUP_IMAGE="$IMAGE" -e DOCKER_GID="$(stat -c %g /var/run/docker.sock)" \
+  -v "$PWD":/deploy "$IMAGE" setup
+sudo docker compose up -d
+sudo docker compose run --rm admin create --email you@example.com --display-name "Your Name"
+```
+
+The wizard asks for the reverse proxy (bekup's own Traefik, your Traefik,
+Nginx Proxy Manager or none), the domain, the database (bundled, or your
+existing PostgreSQL 15-17), the master key and the internal CA, shows a
+summary and writes everything, `compose.yaml` included. Esc goes back;
+nothing is written before the summary. The container has no network and
+only `CAP_CHOWN`; `--log-driver none` keeps a generated passphrase out of
+Docker's logs. With your own PostgreSQL, run the one command it prints
+before `up -d`, usually
+`sudo docker compose run --rm migrate db bootstrap --admin-user <admin>`
+([docs/installation/external-database.md](docs/installation/external-database.md)).
+Details: [docs/installation/compose.md](docs/installation/compose.md#install-with-the-setup-wizard).
+
+### Advanced: start from a compose file
+
+Pick the variant that matches your reverse proxy. Each also exists as
+`*.external-db.yaml` for your own PostgreSQL: save that file as
+`compose.yaml`, put your PostgreSQL's CA bundle (PEM) into the directory
+before step 2 (setup asks for its path and copies it), and run the
+bootstrap command setup prints
+(`docker compose run --rm migrate db bootstrap --admin-user <admin>`)
+before `docker compose up -d`
+([docs/installation/external-database.md](docs/installation/external-database.md)).
+Each variant is one compose file, committed in
 [`deploy/compose/`](deploy/compose/) (generated, never edited by hand; the
 image comes from `BEKUP_IMAGE`) and, once releases exist, also published
 with every release with the bekup image pinned by digest and attested.
@@ -147,7 +185,7 @@ release notes, or `docker image inspect --format '{{index .RepoDigests 0}}'
 `<registry>/bekup@sha256:…`; keep `:<version>` in front of the `@`). The
 release file already pins it: drop `BEKUP_IMAGE=…` there.
 
-<details open>
+<details>
 <summary><b>Own Traefik</b> (bekup brings Traefik; ports 80/443, Let's Encrypt)</summary>
 
 1. Save the compose file:
@@ -274,14 +312,20 @@ Setup asks for the domain, the ACME e-mail (own Traefik only) and a
 passphrase for the CA key, writes everything except `compose.yaml` and
 hands every file to the container user that reads it. Escrow the master key
 offline and move the CA directory to offline media (`setup` prints how).
-Upgrades: replace `compose.yaml` with the new release file, then
+Upgrades of a wizard install (setup wrote `compose.yaml`): run the wizard
+command above with the **new** image; in an existing deployment it offers
+the guided upgrade (it shows the changes and asks for a backup first), then
+`docker compose pull` and `docker compose up -d`. With a downloaded file:
+replace `compose.yaml` with the new release file, then
 `docker compose run --rm setup upgrade`, `docker compose pull` and
 `docker compose up -d`; with the committed file run
 `BEKUP_IMAGE=<new image> docker compose run --rm setup upgrade` instead
 (it updates `.env`) ([docs/installation/upgrades.md](docs/installation/upgrades.md)).
 
-Using nginx, your own proxy, or the full setup with every service? See the
-setup-first install in
+Certificates are renewed with `bekup setup renew`
+([docs/security/mtls-certs.md](docs/security/mtls-certs.md#renewal-with-bekup-setup-renew)).
+Using nginx or the full setup with every service? See the setup-first
+install in
 [docs/installation/compose.md](docs/installation/compose.md#alternative-setup-first).
 
 <details>

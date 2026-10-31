@@ -36,6 +36,7 @@ import {
   GenerateDestinationSshKeypairMutation,
 } from "./operations";
 import { DestinationTest } from "./test-panel";
+import { UnrecordedFilesBanner, UnrecordedFilesSection } from "./unrecorded-files";
 
 type Destination = NonNullable<DetailResult["destination"]>;
 type Settings = NonNullable<Destination["settings"]>;
@@ -291,6 +292,7 @@ export function DestinationDetailPage() {
         {d.noDelete ? <Tag tone="info">No-delete</Tag> : null}
         {!isAdmin ? <Tag tone="neutral">Read only</Tag> : null}
       </div>
+      <UnrecordedFilesBanner destinationId={d.id} enabled={isAdmin} />
 
       <div className="flex flex-col">
         <LedgerSection
@@ -356,6 +358,8 @@ export function DestinationDetailPage() {
         )}
 
         {d.type === "SFTP" ? <SftpSection d={d} isAdmin={isAdmin} /> : null}
+
+        {isAdmin ? <UnrecordedFilesSection destinationId={d.id} noDelete={d.noDelete} /> : null}
 
         {isAdmin ? (
           <LedgerSection

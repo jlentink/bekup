@@ -27,6 +27,10 @@ image's setup, which rewrites the BEKUP_IMAGE line of .env:
 Setup-first: --write-compose --image <new pinned image> also rewrites
 compose.yaml (run with docker run, see bekup setup --help).
 
+On a terminal the upgrade is guided (D-208): it shows the versions, the
+compose changes, new secrets and the restart, asks for the backup and then
+for confirmation before writing anything (--non-interactive skips it).
+
 ```
 bekup setup upgrade [flags]
 ```
@@ -43,7 +47,9 @@ bekup setup upgrade [flags]
       --generate-ca-passphrase      generate a passphrase and show it ONCE on stderr (only when stderr is a terminal; run with --log-driver none)
   -h, --help                        help for upgrade
       --image string                the new bekup image pinned by digest (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)
+      --non-interactive             no guided confirmation on a terminal
       --ownership string            auto, chown, print or none (default "auto")
+      --plain                       plain-text interface for the guided upgrade (NO_COLOR only drops the colors)
       --write-compose               setup-first deployments: rewrite compose.yaml for --image (refused compose-first)
 ```
 
@@ -57,5 +63,5 @@ bekup setup upgrade [flags]
 
 ### SEE ALSO
 
-* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory
+* [bekup setup](bekup_setup.md)	 - Write and maintain a container-only compose deployment directory (wizard on a terminal)
 

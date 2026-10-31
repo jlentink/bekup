@@ -11,6 +11,7 @@ import (
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
+	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
 
@@ -142,6 +143,10 @@ func (a *App) newRetentionWorker() (*retention.Worker, error) {
 		Publisher: a.publisher(), DryRun: cfg.DryRun, MaxDeletions: cfg.MaxDeletionsPerSweep,
 		PartialCleanupAge: cfg.PartialCleanupAge.D(), Metrics: a.metrics, Logger: a.opts.Logger,
 		Alerts: a.retentionAlerts(),
+		// D-209: abandoned runs are failed (interrupted) before the daily
+		// fan-out; every destination gets the unrecorded-file scan.
+		Runs:       runstate.NewStore(a.pool, a.publisher(), nil).WithObserver(a.metrics),
+		Unrecorded: a.destinations,
 	})
 }
 

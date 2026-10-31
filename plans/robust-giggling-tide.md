@@ -1,255 +1,168 @@
-# Plan: finish the fix round, remove mobile-app references, compose-first onboarding
+# Plan: external PostgreSQL + Bubble Tea setup wizard
 
 ## Context
 
-Since commit `7564cdd` these are built but uncommitted: the CI fixes, `bekup setup` (D-203) and the GHCR release workflow (D-204). Both reviews ran and a fix round was half done when plan mode paused it. The user then asked for:
+What the user asked for (2026-10-30):
+- **Existing Postgres:** connect to your own Postgres with plain connection fields (host, port, name, user, password file). Passwords come only from files, never inline or from the environment.
+- **Wizard:** an interactive setup that runs inside the bekup image, built on Bubble Tea. It asks whether you use an external proxy and an existing database, then writes everything, `compose.yaml` included. The same wizard guides upgrades.
+- **The admin account the user gives** (host, user, password) supports two modes ("both"):
+  - **Bootstrap (default):** a one-time `bekup db bootstrap` uses the admin account to create the database and the two least-privilege roles (`bekup_owner`, `bekup_app`) with generated passwords. The admin password is not kept.
+  - **Single account (opt-in):** bekup runs migrations and the app as that one user. This is an explicit weakening: startup warning, audit entry, security alert and a UI badge, because the app could then change its own schema and audit log.
+- **Accepted defaults from the external-DB design:**
+  - fixed role names (one bekup per cluster);
+  - SCRAM channel binding stays required, so poolers are unsupported;
+  - `tls_ca_file` may name a provider bundle or the system bundle file;
+  - optional `tls_server_name`;
+  - the roles SQL uses SCRAM verifiers, never plaintext;
+  - 6 compose files: 3 proxy variants × bundled or external DB.
 
-1. **Remove every iOS and Android app reference.** Also remove the reserved **push** channel, which existed only for the mobile apps (user decision). Phase 2 keeps only the external API.
-2. **Simple onboarding for Docker Compose users.** The README leads with three steps:
-   1. download a copyable `compose.yaml`;
-   2. `docker compose run --rm setup`;
-   3. `docker compose up -d`.
+## Part E: external database backend (D-207, proposed)
 
-   There are three variants: bekup with its own Traefik (the default), behind an **existing Traefik**, and behind **Nginx Proxy Manager**. User decisions:
-   - full hardening in the copyable file;
-   - a dedicated `bekup-proxy` link network for external proxies;
-   - the files come only as release downloads (pinned by digest, attested);
-   - the deployment file name is `compose.yaml`.
+The design agent's proposal (sections 1–3 and 5), plus the user's additions.
 
-## Part A: finish the paused review-fix round (first)
+- **Config.** `[database]` fields mode: `host`, `port`, `name`, `user`, `password_file`, `owner_user`, `owner_password_file` and `tls_server_name`.
+  - Fields mode and URL mode are mutually exclusive, enforced in a normalize step that knows each key's source.
+  - New `DBCredentials` replaces `DatabaseURL()`.
+- **`internal/db` connection builder:**
+  - builds the pgx config from the fields, not from a DSN string, and ignores the PG* environment;
+  - the TLS policy is shared by both modes;
+  - the startup parameter `search_path=public`;
+  - one builder for the pool, the connector and the migrator.
+- **Commands and checks:**
+  - `internal/db/scram.go` and `rolesql.go`, plus `bekup db roles-sql`;
+  - a `bekup migrate check` preflight that `migrate up` also runs.
+- **`bekup db bootstrap`** (new): takes the admin credentials (host, port, user, admin password from a file or a TTY prompt, admin database).
+  - It connects with the same TLS policy, then creates the roles with SCRAM verifiers of passwords that are generated or supplied, the database, the grants and, if possible, citext. It runs the D-099 checks afterwards.
+  - It is idempotent and never logs or stores the admin password.
+  - It works with managed providers' admin roles (`rds_superuser`, `cloudsqlsuperuser`, `azure_pg_admin`, or CREATEROLE+CREATEDB).
+- **Single-account mode:** `database.single_account = true` plus `user`/`password_file`, with no owner credentials.
+  - Feasibility must be checked: released migrations GRANT to `bekup_app`/`bekup_owner`, so the roles may have to exist as NOLOGIN roles, or the mode is limited to accounts that can create roles.
+  - The weakening treatment: startup WARN, an audit entry (`security.insecure_db_roles` or similar, fail closed), a daily alert, an admin `ServerInfo` badge, documentation; the D-099 checks adjusted for this mode only.
+  - If it isn't feasible without editing released migrations, stop and report with options.
+- **Startup:** log the TLS facts. Optionally add an admin `ServerInfo` badge for weakened DB transport or roles.
+- **Tests:**
+  - config table and fuzz tests;
+  - the builder ignores hostile PG* environment variables (reflection test);
+  - special-character passwords, with no secret leaks;
+  - the TLS matrix;
+  - the SCRAM test vector, roles-sql golden files, bootstrap;
+  - integration against plain `postgres:15/16/17` containers with a test CA and a non-superuser CREATEROLE+CREATEDB admin: bootstrap → migrate → serve checks; single-account mode; negative cases.
+- **Docs:** `docs/installation/external-database.md` with provider sections; updates to `configuration.md`, `app-db-tls.md`, `db-roles.md`, SECURITY.md, AGENTS.md; D-207.
 
-Resume the fix agent with its notes (`plans/robust-giggling-tide-agent-a26fab53cbccb5a41.md`).
+## Part S: setup DB dimension + Bubble Tea wizard + guided upgrade (D-208, proposed)
 
-- **Already done:** ownership EPERM, offline CA protection, FAT/exFAT, `override.go`, the deployment root check, `os.Root`, tagless refs, L7 backups, CIDR limits.
-- **To do:**
-  - **`release.yml` split:** build/push by digest (write) → Trivy scan (read only) → sign/attest/tag (write). `harden-runner` and `checkout` stay in the write jobs (decided).
-    - recompute `latest` via `gh api …/git/matching-refs/tags/v` in a global `release-latest` concurrency group;
-    - the immutability check fails closed except on a 404;
-    - the tag object's name must equal `GITHUB_REF_NAME`;
-    - fetch the tag with the token;
-    - disable CI caches when called by the release;
-    - state the cosign minimum version;
-    - verify the trivy-action pin.
-  - **Remaining Lows:** L1 `--log-driver none`; passphrase warning on stderr; remaining tests (regenerate rollback, CA refusal, override, L7, L8); `pinHelp` in upgrade; `readPassphraseLine` stops at the newline; SECURITY.md B10 and the AGENTS.md boundary row; the `--fix-ownership` step in the `setup-install` CI job.
-  - **Docs:** the D-203/D-204 updates and the 5.7 note (three load-sensitive tests examined, carried to 7.1).
-- **Skip** the README, `compose.md` and `upgrades.md` rewrites and the shadow-file tests on the old names: Part C replaces them.
-- **Verify:** the Docker reproductions of both Highs with a rebuilt image, actionlint/zizmor, `just lint`/`sec`/`test-scripts`, race tests, setup integration tests.
+Depends on Part E.
 
-## Part B: remove mobile-app references and the push channel
+- **Setup DB dimension** (design section 4):
+  - `DBMode bundled|external` overlays and 6 committed and released compose files;
+  - manifest, state (`database_mode`), check, upgrade (no mode switch);
+  - the non-internal `backend` network for external mode, the CA copy, password files.
+- **Wizard** (`bekup setup`, no subcommand, on a TTY), built with charmbracelet `bubbletea` + `huh` (forms) + `lipgloss`. Pin the versions, check the licenses (MIT), and add a doctor/sec check.
+  - **Steps:** welcome → proxy (own Traefik / existing Traefik / Nginx Proxy Manager / none) → domain (+ ACME e-mail for own Traefik) → database (bundled / existing) → for an existing database: host, port, name, CA file, and how to authenticate (bootstrap with admin credentials / roles already exist / print SQL for my DBA / single account (weakening, explained)) → Docker GID → CA passphrase (generated or entered) → summary → write.
+  - **Writes** everything including `compose.yaml` (setup-first `--write-compose` path) through the same library code as the flag-based init.
+  - **Runs the bootstrap** for an existing database, if chosen. The setup container has `network_mode: none`, so it prints `docker compose run --rm migrate db bootstrap …` (or runs bootstrap from the migrate service) instead of connecting from the setup container.
+  - **Ends** with the exact next commands.
+  - Non-TTY or `--non-interactive` falls back to the flag mode. Every screen is accessible (no color-only cues) and supports Esc/back.
+- **Key and certificate generation in the wizard** (user request): one consent screen per item.
+  - **Master encryption key:** generate a new keyring (default) or import an existing keyring file (reinstall), validated with the key-check values. Then show the key ID and the escrow guidance (back it up now).
+  - **Internal CA + mTLS certificates (runner, serve):**
+    - generate a new private CA, passphrase-protected (generated and shown once, or entered twice), or use an existing CA mounted at `secrets/certs/ca` (offline media) with its passphrase;
+    - shows the fingerprints;
+    - recommends moving the CA directory offline.
+  - **Bundled Postgres TLS certificate and DB passwords** (bundled DB only): generate them; for an external DB this is replaced by the DB screens of Part E.
+  - **Not offered:** proxy TLS (own Traefik uses Let's Encrypt; external proxies manage their own).
+  - Each "no" is explained: what the operator must provide instead and where.
+  - Secret files are written with the manifest owners and modes, never shown again.
+- **Certificate renewal through the CLI** (user request: guided, simple): `bekup setup renew`, the same wizard UI, with `--non-interactive` flags.
+  - It lists all internal certificates (runner, serve, postgres, CA) with their expiry. It warns from 30 days before expiry; that threshold is shared with the existing hourly security check (`monitor.SecurityChecker`) and its notification.
+  - It asks for the CA (mount or path) and the passphrase, then renews the expiring leaf certificates (or all of them, if chosen) through `internal/certs` (`certs rotate` for leaves). It sets the owners and modes through the ownership code.
+  - It prints exactly which services to restart (`docker compose up -d --force-recreate runner serve worker postgres`, only those affected).
+  - **CA renewal:** offers the existing stage → promote → finish CA rotation (D-090) as a guided multi-step flow, resumable with a state hint.
+  - The CA key stays offline: no automatic renewal.
+  - Renewals are not audited (setup has no network or database access); they print the new fingerprints as evidence; `bekup certs rotate` where the app DB is reachable stays the audited path.
+  - `setup check` and the dashboard point to `setup renew` when a certificate is expiring.
+- **Guided upgrade** (`bekup setup upgrade` on a TTY): current vs new version, compose diff summary, new secret groups, restart-required config, a backup reminder, confirm, write; then prints `docker compose pull && docker compose up -d`.
+- **README:** the main path becomes one `docker run … setup` command (hardened flags), then `docker compose up -d`. The download-a-compose-file path stays as the advanced option.
+- **Tests:**
+  - wizard models driven programmatically: the `teatest` / huh model tests per path, so every combination of answers produces the same files as the flag mode (golden comparison);
+  - a no-TTY fallback test;
+  - the upgrade wizard;
+  - the key/certificate consent paths (generate vs import vs mount existing CA) and `setup renew` (expiry detection, leaf renewal with a mounted test CA, owner/mode results, the restart list, the CA rotation steps), each in TTY and non-interactive form;
+  - the CI end-to-end flow for the external DB (a TLS Postgres container, bootstrap, up, admin create).
 
-- **Plan** (`plans/backup-databases-abstract-corbato.md`):
-  - delete the "Phase 3 — Native iOS · Phase 4 — Native Android" section;
-  - in Phase 2, drop push/FCM/device registration and the "API style for mobile" wording, keeping only the external API;
-  - remove push from the P1 notifications row (l.45) and from the intro line (l.4);
-  - remove "push" from user-facing wording anywhere else in the plan.
-- **`SECURITY.md:587`:** "Phase 2 (external API)" only; drop "Phases 3–4 (mobile apps)".
-- **Push channel code and data:**
-  - GraphQL `internal/graph/schema/notifications.graphqls`: remove the `PUSH` value from the channel enum and the "push follows in phase 2" docstrings; `just gen` regenerates `generated.go`, `models_gen.go`, `docs/reference/schema.graphql` and `web/src/graphql/gen`.
-  - `internal/notify/prefs.go`, `api_prefs.go`, the matrix channel list (`notify.MatrixChannels`) and every switch/case on push.
-  - **DB:** a new migration `00033_drop_push_channel.sql` (migrations 00028+ are committed, so 00028 stays unedited):
-    - delete any `push` preference rows (there are none in practice);
-    - narrow the CHECK constraints that list `push`;
-    - write the Down section;
-    - update `internal/db/schema.sql`.
-  - **Web:**
-    - `features/notifications/model.ts` (matrix columns without push), `messages.ts` (`pushNote` removed), the preference matrix and its tests, csp-check fixtures;
-    - leave the session user-agent detection alone (`account/model.ts`, `sessions-section.tsx`, `user-sessions.tsx`): it labels phone browsers, not apps.
-  - **Docs:** `docs/guides/notifications.md` (the push row), `AGENTS.md:791` (the "A new matrix channel (push, phase 2)" convention becomes "A new matrix channel goes into `notify.MatrixChannels` …"), and the D-161/D-191-era texts in `docs/DECISIONS.md`.
+## Part R: retention / disk cleanup bug (D-209, proposed)
 
-    For accepted decisions, don't edit text away: add a short `proposed` **D-206** "Mobile apps and the push channel dropped from the roadmap", which supersedes the push parts of the affected decisions (D-161 channel list, D-191 matrix), and set their status notes accordingly. If an accepted entry is fully about push, mark it `superseded by D-206`.
-  - **Leave alone:** the word lists (`common_passwords.txt`, `eff_large_wordlist.txt`) and the HMAC `ipad` test variable.
-- **Verify:**
-  - `git grep --untracked -i -w -E 'ios|android|iphone|ipad|fcm|apns|mobile|testflight|swiftui|jetpack'` shows only the allowed hits (word lists, `ipad` HMAC, user-agent labels);
-  - `git grep -i -w push` shows no notification-channel uses;
-  - `just gen` ×2, lint, tests, web tests, migration up/down in the db integration tests.
+The investigation found that the deletion path works (dumps, then `manifest.json`, then empty run/job directories). Files stay because of these causes and decisions:
 
-## Part C: compose-first onboarding (D-205 proposed)
+- **A. Keep rules.** "Keep last N" and "keep N days" keep a backup if *either* rule keeps it (unchanged; user decision).
+  - The job editor shows a live preview: "with these settings about X backups per destination are kept", computed from the schedule.
+  - Its hints say the two rules add up.
+  - New jobs default to keep last 7 with **no** day limit.
+  - Existing jobs are unchanged. Editing retention triggers a retention sweep for that job (new: today the new values wait for the next post-run or daily sweep).
+- **B. Partial runs.** The current behaviour stays (incomplete runs newer than the newest complete run are kept). New: when retention keeps runs only for that reason, or a destination has no complete run, show it:
+  - a job-level warning on the job page and dashboard ("retention is holding N incomplete runs on <destination> since <date>: no complete backup");
+  - a notification event `retention.blocked` (problem group, deduplicated per job/destination per day; catalog plus prefs).
+- **C. Unrecorded files and folders:**
+  - **Empty folders:** the daily cleanup prunes empty run and job directories (disk and SFTP), only inside bekup's layout and only directories older than 24 h. It goes through `os.Root` / Lstat (no symlinks) and is never applied to the destination root.
+  - **Orphan files:** a daily scan compares files in bekup's layout (`{slug}/{timestamp}/…`) with artifact rows and records orphans older than 24 h in a new table (path, size, first seen; key names only).
+    - The UI: an admin page per destination ("Unrecorded files"), plus a destination warning.
+    - An admin delete action with step-up, audited, re-checked at delete time, in no-delete mode refused.
+    - Orphans are never deleted automatically. Covers disk and SFTP; S3 too, by listing the prefix, if cheap.
+  - **Runs stuck in `running`** after the final River attempt: the stuck sweep marks them `interrupted` (like restores), so retention sees their files.
+- **D. Path changes.** The disk path, SFTP base path and S3 prefix of a destination can only change when no `present` artifacts remain there. VALIDATION error with an explanation, enforced in `destinations.Service`.
+- **Tests:**
+  - the policy and preview math;
+  - the sweep after a retention edit;
+  - `retention.blocked` emission and dedup;
+  - directory pruning (disk with `os.Root`, symlink refusal, age, never the root);
+  - orphan scan and delete (re-check, no-delete, step-up, audit);
+  - stuck-run marking;
+  - the path-change refusal;
+  - integration on disk and SFTP;
+  - web tests for the preview and the warnings.
+- **Docs:** `docs/guides/retention.md` (rules, preview, partial runs, orphans), `destinations.md` (path changes), the notifications table, D-209.
 
-Based on the design agent's proposal. The facts that drive it:
-- Docker gives fixed IPs only on networks created with a subnet.
-- `compose run` starts a service from an inactive profile.
-- Nothing is released yet, so names and the state schema can change freely.
+## Part V: schema version per database (D-210, proposed)
 
-### C1. Single source and variants
+User decisions:
+- an opt-in per job;
+- selectable presets for the common frameworks plus "Custom query";
+- editable by admins and maintainers (a custom query needs step-up and every change is audited);
+- the version is captured per backed-up database and shown on the run;
+- failure means the backup still succeeds, with a `version_unavailable` warning.
 
-- **Image line:** `docker-compose.yml` gets one top-level line `x-bekup-image: &bekup-image ${BEKUP_IMAGE:-bekup:dev}`, and `x-bekup-hardening` uses `image: *bekup-image`. Release and setup rendering replace exactly that line.
-- **Setup service in the base file:**
-  - `profiles: [setup]`, `user: "0:0"`, `entrypoint: [/usr/local/bin/bekup, setup]`, `command: [init]`;
-  - `environment`: `BEKUP_IMAGE: *bekup-image` and `DOCKER_GID: ${DOCKER_GID:-}`;
-  - hardening: `read_only`, tmpfs `/tmp` (noexec), `cap_drop: [ALL]`, `cap_add: [CHOWN]`, `no-new-privileges`, `network_mode: none`, `logging: {driver: none}`, `stdin_open`/`tty`, `restart: "no"`, limits;
-  - volume `source: .`, `target: /deploy`, `create_host_path: false`.
-- Every `./deploy/...` bind uses long syntax with `create_host_path: false`.
-- **Variants are overlays, not copies.** They live in `internal/setup/variants.go` plus `internal/setup/variants/{traefik,traefik-external,npm}/*.yaml`, applied by a small path-addressed line editor (`internal/setup/outline.go`): delete or replace a service or key, insert after a key, replace a comment or the header.
-  - Untouched base text stays byte-identical.
-  - Overlays never contain `image:` (a test enforces it).
-- **New commands:** `bekup setup compose --variant V [--image pinned]` prints a variant, and `just compose-examples` writes `dist/compose/` (gitignored). Nothing is committed under `examples/` (decided).
-- **File names:** the deployment file is `compose.yaml` everywhere (setup-first too) and the override is `compose.override.yaml`. The shadow list becomes `compose.yml`, `docker-compose.y{a,}ml` and the other override names. The repo source stays `docker-compose.yml`.
+- **Presets** (fixed, reviewed SQL per engine; the job stores only the preset name):
+  golang-migrate (`schema_migrations`: version + dirty), goose, Flyway, Liquibase, Rails, Django, Laravel, Alembic, Prisma, Knex, Sequelize. Each preset defines its PG and MySQL/MariaDB query and the formatting of the result (e.g. `42 (dirty)`).
+- **Custom query:** stored on the job (bounded length, at most 2 KiB), single statement, validated as a SELECT/WITH and refused when it contains `;` mid-statement. It is never trusted as safe: safety comes from how it runs.
+- **Execution in the runner** (the target DB is untrusted, D-152):
+  - captured during the stats phase on the same `dbprobe` session, in a READ ONLY transaction. For PostgreSQL that is the exported snapshot, so the version matches the dump.
+  - `statement_timeout` / `max_execution_time` of a few seconds; the hardened session (search_path, row_security);
+  - only the first row and first column(s) are read; the result is a string of at most 64 chars, ASCII printable, anything else rejected;
+  - a missing table or permission error gives "no version", not an error.
+  - New proto fields in the Dump request (`VersionQuery {preset | custom sql}`) and in the DumpStats message (`version`, `version_status`); runner validation (length, preset allowlist); secret-free logs (never log the query result).
+- **Storage and API:**
+  - a migration adds job columns (`version_query_mode` none|preset|custom, `version_preset`, `version_custom_sql`) and `run_items.schema_version` / `schema_version_status`;
+  - the manifest `stats` include the version, a canonical string;
+  - GraphQL: the job fields (custom SQL readable by staff only) and `RunItem.schemaVersion`;
+  - authz: `job.version_query_edit` (staff; a custom query needs `FreshStepUp`) plus matrix rows; audit `job.version_query_changed` (preset name or "custom", never the SQL in the details beyond a hash).
+- **UI:**
+  - the job editor: a "Schema version" section (off / preset dropdown / custom textarea with a warning text);
+  - the run detail: version per database; the job page: the version of the last run;
+  - the calendar/run list optionally show it.
+- **Tests:**
+  - the preset SQL against real PG/MySQL/MariaDB with each framework's table layout (integration);
+  - custom query bounds (timeout, read-only refusal of writes, long or binary results refused, multiple statements refused);
+  - snapshot consistency;
+  - authz matrix rows; web tests.
+- **Docs:** `docs/guides/jobs-and-schedules.md` (schema version section with the preset list), the runner API notes, D-210.
 
-### C2. External proxies (variants b and c): dedicated link network (decided)
+## Order
 
-- **Network:** `docker network create --internal --subnet 10.213.253.0/28 bekup-proxy` (once). The user's Traefik or NPM joins it with `ipv4_address: 10.213.253.5` (four lines plus a recreate).
-- **bekup side:** bekup declares it external (`name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}`). serve gets `ipv4_address: ${SERVE_PROXY_IP:-10.213.253.10}`, `listen = "10.213.253.10:8080"` and `trusted_proxies = ["10.213.253.5/32"]`.
-  - No wildcard listen (D-098 untouched).
-  - No variant `frontend`/`edge` network and no published ports.
-- **Validation:**
-  - a private subnet between /8 and /29, with no overlap with `runner-ctl`/`metrics`;
-  - both addresses inside the subnet and distinct, never the network, gateway or broadcast address;
-  - `trusted_proxies` exactly the proxy's /32 (a `check` ERROR otherwise).
-- **Existing Traefik** (labels on serve only):
-  - `traefik.enable=true`;
-  - `traefik.docker.network=${BEKUP_PROXY_NETWORK:-bekup-proxy}`;
-  - the router rule ``Host(`${BEKUP_DOMAIN:-bekup.invalid}`)``;
-  - entrypoint `${TRAEFIK_ENTRYPOINT:-websecure}`;
-  - `tls=true` and certresolver `${TRAEFIK_CERTRESOLVER:-letsencrypt}`;
-  - service port 8080;
-  - `responseforwarding.flushinterval=-1ms`;
-  - no middlewares (bekup sets its own headers, D-102).
+1. Part E (one agent; running).
+2. After E: Part S and Part R in parallel (separate packages; R owns retention, storage, destinations and the job/destination web pages; S owns setup, cmd, compose and the wizard).
+3. Part V after R: it shares the job editor and run detail pages, the migrations and the runner proto.
+4. Full checks, then the security and code reviews, the fixes and the handover.
 
-  The docs cover:
-  - `exposedByDefault=false`;
-  - never `forwardedHeaders.insecure` or a 0.0.0.0/0 `trustedIPs`;
-  - no entrypoint-wide header middlewares and no `readTimeout: 0`;
-  - the Docker-socket risk, recommending a socket proxy or the file provider (with a file-provider snippet).
-- **NPM:** the Proxy Host forwards `http` to `10.213.253.10:8080`.
-  - Websockets **off** (SSE, D-124).
-  - Let's Encrypt, Force SSL and HTTP/2 on; NPM's HSTS off (bekup sends HSTS).
-  - Advanced block: `proxy_http_version 1.1; proxy_buffering off; proxy_cache off; proxy_read_timeout 3600s; client_max_body_size 2m;`.
-- **Optional:** a rate-limited WARN in `internal/httpserver` for X-Forwarded-For from an untrusted peer.
+Migrations: every agent takes the next free number at write time.
 
-### C3. Setup in compose-first mode
-
-- **`setup init`** (default when `/deploy/compose.yaml` exists and there is no state file):
-  - read the file safely;
-  - take the image from the `x-bekup-image` line; `BEKUP_IMAGE` must match; `CheckVersionTag`;
-  - recognise the variant by rendering each embedded variant with that image: byte-equal / same YAML model / customised (customised gives a warning, requires `--variant` and runs the hardening lint);
-  - **never write `compose.yaml`**;
-  - write `.env`, the TOMLs, secrets, certificates, `deploy/**`, `reference/*` and the state file.
-- **No `compose.yaml`:** refuse with the release URL, or use `--write-compose --variant traefik|traefik-external|npm|full`. `full` is today's setup-first path, keeping nginx and own-proxy (`--proxy`).
-- **Prompts:**
-  - bundled: domain, ACME e-mail, CA passphrase;
-  - external variants: domain, CA passphrase;
-  - Docker GID from the `DOCKER_GID` environment variable, otherwise a prompt.
-
-  Everything else comes from flags: `--traefik-entrypoint`, `--traefik-certresolver`, `--proxy-network`, `--proxy-subnet`, `--proxy-ip`, `--serve-ip` and the existing ones. New validators cover network names and entrypoint/certresolver names.
-- **State:** adds `compose_mode` (`operator`|`generated`), `variant`, the link-network answers and the compose hash; schema 1 changes in place. In the manifest, `compose.yaml` is `operator` in compose-first and `generated-upgradable` in setup-first.
-- **`setup upgrade`, compose-first:**
-  - the user replaces `compose.yaml` with the new release file, then runs `docker compose run --rm setup upgrade`;
-  - it refuses a downgrade or a variant switch, re-validates the TOMLs, rewrites `deploy/**` and `reference/*`, generates new secret groups and updates the state;
-  - it never writes `compose.yaml`; `--write-compose` exists only for the `docker run` path.
-- **`setup check`, compose-first:**
-  - every image and the `x-bekup-image` line pinned;
-  - no `build`, `include` or `extends.file`;
-  - the hardening lint for customised files and the override: `privileged`, host network/pid/ipc, `docker.sock` outside runner, `ports:` on internal services, and the setup service hardening exact;
-  - recognition; a newer image than recorded gives a hint to upgrade;
-  - variant-aware TOML/`.env` consistency.
-
-### C4. Release assets (extends D-204; after the Part A split)
-
-- **Assets:** `compose.yaml` (own Traefik), `compose.traefik-external.yaml`, `compose.npm.yaml` and `SHA256SUMS`, rendered by running the published digest (`setup compose`, network none, read-only, uid 65532).
-- **Checks:** `release_ci.sh compose-assets`: exactly one pinned `x-bekup-image` equal to the release ref, and every image pinned. Tests are included.
-- **Provenance:** `actions/attest-build-provenance` (`subject-path`) plus `cosign sign-blob` bundles; the assets are uploaded with `gh release create`.
-- **Release notes:** the three steps.
-
-### C5. README quick start (exact text from the design)
-
-The README starts with: Linux host, Docker Engine 26+, Compose 2.24+, a DNS name.
-
-**Own Traefik** (open by default):
-1. Save the compose file and verify it:
-   ```sh
-   sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
-   sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.yaml
-   gh attestation verify compose.yaml --repo jlentink/bekup
-   ```
-2. `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
-3. `docker compose up -d`, then `docker compose run --rm admin create --email you@example.com --display-name "Your Name"`
-
-**Behind your existing Traefik:**
-- Once: `docker network create …`, and four lines added to Traefik's compose file.
-- Same three steps, with `compose.traefik-external.yaml` saved as `compose.yaml`.
-
-**Behind Nginx Proxy Manager:**
-- Once: the same network setup.
-- Same three steps with `compose.npm.yaml`.
-- Then the NPM proxy-host field table and the Advanced block.
-
-Footer: nginx, own proxy or full setup → setup-first (`docs/installation/compose.md#alternative-setup-first`).
-
-### C6. Docs and governance
-
-- **D-205 (proposed):**
-  - compose-first flow;
-  - `compose.yaml` naming;
-  - the `bekup-proxy` link network;
-  - variants as overlays;
-  - release assets with attestations.
-
-  It supersedes the parts of D-203 that make setup always write compose, and extends D-204. Update the D-203/D-204 status lines and the index.
-- **`docs/installation/compose.md`:** compose-first as the main path, with "Alternative: setup-first (`--write-compose`)", network tables per variant and the manifest table.
-- **`reverse-proxy.md`:** sections "Existing Traefik" and "Nginx Proxy Manager" with exact values and verification (`curl -sI`: one HSTS header, bekup's CSP).
-- **`upgrades.md`:** download the new `compose.yaml`, diff, `docker compose run --rm setup upgrade`, `pull`, `up -d`, `setup check`.
-- **Other docs:** `getting-started.md`, the CLI reference, CHANGELOG.
-- **SECURITY.md:**
-  - B2b: the proxy ↔ serve link network;
-  - RP-8: an external Traefik holds the Docker socket;
-  - B10 extended with the compose-run setup container.
-- **AGENTS.md conventions:**
-  - the image only via `x-bekup-image`;
-  - variants only as overlays (never full copies, no `image:`);
-  - deploy binds with `create_host_path: false`;
-  - the deployment file is `compose.yaml`;
-  - the external-proxy boundary row;
-  - `just compose-examples`.
-- **Plan:** task **6.14b** "Compose-first onboarding (D-205)" with acceptance criteria.
-
-### C7. Tests
-
-- **Line editor:** table tests and a fuzz test.
-- **Base style lint.**
-- **Variants:**
-  - exact service set, pins, no `build`;
-  - untouched blocks byte-equal to the base;
-  - external variants: no frontend network, only serve on the proxy network, no published ports;
-  - labels only in `traefik-external`;
-  - the setup service hardening exact.
-- **Recognition levels.**
-- **Compose-first init per variant:** `compose.yaml` untouched, values correct, refusal without a file, `--write-compose`.
-- **Upgrade:** the replaced-file path, a no-op, refusal of a variant switch.
-- **Check:** the /32 rule and the lint errors.
-- **Scripts:** `release_ci_test.sh compose-assets`.
-- **Integration:** `TestIntegrationComposeConfig` for the three variants.
-- **CI `setup-install` end to end, bundled variant:**
-  1. Render with the local-registry digest.
-  2. Self-signed `bekup.test` certificate (static TLS).
-  3. `docker compose run --rm -T setup init --non-interactive … --ca-passphrase-stdin`.
-  4. `up -d --wait`.
-  5. `curl --resolve … /healthz`.
-  6. `admin create` with a password file.
-  7. `setup check`, then `down -v`.
-- **CI `setup-install` end to end, NPM variant:** create the network, init, `up --wait`, then curl from a pinned curl container at 10.213.253.5.
-- **Spike first (C0):** check the Compose behaviour by hand (missing files or network at `run` time, tty/`-T` with `logging: none`, fixed IP on an external subnet network) and confirm Traefik v3 labels. Adjust the README order if Compose validates the external network at `run` time.
-
-## Order and agents
-
-1. **Part A** (the resumed fix agent) and **Part B** (a new agent) in parallel.
-   - Part B owns: notify, graph notification schema, migration 00033, web notifications, `docs/guides/notifications.md`, the plan Phase 2–4 sections, `SECURITY.md:587`, the push line in AGENTS.md and D-206.
-   - Part A owns: setup, release, ci.yml, and the D-203/D-204 edits.
-   - Shared files (DECISIONS index, SECURITY.md, AGENTS.md) get edited at different lines, each agent re-reading before editing.
-2. **Part C** after Part A: same packages and the release workflow.
-3. Then the full check run and both reviews (security and code) over A+B+C, the fixes, and the handover. No commits; the user commits and pushes.
-
-## Verification
-
-- Every part's own checks (above).
-- **Final full run:**
-  - `just gen` ×2;
-  - build and vet (+ integration);
-  - `just lint` (Linux pass + shellcheck);
-  - `just sec`, `just docs`, `go mod tidy -diff`, `just test-scripts`;
-  - `go test -race ./...`;
-  - `DOCKER_API_VERSION=1.47 go test -race -tags integration -p 1 ./...`;
-  - compose config for every profile;
-  - the web suite and csp-check;
-  - actionlint and zizmor.
-- **By hand:** the three README flows against a local registry (the bundled variant with static TLS, and the NPM variant with a curl container acting as the proxy).
-- **After the user pushes:** CI green; the first real release is the user's `just bump` + `just release`.
+No commits: the user commits.

@@ -50,7 +50,10 @@ type ComposeInfo struct {
 	// .env (D-205 amendment 3).
 	FromEnv bool
 	Variant Variant
-	Level   Recognition
+	// DB is the database mode of the file (D-208): the bundled postgres
+	// service or the operator's PostgreSQL.
+	DB    DBMode
+	Level Recognition
 	// Hash is the SHA-256 (hex) of the file.
 	Hash string
 	// Findings are the lint findings (hardening, pins, setup service).
@@ -75,10 +78,12 @@ var ErrNoCompose = errors.New("no " + ComposeFile)
 func noComposeError(root string) error {
 	return fmt.Errorf(`%w in %s: download it from %s
 (compose.yaml: bekup with its own Traefik; compose.traefik-external.yaml or
-compose.npm.yaml behind your proxy; save it as compose.yaml), verify it with
+compose.npm.yaml behind your proxy; the *.external-db.yaml files use your own
+PostgreSQL; save it as compose.yaml), verify it with
 'gh attestation verify compose.yaml --repo jlentink/bekup' and run
 'docker compose run --rm setup' next to it. To let setup write the compose
-file instead (setup-first), pass --write-compose --variant traefik|traefik-external|npm|full`,
+file instead (setup-first), run the wizard ('bekup setup' on a terminal) or
+pass --write-compose --variant traefik|traefik-external|npm|full [--database external]`,
 		ErrNoCompose, root, ReleaseURL)
 }
 
@@ -86,13 +91,13 @@ file instead (setup-first), pass --write-compose --variant traefik|traefik-exter
 // its pinned image, the recognized variant and the lint findings of the
 // resolved project (compose.yaml, compose.override.yaml when present, and
 // .env). A customized file needs requested (the variant it is based on);
-// a recognized file must match requested when given.
-func InspectCompose(dir string, requested Variant) (*ComposeInfo, error) {
+// a recognized file must match requested (and requestedDB) when given.
+func InspectCompose(dir string, requested Variant, requestedDB DBMode) (*ComposeInfo, error) {
 	root, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
-	return inspectCompose(root, bekup.Assets(), requested, nil, os.LookupEnv)
+	return inspectCompose(root, bekup.Assets(), requested, requestedDB, nil, os.LookupEnv)
 }
 
 // composeInput is what docker compose would read in the deployment
@@ -118,7 +123,7 @@ func (in *composeInput) docs() []composeSrc {
 
 // inspectCompose reads compose.yaml, compose.override.yaml and (when
 // dotenv is nil) .env below root.
-func inspectCompose(root string, fsys fs.FS, requested Variant, dotenv map[string]string, lookup func(string) (string, bool)) (*ComposeInfo, error) {
+func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMode, dotenv map[string]string, lookup func(string) (string, bool)) (*ComposeInfo, error) {
 	data, err := readManaged(root, ComposeFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, noComposeError(root)
@@ -140,7 +145,7 @@ func inspectCompose(root string, fsys fs.FS, requested Variant, dotenv map[strin
 			return nil, err
 		}
 	}
-	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup}, requested)
+	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup}, requested, requestedDB)
 }
 
 var composeImageLineRe = regexp.MustCompile(`^x-bekup-image: &bekup-image (\S.*)$`)
@@ -211,7 +216,8 @@ func envImage(env map[string]string) (imageref.Ref, error) {
 // resolved project. Recognition and lint use the same model: a file is
 // *model*-equal only when both its YAML model and the project docker
 // compose resolves from it (with the same .env) equal a release file's.
-func inspectComposeData(fsys fs.FS, in composeInput, requested Variant) (*ComposeInfo, error) {
+// Every release variant is tried with both database modes (D-208).
+func inspectComposeData(fsys fs.FS, in composeInput, requested Variant, requestedDB DBMode) (*ComposeInfo, error) {
 	if requested != "" && !slices.Contains(ReleaseVariants, requested) {
 		return nil, fmt.Errorf("--variant %s: a compose-first deployment uses one of the release files (traefik, traefik-external, npm); the full variant is setup-first only (--write-compose)", requested)
 	}
@@ -246,49 +252,71 @@ func inspectComposeData(fsys fs.FS, in composeInput, requested Variant) (*Compos
 	var model any
 	modelErr := yaml.Unmarshal(data, &model)
 	own, ownErr := loadProject(in.root, env, composeSrc{name: ComposeFile, data: data})
+recognize:
 	for _, v := range ReleaseVariants {
-		r, err := RenderVariant(src, v, renderImg)
-		if err != nil {
-			return nil, err
-		}
-		if bytes.Equal(r, data) {
-			info.Variant, info.Level = v, RecognizedExact
-			break
-		}
-		if modelErr != nil || ownErr != nil {
-			continue
-		}
-		var want any
-		if err := yaml.Unmarshal(r, &want); err != nil {
-			return nil, err
-		}
-		if !reflect.DeepEqual(want, model) {
-			continue
-		}
-		rp, err := loadProject(in.root, env, composeSrc{name: ComposeFile, data: r})
-		if err != nil {
-			return nil, fmt.Errorf("resolving the %s variant: %w", v, err)
-		}
-		if reflect.DeepEqual(rp, own) {
-			info.Variant, info.Level = v, RecognizedModel
-			break
+		for _, db := range DBModes {
+			r, err := RenderVariant(src, v, db, renderImg)
+			if err != nil {
+				return nil, err
+			}
+			if bytes.Equal(r, data) {
+				info.Variant, info.DB, info.Level = v, db, RecognizedExact
+				break recognize
+			}
+			if modelErr != nil || ownErr != nil {
+				continue
+			}
+			var want any
+			if err := yaml.Unmarshal(r, &want); err != nil {
+				return nil, err
+			}
+			if !reflect.DeepEqual(want, model) {
+				continue
+			}
+			rp, err := loadProject(in.root, env, composeSrc{name: ComposeFile, data: r})
+			if err != nil {
+				return nil, fmt.Errorf("resolving the %s variant: %w", v, err)
+			}
+			if reflect.DeepEqual(rp, own) {
+				info.Variant, info.DB, info.Level = v, db, RecognizedModel
+				break recognize
+			}
 		}
 	}
 	switch {
 	case info.Variant != "" && requested != "" && requested != info.Variant:
 		return nil, fmt.Errorf("%s is the %s variant, not %s", ComposeFile, info.Variant, requested)
+	case info.Variant != "" && requestedDB != "" && requestedDB != info.DB:
+		return nil, fmt.Errorf("%s uses the %s database, not %s (%s)", ComposeFile, info.DB, requestedDB, dbFileHint(info.DB))
 	case info.Variant == "" && requested == "":
-		return nil, fmt.Errorf("%s is customized: it matches none of the release files of bekup %s. Pass --variant traefik|traefik-external|npm to name the file it is based on (the hardening lint then checks it), or start from the unchanged release file and put changes into %s", ComposeFile, img.Tag, OverrideFile)
+		return nil, fmt.Errorf("%s is customized: it matches none of the release files of bekup %s. Pass --variant traefik|traefik-external|npm (and --database bundled|external) to name the file it is based on (the hardening lint then checks it), or start from the unchanged release file and put changes into %s", ComposeFile, img.Tag, OverrideFile)
 	case info.Variant == "":
 		info.Variant, info.Level = requested, RecognizedCustom
+		info.DB = requestedDB
+		if info.DB == "" {
+			// Not named: a file with the postgres service is based on the
+			// bundled form (the lint then holds it to that form).
+			info.DB = DBExternal
+			if own != nil && serviceOf(own, "postgres") != nil {
+				info.DB = DBBundled
+			}
+		}
 	}
 	if modelErr != nil {
 		return nil, fmt.Errorf("%s is not valid YAML: %w", ComposeFile, modelErr)
 	}
-	expected, err := RenderVariant(src, info.Variant, renderImg)
+	expected, err := RenderVariant(src, info.Variant, info.DB, renderImg)
 	if err != nil {
 		return nil, err
 	}
 	info.Findings = lintComposeFiles(&in, env, info.Variant, img.String(), expected, placeholder)
 	return info, nil
+}
+
+// dbFileHint names the compose files of a database mode.
+func dbFileHint(db DBMode) string {
+	if db == DBExternal {
+		return "an *.external-db.yaml release file"
+	}
+	return "a release file without .external-db"
 }

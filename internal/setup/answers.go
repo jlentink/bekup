@@ -225,6 +225,9 @@ type Answers struct {
 	// committed file from deploy/compose/, D-205 amendment 3); .env gets
 	// BEKUP_IMAGE=<Image>. Set by Init from the compose file.
 	ImageInEnv bool
+	// DB is the app database: the bundled postgres service (zero value) or
+	// the operator's PostgreSQL (D-208).
+	DB Database
 }
 
 var (
@@ -633,6 +636,9 @@ func (a *Answers) Validate() error {
 	if err := validateNetwork(a.Network); err != nil {
 		return err
 	}
+	if err := a.DB.validate(); err != nil {
+		return err
+	}
 	if a.Proxy == ProxyNone {
 		// The own proxy must not claim serve's or the disabled bundled
 		// proxy's fixed frontend address (the compose lint refuses it too).
@@ -654,6 +660,10 @@ func (a *Answers) Validate() error {
 	}
 	return nil
 }
+
+// ImpliedProxy is the Proxy a variant implies ("" for full: --proxy
+// decides); the wizard fills it like Complete does.
+func (v Variant) ImpliedProxy() Proxy { return v.proxy() }
 
 // proxy is the Proxy a variant implies ("" for full: --proxy decides).
 func (v Variant) proxy() Proxy {
@@ -706,3 +716,24 @@ func bounded(s string) string {
 	}
 	return s
 }
+
+// ValidateTargetCIDR checks one --target-cidr answer.
+func ValidateTargetCIDR(s string) error { return checkScopedPrefix("target-cidr", s) }
+
+// ValidateTrustedProxy checks one --trusted-proxy answer.
+func ValidateTrustedProxy(s string) error { return checkScopedPrefix("trusted-proxy", s) }
+
+// ValidateTargetHost checks one --target-host answer.
+func ValidateTargetHost(s string) error { return validateTargetHosts([]string{s}) }
+
+// ValidateDockerGID checks a --docker-gid answer.
+func ValidateDockerGID(gid int) error {
+	if gid < 0 || gid > maxGID {
+		return fieldErr("docker-gid", "must be between 0 and %d", maxGID)
+	}
+	return nil
+}
+
+// ValidateDatabase checks the database answers d (a copy; defaults are
+// not returned). The *FieldError names the flag of the first problem.
+func ValidateDatabase(d Database) error { return d.validate() }

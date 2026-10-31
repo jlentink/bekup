@@ -418,7 +418,7 @@ func (s *Service) tampered(ctx context.Context, st *Staged, ve *VerificationErro
 	a := &st.row.Artifact
 	details := audit.Details{
 		"reason": ve.Code, "artifact_id": a.ID.String(), "job_id": a.JobID.String(), "run_id": a.RunID.String(),
-		"destination_id": a.DestinationID.String(), "object_key": a.ObjectKey,
+		"destination_id": a.DestinationID.String(), "object": a.ObjectKey,
 	}
 	actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()

@@ -195,6 +195,11 @@ type fakePGOpts struct {
 	noRestrict bool
 	// queries receives every statement (optional).
 	queries chan<- string
+	// failSimple makes a simple-protocol statement fail (optional).
+	failSimple func(query string) bool
+	// answer overrides the rows and column type OIDs of an extended
+	// query (optional; ok=false: the default answer).
+	answer func(query string) (rows [][]string, oids []uint32, ok bool)
 }
 
 // fakePG is a minimal PostgreSQL server: password authentication (the
@@ -250,21 +255,48 @@ func fakePGWith(t *testing.T, o fakePGOpts) string {
 		if be.Flush() != nil {
 			return
 		}
-		var query string
+		var (
+			query string
+			bound bool
+		)
 		for {
 			m, err := be.Receive()
 			if err != nil {
 				return
 			}
 			switch m := m.(type) {
+			case *pgproto3.Query:
+				if o.queries != nil {
+					o.queries <- m.String
+				}
+				if o.failSimple != nil && o.failSimple(m.String) {
+					be.Send(&pgproto3.ErrorResponse{Severity: "ERROR", Code: "XX000", Message: "failed"})
+					be.Send(&pgproto3.ReadyForQuery{TxStatus: 'E'})
+				} else {
+					be.Send(&pgproto3.CommandComplete{CommandTag: []byte("OK")})
+					be.Send(&pgproto3.ReadyForQuery{TxStatus: 'T'})
+				}
+				if be.Flush() != nil {
+					return
+				}
 			case *pgproto3.Parse:
-				query = m.Query
+				query, bound = m.Query, false
 				if o.queries != nil {
 					o.queries <- query
 				}
+			case *pgproto3.Bind:
+				bound = true
 			case *pgproto3.Sync:
-				var rows [][]string
+				var (
+					rows [][]string
+					oids []uint32
+					over bool
+				)
+				if o.answer != nil {
+					rows, oids, over = o.answer(query)
+				}
 				switch {
+				case over:
 				case strings.Contains(query, "current_setting('search_path')"):
 					rows = [][]string{{o.reportPath, "off"}}
 				case strings.Contains(query, "set_config('search_path'"):
@@ -284,9 +316,27 @@ func fakePGWith(t *testing.T, o fakePGOpts) string {
 				if len(rows) > 0 {
 					cols = len(rows[0])
 				}
+				if len(oids) > 0 {
+					cols = len(oids)
+				}
 				fields := make([]pgproto3.FieldDescription, cols)
 				for i := range fields {
-					fields[i] = pgproto3.FieldDescription{Name: []byte(fmt.Sprintf("c%d", i)), DataTypeOID: 25, Format: 0}
+					oid := uint32(25)
+					if i < len(oids) {
+						oid = oids[i]
+					}
+					fields[i] = pgproto3.FieldDescription{Name: []byte(fmt.Sprintf("c%d", i)), DataTypeOID: oid, Format: 0}
+				}
+				if !bound {
+					// Prepare: Parse + Describe + Sync.
+					be.Send(&pgproto3.ParseComplete{})
+					be.Send(&pgproto3.ParameterDescription{})
+					be.Send(&pgproto3.RowDescription{Fields: fields})
+					be.Send(&pgproto3.ReadyForQuery{TxStatus: 'T'})
+					if be.Flush() != nil {
+						return
+					}
+					continue
 				}
 				be.Send(&pgproto3.ParseComplete{})
 				be.Send(&pgproto3.BindComplete{})

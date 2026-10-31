@@ -98,7 +98,7 @@ func Check(opts CheckOptions) ([]Finding, error) {
 		opts.sys = &s
 	}
 	if opts.WarnDays <= 0 {
-		opts.WarnDays = 30
+		opts.WarnDays = certs.ExpiryWarnDays
 	}
 	root, err := filepath.Abs(opts.Dir)
 	if err != nil {
@@ -142,6 +142,8 @@ func Check(opts CheckOptions) ([]Finding, error) {
 	c.shellOverrides(env)
 	c.certificates(entries)
 	c.caKey()
+	c.rolesSQL()
+	c.importedFiles()
 
 	sort.SliceStable(c.findings, func(i, j int) bool {
 		return c.findings[i].Severity == SeverityError && c.findings[j].Severity != SeverityError
@@ -157,6 +159,9 @@ func Check(opts CheckOptions) ([]Finding, error) {
 		}
 	}
 	fmt.Fprintf(&b, "bekup setup check: %s: %d error(s), %d warning(s) (ownership %s: %s)\n", root, errs, warns, mode, why)
+	if st.dbMode() == DBExternal {
+		b.WriteString("Your PostgreSQL itself (reachability, TLS, roles, citext) is checked from the migrate container:\n  docker compose run --rm migrate migrate check\n")
+	}
 	if _, err := io.WriteString(opts.Out, b.String()); err != nil {
 		return c.findings, err
 	}
@@ -341,7 +346,7 @@ func (c *checker) generated() {
 	if err != nil {
 		return
 	}
-	gen, err := generatedFiles(c.opts.assets, img, c.st.Variant, c.st.ComposeMode == ComposeGenerated)
+	gen, err := generatedFiles(c.opts.assets, img, c.st.Variant, c.st.dbMode(), c.st.ComposeMode == ComposeGenerated)
 	if err != nil {
 		c.add(SeverityError, "", "rendering the embedded files: %v", err)
 		return
@@ -380,7 +385,7 @@ func (c *checker) upgradeHint() string {
 // one setup last ran with, or newer), and the resolved project
 // (compose.yaml + compose.override.yaml + .env) passes the hardening lint.
 func (c *checker) operatorCompose() {
-	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.env, c.opts.LookupEnv)
+	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.st.dbMode(), c.env, c.opts.LookupEnv)
 	if err != nil {
 		c.add(SeverityError, ComposeFile, "%v", err)
 		return
@@ -489,7 +494,7 @@ func (c *checker) composeFiles() {
 		c.add(SeverityError, StateFileName, "the recorded image is not digest-pinned")
 		return
 	}
-	expected, err := RenderGenerated(c.opts.assets, c.st.Variant, img)
+	expected, err := RenderGenerated(c.opts.assets, c.st.Variant, c.st.dbMode(), img)
 	if err != nil {
 		c.add(SeverityError, "", "rendering the embedded compose file: %v", err)
 		return
@@ -530,6 +535,11 @@ func (c *checker) dotenv() map[string]string {
 	}
 	if _, ok := env[composeEnvWarning]; ok {
 		c.add(SeverityWarning, EnvFile, "%s renames the compose project: its volumes (the bekup database) are new and empty under another name", composeEnvWarning)
+	}
+	for _, k := range sortedKeys(env) {
+		if strings.HasPrefix(k, "PG") || strings.HasPrefix(k, "BEKUP_DATABASE_") {
+			c.add(SeverityError, EnvFile, "%s: .env holds compose variables only (no secrets, and bekup ignores PG* variables); the database belongs into bekup.toml [database] and its passwords into the files below %s/", k, c.st.KeysDir)
+		}
 	}
 	if env[ImageEnvVar] != "" && c.st.ImageSource != ImageSourceEnv {
 		c.add(SeverityWarning, EnvFile, "%s has no effect: the image is pinned in %s", ImageEnvVar, ComposeFile)
@@ -607,6 +617,7 @@ func (c *checker) configs(env map[string]string) {
 		if want := metricsIP + ":9464"; b.Metrics.Enabled && b.Metrics.Listen != want {
 			c.add(SeverityError, BekupTOML, "metrics.listen = %q, want %q (SERVE_METRICS_IP)", b.Metrics.Listen, want)
 		}
+		c.database(&b.Database)
 	}
 	if rres != nil {
 		r := rres.Config
@@ -620,6 +631,65 @@ func (c *checker) configs(env map[string]string) {
 			c.add(SeverityError, EnvFile, "DOCKER_GID is missing or not a number")
 		case gid != r.Docker.GID:
 			c.add(SeverityError, RunnerTOML, "docker.gid = %d, but DOCKER_GID in .env is %d (both must be the Docker socket's group)", r.Docker.GID, gid)
+		}
+	}
+}
+
+// database checks bekup.toml [database] against the recorded database
+// mode (D-208): the bundled database uses the URL files, an external one
+// fields mode with the password files and the CA bundle that setup wrote
+// and compose mounts (a weaker tls_mode is reported, not refused).
+func (c *checker) database(d *config.Database) {
+	if c.st.dbMode() == DBBundled {
+		if d.FieldsMode() {
+			c.add(SeverityError, BekupTOML, "[database] uses fields mode (database.host), but this deployment runs the bundled postgres service: remove the database.host/port/name/user/password_file keys (switching to an external database needs a new deployment directory, docs/installation/upgrades.md)")
+		}
+		return
+	}
+	if !d.FieldsMode() {
+		c.add(SeverityError, BekupTOML, "[database] has no host, but this deployment uses your PostgreSQL (database_mode external): restore the fields-mode keys setup wrote (host, port, name, user, password_file, ...)")
+		return
+	}
+	single := c.st.DatabaseAuth == DBAuthSingleAccount
+	switch {
+	case d.SingleAccount && !single:
+		c.add(SeverityError, BekupTOML, "database.single_account = true, but setup configured the two roles bekup_app/bekup_owner: single-account mode is an explicit weakening (D-207); remove it, or set the deployment up again with --db-auth single-account")
+	case !d.SingleAccount && single:
+		c.add(SeverityError, BekupTOML, "database.single_account is not set, but setup configured single-account mode (no owner password exists): set it back, or create the two roles (bekup db bootstrap) and run setup again")
+	}
+	if d.PasswordFile != dbPasswordTarget {
+		c.add(SeverityError, BekupTOML, "database.password_file = %q, want %q (the bekup_database_password secret that compose mounts)", bounded(d.PasswordFile), dbPasswordTarget)
+	}
+	if !d.SingleAccount && d.OwnerPasswordFile != dbOwnerPasswordTarget {
+		c.add(SeverityError, BekupTOML, "database.owner_password_file = %q, want %q (the bekup_database_owner_password secret, mounted into migrate only)", bounded(d.OwnerPasswordFile), dbOwnerPasswordTarget)
+	}
+	switch d.TLSMode {
+	case config.DBTLSVerifyFull:
+	case config.DBTLSRequire:
+		c.add(SeverityWarning, BekupTOML, "database.tls_mode = \"require\" is weaker than verify-full: the server's host name (and without tls_ca_file its certificate) is not verified (D-100); serve warns at every start")
+	default:
+		c.add(SeverityWarning, BekupTOML, "database.tls_mode = %q is weaker than verify-full: traffic to your PostgreSQL is not protected (D-100); serve warns at every start", bounded(d.TLSMode))
+	}
+	if d.TLSMode != config.DBTLSDisable && d.TLSCAFile != "" && d.TLSCAFile != dbCATarget {
+		c.add(SeverityError, BekupTOML, "database.tls_ca_file = %q, want %q (compose mounts %s/%s there)", bounded(d.TLSCAFile), dbCATarget, c.st.KeysDir, dbCAName)
+	}
+}
+
+// rolesSQL warns while the roles SQL for a DBA (dba-sql) is still there.
+func (c *checker) rolesSQL() {
+	rel := c.layout.keys(dbRolesSQLName)
+	if fi, err := checkNoSymlinks(c.root, rel); err == nil && fi != nil {
+		c.add(SeverityWarning, rel, "the roles SQL for your DBA (SCRAM verifiers of the database passwords) is still here: delete it once it ran")
+	}
+}
+
+// importedFiles warns while a secret source file that setup copied
+// (password files, an imported keyring) is still in the deployment
+// directory.
+func (c *checker) importedFiles() {
+	for _, f := range c.st.ImportedFiles {
+		if fi, err := checkNoSymlinks(c.root, f); err == nil && fi != nil {
+			c.add(SeverityWarning, f, "setup copied this secret into %s/ during init: delete the source file (the copy there is the one bekup uses)", c.st.KeysDir)
 		}
 	}
 }
@@ -718,16 +788,39 @@ func (c *checker) certificates(entries []Entry) {
 			c.add(SeverityError, e.Path, "%v", err)
 			continue
 		}
+		if e.Path == c.layout.keys(dbCAName) {
+			c.dbCA(e.Path, infos, now, warn)
+			continue
+		}
 		for i := range infos {
 			in := &infos[i]
 			switch {
 			case in.Expired(now):
-				c.add(SeverityError, e.Path, "certificate %q expired on %s", in.Subject, in.NotAfter.Format("2006-01-02"))
+				c.add(SeverityError, e.Path, "certificate %q expired on %s: renew it with `bekup setup renew`", in.Subject, in.NotAfter.Format("2006-01-02"))
 			case in.NotYetValid(now):
 				c.add(SeverityError, e.Path, "certificate %q is not valid before %s", in.Subject, in.NotBefore.Format("2006-01-02"))
 			case in.ExpiresWithin(now, warn):
-				c.add(SeverityWarning, e.Path, "certificate %q expires on %s (rotate: docs/security/mtls-certs.md)", in.Subject, in.NotAfter.Format("2006-01-02"))
+				c.add(SeverityWarning, e.Path, "certificate %q expires on %s: renew it with `bekup setup renew` (docs/security/mtls-certs.md)", in.Subject, in.NotAfter.Format("2006-01-02"))
 			}
+		}
+	}
+}
+
+// dbCA checks the external database's CA bundle: provider bundles carry
+// many certificates, so an expired one is a warning while another is still
+// valid, and an error only when none is.
+func (c *checker) dbCA(rel string, infos []certs.ExpiryInfo, now time.Time, warn time.Duration) {
+	if !dbCAExpiry(infos, now) {
+		c.add(SeverityError, rel, "no certificate in the CA bundle is valid now: bekup cannot verify your PostgreSQL (replace it with the provider's current bundle)")
+		return
+	}
+	for i := range infos {
+		in := &infos[i]
+		switch {
+		case in.Expired(now):
+			c.add(SeverityWarning, rel, "certificate %q in the CA bundle expired on %s", in.Subject, in.NotAfter.Format("2006-01-02"))
+		case in.ExpiresWithin(now, warn):
+			c.add(SeverityWarning, rel, "certificate %q in the CA bundle expires on %s (get the provider's new bundle)", in.Subject, in.NotAfter.Format("2006-01-02"))
 		}
 	}
 }

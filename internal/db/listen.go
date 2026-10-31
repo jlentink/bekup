@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jlentink/bekup/internal/config"
 )
 
 // ConnectFunc opens one dedicated connection.
@@ -14,10 +16,10 @@ type ConnectFunc func(ctx context.Context) (*pgx.Conn, error)
 // with exactly the settings of NewPool (TLS policy, application name,
 // timeouts, log redaction of the URL and password). It is meant for
 // LISTEN (internal/pubsub), which needs one long-lived session that a pool
-// would recycle. The caller zeroes url; the parsed config keeps what it
+// would recycle. The caller zeroes creds; the built config keeps what it
 // needs.
-func NewConnector(url []byte, opts PoolOptions) (ConnectFunc, error) {
-	cfg, err := poolConfig(url, opts)
+func NewConnector(creds config.DBCredentials, opts PoolOptions) (ConnectFunc, error) {
+	cfg, err := poolConfig(creds, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -28,6 +28,10 @@ func (r *mutationResolver) TestDestination(ctx context.Context, id uuid.UUID) (*
 	return r.testDestination(ctx, id)
 }
 
+func (r *mutationResolver) DeleteUnrecordedFile(ctx context.Context, destinationID uuid.UUID, id uuid.UUID) (*model.UnrecordedFileDeleteResult, error) {
+	return r.deleteUnrecordedFile(ctx, destinationID, id)
+}
+
 func (r *mutationResolver) FetchDestinationHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error) {
 	return r.fetchDestinationHostKey(ctx, id)
 }
@@ -50,4 +54,8 @@ func (r *queryResolver) Destination(ctx context.Context, id uuid.UUID) (*model.D
 
 func (r *queryResolver) DestinationUsage(ctx context.Context) ([]model.DestinationUsage, error) {
 	return r.destinationUsage(ctx)
+}
+
+func (r *queryResolver) DestinationUnrecordedFiles(ctx context.Context, destinationID uuid.UUID, first *int, after *string) (*model.UnrecordedFiles, error) {
+	return r.destinationUnrecordedFiles(ctx, destinationID, first, after)
 }

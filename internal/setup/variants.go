@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/jlentink/bekup/internal/imageref"
@@ -54,26 +55,81 @@ func ParseVariant(s string) (Variant, error) {
 // reverse proxy on the bekup-proxy link network.
 func (v Variant) External() bool { return v == VariantTraefikExternal || v == VariantNPM }
 
-// AssetName is the release asset name of a variant.
-func (v Variant) AssetName() string {
-	switch v {
-	case VariantTraefik:
-		return "compose.yaml"
-	default:
-		return "compose." + string(v) + ".yaml"
+// DBMode is the second overlay dimension (D-208): bekup's own app database
+// is the bundled postgres service or the operator's PostgreSQL (fields
+// mode, D-207).
+type DBMode string
+
+// Database modes.
+const (
+	// DBBundled runs the bundled postgres service (the default).
+	DBBundled DBMode = "bundled"
+	// DBExternal connects to the operator's PostgreSQL: no postgres
+	// service, a non-internal backend network, the bekup_app/bekup_owner
+	// password files and the server's CA bundle as secrets.
+	DBExternal DBMode = "external"
+)
+
+// DBModes lists the database modes in recognition order.
+var DBModes = []DBMode{DBBundled, DBExternal}
+
+// ParseDBMode validates a --database value ("" is bundled).
+func ParseDBMode(s string) (DBMode, error) {
+	switch DBMode(s) {
+	case "", DBBundled:
+		return DBBundled, nil
+	case DBExternal:
+		return DBExternal, nil
 	}
+	return "", fmt.Errorf("--database must be bundled or external (got %q)", bounded(s))
 }
 
-// assetDirs returns the embedded deploy directories the variant mounts.
-func (v Variant) assetDirs() []string {
+// OrBundled maps the zero value to DBBundled.
+func (d DBMode) OrBundled() DBMode {
+	if d == "" {
+		return DBBundled
+	}
+	return d
+}
+
+// AssetName is the release asset name of a variant with a database mode:
+// compose.yaml, compose.traefik-external.yaml, compose.npm.yaml and, for
+// an external database, compose.external-db.yaml,
+// compose.traefik-external.external-db.yaml and
+// compose.npm.external-db.yaml.
+func (v Variant) AssetName(db DBMode) string {
+	name := "compose"
+	if v != VariantTraefik {
+		name += "." + string(v)
+	}
+	if db == DBExternal {
+		name += ".external-db"
+	}
+	return name + ".yaml"
+}
+
+// assetDirs returns the embedded deploy directories the variant mounts
+// (an external database needs no deploy/postgres).
+func (v Variant) assetDirs(db DBMode) []string {
+	var dirs []string
 	switch v {
 	case VariantTraefik:
-		return []string{"deploy/postgres", "deploy/traefik"}
+		dirs = []string{"deploy/postgres", "deploy/traefik"}
 	case VariantTraefikExternal, VariantNPM:
-		return []string{"deploy/postgres"}
+		dirs = []string{"deploy/postgres"}
 	default:
-		return assetDirs
+		dirs = assetDirs
 	}
+	if db != DBExternal {
+		return dirs
+	}
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if d != "deploy/postgres" {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 //go:embed variants
@@ -88,6 +144,8 @@ const (
 	editInsertAfter
 	editReplaceLead
 	editReplaceComment
+	editReplaceLine
+	editRenameInComment
 )
 
 // edit is one overlay step: a path (or comment marker) and a fragment
@@ -104,6 +162,11 @@ func replace(path, frag string) edit          { return edit{editReplace, path, f
 func insertAfter(path, frag string) edit      { return edit{editInsertAfter, path, frag} }
 func replaceLead(path, frag string) edit      { return edit{editReplaceLead, path, frag} }
 func replaceComment(marker, frag string) edit { return edit{editReplaceComment, marker, frag} }
+func replaceLine(line, frag string) edit      { return edit{editReplaceLine, line, frag} }
+
+// renameInComment replaces old with repl in the one comment line holding
+// it (the path field carries old, the fragment field repl).
+func renameInComment(old, repl string) edit { return edit{editRenameInComment, old, repl} }
 
 // proxyBanner marks the comment block that introduces the reverse-proxy
 // services in the repository compose file.
@@ -155,6 +218,65 @@ var variantEdits = map[Variant][]edit{
 	},
 }
 
+// Anchors of the external-database overlay in the repository compose file.
+const (
+	// dbNoteMarker starts the free-standing comment block about the app
+	// database (above `services:`).
+	dbNoteMarker = "App database: the bundled"
+	// trustLinePostgres is the postgres line of the trust-boundary
+	// diagram in every variant header.
+	trustLinePostgres = "#   serve ──backend (TLS, verify-full)──> postgres  (role bekup_app; migrations as bekup_owner)"
+	// installUpLine is the `up -d` step of the release variants' headers.
+	installUpLine = "#   3. docker compose up -d"
+	// saveStepLine is the first install step of the release variants'
+	// headers.
+	saveStepLine = "#   1. Save this file there as compose.yaml."
+)
+
+// externalDBEdits turn a variant into its external-database form (D-208):
+// no postgres service (or its volume, init assets and secrets), serve,
+// admin and migrate get the password files of database.password_file /
+// owner_password_file and the operator's CA bundle, the certs-init service
+// issues no postgres certificate, and the backend network is not internal
+// (it must reach the operator's PostgreSQL).
+func externalDBEdits(v Variant) []edit {
+	edits := []edit{replaceLine(trustLinePostgres, "external-db/trust-line.yaml")}
+	if v != VariantFull {
+		bundled, external := v.AssetName(DBBundled), v.AssetName(DBExternal)
+		edits = append(edits,
+			replaceLine(saveStepLine, "external-db/save-step.yaml"),
+			replaceLine(installUpLine, "external-db/install-step.yaml"),
+			// The header names the release asset and the committed file.
+			renameInComment("release asset "+bundled+":", "release asset "+external+":"),
+			renameInComment("deploy/compose/"+bundled+" in the repository", "deploy/compose/"+external+" in the repository"),
+		)
+	}
+	return append(edits,
+		replaceComment(dbNoteMarker, "external-db/db-note.yaml"),
+		replaceLead("services/certs-init", "external-db/certs-init-lead.yaml"),
+		replace("services/certs-init/command", "external-db/certs-init-command.yaml"),
+		remove("services/migrate/environment"),
+		replace("services/migrate/secrets", "external-db/migrate-mounts.yaml"),
+		remove("services/migrate/depends_on"),
+		replace("services/admin/secrets", "external-db/admin-mounts.yaml"),
+		replace("services/serve/secrets", "external-db/serve-mounts.yaml"),
+		remove("services/serve/depends_on/postgres"),
+		remove("services/postgres"),
+		replace("networks/backend", "external-db/backend-network.yaml"),
+		remove("volumes/postgres-data"),
+		remove("secrets/bekup_database_url"),
+		remove("secrets/bekup_database_owner_url"),
+		remove("secrets/postgres_password"),
+		remove("secrets/bekup_owner_password"),
+		remove("secrets/bekup_app_password"),
+		insertAfter("secrets/bekup_master_key", "external-db/password-files.yaml"),
+		remove("secrets/postgres_crt"),
+		remove("secrets/postgres_key"),
+		replace("secrets/bekup_db_ca_crt", "external-db/db-ca-file.yaml"),
+		replaceLead("secrets", "external-db/secrets-lead.yaml"),
+	)
+}
+
 // ComposeImageVar is the value of the x-bekup-image line in the
 // repository compose file.
 const ComposeImageVar = "${BEKUP_IMAGE:-bekup:dev}"
@@ -182,11 +304,18 @@ const ComposePlaceholderLine = composeImagePrefix + ComposeImagePlaceholder
 
 var imageLineAnyRe = regexp.MustCompile(`(?m)^x-bekup-image:`)
 
-// applyEdits renders the overlay of v onto src.
-func applyEdits(src []byte, v Variant) (string, error) {
+// applyEdits renders the overlay of v (and the database mode db) onto src.
+func applyEdits(src []byte, v Variant, db DBMode) (string, error) {
 	edits, ok := variantEdits[v]
 	if !ok {
 		return "", fmt.Errorf("unknown variant %q", bounded(string(v)))
+	}
+	switch db.OrBundled() {
+	case DBBundled:
+	case DBExternal:
+		edits = append(slices.Clone(edits), externalDBEdits(v)...)
+	default:
+		return "", fmt.Errorf("unknown database mode %q", bounded(string(db)))
 	}
 	o, err := newOutline(string(src))
 	if err != nil {
@@ -194,7 +323,7 @@ func applyEdits(src []byte, v Variant) (string, error) {
 	}
 	for _, e := range edits {
 		frag := ""
-		if e.fragment != "" {
+		if e.fragment != "" && e.kind != editRenameInComment {
 			b, err := fs.ReadFile(variantFS, "variants/"+e.fragment)
 			if err != nil {
 				return "", fmt.Errorf("variant %s: %w", v, err)
@@ -214,6 +343,10 @@ func applyEdits(src []byte, v Variant) (string, error) {
 			err = o.replaceLead(e.path, frag)
 		case editReplaceComment:
 			err = o.replaceComment(e.path, frag)
+		case editReplaceLine:
+			err = o.replaceLine(e.path, frag)
+		case editRenameInComment:
+			err = o.renameInComment(e.path, e.fragment)
 		}
 		if err != nil {
 			return "", fmt.Errorf("variant %s: %w", v, err)
@@ -222,7 +355,8 @@ func applyEdits(src []byte, v Variant) (string, error) {
 	return o.String(), nil
 }
 
-// RenderVariant renders a variant from the repository compose file src.
+// RenderVariant renders a variant with a database mode from the
+// repository compose file src.
 // With img set, the single x-bekup-image line becomes the digest-pinned
 // reference as a literal (a shell variable can never override it; the
 // release assets); without, it becomes ComposePlaceholderLine (the
@@ -230,8 +364,8 @@ func applyEdits(src []byte, v Variant) (string, error) {
 // which setup requires to be pinned and writes to .env). It refuses a
 // source with any other ${BEKUP_IMAGE use, an image line that is not
 // exactly the expected one, or a build: key.
-func RenderVariant(src []byte, v Variant, img *imageref.Ref) ([]byte, error) {
-	out, err := applyEdits(src, v)
+func RenderVariant(src []byte, v Variant, db DBMode, img *imageref.Ref) ([]byte, error) {
+	out, err := applyEdits(src, v, db)
 	if err != nil {
 		return nil, err
 	}

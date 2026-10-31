@@ -13,17 +13,18 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db/migrations"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/logging"
 )
 
-// Database roles (D-054).
+// Database roles (D-054; fixed names, D-207).
 const (
 	// OwnerRole is the role migrations must run as.
-	OwnerRole = "bekup_owner"
+	OwnerRole = config.DBOwnerRole
 	// AppRole is the runtime role of serve and worker.
-	AppRole = "bekup_app"
+	AppRole = config.DBAppRole
 )
 
 // MigrationStatus is the state of one migration.
@@ -52,23 +53,23 @@ type Migrator struct {
 	lockConn *pgx.Conn
 	sqlDB    *sql.DB
 	provider *goose.Provider
+	tls      TLSOptions
+	login    string // single-account login role ("" with two roles)
 }
 
-// NewMigrator connects with the owner URL (from config.Bekup.DatabaseOwnerURL;
-// the caller zeroes it), registers the URL and password for log redaction and
-// runs the full role check (checkOwnerRole) on every run. Every connection
-// uses the TLS policy tlsOpts (D-100). Close the Migrator when done.
-func NewMigrator(ctx context.Context, ownerURL []byte, tlsOpts TLSOptions, reg *logging.Registry) (*Migrator, error) {
-	if reg == nil {
-		reg = logging.DefaultRegistry
+// NewMigrator connects with the owner credentials (config.Bekup.
+// OwnerDBCredentials; the caller zeroes them) through the one connection
+// builder, registers the URL and password for log redaction and runs the
+// full role check (checkOwnerRole) on every run. Every connection uses the
+// TLS policy tlsOpts (D-100). In single-account mode (creds.SetRole) every
+// session switches to bekup_owner first (D-207). Close the Migrator when
+// done.
+func NewMigrator(ctx context.Context, creds config.DBCredentials, tlsOpts TLSOptions, reg *logging.Registry) (*Migrator, error) {
+	if creds.SetRole != "" && creds.SetRole != OwnerRole {
+		return nil, fmt.Errorf("migrations must run as %s", OwnerRole)
 	}
-	reg.Register(ownerURL)
-	cc, err := pgx.ParseConfig(string(ownerURL))
+	cc, err := connConfig(creds, tlsOpts, reg)
 	if err != nil {
-		return nil, ErrInvalidURL
-	}
-	registerPassword(reg, cc)
-	if err := applyTLS(&cc.Config, ownerURL, tlsOpts); err != nil {
 		return nil, err
 	}
 	cc.RuntimeParams["application_name"] = "bekup-migrate"
@@ -77,8 +78,8 @@ func NewMigrator(ctx context.Context, ownerURL []byte, tlsOpts TLSOptions, reg *
 	if err != nil {
 		return nil, fmt.Errorf("connect to database as %s: %w", OwnerRole, err)
 	}
-	m := &Migrator{lockConn: lockConn}
-	if err := checkOwnerRole(ctx, sqlc.New(lockConn)); err != nil {
+	m := &Migrator{lockConn: lockConn, tls: tlsOpts, login: singleAccountLogin(creds)}
+	if err := checkOwnerRole(ctx, sqlc.New(lockConn), m.login); err != nil {
 		return nil, errors.Join(err, m.Close(ctx))
 	}
 
@@ -92,17 +93,98 @@ func NewMigrator(ctx context.Context, ownerURL []byte, tlsOpts TLSOptions, reg *
 	return m, nil
 }
 
-// checkOwnerRole runs the full role check on every migrate run (not only when
-// migration 00001 is first applied, D-092/D-098): the session must be a plain
-// bekup_owner, bekup_app must exist, and neither role may hold or inherit
-// dangerous privileges (see checkRole).
-func checkOwnerRole(ctx context.Context, q *sqlc.Queries) error {
-	current, err := q.CurrentRoleName(ctx)
+// singleAccountLogin is the login role of single-account credentials, or ""
+// with two roles (URL mode never uses single-account).
+func singleAccountLogin(creds config.DBCredentials) string {
+	if creds.SetRole == "" {
+		return ""
+	}
+	return creds.User
+}
+
+// checkSessionRole verifies who the session is (D-099, D-207). With two
+// roles (login == "") the session must have logged in as role itself, so a
+// role setting (ALTER ROLE x SET role = ...) cannot make another login,
+// possibly a superuser, pass as bekup's role. In single-account mode the
+// session logged in as login and acts as role after SET ROLE; a superuser
+// login is refused. On PostgreSQL 16+ the authenticated identity
+// (SYSTEM_USER) must also be the expected login authenticated with
+// SCRAM-SHA-256: session_user can be changed after authentication (SET
+// SESSION AUTHORIZATION, a session_authorization setting), the
+// authenticated identity cannot.
+func checkSessionRole(ctx context.Context, q *sqlc.Queries, role, login, hint string) error {
+	sr, err := q.SessionRoles(ctx)
 	if err != nil {
 		return fmt.Errorf("check database role: %w", err)
 	}
-	if current != OwnerRole {
-		return fmt.Errorf("migrations must run as %s, connected as %q (set database.owner_url_file)", OwnerRole, current)
+	if sr.ActiveRole != role {
+		what := "the app must connect"
+		if role == OwnerRole {
+			what = "migrations must run"
+		}
+		return fmt.Errorf("%s as %s, connected as %q (%s)", what, role, sr.ActiveRole, hint)
+	}
+	expected := login
+	if login == "" {
+		expected = role
+		if sr.SessionRole != role {
+			return fmt.Errorf("the session logged in as %q but acts as %s (a role setting or SET ROLE): log in as %s itself (%s)", sr.SessionRole, role, role, hint)
+		}
+	} else {
+		if sr.SessionRole != login {
+			return fmt.Errorf("single-account mode: the session logged in as %q, not as database.user %q", sr.SessionRole, login)
+		}
+		if sr.SessionSuperuser {
+			return fmt.Errorf("single-account mode refuses a SUPERUSER login role (%q): use an account with CREATEROLE and CREATEDB, or better the two least-privilege roles", login)
+		}
+	}
+	if sr.ServerVersionNum < 160000 {
+		return nil
+	}
+	id, err := q.SessionSystemUser(ctx)
+	if err != nil {
+		return fmt.Errorf("check database role: %w", err)
+	}
+	return checkSystemUser(id, expected)
+}
+
+// checkSystemUser compares the session's SYSTEM_USER with the identity
+// bekup authenticated as (PostgreSQL 16+): "scram-sha-256:<login>". An
+// "md5" pg_hba entry also yields a SCRAM exchange for a role with a SCRAM
+// verifier and is reported as "md5:<login>"; require_auth has already
+// refused every exchange but SCRAM on the client side, so both are
+// accepted. A foreign identity is never echoed.
+func checkSystemUser(id, login string) error {
+	method, identity, ok := strings.Cut(id, ":")
+	switch {
+	case ok && identity == login && (method == requireAuth || method == "md5"):
+		return nil
+	case !ok || (method != requireAuth && method != "md5"):
+		return fmt.Errorf("the session was not authenticated with a password exchange (SYSTEM_USER method %q); bekup only accepts SCRAM-SHA-256 logins of %q", safeMethod(method), login)
+	default:
+		return fmt.Errorf("the session authenticated as another role than %q (SYSTEM_USER differs: SET SESSION AUTHORIZATION or a session_authorization setting)", login)
+	}
+}
+
+// safeMethod bounds a server-reported authentication method for messages.
+func safeMethod(m string) string {
+	if m == "" {
+		return "none"
+	}
+	if len(m) > 32 || strings.ContainsFunc(m, func(r rune) bool { return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' }) {
+		return "unknown"
+	}
+	return m
+}
+
+// checkOwnerRole runs the full role check on every migrate run (not only when
+// migration 00001 is first applied, D-092/D-098): the session must be a plain
+// bekup_owner (or, in single-account mode, the configured login acting as
+// bekup_owner), bekup_app must exist, and neither role may hold or inherit
+// dangerous privileges (see checkRole).
+func checkOwnerRole(ctx context.Context, q *sqlc.Queries, login string) error {
+	if err := checkSessionRole(ctx, q, OwnerRole, login, "check database.owner_url_file / database.owner_password_file"); err != nil {
+		return err
 	}
 	owner, err := roleCheck(ctx, q, OwnerRole, nil)
 	if err != nil {
@@ -118,15 +200,13 @@ func checkOwnerRole(ctx context.Context, q *sqlc.Queries) error {
 // CheckAppRole verifies that db is connected as bekup_app and that the role
 // is not SUPERUSER/BYPASSRLS/CREATEROLE/REPLICATION and is not a member of
 // bekup_owner, of a role with those attributes or of a predefined pg_* role.
-// `bekup serve` calls it at startup and refuses to run otherwise.
-func CheckAppRole(ctx context.Context, db sqlc.DBTX) error {
+// login is the single-account login role (D-207; "" with two roles, when
+// the session must have logged in as bekup_app itself). `bekup serve`
+// calls it at startup and refuses to run otherwise.
+func CheckAppRole(ctx context.Context, db sqlc.DBTX, login string) error {
 	q := sqlc.New(db)
-	current, err := q.CurrentRoleName(ctx)
-	if err != nil {
-		return fmt.Errorf("check database role: %w", err)
-	}
-	if current != AppRole {
-		return fmt.Errorf("the app must connect as %s, connected as %q (check database.url_file)", AppRole, current)
+	if err := checkSessionRole(ctx, q, AppRole, login, "check database.url_file / database.user"); err != nil {
+		return err
 	}
 	app, err := roleCheck(ctx, q, AppRole, []string{OwnerRole})
 	if err != nil {
@@ -141,7 +221,7 @@ func roleCheck(ctx context.Context, q *sqlc.Queries, role string, forbidden []st
 	}
 	rc, err := q.RoleSecurityCheck(ctx, sqlc.RoleSecurityCheckParams{RoleName: role, ForbiddenRoles: forbidden})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return rc, fmt.Errorf("role %s does not exist; create it with the deploy init script (docs/security/db-roles.md)", role)
+		return rc, fmt.Errorf("role %s does not exist; create it with bekup db bootstrap or the deploy init script (docs/security/db-roles.md)", role)
 	}
 	if err != nil {
 		return rc, fmt.Errorf("check role %s: %w", role, err)

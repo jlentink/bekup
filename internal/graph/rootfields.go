@@ -54,6 +54,9 @@ var SingleRootFields = []string{
 	// fan out many probes past the per-user limiter.
 	"Mutation.testDestination",
 	"Mutation.fetchDestinationHostKey",
+	// Deletes a file on a destination with its stored credentials
+	// (D-209): one per request.
+	"Mutation.deleteUnrecordedFile",
 	// Runner calls with a connection's stored credentials or towards its
 	// server or bastion (task 2.11, D-135): one per request.
 	"Mutation.testConnection",

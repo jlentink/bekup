@@ -109,6 +109,40 @@ type DestinationPlan struct {
 	// Delete lists the eligible runs, oldest first, with their artifacts
 	// (dumps first, the manifest last).
 	Delete []RunDeletion
+	// Hold describes the incomplete runs kept only by the
+	// newer-than-newest-complete or no-complete rule (nil: none; D-209).
+	Hold *Hold
+}
+
+// Hold is the part of a destination plan that retention keeps although no
+// keep rule would keep it: incomplete runs that are kept only because they
+// are newer than the newest complete run (or because there is no complete
+// run at all). A run counts when KeepLast would not cover it at its rank
+// among all runs on the destination and KeepDays would not cover its time,
+// so the ordinary "the last backup failed" case (a few incomplete runs
+// inside the policy) is not a hold.
+type Hold struct {
+	// Reason is KeepNoComplete or KeepNewerIncomplete.
+	Reason KeepReason
+	// Runs are the held runs, oldest first.
+	Runs []uuid.UUID
+	// Since is the time of the oldest held run.
+	Since time.Time
+	// NewestComplete is the time of the newest complete run (zero: none).
+	NewestComplete time.Time
+}
+
+// heldOnly reports whether an incomplete run at rank (0 = newest of all
+// runs on the destination) of time t would be eligible if it were
+// complete: neither KeepLast nor KeepDays keeps it.
+func (p Policy) heldOnly(now time.Time, rank int, t time.Time) bool {
+	if p.keepLastCovers(rank) {
+		return false
+	}
+	if until, ok := p.keepDaysUntil(t); ok && now.Before(until) {
+		return false
+	}
+	return true
 }
 
 // RunDeletion is one eligible run on one destination.
@@ -244,6 +278,9 @@ func planDestination(in Input, runs map[uuid.UUID]Run, dest uuid.UUID, arts map[
 		for _, r := range here {
 			keep(r.ID, why)
 		}
+		if why == KeepNoComplete {
+			p.Hold = holdOf(in, here, p.Keep, time.Time{})
+		}
 		return p
 	}
 	newest := completeRuns[0]
@@ -278,6 +315,8 @@ func planDestination(in Input, runs map[uuid.UUID]Run, dest uuid.UUID, arts map[
 		}
 	}
 
+	p.Hold = holdOf(in, here, p.Keep, newest.Time)
+
 	for i := len(here) - 1; i >= 0; i-- { // oldest first
 		r := here[i]
 		if _, kept := p.Keep[r.ID]; kept {
@@ -296,6 +335,35 @@ func planDestination(in Input, runs map[uuid.UUID]Run, dest uuid.UUID, arts map[
 		p.Delete = append(p.Delete, del)
 	}
 	return p
+}
+
+// holdOf collects the runs of here (newest first) kept only by the
+// no-complete or newer-incomplete rule that no keep rule would keep on its
+// own (nil: none, or the job has no active policy).
+func holdOf(in Input, here []Run, keep map[uuid.UUID]KeepReason, newestComplete time.Time) *Hold {
+	if !in.Policy.active() {
+		return nil
+	}
+	var h Hold
+	for rank := len(here) - 1; rank >= 0; rank-- { // oldest first
+		r := here[rank]
+		why := keep[r.ID]
+		if why != KeepNoComplete && why != KeepNewerIncomplete {
+			continue
+		}
+		if !in.Policy.heldOnly(in.Now, rank, r.Time) {
+			continue
+		}
+		if len(h.Runs) == 0 {
+			h.Since, h.Reason = r.Time, why
+		}
+		h.Runs = append(h.Runs, r.ID)
+	}
+	if len(h.Runs) == 0 {
+		return nil
+	}
+	h.NewestComplete = newestComplete
+	return &h
 }
 
 // checkPlan verifies the plan's own invariants: the newest complete run is

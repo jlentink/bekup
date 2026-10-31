@@ -21,6 +21,7 @@ import (
 	"github.com/jlentink/bekup/internal/pipeline"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/runstate"
+	"github.com/jlentink/bekup/internal/schemaversion"
 	"github.com/jlentink/bekup/internal/storage"
 )
 
@@ -49,6 +50,9 @@ type itemState struct {
 	stored  int64
 	rawSum  []byte
 	sum     []byte
+	// versionStatus / version: the schema-version capture (D-210).
+	versionStatus schemaversion.Status
+	version       string
 }
 
 func (it *itemState) label() string {

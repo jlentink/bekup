@@ -217,6 +217,11 @@ for needle in \
 	"gh attestation verify oci://ghcr.io/jlentink/bekup@$digest --repo jlentink/bekup" \
 	'compose.traefik-external.yaml' \
 	'compose.npm.yaml' \
+	'compose.external-db.yaml' \
+	'compose.npm.external-db.yaml' \
+	'docker compose run --rm migrate db bootstrap --admin-user <admin>' \
+	"-e BEKUP_IMAGE=ghcr.io/jlentink/bekup:1.2.3@$digest" \
+	'-v "$PWD":/deploy ghcr.io/jlentink/bekup:1.2.3@'"$digest"' setup' \
 	'DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup' \
 	'docker compose run --rm setup upgrade' \
 	'docker network create --internal --subnet 10.213.253.0/28 --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy' \
@@ -267,7 +272,7 @@ fixture() {
 }
 assets() { # assets <dir> [file-to-break value extra]
 	rm -rf "$1" && mkdir -p "$1"
-	for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml; do
+	for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml; do
 		fixture "$1/$f" "$cref"
 	done
 }
@@ -300,6 +305,9 @@ broken leftover-var compose.yaml "$cref" '  x:
     environment: {A: ${BEKUP_IMAGE}}'
 assets "$tmp/cc" && rm "$tmp/cc/compose.npm.yaml"
 refuse "$rc" compose-assets "$cref" "$tmp/cc"
+assets "$tmp/cc" && rm "$tmp/cc/compose.npm.external-db.yaml"
+refuse "$rc" compose-assets "$cref" "$tmp/cc"
+broken external-other-digest compose.traefik-external.external-db.yaml "ghcr.io/jlentink/bekup:1.2.3@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 assets "$tmp/cd" && rm "$tmp/cd/compose.yaml" && ln -s compose.npm.yaml "$tmp/cd/compose.yaml"
 refuse "$rc" compose-assets "$cref" "$tmp/cd"
 # render-compose: a stub docker that checks the hardening flags and prints
@@ -324,8 +332,9 @@ render() { # render <ref-to-print>
 }
 want "release_ci: compose assets pinned to $cref" render "$cref"
 count=$((count + 1))
-if [ "$(grep -c "ghcr.io/jlentink/bekup@$digest setup compose --variant" "$tmp/render.log")" != 3 ] ||
-	! grep -q -- "--variant traefik-external --image $cref" "$tmp/render.log"; then
+if [ "$(grep -c "ghcr.io/jlentink/bekup@$digest setup compose --variant" "$tmp/render.log")" != 6 ] ||
+	! grep -q -- "--variant traefik-external --database bundled --image $cref" "$tmp/render.log" ||
+	! grep -q -- "--variant npm --database external --image $cref" "$tmp/render.log"; then
 	printf 'FAIL: render-compose: docker runs:\n%s\n' "$(cat "$tmp/render.log")" >&2
 	fail=1
 fi
@@ -337,7 +346,7 @@ refuse "$rc" render-compose 'ghcr.io/jlentink/bekup:1.2.3@sha256:x;id' "$tmp/ren
 # the release reference are what the release renders.
 placeholder_line=$(grep '^x-bekup-image:' "$here/../deploy/compose/compose.yaml")
 rm -rf "$tmp/cr" && mkdir -p "$tmp/cr"
-for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml; do
+for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml; do
 	sed "s|^x-bekup-image:.*\$|x-bekup-image: \&bekup-image $cref|" "$here/../deploy/compose/$f" >"$tmp/cr/$f"
 done
 want "release_ci: committed compose files match the release files" "$rc" committed-compose "$tmp/cr" "$here/../deploy/compose"
@@ -357,6 +366,8 @@ committed_case extra-line '$a\
 # trailing'
 rm -rf "$tmp/cm" && cp -R "$here/../deploy/compose" "$tmp/cm" && rm "$tmp/cm/compose.yaml"
 refuse "$rc" committed-compose "$tmp/cr" "$tmp/cm" # missing file
+rm -rf "$tmp/cm" && cp -R "$here/../deploy/compose" "$tmp/cm" && rm "$tmp/cm/compose.external-db.yaml"
+refuse "$rc" committed-compose "$tmp/cr" "$tmp/cm" # missing external-db file
 refuse "$rc" committed-compose "$tmp/missing" "$here/../deploy/compose"
 count=$((count + 1))
 if [ "$placeholder_line" = "" ] || ! grep -qF "placeholder='$placeholder_line'" "$rc"; then
@@ -366,7 +377,7 @@ fi
 
 # --- assets-digest -----------------------------------------------------------
 install -d "$tmp/ad"
-for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml SHA256SUMS; do
+for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml SHA256SUMS; do
 	printf '%s\n' "$f" >"$tmp/ad/$f"
 	printf '{"b":"%s"}\n' "$f" >"$tmp/ad/$f.sigstore.json"
 done

@@ -238,7 +238,7 @@ func (im *Importer) insert(ctx context.Context, q *sqlc.Queries, r *ScannedRun, 
 	}
 	_, err = im.Auditor.RecordTx(ctx, q, audit.CLIEvent(audit.ActionCLIRunImported, "run", runID.String(), audit.Details{
 		"job_id": jobID.String(), "job_slug": m.JobSlug, "destination_id": im.DestinationID.String(),
-		"run_timestamp": m.RunTimestamp.Format(time.RFC3339), "manifest_key": r.ManifestKey.String(),
+		"run_timestamp": m.RunTimestamp.Format(time.RFC3339), "manifest": r.ManifestKey.String(),
 		"manifest_sha256": hex.EncodeToString(r.ManifestSHA256()), "signing_key_id": keyID,
 		"artifacts": res.Artifacts,
 	}))

@@ -1,5 +1,6 @@
 import { useApolloClient, useMutation, useQuery } from "@apollo/client/react";
 import {
+  Database,
   FileCog,
   Loader2,
   RotateCw,
@@ -37,6 +38,7 @@ import { isStepUpCancelled, useStepUp } from "@/features/auth/use-step-up";
 import { getFragmentData } from "@/graphql/gen";
 import type {
   BekupProcessKind,
+  DatabaseConfigMode,
   ConfigReloadErrorKind,
   ConfigReloadRequestFieldsFragment,
   ConfigReloadStatus,
@@ -185,7 +187,85 @@ const T = {
   confirm: "Reload",
   outcomeLabel: "Outcome per process",
   rateLimited: "A reload was just requested. Wait a few seconds and try again.",
+  dbTitle: "App database",
+  dbLead:
+    "How the serve process that answered connects to bekup's own database. These settings need a restart.",
+  dbMode: "Credentials",
+  dbTLS: "TLS mode",
+  dbModes: {
+    URL: "Connection URL files",
+    FIELDS: "Host and password files (external PostgreSQL)",
+    SINGLE_ACCOUNT: "One account for everything",
+  } satisfies Record<DatabaseConfigMode, string>,
+  dbWeakened: "Weakened",
+  dbStrict: "verify-full",
+  dbTLSWeakTitle: "The database connection is not fully verified",
+  dbTLSWeakLead:
+    "database.tls_mode is weaker than verify-full: a network attacker could impersonate the database or read the traffic. Every start is audited and admins are alerted daily.",
+  dbSingleTitle: "Single-account mode is on",
+  dbSingleLead:
+    "bekup runs migrations and the app with one database account, so a compromised server process could change the schema and the audit log. Create the two least-privilege roles with bekup db bootstrap.",
 } as const;
+
+interface DatabasePosture {
+  mode: DatabaseConfigMode;
+  tlsMode: string;
+  insecureTransport: boolean;
+  singleAccount: boolean;
+}
+
+/** App database posture (D-100, D-207): mode, TLS and the weakenings. */
+function DatabaseSection({ posture }: { posture: DatabasePosture | undefined }) {
+  const weak = posture ? posture.insecureTransport || posture.singleAccount : false;
+  return (
+    <Section
+      icon={Database}
+      title={T.dbTitle}
+      lead={T.dbLead}
+      status={weak ? <Tag tone="insecure">{T.dbWeakened}</Tag> : null}
+    >
+      {!posture ? (
+        <Skeleton className="h-8 w-full" />
+      ) : (
+        <div className="flex flex-col gap-4" data-testid="config-database">
+          <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[auto_1fr]">
+            <dt className="eyebrow self-center">{T.dbMode}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              {posture.singleAccount ? (
+                <Tag tone="insecure">{T.dbModes[posture.mode]}</Tag>
+              ) : (
+                <span>{T.dbModes[posture.mode]}</span>
+              )}
+            </dd>
+            <dt className="eyebrow self-center">{T.dbTLS}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <code className="font-mono text-xs">{posture.tlsMode}</code>
+              {posture.insecureTransport ? (
+                <Tag tone="insecure">{T.dbWeakened}</Tag>
+              ) : (
+                <Tag tone="success">{T.dbStrict}</Tag>
+              )}
+            </dd>
+          </dl>
+          {posture.insecureTransport ? (
+            <Alert variant="destructive">
+              <ShieldAlert aria-hidden="true" />
+              <AlertTitle>{T.dbTLSWeakTitle}</AlertTitle>
+              <AlertDescription>{T.dbTLSWeakLead}</AlertDescription>
+            </Alert>
+          ) : null}
+          {posture.singleAccount ? (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{T.dbSingleTitle}</AlertTitle>
+              <AlertDescription>{T.dbSingleLead}</AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+      )}
+    </Section>
+  );
+}
 
 type Request = ConfigReloadRequestFieldsFragment;
 type Phase = "polling" | "done" | "timeout" | "error";
@@ -312,6 +392,8 @@ export function ConfigurationPage() {
         )}
         {status ? <p className="text-xs text-muted-foreground">{T.countsNote}</p> : null}
       </Section>
+
+      <DatabaseSection posture={status?.database} />
 
       <Section icon={Zap} title={T.liveTitle} lead={T.liveLead}>
         {!status ? (

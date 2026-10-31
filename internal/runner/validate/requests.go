@@ -90,6 +90,8 @@ type DatabaseOp struct {
 	Database string
 	// Stats is set for a Dump with statistics enabled (task 3.10).
 	Stats *Stats
+	// Version is set for a Dump with a schema-version query (D-210).
+	Version *Version
 }
 
 // database validates a database name; write operations additionally
@@ -128,7 +130,11 @@ func (v *Validator) Dump(ctx context.Context, req *runnerpb.DumpRequest) (*Datab
 	if err != nil {
 		return nil, err
 	}
-	return &DatabaseOp{Target: t, Database: req.GetDatabase(), Stats: st}, nil
+	ver, err := VersionQuery(req.GetVersionQuery(), st)
+	if err != nil {
+		return nil, err
+	}
+	return &DatabaseOp{Target: t, Database: req.GetDatabase(), Stats: st, Version: ver}, nil
 }
 
 // DumpGlobals validates a DumpGlobalsRequest (PostgreSQL only).

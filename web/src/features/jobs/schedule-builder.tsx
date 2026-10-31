@@ -1,6 +1,6 @@
 import { skipToken, useQuery } from "@apollo/client/react";
 import { CalendarClock, Hand, Repeat, SquareAsterisk, type LucideIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +20,7 @@ import {
   WEEKDAYS,
   type ScheduleDraft,
 } from "./schedule";
+import { useDebounced } from "./use-debounced";
 
 const T = {
   legend: "Schedule",
@@ -52,20 +53,6 @@ const KIND_ICONS: Record<ScheduleKind, LucideIcon> = {
   INTERVAL: Repeat,
   CRON: SquareAsterisk,
 };
-
-/** Waits until value stopped changing for ms. */
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setV(value);
-    }, ms);
-    return () => {
-      clearTimeout(t);
-    };
-  }, [value, ms]);
-  return v;
-}
 
 export interface ScheduleBuilderProps {
   value: ScheduleDraft;

@@ -40,6 +40,24 @@ type Querier interface {
 	AdvanceTestRestore(ctx context.Context, arg AdvanceTestRestoreParams) error
 	ArtifactKeyExists(ctx context.Context, arg ArtifactKeyExistsParams) (bool, error)
 	AttachSharedChannel(ctx context.Context, arg AttachSharedChannelParams) error
+	// Queries of `bekup db bootstrap` on the admin connection (D-207). The DDL
+	// itself (roles, database, grants) cannot take bind parameters; it is built
+	// by internal/db/rolesql.go from constants, a validated database name and
+	// validated SCRAM verifiers.
+	BootstrapAdminFacts(ctx context.Context) (BootstrapAdminFactsRow, error)
+	// BootstrapCanSetRole (PostgreSQL 16+): may the current user SET ROLE to
+	// the role (needed for CREATE DATABASE ... OWNER) and does it inherit the
+	// role's privileges (needed for the database grants as a non-owner)?
+	BootstrapCanSetRole(ctx context.Context, roleName string) (bool, error)
+	// BootstrapDatabaseFacts: no row means the database does not exist.
+	BootstrapDatabaseFacts(ctx context.Context, databaseName string) (BootstrapDatabaseFactsRow, error)
+	// BootstrapHasAdminOption: may the current user grant the role (ADMIN
+	// OPTION; PostgreSQL 16+ requires it for GRANT, 15 also accepts CREATEROLE)?
+	BootstrapHasAdminOption(ctx context.Context, roleName string) (bool, error)
+	// BootstrapIsMember (PostgreSQL 15): membership allows SET ROLE.
+	BootstrapIsMember(ctx context.Context, roleName string) (bool, error)
+	// BootstrapRoleFacts: no row means the role does not exist.
+	BootstrapRoleFacts(ctx context.Context, roleName string) (BootstrapRoleFactsRow, error)
 	// Session re-validation for long-lived connections (event
 	// streams of subscriptions, tasks 1.10/2.13). Looks the session up by id, never by token,
 	// and does not touch it: an open stream is not user activity, so the idle
@@ -54,6 +72,9 @@ type Querier interface {
 	// ClearJobMissedState deletes the state of checked jobs whose outage
 	// ended (or that have none).
 	ClearJobMissedState(ctx context.Context, jobIds []uuid.UUID) error
+	// ClearUnrecordedFiles forgets a destination's scan results (its location
+	// changed).
+	ClearUnrecordedFiles(ctx context.Context, destinationID uuid.UUID) error
 	CollapseEventInto(ctx context.Context, arg CollapseEventIntoParams) error
 	// ConfigReloadInstancesResponsible returns the given instances that
 	// answer a UI request made at the given time (D-200): those whose
@@ -116,11 +137,19 @@ type Querier interface {
 	// DeleteRestoreIdentityHandoff removes the identity handoff of a restore
 	// that will never start (canceled or abandoned).
 	DeleteRestoreIdentityHandoff(ctx context.Context, restoreID uuid.UUID) (int64, error)
+	// DeleteRetentionHoldsExcept removes the holds of a job on every destination
+	// not in @keep (the hold ended, or the destination holds nothing any more).
+	DeleteRetentionHoldsExcept(ctx context.Context, arg DeleteRetentionHoldsExceptParams) (int64, error)
 	DeleteRunSlot(ctx context.Context, holderID uuid.UUID) error
 	// DeleteScheduleSkipsBefore removes skip records older than the retention
 	// period, in bounded batches.
 	DeleteScheduleSkipsBefore(ctx context.Context, arg DeleteScheduleSkipsBeforeParams) (int64, error)
 	DeleteSharedChannel(ctx context.Context, id uuid.UUID) (int64, error)
+	// DeleteStaleRetentionHolds removes the holds of job/destination pairs
+	// without a present artifact (nothing is held there any more; the daily
+	// fan-out sweeps only jobs with present artifacts, so no sweep would end
+	// them otherwise).
+	DeleteStaleRetentionHolds(ctx context.Context) (int64, error)
 	// DeleteStaleRunSlots drops slots whose holder stopped sending heartbeats
 	// (crashed worker).
 	DeleteStaleRunSlots(ctx context.Context, leaseSeconds float64) (int64, error)
@@ -128,6 +157,12 @@ type Querier interface {
 	// the cutoff (housekeeping; revoked rows are kept a while for the session
 	// list and investigations).
 	DeleteStaleSessions(ctx context.Context, cutoff time.Time) (int64, error)
+	DeleteUnrecordedFile(ctx context.Context, id uuid.UUID) error
+	// DeleteUnseenUnrecordedFiles drops the rows a scan did not see again (the
+	// file is gone or recorded). @upto bounds it to the listed key range of a
+	// scan that stopped at its object limit ('' = the whole destination); keys
+	// compare bytewise (COLLATE "C"), the order the backends list them in.
+	DeleteUnseenUnrecordedFiles(ctx context.Context, arg DeleteUnseenUnrecordedFilesParams) (int64, error)
 	DeleteUserChannelOfUser(ctx context.Context, arg DeleteUserChannelOfUserParams) (int64, error)
 	DeleteUserJobNotificationPrefs(ctx context.Context, arg DeleteUserJobNotificationPrefsParams) (int64, error)
 	// DeleteUserNotification deletes one own notification; security.*
@@ -137,6 +172,13 @@ type Querier interface {
 	DeleteUserWebAuthnCeremonies(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteUserWebAuthnCredentials(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteWebAuthnCredential(ctx context.Context, arg DeleteWebAuthnCredentialParams) (WebauthnCredential, error)
+	// DestinationHasActiveRuns reports a queued or running backup run of a job
+	// that writes to the destination (its location must not change then,
+	// D-209).
+	DestinationHasActiveRuns(ctx context.Context, destinationID uuid.UUID) (bool, error)
+	// DestinationHasPresentArtifacts reports whether backup files are recorded as
+	// present on the destination (its location must not change then, D-209).
+	DestinationHasPresentArtifacts(ctx context.Context, destinationID uuid.UUID) (bool, error)
 	// DestinationUsage returns, per destination that is not deleted, the
 	// bytes and number of the present artifacts stored on it (one grouped
 	// query; D-196).
@@ -313,6 +355,8 @@ type Querier interface {
 	// the run slot and the restore worker's own share lock protect the run).
 	GetTestRestoreConnection(ctx context.Context, id uuid.UUID) (GetTestRestoreConnectionRow, error)
 	GetTestRestoreView(ctx context.Context, id uuid.UUID) (GetTestRestoreViewRow, error)
+	GetUnrecordedFile(ctx context.Context, arg GetUnrecordedFileParams) (UnrecordedFile, error)
+	GetUnrecordedFileScan(ctx context.Context, destinationID uuid.UUID) (UnrecordedFileScan, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserChannel(ctx context.Context, id uuid.UUID) (UserChannel, error)
@@ -425,6 +469,9 @@ type Querier interface {
 	// IsRestoreStuck re-checks ListStuckRestores' condition for one restore
 	// under its row lock (the sweep).
 	IsRestoreStuck(ctx context.Context, arg IsRestoreStuckParams) (bool, error)
+	// IsRunAbandoned re-checks ListAbandonedRuns' condition for one run under
+	// its row lock.
+	IsRunAbandoned(ctx context.Context, arg IsRunAbandonedParams) (bool, error)
 	// IsTestRestoreStuck re-checks ListStuckTestRestores' condition under the
 	// row lock.
 	IsTestRestoreStuck(ctx context.Context, arg IsTestRestoreStuckParams) (bool, error)
@@ -448,8 +495,16 @@ type Querier interface {
 	LatestRunForRiverJob(ctx context.Context, riverJobID int64) (Run, error)
 	// LatestTestRestore is a job's newest finished test restore.
 	LatestTestRestore(ctx context.Context, jobID uuid.UUID) (TestRestore, error)
+	// ListAbandonedRuns finds queued or running runs that no worker will finish
+	// (D-209): unchanged since @idle_before while their River job is gone or
+	// already finalized (the last attempt crashed or was discarded). A retry
+	// that is still pending finishes its predecessor itself (Store.Begin).
+	ListAbandonedRuns(ctx context.Context, arg ListAbandonedRunsParams) ([]ListAbandonedRunsRow, error)
 	// ListActiveAdminIDs returns the active admins.
 	ListActiveAdminIDs(ctx context.Context) ([]uuid.UUID, error)
+	// ListActiveRunDirs returns the directories of queued and running runs:
+	// their files may not have artifact rows yet.
+	ListActiveRunDirs(ctx context.Context) ([]ListActiveRunDirsRow, error)
 	// ListActiveUserSessions returns the user's sessions that are neither
 	// revoked nor expired, most recently used first.
 	ListActiveUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
@@ -505,6 +560,15 @@ type Querier interface {
 	// query below except the *Any* / *Temporary* ones and the pin, host-key and
 	// SSH-key updates with allow_temporary (the service decides).
 	ListConnections(ctx context.Context) ([]Connection, error)
+	// ListDailyMaintenanceDestinations returns the destinations the daily sweep
+	// maintains: every non-deleted one (unrecorded-file scan; disk and SFTP also
+	// leftover temporary files and empty directories) and deleted disk and SFTP
+	// ones that still hold present artifacts (temporary files only).
+	ListDailyMaintenanceDestinations(ctx context.Context) ([]ListDailyMaintenanceDestinationsRow, error)
+	// ListDestinationLocations returns the other destinations whose location a
+	// new or moved destination must not overlap: every non-deleted one and the
+	// soft-deleted ones that still hold present backups (D-209).
+	ListDestinationLocations(ctx context.Context, id uuid.UUID) ([]ListDestinationLocationsRow, error)
 	// Backup destinations (task 2.12, D-131). Only internal/destinations uses
 	// these queries; secret_enc is sealed under AAD destinations:<id>:secret.
 	ListDestinations(ctx context.Context) ([]Destination, error)
@@ -537,6 +601,9 @@ type Querier interface {
 	// ListJobSharedChannels returns the enabled shared channels attached to a
 	// job with their filters.
 	ListJobSharedChannels(ctx context.Context, jobID uuid.UUID) ([]ListJobSharedChannelsRow, error)
+	// ListJobSlugs returns the slug of every job, deleted ones included: the
+	// job directories empty-directory pruning may touch (D-209).
+	ListJobSlugs(ctx context.Context) ([]string, error)
 	// ListJobs returns one page of non-deleted jobs ordered by (lower(name),
 	// id) after the cursor. scope_all = false limits the page to the jobs
 	// @user_id owns (authz.JobScope). owner_id (staff only, checked by the
@@ -554,10 +621,6 @@ type Querier interface {
 	// ListNotificationPrefs returns the preferences of users for one event:
 	// the per-event rows and the per-job overrides of one job.
 	ListNotificationPrefs(ctx context.Context, arg ListNotificationPrefsParams) ([]ListNotificationPrefsRow, error)
-	// ListPartialCleanupDestinations returns the disk and SFTP destinations whose
-	// leftover temporary files the daily sweep removes: every non-deleted one and
-	// deleted ones that still hold present artifacts.
-	ListPartialCleanupDestinations(ctx context.Context) ([]uuid.UUID, error)
 	// ListRecentRunsForJobs returns the newest @per_job runs of each job
 	// (Job.lastRun / Job.recentRuns, one query per page of jobs).
 	ListRecentRunsForJobs(ctx context.Context, arg ListRecentRunsForJobsParams) ([]ListRecentRunsForJobsRow, error)
@@ -579,6 +642,9 @@ type Querier interface {
 	// ListRetentionArtifacts returns the present artifacts of a job's finished
 	// runs (queued and running runs are never considered).
 	ListRetentionArtifacts(ctx context.Context, jobID uuid.UUID) ([]ListRetentionArtifactsRow, error)
+	// ListRetentionHoldsForJobs returns the holds of a page of jobs with the
+	// destination's name (Job.retentionHolds, batch-loaded).
+	ListRetentionHoldsForJobs(ctx context.Context, jobIds []uuid.UUID) ([]ListRetentionHoldsForJobsRow, error)
 	// Retention (task 3.8, D-148): the inputs of the per-destination policy and
 	// the artifact state changes. Artifact rows are never deleted; retention
 	// only moves `present` to `deleted` or `missing` (through internal/runstate).
@@ -642,6 +708,9 @@ type Querier interface {
 	// ListUndroppedScratch lists the items of finished (or abandoned) test
 	// restores whose scratch database may still exist.
 	ListUndroppedScratch(ctx context.Context, maxRows int32) ([]ListUndroppedScratchRow, error)
+	// ListUnrecordedFiles returns one page ordered by key (keyset: @after is the
+	// last key of the previous page, '' for the first).
+	ListUnrecordedFiles(ctx context.Context, arg ListUnrecordedFilesParams) ([]UnrecordedFile, error)
 	ListUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) ([]ListUnusedRecoveryCodesRow, error)
 	// --- personal webhooks --------------------------------------------------------
 	ListUserChannelsOfUser(ctx context.Context, userID uuid.UUID) ([]UserChannel, error)
@@ -686,6 +755,9 @@ type Querier interface {
 	// LockConnectionForJob locks the connection a job is saved with against a
 	// concurrent delete (FOR SHARE; the delete takes FOR UPDATE).
 	LockConnectionForJob(ctx context.Context, id uuid.UUID) (LockConnectionForJobRow, error)
+	// LockDestinationLocations serializes the location checks of creates and
+	// location changes (transaction-scoped advisory lock, D-209).
+	LockDestinationLocations(ctx context.Context) error
 	// LockDestinationsForJob locks the destinations a job is saved with.
 	LockDestinationsForJob(ctx context.Context, ids []uuid.UUID) ([]LockDestinationsForJobRow, error)
 	// Scheduler loop (internal/scheduler, task 3.4, D-145). Explicit column
@@ -711,6 +783,7 @@ type Querier interface {
 	// (transaction-scoped advisory lock: safe on pooled connections).
 	LockRunSlots(ctx context.Context) error
 	LockTestRestore(ctx context.Context, id uuid.UUID) (TestRestore, error)
+	LockUnrecordedFile(ctx context.Context, arg LockUnrecordedFileParams) (UnrecordedFile, error)
 	// LockUserForFactorChange serializes second-factor changes of one user
 	// (enrollment limits, last-factor protection).
 	LockUserForFactorChange(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
@@ -775,6 +848,9 @@ type Querier interface {
 	// NotifyAdvisoryLock serializes fan-outs per key (user flood counters,
 	// started-event collapse) until the transaction ends.
 	NotifyAdvisoryLock(ctx context.Context, lockKey string) error
+	// ObjectKeyRecorded reports whether an artifact row on any destination
+	// references the key.
+	ObjectKeyRecorded(ctx context.Context, objectKey string) (bool, error)
 	OptOutJobEncryption(ctx context.Context, arg OptOutJobEncryptionParams) (JobEncryption, error)
 	// OwnerBackedUpDatabases returns the names among @names that a non-deleted
 	// job owned by the user backs up on the connection (OwnerBacksUpDatabase
@@ -790,6 +866,27 @@ type Querier interface {
 	// PickTestRestoreRun is the newest successful run of a job with at least
 	// one present, verified, signed database artifact.
 	PickTestRestoreRun(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
+	// PreflightCitext reports whether citext (migration 00004) is installed in
+	// this database, available on the server, and trusted (then the database
+	// owner can create it). azure_extensions is Azure's extension allow-list
+	// (azure_allowlist false elsewhere).
+	PreflightCitext(ctx context.Context) (PreflightCitextRow, error)
+	// PreflightConnectableDatabases lists other databases the role may connect
+	// to (at most 50).
+	PreflightConnectableDatabases(ctx context.Context, roleName string) ([]string, error)
+	PreflightDatabase(ctx context.Context) (PreflightDatabaseRow, error)
+	// PreflightPublicSchemaCreate: may the session (bekup_owner) create objects
+	// in the public schema? (PostgreSQL 15 denies it to a NOINHERIT database
+	// owner while pg_database_owner owns the schema.)
+	PreflightPublicSchemaCreate(ctx context.Context) (bool, error)
+	// PreflightPublicSchemaOwner: no row means the public schema is missing.
+	PreflightPublicSchemaOwner(ctx context.Context) (string, error)
+	// PreflightRoleSettings lists ALTER ROLE / ALTER DATABASE ... SET entries
+	// that apply to the given roles in this database (names only, never the
+	// values).
+	PreflightRoleSettings(ctx context.Context, roleNames []string) ([]PreflightRoleSettingsRow, error)
+	// Preflight of `bekup migrate check` (D-207).
+	PreflightServerVersion(ctx context.Context) (PreflightServerVersionRow, error)
 	// PruneConfigReloadRequests deletes requests (with their results) older
 	// than 30 days, except a request whose answer is the newest row of a
 	// process listening now (@listening): a long-running process stays listed.
@@ -824,6 +921,14 @@ type Querier interface {
 	// one); no row means a concurrent assertion already advanced it, which is
 	// treated as a regression.
 	RecordWebAuthnAssertion(ctx context.Context, arg RecordWebAuthnAssertionParams) (WebauthnCredential, error)
+	// Unrecorded files (D-209): files in bekup's layout on a destination that no
+	// artifact row references, found by the daily scan. Only
+	// internal/destinations reads and writes these tables.
+	// RecordedObjectKeys returns which of the keys have an artifact row in
+	// any state on any destination, soft-deleted ones included, so a key
+	// recorded elsewhere is never reported as unrecorded, even if two
+	// destinations ever shared a location (D-209).
+	RecordedObjectKeys(ctx context.Context, keys []string) ([]string, error)
 	// RedeemDownloadTicket marks a ticket used and clears its identity (also
 	// used to burn a ticket presented by the wrong session).
 	RedeemDownloadTicket(ctx context.Context, arg RedeemDownloadTicketParams) (int64, error)
@@ -884,6 +989,11 @@ type Querier interface {
 	// user is never touched).
 	RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) (int64, error)
 	RevokeUserSessions(ctx context.Context, userID uuid.UUID) (int64, error)
+	// RoleMemberships lists who may act as or administer the given roles
+	// (D-207): every direct pg_auth_members row with the role as the granted
+	// role, the member's name, whether it holds ADMIN OPTION and whether the
+	// member is a superuser. Names only.
+	RoleMemberships(ctx context.Context, roleNames []string) ([]RoleMembershipsRow, error)
 	// RoleSecurityCheck reports the attributes of a role that would weaken the
 	// least-privilege model, and every role it is a member of (directly or
 	// transitively) that is dangerous: a role with SUPERUSER, BYPASSRLS,
@@ -898,6 +1008,16 @@ type Querier interface {
 	// bekup_app cannot read goose_db_version. Used by `bekup serve` at startup and
 	// by /readyz (task 1.1, D-078).
 	SchemaVersion(ctx context.Context) (int64, error)
+	// SessionRoles returns the login role of the session, the role it acts as
+	// (different only after SET ROLE: single-account mode, or a role setting
+	// someone attached to the login role) and whether the login role is a
+	// superuser (D-099, D-207).
+	SessionRoles(ctx context.Context) (SessionRolesRow, error)
+	// SessionSystemUser (PostgreSQL 16+ only: SYSTEM_USER is a syntax error on
+	// 15) returns the authenticated identity of the session as
+	// "<auth method>:<identity>", e.g. "scram-sha-256:bekup_app" (D-207): unlike
+	// session_user it cannot be changed after authentication.
+	SessionSystemUser(ctx context.Context) (string, error)
 	// SetArtifactsSigned records the manifest signing key on exactly the
 	// objects the manifest on one destination lists (after manifest.json was
 	// finalized there).
@@ -924,6 +1044,8 @@ type Querier interface {
 	// internal/restore.
 	// SetJobTestRestore changes a job's test-restore settings.
 	SetJobTestRestore(ctx context.Context, arg SetJobTestRestoreParams) (Job, error)
+	// SetJobVersionQuery changes a job's schema-version capture (D-210).
+	SetJobVersionQuery(ctx context.Context, arg SetJobVersionQueryParams) (Job, error)
 	SetRestoreRiverJob(ctx context.Context, arg SetRestoreRiverJobParams) (int64, error)
 	SetRestoreStagedBytes(ctx context.Context, arg SetRestoreStagedBytesParams) (int64, error)
 	SetRunLogCounts(ctx context.Context, arg SetRunLogCountsParams) error
@@ -983,6 +1105,7 @@ type Querier interface {
 	// process: nothing.
 	UnansweredConfigReloadRequests(ctx context.Context, arg UnansweredConfigReloadRequestsParams) ([]ConfigReloadRequest, error)
 	UnlockUser(ctx context.Context, id uuid.UUID) (int64, error)
+	UnrecordedFileTotals(ctx context.Context, destinationID uuid.UUID) (UnrecordedFileTotalsRow, error)
 	// UpdateConnection replaces the mutable fields (not the TLS mode, which
 	// only SetConnectionTLSMode changes). clear_pins removes both certificate
 	// pins (engine, host or port changed); clear_host_key removes the SSH
@@ -1007,6 +1130,14 @@ type Querier interface {
 	// detector's view after its last pass, read by Job.missed.
 	UpsertJobMissedState(ctx context.Context, arg UpsertJobMissedStateParams) error
 	UpsertNotificationPref(ctx context.Context, arg UpsertNotificationPrefParams) error
+	// UpsertRetentionHold records (or confirms) that the sweep keeps incomplete
+	// runs of a job on a destination that no keep rule would keep (D-209).
+	// first_seen_at is kept from the first sighting.
+	UpsertRetentionHold(ctx context.Context, arg UpsertRetentionHoldParams) (time.Time, error)
+	// UpsertUnrecordedFile records a file found by the scan (first_seen_at is
+	// kept from the first sighting).
+	UpsertUnrecordedFile(ctx context.Context, arg UpsertUnrecordedFileParams) error
+	UpsertUnrecordedFileScan(ctx context.Context, arg UpsertUnrecordedFileScanParams) error
 	// UseRecoveryCode marks a code used; 0 rows when it was used concurrently.
 	UseRecoveryCode(ctx context.Context, arg UseRecoveryCodeParams) (int64, error)
 	// UserActivityFacts returns, for each given account, its most recent

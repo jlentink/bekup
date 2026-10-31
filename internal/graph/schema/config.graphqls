@@ -108,8 +108,40 @@ type ConfigReloadRequest {
   expectedProcesses: Int!
 }
 
+"How the answering serve process connects to bekup's own database (D-207)."
+enum DatabaseConfigMode {
+  "Connection URL files (the bundled stack)."
+  URL
+  "host, port, name, user and password files (an external PostgreSQL)."
+  FIELDS
+  """
+  One account for migrations and the app (database.single_account): an
+  explicit weakening, warned at every start and alerted daily.
+  """
+  SINGLE_ACCOUNT
+}
+
+"""
+The app database posture of the serve process that answered (restart-only
+settings; no host names or credentials).
+"""
+type DatabasePosture {
+  mode: DatabaseConfigMode!
+  "database.tls_mode: verify-full, require or disable."
+  tlsMode: String!
+  """
+  True when tls_mode is weaker than verify-full (D-100): the server identity
+  is not fully verified, or the connection is not encrypted.
+  """
+  insecureTransport: Boolean!
+  "True in single-account mode (D-207)."
+  singleAccount: Boolean!
+}
+
 "The configuration page."
 type ConfigStatus {
+  "The app database posture of the serve process that answered."
+  database: DatabasePosture!
   "Keys a reload applies without a restart (`section.key`)."
   liveKeys: [String!]!
   """

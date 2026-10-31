@@ -219,7 +219,7 @@ func (r *Resolver) jobOwners(ctx context.Context, obj *model.Job) ([]model.JobOw
 	return ownersModel(owners), nil
 }
 
-func (r *Resolver) previewSchedule(ctx context.Context, in model.ScheduleInput, count *int) (*model.SchedulePreview, error) {
+func (r *Resolver) previewSchedule(ctx context.Context, in model.ScheduleInput, count *int, ret *model.JobRetentionInput) (*model.SchedulePreview, error) {
 	svc, _, err := r.jobCaller(ctx)
 	if err != nil {
 		return nil, err
@@ -239,7 +239,13 @@ func (r *Resolver) previewSchedule(ctx context.Context, in model.ScheduleInput, 
 	if err != nil {
 		return nil, jobError(err)
 	}
-	return &model.SchedulePreview{Schedule: scheduleModel(p.Schedule), Description: p.Description, Next: p.Next}, nil
+	out := &model.SchedulePreview{Schedule: scheduleModel(p.Schedule), Description: p.Description, Next: p.Next}
+	if ret != nil {
+		if out.Retention, err = retentionEstimate(svc, p, ret); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // --- job mutations -------------------------------------------------------------
@@ -730,8 +736,9 @@ func jobModel(j *jobs.Job) *model.Job {
 		Retention:      &model.JobRetention{KeepLast: j.Retention.KeepLast, KeepDays: j.Retention.KeepDays},
 		TimeoutSeconds: durationSeconds(j.Timeout), ExpectedWindowSeconds: durationSeconds(j.ExpectedWindow),
 		Verification: verificationModel(j.Verification), CreatedAt: j.CreatedAt, UpdatedAt: j.UpdatedAt,
-		Destinations: make([]model.JobDestinationRef, 0, len(j.Destinations)),
-		TestRestore:  testRestoreJobModel(&j.TestRestore),
+		Destinations:  make([]model.JobDestinationRef, 0, len(j.Destinations)),
+		TestRestore:   testRestoreJobModel(&j.TestRestore),
+		SchemaVersion: jobSchemaVersionModel(&j.SchemaVersion),
 	}
 	for _, d := range j.Destinations {
 		m.Destinations = append(m.Destinations, model.JobDestinationRef{

@@ -95,3 +95,33 @@ LEFT JOIN (
 ) u ON u.destination_id = d.id
 WHERE d.deleted_at IS NULL
 ORDER BY lower(d.name), d.id;
+
+-- DestinationHasPresentArtifacts reports whether backup files are recorded as
+-- present on the destination (its location must not change then, D-209).
+-- name: DestinationHasPresentArtifacts :one
+SELECT EXISTS (SELECT 1 FROM artifacts WHERE destination_id = $1 AND state = 'present')::boolean;
+
+-- LockDestinationLocations serializes the location checks of creates and
+-- location changes (transaction-scoped advisory lock, D-209).
+-- name: LockDestinationLocations :exec
+SELECT pg_advisory_xact_lock(7142023363);
+
+-- ListDestinationLocations returns the other destinations whose location a
+-- new or moved destination must not overlap: every non-deleted one and the
+-- soft-deleted ones that still hold present backups (D-209).
+-- name: ListDestinationLocations :many
+SELECT d.id, d.name, d.type, d.config
+FROM destinations d
+WHERE d.id <> @id
+  AND (d.deleted_at IS NULL OR EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
+ORDER BY d.name, d.id;
+
+-- DestinationHasActiveRuns reports a queued or running backup run of a job
+-- that writes to the destination (its location must not change then,
+-- D-209).
+-- name: DestinationHasActiveRuns :one
+SELECT EXISTS (
+    SELECT 1 FROM runs r
+    JOIN job_destinations jd ON jd.job_id = r.job_id
+    WHERE jd.destination_id = $1 AND r.status IN ('queued', 'running')
+)::boolean;

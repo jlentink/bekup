@@ -79,11 +79,12 @@ func clampInt32(n int) int32 {
 }
 
 // NewPool builds the runtime connection pool (role bekup_app) from the
-// connection URL (from config.Bekup.DatabaseURL; the caller zeroes it). The
-// URL and its password are registered with the log redaction registry before
-// anything else happens and are never logged. NewPool pings the database.
-func NewPool(ctx context.Context, url []byte, opts PoolOptions) (*pgxpool.Pool, error) {
-	cfg, err := poolConfig(url, opts)
+// credentials (config.Bekup.AppDBCredentials; the caller zeroes them). The
+// URL and the password are registered with the log redaction registry
+// before anything else happens and are never logged. NewPool pings the
+// database.
+func NewPool(ctx context.Context, creds config.DBCredentials, opts PoolOptions) (*pgxpool.Pool, error) {
+	cfg, err := poolConfig(creds, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -98,21 +99,21 @@ func NewPool(ctx context.Context, url []byte, opts PoolOptions) (*pgxpool.Pool, 
 	return pool, nil
 }
 
-// poolConfig parses the URL and applies opts; it does not connect.
-func poolConfig(url []byte, opts PoolOptions) (*pgxpool.Config, error) {
-	reg := opts.Registry
-	if reg == nil {
-		reg = logging.DefaultRegistry
-	}
-	reg.Register(url)
-	cfg, err := pgxpool.ParseConfig(string(url))
+// poolConfig builds the connection config (connConfig, the one builder)
+// and applies opts; it does not connect.
+func poolConfig(creds config.DBCredentials, opts PoolOptions) (*pgxpool.Config, error) {
+	cc, err := connConfig(creds, opts.TLS, opts.Registry)
 	if err != nil {
-		return nil, ErrInvalidURL
-	}
-	registerPassword(reg, cfg.ConnConfig)
-	if err := applyTLS(&cfg.ConnConfig.Config, url, opts.TLS); err != nil {
 		return nil, err
 	}
+	// pgxpool only accepts a config from its own parser; the neutral
+	// string carries no settings that survive (the connection config is
+	// replaced and the pool settings are set below).
+	cfg, err := pgxpool.ParseConfig(neutralConnString)
+	if err != nil {
+		return nil, fmt.Errorf("build database pool config (check PGSERVICE/PGSERVICEFILE in the environment): %w", err)
+	}
+	cfg.ConnConfig = cc
 
 	def := config.DefaultBekup().Database
 	cfg.MaxConns = pick(opts.MaxConns, clampInt32(def.MaxConns))

@@ -19,4 +19,11 @@
 // of the SFTP host-key pin (internal/tunnel.FetchHostKey through the
 // guard); the pin is only set by ConfirmHostKey after the admin compared
 // the fingerprint out of band.
+//
+// D-209: the location (disk path, S3 bucket/prefix, SFTP base path/dir)
+// never changes while artifacts are present there. ScanUnrecorded (daily,
+// from the retention fan-out) prunes empty layout directories and records
+// unrecorded files; UnrecordedFiles lists them and DeleteUnrecordedFile
+// removes one (admin + step-up, re-checked, audited, never in no-delete
+// mode).
 package destinations

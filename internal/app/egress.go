@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/egress"
@@ -65,12 +64,12 @@ func (a *App) newWorkerSettingsListener() (*pubsub.Bus, error) {
 	if err != nil {
 		return nil, err
 	}
-	url, err := cfg.DatabaseURL()
+	creds, err := cfg.AppDBCredentials()
 	if err != nil {
-		return nil, fmt.Errorf("read database URL: %w", err)
+		return nil, fmt.Errorf("read database credentials: %w", err)
 	}
-	connect, err := db.NewConnector(url, poolOpts)
-	config.Zero(url)
+	connect, err := db.NewConnector(creds, poolOpts)
+	creds.Zero()
 	if err != nil {
 		return nil, err
 	}

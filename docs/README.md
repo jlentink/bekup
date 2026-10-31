@@ -16,8 +16,9 @@ in by the task named on the page (see the
 
 ## Installation
 
-- [Docker Compose](installation/compose.md)
+- [Docker Compose and the setup wizard](installation/compose.md)
 - [Reverse proxy and TLS](installation/reverse-proxy.md)
+- [External PostgreSQL for bekup's own database](installation/external-database.md)
 - [Rootless Docker and userns-remap](installation/rootless-docker.md)
 - [Upgrades](installation/upgrades.md)
 

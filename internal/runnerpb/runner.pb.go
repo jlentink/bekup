@@ -369,6 +369,69 @@ func (PrivilegeStatus) EnumDescriptor() ([]byte, []int) {
 	return file_runner_v1_runner_proto_rawDescGZIP(), []int{5}
 }
 
+// VersionStatus is the outcome of a schema-version capture (D-210).
+type VersionStatus int32
+
+const (
+	// No version was requested.
+	VersionStatus_VERSION_STATUS_UNSPECIFIED VersionStatus = 0
+	// schema_version holds the captured version.
+	VersionStatus_VERSION_STATUS_OK VersionStatus = 1
+	// No version: the table does not exist, has no row or the value is
+	// NULL or empty.
+	VersionStatus_VERSION_STATUS_NONE VersionStatus = 2
+	// The query failed (privilege, timeout, unexpected table layout,
+	// server without the D-152 safeguards, any error).
+	VersionStatus_VERSION_STATUS_UNAVAILABLE VersionStatus = 3
+	// The result was longer than 64 characters or not printable ASCII.
+	VersionStatus_VERSION_STATUS_INVALID VersionStatus = 4
+)
+
+// Enum value maps for VersionStatus.
+var (
+	VersionStatus_name = map[int32]string{
+		0: "VERSION_STATUS_UNSPECIFIED",
+		1: "VERSION_STATUS_OK",
+		2: "VERSION_STATUS_NONE",
+		3: "VERSION_STATUS_UNAVAILABLE",
+		4: "VERSION_STATUS_INVALID",
+	}
+	VersionStatus_value = map[string]int32{
+		"VERSION_STATUS_UNSPECIFIED": 0,
+		"VERSION_STATUS_OK":          1,
+		"VERSION_STATUS_NONE":        2,
+		"VERSION_STATUS_UNAVAILABLE": 3,
+		"VERSION_STATUS_INVALID":     4,
+	}
+)
+
+func (x VersionStatus) Enum() *VersionStatus {
+	p := new(VersionStatus)
+	*p = x
+	return p
+}
+
+func (x VersionStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VersionStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[6].Descriptor()
+}
+
+func (VersionStatus) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[6]
+}
+
+func (x VersionStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VersionStatus.Descriptor instead.
+func (VersionStatus) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{6}
+}
+
 // StatsLevel is a job's verification level (D-141, D-151).
 type StatsLevel int32
 
@@ -406,11 +469,11 @@ func (x StatsLevel) String() string {
 }
 
 func (StatsLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_runner_v1_runner_proto_enumTypes[6].Descriptor()
+	return file_runner_v1_runner_proto_enumTypes[7].Descriptor()
 }
 
 func (StatsLevel) Type() protoreflect.EnumType {
-	return &file_runner_v1_runner_proto_enumTypes[6]
+	return &file_runner_v1_runner_proto_enumTypes[7]
 }
 
 func (x StatsLevel) Number() protoreflect.EnumNumber {
@@ -419,7 +482,7 @@ func (x StatsLevel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use StatsLevel.Descriptor instead.
 func (StatsLevel) EnumDescriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{6}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{7}
 }
 
 // RowCount says how a table's row count was obtained.
@@ -462,11 +525,11 @@ func (x RowCount) String() string {
 }
 
 func (RowCount) Descriptor() protoreflect.EnumDescriptor {
-	return file_runner_v1_runner_proto_enumTypes[7].Descriptor()
+	return file_runner_v1_runner_proto_enumTypes[8].Descriptor()
 }
 
 func (RowCount) Type() protoreflect.EnumType {
-	return &file_runner_v1_runner_proto_enumTypes[7]
+	return &file_runner_v1_runner_proto_enumTypes[8]
 }
 
 func (x RowCount) Number() protoreflect.EnumNumber {
@@ -475,7 +538,7 @@ func (x RowCount) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RowCount.Descriptor instead.
 func (RowCount) EnumDescriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{7}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{8}
 }
 
 // TempDatabaseRole selects which derived temporary database to drop.
@@ -515,11 +578,11 @@ func (x TempDatabaseRole) String() string {
 }
 
 func (TempDatabaseRole) Descriptor() protoreflect.EnumDescriptor {
-	return file_runner_v1_runner_proto_enumTypes[8].Descriptor()
+	return file_runner_v1_runner_proto_enumTypes[9].Descriptor()
 }
 
 func (TempDatabaseRole) Type() protoreflect.EnumType {
-	return &file_runner_v1_runner_proto_enumTypes[8]
+	return &file_runner_v1_runner_proto_enumTypes[9]
 }
 
 func (x TempDatabaseRole) Number() protoreflect.EnumNumber {
@@ -528,7 +591,7 @@ func (x TempDatabaseRole) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TempDatabaseRole.Descriptor instead.
 func (TempDatabaseRole) EnumDescriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{8}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{9}
 }
 
 // NeutralizeKind selects the database NeutralizeRestoredDatabase works on.
@@ -571,11 +634,11 @@ func (x NeutralizeKind) String() string {
 }
 
 func (NeutralizeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_runner_v1_runner_proto_enumTypes[9].Descriptor()
+	return file_runner_v1_runner_proto_enumTypes[10].Descriptor()
 }
 
 func (NeutralizeKind) Type() protoreflect.EnumType {
-	return &file_runner_v1_runner_proto_enumTypes[9]
+	return &file_runner_v1_runner_proto_enumTypes[10]
 }
 
 func (x NeutralizeKind) Number() protoreflect.EnumNumber {
@@ -584,7 +647,7 @@ func (x NeutralizeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NeutralizeKind.Descriptor instead.
 func (NeutralizeKind) EnumDescriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{9}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{10}
 }
 
 // RunContext correlates a call with a bekup run.
@@ -1890,7 +1953,11 @@ type DumpRequest struct {
 	Database string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
 	// Completeness evidence (task 3.10, D-141, D-151: the stats travel inside
 	// the Dump call). Absent or disabled: no stats.
-	Stats         *StatsOptions `protobuf:"bytes,4,opt,name=stats,proto3" json:"stats,omitempty"`
+	Stats *StatsOptions `protobuf:"bytes,4,opt,name=stats,proto3" json:"stats,omitempty"`
+	// Schema-version capture (D-210). Requires enabled stats: the version is
+	// read in the stats transaction (PostgreSQL: the dump's snapshot) and
+	// reported in DumpStats. Absent: no version.
+	VersionQuery  *VersionQuery `protobuf:"bytes,5,opt,name=version_query,json=versionQuery,proto3" json:"version_query,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1953,6 +2020,113 @@ func (x *DumpRequest) GetStats() *StatsOptions {
 	return nil
 }
 
+func (x *DumpRequest) GetVersionQuery() *VersionQuery {
+	if x != nil {
+		return x.VersionQuery
+	}
+	return nil
+}
+
+// VersionQuery selects how the runner reads the schema (migration) version
+// of the dumped database (D-210). Exactly one of the queries is set.
+type VersionQuery struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Query:
+	//
+	//	*VersionQuery_Preset
+	//	*VersionQuery_CustomSql
+	Query isVersionQuery_Query `protobuf_oneof:"query"`
+	// PostgreSQL schema of the preset's table (empty: public). Ignored for
+	// custom queries and MySQL/MariaDB.
+	Schema        string `protobuf:"bytes,3,opt,name=schema,proto3" json:"schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VersionQuery) Reset() {
+	*x = VersionQuery{}
+	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VersionQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VersionQuery) ProtoMessage() {}
+
+func (x *VersionQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VersionQuery.ProtoReflect.Descriptor instead.
+func (*VersionQuery) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *VersionQuery) GetQuery() isVersionQuery_Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *VersionQuery) GetPreset() string {
+	if x != nil {
+		if x, ok := x.Query.(*VersionQuery_Preset); ok {
+			return x.Preset
+		}
+	}
+	return ""
+}
+
+func (x *VersionQuery) GetCustomSql() string {
+	if x != nil {
+		if x, ok := x.Query.(*VersionQuery_CustomSql); ok {
+			return x.CustomSql
+		}
+	}
+	return ""
+}
+
+func (x *VersionQuery) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+type isVersionQuery_Query interface {
+	isVersionQuery_Query()
+}
+
+type VersionQuery_Preset struct {
+	// A preset name of internal/schemaversion (allowlisted by the runner,
+	// which owns the preset SQL).
+	Preset string `protobuf:"bytes,1,opt,name=preset,proto3,oneof"`
+}
+
+type VersionQuery_CustomSql struct {
+	// A custom single SELECT or WITH statement, at most 2 KiB. The only
+	// free-form SQL of the runner API (D-210): the runner validates it
+	// again and runs it read-only on the stats snapshot with statement and
+	// lock timeouts, reading the first column of the first row only.
+	CustomSql string `protobuf:"bytes,2,opt,name=custom_sql,json=customSql,proto3,oneof"`
+}
+
+func (*VersionQuery_Preset) isVersionQuery_Query() {}
+
+func (*VersionQuery_CustomSql) isVersionQuery_Query() {}
+
 // StatsOptions asks the runner to capture source statistics before the
 // dump. PostgreSQL: the runner exports a snapshot in a REPEATABLE READ READ
 // ONLY transaction, counts inside it and runs pg_dump --snapshot=<id>
@@ -1977,7 +2151,7 @@ type StatsOptions struct {
 
 func (x *StatsOptions) Reset() {
 	*x = StatsOptions{}
-	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	mi := &file_runner_v1_runner_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1989,7 +2163,7 @@ func (x *StatsOptions) String() string {
 func (*StatsOptions) ProtoMessage() {}
 
 func (x *StatsOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[19]
+	mi := &file_runner_v1_runner_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2002,7 +2176,7 @@ func (x *StatsOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsOptions.ProtoReflect.Descriptor instead.
 func (*StatsOptions) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{19}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *StatsOptions) GetEnabled() bool {
@@ -2053,7 +2227,7 @@ type TableStats struct {
 
 func (x *TableStats) Reset() {
 	*x = TableStats{}
-	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	mi := &file_runner_v1_runner_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2065,7 +2239,7 @@ func (x *TableStats) String() string {
 func (*TableStats) ProtoMessage() {}
 
 func (x *TableStats) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[20]
+	mi := &file_runner_v1_runner_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2078,7 +2252,7 @@ func (x *TableStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TableStats.ProtoReflect.Descriptor instead.
 func (*TableStats) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{20}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *TableStats) GetSchema() string {
@@ -2140,7 +2314,7 @@ type ObjectCounts struct {
 
 func (x *ObjectCounts) Reset() {
 	*x = ObjectCounts{}
-	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	mi := &file_runner_v1_runner_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2152,7 +2326,7 @@ func (x *ObjectCounts) String() string {
 func (*ObjectCounts) ProtoMessage() {}
 
 func (x *ObjectCounts) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[21]
+	mi := &file_runner_v1_runner_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2165,7 +2339,7 @@ func (x *ObjectCounts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectCounts.ProtoReflect.Descriptor instead.
 func (*ObjectCounts) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{21}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ObjectCounts) GetSchemas() uint32 {
@@ -2271,7 +2445,7 @@ type StatsWarning struct {
 
 func (x *StatsWarning) Reset() {
 	*x = StatsWarning{}
-	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	mi := &file_runner_v1_runner_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2283,7 +2457,7 @@ func (x *StatsWarning) String() string {
 func (*StatsWarning) ProtoMessage() {}
 
 func (x *StatsWarning) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[22]
+	mi := &file_runner_v1_runner_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2296,7 +2470,7 @@ func (x *StatsWarning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsWarning.ProtoReflect.Descriptor instead.
 func (*StatsWarning) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{22}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *StatsWarning) GetCode() string {
@@ -2342,14 +2516,18 @@ type DumpStats struct {
 	TablesTotal     uint32 `protobuf:"varint,5,opt,name=tables_total,json=tablesTotal,proto3" json:"tables_total,omitempty"`
 	TablesTruncated bool   `protobuf:"varint,6,opt,name=tables_truncated,json=tablesTruncated,proto3" json:"tables_truncated,omitempty"`
 	// At most 32 warnings.
-	Warnings      []*StatsWarning `protobuf:"bytes,7,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Warnings []*StatsWarning `protobuf:"bytes,7,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// The schema version (D-210): at most 64 printable ASCII characters, set
+	// only with VERSION_STATUS_OK.
+	SchemaVersion string        `protobuf:"bytes,8,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	VersionStatus VersionStatus `protobuf:"varint,9,opt,name=version_status,json=versionStatus,proto3,enum=runner.v1.VersionStatus" json:"version_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DumpStats) Reset() {
 	*x = DumpStats{}
-	mi := &file_runner_v1_runner_proto_msgTypes[23]
+	mi := &file_runner_v1_runner_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2361,7 +2539,7 @@ func (x *DumpStats) String() string {
 func (*DumpStats) ProtoMessage() {}
 
 func (x *DumpStats) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[23]
+	mi := &file_runner_v1_runner_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2374,7 +2552,7 @@ func (x *DumpStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpStats.ProtoReflect.Descriptor instead.
 func (*DumpStats) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{23}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DumpStats) GetLevel() StatsLevel {
@@ -2426,6 +2604,20 @@ func (x *DumpStats) GetWarnings() []*StatsWarning {
 	return nil
 }
 
+func (x *DumpStats) GetSchemaVersion() string {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return ""
+}
+
+func (x *DumpStats) GetVersionStatus() VersionStatus {
+	if x != nil {
+		return x.VersionStatus
+	}
+	return VersionStatus_VERSION_STATUS_UNSPECIFIED
+}
+
 // DumpResult ends a Dump or DumpGlobals stream.
 type DumpResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2445,7 +2637,7 @@ type DumpResult struct {
 
 func (x *DumpResult) Reset() {
 	*x = DumpResult{}
-	mi := &file_runner_v1_runner_proto_msgTypes[24]
+	mi := &file_runner_v1_runner_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2457,7 +2649,7 @@ func (x *DumpResult) String() string {
 func (*DumpResult) ProtoMessage() {}
 
 func (x *DumpResult) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[24]
+	mi := &file_runner_v1_runner_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2470,7 +2662,7 @@ func (x *DumpResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpResult.ProtoReflect.Descriptor instead.
 func (*DumpResult) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{24}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DumpResult) GetBytes() uint64 {
@@ -2530,7 +2722,7 @@ type DumpResponse struct {
 
 func (x *DumpResponse) Reset() {
 	*x = DumpResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[25]
+	mi := &file_runner_v1_runner_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2542,7 +2734,7 @@ func (x *DumpResponse) String() string {
 func (*DumpResponse) ProtoMessage() {}
 
 func (x *DumpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[25]
+	mi := &file_runner_v1_runner_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2555,7 +2747,7 @@ func (x *DumpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpResponse.ProtoReflect.Descriptor instead.
 func (*DumpResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{25}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DumpResponse) GetMsg() isDumpResponse_Msg {
@@ -2642,7 +2834,7 @@ type DumpGlobalsRequest struct {
 
 func (x *DumpGlobalsRequest) Reset() {
 	*x = DumpGlobalsRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[26]
+	mi := &file_runner_v1_runner_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2654,7 +2846,7 @@ func (x *DumpGlobalsRequest) String() string {
 func (*DumpGlobalsRequest) ProtoMessage() {}
 
 func (x *DumpGlobalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[26]
+	mi := &file_runner_v1_runner_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2667,7 +2859,7 @@ func (x *DumpGlobalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpGlobalsRequest.ProtoReflect.Descriptor instead.
 func (*DumpGlobalsRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{26}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DumpGlobalsRequest) GetCtx() *RunContext {
@@ -2706,7 +2898,7 @@ type DumpGlobalsResponse struct {
 
 func (x *DumpGlobalsResponse) Reset() {
 	*x = DumpGlobalsResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[27]
+	mi := &file_runner_v1_runner_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2718,7 +2910,7 @@ func (x *DumpGlobalsResponse) String() string {
 func (*DumpGlobalsResponse) ProtoMessage() {}
 
 func (x *DumpGlobalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[27]
+	mi := &file_runner_v1_runner_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2731,7 +2923,7 @@ func (x *DumpGlobalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DumpGlobalsResponse.ProtoReflect.Descriptor instead.
 func (*DumpGlobalsResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{27}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DumpGlobalsResponse) GetMsg() isDumpGlobalsResponse_Msg {
@@ -2822,7 +3014,7 @@ type VerifyDumpHeader struct {
 
 func (x *VerifyDumpHeader) Reset() {
 	*x = VerifyDumpHeader{}
-	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	mi := &file_runner_v1_runner_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2834,7 +3026,7 @@ func (x *VerifyDumpHeader) String() string {
 func (*VerifyDumpHeader) ProtoMessage() {}
 
 func (x *VerifyDumpHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[28]
+	mi := &file_runner_v1_runner_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2847,7 +3039,7 @@ func (x *VerifyDumpHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpHeader.ProtoReflect.Descriptor instead.
 func (*VerifyDumpHeader) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{28}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *VerifyDumpHeader) GetCtx() *RunContext {
@@ -2897,7 +3089,7 @@ type VerifyDumpTrailer struct {
 
 func (x *VerifyDumpTrailer) Reset() {
 	*x = VerifyDumpTrailer{}
-	mi := &file_runner_v1_runner_proto_msgTypes[29]
+	mi := &file_runner_v1_runner_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2909,7 +3101,7 @@ func (x *VerifyDumpTrailer) String() string {
 func (*VerifyDumpTrailer) ProtoMessage() {}
 
 func (x *VerifyDumpTrailer) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[29]
+	mi := &file_runner_v1_runner_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2922,7 +3114,7 @@ func (x *VerifyDumpTrailer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpTrailer.ProtoReflect.Descriptor instead.
 func (*VerifyDumpTrailer) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{29}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *VerifyDumpTrailer) GetTotalBytes() uint64 {
@@ -2946,7 +3138,7 @@ type VerifyDumpRequest struct {
 
 func (x *VerifyDumpRequest) Reset() {
 	*x = VerifyDumpRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[30]
+	mi := &file_runner_v1_runner_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2958,7 +3150,7 @@ func (x *VerifyDumpRequest) String() string {
 func (*VerifyDumpRequest) ProtoMessage() {}
 
 func (x *VerifyDumpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[30]
+	mi := &file_runner_v1_runner_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2971,7 +3163,7 @@ func (x *VerifyDumpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpRequest.ProtoReflect.Descriptor instead.
 func (*VerifyDumpRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{30}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *VerifyDumpRequest) GetMsg() isVerifyDumpRequest_Msg {
@@ -3044,7 +3236,7 @@ type VerifyDumpResponse struct {
 
 func (x *VerifyDumpResponse) Reset() {
 	*x = VerifyDumpResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[31]
+	mi := &file_runner_v1_runner_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3056,7 +3248,7 @@ func (x *VerifyDumpResponse) String() string {
 func (*VerifyDumpResponse) ProtoMessage() {}
 
 func (x *VerifyDumpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[31]
+	mi := &file_runner_v1_runner_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3069,7 +3261,7 @@ func (x *VerifyDumpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyDumpResponse.ProtoReflect.Descriptor instead.
 func (*VerifyDumpResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{31}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *VerifyDumpResponse) GetVerified() bool {
@@ -3129,7 +3321,7 @@ type RestoreHeader struct {
 
 func (x *RestoreHeader) Reset() {
 	*x = RestoreHeader{}
-	mi := &file_runner_v1_runner_proto_msgTypes[32]
+	mi := &file_runner_v1_runner_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3141,7 +3333,7 @@ func (x *RestoreHeader) String() string {
 func (*RestoreHeader) ProtoMessage() {}
 
 func (x *RestoreHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[32]
+	mi := &file_runner_v1_runner_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3154,7 +3346,7 @@ func (x *RestoreHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreHeader.ProtoReflect.Descriptor instead.
 func (*RestoreHeader) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{32}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *RestoreHeader) GetCtx() *RunContext {
@@ -3226,7 +3418,7 @@ type RestoreRequest struct {
 
 func (x *RestoreRequest) Reset() {
 	*x = RestoreRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[33]
+	mi := &file_runner_v1_runner_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3238,7 +3430,7 @@ func (x *RestoreRequest) String() string {
 func (*RestoreRequest) ProtoMessage() {}
 
 func (x *RestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[33]
+	mi := &file_runner_v1_runner_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3251,7 +3443,7 @@ func (x *RestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreRequest.ProtoReflect.Descriptor instead.
 func (*RestoreRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{33}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *RestoreRequest) GetMsg() isRestoreRequest_Msg {
@@ -3307,7 +3499,7 @@ type RestoreResult struct {
 
 func (x *RestoreResult) Reset() {
 	*x = RestoreResult{}
-	mi := &file_runner_v1_runner_proto_msgTypes[34]
+	mi := &file_runner_v1_runner_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3319,7 +3511,7 @@ func (x *RestoreResult) String() string {
 func (*RestoreResult) ProtoMessage() {}
 
 func (x *RestoreResult) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[34]
+	mi := &file_runner_v1_runner_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3332,7 +3524,7 @@ func (x *RestoreResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreResult.ProtoReflect.Descriptor instead.
 func (*RestoreResult) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{34}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RestoreResult) GetBytesReceived() uint64 {
@@ -3376,7 +3568,7 @@ type RestoreResponse struct {
 
 func (x *RestoreResponse) Reset() {
 	*x = RestoreResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[35]
+	mi := &file_runner_v1_runner_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3388,7 +3580,7 @@ func (x *RestoreResponse) String() string {
 func (*RestoreResponse) ProtoMessage() {}
 
 func (x *RestoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[35]
+	mi := &file_runner_v1_runner_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3401,7 +3593,7 @@ func (x *RestoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreResponse.ProtoReflect.Descriptor instead.
 func (*RestoreResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{35}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RestoreResponse) GetMsg() isRestoreResponse_Msg {
@@ -3456,7 +3648,7 @@ type CreateDatabaseRequest struct {
 
 func (x *CreateDatabaseRequest) Reset() {
 	*x = CreateDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[36]
+	mi := &file_runner_v1_runner_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3468,7 +3660,7 @@ func (x *CreateDatabaseRequest) String() string {
 func (*CreateDatabaseRequest) ProtoMessage() {}
 
 func (x *CreateDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[36]
+	mi := &file_runner_v1_runner_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3481,7 +3673,7 @@ func (x *CreateDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*CreateDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{36}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CreateDatabaseRequest) GetCtx() *RunContext {
@@ -3513,7 +3705,7 @@ type CreateDatabaseResponse struct {
 
 func (x *CreateDatabaseResponse) Reset() {
 	*x = CreateDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[37]
+	mi := &file_runner_v1_runner_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3525,7 +3717,7 @@ func (x *CreateDatabaseResponse) String() string {
 func (*CreateDatabaseResponse) ProtoMessage() {}
 
 func (x *CreateDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[37]
+	mi := &file_runner_v1_runner_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3538,7 +3730,7 @@ func (x *CreateDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*CreateDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{37}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{38}
 }
 
 type RenameSwapDatabaseRequest struct {
@@ -3557,7 +3749,7 @@ type RenameSwapDatabaseRequest struct {
 
 func (x *RenameSwapDatabaseRequest) Reset() {
 	*x = RenameSwapDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[38]
+	mi := &file_runner_v1_runner_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3569,7 +3761,7 @@ func (x *RenameSwapDatabaseRequest) String() string {
 func (*RenameSwapDatabaseRequest) ProtoMessage() {}
 
 func (x *RenameSwapDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[38]
+	mi := &file_runner_v1_runner_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3582,7 +3774,7 @@ func (x *RenameSwapDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSwapDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*RenameSwapDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{38}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RenameSwapDatabaseRequest) GetCtx() *RunContext {
@@ -3621,7 +3813,7 @@ type RenameSwapDatabaseResponse struct {
 
 func (x *RenameSwapDatabaseResponse) Reset() {
 	*x = RenameSwapDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[39]
+	mi := &file_runner_v1_runner_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3633,7 +3825,7 @@ func (x *RenameSwapDatabaseResponse) String() string {
 func (*RenameSwapDatabaseResponse) ProtoMessage() {}
 
 func (x *RenameSwapDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[39]
+	mi := &file_runner_v1_runner_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3646,7 +3838,7 @@ func (x *RenameSwapDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSwapDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*RenameSwapDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{39}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{40}
 }
 
 type DropTempDatabaseRequest struct {
@@ -3664,7 +3856,7 @@ type DropTempDatabaseRequest struct {
 
 func (x *DropTempDatabaseRequest) Reset() {
 	*x = DropTempDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[40]
+	mi := &file_runner_v1_runner_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3676,7 +3868,7 @@ func (x *DropTempDatabaseRequest) String() string {
 func (*DropTempDatabaseRequest) ProtoMessage() {}
 
 func (x *DropTempDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[40]
+	mi := &file_runner_v1_runner_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3689,7 +3881,7 @@ func (x *DropTempDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropTempDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*DropTempDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{40}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *DropTempDatabaseRequest) GetCtx() *RunContext {
@@ -3737,7 +3929,7 @@ type DropTempDatabaseResponse struct {
 
 func (x *DropTempDatabaseResponse) Reset() {
 	*x = DropTempDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[41]
+	mi := &file_runner_v1_runner_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3749,7 +3941,7 @@ func (x *DropTempDatabaseResponse) String() string {
 func (*DropTempDatabaseResponse) ProtoMessage() {}
 
 func (x *DropTempDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[41]
+	mi := &file_runner_v1_runner_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3762,7 +3954,7 @@ func (x *DropTempDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropTempDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*DropTempDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{41}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DropTempDatabaseResponse) GetExisted() bool {
@@ -3782,7 +3974,7 @@ type PrePullRequest struct {
 
 func (x *PrePullRequest) Reset() {
 	*x = PrePullRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[42]
+	mi := &file_runner_v1_runner_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3794,7 +3986,7 @@ func (x *PrePullRequest) String() string {
 func (*PrePullRequest) ProtoMessage() {}
 
 func (x *PrePullRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[42]
+	mi := &file_runner_v1_runner_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3807,7 +3999,7 @@ func (x *PrePullRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrePullRequest.ProtoReflect.Descriptor instead.
 func (*PrePullRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{42}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *PrePullRequest) GetEngine() Engine {
@@ -3835,7 +4027,7 @@ type PrePullResponse struct {
 
 func (x *PrePullResponse) Reset() {
 	*x = PrePullResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[43]
+	mi := &file_runner_v1_runner_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3847,7 +4039,7 @@ func (x *PrePullResponse) String() string {
 func (*PrePullResponse) ProtoMessage() {}
 
 func (x *PrePullResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[43]
+	mi := &file_runner_v1_runner_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3860,7 +4052,7 @@ func (x *PrePullResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrePullResponse.ProtoReflect.Descriptor instead.
 func (*PrePullResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{43}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PrePullResponse) GetImageRef() string {
@@ -3885,7 +4077,7 @@ type ListImagesRequest struct {
 
 func (x *ListImagesRequest) Reset() {
 	*x = ListImagesRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[44]
+	mi := &file_runner_v1_runner_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3897,7 +4089,7 @@ func (x *ListImagesRequest) String() string {
 func (*ListImagesRequest) ProtoMessage() {}
 
 func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[44]
+	mi := &file_runner_v1_runner_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3910,7 +4102,7 @@ func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesRequest.ProtoReflect.Descriptor instead.
 func (*ListImagesRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{44}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{45}
 }
 
 type ListImagesResponse struct {
@@ -3923,7 +4115,7 @@ type ListImagesResponse struct {
 
 func (x *ListImagesResponse) Reset() {
 	*x = ListImagesResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[45]
+	mi := &file_runner_v1_runner_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3935,7 +4127,7 @@ func (x *ListImagesResponse) String() string {
 func (*ListImagesResponse) ProtoMessage() {}
 
 func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[45]
+	mi := &file_runner_v1_runner_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3948,7 +4140,7 @@ func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesResponse.ProtoReflect.Descriptor instead.
 func (*ListImagesResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{45}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListImagesResponse) GetImages() []*AllowlistedImage {
@@ -3978,7 +4170,7 @@ type AllowlistedImage struct {
 
 func (x *AllowlistedImage) Reset() {
 	*x = AllowlistedImage{}
-	mi := &file_runner_v1_runner_proto_msgTypes[46]
+	mi := &file_runner_v1_runner_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3990,7 +4182,7 @@ func (x *AllowlistedImage) String() string {
 func (*AllowlistedImage) ProtoMessage() {}
 
 func (x *AllowlistedImage) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[46]
+	mi := &file_runner_v1_runner_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4003,7 +4195,7 @@ func (x *AllowlistedImage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AllowlistedImage.ProtoReflect.Descriptor instead.
 func (*AllowlistedImage) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{46}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AllowlistedImage) GetEngine() Engine {
@@ -4064,7 +4256,7 @@ type ScratchStatsRequest struct {
 
 func (x *ScratchStatsRequest) Reset() {
 	*x = ScratchStatsRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[47]
+	mi := &file_runner_v1_runner_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4076,7 +4268,7 @@ func (x *ScratchStatsRequest) String() string {
 func (*ScratchStatsRequest) ProtoMessage() {}
 
 func (x *ScratchStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[47]
+	mi := &file_runner_v1_runner_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4089,7 +4281,7 @@ func (x *ScratchStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScratchStatsRequest.ProtoReflect.Descriptor instead.
 func (*ScratchStatsRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{47}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ScratchStatsRequest) GetCtx() *RunContext {
@@ -4131,7 +4323,7 @@ type ScratchStatsResponse struct {
 
 func (x *ScratchStatsResponse) Reset() {
 	*x = ScratchStatsResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	mi := &file_runner_v1_runner_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4143,7 +4335,7 @@ func (x *ScratchStatsResponse) String() string {
 func (*ScratchStatsResponse) ProtoMessage() {}
 
 func (x *ScratchStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	mi := &file_runner_v1_runner_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4156,7 +4348,7 @@ func (x *ScratchStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScratchStatsResponse.ProtoReflect.Descriptor instead.
 func (*ScratchStatsResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{48}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ScratchStatsResponse) GetStats() *DumpStats {
@@ -4185,7 +4377,7 @@ type DropScratchDatabaseRequest struct {
 
 func (x *DropScratchDatabaseRequest) Reset() {
 	*x = DropScratchDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	mi := &file_runner_v1_runner_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4197,7 +4389,7 @@ func (x *DropScratchDatabaseRequest) String() string {
 func (*DropScratchDatabaseRequest) ProtoMessage() {}
 
 func (x *DropScratchDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	mi := &file_runner_v1_runner_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4210,7 +4402,7 @@ func (x *DropScratchDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropScratchDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*DropScratchDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{49}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DropScratchDatabaseRequest) GetCtx() *RunContext {
@@ -4244,7 +4436,7 @@ type DropScratchDatabaseResponse struct {
 
 func (x *DropScratchDatabaseResponse) Reset() {
 	*x = DropScratchDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	mi := &file_runner_v1_runner_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4256,7 +4448,7 @@ func (x *DropScratchDatabaseResponse) String() string {
 func (*DropScratchDatabaseResponse) ProtoMessage() {}
 
 func (x *DropScratchDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	mi := &file_runner_v1_runner_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4269,7 +4461,7 @@ func (x *DropScratchDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropScratchDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*DropScratchDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{50}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *DropScratchDatabaseResponse) GetExisted() bool {
@@ -4295,7 +4487,7 @@ type NeutralizeRestoredDatabaseRequest struct {
 
 func (x *NeutralizeRestoredDatabaseRequest) Reset() {
 	*x = NeutralizeRestoredDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	mi := &file_runner_v1_runner_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4307,7 +4499,7 @@ func (x *NeutralizeRestoredDatabaseRequest) String() string {
 func (*NeutralizeRestoredDatabaseRequest) ProtoMessage() {}
 
 func (x *NeutralizeRestoredDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	mi := &file_runner_v1_runner_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4320,7 +4512,7 @@ func (x *NeutralizeRestoredDatabaseRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use NeutralizeRestoredDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*NeutralizeRestoredDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{51}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *NeutralizeRestoredDatabaseRequest) GetCtx() *RunContext {
@@ -4373,7 +4565,7 @@ type NeutralizeRestoredDatabaseResponse struct {
 
 func (x *NeutralizeRestoredDatabaseResponse) Reset() {
 	*x = NeutralizeRestoredDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[52]
+	mi := &file_runner_v1_runner_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4385,7 +4577,7 @@ func (x *NeutralizeRestoredDatabaseResponse) String() string {
 func (*NeutralizeRestoredDatabaseResponse) ProtoMessage() {}
 
 func (x *NeutralizeRestoredDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[52]
+	mi := &file_runner_v1_runner_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4398,7 +4590,7 @@ func (x *NeutralizeRestoredDatabaseResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use NeutralizeRestoredDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*NeutralizeRestoredDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{52}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *NeutralizeRestoredDatabaseResponse) GetDatabase() string {
@@ -4558,12 +4750,19 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x14FetchHostKeyResponse\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12-\n" +
 	"\x12fingerprint_sha256\x18\x02 \x01(\tR\x11fingerprintSha256\x12%\n" +
-	"\x0eauthorized_key\x18\x03 \x01(\tR\rauthorizedKey\"\xac\x01\n" +
+	"\x0eauthorized_key\x18\x03 \x01(\tR\rauthorizedKey\"\xea\x01\n" +
 	"\vDumpRequest\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
 	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12-\n" +
-	"\x05stats\x18\x04 \x01(\v2\x17.runner.v1.StatsOptionsR\x05stats\"\xa3\x01\n" +
+	"\x05stats\x18\x04 \x01(\v2\x17.runner.v1.StatsOptionsR\x05stats\x12<\n" +
+	"\rversion_query\x18\x05 \x01(\v2\x17.runner.v1.VersionQueryR\fversionQuery\"j\n" +
+	"\fVersionQuery\x12\x18\n" +
+	"\x06preset\x18\x01 \x01(\tH\x00R\x06preset\x12\x1f\n" +
+	"\n" +
+	"custom_sql\x18\x02 \x01(\tH\x00R\tcustomSql\x12\x16\n" +
+	"\x06schema\x18\x03 \x01(\tR\x06schemaB\a\n" +
+	"\x05query\"\xa3\x01\n" +
 	"\fStatsOptions\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12+\n" +
 	"\x05level\x18\x02 \x01(\x0e2\x15.runner.v1.StatsLevelR\x05level\x12/\n" +
@@ -4598,7 +4797,7 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\rR\x05count\x12\x18\n" +
 	"\aobjects\x18\x03 \x03(\tR\aobjects\x12+\n" +
-	"\x11objects_truncated\x18\x04 \x01(\bR\x10objectsTruncated\"\xc2\x02\n" +
+	"\x11objects_truncated\x18\x04 \x01(\bR\x10objectsTruncated\"\xaa\x03\n" +
 	"\tDumpStats\x12+\n" +
 	"\x05level\x18\x01 \x01(\x0e2\x15.runner.v1.StatsLevelR\x05level\x12#\n" +
 	"\rsame_snapshot\x18\x02 \x01(\bR\fsameSnapshot\x121\n" +
@@ -4606,7 +4805,9 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x06tables\x18\x04 \x03(\v2\x15.runner.v1.TableStatsR\x06tables\x12!\n" +
 	"\ftables_total\x18\x05 \x01(\rR\vtablesTotal\x12)\n" +
 	"\x10tables_truncated\x18\x06 \x01(\bR\x0ftablesTruncated\x123\n" +
-	"\bwarnings\x18\a \x03(\v2\x17.runner.v1.StatsWarningR\bwarnings\"\xdb\x01\n" +
+	"\bwarnings\x18\a \x03(\v2\x17.runner.v1.StatsWarningR\bwarnings\x12%\n" +
+	"\x0eschema_version\x18\b \x01(\tR\rschemaVersion\x12?\n" +
+	"\x0eversion_status\x18\t \x01(\x0e2\x18.runner.v1.VersionStatusR\rversionStatus\"\xdb\x01\n" +
 	"\n" +
 	"DumpResult\x12\x14\n" +
 	"\x05bytes\x18\x01 \x01(\x04R\x05bytes\x12\x1b\n" +
@@ -4765,7 +4966,13 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x1cPRIVILEGE_STATUS_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPRIVILEGE_STATUS_NOT_PRIVILEGED\x10\x01\x12\x1f\n" +
 	"\x1bPRIVILEGE_STATUS_PRIVILEGED\x10\x02\x12\x1c\n" +
-	"\x18PRIVILEGE_STATUS_UNKNOWN\x10\x03*Y\n" +
+	"\x18PRIVILEGE_STATUS_UNKNOWN\x10\x03*\x9b\x01\n" +
+	"\rVersionStatus\x12\x1e\n" +
+	"\x1aVERSION_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11VERSION_STATUS_OK\x10\x01\x12\x17\n" +
+	"\x13VERSION_STATUS_NONE\x10\x02\x12\x1e\n" +
+	"\x1aVERSION_STATUS_UNAVAILABLE\x10\x03\x12\x1a\n" +
+	"\x16VERSION_STATUS_INVALID\x10\x04*Y\n" +
 	"\n" +
 	"StatsLevel\x12\x1b\n" +
 	"\x17STATS_LEVEL_UNSPECIFIED\x10\x00\x12\x18\n" +
@@ -4819,8 +5026,8 @@ func file_runner_v1_runner_proto_rawDescGZIP() []byte {
 	return file_runner_v1_runner_proto_rawDescData
 }
 
-var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
+var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_runner_v1_runner_proto_goTypes = []any{
 	(Engine)(0),                                // 0: runner.v1.Engine
 	(TlsMode)(0),                               // 1: runner.v1.TlsMode
@@ -4828,179 +5035,183 @@ var file_runner_v1_runner_proto_goTypes = []any{
 	(DockerStatus)(0),                          // 3: runner.v1.DockerStatus
 	(LogStream)(0),                             // 4: runner.v1.LogStream
 	(PrivilegeStatus)(0),                       // 5: runner.v1.PrivilegeStatus
-	(StatsLevel)(0),                            // 6: runner.v1.StatsLevel
-	(RowCount)(0),                              // 7: runner.v1.RowCount
-	(TempDatabaseRole)(0),                      // 8: runner.v1.TempDatabaseRole
-	(NeutralizeKind)(0),                        // 9: runner.v1.NeutralizeKind
-	(*RunContext)(nil),                         // 10: runner.v1.RunContext
-	(*CertificatePin)(nil),                     // 11: runner.v1.CertificatePin
-	(*ClientCertificate)(nil),                  // 12: runner.v1.ClientCertificate
-	(*HostKeyPin)(nil),                         // 13: runner.v1.HostKeyPin
-	(*SshTunnel)(nil),                          // 14: runner.v1.SshTunnel
-	(*Target)(nil),                             // 15: runner.v1.Target
-	(*DataChunk)(nil),                          // 16: runner.v1.DataChunk
-	(*LogLine)(nil),                            // 17: runner.v1.LogLine
-	(*PeerCertificate)(nil),                    // 18: runner.v1.PeerCertificate
-	(*HealthRequest)(nil),                      // 19: runner.v1.HealthRequest
-	(*HealthResponse)(nil),                     // 20: runner.v1.HealthResponse
-	(*ProbeRequest)(nil),                       // 21: runner.v1.ProbeRequest
-	(*ProbeResponse)(nil),                      // 22: runner.v1.ProbeResponse
-	(*TargetPrivileges)(nil),                   // 23: runner.v1.TargetPrivileges
-	(*FetchServerCertificateRequest)(nil),      // 24: runner.v1.FetchServerCertificateRequest
-	(*FetchServerCertificateResponse)(nil),     // 25: runner.v1.FetchServerCertificateResponse
-	(*FetchHostKeyRequest)(nil),                // 26: runner.v1.FetchHostKeyRequest
-	(*FetchHostKeyResponse)(nil),               // 27: runner.v1.FetchHostKeyResponse
-	(*DumpRequest)(nil),                        // 28: runner.v1.DumpRequest
-	(*StatsOptions)(nil),                       // 29: runner.v1.StatsOptions
-	(*TableStats)(nil),                         // 30: runner.v1.TableStats
-	(*ObjectCounts)(nil),                       // 31: runner.v1.ObjectCounts
-	(*StatsWarning)(nil),                       // 32: runner.v1.StatsWarning
-	(*DumpStats)(nil),                          // 33: runner.v1.DumpStats
-	(*DumpResult)(nil),                         // 34: runner.v1.DumpResult
-	(*DumpResponse)(nil),                       // 35: runner.v1.DumpResponse
-	(*DumpGlobalsRequest)(nil),                 // 36: runner.v1.DumpGlobalsRequest
-	(*DumpGlobalsResponse)(nil),                // 37: runner.v1.DumpGlobalsResponse
-	(*VerifyDumpHeader)(nil),                   // 38: runner.v1.VerifyDumpHeader
-	(*VerifyDumpTrailer)(nil),                  // 39: runner.v1.VerifyDumpTrailer
-	(*VerifyDumpRequest)(nil),                  // 40: runner.v1.VerifyDumpRequest
-	(*VerifyDumpResponse)(nil),                 // 41: runner.v1.VerifyDumpResponse
-	(*RestoreHeader)(nil),                      // 42: runner.v1.RestoreHeader
-	(*RestoreRequest)(nil),                     // 43: runner.v1.RestoreRequest
-	(*RestoreResult)(nil),                      // 44: runner.v1.RestoreResult
-	(*RestoreResponse)(nil),                    // 45: runner.v1.RestoreResponse
-	(*CreateDatabaseRequest)(nil),              // 46: runner.v1.CreateDatabaseRequest
-	(*CreateDatabaseResponse)(nil),             // 47: runner.v1.CreateDatabaseResponse
-	(*RenameSwapDatabaseRequest)(nil),          // 48: runner.v1.RenameSwapDatabaseRequest
-	(*RenameSwapDatabaseResponse)(nil),         // 49: runner.v1.RenameSwapDatabaseResponse
-	(*DropTempDatabaseRequest)(nil),            // 50: runner.v1.DropTempDatabaseRequest
-	(*DropTempDatabaseResponse)(nil),           // 51: runner.v1.DropTempDatabaseResponse
-	(*PrePullRequest)(nil),                     // 52: runner.v1.PrePullRequest
-	(*PrePullResponse)(nil),                    // 53: runner.v1.PrePullResponse
-	(*ListImagesRequest)(nil),                  // 54: runner.v1.ListImagesRequest
-	(*ListImagesResponse)(nil),                 // 55: runner.v1.ListImagesResponse
-	(*AllowlistedImage)(nil),                   // 56: runner.v1.AllowlistedImage
-	(*ScratchStatsRequest)(nil),                // 57: runner.v1.ScratchStatsRequest
-	(*ScratchStatsResponse)(nil),               // 58: runner.v1.ScratchStatsResponse
-	(*DropScratchDatabaseRequest)(nil),         // 59: runner.v1.DropScratchDatabaseRequest
-	(*DropScratchDatabaseResponse)(nil),        // 60: runner.v1.DropScratchDatabaseResponse
-	(*NeutralizeRestoredDatabaseRequest)(nil),  // 61: runner.v1.NeutralizeRestoredDatabaseRequest
-	(*NeutralizeRestoredDatabaseResponse)(nil), // 62: runner.v1.NeutralizeRestoredDatabaseResponse
-	(*timestamppb.Timestamp)(nil),              // 63: google.protobuf.Timestamp
-	(*descriptorpb.FieldOptions)(nil),          // 64: google.protobuf.FieldOptions
+	(VersionStatus)(0),                         // 6: runner.v1.VersionStatus
+	(StatsLevel)(0),                            // 7: runner.v1.StatsLevel
+	(RowCount)(0),                              // 8: runner.v1.RowCount
+	(TempDatabaseRole)(0),                      // 9: runner.v1.TempDatabaseRole
+	(NeutralizeKind)(0),                        // 10: runner.v1.NeutralizeKind
+	(*RunContext)(nil),                         // 11: runner.v1.RunContext
+	(*CertificatePin)(nil),                     // 12: runner.v1.CertificatePin
+	(*ClientCertificate)(nil),                  // 13: runner.v1.ClientCertificate
+	(*HostKeyPin)(nil),                         // 14: runner.v1.HostKeyPin
+	(*SshTunnel)(nil),                          // 15: runner.v1.SshTunnel
+	(*Target)(nil),                             // 16: runner.v1.Target
+	(*DataChunk)(nil),                          // 17: runner.v1.DataChunk
+	(*LogLine)(nil),                            // 18: runner.v1.LogLine
+	(*PeerCertificate)(nil),                    // 19: runner.v1.PeerCertificate
+	(*HealthRequest)(nil),                      // 20: runner.v1.HealthRequest
+	(*HealthResponse)(nil),                     // 21: runner.v1.HealthResponse
+	(*ProbeRequest)(nil),                       // 22: runner.v1.ProbeRequest
+	(*ProbeResponse)(nil),                      // 23: runner.v1.ProbeResponse
+	(*TargetPrivileges)(nil),                   // 24: runner.v1.TargetPrivileges
+	(*FetchServerCertificateRequest)(nil),      // 25: runner.v1.FetchServerCertificateRequest
+	(*FetchServerCertificateResponse)(nil),     // 26: runner.v1.FetchServerCertificateResponse
+	(*FetchHostKeyRequest)(nil),                // 27: runner.v1.FetchHostKeyRequest
+	(*FetchHostKeyResponse)(nil),               // 28: runner.v1.FetchHostKeyResponse
+	(*DumpRequest)(nil),                        // 29: runner.v1.DumpRequest
+	(*VersionQuery)(nil),                       // 30: runner.v1.VersionQuery
+	(*StatsOptions)(nil),                       // 31: runner.v1.StatsOptions
+	(*TableStats)(nil),                         // 32: runner.v1.TableStats
+	(*ObjectCounts)(nil),                       // 33: runner.v1.ObjectCounts
+	(*StatsWarning)(nil),                       // 34: runner.v1.StatsWarning
+	(*DumpStats)(nil),                          // 35: runner.v1.DumpStats
+	(*DumpResult)(nil),                         // 36: runner.v1.DumpResult
+	(*DumpResponse)(nil),                       // 37: runner.v1.DumpResponse
+	(*DumpGlobalsRequest)(nil),                 // 38: runner.v1.DumpGlobalsRequest
+	(*DumpGlobalsResponse)(nil),                // 39: runner.v1.DumpGlobalsResponse
+	(*VerifyDumpHeader)(nil),                   // 40: runner.v1.VerifyDumpHeader
+	(*VerifyDumpTrailer)(nil),                  // 41: runner.v1.VerifyDumpTrailer
+	(*VerifyDumpRequest)(nil),                  // 42: runner.v1.VerifyDumpRequest
+	(*VerifyDumpResponse)(nil),                 // 43: runner.v1.VerifyDumpResponse
+	(*RestoreHeader)(nil),                      // 44: runner.v1.RestoreHeader
+	(*RestoreRequest)(nil),                     // 45: runner.v1.RestoreRequest
+	(*RestoreResult)(nil),                      // 46: runner.v1.RestoreResult
+	(*RestoreResponse)(nil),                    // 47: runner.v1.RestoreResponse
+	(*CreateDatabaseRequest)(nil),              // 48: runner.v1.CreateDatabaseRequest
+	(*CreateDatabaseResponse)(nil),             // 49: runner.v1.CreateDatabaseResponse
+	(*RenameSwapDatabaseRequest)(nil),          // 50: runner.v1.RenameSwapDatabaseRequest
+	(*RenameSwapDatabaseResponse)(nil),         // 51: runner.v1.RenameSwapDatabaseResponse
+	(*DropTempDatabaseRequest)(nil),            // 52: runner.v1.DropTempDatabaseRequest
+	(*DropTempDatabaseResponse)(nil),           // 53: runner.v1.DropTempDatabaseResponse
+	(*PrePullRequest)(nil),                     // 54: runner.v1.PrePullRequest
+	(*PrePullResponse)(nil),                    // 55: runner.v1.PrePullResponse
+	(*ListImagesRequest)(nil),                  // 56: runner.v1.ListImagesRequest
+	(*ListImagesResponse)(nil),                 // 57: runner.v1.ListImagesResponse
+	(*AllowlistedImage)(nil),                   // 58: runner.v1.AllowlistedImage
+	(*ScratchStatsRequest)(nil),                // 59: runner.v1.ScratchStatsRequest
+	(*ScratchStatsResponse)(nil),               // 60: runner.v1.ScratchStatsResponse
+	(*DropScratchDatabaseRequest)(nil),         // 61: runner.v1.DropScratchDatabaseRequest
+	(*DropScratchDatabaseResponse)(nil),        // 62: runner.v1.DropScratchDatabaseResponse
+	(*NeutralizeRestoredDatabaseRequest)(nil),  // 63: runner.v1.NeutralizeRestoredDatabaseRequest
+	(*NeutralizeRestoredDatabaseResponse)(nil), // 64: runner.v1.NeutralizeRestoredDatabaseResponse
+	(*timestamppb.Timestamp)(nil),              // 65: google.protobuf.Timestamp
+	(*descriptorpb.FieldOptions)(nil),          // 66: google.protobuf.FieldOptions
 }
 var file_runner_v1_runner_proto_depIdxs = []int32{
-	13, // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
+	14, // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
 	0,  // 1: runner.v1.Target.engine:type_name -> runner.v1.Engine
 	1,  // 2: runner.v1.Target.tls_mode:type_name -> runner.v1.TlsMode
-	11, // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
-	12, // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
-	14, // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	63, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
+	12, // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
+	13, // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
+	15, // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	65, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
 	4,  // 7: runner.v1.LogLine.stream:type_name -> runner.v1.LogStream
-	63, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
-	63, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
+	65, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
+	65, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
 	3,  // 10: runner.v1.HealthResponse.docker_status:type_name -> runner.v1.DockerStatus
-	63, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
-	10, // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
-	23, // 14: runner.v1.ProbeResponse.privileges:type_name -> runner.v1.TargetPrivileges
+	65, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
+	11, // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
+	24, // 14: runner.v1.ProbeResponse.privileges:type_name -> runner.v1.TargetPrivileges
 	5,  // 15: runner.v1.TargetPrivileges.status:type_name -> runner.v1.PrivilegeStatus
-	10, // 16: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
+	11, // 16: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
 	0,  // 17: runner.v1.FetchServerCertificateRequest.engine:type_name -> runner.v1.Engine
-	14, // 18: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	18, // 19: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
-	10, // 20: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
-	10, // 21: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 22: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
-	29, // 23: runner.v1.DumpRequest.stats:type_name -> runner.v1.StatsOptions
-	6,  // 24: runner.v1.StatsOptions.level:type_name -> runner.v1.StatsLevel
-	7,  // 25: runner.v1.TableStats.count:type_name -> runner.v1.RowCount
-	6,  // 26: runner.v1.DumpStats.level:type_name -> runner.v1.StatsLevel
-	31, // 27: runner.v1.DumpStats.objects:type_name -> runner.v1.ObjectCounts
-	30, // 28: runner.v1.DumpStats.tables:type_name -> runner.v1.TableStats
-	32, // 29: runner.v1.DumpStats.warnings:type_name -> runner.v1.StatsWarning
-	16, // 30: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
-	17, // 31: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
-	34, // 32: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
-	33, // 33: runner.v1.DumpResponse.stats:type_name -> runner.v1.DumpStats
-	10, // 34: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 35: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
-	29, // 36: runner.v1.DumpGlobalsRequest.stats:type_name -> runner.v1.StatsOptions
-	16, // 37: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
-	17, // 38: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
-	34, // 39: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
-	33, // 40: runner.v1.DumpGlobalsResponse.stats:type_name -> runner.v1.DumpStats
-	10, // 41: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
-	0,  // 42: runner.v1.VerifyDumpHeader.engine:type_name -> runner.v1.Engine
-	2,  // 43: runner.v1.VerifyDumpHeader.kind:type_name -> runner.v1.DumpKind
-	38, // 44: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
-	16, // 45: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
-	39, // 46: runner.v1.VerifyDumpRequest.trailer:type_name -> runner.v1.VerifyDumpTrailer
-	17, // 47: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
-	10, // 48: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
-	15, // 49: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
-	2,  // 50: runner.v1.RestoreHeader.kind:type_name -> runner.v1.DumpKind
-	42, // 51: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
-	16, // 52: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
-	17, // 53: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
-	44, // 54: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
-	10, // 55: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 56: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
-	10, // 57: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 58: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
-	10, // 59: runner.v1.DropTempDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 60: runner.v1.DropTempDatabaseRequest.target:type_name -> runner.v1.Target
-	8,  // 61: runner.v1.DropTempDatabaseRequest.role:type_name -> runner.v1.TempDatabaseRole
-	0,  // 62: runner.v1.PrePullRequest.engine:type_name -> runner.v1.Engine
-	56, // 63: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
-	0,  // 64: runner.v1.AllowlistedImage.engine:type_name -> runner.v1.Engine
-	10, // 65: runner.v1.ScratchStatsRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 66: runner.v1.ScratchStatsRequest.target:type_name -> runner.v1.Target
-	29, // 67: runner.v1.ScratchStatsRequest.stats:type_name -> runner.v1.StatsOptions
-	33, // 68: runner.v1.ScratchStatsResponse.stats:type_name -> runner.v1.DumpStats
-	10, // 69: runner.v1.DropScratchDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 70: runner.v1.DropScratchDatabaseRequest.target:type_name -> runner.v1.Target
-	10, // 71: runner.v1.NeutralizeRestoredDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	15, // 72: runner.v1.NeutralizeRestoredDatabaseRequest.target:type_name -> runner.v1.Target
-	9,  // 73: runner.v1.NeutralizeRestoredDatabaseRequest.kind:type_name -> runner.v1.NeutralizeKind
-	64, // 74: runner.v1.secret:extendee -> google.protobuf.FieldOptions
-	19, // 75: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
-	21, // 76: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
-	24, // 77: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
-	26, // 78: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
-	28, // 79: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
-	36, // 80: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
-	40, // 81: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
-	43, // 82: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
-	46, // 83: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
-	48, // 84: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
-	50, // 85: runner.v1.RunnerService.DropTempDatabase:input_type -> runner.v1.DropTempDatabaseRequest
-	52, // 86: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
-	54, // 87: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
-	57, // 88: runner.v1.RunnerService.ScratchStats:input_type -> runner.v1.ScratchStatsRequest
-	59, // 89: runner.v1.RunnerService.DropScratchDatabase:input_type -> runner.v1.DropScratchDatabaseRequest
-	61, // 90: runner.v1.RunnerService.NeutralizeRestoredDatabase:input_type -> runner.v1.NeutralizeRestoredDatabaseRequest
-	20, // 91: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
-	22, // 92: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
-	25, // 93: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
-	27, // 94: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
-	35, // 95: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
-	37, // 96: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
-	41, // 97: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
-	45, // 98: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
-	47, // 99: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
-	49, // 100: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
-	51, // 101: runner.v1.RunnerService.DropTempDatabase:output_type -> runner.v1.DropTempDatabaseResponse
-	53, // 102: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
-	55, // 103: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
-	58, // 104: runner.v1.RunnerService.ScratchStats:output_type -> runner.v1.ScratchStatsResponse
-	60, // 105: runner.v1.RunnerService.DropScratchDatabase:output_type -> runner.v1.DropScratchDatabaseResponse
-	62, // 106: runner.v1.RunnerService.NeutralizeRestoredDatabase:output_type -> runner.v1.NeutralizeRestoredDatabaseResponse
-	91, // [91:107] is the sub-list for method output_type
-	75, // [75:91] is the sub-list for method input_type
-	75, // [75:75] is the sub-list for extension type_name
-	74, // [74:75] is the sub-list for extension extendee
-	0,  // [0:74] is the sub-list for field type_name
+	15, // 18: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	19, // 19: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
+	11, // 20: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
+	11, // 21: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 22: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
+	31, // 23: runner.v1.DumpRequest.stats:type_name -> runner.v1.StatsOptions
+	30, // 24: runner.v1.DumpRequest.version_query:type_name -> runner.v1.VersionQuery
+	7,  // 25: runner.v1.StatsOptions.level:type_name -> runner.v1.StatsLevel
+	8,  // 26: runner.v1.TableStats.count:type_name -> runner.v1.RowCount
+	7,  // 27: runner.v1.DumpStats.level:type_name -> runner.v1.StatsLevel
+	33, // 28: runner.v1.DumpStats.objects:type_name -> runner.v1.ObjectCounts
+	32, // 29: runner.v1.DumpStats.tables:type_name -> runner.v1.TableStats
+	34, // 30: runner.v1.DumpStats.warnings:type_name -> runner.v1.StatsWarning
+	6,  // 31: runner.v1.DumpStats.version_status:type_name -> runner.v1.VersionStatus
+	17, // 32: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
+	18, // 33: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
+	36, // 34: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
+	35, // 35: runner.v1.DumpResponse.stats:type_name -> runner.v1.DumpStats
+	11, // 36: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 37: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
+	31, // 38: runner.v1.DumpGlobalsRequest.stats:type_name -> runner.v1.StatsOptions
+	17, // 39: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
+	18, // 40: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
+	36, // 41: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
+	35, // 42: runner.v1.DumpGlobalsResponse.stats:type_name -> runner.v1.DumpStats
+	11, // 43: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
+	0,  // 44: runner.v1.VerifyDumpHeader.engine:type_name -> runner.v1.Engine
+	2,  // 45: runner.v1.VerifyDumpHeader.kind:type_name -> runner.v1.DumpKind
+	40, // 46: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
+	17, // 47: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
+	41, // 48: runner.v1.VerifyDumpRequest.trailer:type_name -> runner.v1.VerifyDumpTrailer
+	18, // 49: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
+	11, // 50: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
+	16, // 51: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
+	2,  // 52: runner.v1.RestoreHeader.kind:type_name -> runner.v1.DumpKind
+	44, // 53: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
+	17, // 54: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
+	18, // 55: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
+	46, // 56: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
+	11, // 57: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 58: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
+	11, // 59: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 60: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
+	11, // 61: runner.v1.DropTempDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 62: runner.v1.DropTempDatabaseRequest.target:type_name -> runner.v1.Target
+	9,  // 63: runner.v1.DropTempDatabaseRequest.role:type_name -> runner.v1.TempDatabaseRole
+	0,  // 64: runner.v1.PrePullRequest.engine:type_name -> runner.v1.Engine
+	58, // 65: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
+	0,  // 66: runner.v1.AllowlistedImage.engine:type_name -> runner.v1.Engine
+	11, // 67: runner.v1.ScratchStatsRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 68: runner.v1.ScratchStatsRequest.target:type_name -> runner.v1.Target
+	31, // 69: runner.v1.ScratchStatsRequest.stats:type_name -> runner.v1.StatsOptions
+	35, // 70: runner.v1.ScratchStatsResponse.stats:type_name -> runner.v1.DumpStats
+	11, // 71: runner.v1.DropScratchDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 72: runner.v1.DropScratchDatabaseRequest.target:type_name -> runner.v1.Target
+	11, // 73: runner.v1.NeutralizeRestoredDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	16, // 74: runner.v1.NeutralizeRestoredDatabaseRequest.target:type_name -> runner.v1.Target
+	10, // 75: runner.v1.NeutralizeRestoredDatabaseRequest.kind:type_name -> runner.v1.NeutralizeKind
+	66, // 76: runner.v1.secret:extendee -> google.protobuf.FieldOptions
+	20, // 77: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
+	22, // 78: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
+	25, // 79: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
+	27, // 80: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
+	29, // 81: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
+	38, // 82: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
+	42, // 83: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
+	45, // 84: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
+	48, // 85: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
+	50, // 86: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
+	52, // 87: runner.v1.RunnerService.DropTempDatabase:input_type -> runner.v1.DropTempDatabaseRequest
+	54, // 88: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
+	56, // 89: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
+	59, // 90: runner.v1.RunnerService.ScratchStats:input_type -> runner.v1.ScratchStatsRequest
+	61, // 91: runner.v1.RunnerService.DropScratchDatabase:input_type -> runner.v1.DropScratchDatabaseRequest
+	63, // 92: runner.v1.RunnerService.NeutralizeRestoredDatabase:input_type -> runner.v1.NeutralizeRestoredDatabaseRequest
+	21, // 93: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
+	23, // 94: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
+	26, // 95: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
+	28, // 96: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
+	37, // 97: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
+	39, // 98: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
+	43, // 99: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
+	47, // 100: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
+	49, // 101: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
+	51, // 102: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
+	53, // 103: runner.v1.RunnerService.DropTempDatabase:output_type -> runner.v1.DropTempDatabaseResponse
+	55, // 104: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
+	57, // 105: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
+	60, // 106: runner.v1.RunnerService.ScratchStats:output_type -> runner.v1.ScratchStatsResponse
+	62, // 107: runner.v1.RunnerService.DropScratchDatabase:output_type -> runner.v1.DropScratchDatabaseResponse
+	64, // 108: runner.v1.RunnerService.NeutralizeRestoredDatabase:output_type -> runner.v1.NeutralizeRestoredDatabaseResponse
+	93, // [93:109] is the sub-list for method output_type
+	77, // [77:93] is the sub-list for method input_type
+	77, // [77:77] is the sub-list for extension type_name
+	76, // [76:77] is the sub-list for extension extendee
+	0,  // [0:76] is the sub-list for field type_name
 }
 
 func init() { file_runner_v1_runner_proto_init() }
@@ -5008,28 +5219,32 @@ func file_runner_v1_runner_proto_init() {
 	if File_runner_v1_runner_proto != nil {
 		return
 	}
-	file_runner_v1_runner_proto_msgTypes[25].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[19].OneofWrappers = []any{
+		(*VersionQuery_Preset)(nil),
+		(*VersionQuery_CustomSql)(nil),
+	}
+	file_runner_v1_runner_proto_msgTypes[26].OneofWrappers = []any{
 		(*DumpResponse_Chunk)(nil),
 		(*DumpResponse_Log)(nil),
 		(*DumpResponse_Result)(nil),
 		(*DumpResponse_Stats)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[27].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[28].OneofWrappers = []any{
 		(*DumpGlobalsResponse_Chunk)(nil),
 		(*DumpGlobalsResponse_Log)(nil),
 		(*DumpGlobalsResponse_Result)(nil),
 		(*DumpGlobalsResponse_Stats)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[30].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[31].OneofWrappers = []any{
 		(*VerifyDumpRequest_Header)(nil),
 		(*VerifyDumpRequest_Chunk)(nil),
 		(*VerifyDumpRequest_Trailer)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[33].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[34].OneofWrappers = []any{
 		(*RestoreRequest_Header)(nil),
 		(*RestoreRequest_Chunk)(nil),
 	}
-	file_runner_v1_runner_proto_msgTypes[35].OneofWrappers = []any{
+	file_runner_v1_runner_proto_msgTypes[36].OneofWrappers = []any{
 		(*RestoreResponse_Log)(nil),
 		(*RestoreResponse_Result)(nil),
 	}
@@ -5038,8 +5253,8 @@ func file_runner_v1_runner_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runner_v1_runner_proto_rawDesc), len(file_runner_v1_runner_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   53,
+			NumEnums:      11,
+			NumMessages:   54,
 			NumExtensions: 1,
 			NumServices:   1,
 		},

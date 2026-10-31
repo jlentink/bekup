@@ -138,6 +138,32 @@ export const JobDetailQuery = graphql(`
         status
         queuedAt
         finishedAt
+        items {
+          id
+          kind
+          database
+          position
+          schemaVersion
+          schemaVersionStatus
+        }
+      }
+      schemaVersion {
+        mode
+        preset
+        presetLabel
+        schema
+        customSql
+      }
+      retentionHolds {
+        destinationId
+        destinationName
+        destinationType
+        destinationDeleted
+        reason
+        heldRuns
+        since
+        newestCompleteAt
+        checkedAt
       }
       testRestore {
         enabled
@@ -359,6 +385,35 @@ export const SetJobTestRestoreMutation = graphql(`
   }
 `);
 
+/** The schema-version presets (D-210): the server's list, staff only. */
+export const SchemaVersionPresetsQuery = graphql(`
+  query SchemaVersionPresets {
+    schemaVersionPresets {
+      name
+      label
+      description
+      postgresTable
+      mysqlTable
+      engines
+    }
+  }
+`);
+
+export const SetJobSchemaVersionMutation = graphql(`
+  mutation SetJobSchemaVersion($jobId: UUID!, $input: JobSchemaVersionInput!) {
+    setJobSchemaVersion(jobId: $jobId, input: $input) {
+      id
+      schemaVersion {
+        mode
+        preset
+        presetLabel
+        schema
+        customSql
+      }
+    }
+  }
+`);
+
 export const RunTestRestoreNowMutation = graphql(`
   mutation RunTestRestoreNow($jobId: UUID!) {
     runTestRestoreNow(jobId: $jobId) {
@@ -395,6 +450,24 @@ export const PreviewScheduleQuery = graphql(`
       schedule {
         kind
         timezone
+      }
+    }
+  }
+`);
+
+/**
+ * The steady-state number of backups each destination keeps for a schedule
+ * and retention draft (D-209). Its own request so retention edits do not
+ * refetch the schedule preview.
+ */
+export const PreviewRetentionQuery = graphql(`
+  query PreviewRetention($input: ScheduleInput!, $retention: JobRetentionInput!) {
+    previewSchedule(input: $input, count: 1, retention: $retention) {
+      retention {
+        kept
+        byKeepLast
+        byKeepDays
+        atLeast
       }
     }
   }

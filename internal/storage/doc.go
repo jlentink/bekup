@@ -16,6 +16,9 @@
 // object lock. [Capabilities] tells retention (task 3.8) and the pipeline
 // (task 3.1) what a backend supports.
 //
+// [ParseLayoutKey] recognizes keys of bekup's layout; [DirPruner] (disk and
+// SFTP) removes empty run and job directories of it (D-209).
+//
 // The conformance suite in package storagetest is run against every backend.
 // See D-121 in docs/DECISIONS.md.
 package storage

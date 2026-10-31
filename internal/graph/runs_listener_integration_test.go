@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/db/sqlc"
@@ -25,7 +26,7 @@ import (
 // (a delivery may read the old row and nothing announces the new one).
 func startBusListener(t *testing.T, d dbtest.DB, bus *pubsub.Bus) {
 	t.Helper()
-	connect, err := db.NewConnector([]byte(d.AppURL), db.PoolOptions{
+	connect, err := db.NewConnector(config.DBCredentials{URL: []byte(d.AppURL)}, db.PoolOptions{
 		ApplicationName: "bekup-graph-test-listener", TLS: dbtest.TLS(), Registry: logging.NewRegistry(),
 	})
 	if err != nil {

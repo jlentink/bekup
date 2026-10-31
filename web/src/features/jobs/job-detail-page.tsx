@@ -12,6 +12,7 @@ import { reportActionError } from "@/features/auth/use-step-up";
 import { RunHistory } from "@/features/runs/run-history";
 import { RunStatusBadge } from "@/features/runs/run-status";
 import { isActive } from "@/features/runs/run-status-model";
+import { SchemaVersionValue } from "@/features/runs/schema-version";
 import type { JobDetailQuery as JobDetailResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -27,6 +28,7 @@ import {
   LatestTestRestoreQuery,
   TestRestoreDetailQuery,
 } from "./operations";
+import { RetentionHoldsAlert } from "./retention-holds";
 import { useRoleFlags } from "./roles";
 import { RunActions } from "./run-actions";
 import { DiffSummaryLine } from "./test-restore-findings";
@@ -58,8 +60,15 @@ const T = {
     destinations: "Destinations",
     encryption: "Encryption",
     verification: "Evidence",
+    schemaVersion: "Schema version",
     owners: "Owners",
   },
+  schemaVersionMode: (mode: string, label: string | null | undefined) =>
+    mode === "CUSTOM" ? "Custom query" : (label ?? "Preset"),
+  schemaVersionLast: "Last run",
+  schemaVersionNoRun: "Captured from the next run on.",
+  schemaVersionNoneRecorded:
+    "The last run recorded no version: only complete database dumps record one.",
   noNext: "Not planned",
   disabled: "Disabled",
   never: "Never run",
@@ -212,6 +221,7 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
             <AlertDescription>{T.disabledBanner}</AlertDescription>
           </Alert>
         ) : null}
+        <RetentionHoldsAlert holds={job.retentionHolds} historyAnchor="job-history" />
 
         <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
           <Fact label={T.facts.next}>
@@ -292,6 +302,11 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
             </ol>
           </Fact>
           <Fact label={T.facts.verification}>{T.verification[job.verification]}</Fact>
+          {job.schemaVersion.mode !== "NONE" ? (
+            <Fact label={T.facts.schemaVersion} className="sm:col-span-2">
+              <SchemaVersionFact job={job} />
+            </Fact>
+          ) : null}
           {flags.staff ? (
             <Fact label={T.facts.owners} className="sm:col-span-2">
               <OwnerChips owners={job.owners ?? []} max={8} />
@@ -302,7 +317,7 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
 
       <section aria-labelledby="job-history" className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-4">
-          <h2 id="job-history" className="font-display text-2xl">
+          <h2 id="job-history" className="scroll-mt-20 font-display text-2xl">
             {T.history}
           </h2>
           <Link
@@ -340,6 +355,44 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
           }
         }}
       />
+    </div>
+  );
+}
+
+/** The capture mode and the versions of the last run, per database (D-210). */
+function SchemaVersionFact({ job }: { job: Job }) {
+  const sv = job.schemaVersion;
+  const items = [...(job.lastRun?.items ?? [])]
+    .filter((i) => i.kind === "DATABASE" && i.schemaVersionStatus)
+    .sort((a, b) => a.position - b.position);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span>
+        {T.schemaVersionMode(sv.mode, sv.presetLabel)}
+        {sv.mode === "PRESET" && job.connection.engine === "POSTGRES" ? (
+          <span className="ml-1.5 font-mono text-2xs text-muted-foreground">{sv.schema}</span>
+        ) : null}
+      </span>
+      {items.length > 0 ? (
+        <ul aria-label={T.schemaVersionLast} className="flex flex-col gap-0.5">
+          {items.map((i) => (
+            <li key={i.id} className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-mono text-xs text-muted-foreground">{i.database}</span>
+              <SchemaVersionValue
+                version={i.schemaVersion}
+                status={i.schemaVersionStatus}
+                showLabel={false}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          {job.lastRun && !isActive(job.lastRun.status)
+            ? T.schemaVersionNoneRecorded
+            : T.schemaVersionNoRun}
+        </span>
+      )}
     </div>
   );
 }

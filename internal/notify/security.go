@@ -36,21 +36,27 @@ const (
 	KindRestorePrivilegedTarget     = "restore_privileged_target"
 	KindRestorePrivilegedRefused    = "restore_privileged_refused"
 	KindTestRestorePrivilegedTarget = "test_restore_privileged_target"
-	KindSecdefNeutralized           = "secdef_neutralized"
-	KindTwoFactorPolicyWeakened     = "two_factor_policy_weakened"
-	KindPasskeyCloneSuspected       = "passkey_clone_suspected" //nolint:gosec // G101: an alert kind, not a credential
-	KindDownloadRejected            = "download_rejected"
-	KindInsecureTransport           = "insecure_transport"
-	KindInsecureDBTLS               = "insecure_db_tls"
-	KindAuditHeadExportFailed       = "audit_head_export_failed"
-	KindCLIAction                   = "cli_action"
-	KindLoginBurstAddress           = "login_burst_address"
-	KindLoginBurstAccount           = "login_burst_account"
-	KindLoginBurstGlobal            = "login_burst_global"
-	KindCertExpiring                = "cert_expiring"
-	KindCertExpired                 = "cert_expired"
-	KindPinExpiring                 = "pin_expiring"
-	KindPinExpired                  = "pin_expired"
+	// KindJobCustomVersionQuery: a job's custom schema-version query was
+	// set or changed, or the job moved to another connection (D-210:
+	// user-defined SQL that runs on the target with the backup role's
+	// rights).
+	KindJobCustomVersionQuery   = "job_custom_version_query"
+	KindSecdefNeutralized       = "secdef_neutralized"
+	KindTwoFactorPolicyWeakened = "two_factor_policy_weakened"
+	KindPasskeyCloneSuspected   = "passkey_clone_suspected" //nolint:gosec // G101: an alert kind, not a credential
+	KindDownloadRejected        = "download_rejected"
+	KindInsecureTransport       = "insecure_transport"
+	KindInsecureDBTLS           = "insecure_db_tls"
+	KindInsecureDBRoles         = "insecure_db_roles"
+	KindAuditHeadExportFailed   = "audit_head_export_failed"
+	KindCLIAction               = "cli_action"
+	KindLoginBurstAddress       = "login_burst_address"
+	KindLoginBurstAccount       = "login_burst_account"
+	KindLoginBurstGlobal        = "login_burst_global"
+	KindCertExpiring            = "cert_expiring"
+	KindCertExpired             = "cert_expired"
+	KindPinExpiring             = "pin_expiring"
+	KindPinExpired              = "pin_expired"
 	// KindSSRFAllowlistWidened: an admin added entries to the runtime
 	// SSRF allowlist (D-196).
 	KindSSRFAllowlistWidened = "ssrf_allowlist_widened"
@@ -90,6 +96,7 @@ var securitySystemKinds = map[audit.Action]string{
 	audit.ActionSystemInsecureTransportStarted: KindInsecureTransport,
 	audit.ActionSecurityInsecureHTTP:           KindInsecureTransport,
 	audit.ActionSecurityInsecureDBTLS:          KindInsecureDBTLS,
+	audit.ActionSecurityInsecureDBRoles:        KindInsecureDBRoles,
 	audit.ActionAuditHeadExportFailed:          KindAuditHeadExportFailed,
 }
 
@@ -122,12 +129,14 @@ var systemSeverity = map[string]Severity{
 	KindRestorePrivilegedTarget:     SeverityWarning,
 	KindRestorePrivilegedRefused:    SeverityWarning,
 	KindTestRestorePrivilegedTarget: SeverityWarning,
+	KindJobCustomVersionQuery:       SeverityWarning,
 	KindSecdefNeutralized:           SeverityWarning,
 	KindTwoFactorPolicyWeakened:     SeverityError,
 	KindPasskeyCloneSuspected:       SeverityError,
 	KindDownloadRejected:            SeverityWarning,
 	KindInsecureTransport:           SeverityError,
 	KindInsecureDBTLS:               SeverityError,
+	KindInsecureDBRoles:             SeverityError,
 	KindAuditHeadExportFailed:       SeverityError,
 	KindCLIAction:                   SeverityWarning,
 	KindLoginBurstAddress:           SeverityError,
@@ -212,6 +221,15 @@ func securityFromAudit(ev audit.Event) []Event {
 	case audit.ActionJobTestRestoreUpdated:
 		if detailTrue(ev.Details, "privileged_target_acknowledged") {
 			kind = KindTestRestorePrivilegedTarget
+		}
+	case audit.ActionJobVersionQueryChanged:
+		if detailString(ev.Details, "mode") == "custom" && detailTrue(ev.Details, "custom_sql_changed") {
+			kind = KindJobCustomVersionQuery
+		}
+	case audit.ActionJobUpdated:
+		// A job with a custom query moved to another connection.
+		if detailTrue(ev.Details, "custom_version_query_retargeted") {
+			kind = KindJobCustomVersionQuery
 		}
 	case audit.ActionMFAPolicyUpdated:
 		if detailTrue(ev.Details, "weakened") {
@@ -309,7 +327,7 @@ func day(now time.Time) string { return now.UTC().Format("2006-01-02") }
 func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 	p := "security.system:" + kind + ":"
 	switch kind {
-	case KindInsecureTransport, KindInsecureDBTLS, KindAuditHeadExportFailed:
+	case KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles, KindAuditHeadExportFailed:
 		return p + day(now)
 	case KindTLSPinMismatch, KindSSHHostKeyMismatch, KindDestinationHostKeyMismatch:
 		return p + dedupPart(ev.TargetID) + ":" + day(now)
@@ -337,8 +355,8 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 }
 
 // PostureDedupKey is the once-per-day key of a posture alert
-// (KindInsecureTransport, KindInsecureDBTLS): the startup audit entry and
-// the periodic reminder share it.
+// (KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles): the
+// startup audit entry and the periodic reminder share it.
 func PostureDedupKey(kind string, now time.Time) string {
 	return "security.system:" + kind + ":" + day(now)
 }
@@ -410,10 +428,10 @@ func systemBody(d Detail) string {
 	case KindLoginBurstGlobal:
 		return fmt.Sprintf("%d failed sign-ins in total within %d minutes.", num(d, "failures"), num(d, "window_minutes"))
 	case KindCertExpiring:
-		return fmt.Sprintf("The %s certificate expires on %s (in %d days or less). Rotate it with bekup certs rotate.",
+		return fmt.Sprintf("The %s certificate expires on %s (in %d days or less). Renew it with bekup setup renew (or bekup certs rotate).",
 			str(d, "component"), str(d, "not_after"), num(d, "threshold_days"))
 	case KindCertExpired:
-		return fmt.Sprintf("The %s certificate expired on %s. Rotate it with bekup certs rotate.", str(d, "component"), str(d, "not_after"))
+		return fmt.Sprintf("The %s certificate expired on %s. Renew it with bekup setup renew (or bekup certs rotate).", str(d, "component"), str(d, "not_after"))
 	case KindPinExpiring:
 		return fmt.Sprintf("The pinned certificate of a database connection expires on %s (in %d days or less); re-pin it after the server's certificate is renewed.",
 			str(d, "not_after"), num(d, "threshold_days"))

@@ -134,6 +134,45 @@ func (t *Terminal) NewPassphrase() ([]byte, error) {
 	return nil, errors.New("no valid CA key passphrase entered")
 }
 
+// ExistingPassphrase asks once (no echo) for the passphrase of an existing
+// CA key.
+func (t *Terminal) ExistingPassphrase() ([]byte, error) {
+	if t == nil || !t.IsTerminal || t.ReadPassword == nil {
+		return nil, ErrNoTerminal
+	}
+	fmt.Fprint(t.Out, "Passphrase of the existing CA key: ")
+	return t.ReadPassword()
+}
+
+// DBPassword asks twice (no echo) for the password of an existing database
+// role (external database: existing roles, single account).
+func (t *Terminal) DBPassword(role string) ([]byte, error) {
+	if t == nil || !t.IsTerminal || t.ReadPassword == nil {
+		return nil, ErrNoTerminal
+	}
+	for range 3 {
+		fmt.Fprintf(t.Out, "Password of the database role %s (no echo): ", role)
+		first, err := t.ReadPassword()
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprint(t.Out, "Repeat it: ")
+		second, err := t.ReadPassword()
+		if err != nil {
+			clear(first)
+			return nil, err
+		}
+		same := bytes.Equal(first, second)
+		clear(second)
+		if same {
+			return first, nil
+		}
+		clear(first)
+		fmt.Fprintln(t.Out, "  the passwords do not match")
+	}
+	return nil, errors.New("no matching password entered")
+}
+
 // Confirm requires the operator to type want exactly.
 func (t *Terminal) Confirm(warning, want string) error {
 	if t == nil || !t.IsTerminal {
@@ -158,6 +197,9 @@ type Given struct {
 	// e-mail for the bundled proxy, Docker GID), the rest comes from
 	// flags or defaults.
 	ComposeFirst bool
+	// Database: the database mode is decided (--database, or compose.yaml);
+	// DBHost, DBCAFile, DBAuth: those external database flags were given.
+	Database, DBHost, DBCAFile, DBAuth bool
 }
 
 // Complete fills the answers that were not given: on a terminal by asking,
@@ -301,6 +343,9 @@ func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive 
 			need("--docker-gid")
 		}
 	}
+	if err := completeDB(a, g, t, ask, need); err != nil {
+		return err
+	}
 	if !g.Targets && ask {
 		cidrs, err := t.AskList("Target database networks the runner may reach (CIDRs)", func(s string) error {
 			return checkScopedPrefix("target-cidr", s)
@@ -323,6 +368,77 @@ func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive 
 			why = "no terminal"
 		}
 		return fmt.Errorf("%s: missing %s", why, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// completeDB asks for (or names the flags of) the external database
+// answers: host and CA bundle are required, the authentication defaults to
+// bootstrap, single-account needs the account.
+func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) error {
+	if !g.Database && a.DB.Mode == "" && ask {
+		s, err := t.Ask("App database (bundled = bekup's own postgres service, external = your PostgreSQL)", string(DBBundled), func(s string) error {
+			_, err := ParseDBMode(s)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		a.DB.Mode = DBMode(s)
+	}
+	if a.DB.Mode != DBExternal {
+		return nil
+	}
+	if !g.DBHost && a.DB.Host == "" {
+		if ask {
+			s, err := t.Ask("Host name or IP address of your PostgreSQL", "", func(s string) error {
+				d := Database{Mode: DBExternal, Host: s, CAFile: "x"}
+				return d.validate()
+			})
+			if err != nil {
+				return err
+			}
+			a.DB.Host = s
+		} else {
+			need("--db-host")
+		}
+	}
+	if !g.DBCAFile && a.DB.CAFile == "" {
+		if ask {
+			s, err := t.Ask("CA bundle (PEM) of its server certificate, a file in the deployment directory", "", func(s string) error {
+				return checkSourcePath("db-ca-file", s)
+			})
+			if err != nil {
+				return err
+			}
+			a.DB.CAFile = s
+		} else {
+			need("--db-ca-file")
+		}
+	}
+	if !g.DBAuth && a.DB.Auth == "" && ask {
+		s, err := t.Ask("Roles: bootstrap (an admin creates them; default), existing-roles, dba-sql (SQL for your DBA) or single-account (WEAKENED: one account for everything)", string(DBAuthBootstrap), func(s string) error {
+			_, err := ParseDBAuth(s)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		a.DB.Auth = DBAuth(s)
+	}
+	if a.DB.Auth == DBAuthSingleAccount && a.DB.User == "" {
+		if ask {
+			s, err := t.Ask("The single account's role name", "", func(s string) error {
+				d := Database{Mode: DBExternal, Host: "x", CAFile: "x", Auth: DBAuthSingleAccount, User: s}
+				return d.validate()
+			})
+			if err != nil {
+				return err
+			}
+			a.DB.User = s
+		} else {
+			need("--db-user")
+		}
 	}
 	return nil
 }

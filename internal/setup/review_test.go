@@ -45,7 +45,7 @@ func TestInitRefusesExistingCA(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	if err := generateCerts(w, Layout{KeysDir: "secrets"}, []byte(testPass), fastCerts); err == nil {
+	if err := generateCerts(w, Layout{KeysDir: "secrets"}, certComponentsFor(DBBundled), []byte(testPass), fastCerts); err == nil {
 		t.Fatal("generateCerts accepted an existing CA")
 	}
 	if err := w.rollback(); err != nil {

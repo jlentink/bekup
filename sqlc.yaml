@@ -3,7 +3,11 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: internal/db/migrations
+    schema:
+      - internal/db/migrations
+      # PostgreSQL 16+ built-ins missing from sqlc's catalog (types only,
+      # never applied).
+      - internal/db/sqlcschema
     queries: internal/db/queries
     strict_function_checks: true
     gen:

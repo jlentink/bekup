@@ -389,7 +389,7 @@ func (s *UserAdmin) Create(ctx context.Context, a Actor, in NewUser) (sqlc.User,
 		}
 		user = u
 		_, err = s.o.Auditor.RecordTx(ctx, q, a.event(audit.ActionUserCreated, audit.ActionCLIAdminCreated, u.ID, audit.Details{
-			"email": email, "role": string(in.Role), "temporary_password": temp != nil,
+			"email": email, "role": string(in.Role), "temporary_login_issued": temp != nil,
 		}))
 		return err
 	})
@@ -557,7 +557,7 @@ func (s *UserAdmin) ResetPassword(ctx context.Context, a Actor, id uuid.UUID, pa
 		}
 		revoked = n
 		_, err = s.o.Auditor.RecordTx(ctx, q, a.event(audit.ActionUserPasswordReset, audit.ActionCLIAdminPasswordReset, id, audit.Details{
-			"temporary_password": temp != nil, "revoked_sessions": n, "lockout_cleared": true,
+			"temporary_login_issued": temp != nil, "revoked_sessions": n, "lockout_cleared": true,
 		}))
 		return err
 	})

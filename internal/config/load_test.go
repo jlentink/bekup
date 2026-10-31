@@ -294,9 +294,9 @@ func TestInlineSecrets(t *testing.T) {
 				t.Errorf("warnings miss %q: %v", want, res.Warnings)
 			}
 		}
-		u, err := res.Config.DatabaseURL()
-		if err != nil || string(u) != "postgres://u:hunter22@db/x" {
-			t.Fatalf("DatabaseURL = %q, %v", u, err)
+		creds, err := res.Config.AppDBCredentials()
+		if err != nil || string(creds.URL) != "postgres://u:hunter22@db/x" || !strings.Contains(creds.String(), "url") {
+			t.Fatalf("AppDBCredentials = %v, %v", creds, err)
 		}
 	})
 

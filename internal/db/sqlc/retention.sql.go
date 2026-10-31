@@ -12,6 +12,46 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteRetentionHoldsExcept = `-- name: DeleteRetentionHoldsExcept :execrows
+DELETE FROM retention_holds
+WHERE job_id = $1 AND NOT (destination_id = ANY ($2::uuid[]))
+`
+
+type DeleteRetentionHoldsExceptParams struct {
+	JobID uuid.UUID   `json:"jobId"`
+	Keep  []uuid.UUID `json:"keep"`
+}
+
+// DeleteRetentionHoldsExcept removes the holds of a job on every destination
+// not in @keep (the hold ended, or the destination holds nothing any more).
+func (q *Queries) DeleteRetentionHoldsExcept(ctx context.Context, arg DeleteRetentionHoldsExceptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRetentionHoldsExcept, arg.JobID, arg.Keep)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStaleRetentionHolds = `-- name: DeleteStaleRetentionHolds :execrows
+DELETE FROM retention_holds h
+WHERE NOT EXISTS (
+    SELECT 1 FROM artifacts a
+    WHERE a.job_id = h.job_id AND a.destination_id = h.destination_id AND a.state = 'present'
+)
+`
+
+// DeleteStaleRetentionHolds removes the holds of job/destination pairs
+// without a present artifact (nothing is held there any more; the daily
+// fan-out sweeps only jobs with present artifacts, so no sweep would end
+// them otherwise).
+func (q *Queries) DeleteStaleRetentionHolds(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleRetentionHolds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getJobRetention = `-- name: GetJobRetention :one
 SELECT id, slug, retention_keep_last, retention_keep_days, deleted_at
 FROM jobs
@@ -39,31 +79,64 @@ func (q *Queries) GetJobRetention(ctx context.Context, id uuid.UUID) (GetJobRete
 	return i, err
 }
 
-const listPartialCleanupDestinations = `-- name: ListPartialCleanupDestinations :many
-SELECT d.id
+const listDailyMaintenanceDestinations = `-- name: ListDailyMaintenanceDestinations :many
+SELECT d.id, d.type, (d.deleted_at IS NOT NULL)::boolean AS deleted
 FROM destinations d
-WHERE d.type IN ('disk', 'sftp')
-  AND (d.deleted_at IS NULL
-       OR EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
+WHERE d.deleted_at IS NULL
+   OR (d.type IN ('disk', 'sftp')
+       AND EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
 ORDER BY d.id
 `
 
-// ListPartialCleanupDestinations returns the disk and SFTP destinations whose
-// leftover temporary files the daily sweep removes: every non-deleted one and
-// deleted ones that still hold present artifacts.
-func (q *Queries) ListPartialCleanupDestinations(ctx context.Context) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, listPartialCleanupDestinations)
+type ListDailyMaintenanceDestinationsRow struct {
+	ID      uuid.UUID       `json:"id"`
+	Type    DestinationType `json:"type"`
+	Deleted bool            `json:"deleted"`
+}
+
+// ListDailyMaintenanceDestinations returns the destinations the daily sweep
+// maintains: every non-deleted one (unrecorded-file scan; disk and SFTP also
+// leftover temporary files and empty directories) and deleted disk and SFTP
+// ones that still hold present artifacts (temporary files only).
+func (q *Queries) ListDailyMaintenanceDestinations(ctx context.Context) ([]ListDailyMaintenanceDestinationsRow, error) {
+	rows, err := q.db.Query(ctx, listDailyMaintenanceDestinations)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []uuid.UUID
+	var items []ListDailyMaintenanceDestinationsRow
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListDailyMaintenanceDestinationsRow
+		if err := rows.Scan(&i.ID, &i.Type, &i.Deleted); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJobSlugs = `-- name: ListJobSlugs :many
+SELECT slug FROM jobs ORDER BY slug
+`
+
+// ListJobSlugs returns the slug of every job, deleted ones included: the
+// job directories empty-directory pruning may touch (D-209).
+func (q *Queries) ListJobSlugs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listJobSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -117,6 +190,64 @@ func (q *Queries) ListRetentionArtifacts(ctx context.Context, jobID uuid.UUID) (
 			&i.Verified,
 			&i.LockUntil,
 			&i.RunTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRetentionHoldsForJobs = `-- name: ListRetentionHoldsForJobs :many
+SELECT h.job_id, h.destination_id, d.name AS destination_name, d.type AS destination_type,
+       (d.deleted_at IS NOT NULL)::boolean AS destination_deleted,
+       h.reason, h.held_runs, h.held_since, h.newest_complete_at, h.first_seen_at, h.checked_at
+FROM retention_holds h
+JOIN destinations d ON d.id = h.destination_id
+WHERE h.job_id = ANY ($1::uuid[])
+ORDER BY h.job_id, d.name, h.destination_id
+`
+
+type ListRetentionHoldsForJobsRow struct {
+	JobID              uuid.UUID       `json:"jobId"`
+	DestinationID      uuid.UUID       `json:"destinationId"`
+	DestinationName    string          `json:"destinationName"`
+	DestinationType    DestinationType `json:"destinationType"`
+	DestinationDeleted bool            `json:"destinationDeleted"`
+	Reason             string          `json:"reason"`
+	HeldRuns           int32           `json:"heldRuns"`
+	HeldSince          time.Time       `json:"heldSince"`
+	NewestCompleteAt   *time.Time      `json:"newestCompleteAt"`
+	FirstSeenAt        time.Time       `json:"firstSeenAt"`
+	CheckedAt          time.Time       `json:"checkedAt"`
+}
+
+// ListRetentionHoldsForJobs returns the holds of a page of jobs with the
+// destination's name (Job.retentionHolds, batch-loaded).
+func (q *Queries) ListRetentionHoldsForJobs(ctx context.Context, jobIds []uuid.UUID) ([]ListRetentionHoldsForJobsRow, error) {
+	rows, err := q.db.Query(ctx, listRetentionHoldsForJobs, jobIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRetentionHoldsForJobsRow
+	for rows.Next() {
+		var i ListRetentionHoldsForJobsRow
+		if err := rows.Scan(
+			&i.JobID,
+			&i.DestinationID,
+			&i.DestinationName,
+			&i.DestinationType,
+			&i.DestinationDeleted,
+			&i.Reason,
+			&i.HeldRuns,
+			&i.HeldSince,
+			&i.NewestCompleteAt,
+			&i.FirstSeenAt,
+			&i.CheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -250,4 +381,42 @@ func (q *Queries) MarkArtifactMissing(ctx context.Context, arg MarkArtifactMissi
 	var i MarkArtifactMissingRow
 	err := row.Scan(&i.ID, &i.RunID, &i.JobID)
 	return i, err
+}
+
+const upsertRetentionHold = `-- name: UpsertRetentionHold :one
+INSERT INTO retention_holds (job_id, destination_id, reason, held_runs, held_since, newest_complete_at, first_seen_at, checked_at)
+VALUES ($1, $2, $3, $4, $5::timestamptz, $6::timestamptz,
+        $7::timestamptz, $7::timestamptz)
+ON CONFLICT (job_id, destination_id) DO UPDATE
+SET reason = excluded.reason, held_runs = excluded.held_runs, held_since = excluded.held_since,
+    newest_complete_at = excluded.newest_complete_at, checked_at = excluded.checked_at
+RETURNING first_seen_at
+`
+
+type UpsertRetentionHoldParams struct {
+	JobID            uuid.UUID  `json:"jobId"`
+	DestinationID    uuid.UUID  `json:"destinationId"`
+	Reason           string     `json:"reason"`
+	HeldRuns         int32      `json:"heldRuns"`
+	HeldSince        time.Time  `json:"heldSince"`
+	NewestCompleteAt *time.Time `json:"newestCompleteAt"`
+	CheckedAt        time.Time  `json:"checkedAt"`
+}
+
+// UpsertRetentionHold records (or confirms) that the sweep keeps incomplete
+// runs of a job on a destination that no keep rule would keep (D-209).
+// first_seen_at is kept from the first sighting.
+func (q *Queries) UpsertRetentionHold(ctx context.Context, arg UpsertRetentionHoldParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, upsertRetentionHold,
+		arg.JobID,
+		arg.DestinationID,
+		arg.Reason,
+		arg.HeldRuns,
+		arg.HeldSince,
+		arg.NewestCompleteAt,
+		arg.CheckedAt,
+	)
+	var first_seen_at time.Time
+	err := row.Scan(&first_seen_at)
+	return first_seen_at, err
 }

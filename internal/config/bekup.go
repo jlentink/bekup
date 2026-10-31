@@ -64,22 +64,55 @@ type GraphQL struct {
 }
 
 // Database configures the connection to bekup's own Postgres app DB.
+//
+// Two mutually exclusive ways to name the login (D-207): URL mode
+// (url_file / owner_url_file, the bundled stack) and fields mode (host,
+// port, name, user, password_file, owner_user, owner_password_file; an
+// external Postgres). Setting host selects fields mode; mixing the two is
+// a configuration error (see normalizeBekup).
 type Database struct {
-	URLFile           string   `toml:"url_file" secret:"file" doc:"Path to a file containing the Postgres connection URL (Docker secret). The file must not be group/world-writable or world-readable."`
+	URLFile           string   `toml:"url_file" secret:"file" doc:"URL mode: path to a file containing the Postgres connection URL (Docker secret). The file must not be group/world-writable or world-readable. Cannot be combined with database.host (fields mode)."`
 	URL               string   `toml:"url" secret:"inline" doc:"Inline connection URL. Dev mode only; rejected otherwise. Use url_file instead."`
-	OwnerURLFile      string   `toml:"owner_url_file" secret:"file" doc:"Path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate."`
+	OwnerURLFile      string   `toml:"owner_url_file" secret:"file" doc:"URL mode: path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate."`
 	OwnerURL          string   `toml:"owner_url" secret:"inline" doc:"Inline bekup_owner connection URL. Dev mode only; rejected otherwise. Use owner_url_file instead."`
+	Host              string   `toml:"host" doc:"Fields mode (D-207): host name or IP address of an external Postgres (15 to 17). Setting it selects fields mode, which builds the connection from the database.* keys only (never from a URL or the PG* environment); url_file, owner_url_file, url and owner_url must then be unset. Connect directly to Postgres: poolers that terminate TLS break the required SCRAM channel binding."`
+	Port              int      `toml:"port" doc:"Fields mode: TCP port of the Postgres server (1 to 65535; default 5432)."`
+	Name              string   `toml:"name" doc:"Fields mode: name of bekup's own database (default bekup; letters, digits, _, - and $, at most 63 characters; never postgres or a template database)."`
+	User              string   `toml:"user" doc:"Fields mode: login role of serve and worker. With two roles (the default) it must be bekup_app (the default). With single_account = true it is the one account bekup uses for everything."`
+	PasswordFile      string   `toml:"password_file" secret:"file" doc:"Fields mode: path to a file holding the password of database.user (required in fields mode; surrounding whitespace is trimmed). Same file rules as url_file."`
+	OwnerUser         string   `toml:"owner_user" doc:"Fields mode with two roles: login role of bekup migrate; must be bekup_owner (the default). Not used with single_account."`
+	OwnerPasswordFile string   `toml:"owner_password_file" secret:"file" doc:"Fields mode with two roles: path to a file holding the bekup_owner password, needed only by bekup migrate and bekup db bootstrap. Do not mount it into containers that never migrate. Not used with single_account."`
+	SingleAccount     bool     `toml:"single_account" doc:"Fields mode only. EXPLICIT WEAKENING (D-207): bekup uses the one account database.user for migrations and the app; its sessions switch to the NOLOGIN roles bekup_owner/bekup_app with SET ROLE, so a compromised serve or worker can switch back and alter the schema and the audit log. Logged at every startup, audited (security.insecure_db_roles) and alerted daily. Prefer the two least-privilege login roles (bekup db bootstrap)."`
 	MaxConns          int      `toml:"max_conns" doc:"Maximum number of pooled connections (worker processes: at least the sum of the [workers] *_queue_workers plus 4)."`
 	MinConns          int      `toml:"min_conns" doc:"Minimum number of idle pooled connections."`
 	ConnMaxLifetime   Duration `toml:"conn_max_lifetime" doc:"Maximum lifetime of a pooled connection."`
 	ConnMaxIdleTime   Duration `toml:"conn_max_idle_time" doc:"Maximum idle time of a pooled connection."`
 	ConnectTimeout    Duration `toml:"connect_timeout" doc:"Timeout for establishing a connection."`
 	StatementTimeout  Duration `toml:"statement_timeout" doc:"Server-side statement_timeout of app connections (1s to 1h). Migrations are not limited by it."`
-	TLSMode           string   `toml:"tls_mode" doc:"TLS for the app DB connection (D-100): verify-full (default; encrypted, server certificate verified against tls_ca_file and the URL's host name), require (encrypted; with tls_ca_file the chain is verified but not the host name, without it nothing is verified) or disable (plain text). require and disable log a warning at every startup. With TLS, SCRAM channel binding is always required. Applies to serve, worker and migrate; an sslmode in the URL may not be stricter than this and is otherwise overridden."`
-	TLSCAFile         string   `toml:"tls_ca_file" doc:"Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only this CA is trusted, never the system roots. Required for verify-full."`
+	TLSMode           string   `toml:"tls_mode" doc:"TLS for the app DB connection (D-100): verify-full (default; encrypted, server certificate verified against tls_ca_file and the host name: the URL host, database.host or tls_server_name), require (encrypted; with tls_ca_file the chain is verified but not the host name, without it nothing is verified) or disable (plain text). require and disable log a warning at every startup. With TLS, SCRAM channel binding is always required. With TLS or without, only SCRAM-SHA-256 authentication is accepted (D-207). Applies to serve, worker, migrate and db bootstrap; an sslmode in the URL may not be stricter than this and is otherwise overridden."`
+	TLSCAFile         string   `toml:"tls_ca_file" doc:"Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only the certificates in this file are trusted (never the built-in system roots); for a managed Postgres name the provider's CA bundle, or the system bundle file only if the provider uses a public CA (D-207). Required for verify-full."`
 	TLSClientCertFile string   `toml:"tls_client_cert_file" doc:"Optional client certificate (PEM) presented to Postgres. Set together with tls_client_key_file."`
 	TLSClientKeyFile  string   `toml:"tls_client_key_file" secret:"file" doc:"Optional client private key (PEM) for tls_client_cert_file. Same file rules as url_file."`
+	TLSServerName     string   `toml:"tls_server_name" doc:"Optional host name the Postgres server certificate is verified against instead of the connection host (verify-full only), e.g. when database.host is an IP address but the certificate names a DNS name. Also sent as SNI."`
 }
+
+// Fixed names of bekup's database roles (D-054). Released migrations
+// grant to them literally, so they cannot be renamed (one bekup per
+// cluster, D-207).
+const (
+	// DBOwnerRole owns the database and runs the migrations.
+	DBOwnerRole = "bekup_owner"
+	// DBAppRole is the runtime role of serve and worker.
+	DBAppRole = "bekup_app"
+	// DefaultDBPort and DefaultDBName apply in fields mode.
+	DefaultDBPort = 5432
+	DefaultDBName = "bekup"
+)
+
+// FieldsMode reports whether the connection is configured with the
+// database.host/port/name/user/password_file keys instead of URL files
+// (D-207).
+func (d *Database) FieldsMode() bool { return d.Host != "" }
 
 // Values of database.tls_mode (D-100).
 const (
@@ -258,6 +291,8 @@ func DefaultBekup() Bekup {
 		Database: Database{
 			URLFile:          "/run/secrets/bekup_database_url",
 			OwnerURLFile:     "/run/secrets/bekup_database_owner_url",
+			Port:             DefaultDBPort,
+			Name:             DefaultDBName,
 			MaxConns:         25,
 			MinConns:         0,
 			ConnMaxLifetime:  Duration(time.Hour),
@@ -378,6 +413,9 @@ const (
 	DBTLSDisableWarning   = `app database TLS disabled: database.tls_mode = "disable", so traffic to Postgres (credentials, sessions, audit log) is NOT encrypted and can be read or altered on the network. Use "verify-full".`
 	DBTLSRequireWarning   = `app database TLS not verified: database.tls_mode = "require" without tls_ca_file encrypts but does not verify the Postgres server certificate, so a network attacker can impersonate the database. Use "verify-full".`
 	DBTLSRequireCAWarning = `app database TLS host name not verified: database.tls_mode = "require" verifies the Postgres server certificate against tls_ca_file but not its host name. Use "verify-full".`
+	// DBSingleAccountWarning is the startup warning of single-account
+	// mode (D-207).
+	DBSingleAccountWarning = `app database single-account mode: database.single_account = true, so bekup runs migrations and the app as one database account that can switch to bekup_owner; a compromised serve or worker can alter the schema and the audit log. Create the two least-privilege roles instead (bekup db bootstrap).`
 )
 
 func (c *Bekup) warnings(dev bool) []string {
@@ -391,6 +429,9 @@ func (c *Bekup) warnings(dev bool) []string {
 	if !dev && c.Metrics.Enabled && c.Metrics.AllowWildcardListen && isWildcardListen(c.Metrics.Listen) {
 		out = append(out, fmt.Sprintf("metrics.listen %q listens on every interface (metrics.allow_wildcard_listen = true); bind an internal address instead", c.Metrics.Listen))
 	}
+	if c.Database.SingleAccount {
+		out = append(out, DBSingleAccountWarning)
+	}
 	switch c.Database.TLSMode {
 	case DBTLSDisable:
 		out = append(out, DBTLSDisableWarning)
@@ -402,11 +443,4 @@ func (c *Bekup) warnings(dev bool) []string {
 		}
 	}
 	return out
-}
-
-// DatabaseOwnerURL returns the bekup_owner connection URL used for migrations
-// from database.owner_url_file (or the dev-only inline database.owner_url).
-// Zero the result after use.
-func (c *Bekup) DatabaseOwnerURL() ([]byte, error) {
-	return resolveSecret(c.Database.OwnerURL, c.Database.OwnerURLFile)
 }

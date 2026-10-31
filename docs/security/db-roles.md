@@ -1,7 +1,8 @@
 # Backup and restore database roles
 
 > **Status:** partial. The section on bekup's own app database
-> (`bekup_owner` / `bekup_app`) is complete (task 0.4, D-054, D-092). The
+> (`bekup_owner` / `bekup_app`) is complete (task 0.4, D-054, D-092; external
+> databases and single-account mode: D-207). The
 > backup roles for **target** databases are still to come (task 2.7a); the
 > [restore roles](#restore-roles-for-target-databases) section covers the
 > privileged-target check (task 4.8, D-168).
@@ -10,26 +11,66 @@ Recommended dedicated, non-superuser roles for backing up and restoring PostgreS
 
 ## bekup's own app database: `bekup_owner` and `bekup_app`
 
-bekup's own Postgres database uses two least-privilege roles. They are created
-by the deploy init script (`deploy/postgres/init/10-bekup-roles.sh` for the
-compose stack), **never by a migration**:
+bekup's own Postgres database uses two least-privilege roles with **fixed
+names** (released migrations grant to them literally, so there is one bekup
+per cluster; D-207). They are created by the deploy init script
+(`deploy/postgres/init/10-bekup-roles.sh` for the bundled compose stack) or,
+on an external PostgreSQL, by `bekup db bootstrap` / the script of
+`bekup db roles-sql` ([External database](../installation/external-database.md)),
+**never by a migration**:
 
 | Role | Used by | May |
 |---|---|---|
-| `bekup_owner` | `bekup migrate` only (`database.owner_url_file`) | Owns the `bekup` database, the `public` schema and every object; runs DDL |
-| `bekup_app` | `bekup serve` / `bekup worker` (`database.url_file`) | `CONNECT`; `USAGE` on `public`; `SELECT, INSERT, UPDATE, DELETE` on tables; sequences; `EXECUTE` on bekup/River functions. **On `audit_log` only `INSERT` and `SELECT`.** |
+| `bekup_owner` | `bekup migrate` only (`database.owner_url_file`, or `owner_user` + `owner_password_file` in fields mode) | Owns the `bekup` database, the `public` schema and every object; runs DDL |
+| `bekup_app` | `bekup serve` / `bekup worker` (`database.url_file`, or `user` + `password_file`) | `CONNECT`; `USAGE` on `public`; `SELECT, INSERT, UPDATE, DELETE` on tables; sequences; `EXECUTE` on bekup/River functions. **On `audit_log` only `INSERT` and `SELECT`.** |
 
-Requirements, checked by the first migration (and the owner check on every
-`bekup migrate` run):
+Requirements, checked by the first migration, the role check on every
+`bekup migrate` run and `bekup migrate check` (D-099, D-207):
 
-- PostgreSQL ≥ 15, database encoding UTF8.
-- Migrations connect as `bekup_owner`; the migrator refuses any other role
-  and superusers.
-- Neither role is `SUPERUSER`, `BYPASSRLS`, `CREATEROLE` or `REPLICATION`;
-  `bekup_app` is not a member of `bekup_owner`.
-- The database is owned by `bekup_owner`.
+- PostgreSQL ≥ 15 (15 to 17 are tested), database encoding UTF8.
+- Migrations connect as `bekup_owner`; the migrator refuses any other role.
+- The session must have **logged in** as the role itself: a role setting
+  (`ALTER ROLE x SET role = bekup_app`) cannot make another login, possibly a
+  superuser, pass as `bekup_app` or `bekup_owner` (`session_user` is checked,
+  D-207). On PostgreSQL 16+ the authenticated identity is compared too
+  (`SYSTEM_USER` must be `scram-sha-256:<role>`, or `md5:<role>` for an `md5`
+  pg_hba entry, which still runs SCRAM for a SCRAM verifier): a superuser
+  that switched its session with `SET SESSION AUTHORIZATION` or a
+  `session_authorization` setting is refused. PostgreSQL 15 has no
+  `SYSTEM_USER`, so there only `session_user` is checked. serve applies the
+  same check at startup.
+- Members of `bekup_owner`/`bekup_app` and holders of `ADMIN OPTION` on them
+  can act as or take over bekup's roles. `bekup db bootstrap` refuses every
+  such membership except the admin running it (PostgreSQL 16+ gives a role's
+  creator `ADMIN OPTION`) and, in single-account mode, the account; superuser
+  members are warned about. `bekup migrate check` warns about every
+  membership other than the single-account login. Existing roles are only
+  adopted with `--adopt-existing-roles`.
+- Neither role is `SUPERUSER`, `BYPASSRLS`, `CREATEROLE` or `REPLICATION` or
+  a member (directly or through other roles) of a role with one of these
+  attributes or of a predefined `pg_*` role; `bekup_app` is not a member of
+  `bekup_owner`. Managed admin roles (`rds_superuser`, `cloudsqlsuperuser`,
+  `azure_pg_admin`) have `CREATEROLE`, so a bekup role that is a member of one
+  is refused.
+- The database is owned by `bekup_owner`, and `bekup_owner` can create
+  objects in `public`.
+- The `citext` extension is installed or creatable by `bekup_owner` (a
+  trusted extension since PostgreSQL 13).
 
-Manual setup (outside the compose stack), as a superuser:
+Every session uses `search_path=public` as a startup parameter and accepts
+only SCRAM-SHA-256 authentication (D-207); with TLS, SCRAM channel binding is
+required (D-104), so the roles need SCRAM password verifiers, never MD5.
+
+On an external PostgreSQL, `bekup_owner` is created with `INHERIT`: as the
+database owner it must get the privileges of `pg_database_owner`, which owns
+the `public` schema of a new database, and PostgreSQL 15 applies `NOINHERIT`
+to that implicit membership as well (only a superuser could hand the schema
+over, which the bundled init script does). `INHERIT` grants nothing a
+membership would not allow through `SET ROLE` anyway, and the checks above
+refuse every dangerous membership. `bekup_app` stays `NOINHERIT`.
+
+Manual setup (outside the compose stack), as a superuser (on an external
+server without a superuser use `bekup db bootstrap` or `bekup db roles-sql`):
 
 ```sql
 CREATE ROLE bekup_owner WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
@@ -62,9 +103,31 @@ What the migrations set up (`internal/db/migrations/00001_roles_and_privileges.s
 - The goose version table is created before the default privileges exist, so
   `bekup_app` has no access to it.
 
-Keep `database.owner_url_file` out of containers that never migrate. A
-compromised `bekup_app` can read and change app data but cannot change the
-schema, rewrite or delete audit history, or alter migration state.
+Keep `database.owner_url_file` / `owner_password_file` out of containers that
+never migrate. A compromised `bekup_app` can read and change app data but
+cannot change the schema, rewrite or delete audit history, or alter migration
+state.
+
+### Single-account mode (weakened)
+
+With `database.single_account = true` (fields mode only; D-207) bekup uses
+**one** database account for migrations and the app, for providers that hand
+out a single account. `bekup db bootstrap` creates `bekup_owner` and
+`bekup_app` as `NOLOGIN` roles and grants both to that account; every
+migrator session runs `SET ROLE bekup_owner` and every app session
+`SET ROLE bekup_app` right after connecting, so the schema, the grants and
+the audit-log protections are exactly those of the two-role setup and all
+checks above still run against the two roles. The account itself must not be
+a superuser (refused); its other dangerous attributes and memberships are
+listed in the startup warning, the audit entry and `bekup migrate check`.
+
+**The weakening:** the account can always switch back (`RESET ROLE`) or to
+`bekup_owner`, so anyone who takes over serve or worker can change the
+schema, disable the audit-log triggers and rewrite the audit history. bekup
+therefore logs a warning at every start, records
+`security.insecure_db_roles` (fail closed) and alerts every admin daily, and
+the admin configuration page shows a permanent badge. Prefer the two login
+roles whenever the provider allows creating roles.
 
 In the compose stack, the init script also puts `pg_hba.conf` rules first
 that reject the bootstrap superuser (`postgres`) on every TCP connection, so

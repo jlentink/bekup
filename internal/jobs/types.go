@@ -98,10 +98,12 @@ type Job struct {
 	Destinations   []DestinationRef
 	// TestRestore are the scheduled test-restore settings (task 4.6).
 	TestRestore TestRestoreSettings
-	CreatedBy   *uuid.UUID
-	UpdatedBy   *uuid.UUID
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// SchemaVersion is the schema-version capture (D-210).
+	SchemaVersion SchemaVersionSettings
+	CreatedBy     *uuid.UUID
+	UpdatedBy     *uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Owner is one backup owner of a job (D-011, D-067). Only owners with role

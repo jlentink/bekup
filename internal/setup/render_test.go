@@ -93,7 +93,7 @@ func loadCompose(t *testing.T) composeDoc {
 func TestDeploySourcesEmbedded(t *testing.T) {
 	for _, v := range AllVariants {
 		t.Run(string(v), func(t *testing.T) {
-			out, err := RenderRelease(v, nil)
+			out, err := RenderRelease(v, DBBundled, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestDeploySourcesEmbedded(t *testing.T) {
 			if err := yaml.Unmarshal(out, &doc); err != nil {
 				t.Fatal(err)
 			}
-			assets, err := assetFiles(bekup.Assets(), v.assetDirs())
+			assets, err := assetFiles(bekup.Assets(), v.assetDirs(DBBundled))
 			if err != nil {
 				t.Fatal(err)
 			}

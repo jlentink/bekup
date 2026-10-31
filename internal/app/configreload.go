@@ -218,6 +218,7 @@ func (a *App) newReloader() error {
 	}
 	a.reloadAPI, err = configreload.NewAPI(configreload.APIOptions{
 		DB: a.pool, Auditor: a.auditor, Policy: a.policy, Reloader: r, Logger: a.opts.Logger,
+		Database: configreload.DatabasePostureOf(&a.opts.Config.Database),
 	})
 	return err
 }

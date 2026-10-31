@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/jlentink/bekup/internal/engine"
@@ -37,6 +38,10 @@ type statsWorld struct {
 	globalErr error
 	// unsafeCounts: the server cannot restrict relation kinds.
 	unsafeCounts bool
+	// version is the schema-version result; versionQueries records the
+	// queries asked (D-210).
+	version        dbprobe.VersionResult
+	versionQueries []dbprobe.VersionQuery
 }
 
 type fakeStatsConn struct {
@@ -98,6 +103,16 @@ func (c *fakeStatsConn) SafeRowCounts() bool { return !c.w.unsafeCounts }
 
 func (c *fakeStatsConn) GlobalCounts(context.Context) (int64, int64, error) {
 	return 7, 1, c.w.globalErr
+}
+
+func (c *fakeStatsConn) SchemaVersion(_ context.Context, _ string, q dbprobe.VersionQuery) dbprobe.VersionResult {
+	c.w.mu.Lock()
+	defer c.w.mu.Unlock()
+	c.w.versionQueries = append(c.w.versionQueries, q)
+	if !c.open {
+		return dbprobe.VersionResult{Status: "unavailable", Detail: "no transaction"}
+	}
+	return c.w.version
 }
 
 func (c *fakeStatsConn) EndStats(context.Context) error {
@@ -514,4 +529,101 @@ func mustMarshal(t *testing.T, m proto.Message) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// The schema version (D-210) travels in the stats message, is read inside
+// the stats transaction and never reaches the runner log.
+func TestDumpSchemaVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		q      *runnerpb.VersionQuery
+		result dbprobe.VersionResult
+		status runnerpb.VersionStatus
+		value  string
+	}{
+		{"preset ok", &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: "golang-migrate"}, Schema: "app"},
+			dbprobe.VersionResult{Value: "42 (dirty)", Status: "ok"}, runnerpb.VersionStatus_VERSION_STATUS_OK, "42 (dirty)"},
+		{"custom none", &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_CustomSql{CustomSql: "SELECT secret_marker FROM public.t"}},
+			dbprobe.VersionResult{Status: "none", Detail: "no row"}, runnerpb.VersionStatus_VERSION_STATUS_NONE, ""},
+		{"unavailable", &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: "goose"}},
+			dbprobe.VersionResult{Value: "ignored", Status: "unavailable", Detail: "sqlstate=42501"}, runnerpb.VersionStatus_VERSION_STATUS_UNAVAILABLE, ""},
+		{"invalid", &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: "goose"}},
+			dbprobe.VersionResult{Status: "invalid", Detail: "value"}, runnerpb.VersionStatus_VERSION_STATUS_INVALID, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := pgWorld()
+			w.version = tc.result
+			env := statsEnv(t, w, engine.KindPostgres)
+			env.exec.script = []func(context.Context, *call) (executor.Result, error){
+				func(_ context.Context, c *call) (executor.Result, error) {
+					return executor.Result{}, c.spec.Stdout([]byte("D"))
+				},
+			}
+			msgs, err := collectDump(t, env, &runnerpb.DumpRequest{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app",
+				Stats: &runnerpb.StatsOptions{Enabled: true, Level: runnerpb.StatsLevel_STATS_LEVEL_STANDARD}, VersionQuery: tc.q})
+			if err != nil {
+				t.Fatal(err)
+			}
+			st := msgs[0].GetStats()
+			if st == nil || st.GetVersionStatus() != tc.status || st.GetSchemaVersion() != tc.value {
+				t.Fatalf("stats %v", st)
+			}
+			if len(w.versionQueries) != 1 {
+				t.Fatalf("queries %v", w.versionQueries)
+			}
+			got := w.versionQueries[0]
+			if p := tc.q.GetPreset(); p != "" && (got.Preset == nil || got.Preset.Name != p || got.Custom != "") {
+				t.Fatalf("preset query %+v", got)
+			}
+			if tc.q.GetCustomSql() != "" && (got.Custom != "SELECT secret_marker FROM public.t" || got.Preset != nil) {
+				t.Fatalf("custom query %+v", got)
+			}
+			logs := env.logs.String()
+			if !strings.Contains(logs, "runner_schema_version") || strings.Contains(logs, "secret_marker") ||
+				strings.Contains(logs, "42 (dirty)") || strings.Contains(logs, "ignored") {
+				t.Fatalf("log: %s", logs)
+			}
+		})
+	}
+}
+
+// A capture that leaves the statistics transaction unusable (failed
+// savepoint rollback, broken connection) must not hand its snapshot to
+// pg_dump: the dump runs with its own snapshot and the stats say so.
+func TestDumpSchemaVersionSessionLost(t *testing.T) {
+	w := pgWorld()
+	w.version = dbprobe.VersionResult{Status: "unavailable", Detail: "rollback", SessionLost: true}
+	env := statsEnv(t, w, engine.KindPostgres)
+	endedBeforeDump := false
+	env.exec.script = []func(context.Context, *call) (executor.Result, error){
+		func(_ context.Context, c *call) (executor.Result, error) {
+			endedBeforeDump = w.ended.Load() > 0
+			return executor.Result{}, c.spec.Stdout([]byte("D"))
+		},
+	}
+	msgs, err := collectDump(t, env, &runnerpb.DumpRequest{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app",
+		Stats:        &runnerpb.StatsOptions{Enabled: true, Level: runnerpb.StatsLevel_STATS_LEVEL_STANDARD},
+		VersionQuery: &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: "goose"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := msgs[0].GetStats()
+	if st == nil || st.GetSameSnapshot() || st.GetVersionStatus() != runnerpb.VersionStatus_VERSION_STATUS_UNAVAILABLE {
+		t.Fatalf("stats %v", st)
+	}
+	if argv := strings.Join(env.exec.Calls()[0].cmd.Argv, " "); strings.Contains(argv, "--snapshot") {
+		t.Fatalf("snapshot passed after a lost session: %s", argv)
+	}
+	if !endedBeforeDump {
+		t.Fatal("the broken statistics session was kept open during the dump")
+	}
+}
+
+func TestDumpSchemaVersionNeedsStats(t *testing.T) {
+	env := statsEnv(t, pgWorld(), engine.KindPostgres)
+	_, err := collectDump(t, env, &runnerpb.DumpRequest{Ctx: rc(), Target: pgTarget(t, runnerpb.TlsMode_TLS_MODE_DISABLED), Database: "app",
+		VersionQuery: &runnerpb.VersionQuery{Query: &runnerpb.VersionQuery_Preset{Preset: "goose"}}})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("err %v", err)
+	}
 }

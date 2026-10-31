@@ -58,6 +58,13 @@ function status(over: Record<string, unknown> = {}) {
   return ok({
     configStatus: {
       __typename: "ConfigStatus",
+      database: {
+        __typename: "DatabasePosture",
+        mode: "FIELDS",
+        tlsMode: "verify-full",
+        insecureTransport: false,
+        singleAccount: false,
+      },
       liveKeys: ["logging.level", "workers.max_concurrent_runs", "retention.dry_run"],
       listeningProcesses: 3,
       processes: [
@@ -453,6 +460,41 @@ describe("configuration page", () => {
     const panel = await screen.findByTestId("config-reload-panel");
     expect(within(panel).getByText("Latest reload")).toBeInTheDocument();
     expect(within(panel).getByText("Nothing changed")).toBeInTheDocument();
+  });
+
+  it("shows the app database posture and its weakenings", async () => {
+    renderApp(
+      PATH,
+      handlers({
+        AdminConfigStatus: () =>
+          status({
+            database: {
+              __typename: "DatabasePosture",
+              mode: "SINGLE_ACCOUNT",
+              tlsMode: "require",
+              insecureTransport: true,
+              singleAccount: true,
+            },
+          }),
+      }),
+    );
+    const section = await screen.findByTestId("config-database");
+    expect(within(section).getByText("One account for everything")).toBeInTheDocument();
+    expect(within(section).getByText("require")).toBeInTheDocument();
+    expect(
+      within(section).getByText("The database connection is not fully verified"),
+    ).toBeInTheDocument();
+    expect(within(section).getByText("Single-account mode is on")).toBeInTheDocument();
+  });
+
+  it("shows a verified two-role database without warnings", async () => {
+    renderApp(PATH, handlers({}));
+    const section = await screen.findByTestId("config-database");
+    expect(
+      within(section).getByText("Host and password files (external PostgreSQL)"),
+    ).toBeInTheDocument();
+    expect(within(section).queryByRole("alert")).toBeNull();
+    expect(within(section).queryByText("Single-account mode is on")).toBeNull();
   });
 
   it("denies non-admins without querying", async () => {

@@ -55,7 +55,25 @@ type APIOptions struct {
 	Auditor  *audit.Auditor
 	Policy   *authz.Policy
 	Reloader *Reloader
+	// Database is this process's app database posture (restart-only
+	// settings, D-207).
+	Database DatabasePosture
 	Logger   *slog.Logger
+}
+
+// DatabasePosture is the app database posture shown on the configuration
+// page (D-100, D-207): no host names or credentials.
+type DatabasePosture struct {
+	// Mode is config.Database.DatabaseMode(): url, fields or single_account.
+	Mode          string
+	TLSMode       string
+	TLSWeakened   bool
+	SingleAccount bool
+}
+
+// DatabasePostureOf derives the posture from the [database] section.
+func DatabasePostureOf(d *config.Database) DatabasePosture {
+	return DatabasePosture{Mode: d.DatabaseMode(), TLSMode: d.TLSMode, TLSWeakened: d.TLSWeakened(), SingleAccount: d.SingleAccount}
 }
 
 // API backs the GraphQL fields (configStatus, configReloadRequest,
@@ -122,6 +140,7 @@ type RequestView struct {
 // every process listening now (any age) or seen in the last 7 days, and the
 // newest UI request.
 type StatusView struct {
+	Database    DatabasePosture
 	LiveKeys    []string
 	Processes   []ProcessResult
 	Listening   int
@@ -210,7 +229,7 @@ func (a *API) Status(ctx context.Context) (*StatusView, error) {
 	if err != nil {
 		return nil, fmt.Errorf("configreload: list processes: %w", err)
 	}
-	out := &StatusView{LiveKeys: config.LiveKeys(), Processes: make([]ProcessResult, 0, len(rows)), Listening: len(listening)}
+	out := &StatusView{Database: a.o.Database, LiveKeys: config.LiveKeys(), Processes: make([]ProcessResult, 0, len(rows)), Listening: len(listening)}
 	for i := range rows {
 		out.Processes = append(out.Processes, processResult(&rows[i].ConfigReloadResult, rows[i].RequestTrigger, listening))
 	}

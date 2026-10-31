@@ -32,6 +32,8 @@ type destEnv struct {
 	*authEnv
 	svc    *destinations.Service
 	bodies []string
+	// root is storage.disk_root of svc.
+	root string
 }
 
 func newDestEnv(t *testing.T) *destEnv {
@@ -60,8 +62,9 @@ func newDestEnv(t *testing.T) *destEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	root := t.TempDir()
 	dests, err := destinations.New(destinations.Options{
-		DB: e.pool, Keyring: kr, Auditor: e.auditor, Guard: guard, DiskRoot: t.TempDir(),
+		DB: e.pool, Keyring: kr, Auditor: e.auditor, Guard: guard, DiskRoot: root,
 		Limiter: func(string) (bool, time.Duration) { return true, 0 },
 	})
 	if err != nil {
@@ -91,7 +94,7 @@ func newDestEnv(t *testing.T) *destEnv {
 		t.Fatal(err)
 	}
 	e.h = srv.Handler()
-	return &destEnv{authEnv: e, svc: dests}
+	return &destEnv{authEnv: e, svc: dests, root: root}
 }
 
 // gql runs a request and records the raw response body.

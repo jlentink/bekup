@@ -165,3 +165,41 @@ func TestKeepalive(t *testing.T) {
 		}
 	})
 }
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
+
+// A conn deadline that fires just before ctx's own timer is ctx's deadline
+// (the race that made "silent server times out" flaky under load).
+func TestDeadlineErr(t *testing.T) {
+	past, cancelPast := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelPast()
+	future, cancelFuture := context.WithTimeout(context.Background(), time.Hour)
+	defer cancelFuture()
+	protocol := errors.New("ssh: handshake failed: protocol")
+	for _, tc := range []struct {
+		name     string
+		ctx      context.Context
+		err      error
+		deadline bool
+	}{
+		{"timeout after deadline", past, &net.OpError{Op: "read", Err: timeoutError{}}, true},
+		{"timeout before deadline", future, &net.OpError{Op: "read", Err: timeoutError{}}, false},
+		{"timeout without deadline", context.Background(), &net.OpError{Op: "read", Err: timeoutError{}}, false},
+		{"protocol error after deadline", past, protocol, true}, // ctx.Err() wins once ctx ended
+		{"protocol error", future, protocol, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := deadlineErr(tc.ctx, tc.err)
+			if errors.Is(got, context.DeadlineExceeded) != tc.deadline {
+				t.Fatalf("deadlineErr = %v, want DeadlineExceeded=%v", got, tc.deadline)
+			}
+			if !tc.deadline && (!errors.Is(got, tc.err) || got.Error() != tc.err.Error()) {
+				t.Fatalf("error changed: %v", got)
+			}
+		})
+	}
+}

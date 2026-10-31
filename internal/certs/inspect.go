@@ -16,6 +16,11 @@ import (
 	"github.com/jlentink/bekup/internal/config"
 )
 
+// ExpiryWarnDays is the one "expires soon" threshold of the internal
+// certificates: `bekup setup check` and `setup renew` warn from it, and the
+// hourly security check (monitor.SecurityChecker) alerts at it first.
+const ExpiryWarnDays = 30
+
 // ExpiryInfo describes one certificate for inspection, metrics and alerts
 // (tasks 5.5/5.6).
 type ExpiryInfo struct {

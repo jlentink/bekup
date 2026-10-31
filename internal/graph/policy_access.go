@@ -117,6 +117,8 @@ var RootFieldOperations = map[string]authz.Operation{
 	// maintainers see metadata and may test.
 	"Query.destinations":                     authz.OpDestinationList,
 	"Query.destinationUsage":                 authz.OpStorageUsageView,
+	"Query.destinationUnrecordedFiles":       authz.OpDestinationUnrecordedView,
+	"Mutation.deleteUnrecordedFile":          authz.OpDestinationUnrecordedDelete,
 	"Query.destination":                      authz.OpDestinationView,
 	"Mutation.createDestination":             authz.OpDestinationCreate,
 	"Mutation.updateDestination":             authz.OpDestinationUpdate,
@@ -223,9 +225,13 @@ var RootFieldOperations = map[string]authz.Operation{
 	// (the scratch target receives the job's data), runs staff, results
 	// staff and the job's owners (authorized with the job from the DB).
 	"Mutation.setJobTestRestore": authz.OpJobTestRestoreEdit,
-	"Mutation.runTestRestoreNow": authz.OpTestRestoreRun,
-	"Query.testRestores":         authz.OpTestRestoreView,
-	"Query.testRestore":          authz.OpTestRestoreView,
+	// Schema version (D-210): staff; a custom query also needs
+	// job.version_query_custom_edit (step-up), checked by the service.
+	"Query.schemaVersionPresets":   authz.OpJobVersionQueryEdit,
+	"Mutation.setJobSchemaVersion": authz.OpJobVersionQueryEdit,
+	"Mutation.runTestRestoreNow":   authz.OpTestRestoreRun,
+	"Query.testRestores":           authz.OpTestRestoreView,
+	"Query.testRestore":            authz.OpTestRestoreView,
 }
 
 // PolicyAccess is the Access backed by internal/authz and the principal

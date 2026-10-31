@@ -14,12 +14,14 @@ There are two ways to run bekup with Docker Compose:
   natively on `http://localhost:8080`; no reverse proxy needed. The `full`
   profile adds the containerised app, runner, sample databases and
   destinations.
-- **Production:** one compose file, saved as `compose.yaml`:
-  `compose.yaml` (bekup with its own Traefik), `compose.traefik-external.yaml`
-  (behind your Traefik) or `compose.npm.yaml` (behind Nginx Proxy Manager),
-  either the committed copy from `deploy/compose/` (image from
-  `BEKUP_IMAGE`) or the release asset (pinned by digest and attested);
-  `docker compose run --rm setup` writes the rest
+- **Production:** one `docker run ... setup` command starts the setup
+  wizard of the image, which asks for the proxy, the domain and the
+  database (bundled or your own PostgreSQL) and writes everything,
+  `compose.yaml` included; then `docker compose up -d`. Advanced: start
+  from one of the six compose files (`compose.yaml`,
+  `compose.traefik-external.yaml`, `compose.npm.yaml` and their
+  `*.external-db.yaml` forms), committed in `deploy/compose/` and attached
+  to every release, and let `docker compose run --rm setup` write the rest
   ([installation](installation/compose.md)).
 
 ## Development quick start
@@ -101,11 +103,29 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml \
 The detailed steps are in [installation/compose.md](installation/compose.md)
 and [installation/reverse-proxy.md](installation/reverse-proxy.md):
 
-The server needs only Docker and one compose file, no source
-checkout (`bekup setup`, D-203, D-205). The short version is the
+The server needs only Docker and the bekup image, no source checkout
+(`bekup setup`, D-203, D-205, D-208). The short version is the
 [README quick start](../README.md#quick-start):
 
-1. Download the compose file for your proxy (`compose.yaml` with bekup's
+1. In an empty directory run the setup wizard (root with only `CAP_CHOWN`,
+   no network, no logs):
+
+   ```sh
+   sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
+     --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+     -e BEKUP_IMAGE="$IMAGE" -e DOCKER_GID="$(stat -c %g /var/run/docker.sock)" \
+     -v "$PWD":/deploy "$IMAGE" setup
+   ```
+
+   `IMAGE` is the image pinned by digest
+   (`<registry>/bekup:<version>@sha256:<digest>`). The wizard asks for the
+   proxy, the domain, the database, the master key and the CA, then writes
+   `compose.yaml`, `.env`, `bekup.toml`, `runner.toml`, the secrets and
+   certificates ([details](installation/compose.md#install-with-the-setup-wizard)).
+   With your own PostgreSQL, run the printed bootstrap command next
+   (`docker compose run --rm migrate db bootstrap --admin-user <admin>`;
+   [external database](installation/external-database.md)).
+2. **Or, advanced, instead of step 1:** download the compose file for your proxy (`compose.yaml` with bekup's
    own Traefik, `compose.traefik-external.yaml` behind your Traefik,
    `compose.npm.yaml` behind Nginx Proxy Manager) into an empty directory
    and save it as `compose.yaml`: the committed copy from
@@ -114,7 +134,7 @@ checkout (`bekup setup`, D-203, D-205). The short version is the
    `gh attestation verify compose.yaml --repo jlentink/bekup`. Behind your
    own proxy, create the `bekup-proxy` link network once
    ([reverse proxy](installation/reverse-proxy.md#existing-traefik)).
-2. `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
+   Then `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
    (with the committed copy prefixed by
    `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`; setup writes
    it to `.env`) runs `bekup setup init` from the pinned image (root with only
@@ -137,7 +157,10 @@ checkout (`bekup setup`, D-203, D-205). The short version is the
    ([your first backup](#your-first-backup)).
 6. Run `docker compose -f compose.yaml run --rm setup check` after every
    change (`-f compose.yaml` keeps the override out of the checking
-   container; the check still lints it); upgrade by
+   container; the check still lints it); renew certificates with
+   `bekup setup renew` ([mTLS certificates](security/mtls-certs.md#renewal-with-bekup-setup-renew));
+   upgrade a wizard install by running the wizard command with the new
+   image (it offers the guided upgrade), a downloaded-file install by
    replacing `compose.yaml` and running `docker compose run --rm setup
    upgrade` (committed copy: `BEKUP_IMAGE=<new image> docker compose run
    --rm setup upgrade`; [upgrades](installation/upgrades.md)).

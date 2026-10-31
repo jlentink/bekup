@@ -122,23 +122,26 @@ UPDATE run_items
 SET status = $1, finished_at = $2::timestamptz, raw_size = $3, stored_size = $4,
     raw_sha256 = $5::bytea, sha256 = $6::bytea, verified = $7,
     error_code = $8::text, error_message = $9::text,
-    warnings = $10::jsonb
-WHERE id = $11 AND status = 'running'
-RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings
+    warnings = $10::jsonb,
+    schema_version = $11::text, schema_version_status = $12::text
+WHERE id = $13 AND status = 'running'
+RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings, schema_version, schema_version_status
 `
 
 type FinishRunItemParams struct {
-	Status       RunItemStatus   `json:"status"`
-	FinishedAt   time.Time       `json:"finishedAt"`
-	RawSize      int64           `json:"rawSize"`
-	StoredSize   int64           `json:"storedSize"`
-	RawSha256    []byte          `json:"rawSha256"`
-	Sha256       []byte          `json:"sha256"`
-	Verified     bool            `json:"verified"`
-	ErrorCode    *string         `json:"errorCode"`
-	ErrorMessage *string         `json:"errorMessage"`
-	Warnings     json.RawMessage `json:"warnings"`
-	ID           uuid.UUID       `json:"id"`
+	Status              RunItemStatus   `json:"status"`
+	FinishedAt          time.Time       `json:"finishedAt"`
+	RawSize             int64           `json:"rawSize"`
+	StoredSize          int64           `json:"storedSize"`
+	RawSha256           []byte          `json:"rawSha256"`
+	Sha256              []byte          `json:"sha256"`
+	Verified            bool            `json:"verified"`
+	ErrorCode           *string         `json:"errorCode"`
+	ErrorMessage        *string         `json:"errorMessage"`
+	Warnings            json.RawMessage `json:"warnings"`
+	SchemaVersion       *string         `json:"schemaVersion"`
+	SchemaVersionStatus *string         `json:"schemaVersionStatus"`
+	ID                  uuid.UUID       `json:"id"`
 }
 
 func (q *Queries) FinishRunItem(ctx context.Context, arg FinishRunItemParams) (RunItem, error) {
@@ -153,6 +156,8 @@ func (q *Queries) FinishRunItem(ctx context.Context, arg FinishRunItemParams) (R
 		arg.ErrorCode,
 		arg.ErrorMessage,
 		arg.Warnings,
+		arg.SchemaVersion,
+		arg.SchemaVersionStatus,
 		arg.ID,
 	)
 	var i RunItem
@@ -173,12 +178,14 @@ func (q *Queries) FinishRunItem(ctx context.Context, arg FinishRunItemParams) (R
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.Warnings,
+		&i.SchemaVersion,
+		&i.SchemaVersionStatus,
 	)
 	return i, err
 }
 
 const getJobForRun = `-- name: GetJobForRun :one
-SELECT jobs.id, jobs.enabled, jobs.schedule, jobs.next_run_at, jobs.last_scheduled_at, jobs.deleted_at, jobs.created_at, jobs.updated_at, jobs.name, jobs.slug, jobs.description, jobs.connection_id, jobs.db_mode, jobs.databases, jobs.exclude, jobs.include_globals, jobs.retention_keep_last, jobs.retention_keep_days, jobs.timeout_seconds, jobs.verification, jobs.expected_window_seconds, jobs.created_by, jobs.updated_by, jobs.test_restore_enabled, jobs.test_restore_schedule, jobs.test_restore_connection_id, jobs.test_restore_next_at, jobs.test_restore_target_privileges, jobs.test_restore_privilege_reasons, jobs.test_restore_privileged_ack_by, jobs.test_restore_privileged_ack_at, c.engine AS connection_engine, c.image_key AS connection_image_key,
+SELECT jobs.id, jobs.enabled, jobs.schedule, jobs.next_run_at, jobs.last_scheduled_at, jobs.deleted_at, jobs.created_at, jobs.updated_at, jobs.name, jobs.slug, jobs.description, jobs.connection_id, jobs.db_mode, jobs.databases, jobs.exclude, jobs.include_globals, jobs.retention_keep_last, jobs.retention_keep_days, jobs.timeout_seconds, jobs.verification, jobs.expected_window_seconds, jobs.created_by, jobs.updated_by, jobs.test_restore_enabled, jobs.test_restore_schedule, jobs.test_restore_connection_id, jobs.test_restore_next_at, jobs.test_restore_target_privileges, jobs.test_restore_privilege_reasons, jobs.test_restore_privileged_ack_by, jobs.test_restore_privileged_ack_at, jobs.version_query_mode, jobs.version_preset, jobs.version_custom_sql, jobs.version_schema, c.engine AS connection_engine, c.image_key AS connection_image_key,
        c.deleted_at AS connection_deleted_at
 FROM jobs JOIN connections c ON c.id = jobs.connection_id
 WHERE jobs.id = $1
@@ -228,6 +235,10 @@ func (q *Queries) GetJobForRun(ctx context.Context, id uuid.UUID) (GetJobForRunR
 		&i.Job.TestRestorePrivilegeReasons,
 		&i.Job.TestRestorePrivilegedAckBy,
 		&i.Job.TestRestorePrivilegedAckAt,
+		&i.Job.VersionQueryMode,
+		&i.Job.VersionPreset,
+		&i.Job.VersionCustomSql,
+		&i.Job.VersionSchema,
 		&i.ConnectionEngine,
 		&i.ConnectionImageKey,
 		&i.ConnectionDeletedAt,
@@ -456,7 +467,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (Run, erro
 const insertRunItem = `-- name: InsertRunItem :one
 INSERT INTO run_items (run_id, kind, db_name, position)
 VALUES ($1, $2, $3::text, $4)
-RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings
+RETURNING id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings, schema_version, schema_version_status
 `
 
 type InsertRunItemParams struct {
@@ -491,6 +502,8 @@ func (q *Queries) InsertRunItem(ctx context.Context, arg InsertRunItemParams) (R
 		&i.ErrorCode,
 		&i.ErrorMessage,
 		&i.Warnings,
+		&i.SchemaVersion,
+		&i.SchemaVersionStatus,
 	)
 	return i, err
 }
@@ -520,6 +533,31 @@ func (q *Queries) InsertRunLogs(ctx context.Context, arg InsertRunLogsParams) er
 		arg.Lines,
 	)
 	return err
+}
+
+const isRunAbandoned = `-- name: IsRunAbandoned :one
+SELECT EXISTS (
+    SELECT 1 FROM runs r
+    LEFT JOIN river_job rj ON rj.id = r.river_job_id
+    WHERE r.id = $1
+      AND r.status IN ('queued', 'running')
+      AND r.updated_at < $2::timestamptz
+      AND (rj.id IS NULL OR rj.state::text IN ('completed', 'discarded', 'cancelled'))
+)::boolean
+`
+
+type IsRunAbandonedParams struct {
+	ID         uuid.UUID `json:"id"`
+	IdleBefore time.Time `json:"idleBefore"`
+}
+
+// IsRunAbandoned re-checks ListAbandonedRuns' condition for one run under
+// its row lock.
+func (q *Queries) IsRunAbandoned(ctx context.Context, arg IsRunAbandonedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isRunAbandoned, arg.ID, arg.IdleBefore)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const latestRunForRiverJob = `-- name: LatestRunForRiverJob :one
@@ -563,6 +601,51 @@ func (q *Queries) LatestRunForRiverJob(ctx context.Context, riverJobID int64) (R
 		&i.Notices,
 	)
 	return i, err
+}
+
+const listAbandonedRuns = `-- name: ListAbandonedRuns :many
+SELECT r.id, r.job_id
+FROM runs r
+LEFT JOIN river_job rj ON rj.id = r.river_job_id
+WHERE r.status IN ('queued', 'running')
+  AND r.updated_at < $1::timestamptz
+  AND (rj.id IS NULL OR rj.state::text IN ('completed', 'discarded', 'cancelled'))
+ORDER BY r.created_at, r.id
+LIMIT $2::int
+`
+
+type ListAbandonedRunsParams struct {
+	IdleBefore time.Time `json:"idleBefore"`
+	MaxRows    int32     `json:"maxRows"`
+}
+
+type ListAbandonedRunsRow struct {
+	ID    uuid.UUID `json:"id"`
+	JobID uuid.UUID `json:"jobId"`
+}
+
+// ListAbandonedRuns finds queued or running runs that no worker will finish
+// (D-209): unchanged since @idle_before while their River job is gone or
+// already finalized (the last attempt crashed or was discarded). A retry
+// that is still pending finishes its predecessor itself (Store.Begin).
+func (q *Queries) ListAbandonedRuns(ctx context.Context, arg ListAbandonedRunsParams) ([]ListAbandonedRunsRow, error) {
+	rows, err := q.db.Query(ctx, listAbandonedRuns, arg.IdleBefore, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAbandonedRunsRow
+	for rows.Next() {
+		var i ListAbandonedRunsRow
+		if err := rows.Scan(&i.ID, &i.JobID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRunArtifacts = `-- name: ListRunArtifacts :many
@@ -611,7 +694,7 @@ func (q *Queries) ListRunArtifacts(ctx context.Context, runID uuid.UUID) ([]Arti
 }
 
 const listRunItems = `-- name: ListRunItems :many
-SELECT id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings FROM run_items WHERE run_id = $1 ORDER BY position, id
+SELECT id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings, schema_version, schema_version_status FROM run_items WHERE run_id = $1 ORDER BY position, id
 `
 
 func (q *Queries) ListRunItems(ctx context.Context, runID uuid.UUID) ([]RunItem, error) {
@@ -640,6 +723,8 @@ func (q *Queries) ListRunItems(ctx context.Context, runID uuid.UUID) ([]RunItem,
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.Warnings,
+			&i.SchemaVersion,
+			&i.SchemaVersionStatus,
 		); err != nil {
 			return nil, err
 		}

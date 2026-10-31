@@ -9,6 +9,7 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -43,6 +44,9 @@ type runLoader struct {
 	// channels are the shared channels attached to a page of jobs
 	// (Job.sharedChannelAttachments, D-198).
 	channels map[uuid.UUID][]notify.JobAttachment
+	// holds are the retention holds of a page of jobs
+	// (Job.retentionHolds, D-209).
+	holds map[uuid.UUID][]retention.HoldView
 }
 
 type runLoaderKey struct{}
@@ -58,6 +62,7 @@ func WithRunLoader(ctx context.Context) context.Context {
 		missed:    map[uuid.UUID]*runstate.MissedState{},
 		activity:  map[uuid.UUID]auth.UserActivity{},
 		channels:  map[uuid.UUID][]notify.JobAttachment{},
+		holds:     map[uuid.UUID][]retention.HoldView{},
 	})
 }
 
@@ -187,4 +192,10 @@ func (r *Resolver) loadMissed(ctx context.Context, jobID uuid.UUID) (*runstate.M
 func (r *Resolver) loadUserActivity(ctx context.Context, userID uuid.UUID) (auth.UserActivity, error) {
 	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID]auth.UserActivity { return l.activity },
 		userHintsOf, userID, r.Users.Activity)
+}
+
+// loadRetentionHolds returns the retention holds of a job.
+func (r *Resolver) loadRetentionHolds(ctx context.Context, jobID uuid.UUID) ([]retention.HoldView, error) {
+	return batchLoad(ctx, loaderFrom(ctx), func(l *runLoader) map[uuid.UUID][]retention.HoldView { return l.holds },
+		jobHintsOf, jobID, r.RetentionHolds.HoldsForJobs)
 }

@@ -1,14 +1,26 @@
-import { CircleCheck, ClockAlert, OctagonX } from "lucide-react";
+import { ArchiveX, CircleCheck, ClockAlert, OctagonX } from "lucide-react";
 import { Link } from "react-router";
 
+import { backups, holdReason } from "@/features/jobs/retention-model";
 import { formatDateTime, formatRelative } from "@/lib/format";
 
 import type { AttentionItem } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
+const T = {
+  empty: "No failures in the last 7 days, no missed backups and no stuck retention.",
+  listLabel: "Failures, missed backups and retention holds",
+  retention: "Retention",
+  held: (n: number, dest: string, deleted: boolean) =>
+    `keeps ${backups(n)} incomplete on ${dest}${deleted ? " (deleted)" : ""}`,
+  heldSince: (at: string) => `Oldest held backup from ${at}`,
+  since: (rel: string) => `since ${rel}`,
+} as const;
+
 /**
- * Failed runs of the last 7 days and jobs in an ongoing missed-backup
- * outage (the server's missed-backup check, D-188/D-196), newest first.
+ * Failed runs of the last 7 days, jobs in an ongoing missed-backup outage
+ * (the server's missed-backup check, D-188/D-196) and destinations where
+ * retention keeps incomplete backups (D-209), newest first.
  */
 export function AttentionTile({
   items,
@@ -36,10 +48,10 @@ export function AttentionTile({
         <TileError error={error} />
       ) : items.length === 0 ? (
         <TileEmpty icon={<CircleCheck aria-hidden="true" className="size-4 text-status-success" />}>
-          No failures in the last 7 days and no missed backups.
+          {T.empty}
         </TileEmpty>
       ) : (
-        <ol aria-label="Failures and missed backups" className="flex flex-col divide-y divide-rule">
+        <ol aria-label={T.listLabel} className="flex flex-col divide-y divide-rule">
           {items.map((item) =>
             item.kind === "failed" ? (
               <li
@@ -67,6 +79,39 @@ export function AttentionTile({
                   className="font-mono text-2xs whitespace-nowrap text-muted-foreground"
                 >
                   {formatRelative(item.at, now)}
+                </time>
+              </li>
+            ) : item.kind === "retention" ? (
+              <li
+                key={`h-${item.job.id}-${item.hold.destinationId}`}
+                data-testid="attention-item"
+                data-kind="retention"
+                className="grid grid-cols-[auto_1fr_auto] items-start gap-x-3 py-2"
+              >
+                <ArchiveX aria-hidden="true" className="mt-0.5 size-4 text-status-partial" />
+                <span className="min-w-0">
+                  <Link
+                    to={`/jobs/${item.job.id}`}
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    {item.job.name}
+                  </Link>
+                  <span className="block text-xs text-muted-foreground">
+                    <span className="text-status-partial-fg">{T.retention}</span> ·{" "}
+                    {T.held(
+                      item.hold.heldRuns,
+                      item.hold.destinationName,
+                      item.hold.destinationDeleted,
+                    )}
+                    : {holdReason(item.hold)}
+                  </span>
+                </span>
+                <time
+                  dateTime={item.at}
+                  title={T.heldSince(formatDateTime(item.at))}
+                  className="font-mono text-2xs whitespace-nowrap text-muted-foreground"
+                >
+                  {T.since(formatRelative(item.at, now))}
                 </time>
               </li>
             ) : (

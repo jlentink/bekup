@@ -311,6 +311,7 @@ func TestInnerRunnerRPCs(t *testing.T) {
 	t.Run("roundtrip", in.testRoundTrip)
 	t.Run("globals", in.testGlobals)
 	t.Run("stats", in.testStats)
+	t.Run("schema_version", in.testSchemaVersion)
 	t.Run("hostile", in.testHostile)
 	t.Run("psql_restrict", in.testPSQLRestrict)
 	t.Run("ssh", in.testSSH)

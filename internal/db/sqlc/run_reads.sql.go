@@ -393,7 +393,7 @@ func (q *Queries) ListRunIDsUpdatedSince(ctx context.Context, arg ListRunIDsUpda
 }
 
 const listRunItemsForRuns = `-- name: ListRunItemsForRuns :many
-SELECT id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings FROM run_items WHERE run_id = ANY($1::uuid[]) ORDER BY run_id, position, id
+SELECT id, run_id, kind, db_name, position, status, raw_size, stored_size, raw_sha256, sha256, verified, started_at, finished_at, error_code, error_message, warnings, schema_version, schema_version_status FROM run_items WHERE run_id = ANY($1::uuid[]) ORDER BY run_id, position, id
 `
 
 func (q *Queries) ListRunItemsForRuns(ctx context.Context, runIds []uuid.UUID) ([]RunItem, error) {
@@ -422,6 +422,8 @@ func (q *Queries) ListRunItemsForRuns(ctx context.Context, runIds []uuid.UUID) (
 			&i.ErrorCode,
 			&i.ErrorMessage,
 			&i.Warnings,
+			&i.SchemaVersion,
+			&i.SchemaVersionStatus,
 		); err != nil {
 			return nil, err
 		}

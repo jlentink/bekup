@@ -141,11 +141,13 @@ func (TestRestoreScheduleArgs) Kind() string { return KindTestRestoreSchedule }
 // RetentionReason says why a retention sweep was enqueued.
 type RetentionReason string
 
-// Retention reasons: after a backup run finished (success or partial), or
-// the daily sweep (periodic fan-out and the per-job sweeps it enqueues).
+// Retention reasons: after a backup run finished (success or partial), the
+// daily sweep (periodic fan-out and the per-job sweeps it enqueues), or a
+// changed retention policy of the job (D-209).
 const (
-	RetentionPostRun RetentionReason = "post_run"
-	RetentionDaily   RetentionReason = "daily"
+	RetentionPostRun       RetentionReason = "post_run"
+	RetentionDaily         RetentionReason = "daily"
+	RetentionPolicyChanged RetentionReason = "policy_changed"
 )
 
 // RetentionSweepArgs are the args of KindRetentionSweep. Unique by JobID: a

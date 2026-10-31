@@ -107,8 +107,10 @@ func TestServiceCRUD(t *testing.T) {
 		t.Fatalf("open: %v", err)
 	}
 
-	// Duplicate name (case-insensitive).
+	// Duplicate name (case-insensitive; another prefix: the location of
+	// "Offsite" is taken, D-209).
 	in2 := validS3()
+	in2.Prefix = "dup"
 	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "offsite", Type: TypeS3, S3: in2}); !errors.Is(err, ErrNameTaken) {
 		t.Fatalf("duplicate: %v", err)
 	}
@@ -215,7 +217,9 @@ func TestServiceCRUD(t *testing.T) {
 	if err := e.svc.Delete(ctx, e.actor, d.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete: %v", err)
 	}
-	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "Offsite", Type: TypeS3, S3: validS3()}); err != nil {
+	reuse := validS3()
+	reuse.Prefix = "reuse" // "Other" owns the bucket root (D-209)
+	if _, err := e.svc.Create(ctx, e.actor, CreateInput{Name: "Offsite", Type: TypeS3, S3: reuse}); err != nil {
 		t.Fatalf("name reuse: %v", err)
 	}
 	if len(e.auditEntries(t, audit.ActionDestinationDeleted)) != 1 {

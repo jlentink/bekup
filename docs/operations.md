@@ -446,7 +446,7 @@ runs on any worker of its queue.
 | `security_check` | leader, `maintenance` queue | 1 h | certificate and pin expiry alerts, audit chain verification (new entries hourly, the whole chain once a day per process; stored for `auditChainStatus`), posture reminders (D-190) |
 | `notify_retention_digest` | leader, `maintenance` queue | 24 h | one `retention.summary` per job and UTC day with deletions (the last 3 complete days) |
 | `notify_cleanup` | leader, `maintenance` queue | 24 h | deletes notification events and deliveries older than 90 days, inbox entries older than 180 days |
-| `retention_sweep` (daily) | leader, `retention` queue | 24 h | a sweep for every job that has backups, plus the partial-file cleanup ([Retention](guides/retention.md)) |
+| `retention_sweep` (daily) | leader, `retention` queue | 24 h | marks runs no worker will finish as `interrupted`, a sweep for every job that has backups, the partial-file cleanup, empty-folder pruning and the unrecorded-file scan per destination ([Retention](guides/retention.md)) |
 | `test_restore_schedule` | leader, `maintenance` queue | 1 min | enqueues due scheduled test restores |
 | `restore_stuck_sweep` | leader, `maintenance` queue | 5 min | fails restores stuck without a live worker |
 | `temporary_connection_cleanup` | leader, `maintenance` queue | 5 min | removes expired temporary restore connections |

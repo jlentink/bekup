@@ -27,7 +27,7 @@ type variantDoc struct {
 func renderVariantT(t *testing.T, v Variant) ([]byte, variantDoc) {
 	t.Helper()
 	img := mustRef(t, variantImage)
-	out, err := RenderRelease(v, &img)
+	out, err := RenderRelease(v, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestVariantUntouchedBlocksByteEqual(t *testing.T) {
 		nodes = append(nodes, "networks/"+name)
 	}
 	for _, v := range AllVariants {
-		out, err := RenderRelease(v, nil)
+		out, err := RenderRelease(v, DBBundled, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -310,8 +310,8 @@ func TestOverlaysHaveNoImage(t *testing.T) {
 	}
 	// Every fragment is used by some variant, every referenced one exists.
 	used := map[string]bool{}
-	for _, edits := range variantEdits {
-		for _, e := range edits {
+	for v, edits := range variantEdits {
+		for _, e := range append(slices.Clone(edits), externalDBEdits(v)...) {
 			if e.fragment != "" {
 				used["variants/"+e.fragment] = true
 			}
@@ -393,24 +393,24 @@ func TestRenderVariantRefusesBadSources(t *testing.T) {
 		"build":           strings.Replace(src, "    command: [serve]\n", "    command: [serve]\n    build: .\n", 1),
 		"missing node":    strings.Replace(src, "  certbot:\n", "  certbot2:\n", 1),
 	} {
-		if _, err := RenderVariant([]byte(bad), VariantTraefik, &img); err == nil {
+		if _, err := RenderVariant([]byte(bad), VariantTraefik, DBBundled, &img); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := RenderVariant([]byte(src), VariantTraefik, &imageref.Ref{Repo: "bekup", Tag: "dev"}); err == nil {
+	if _, err := RenderVariant([]byte(src), VariantTraefik, DBBundled, &imageref.Ref{Repo: "bekup", Tag: "dev"}); err == nil {
 		t.Error("unpinned image accepted")
 	}
-	if _, err := RenderVariant([]byte(src), "caddy", &img); err == nil {
+	if _, err := RenderVariant([]byte(src), "caddy", DBBundled, &img); err == nil {
 		t.Error("unknown variant accepted")
 	}
 	// Without an image the line becomes the placeholder of the committed
 	// files (deploy/compose/).
-	out, err := RenderVariant([]byte(src), VariantNPM, nil)
+	out, err := RenderVariant([]byte(src), VariantNPM, DBBundled, nil)
 	if err != nil || !hasLine(string(out), ComposePlaceholderLine) || hasLine(string(out), ComposeImageLine) {
 		t.Fatalf("example: %v", err)
 	}
 	// Setup-first files carry the GENERATED header.
-	gen, err := RenderGenerated(bekup.Assets(), VariantTraefik, img)
+	gen, err := RenderGenerated(bekup.Assets(), VariantTraefik, DBBundled, img)
 	if err != nil || !strings.HasPrefix(string(gen), composeHeader) {
 		t.Fatalf("generated: %v", err)
 	}
@@ -418,8 +418,8 @@ func TestRenderVariantRefusesBadSources(t *testing.T) {
 
 func TestVariantNames(t *testing.T) {
 	for v, name := range map[Variant]string{VariantTraefik: "compose.yaml", VariantTraefikExternal: "compose.traefik-external.yaml", VariantNPM: "compose.npm.yaml"} {
-		if v.AssetName() != name {
-			t.Errorf("%s: %s", v, v.AssetName())
+		if v.AssetName(DBBundled) != name {
+			t.Errorf("%s: %s", v, v.AssetName(DBBundled))
 		}
 		if got, err := ParseVariant(string(v)); err != nil || got != v {
 			t.Errorf("ParseVariant(%s)", v)
@@ -427,5 +427,33 @@ func TestVariantNames(t *testing.T) {
 	}
 	if _, err := ParseVariant("traefik "); err == nil {
 		t.Error("bad variant accepted")
+	}
+}
+
+// TestExternalDBComments: the external-database form keeps no comment
+// about the bundled postgres service, names its own release asset and
+// asks for the CA bundle in the install steps.
+func TestExternalDBComments(t *testing.T) {
+	for _, v := range AllVariants {
+		out, err := RenderRelease(v, DBExternal, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(out)
+		for _, stale := range []string{"postgres/{postgres.crt", "70 for postgres", "runner and postgres each", "postgres/ca.crt"} {
+			if strings.Contains(text, stale) {
+				t.Errorf("%s external: stale comment %q", v, stale)
+			}
+		}
+		if v == VariantFull {
+			continue
+		}
+		bundled := v.AssetName(DBBundled)
+		if strings.Contains(text, "release asset "+bundled+":") || !strings.Contains(text, "release asset "+v.AssetName(DBExternal)+":") {
+			t.Errorf("%s external: the header names the wrong release asset", v)
+		}
+		if !strings.Contains(text, "your PostgreSQL's CA bundle") {
+			t.Errorf("%s external: no CA bundle install step", v)
+		}
 	}
 }

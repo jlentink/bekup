@@ -3,6 +3,7 @@ package runnerpb
 import (
 	"bytes"
 	"regexp"
+	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -50,6 +51,12 @@ func TestCredentialFieldsAnnotated(t *testing.T) {
 	}
 }
 
+// sqlFields are the only fields that carry SQL text: the bounded custom
+// schema-version query (D-210), revalidated by the runner.
+var sqlFields = map[protoreflect.FullName]bool{
+	"runner.v1.VersionQuery.custom_sql": true,
+}
+
 // TestNoFreeFormFields guards D-030: the API has no command, argument,
 // environment, image or path fields.
 func TestNoFreeFormFields(t *testing.T) {
@@ -58,8 +65,13 @@ func TestNoFreeFormFields(t *testing.T) {
 	for i := range msgs.Len() {
 		fields := msgs.Get(i).Fields()
 		for j := range fields.Len() {
-			if fd := fields.Get(j); forbidden.MatchString(string(fd.Name())) {
+			fd := fields.Get(j)
+			if forbidden.MatchString(string(fd.Name())) {
 				t.Errorf("%s: free-form field not allowed", fd.FullName())
+			}
+			// SQL travels in exactly one bounded field (D-210).
+			if strings.Contains(string(fd.Name()), "sql") && !sqlFields[fd.FullName()] {
+				t.Errorf("%s: SQL field outside the D-210 exception", fd.FullName())
 			}
 		}
 	}

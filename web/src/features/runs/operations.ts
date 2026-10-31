@@ -88,6 +88,8 @@ export const RunDetailQuery = graphql(`
         database
         position
         status
+        schemaVersion
+        schemaVersionStatus
         rawSize
         storedSize
         sha256
@@ -203,6 +205,8 @@ export const RunActivitySubscription = graphql(`
           database
           position
           status
+          schemaVersion
+          schemaVersionStatus
           rawSize
           storedSize
           sha256

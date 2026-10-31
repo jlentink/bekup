@@ -3,11 +3,13 @@ package dbprobe
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgproto3"
 
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runnerpb"
@@ -56,6 +58,10 @@ const (
 		`WHERE s.name OPERATOR(pg_catalog.=) 'restrict_nonsystem_relation_kind'`
 )
 
+// pgMaxMessageBytes caps the body of every protocol message a probe
+// session receives. Catalog rows, counts and settings are far smaller.
+const pgMaxMessageBytes = 1 << 20
+
 type pgConn struct {
 	c   *pgconn.PgConn
 	eng engine.Engine
@@ -96,6 +102,14 @@ func openPG(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, error
 	cfg.OnNotice = nil
 	cfg.OnNotification = nil
 	cfg.AfterConnect, cfg.ValidateConnect = nil, nil
+	// No server message may make the runner buffer more than
+	// pgMaxMessageBytes (a huge row of a version query, D-210): a longer
+	// one breaks the session instead.
+	cfg.BuildFrontend = func(r io.Reader, w io.Writer) *pgproto3.Frontend {
+		f := pgproto3.NewFrontend(r, w)
+		f.SetMaxBodyLen(pgMaxMessageBytes)
+		return f
+	}
 
 	c, err := pgconn.ConnectConfig(cctx, cfg)
 	cfg.Password = ""

@@ -13,6 +13,37 @@ import (
 	"github.com/google/uuid"
 )
 
+const destinationHasActiveRuns = `-- name: DestinationHasActiveRuns :one
+SELECT EXISTS (
+    SELECT 1 FROM runs r
+    JOIN job_destinations jd ON jd.job_id = r.job_id
+    WHERE jd.destination_id = $1 AND r.status IN ('queued', 'running')
+)::boolean
+`
+
+// DestinationHasActiveRuns reports a queued or running backup run of a job
+// that writes to the destination (its location must not change then,
+// D-209).
+func (q *Queries) DestinationHasActiveRuns(ctx context.Context, destinationID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, destinationHasActiveRuns, destinationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const destinationHasPresentArtifacts = `-- name: DestinationHasPresentArtifacts :one
+SELECT EXISTS (SELECT 1 FROM artifacts WHERE destination_id = $1 AND state = 'present')::boolean
+`
+
+// DestinationHasPresentArtifacts reports whether backup files are recorded as
+// present on the destination (its location must not change then, D-209).
+func (q *Queries) DestinationHasPresentArtifacts(ctx context.Context, destinationID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, destinationHasPresentArtifacts, destinationID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const destinationUsage = `-- name: DestinationUsage :many
 SELECT d.id, d.name, d.type,
        COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,
@@ -230,6 +261,49 @@ func (q *Queries) InsertDestination(ctx context.Context, arg InsertDestinationPa
 	return i, err
 }
 
+const listDestinationLocations = `-- name: ListDestinationLocations :many
+SELECT d.id, d.name, d.type, d.config
+FROM destinations d
+WHERE d.id <> $1
+  AND (d.deleted_at IS NULL OR EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
+ORDER BY d.name, d.id
+`
+
+type ListDestinationLocationsRow struct {
+	ID     uuid.UUID       `json:"id"`
+	Name   string          `json:"name"`
+	Type   DestinationType `json:"type"`
+	Config json.RawMessage `json:"config"`
+}
+
+// ListDestinationLocations returns the other destinations whose location a
+// new or moved destination must not overlap: every non-deleted one and the
+// soft-deleted ones that still hold present backups (D-209).
+func (q *Queries) ListDestinationLocations(ctx context.Context, id uuid.UUID) ([]ListDestinationLocationsRow, error) {
+	rows, err := q.db.Query(ctx, listDestinationLocations, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDestinationLocationsRow
+	for rows.Next() {
+		var i ListDestinationLocationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Type,
+			&i.Config,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDestinations = `-- name: ListDestinations :many
 
 SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations
@@ -279,6 +353,17 @@ func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockDestinationLocations = `-- name: LockDestinationLocations :exec
+SELECT pg_advisory_xact_lock(7142023363)
+`
+
+// LockDestinationLocations serializes the location checks of creates and
+// location changes (transaction-scoped advisory lock, D-209).
+func (q *Queries) LockDestinationLocations(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockDestinationLocations)
+	return err
 }
 
 const recordDestinationTest = `-- name: RecordDestinationTest :execrows

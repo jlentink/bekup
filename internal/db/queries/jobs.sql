@@ -203,3 +203,14 @@ SELECT j.id, j.name FROM jobs j JOIN job_destinations jd ON jd.job_id = j.id
 WHERE jd.destination_id = $1 AND j.deleted_at IS NULL
 ORDER BY lower(j.name), j.id
 LIMIT 5;
+
+-- SetJobVersionQuery changes a job's schema-version capture (D-210).
+-- name: SetJobVersionQuery :one
+UPDATE jobs
+SET version_query_mode = @mode,
+    version_preset = sqlc.narg(preset)::text,
+    version_custom_sql = sqlc.narg(custom_sql)::text,
+    version_schema = @schema_name::text,
+    updated_by = @updated_by
+WHERE id = @id AND deleted_at IS NULL
+RETURNING *;

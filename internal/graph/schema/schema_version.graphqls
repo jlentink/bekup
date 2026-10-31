@@ -1,0 +1,97 @@
+# Schema version per database (D-210). A job may capture the schema
+# (migration) version of every database it backs up: a preset for a common
+# migration framework (fixed, reviewed SQL kept in bekup) or a custom
+# query (a single SELECT or WITH statement, at most 2 KiB). The runner reads
+# it in the dump's statistics transaction (PostgreSQL: the snapshot the dump
+# uses), read-only and with statement and lock time limits. A failed capture
+# is a warning (version_unavailable, version_invalid) and never fails the
+# backup. Admins and maintainers change the setting; a custom query needs a
+# fresh step-up (it runs on the target with the backup role's rights).
+# Every change is audited (job.version_query_changed, with a digest of a
+# custom query, never the query).
+
+"How a job captures the schema version of its databases."
+enum SchemaVersionMode {
+  "No capture (the default)."
+  NONE
+  "A preset for a migration framework."
+  PRESET
+  "A custom SELECT or WITH query."
+  CUSTOM
+}
+
+"The outcome of a schema-version capture."
+enum SchemaVersionStatus {
+  "A version was captured."
+  OK
+  "No version: the table does not exist, has no row or the value is empty."
+  NONE
+  "The query failed (missing privilege, time limit, unexpected table layout or error)."
+  UNAVAILABLE
+  "The result was longer than 64 characters or not printable ASCII."
+  INVALID
+}
+
+"A job's schema-version capture."
+type JobSchemaVersion {
+  mode: SchemaVersionMode!
+  "The preset name (PRESET only)."
+  preset: String
+  "The preset's display name (PRESET only)."
+  presetLabel: String
+  "PostgreSQL schema of the preset's table."
+  schema: String!
+  "The custom query (CUSTOM only). Admins and maintainers only (null for backup owners)."
+  customSql: String
+}
+
+"A fixed version query for one migration framework."
+type SchemaVersionPreset {
+  "The name stored on the job."
+  name: String!
+  label: String!
+  "What the captured version is."
+  description: String!
+  "The framework table on PostgreSQL."
+  postgresTable: String!
+  "The framework table on MySQL and MariaDB."
+  mysqlTable: String!
+  engines: [DatabaseEngine!]!
+}
+
+"A job's new schema-version capture."
+input JobSchemaVersionInput {
+  mode: SchemaVersionMode!
+  "Required for PRESET."
+  preset: String
+  "PostgreSQL schema of the preset's table (PRESET only; default public)."
+  schema: String
+  "Required for CUSTOM: a single SELECT or WITH statement, at most 2048 bytes. PostgreSQL tables must be schema-qualified."
+  customSql: String
+}
+
+extend type Job {
+  "The schema-version capture (D-210)."
+  schemaVersion: JobSchemaVersion!
+}
+
+extend type RunItem {
+  "The schema version captured for this database (status OK only)."
+  schemaVersion: String
+  "The outcome of the capture; null when the job captures none or the dump did not complete."
+  schemaVersionStatus: SchemaVersionStatus
+}
+
+extend type Query {
+  "The schema-version presets, in display order."
+  schemaVersionPresets: [SchemaVersionPreset!]! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Changes a job's schema-version capture (audited). A custom query
+  requires a step-up within the last 5 minutes (STEP_UP_REQUIRED
+  otherwise); turning the capture off or choosing a preset does not.
+  """
+  setJobSchemaVersion(jobId: UUID!, input: JobSchemaVersionInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+}

@@ -615,3 +615,159 @@ func (d *Disk) cleanupDir(ctx context.Context, dir, rel string, cutoff time.Time
 	}
 	return nil
 }
+
+var _ DirPruner = (*Disk)(nil)
+
+// PruneEmptyDirs implements DirPruner. Every directory is checked with
+// Lstat (a symbolic link is never a directory here) and read to confirm it
+// is empty right before it is removed; the destination directory itself is
+// never removed. It does not look at no-delete mode: the caller decides
+// (the daily scan skips no-delete destinations).
+func (d *Disk) PruneEmptyDirs(ctx context.Context, olderThan time.Duration, isJob func(string) bool) (int, error) {
+	if d.closed.Load() {
+		return 0, ErrClosed
+	}
+	cutoff := time.Now().Add(-olderThan)
+	jobs, err := d.readDirNames(".")
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, job := range jobs {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		if !PruneCandidate(1, job, isJob) {
+			continue
+		}
+		jfi, err := d.dir.Lstat(job)
+		if err != nil || !jfi.IsDir() {
+			continue // gone, a file or a symbolic link
+		}
+		// The job directory's own age is taken before its run
+		// directories are pruned (removing them updates its mtime).
+		jobOld := jfi.ModTime().Before(cutoff)
+		runs, err := d.readDirNames(job)
+		if err != nil {
+			return removed, err
+		}
+		older := func(fi fs.FileInfo) bool { return fi.ModTime().Before(cutoff) }
+		prunedRuns := false
+		for _, run := range runs {
+			if !PruneCandidate(2, run, isJob) {
+				continue
+			}
+			ok, err := d.removeEmptyDir(job+"/"+run, older)
+			if err != nil {
+				return removed, err
+			}
+			if ok {
+				removed++
+				prunedRuns = true
+			}
+		}
+		if !jobOld {
+			continue
+		}
+		// Right before the removal the job directory must still be old,
+		// or (when this pass removed run directories in it) unchanged
+		// since this pass's own last change.
+		jobCheck := older
+		if prunedRuns {
+			after, ok := d.realDir(job)
+			if !ok {
+				continue
+			}
+			mod := after.ModTime()
+			jobCheck = func(fi fs.FileInfo) bool { return fi.ModTime().Equal(mod) }
+		}
+		ok, err := d.removeEmptyDir(job, jobCheck)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
+// readDirNames returns the names of the entries of the relative directory
+// p ("." for the destination directory); a missing directory has none.
+func (d *Disk) readDirNames(p string) ([]string, error) {
+	f, err := d.dir.Open(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("storage: open directory: %w", err)
+	}
+	ents, err := f.ReadDir(-1)
+	cerr := f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("storage: read directory: %w", err)
+	}
+	if cerr != nil {
+		return nil, fmt.Errorf("storage: close directory: %w", cerr)
+	}
+	names := make([]string, 0, len(ents))
+	for _, e := range ents {
+		if e.Type().IsDir() { // lstat type: symbolic links are not directories
+			names = append(names, e.Name())
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+// removeEmptyDir removes the relative directory p when it is a real
+// directory (Lstat), passes old (its age) and is empty; both are checked
+// again right before the removal. It reports whether it removed p; a
+// directory that is in use, not empty, too new or gone is left alone
+// without an error.
+func (d *Disk) removeEmptyDir(p string, old func(fs.FileInfo) bool) (bool, error) {
+	if p == "" || p == "." {
+		return false, nil // never the destination directory
+	}
+	fi, ok := d.realDir(p)
+	if !ok || !old(fi) {
+		return false, nil
+	}
+	f, err := d.dir.Open(p)
+	if err != nil {
+		return false, nil //nolint:nilerr // removed or replaced concurrently: nothing to prune
+	}
+	ents, rerr := f.ReadDir(1)
+	cerr := f.Close()
+	if rerr == nil && len(ents) > 0 {
+		return false, nil // not empty
+	}
+	if rerr != nil && !errors.Is(rerr, io.EOF) {
+		return false, fmt.Errorf("storage: read directory: %w", rerr)
+	}
+	if cerr != nil {
+		return false, fmt.Errorf("storage: close directory: %w", cerr)
+	}
+	// Re-check right before the removal: still a real directory, and
+	// still old (a writer that came and went changed its mtime).
+	if fi, ok := d.realDir(p); !ok || !old(fi) {
+		return false, nil
+	}
+	if err := d.dir.Remove(p); err != nil {
+		return false, nil //nolint:nilerr // not empty any more (a writer raced us) or gone: left alone
+	}
+	if err := d.syncDirs(parentDir(p)); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+// realDir reports whether the relative path p is a real directory (Lstat:
+// a symbolic link is not), with its file info.
+func (d *Disk) realDir(p string) (fs.FileInfo, bool) {
+	fi, err := d.dir.Lstat(p)
+	if err != nil || !fi.IsDir() {
+		return nil, false
+	}
+	return fi, true
+}

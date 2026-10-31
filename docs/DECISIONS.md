@@ -229,6 +229,11 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205) |
 | [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder) |
 | [D-206](#d-206-mobile-apps-and-the-push-channel-dropped-from-the-roadmap) | Mobile apps and the push channel dropped from the roadmap | proposed |
+| [D-207](#d-207-external-postgresql-for-the-app-database-fields-mode-one-connection-builder-db-bootstrap--roles-sql-migrate-preflight-and-an-opt-in-single-account-mode) | External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode | proposed |
+| [D-208](#d-208-setup-for-an-external-database-the-bubble-tea-setup-wizard-setup-renew-and-the-guided-upgrade) | Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade | proposed |
+| [D-209](#d-209-retention-visibility-and-disk-cleanup-live-keep-estimate-retention-holds-and-retentionblocked-interrupted-runs-empty-folder-pruning-unrecorded-files-and-fixed-destination-locations) | Retention visibility and disk cleanup: live keep estimate, retention holds and `retention.blocked`, interrupted runs, empty-folder pruning, unrecorded files and fixed destination locations | proposed |
+| [D-210](#d-210-schema-version-per-database-framework-presets-and-a-bounded-custom-query-read-on-the-dumps-snapshot) | Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot | proposed |
+| [D-211](#d-211-web-dev-tooling-minimatch-forced-to-the-fixed-11x-line-with-a-pnpm-patch-for-eslint-plugin-jsx-a11y) | Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y | proposed |
 
 ---
 
@@ -11872,3 +11877,798 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/db/schema.sql`, `internal/graph/schema/notifications.graphqls`,
   `web/src/features/notifications/`, `docs/guides/notifications.md`,
   `SECURITY.md`, `AGENTS.md`.
+
+## D-207: External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode
+
+- **Date:** 2026-10-30
+- **Status:** proposed
+- **Decided by:** agent (implementing the user's request for "existing
+  Postgres" support with plain connection fields, bootstrap with an admin
+  account as the default and single-account mode as an explicit weakening;
+  the accepted defaults of the external-DB design: fixed role names,
+  required SCRAM channel binding, no poolers, `tls_ca_file` may name a
+  provider or system bundle, optional `tls_server_name`, roles SQL with
+  SCRAM verifiers)
+- **Context:** bekup's own database was only the bundled Postgres, reached
+  through URL files and prepared by its init script as superuser
+  (D-054, D-092, D-100). Operators with a managed PostgreSQL (RDS/Aurora,
+  Cloud SQL, Azure Flexible Server) or their own server have no superuser,
+  often an IP address instead of the certificate's name, and want to type
+  host/user/password instead of hand-building URLs (where special
+  characters need escaping and secrets end up in strings). Released
+  migrations (00001-00033) grant to `bekup_owner`/`bekup_app` literally,
+  run `CREATE EXTENSION citext` (trusted since PostgreSQL 13) and require
+  `current_user = bekup_owner`.
+- **Decision:**
+  1. **Config, fields mode.** `[database]` gains `host`, `port` (5432),
+     `name` (`bekup`), `user`, `password_file`, `owner_user`,
+     `owner_password_file`, `single_account` and `tls_server_name`.
+     `host` selects fields mode. A load-time normalize step that knows each
+     key's source makes the modes exclusive: an explicitly set URL key in
+     fields mode, or a fields key in URL mode, is an error (never a
+     precedence); the defaulted URL file paths are cleared in fields mode.
+     With two roles `user`/`owner_user` must be `bekup_app`/`bekup_owner`
+     (fixed names: one bekup per cluster). `name` and role names follow
+     strict patterns (quotable; `postgres`/templates, `bekup_*` and `pg_*`
+     refused where relevant). `config.DBCredentials` (URL or fields +
+     password bytes + `SetRole`, `Zero()`) replaces `DatabaseURL()` /
+     `DatabaseOwnerURL()`; `AppDBCredentials()` / `OwnerDBCredentials()`
+     read the secret files with `ReadSecretFile`.
+  2. **One connection builder** (`internal/db` `connConfig`) for the pool,
+     the LISTEN connector, the migrator and bootstrap's admin connection.
+     Fields mode never builds a DSN: pgx parses a fixed neutral string
+     (pgx only connects parsed configs), then every field a `PG*` variable
+     or service file could touch is set explicitly (reflection test under
+     a hostile environment). URL mode keeps pgx parsing but takes runtime
+     parameters only from the URL and rejects `options`, `search_path`,
+     `role`, service/passfile, Kerberos, `pool_*`, `sslsni`,
+     `sslnegotiation` and a weaker `require_auth`. Both modes: the D-100
+     TLS policy (split into URL checks + a shared policy),
+     `tls_server_name` (verify-full only; verification name and SNI),
+     `require_auth = scram-sha-256` (no cleartext/MD5/trust), startup
+     parameter `search_path=public`. serve logs the TLS facts once
+     (`app database connected`; no host, no credentials).
+  3. **Session role check.** `CheckAppRole` / the migrator's role check
+     also compare `session_user`: with two roles the session must have
+     logged in as the role itself, so `ALTER ROLE x SET role = bekup_app`
+     cannot let another login (possibly a superuser) pass the D-099 checks.
+  4. **`bekup migrate check`**, also run by `migrate up` before any
+     migration (sqlc queries): PostgreSQL ≥ 15 (warning above 17), UTF8
+     database owned by `bekup_owner`, `public` usable by `bekup_owner`,
+     citext installed / trusted / allow-listed (Azure) / not creatable
+     (error with the fix), the full role checks, warnings for `bekup_app`
+     CONNECT on other databases and `pg_db_role_setting` entries (names
+     only), TLS facts.
+  5. **`bekup db roles-sql`** prints a psql script (stdout only) that
+     creates the roles with SCRAM-SHA-256 verifiers (client-side, random
+     16-byte salt, 4096 iterations, RFC 7677 vector test; passwords 16-1024
+     printable ASCII so SASLprep cannot change them) or with `\password`
+     prompts (`--passwords prompt`, `password_encryption` forced to SCRAM),
+     the database (`OWNER bekup_owner ENCODING 'UTF8' TEMPLATE template0`),
+     `REVOKE ALL ... FROM PUBLIC`, `GRANT CONNECT` to `bekup_app`,
+     optionally citext, inside a temporary `GRANT/REVOKE bekup_owner TO
+     CURRENT_USER`. Verifiers are sensitive (marked, registered for
+     redaction). This DDL (`internal/db/rolesql.go`) is the only hand-built
+     SQL in bekup: utility statements take no bind parameters; inputs are
+     constants, a validated database name quoted with `pgx.Identifier` and
+     format-checked verifiers.
+  6. **`bekup db bootstrap`** (the default path): admin host/port (default
+     the configured ones), user, password from `--admin-password-file`
+     (`ReadSecretFile`) or a no-echo TTY prompt, admin database (default
+     `postgres`), the configured TLS policy (overridable per flag). It runs
+     the same plan as roles-sql over the admin connection: creates missing
+     roles with verifiers of the configured password files, checks existing
+     ones (D-099 attributes and memberships, LOGIN; never changed silently,
+     `--reset-passwords` sets them), creates the database or requires an
+     existing one to be owned by `bekup_owner`, re-applies the database
+     grants, creates citext as the admin only when `bekup_owner` cannot,
+     and revokes the admin's temporary `bekup_owner` membership unless it
+     held it before (PostgreSQL 16+: granted `WITH INHERIT TRUE, SET TRUE`).
+     It works with `CREATEROLE` + `CREATEDB` accounts and the managed admin
+     roles. Then it logs in as both roles, runs the role checks and the
+     preflight. The admin password is used for one connection, registered
+     for redaction, zeroed, never stored, logged or audited. `--dry-run`
+     lists the plan.
+  7. **Audit of bootstrap.** Before the first migration there is no audit
+     log, so the printed report is the record. When the schema is already
+     current and bootstrap created or changed something (roles, passwords,
+     database, citext), it records `cli.db.bootstrap` through `bekup_app`
+     after the change (CLI event with OS user/host, alerted like every CLI
+     action, D-069); a failure to record exits non-zero ("applied but not
+     audited"). Recording before the change was rejected: a password reset
+     is often needed exactly because the app login no longer works.
+  8. **`bekup_owner` is INHERIT on external servers.** PostgreSQL 15
+     applies NOINHERIT to the database owner's implicit
+     `pg_database_owner` membership, so a NOINHERIT owner cannot use the
+     `public` schema of a new database, and only a superuser could hand the
+     schema over (the bundled init script does). INHERIT grants nothing a
+     membership would not allow through `SET ROLE`, and the role checks
+     refuse every dangerous membership; `bekup_app` stays NOINHERIT. The
+     preflight checks `CREATE` on `public` and names both fixes.
+  9. **Single-account mode** (`database.single_account = true`, fields mode
+     only, no owner keys): feasible without editing released migrations.
+     Bootstrap (as that account, which needs `CREATEROLE` + `CREATEDB`
+     once) creates `bekup_owner`/`bekup_app` as NOLOGIN roles, grants both
+     to the account (kept) and `CONNECT` on the database to it. Every
+     migrator session runs `SET ROLE bekup_owner`, every app session
+     `SET ROLE bekup_app` (pgconn `AfterConnect`, fixed role names only),
+     so migrations see `current_user = bekup_owner`, objects are owned and
+     granted exactly as with two roles, and `CheckAppRole`/the owner check
+     run unchanged against the two roles plus a session check (logged in as
+     the configured account, which must not be SUPERUSER). Weakening
+     treatment: config warning at every start, a startup WARN with the
+     account's dangerous attributes/memberships, `security.insecure_db_roles`
+     audited at every serve/worker start outside dev mode (fail closed),
+     the `insecure_db_roles` security alert (error, once a day, also as the
+     hourly check's posture reminder), the admin configuration page's
+     database posture (`ConfigStatus.database`, also covering a weakened
+     `tls_mode`: the D-100 badge gap), docs explaining that the app can then
+     alter the schema and the audit log.
+  10. **Review amendments (2026-10-31, before release).**
+      - *URL parameters are an allowlist:* only `sslmode`,
+        `channel_binding` (as before: not weaker than the TLS policy),
+        `require_auth` (exactly `scram-sha-256`; nothing stricter exists),
+        `connect_timeout`, `target_session_attrs` and `application_name`,
+        each once; plus `host=` naming a Unix-socket directory (the only way
+        to express a socket in a URL, kept for `tls_mode = "disable"`).
+        Everything else is refused, including `session_authorization` and
+        every other run-time parameter; parameter names in errors are
+        bounded, values never echoed.
+      - *pgx's own settings:* both modes reset `Tracer`,
+        `StatementCacheCapacity`, `DescriptionCacheCapacity` and
+        `DefaultQueryExecMode` to pgx's defaults (a service file can set
+        them); URL mode also drops an environment/service-file
+        `target_session_attrs`. The hostile reflection test's service file
+        sets them all.
+      - *Authenticated identity (PostgreSQL 16+):* the session check also
+        compares `SYSTEM_USER` with `scram-sha-256:<login>` (or
+        `md5:<login>`: an `md5` pg_hba entry still runs SCRAM for a SCRAM
+        verifier, and `require_auth` already refused anything else), so a
+        superuser that switched to a bekup role with `SET SESSION
+        AUTHORIZATION`/`session_authorization` is refused; a foreign
+        identity is never echoed. PostgreSQL 15 has no `SYSTEM_USER`
+        (documented limitation). sqlc's catalog lacks the function, so a
+        types-only stub (`internal/db/sqlcschema/`, never applied) is added
+        to the sqlc schema list.
+      - *Role memberships:* bootstrap refuses members of and `ADMIN OPTION`
+        holders on `bekup_owner`/`bekup_app` other than the admin running it
+        (PostgreSQL 16+ gives a role's creator `ADMIN OPTION`; in
+        single-account mode the account), printing the `REVOKE` statements;
+        superuser members are only warned about. `migrate check` warns about
+        every membership but the single-account login's (it cannot know
+        the admin). Existing roles are accepted only with
+        `--adopt-existing-roles` (re-running a finished bootstrap needs it
+        too; `--reset-passwords` requires it), so a role somebody else
+        prepared is never adopted unnoticed.
+      - *Grants:* a role the admin already holds (16+: `SET` and `INHERIT`;
+        15: membership) is not granted again, so a single account that
+        dropped `CREATEROLE` after the first bootstrap can re-run it (also
+        on 15). Before granting an existing role bootstrap checks `ADMIN
+        OPTION` (16+; 15 also accepts `CREATEROLE`), and before `ALTER ROLE
+        ... PASSWORD` on 16+ too, with a message naming the fix.
+      - *Revoke of the temporary grant:* only after the GRANT ran, on
+        `context.WithoutCancel` with a 15 s timeout (survives Ctrl+C),
+        reconnecting when the connection died; on failure the report and
+        the error print "ACTION REQUIRED: manual REVOKE needed" with
+        `REVOKE bekup_owner FROM <admin>;`. The roles-sql script's header
+        tells the DBA the same for a script stopped by `ON_ERROR_STOP`.
+      - *SCRAM:* HMAC-SHA-256 is implemented on byte arrays with own pads
+        (zeroed after use, SHA-256 states reset; `crypto/hmac` keeps
+        unclearable copies); bootstrap registers the bare verifiers for
+        redaction, not only the statements.
+      - *Insecure admin connection:* an effective `tls_mode` other than
+        `verify-full` for `db bootstrap` (configured or `--tls-mode`) needs
+        `--allow-insecure-admin-connection` and prints a loud warning: the
+        administrator's password and DDL would cross an unverified or
+        unencrypted connection.
+      - *Role names:* `ValidDBRoleName` (single account, bootstrap admin)
+        refuses the whole `bekup_` prefix case-insensitively, not only the
+        two fixed roles, matching item 1.
+      - *Audit details* of `cli.db.bootstrap`: `rotated_logins` (was
+        `reset_passwords`, which the redaction treated as a secret key) and
+        `adopted_roles`.
+- **Alternatives considered:** configurable role names (released
+  migrations name the roles; would need new migrations rewriting every
+  grant); building a URL from the fields (escaping bugs, secrets in
+  strings, `PG*` environment leaking in); precedence between URL and
+  fields (silent surprises); plaintext passwords in roles-sql (they end up
+  in files, shell history and DDL logs); running bootstrap SQL through
+  sqlc (impossible for utility statements); auditing bootstrap into a new
+  table before migrations (no audit chain, keys or schema yet);
+  single-account by running migrations as the account directly
+  (migration 00001 refuses any `current_user` but `bekup_owner`, and the
+  app would own the audit log outright); stopping single-account
+  altogether (the user wants it as an explicit opt-in); allowing poolers
+  (break SCRAM channel binding, D-104).
+- **Consequences:** bekup runs on PostgreSQL 15-17 it does not operate,
+  verified against plain servers with a non-superuser admin (integration
+  tests: bootstrap, preflight, migrations and serve checks on 15/16/17,
+  ECDSA and RSA test CAs, IP and DNS SANs, `tls_server_name`, SAN
+  mismatch, MD5-stored passwords repaired by `--reset-passwords`, an
+  untrusted citext, a `cloudsqlsuperuser`-like membership, a role setting
+  impersonating `bekup_app`, single-account mode, superuser refusal).
+  New CLI: `db bootstrap`, `db roles-sql`, `migrate check`. Security
+  impact: no weakening by default (stricter than before: SCRAM-only,
+  `search_path` pinned, session role checked, URL session parameters
+  refused); the DB administrator/provider becomes an explicit trusted
+  actor (T11); single-account mode is an audited, alerted, opt-in
+  weakening; DDL-logging servers store role verifiers (strong generated
+  passwords required). Part S (D-208) builds the compose files and the
+  wizard on these keys.
+- **Related:** D-054, D-069, D-092, D-096, D-099, D-100, D-103, D-104,
+  D-190; `internal/config/dbconfig.go`, `internal/config/credfiles.go`,
+  `internal/db/conn.go`, `internal/db/dbtls.go`, `internal/db/preflight.go`,
+  `internal/db/scram.go`, `internal/db/rolesql.go`,
+  `internal/db/bootstrap.go`, `internal/db/memberships.go`,
+  `internal/db/queries/{migrate,bootstrap}.sql`, `internal/db/sqlcschema/`,
+  `sqlc.yaml`, `cmd/bekup/db_cmd.go`, `cmd/bekup/migrate_cmd.go`,
+  `internal/app/{app,audit,security,configreload}.go`,
+  `internal/notify/security.go`, `docs/installation/external-database.md`,
+  `docs/security/{db-roles,app-db-tls,audit}.md`, `SECURITY.md` (B3, DB-4,
+  DB-5, DB-7, CL-15, T11), `AGENTS.md`.
+
+## D-208: Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade
+
+- **Date:** 2026-10-30
+- **Status:** proposed
+- **Decided by:** agent (Part S of `plans/robust-giggling-tide.md`; user
+  requests: an interactive setup inside the bekup image built on Bubble
+  Tea that asks for the proxy and an existing database and writes
+  everything including `compose.yaml`, key and certificate generation with
+  one consent screen per item, guided certificate renewal and a guided
+  upgrade; accepted default: six compose files, three proxy variants x
+  bundled or external database)
+- **Context:** D-207 made bekup able to use an operator's PostgreSQL, but
+  `bekup setup` (D-203, D-205) still wrote only the bundled-database
+  deployment: a `postgres` service, its URL files, UID 70 password files and
+  a `postgres` certificate. Operators had to edit the compose file by hand,
+  which the hardening lint refuses. Setup was flag- and prompt-driven only,
+  certificate renewal meant running `bekup certs rotate` by hand, and an
+  upgrade wrote files without showing what changes. The setup container has
+  `network_mode: none`, so it can never reach a database.
+- **Decision:**
+  1. **Database mode as a second overlay dimension.** `setup.DBMode`
+     (`bundled` | `external`) is applied after the proxy variant's edits
+     (`externalDBEdits`, fragments in `internal/setup/variants/external-db/`).
+     Six release and committed files (`deploy/compose/`, `just gen`):
+     `compose.yaml`, `compose.traefik-external.yaml`, `compose.npm.yaml`,
+     `compose.external-db.yaml`, `compose.traefik-external.external-db.yaml`,
+     `compose.npm.external-db.yaml` (`Variant.AssetName(db)`). The full
+     variant takes both modes setup-first only. `bekup setup compose
+     --database`, `release_ci.sh` (render, check, committed check, assets
+     digest, notes) and the release `compose` job handle all six.
+     Recognition (compose-first) tries every release variant with both
+     modes; a customized file names it with `--database` (or is inferred
+     from the presence of a `postgres` service).
+  2. **The external-database form** drops the `postgres` service, its
+     volume, `deploy/postgres` and the `postgres_*`, URL and role-password
+     secrets; the certs-init service issues no `postgres` certificate; the
+     `migrate` environment (`BEKUP_DATABASE_OWNER_URL_FILE`) and its
+     `depends_on` go. serve and admin get `bekup_database_password`,
+     migrate also `bekup_database_owner_password`; `bekup_db_ca_crt` points
+     to `<keys>/bekup_database_ca.crt` (same container path, so the default
+     `tls_ca_file` stays). The `backend` network is **not internal** (an
+     internal network has no route off the host); a free-standing comment
+     block in `docker-compose.yml` and the header lines say so. In
+     single-account mode the owner password file is written **empty**:
+     compose mounts it into migrate, bekup never reads it.
+  3. **Manifest version 2.** `ManifestOptions.ExternalDB`: the two password
+     files (65532:65532, 0400, secret group `database-external`), the CA
+     bundle copy (root, 0644, class operator: written once, the operator
+     may replace it) and the optional `<keys>/bekup-roles.sql` (root, 0600,
+     secret, optional). The bundled entries are unchanged.
+  4. **State.** `bekup-setup.json` records `database_mode` (`external`;
+     omitted for bundled, so existing states stay byte-identical),
+     `database_auth` and `imported_files`: the operator's secret source
+     files setup copied (`--db-password-file`, `--db-owner-password-file`,
+     `--import-master-key`; omitted when none); `setup check` warns while
+     one of them still exists, like a leftover roles SQL.
+  5. **Answers and flags.** `setup init --database external --db-host
+     --db-port --db-name --db-ca-file --db-tls-server-name --db-auth
+     bootstrap|existing-roles|dba-sql|single-account --db-user
+     --db-admin-user --db-password-file --db-owner-password-file`. The CA
+     file and password files (and a keyring to import) are paths inside
+     the deployment directory (the only thing the container sees), opened
+     through an `os.Root` with `openat(O_NOFOLLOW)` per component and the
+     type checked on the descriptor (no check-then-open), the CA parsed
+     (CERTIFICATE blocks only, so a key is never copied) and copied. An
+     explicit `--db-port 0` (or 0 in the wizard) is an error, never a
+     silent 5432; `--db-host` takes a host name or an IPv4 or IPv6 address.
+     Passwords are generated (bootstrap, dba-sql) or taken from files or a
+     no-echo prompt (existing-roles, single-account), checked with
+     `db.CheckRolePassword` and collected before anything is written; equal
+     bekup_owner/bekup_app passwords are refused (the wizard zeroes both
+     and asks for both again). setup always writes
+     `tls_mode = "verify-full"`.
+  6. **setup never connects.** It prints the exact next command:
+     `docker compose run --rm migrate db bootstrap --admin-user <admin>`
+     (the admin password is asked there and never stored), `docker compose
+     run --rm migrate migrate check`, or for `dba-sql` the psql command for
+     `<keys>/bekup-roles.sql`, which setup writes with SCRAM verifiers
+     (never the passwords) while the passwords are in memory.
+  7. **Check.** The recorded mode must match compose.yaml and bekup.toml
+     (fields mode with the mounted `password_file`, `owner_password_file`
+     and `tls_ca_file` paths; `single_account` as recorded); a weaker
+     `tls_mode` is a warning; the CA bundle is an error only when no
+     certificate in it is valid now (provider bundles carry expired ones:
+     warnings); `PG*` or `BEKUP_DATABASE_*` in `.env` is an error; a
+     leftover roles SQL is a warning; the summary points to `docker compose
+     run --rm migrate migrate check`. A bundled deployment with a
+     fields-mode bekup.toml is an error.
+  8. **Upgrade** refuses a switch of the database mode (moving the data is
+     a dump and restore into a new deployment).
+  9. **Key and CA consent.** `--import-master-key <file>` (re-marshaled;
+     optional `--master-key-check-value`) and `--use-existing-ca` (the
+     leaves are issued with `certs.Rotate` from the CA mounted at
+     `<keys>/certs/ca`; the CA is only read and never part of a rollback).
+  10. **The wizard** (`internal/setup/wizard`, `bekup setup` on a
+      terminal): charmbracelet `huh` v2.0.3, `bubbletea` v2.0.2,
+      `lipgloss` v2.0.1 and `bubbles` v2.0.0 (`charm.land/*/v2`, MIT; the
+      v1 line queries the terminal colors in a package `init`, which would
+      run in every bekup command of the single binary, so v2 is required;
+      `just sec` checks the licenses of their closure with
+      `scripts/licenses.sh`, which fails when `go list` fails or finds no
+      module), one screen per question: welcome, image, proxy (+ the
+      entrypoint and certificate resolver of an existing Traefik, defaults
+      `websecure` / `letsencrypt`), domain (+ ACME e-mail), database (+
+      host, port, name, CA bundle, TLS server name, roles; single-account
+      behind a warning), master key, CA, bundled database secrets, Docker
+      group, targets, summary, then the generated passphrase once; the
+      equivalent flag line is printed after writing, complete (`--dir` when
+      not `/deploy`, `--ownership`, `--allow-version-mismatch`, the Traefik
+      names) and secret-free: entered passwords appear as the placeholders
+      `PASSWORD_FILE` / `OWNER_PASSWORD_FILE`, explained in a note below the
+      line. Two interfaces: TUI (Esc goes back, Ctrl+C quits; NO_COLOR and
+      TERM=dumb only drop the colors through the renderer's color profile)
+      and Plain (numbered choices, `<` goes back, no escape sequences; only
+      with `--plain`); nothing depends on color. The wizard runs only when
+      stdin **and stdout** are terminals, so a generated passphrase never
+      goes into a pipe or a file. The passphrase is written as bytes by
+      `UI.Sensitive(title, secret []byte, body)` (no Go string, no `fmt`
+      buffer, which `sync.Pool` would keep): the TUI writes it outside
+      Bubble Tea on the alternate screen and erases it before leaving; the
+      plain interface cannot keep it out of the scrollback, so its
+      "generate" choice says so (enter your own or clear the scrollback);
+      the screen repeats the `--log-driver none` warning. Secrets are read
+      with `term.ReadPassword` into `[]byte` (never Go strings) and zeroed.
+      The wizard returns exactly the `setup.Options` of the equivalent flags
+      (`InitPlan.Flags`), and the same `setup.Init` writes the files;
+      `TestSetupWizardMatchesFlags` compares both (setup-first, compose-first,
+      `--import-master-key` and `--use-existing-ca` cases). With an existing
+      `compose.yaml` it keeps the file (variant, implied proxy, database mode
+      and image from it) and checks the image's version tag like the flag
+      mode (unless `--allow-version-mismatch`); in an existing deployment it
+      offers check, upgrade (labelled for setup-first or compose-first, with
+      `--allow-version-mismatch` passed on) and renew. Without a terminal
+      `bekup setup` refuses and points to the flag mode.
+      `github.com/atotto/clipboard` (imported by the bubbles text inputs for
+      an optional paste key) runs `exec.LookPath` for clipboard helpers in a
+      package `init`, i.e. in every bekup process: go.mod replaces it with
+      the inert local module `third_party/clipboard` (same API, no `init`,
+      every call fails, MIT; the Dockerfile copies `third_party/` before
+      `go mod download`). Residual risk: `github.com/charmbracelet/ultraviolet`
+      is required by bubbletea v2 as a pseudo-version (no tagged release);
+      it is pinned in go.sum and scanned like every module, but has no
+      release process to track.
+  11. **`bekup setup renew`** (guided on a terminal, flags otherwise:
+      `--list`, `--all`, `--component`, `--ca stage|promote|finish`):
+      lists the internal certificates with their expiry, warning from
+      `certs.ExpiryWarnDays` (30), the threshold the hourly security check
+      (`monitor.ExpiryThresholds`) and `setup check` share; renews leaves
+      with `certs.Rotate` and runs one CA rotation phase per run with
+      `certs.RotateCA` (D-090), resumable because the CA directory's files
+      tell the next phase; re-applies the manifest's owners and modes and
+      prints `docker compose up -d --force-recreate <services>` (file
+      secrets are bind mounts of the replaced files). The CA directory must
+      be mounted for the run (`--ca finish` reads only `ca.crt` and
+      `ca.prev.crt`, no key); messages name the deployment's own
+      `<keys>/certs/ca`. Missing leaf certificates count as due and are
+      listed; `--warn-days` also applies to the guided run. Renewals are not
+      audited (setup has no network or database access); the new
+      fingerprints are printed as evidence (AGENTS.md and plan task 6.16
+      say the same; `bekup certs rotate` where the database is reachable
+      stays the audited path).
+  12. **Guided upgrade.** `UpgradeOptions.Confirm` receives an
+      `UpgradeSummary` (versions, images, compose diff or recognition,
+      changed/removed/backed-up files, new secret groups, the `.env` image
+      line) before anything is written; on a terminal `setup upgrade` shows
+      it, asks for a current backup and for confirmation
+      (`--non-interactive` skips it). A new CA key passphrase (a version
+      that adds certificates) is asked twice, in the wizard as in the flag
+      mode's prompt.
+- **Alternatives considered:** running `db bootstrap` from the setup
+  container (rejected: it has no network by design); a `--db-tls-mode`
+  flag (rejected: setup writes only verify-full, a weaker mode is an
+  explicit operator edit that check reports); generating a placeholder
+  owner password in single-account mode (rejected: a fake secret; an empty
+  file is honest) and separate compose files for single-account (rejected:
+  more files for one mounted file); huh's accessible mode instead of an own
+  Plain interface (rejected: no back navigation, no zeroable secrets);
+  reading secrets through huh's password input (rejected: Go strings
+  cannot be zeroed); auditing renewals through the database (rejected for
+  setup: no network; `bekup certs rotate` where the database is reachable
+  stays the audited path); renewing certificates automatically (rejected:
+  the CA key stays offline).
+- **Consequences:** Operators install with one `docker run ... setup`
+  command and, for an existing database, one bootstrap command; the
+  manifest, check and upgrade cover the external mode. Security impact:
+  in external mode serve, migrate and admin are on a non-internal
+  `backend` network and gain egress (serve already had it through
+  `egress`); Docker cannot narrow it to the database, so the operator must
+  restrict the database's firewall and `pg_hba.conf` to this host; TLS
+  verify-full and SCRAM channel binding (D-104) stay required. The setup
+  container keeps `network_mode: none`, root with only `CAP_CHOWN`. New
+  third-party code in the setup path (charm modules and their dependencies,
+  MIT/BSD-licensed, pinned in go.mod and scanned by `just sec`); it runs
+  only in the one-shot setup container (the clipboard module is replaced
+  by an inert stub, so no charm dependency runs code at package
+  initialization in other bekup commands; `ultraviolet` stays a
+  pseudo-version dependency). Certificate renewals done through setup
+  leave no audit entry, only printed evidence. A generated passphrase is
+  shown only on a terminal (stdout checked) and, in the TUI, only on the
+  alternate screen; `--plain` trades that for accessibility and says so.
+- **Related:** D-054, D-090, D-100, D-104, D-203, D-205, D-207;
+  `internal/setup/{variants,database,renew,manifest,state,check,upgrade}.go`,
+  `internal/setup/variants/external-db/`, `internal/setup/wizard/`,
+  `cmd/bekup/setup_cmd.go`, `deploy/compose/`, `scripts/gen_compose.sh`,
+  `scripts/licenses.sh`, `third_party/clipboard/`, `Dockerfile`,
+  `scripts/release_ci.sh`, `.github/workflows/{ci,release}.yml`,
+  `docs/installation/{compose,external-database,upgrades}.md`,
+  `docs/security/mtls-certs.md`, `SECURITY.md`, `AGENTS.md`.
+
+## D-209: Retention visibility and disk cleanup: live keep estimate, retention holds and `retention.blocked`, interrupted runs, empty-folder pruning, unrecorded files and fixed destination locations
+
+- **Date:** 2026-10-30
+- **Status:** proposed
+- **Decided by:** agent (implementing Part R of the retention / disk
+  cleanup bug report; user decisions: the keep rules stay "either keeps",
+  incomplete runs newer than the newest complete run stay protected but
+  become visible, unrecorded files are never deleted automatically)
+- **Context:** Backups seemed to stay on disk forever although the deletion
+  path works (dumps, then the manifest, then empty run/job directories).
+  The causes: (A) "keep last N" and "keep N days" add up, and the editor
+  defaulted to 7 + 30 days without explaining it; a changed policy waited
+  for the next run or the daily sweep. (B) Incomplete runs newer than the
+  newest complete one are kept, and a destination without a complete run
+  deletes nothing (D-148), silently. (C) Run directories stayed after
+  failed dumps (the partial cleanup only removes `.partial` files), files
+  could exist without artifact rows (a crash between the finalized object
+  and its row), and runs stayed `running` after the last River attempt
+  died, so retention (which ignores unfinished runs) never considered
+  their files. (D) Changing a destination's path orphaned every file at
+  the old location.
+- **Decision:**
+  1. **Estimate.** `retention.EstimateKept` projects a schedule's
+     occurrences (assumed complete) and counts what the keep rules of
+     `Plan` keep in the steady state (newest complete, KeepLast, KeepDays;
+     the same `keepLastCovers`/`keepDaysUntil`, a test ties it to `Plan`),
+     at most 20,000 occurrences (`atLeast`); manual schedules with a day
+     limit are unknown. Exposed as `previewSchedule(..., retention:)` →
+     `SchedulePreview.retention` (no new operation); the editor shows it
+     live with the per-rule counts and explains that the rules add up.
+     New jobs default to keep last 7 without a day limit (web default only;
+     the API still requires at least one limit).
+  2. **Sweep on change.** `jobs.Service.Update` enqueues a
+     `retention_sweep` (reason `policy_changed`) in the update's
+     transaction when the retention changed; the queue's uniqueness per job
+     applies (a queued sweep absorbs it; a running one leaves it to the
+     next sweep).
+  3. **Retention holds.** `Plan` reports per destination the incomplete
+     runs kept only by the newer-incomplete or no-complete rule that
+     neither KeepLast (at their rank among all runs there) nor KeepDays
+     would keep (`DestinationPlan.Hold`; a single failed night inside the
+     policy is no hold). Every sweep (dry runs too) upserts them into
+     `retention_holds` (job, destination, reason, count, oldest run,
+     newest complete) and deletes ended ones (and all of a deleted job);
+     a failure to record is logged and never blocks deletions. The daily
+     fan-out also drops the holds of job/destination pairs without a
+     present artifact (no sweep would end them). Read by
+     `Job.retentionHolds` (batch-loaded per page, visible to whoever sees
+     the job) on the job page and the dashboard. The sweep emits
+     `retention.blocked` (retention group, problem, job audience,
+     `artifact.view` at delivery, warning) in the same transaction with the
+     dedup key `retention.blocked:<job>:<destination>:<UTC date>`.
+  4. **Interrupted runs.** The daily fan-out first calls
+     `runstate.Store.FailAbandonedRuns`: runs `queued`/`running` unchanged
+     for 15 minutes whose River job is gone or finalized (completed,
+     discarded, cancelled) are finished as `failed` with code
+     `interrupted` (or `canceled` with code `canceled` when a cancellation
+     was requested) under their row lock (run event, notification and
+     metrics as for any failure). No new run status: restores mark the same
+     situation with a code too (`abandoned`, D-167), and a new enum value
+     would ripple through the API, UI, metrics and missed-backup logic.
+  5. **Empty folders.** `storage.DirPruner` (disk, SFTP) removes empty
+     run (`{slug}/{timestamp}`) and job (`{slug}`, only slugs of known
+     jobs, deleted ones included) directories older than 24 hours: only
+     those two layout levels, `os.Root` + `Lstat` (no symbolic link is
+     followed or removed), an emptiness and age check right before the
+     removal (`rmdir` on SFTP; a job directory whose run directories this
+     pass removed must be unchanged since this pass's own last change),
+     never the destination root; skipped in no-delete mode and in dry runs.
+  6. **Unrecorded files.** The daily maintenance lists the directories of
+     the known job slugs (deleted jobs included; other files at the
+     location are not bekup's to judge) on every non-deleted destination,
+     S3 included (one request per 1,000 objects; at most 200,000 objects
+     per destination and day), and records layout keys
+     (`{slug}/{timestamp}/{file}`) whose modification time is older than
+     24 hours, that no artifact row on any destination references (any
+     state, soft-deleted destinations included: a conservative match in
+     case two destinations ever shared a location) and that do not belong
+     to a queued or running run. Each destination's maintenance gets an
+     equal share of the attempt's remaining time, so a slow one cannot
+     starve the rest: at most 1,000 rows per destination
+     in `unrecorded_files` (key, size, dates; truncation recorded in
+     `unrecorded_file_scans`). `internal/destinations` alone owns both
+     tables. Admins list them (`destinationUnrecordedFiles`,
+     `destination.unrecorded_files_view`) and delete one at a time
+     (`deleteUnrecordedFile`, `destination.unrecorded_file_delete`: admin +
+     step-up, single root field, the destinations rate limiter): it checks
+     the file's existence and age on the backend, then re-checks the
+     artifact rows and the running runs under the row lock and commits
+     `destination.unrecorded_file_deleted` (fail closed) before the file is
+     deleted outside the transaction, then removes the row (the retention
+     pattern: no row lock is held across network I/O); refused in
+     no-delete mode; storage failures are normalized codes; an SFTP
+     host-key mismatch is recorded as the usual security event. Nothing is
+     ever deleted automatically.
+  7. **Fixed, unshared locations.** `destinations.Service.Update` refuses
+     to change the disk path, the S3 endpoint, region, bucket or prefix, or
+     the SFTP host, port, user, base path or directory while artifacts are
+     `present` there or a queued or running run of a job using the
+     destination exists (`VALIDATION` on the field, with the way out in the
+     message); an allowed move clears the destination's unrecorded-file
+     results. Every destination owns its location: creating one on, or
+     moving one onto, the location of another destination (every
+     non-deleted one and soft-deleted ones with present artifacts) is
+     refused when one location equals, contains or lies inside the other
+     (`VALIDATION` naming the other destination and pointing to `bekup
+     reindex --import`; checked under a transaction-scoped advisory lock).
+     Same location: disk path below `storage.disk_root`; S3 endpoint
+     (empty and `*.amazonaws.com` are AWS) + bucket, then the prefix; SFTP
+     host + port (+ the user when the base path is relative to the home),
+     then base path + directory.
+- **Alternatives considered:** a new `interrupted` run status (rejected,
+  see 4); deleting unrecorded files automatically (rejected by the user:
+  a wrong layout guess would destroy data); scanning disk and SFTP only
+  (rejected: listing S3 is cheap at these bounds); pruning every empty
+  directory (rejected: only bekup's layout and known jobs); a
+  retention.blocked event per sweep (rejected: noise; one per day);
+  "keep only when both rules keep" (rejected by the user).
+- **Consequences:** Users see why backups stay and what a policy keeps
+  before saving it; stuck runs, empty folders and stray files no longer
+  accumulate silently. Security impact: one new destructive operation
+  (admin, step-up, audited fail closed, re-checked, never in no-delete
+  mode, never outside bekup's layout); the scan reads object metadata only
+  and stores keys (job slugs, run timestamps, encoded database names, which
+  the artifact rows and audit log already hold) and sizes, never contents;
+  the new tables are DML-only for `bekup_app` with column-limited UPDATE;
+  pruning stays inside `os.Root` without following links (the SFTP
+  check-then-remove window is the residual trust in the server already
+  documented in D-128). Holds and estimates expose no data beyond what job
+  viewers already see (destination names of the job).
+- **Related:** D-128, D-131, D-146, D-147, D-148, D-155, D-161, D-167,
+  D-183, D-187; migration `00034_retention_visibility.sql`;
+  `internal/retention/{estimate,holds,policy,worker}.go`,
+  `internal/runstate/abandoned.go`, `internal/storage/{layout,disk}.go`,
+  `internal/storage/sftp/sftp.go`,
+  `internal/destinations/{unrecorded,service,location}.go`,
+  `internal/jobs/service.go`, `internal/notify/{catalog,content}.go`,
+  `internal/graph/resolvers/retention.go`, `docs/guides/{retention,destinations,notifications}.md`.
+
+## D-210: Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot
+
+- **Date:** 2026-10-30
+- **Status:** proposed
+- **Decided by:** agent (implementing Part V of
+  `plans/robust-giggling-tide.md`; user decisions: opt-in per job, presets
+  for the common frameworks plus a custom query, admins and maintainers may
+  edit, a custom query needs step-up, every change is audited, the version
+  is captured per backed-up database and shown on the run and the job page,
+  a failed capture keeps the backup successful with a `version_unavailable`
+  warning)
+- **Context:** Users want to know which schema (migration) version each
+  backup holds, e.g. to pick a backup that matches an application release.
+  Reading it means running SQL on the target database, which D-152/D-153
+  otherwise forbid beyond catalog reads (targets are untrusted; MySQL/MariaDB
+  never run a statement on a user table). The version has to come from the
+  same snapshot as the dump to be meaningful.
+- **Decision:**
+  1. **Job setting.** `jobs.version_query_mode` (`none` default, `preset`,
+     `custom`), `version_preset` (a name of `internal/schemaversion`; the
+     SQL lives in Go, never in the database), `version_custom_sql` (at most
+     2 KiB) and `version_schema` (PostgreSQL schema of a preset's table,
+     default `public`), with CHECK constraints (migration 00035). Written
+     only by `jobs.Service.SetSchemaVersion` (`setJobSchemaVersion`).
+  2. **Authorization.** `job.version_query_edit` (admins and maintainers)
+     for every change and for reading the stored custom query
+     (`JobSchemaVersion.customSql`, null for owners);
+     `job.version_query_custom_edit` (same roles, fresh step-up) is checked
+     additionally by the service when the new mode is `custom`. Two
+     operations instead of a conditional freshness rule keep the policy
+     table and the matrix the single source of truth. Audited
+     `job.version_query_changed` (mode, previous mode, preset, schema,
+     `custom_sql_sha256`, `custom_sql_bytes`, `custom_sql_changed`; never
+     the query) in the change's transaction; setting or changing a custom
+     query raises the security alert `job_custom_version_query` (warning).
+     Moving a job whose mode is `custom` to another connection
+     (`jobs.Service.Update`) needs `job.version_query_custom_edit` too (the
+     query would run on other databases) and is audited on `job.updated`
+     with `custom_version_query_retargeted`, which raises the same alert.
+  3. **Presets.** golang-migrate (`42` / `42 (dirty)`), goose (newest
+     applied `version_id`, rolled-back versions skipped), Flyway (undo rows
+     `UNDO_*` skipped, a version undone by a later successful undo no
+     longer counts), Liquibase (`EXECUTED` / `MARK_RAN` only: `RERAN` rows
+     of `runAlways` / `runOnChange` changesets carry the re-run's date and
+     would look like the newest migration), Rails, Django (`app.name`), Laravel, Alembic (heads joined with
+     commas), Prisma, Knex and Sequelize, each with a reviewed PostgreSQL
+     statement (functions, operators and collations schema-qualified as
+     D-152 requires; enforced by the same unit test) and a MySQL/MariaDB
+     statement, the columns they read and a formatter. The table name is
+     quoted with `engine.QuotePGObject` / `QuoteMySQLObject` (PostgreSQL
+     `schema.table`; MySQL/MariaDB `database.table`, exact name first, a
+     single case-insensitive match otherwise). Every text output column is
+     truncated in SQL to 257 characters (`pg_catalog.left(x::pg_catalog.text,
+     257)` / `LEFT(CAST(x AS CHAR), 257)`, aggregates included); a value of
+     more than 256 bytes is `invalid`. Before reading, the runner checks in
+     `pg_catalog` / `information_schema` that the table is a plain (or
+     partitioned) table the role may read and that every read column has a
+     built-in type of an allowlist (no view, foreign table, domain or user
+     type whose casts, output or comparison functions the owner controls).
+     PostgreSQL first takes `LOCK TABLE ... IN ACCESS SHARE MODE` (bounded
+     by `lock_timeout`, released with the savepoint), so the definition
+     cannot change between the checks and the read, and because the
+     catalog check reads the snapshot, it also describes (prepares, never
+     runs) a statement over the raw columns and requires built-in result
+     type OIDs of the current definition. MySQL/MariaDB metadata is
+     current, not the snapshot: the layout is checked again after the read
+     and the value discarded when it changed (the window in between is a
+     residual risk). A missing table (or schema / database) is "no
+     version".
+  4. **Custom query.** A strict, simple check over the **whole text**
+     (string literals and quoted identifiers included, so no quoting or
+     comment trick hides anything; case-insensitive whole words):
+     at most 2048 bytes of printable ASCII plus space, tab and newline (no
+     carriage return, NUL or other control character); starts with
+     `SELECT` or `WITH`; no `;` anywhere (not even trailing), no comment
+     (`--`, `/*`, `*/`, `#`), no backslash, `$` or `U&` escape; terminated
+     quotes and balanced parentheses (the runner's wrapper stays intact);
+     no denied keyword (set operations `UNION` / `INTERSECT` / `EXCEPT`,
+     writes and DDL, session and transaction control, `SET`, `LOCK`,
+     `SHARE`, maintenance and server control, `SLEEP`, `BENCHMARK`,
+     `UESCAPE`, ...) and no denied function (file, network, lock, setting,
+     backend, replication, dynamic-SQL and delay functions: `pg_read_file`,
+     `pg_ls_*`, `ts_stat`, `ts_rewrite`, `query_to_xml*`, `*_to_xmlschema`,
+     `pg_create_*`, `pg_drop_replication_slot`, `pg_stat_reset*`,
+     `pg_import_system_collations`, `pg_sleep*`, `lo_*`, `dblink*`,
+     `LOAD_FILE`, `GET_LOCK`, `xp_*`, `sys_*`, ...); a word glued to a
+     number (`1union`) is checked without the number too. The error names
+     the offending word or character, never the query. Validated by the
+     service, by the worker before each dump (a stored query the current
+     rules refuse is not sent; the item gets `version_unavailable`) and
+     again by the runner (`validate.VersionQuery`). The list is a
+     guardrail; the boundary is the execution (5).
+  5. **Execution (runner).** The version is read on the stats session
+     (`dbprobe.StatsSource.SchemaVersion`) inside the statistics
+     transaction, after the catalog reads: PostgreSQL only on sessions with
+     `restrict_nonsystem_relation_kind` (else `unavailable`), in the
+     exported `REPEATABLE READ READ ONLY` snapshot the dump uses, in a
+     savepoint with `SET LOCAL statement_timeout` 5 s, `lock_timeout` 2 s
+     and `idle_in_transaction_session_timeout` 30 s that is always rolled
+     back (the stats transaction and the snapshot stay usable); the
+     `search_path` stays `pg_catalog, pg_temp`, so custom queries must
+     schema-qualify their tables; a custom query runs as
+     `SELECT * FROM (<query>) bekup_version LIMIT 1` through the extended
+     protocol (one statement only). The savepoint is always rolled back
+     with a fresh 5-second context (also when the SAVEPOINT batch failed
+     half-way); when that fails or the connection broke, the result says
+     the session is lost and the runner stops sharing the exported snapshot
+     with pg_dump (`SameSnapshot = false`, the dump takes its own) instead
+     of failing the dump. Probe sessions refuse protocol messages over
+     1 MiB (pgx `SetMaxBodyLen`). MySQL/MariaDB: in the READ ONLY
+     consistent-snapshot transaction with `max_execution_time` 5000 ms
+     (MySQL) or `max_statement_time` 5 s (MariaDB) and `lock_wait_timeout`
+     2 s; a custom query runs after `USE` of the dumped database as
+     `SELECT * FROM (<query>) AS bekup_version LIMIT 1`; the driver refuses
+     multiple statements, and the session reads at most 1 MiB during a
+     capture (the driver itself buffers whole rows without a limit). Only
+     the first row is read (a custom query: its first column); the value is
+     trimmed and must be 1 to 64 printable ASCII characters (bytea results
+     are invalid). Statuses: `ok`, `none`, `unavailable`, `invalid`; the
+     log line `runner_schema_version` carries the query kind, the status
+     and a fixed classification only.
+  6. **Runner API.** `DumpRequest.version_query` (`VersionQuery`: oneof
+     `preset` / `custom_sql`, plus `schema`; requires enabled stats) and
+     `DumpStats.schema_version` / `version_status` (additive; `buf
+     breaking` passes; `Dump` keeps its method class). `custom_sql` is the
+     only free-form SQL field of the runner API, bounded and revalidated; a
+     test fails for any other SQL-named field. It is not a credential (no
+     secret annotation) but is never logged.
+  7. **Results.** The worker validates the version against the request
+     (an unrequested version, a value outside the rules or a value without
+     status `ok` discards the stats as `stats_invalid`), writes
+     `schema_version` / `schema_version_status` into the canonical stats
+     (manifest `stats.databases.<db>`, `backup_stats`) and
+     `run_items.schema_version` / `schema_version_status` (complete, stored
+     dumps only; CHECK: a version exactly with status `ok`), and adds the
+     item warnings `version_unavailable` / `version_invalid` (fixed texts)
+     without changing the run status. A requested version without a stats
+     message is `unavailable`. GraphQL: `Job.schemaVersion`,
+     `RunItem.schemaVersion` / `schemaVersionStatus`,
+     `schemaVersionPresets` (staff), `setJobSchemaVersion`.
+- **Alternatives considered:** storing preset SQL in the database
+  (rejected: the runner would execute database-provided SQL); presets only
+  (rejected by the user); a separate RPC or session for the version
+  (rejected: a second snapshot would not match the dump); requiring an
+  admin for custom queries (the user chose admins and maintainers with
+  step-up; the alert makes every change visible to admins); setting
+  `search_path` to the job's schema for custom queries (rejected: it
+  reopens the D-152 shadowing attack; tables must be qualified); a full SQL
+  parser or a quote- and comment-aware lexer (rejected after review: a
+  lexer that disagrees with a server about a carriage return or a string
+  hides code from the denylist; the whole-text check needs no such
+  agreement); a trailing `;` or comments (rejected: no version query
+  needs them).
+- **Consequences:** Runs record the schema version of every database in
+  the same snapshot as the dump (PostgreSQL) or right before it
+  (MySQL/MariaDB). Security impact: the first user-defined SQL on targets,
+  a deliberate, bounded exception to D-152/D-153: presets cannot run owner
+  code (layout checks, relation-kind restriction, built-in types only); a
+  custom query runs read-only, time-limited, with a bounded result and the
+  backup role's rights, so a privileged backup role can still read server
+  files, call functions the denylist does not know or signal backends
+  through it (residual risk, SECURITY.md RN-19: staff + step-up + audit +
+  alert; the denylist is a guardrail and safety comes from READ ONLY,
+  the timeouts and the bounded result; a least-privilege backup role is
+  recommended); a version string exposes at most 64 printable
+  characters to everyone who sees the job's runs. The query is never
+  logged and the audit log holds only its digest.
+- **Related:** D-068, D-141, D-151, D-152, D-153, D-187, D-190; migration
+  `00035_schema_version.sql`; `internal/schemaversion`,
+  `internal/runner/{ops_stats.go,validate/version.go,dbprobe/version*.go}`,
+  `internal/jobs/{schema_version.go,backup_stats.go,backup_dump.go}`,
+  `internal/runstate/store.go`, `internal/authz/operations.go`,
+  `internal/notify/security.go`,
+  `internal/graph/schema/schema_version.graphqls`,
+  `web/src/features/jobs/schema-version-settings.tsx`,
+  `web/src/features/runs/schema-version.tsx`,
+  `docs/guides/jobs-and-schedules.md#schema-version`.
+
+## D-211: Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y
+
+- **Date:** 2026-10-31
+- **Status:** proposed
+- **Decided by:** agent (task: make `just sec` green again; `just sec` must
+  stay a hard gate, D-061)
+- **Context:** osv-scanner reports GHSA-g3hv-75wg-m249 (minimatch
+  "globparts amplification" denial of service) for minimatch 10.2.6 and
+  3.1.5 in `web/pnpm-lock.yaml`. Only 11.0.1 and later are fixed; the 3.x
+  and 10.x lines get no backport. Every consumer is web dev tooling, never
+  shipped in the image: eslint and `@eslint/config-array`,
+  `@typescript-eslint/typescript-estree`, graphql-config (codegen) and
+  eslint-plugin-jsx-a11y 6.10.2 (latest release, still on minimatch 3).
+  Version 11 is a rewrite without `makeRe`/`AST`; the consumers use only
+  `minimatch()` and `new Minimatch(...).match()`, which it keeps, except
+  that jsx-a11y default-imports the minimatch 3 CommonJS function.
+- **Decision:** `web/pnpm-workspace.yaml` sets `overrides: minimatch:
+  11.0.2` (the newest release outside the 3-day `minimumReleaseAge`
+  window, D-065) and `patchedDependencies` applies
+  `web/patches/eslint-plugin-jsx-a11y@6.10.2.patch`, which only replaces
+  the default import with the named `minimatch` export in its two helper
+  files. The Dockerfile copies `web/patches/` before `pnpm install
+  --frozen-lockfile`. Both are removed once the dependents ship
+  minimatch >= 11.0.1 themselves.
+- **Alternatives considered:** ignoring the advisory in osv-scanner
+  (rejected: dev tooling still parses repository globs, and an ignore
+  entry tends to outlive its reason); overriding only the 10.x consumers
+  (rejected: 3.1.5 is affected too); dropping eslint-plugin-jsx-a11y
+  (rejected: the accessibility lint is part of the WCAG AA requirement,
+  D-021); a fork of the plugin (rejected: more code to trust than a
+  two-line patch).
+- **Consequences:** `just sec` is green; lint, typecheck, tests and the
+  build pass on minimatch 11.0.2. New transitive dev dependency
+  `@isaacs/nonrecursive-glob-match` 1.0.2 (same author as minimatch,
+  BlueOak-1.0.0 like minimatch). Security impact: none on the shipped
+  product (dev tooling only); one maintained patch file in the web tree
+  whose hash pnpm pins in the lockfile.
+- **Related:** D-021, D-061, D-065; `web/pnpm-workspace.yaml`,
+  `web/patches/`, `web/pnpm-lock.yaml`, `Dockerfile`.

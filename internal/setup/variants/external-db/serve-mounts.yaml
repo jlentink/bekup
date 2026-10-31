@@ -1,0 +1,13 @@
+    secrets:
+      - bekup_master_key
+      # Your PostgreSQL (fields mode, D-207): [database] password_file.
+      - bekup_database_password
+      # App DB TLS (D-100): [database] tls_ca_file default path.
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
+      - source: serve_ca_crt
+        target: bekup_ca.crt
+      - source: bekup_client_crt
+        target: bekup_client.crt
+      - source: bekup_client_key
+        target: bekup_client.key

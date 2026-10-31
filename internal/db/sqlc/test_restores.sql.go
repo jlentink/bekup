@@ -770,7 +770,7 @@ SET test_restore_enabled = $1,
     test_restore_privileged_ack_at = $8::timestamptz,
     updated_by = $9
 WHERE id = $10 AND deleted_at IS NULL
-RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at
+RETURNING id, enabled, schedule, next_run_at, last_scheduled_at, deleted_at, created_at, updated_at, name, slug, description, connection_id, db_mode, databases, exclude, include_globals, retention_keep_last, retention_keep_days, timeout_seconds, verification, expected_window_seconds, created_by, updated_by, test_restore_enabled, test_restore_schedule, test_restore_connection_id, test_restore_next_at, test_restore_target_privileges, test_restore_privilege_reasons, test_restore_privileged_ack_by, test_restore_privileged_ack_at, version_query_mode, version_preset, version_custom_sql, version_schema
 `
 
 type SetJobTestRestoreParams struct {
@@ -836,6 +836,10 @@ func (q *Queries) SetJobTestRestore(ctx context.Context, arg SetJobTestRestorePa
 		&i.TestRestorePrivilegeReasons,
 		&i.TestRestorePrivilegedAckBy,
 		&i.TestRestorePrivilegedAckAt,
+		&i.VersionQueryMode,
+		&i.VersionPreset,
+		&i.VersionCustomSql,
+		&i.VersionSchema,
 	)
 	return i, err
 }

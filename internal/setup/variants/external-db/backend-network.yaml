@@ -1,0 +1,7 @@
+  # serve/migrate/admin <-> YOUR PostgreSQL (D-208). NOT internal: an
+  # internal network has no route off this host. Docker cannot narrow it to
+  # the database's address, so serve, migrate and admin can reach any host
+  # through it (serve already can, through `egress`): allow only this host
+  # in the database's firewall and pg_hba.conf, and keep tls_mode
+  # verify-full.
+  backend: {}

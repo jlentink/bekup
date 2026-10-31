@@ -353,6 +353,44 @@ message DumpRequest {
   // Completeness evidence (task 3.10, D-141, D-151: the stats travel inside
   // the Dump call). Absent or disabled: no stats.
   StatsOptions stats = 4;
+  // Schema-version capture (D-210). Requires enabled stats: the version is
+  // read in the stats transaction (PostgreSQL: the dump's snapshot) and
+  // reported in DumpStats. Absent: no version.
+  VersionQuery version_query = 5;
+}
+
+// VersionQuery selects how the runner reads the schema (migration) version
+// of the dumped database (D-210). Exactly one of the queries is set.
+message VersionQuery {
+  oneof query {
+    // A preset name of internal/schemaversion (allowlisted by the runner,
+    // which owns the preset SQL).
+    string preset = 1;
+    // A custom single SELECT or WITH statement, at most 2 KiB. The only
+    // free-form SQL of the runner API (D-210): the runner validates it
+    // again and runs it read-only on the stats snapshot with statement and
+    // lock timeouts, reading the first column of the first row only.
+    string custom_sql = 2;
+  }
+  // PostgreSQL schema of the preset's table (empty: public). Ignored for
+  // custom queries and MySQL/MariaDB.
+  string schema = 3;
+}
+
+// VersionStatus is the outcome of a schema-version capture (D-210).
+enum VersionStatus {
+  // No version was requested.
+  VERSION_STATUS_UNSPECIFIED = 0;
+  // schema_version holds the captured version.
+  VERSION_STATUS_OK = 1;
+  // No version: the table does not exist, has no row or the value is
+  // NULL or empty.
+  VERSION_STATUS_NONE = 2;
+  // The query failed (privilege, timeout, unexpected table layout,
+  // server without the D-152 safeguards, any error).
+  VERSION_STATUS_UNAVAILABLE = 3;
+  // The result was longer than 64 characters or not printable ASCII.
+  VERSION_STATUS_INVALID = 4;
 }
 
 // StatsLevel is a job's verification level (D-141, D-151).
@@ -458,6 +496,10 @@ message DumpStats {
   bool tables_truncated = 6;
   // At most 32 warnings.
   repeated StatsWarning warnings = 7;
+  // The schema version (D-210): at most 64 printable ASCII characters, set
+  // only with VERSION_STATUS_OK.
+  string schema_version = 8;
+  VersionStatus version_status = 9;
 }
 
 // DumpResult ends a Dump or DumpGlobals stream.

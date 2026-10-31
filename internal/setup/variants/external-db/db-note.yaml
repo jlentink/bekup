@@ -1,0 +1,14 @@
+# ---------------------------------------------------------------------------
+# App database: YOUR PostgreSQL 15-17 (D-207, D-208), configured in
+# bekup.toml [database] (fields mode: host, port, name, the fixed roles
+# bekup_app / bekup_owner, TLS verify-full against the CA bundle that setup
+# copied to <keys>/bekup_database_ca.crt). There is no postgres service.
+# Create the roles and the database once, before the first `up -d` (setup
+# prints the exact command for your choice; docs/installation/
+# external-database.md):
+#   docker compose run --rm migrate db bootstrap --admin-user <admin>
+#   docker compose run --rm migrate migrate check
+# serve, migrate and admin reach it over the `backend` network, which is
+# therefore NOT internal: allow only this host in the database's firewall
+# and pg_hba.conf.
+# ---------------------------------------------------------------------------

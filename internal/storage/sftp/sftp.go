@@ -656,3 +656,85 @@ func cleanupDir(ctx context.Context, sess *session, rel string, cutoff time.Time
 	}
 	return nil
 }
+
+var _ storage.DirPruner = (*Destination)(nil)
+
+// PruneEmptyDirs implements storage.DirPruner. Directory entries come from
+// READDIR (lstat attributes: symbolic links are never directories here),
+// each candidate is checked again with Lstat right before the removal, and
+// RemoveDirectory (rmdir) never removes a non-empty directory. The base
+// directory itself is never removed. It does not look at no-delete mode:
+// the caller decides (the daily scan skips no-delete destinations).
+func (d *Destination) PruneEmptyDirs(ctx context.Context, olderThan time.Duration, isJob func(string) bool) (int, error) {
+	if d.closed.Load() {
+		return 0, storage.ErrClosed
+	}
+	sess, err := d.session(ctx)
+	if err != nil {
+		return 0, err
+	}
+	cutoff := time.Now().Add(-olderThan)
+	jobs, err := readDir(ctx, sess, "")
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, j := range jobs {
+		if !j.isDir || !storage.PruneCandidate(1, j.name, isJob) {
+			continue
+		}
+		// The job directory's age is taken before its run directories
+		// are pruned (removing them updates its mtime).
+		jobOld := j.fi.ModTime().Before(cutoff)
+		runs, err := readDir(ctx, sess, j.name)
+		if err != nil {
+			return removed, err
+		}
+		older := func(fi os.FileInfo) bool { return fi.ModTime().Before(cutoff) }
+		prunedRuns := false
+		for _, r := range runs {
+			if !r.isDir || !storage.PruneCandidate(2, r.name, isJob) || !older(r.fi) {
+				continue
+			}
+			if removeEmptyDir(sess, j.name+"/"+r.name, older) {
+				removed++
+				prunedRuns = true
+			}
+		}
+		if jobOld {
+			// Right before the removal the job directory must still be
+			// old, or (when this pass removed run directories in it)
+			// unchanged since this pass's own last change.
+			jobCheck := older
+			if prunedRuns {
+				if after, err := sess.sftp.Lstat(sess.path(j.name)); err == nil {
+					mod := after.ModTime()
+					jobCheck = func(fi os.FileInfo) bool { return fi.ModTime().Equal(mod) }
+				} else {
+					jobCheck = func(os.FileInfo) bool { return false }
+				}
+			}
+			if removeEmptyDir(sess, j.name, jobCheck) {
+				removed++
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+	}
+	return removed, nil
+}
+
+// removeEmptyDir removes the relative directory rel (never the base) when
+// it is still a real directory that passes old (its age, checked right
+// before the removal); rmdir refuses a non-empty one.
+func removeEmptyDir(sess *session, rel string, old func(os.FileInfo) bool) bool {
+	if rel == "" {
+		return false
+	}
+	fi, err := sess.sftp.Lstat(sess.path(rel))
+	if err != nil || !fi.IsDir() || !old(fi) {
+		return false
+	}
+	return sess.sftp.RemoveDirectory(sess.path(rel)) == nil
+}

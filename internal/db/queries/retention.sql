@@ -39,16 +39,62 @@ WHERE r.job_id = $1
   AND EXISTS (SELECT 1 FROM artifacts a WHERE a.run_id = r.id AND a.state = 'present')
 ORDER BY ri.run_id, ri.id;
 
--- ListPartialCleanupDestinations returns the disk and SFTP destinations whose
--- leftover temporary files the daily sweep removes: every non-deleted one and
--- deleted ones that still hold present artifacts.
--- name: ListPartialCleanupDestinations :many
-SELECT d.id
+-- ListDailyMaintenanceDestinations returns the destinations the daily sweep
+-- maintains: every non-deleted one (unrecorded-file scan; disk and SFTP also
+-- leftover temporary files and empty directories) and deleted disk and SFTP
+-- ones that still hold present artifacts (temporary files only).
+-- name: ListDailyMaintenanceDestinations :many
+SELECT d.id, d.type, (d.deleted_at IS NOT NULL)::boolean AS deleted
 FROM destinations d
-WHERE d.type IN ('disk', 'sftp')
-  AND (d.deleted_at IS NULL
-       OR EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
+WHERE d.deleted_at IS NULL
+   OR (d.type IN ('disk', 'sftp')
+       AND EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
 ORDER BY d.id;
+
+-- ListJobSlugs returns the slug of every job, deleted ones included: the
+-- job directories empty-directory pruning may touch (D-209).
+-- name: ListJobSlugs :many
+SELECT slug FROM jobs ORDER BY slug;
+
+-- UpsertRetentionHold records (or confirms) that the sweep keeps incomplete
+-- runs of a job on a destination that no keep rule would keep (D-209).
+-- first_seen_at is kept from the first sighting.
+-- name: UpsertRetentionHold :one
+INSERT INTO retention_holds (job_id, destination_id, reason, held_runs, held_since, newest_complete_at, first_seen_at, checked_at)
+VALUES (@job_id, @destination_id, @reason, @held_runs, @held_since::timestamptz, sqlc.narg(newest_complete_at)::timestamptz,
+        @checked_at::timestamptz, @checked_at::timestamptz)
+ON CONFLICT (job_id, destination_id) DO UPDATE
+SET reason = excluded.reason, held_runs = excluded.held_runs, held_since = excluded.held_since,
+    newest_complete_at = excluded.newest_complete_at, checked_at = excluded.checked_at
+RETURNING first_seen_at;
+
+-- DeleteRetentionHoldsExcept removes the holds of a job on every destination
+-- not in @keep (the hold ended, or the destination holds nothing any more).
+-- name: DeleteRetentionHoldsExcept :execrows
+DELETE FROM retention_holds
+WHERE job_id = @job_id AND NOT (destination_id = ANY (@keep::uuid[]));
+
+-- DeleteStaleRetentionHolds removes the holds of job/destination pairs
+-- without a present artifact (nothing is held there any more; the daily
+-- fan-out sweeps only jobs with present artifacts, so no sweep would end
+-- them otherwise).
+-- name: DeleteStaleRetentionHolds :execrows
+DELETE FROM retention_holds h
+WHERE NOT EXISTS (
+    SELECT 1 FROM artifacts a
+    WHERE a.job_id = h.job_id AND a.destination_id = h.destination_id AND a.state = 'present'
+);
+
+-- ListRetentionHoldsForJobs returns the holds of a page of jobs with the
+-- destination's name (Job.retentionHolds, batch-loaded).
+-- name: ListRetentionHoldsForJobs :many
+SELECT h.job_id, h.destination_id, d.name AS destination_name, d.type AS destination_type,
+       (d.deleted_at IS NOT NULL)::boolean AS destination_deleted,
+       h.reason, h.held_runs, h.held_since, h.newest_complete_at, h.first_seen_at, h.checked_at
+FROM retention_holds h
+JOIN destinations d ON d.id = h.destination_id
+WHERE h.job_id = ANY (@job_ids::uuid[])
+ORDER BY h.job_id, d.name, h.destination_id;
 
 -- MarkArtifactDeleted records a retention deletion (only from present).
 -- name: MarkArtifactDeleted :one

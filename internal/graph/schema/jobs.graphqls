@@ -77,6 +77,63 @@ type SchedulePreview {
   description: String!
   "The next occurrences after now (empty for MANUAL)."
   next: [Time!]!
+  """
+  How many backups each destination keeps with the `retention` argument of
+  previewSchedule once the schedule has run long enough (null when the
+  argument is not set). Assumes every planned run succeeds.
+  """
+  retention: RetentionEstimate
+}
+
+"""
+An estimate of the backups kept per destination in the steady state
+(D-209). "Keep last" and "keep days" add up: a backup is kept when either
+rule keeps it, so the total is the larger of the two counts.
+"""
+type RetentionEstimate {
+  "Backups kept per destination; null when unknown (a manual schedule with a day limit)."
+  kept: Int
+  "Backups the keep-last rule keeps on its own (0 when off)."
+  byKeepLast: Int!
+  "Backups the keep-days rule keeps on its own (0 when off; null when unknown for a manual schedule)."
+  byKeepDays: Int
+  "The projection stopped at its limit: at least `kept` backups are kept."
+  atLeast: Boolean!
+}
+
+"Why retention keeps incomplete backups on a destination (D-209)."
+enum RetentionHoldReason {
+  "The destination holds no complete backup of the job, so retention deletes nothing there."
+  NO_COMPLETE_RUN
+  """
+  The backups newer than the newest complete backup on the destination are
+  incomplete; retention keeps them (they may hold the only copy of some
+  database) until a newer complete backup exists.
+  """
+  NEWER_THAN_NEWEST_COMPLETE
+}
+
+"""
+Retention is holding incomplete backups on one destination that no keep
+rule would keep on its own (D-209). Written by the retention sweep (after
+every backup, after a retention change and daily); cleared once a complete
+backup exists there again.
+"""
+type RetentionHold {
+  destinationId: UUID!
+  destinationName: String!
+  destinationType: DestinationType!
+  "The destination was deleted (its files are still kept)."
+  destinationDeleted: Boolean!
+  reason: RetentionHoldReason!
+  "The incomplete backups kept only for this reason."
+  heldRuns: Int!
+  "The time of the oldest held backup."
+  since: Time!
+  "The newest complete backup on this destination (null: none)."
+  newestCompleteAt: Time
+  "When a retention sweep last confirmed the hold."
+  checkedAt: Time!
 }
 
 "How many backups a job keeps per destination; at least one limit is set."
@@ -204,6 +261,11 @@ type Job {
   missed: Boolean!
   "The first missed occurrence of the current outage (null when not missed)."
   missedSince: Time
+  """
+  Destinations on which retention keeps incomplete backups that no keep
+  rule would keep on its own (D-209); empty when retention works normally.
+  """
+  retentionHolds: [RetentionHold!]!
   verification: JobVerification!
   destinations: [JobDestinationRef!]!
   encryption: JobEncryption!
@@ -364,8 +426,12 @@ extend type Query {
   """
   job(id: UUID!): Job @hasRole(roles: [ADMIN, MAINTAINER, USER])
 
-  "Validates a schedule and returns its next `count` occurrences (1-50, default 5)."
-  previewSchedule(input: ScheduleInput!, count: Int): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
+  """
+  Validates a schedule and returns its next `count` occurrences (1-50,
+  default 5). With `retention` it also estimates how many backups each
+  destination keeps (SchedulePreview.retention).
+  """
+  previewSchedule(input: ScheduleInput!, count: Int, retention: JobRetentionInput): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
 }
 
 extend type Mutation {

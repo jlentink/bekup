@@ -160,12 +160,14 @@ var systemMessages = map[string]string{
 	KindRestorePrivilegedTarget:     "A restore into a privileged (or unverified) database role was requested with an acknowledgement.",
 	KindRestorePrivilegedRefused:    "A restore was refused because its target role became privileged after the request.",
 	KindTestRestorePrivilegedTarget: "A privileged (or unverified) database role was set as a test-restore scratch target with an acknowledgement.",
+	KindJobCustomVersionQuery:       "A custom schema-version query was set on a job, or its job moved to another connection; it runs on the backed-up databases with the backup role's rights.",
 	KindSecdefNeutralized:           "A restore switched SECURITY DEFINER functions of the restored database to SECURITY INVOKER.",
 	KindTwoFactorPolicyWeakened:     "The two-factor authentication policy was weakened.",
 	KindPasskeyCloneSuspected:       "A passkey reported a signature counter that went backwards (possibly a cloned authenticator).",
 	KindDownloadRejected:            "A download link was presented after use, after expiry, by another session or by an account without access.",
 	KindInsecureTransport:           "bekup is running over plain HTTP outside dev mode; sessions and passwords travel unencrypted.",
 	KindInsecureDBTLS:               "bekup connects to its database with a weakened TLS mode (the server identity is not fully verified).",
+	KindInsecureDBRoles:             "bekup runs migrations and the app with one database account (single-account mode), so a compromised server process could alter the schema and the audit log.",
 	KindAuditHeadExportFailed:       "The signed audit chain head could not be exported.",
 	KindCLIAction:                   "A break-glass command was run on the bekup host.",
 	KindSSRFAllowlistWidened:        "The SSRF allowlist was widened: bekup may now connect to more private hosts or networks. Review the change in the audit log.",
@@ -220,6 +222,14 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 		case RetentionSummary:
 			body = fmt.Sprintf("Retention removed %d backup(s) (%d file(s), %d bytes) of job %q on %s.",
 				num(d, "runs"), num(d, "files"), num(d, "bytes"), job, str(d, "date"))
+			path = idPath("/jobs", ev.JobID)
+		case RetentionBlocked:
+			cause := "the destination holds no complete backup of the job"
+			if c := str(d, "newest_complete"); c != "" {
+				cause = "the backups after " + c + " are incomplete"
+			}
+			body = fmt.Sprintf("Retention is keeping %d incomplete backup(s) of job %q on destination %q since %s: %s.",
+				num(d, "held_runs"), job, n.destination, str(d, "since"), cause)
 			path = idPath("/jobs", ev.JobID)
 		case ArtifactMissing:
 			body = fmt.Sprintf("A backup file of job %q is missing from its destination; bekup did not delete it.", job)

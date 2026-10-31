@@ -123,7 +123,8 @@ warning:
 
 - Secret values are **never** written inline. Secret-bearing keys only exist
   as `*_file` paths, which fit Docker secrets (`/run/secrets/...`).
-- Inline secret keys (`database.url`, `security.master_key`) exist for local
+- Inline secret keys (`database.url`, `database.owner_url`,
+  `security.master_key`) exist for local
   development only. They are rejected (in the file and in env vars) unless
   dev mode is on, and even then bekup logs a warning. They can never be set
   with command-line flags.
@@ -139,6 +140,38 @@ warning:
   `sslkey`, `sslcert`, `passfile`, `*_secret`, `*_token`) are removed, and
   known secret values registered at runtime are scrubbed. Fatal CLI errors
   get the same treatment before they are printed.
+
+## App database: URL mode or fields mode
+
+`[database]` names bekup's own PostgreSQL in one of two ways (D-207):
+
+- **URL mode** (the bundled compose stack): `url_file` and `owner_url_file`
+  hold `postgres://` URLs for `bekup_app` and `bekup_owner`.
+- **Fields mode** (an external PostgreSQL): setting `host` selects it. The
+  connection is built from the keys alone, never from a connection string,
+  and the `PG*` environment variables are ignored.
+
+```toml
+[database]
+host = "bekup-db.example.internal"
+port = 5432
+name = "bekup"
+user = "bekup_app"                                        # fixed role name
+password_file = "/run/secrets/bekup_app_password"
+owner_user = "bekup_owner"                                # fixed role name
+owner_password_file = "/run/secrets/bekup_owner_password" # bekup migrate only
+tls_ca_file = "/run/secrets/bekup_db_ca.pem"
+# tls_server_name = "bekup-db.example.internal"            # when host is an IP
+# single_account = true   # EXPLICIT WEAKENING: one account for everything
+```
+
+The two modes never mix: a URL key set in fields mode, or a fields key in URL
+mode, is an error rather than a silent precedence (the defaulted URL file
+paths are simply unused in fields mode). With two roles `user` and
+`owner_user` can only be `bekup_app` and `bekup_owner`; `single_account =
+true` takes any account name in `user` and refuses the owner keys. See
+[External database](installation/external-database.md) for `bekup db
+bootstrap`, `bekup db roles-sql` and `bekup migrate check`.
 
 ## Validation
 
@@ -321,20 +354,29 @@ Generated from the config structs; regenerate with
 
 | Key | Env override | Type | Default | Reload | Description |
 |---|---|---|---|---|---|
-| `url_file` | `BEKUP_DATABASE_URL_FILE` | string | `'/run/secrets/bekup_database_url'` | restart | **Secret file.** Path to a file containing the Postgres connection URL (Docker secret). The file must not be group/world-writable or world-readable. |
+| `url_file` | `BEKUP_DATABASE_URL_FILE` | string | `'/run/secrets/bekup_database_url'` | restart | **Secret file.** URL mode: path to a file containing the Postgres connection URL (Docker secret). The file must not be group/world-writable or world-readable. Cannot be combined with database.host (fields mode). |
 | `url` | `BEKUP_DATABASE_URL` | string | `(empty)` | restart | **Dev mode only.** Inline connection URL. Dev mode only; rejected otherwise. Use url_file instead. |
-| `owner_url_file` | `BEKUP_DATABASE_OWNER_URL_FILE` | string | `'/run/secrets/bekup_database_owner_url'` | restart | **Secret file.** Path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate. |
+| `owner_url_file` | `BEKUP_DATABASE_OWNER_URL_FILE` | string | `'/run/secrets/bekup_database_owner_url'` | restart | **Secret file.** URL mode: path to a file containing the Postgres connection URL of the bekup_owner role, used only to apply migrations (bekup migrate). Same file rules as url_file. Do not mount it into containers that never migrate. |
 | `owner_url` | `BEKUP_DATABASE_OWNER_URL` | string | `(empty)` | restart | **Dev mode only.** Inline bekup_owner connection URL. Dev mode only; rejected otherwise. Use owner_url_file instead. |
+| `host` | `BEKUP_DATABASE_HOST` | string | `(empty)` | restart | Fields mode (D-207): host name or IP address of an external Postgres (15 to 17). Setting it selects fields mode, which builds the connection from the database.* keys only (never from a URL or the PG* environment); url_file, owner_url_file, url and owner_url must then be unset. Connect directly to Postgres: poolers that terminate TLS break the required SCRAM channel binding. |
+| `port` | `BEKUP_DATABASE_PORT` | int | `5432` | restart | Fields mode: TCP port of the Postgres server (1 to 65535; default 5432). |
+| `name` | `BEKUP_DATABASE_NAME` | string | `'bekup'` | restart | Fields mode: name of bekup's own database (default bekup; letters, digits, _, - and $, at most 63 characters; never postgres or a template database). |
+| `user` | `BEKUP_DATABASE_USER` | string | `(empty)` | restart | Fields mode: login role of serve and worker. With two roles (the default) it must be bekup_app (the default). With single_account = true it is the one account bekup uses for everything. |
+| `password_file` | `BEKUP_DATABASE_PASSWORD_FILE` | string | `(empty)` | restart | **Secret file.** Fields mode: path to a file holding the password of database.user (required in fields mode; surrounding whitespace is trimmed). Same file rules as url_file. |
+| `owner_user` | `BEKUP_DATABASE_OWNER_USER` | string | `(empty)` | restart | Fields mode with two roles: login role of bekup migrate; must be bekup_owner (the default). Not used with single_account. |
+| `owner_password_file` | `BEKUP_DATABASE_OWNER_PASSWORD_FILE` | string | `(empty)` | restart | **Secret file.** Fields mode with two roles: path to a file holding the bekup_owner password, needed only by bekup migrate and bekup db bootstrap. Do not mount it into containers that never migrate. Not used with single_account. |
+| `single_account` | `BEKUP_DATABASE_SINGLE_ACCOUNT` | bool | `false` | restart | Fields mode only. EXPLICIT WEAKENING (D-207): bekup uses the one account database.user for migrations and the app; its sessions switch to the NOLOGIN roles bekup_owner/bekup_app with SET ROLE, so a compromised serve or worker can switch back and alter the schema and the audit log. Logged at every startup, audited (security.insecure_db_roles) and alerted daily. Prefer the two least-privilege login roles (bekup db bootstrap). |
 | `max_conns` | `BEKUP_DATABASE_MAX_CONNS` | int | `25` | restart | Maximum number of pooled connections (worker processes: at least the sum of the [workers] *_queue_workers plus 4). |
 | `min_conns` | `BEKUP_DATABASE_MIN_CONNS` | int | `0` | restart | Minimum number of idle pooled connections. |
 | `conn_max_lifetime` | `BEKUP_DATABASE_CONN_MAX_LIFETIME` | duration | `'1h0m0s'` | restart | Maximum lifetime of a pooled connection. |
 | `conn_max_idle_time` | `BEKUP_DATABASE_CONN_MAX_IDLE_TIME` | duration | `'30m0s'` | restart | Maximum idle time of a pooled connection. |
 | `connect_timeout` | `BEKUP_DATABASE_CONNECT_TIMEOUT` | duration | `'10s'` | restart | Timeout for establishing a connection. |
 | `statement_timeout` | `BEKUP_DATABASE_STATEMENT_TIMEOUT` | duration | `'30s'` | restart | Server-side statement_timeout of app connections (1s to 1h). Migrations are not limited by it. |
-| `tls_mode` | `BEKUP_DATABASE_TLS_MODE` | string | `'verify-full'` | restart | TLS for the app DB connection (D-100): verify-full (default; encrypted, server certificate verified against tls_ca_file and the URL's host name), require (encrypted; with tls_ca_file the chain is verified but not the host name, without it nothing is verified) or disable (plain text). require and disable log a warning at every startup. With TLS, SCRAM channel binding is always required. Applies to serve, worker and migrate; an sslmode in the URL may not be stricter than this and is otherwise overridden. |
-| `tls_ca_file` | `BEKUP_DATABASE_TLS_CA_FILE` | string | `'/run/secrets/bekup_db_ca.crt'` | restart | Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only this CA is trusted, never the system roots. Required for verify-full. |
+| `tls_mode` | `BEKUP_DATABASE_TLS_MODE` | string | `'verify-full'` | restart | TLS for the app DB connection (D-100): verify-full (default; encrypted, server certificate verified against tls_ca_file and the host name: the URL host, database.host or tls_server_name), require (encrypted; with tls_ca_file the chain is verified but not the host name, without it nothing is verified) or disable (plain text). require and disable log a warning at every startup. With TLS, SCRAM channel binding is always required. With TLS or without, only SCRAM-SHA-256 authentication is accepted (D-207). Applies to serve, worker, migrate and db bootstrap; an sslmode in the URL may not be stricter than this and is otherwise overridden. |
+| `tls_ca_file` | `BEKUP_DATABASE_TLS_CA_FILE` | string | `'/run/secrets/bekup_db_ca.crt'` | restart | Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only the certificates in this file are trusted (never the built-in system roots); for a managed Postgres name the provider's CA bundle, or the system bundle file only if the provider uses a public CA (D-207). Required for verify-full. |
 | `tls_client_cert_file` | `BEKUP_DATABASE_TLS_CLIENT_CERT_FILE` | string | `(empty)` | restart | Optional client certificate (PEM) presented to Postgres. Set together with tls_client_key_file. |
 | `tls_client_key_file` | `BEKUP_DATABASE_TLS_CLIENT_KEY_FILE` | string | `(empty)` | restart | **Secret file.** Optional client private key (PEM) for tls_client_cert_file. Same file rules as url_file. |
+| `tls_server_name` | `BEKUP_DATABASE_TLS_SERVER_NAME` | string | `(empty)` | restart | Optional host name the Postgres server certificate is verified against instead of the connection host (verify-full only), e.g. when database.host is an IP address but the certificate names a DNS name. Also sent as SNI. |
 
 #### `[security]`
 

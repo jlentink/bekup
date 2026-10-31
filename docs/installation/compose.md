@@ -16,19 +16,29 @@
 
 A production install uses one compose file, always named `compose.yaml` in
 the deployment directory (local changes go into `compose.override.yaml`).
-Each release publishes three variants of it, pinned to the release image by
-digest and attested (D-205):
+**The easiest way is the setup wizard of the image**: one `docker run`
+command asks a few questions and writes everything, `compose.yaml`
+included ([Install with the setup wizard](#install-with-the-setup-wizard)).
 
-| Release asset | Variant | Reverse proxy |
-|---|---|---|
-| `compose.yaml` | `traefik` | bekup's own Traefik (ports 80/443, Let's Encrypt or a static certificate) |
-| `compose.traefik-external.yaml` | `traefik-external` | your existing Traefik on the `bekup-proxy` link network |
-| `compose.npm.yaml` | `npm` | Nginx Proxy Manager on the `bekup-proxy` link network |
+Each release also publishes six variants of the compose file, pinned to the
+release image by digest and attested (D-205, D-208): three reverse-proxy
+variants, each with bekup's bundled database or with your own PostgreSQL
+([external database](#your-own-postgresql-external-database-files)):
 
-All three are rendered from the repository's `docker-compose.yml` (overlays
+| Release asset | Variant | Reverse proxy | Database |
+|---|---|---|---|
+| `compose.yaml` | `traefik` | bekup's own Traefik (ports 80/443, Let's Encrypt or a static certificate) | bundled |
+| `compose.traefik-external.yaml` | `traefik-external` | your existing Traefik on the `bekup-proxy` link network | bundled |
+| `compose.npm.yaml` | `npm` | Nginx Proxy Manager on the `bekup-proxy` link network | bundled |
+| `compose.external-db.yaml` | `traefik` | bekup's own Traefik | your PostgreSQL 15-17 |
+| `compose.traefik-external.external-db.yaml` | `traefik-external` | your existing Traefik | your PostgreSQL |
+| `compose.npm.external-db.yaml` | `npm` | Nginx Proxy Manager | your PostgreSQL |
+
+All six are rendered from the repository's `docker-compose.yml` (overlays
 in `internal/setup/variants`, never copies; `bekup setup compose --variant
-<v>` prints one, `just compose-examples` writes them to `dist/compose/`).
-The same three files are **committed** in
+<v> [--database external]` prints one, `just compose-examples` writes them
+to `dist/compose/`).
+The same six files are **committed** in
 [`deploy/compose/`](../../deploy/compose/) (D-205 amendment 3), generated
 by `just gen` and never edited by hand. They differ from the release assets
 only in the `x-bekup-image` line: instead of the pinned literal it reads
@@ -38,7 +48,8 @@ before a release exists, for your own image, or when you prefer to pin the
 image yourself; the release assets are the attested choice once releases
 exist.
 Save one as `compose.yaml` and let `bekup setup` do the rest
-([Install](#install-with-bekup-setup-container-only)). The setup-first
+([Install with a compose file](#install-with-bekup-setup-container-only)).
+The setup-first
 alternative lets `setup` write the file itself, including the `full`
 variant with nginx or your own proxy
 ([Alternative: setup-first](#alternative-setup-first)).
@@ -232,6 +243,85 @@ Likewise bind the Prometheus endpoint to serve's address on the internal
 `metrics` network (`[metrics] listen = "10.213.252.10:9464"`); it is never
 published (see [Operations: metrics](../operations.md#metrics)).
 
+## Install with the setup wizard
+
+The main path: in an empty directory, run the wizard of the image you
+deploy (pinned by digest, its tag naming the version; verify it first,
+[Verifying release images](#verifying-release-images)), then start the
+stack:
+
+```sh
+IMAGE=ghcr.io/jlentink/bekup:<version>@sha256:<digest from the release notes>
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+sudo docker run --rm -it --log-driver none --network none --read-only --tmpfs /tmp \
+  --user 0:0 --cap-drop ALL --cap-add CHOWN --security-opt no-new-privileges \
+  -e BEKUP_IMAGE="$IMAGE" -e DOCKER_GID="$(stat -c %g /var/run/docker.sock)" \
+  -v "$PWD":/deploy "$IMAGE" setup
+# your own PostgreSQL only: the command the wizard printed, e.g.
+sudo docker compose run --rm migrate db bootstrap --admin-user <admin>
+sudo docker compose up -d
+sudo docker compose run --rm admin create --email you@example.com --display-name "You"
+```
+
+The flags give the wizard the same hardening as the compose `setup`
+service: root with only `CAP_CHOWN`, no network, a read-only root, and
+`--log-driver none`, so a generated passphrase never reaches Docker's log
+files. `BEKUP_IMAGE` names the image (a container cannot know its own
+digest; without it the wizard asks), `DOCKER_GID` the Docker socket's group.
+
+One question per screen; **Esc goes back, Ctrl+C quits**, and nothing is
+written before the summary:
+
+1. the reverse proxy: bekup's own Traefik, your existing Traefik (its HTTPS
+   entrypoint and certificate resolver are asked, defaults `websecure` and
+   `letsencrypt`), Nginx Proxy Manager, or none (your own proxy joins the
+   `frontend` network; its CIDR is asked);
+2. the public host name (and, for bekup's Traefik, the Let's Encrypt
+   e-mail and whether to use the staging CA);
+3. the database: bundled, or your existing PostgreSQL with host, port,
+   database name, the CA bundle file (put it into the directory first), an
+   optional TLS server name and how the roles come to exist
+   ([below](#your-own-postgresql-external-database-files));
+4. the master encryption key: generate a new one, or import your existing
+   key file (reinstall; put the file into the directory; an optional
+   key-check value is compared);
+5. the internal CA: generate a new one (the passphrase generated and shown
+   once, or entered twice), or use your existing CA mounted at
+   `secrets/certs/ca` (its passphrase is checked at once);
+6. for the bundled database, consent to generate its TLS certificate and
+   passwords;
+7. the Docker socket group and, optionally, the target database networks
+   and host names (`runner.toml [targets]`);
+8. a summary of the answers and the final confirmation.
+
+Then it shows a generated CA passphrase once on the alternate screen (store
+it offline with the CA media), writes the deployment with exactly the code
+of `bekup setup init` (the same options as those flags) and prints the
+report (certificate fingerprints, the master key ID and the next commands)
+followed by the equivalent `bekup setup init --non-interactive ...` command
+line. That line never holds a secret: entered database passwords appear as
+the placeholders `PASSWORD_FILE` / `OWNER_PASSWORD_FILE` (files you would
+put into the directory) and an entered or existing CA passphrase as
+`--ca-passphrase-stdin`; a note below the line says so.
+
+- **Existing `compose.yaml`:** when the directory already holds a compose
+  file (compose-first), the wizard keeps it and takes the variant, the
+  database mode and the image from it.
+- **Existing deployment:** in a directory with `bekup-setup.json`,
+  `bekup setup` offers `setup check`, the [guided upgrade](upgrades.md) and
+  [certificate renewal](../security/mtls-certs.md#renewal-with-bekup-setup-renew).
+- **Colors and plain text:** `NO_COLOR` or `TERM=dumb` drop the colors of
+  the terminal interface (it keeps the alternate screen for the
+  passphrase). `--plain` switches to numbered choices and plain lines
+  (`<` goes back) for screen readers and minimal terminals; it sends no
+  escape sequences, so a generated passphrase stays in the scrollback (the
+  choice says so: enter your own, or clear the scrollback afterwards).
+  Nothing relies on color in either interface.
+- **No terminal:** without `-it`, or with stdout redirected to a pipe or a
+  file, the wizard refuses (a generated passphrase is never written into
+  one); use `bekup setup init --non-interactive` with flags (the line the
+  wizard prints after writing is the equivalent).
+
 ## Install with `bekup setup` (container only)
 
 A production host needs **only Docker and one compose file**: no source
@@ -284,7 +374,10 @@ docker compose run --rm admin create --email you@example.com --display-name "You
 ```
 
 For the external variants create the link network first
-([above](#architecture-in-compose)); `setup` itself runs without it.
+([above](#architecture-in-compose)); `setup` itself runs without it. For an
+`*.external-db.yaml` file put your PostgreSQL's CA bundle into the directory
+first; setup asks for the database
+([below](#your-own-postgresql-external-database-files)).
 
 **Verify the release file before running it.** `gh attestation verify` checks the
 GitHub build provenance (made by the release workflow for a `vX.Y.Z` tag;
@@ -298,7 +391,7 @@ cosign verify-blob --bundle compose.yaml.sigstore.json \
   compose.yaml
 ```
 
-Every release also publishes `SHA256SUMS` over the three compose files
+Every release also publishes `SHA256SUMS` over the six compose files
 (with its own bundle and attestation). The release workflow renders the
 files by running the published, scanned and signed image
 (`setup compose --image <ref>`, no network, read-only, UID 65532) and checks
@@ -323,6 +416,7 @@ container that runs it (the check still reads and lints the override):
 |---|---|
 | `traefik` | public host name, ACME e-mail, CA key passphrase (twice, no echo) |
 | `traefik-external`, `npm` | public host name, CA key passphrase |
+| any `*.external-db.yaml` | additionally: database host, CA bundle file, roles (`bootstrap`, `existing-roles`, `dba-sql`, `single-account`), the account for single-account, role passwords for existing roles (twice, no echo) |
 
 The Docker socket's group comes from `DOCKER_GID` (the compose file passes
 it into the container), otherwise setup asks. Everything else has defaults
@@ -332,9 +426,14 @@ or flags: `--tls-mode static` (own certificate in `proxy-tls/`, see
 defaults `websecure` / `letsencrypt`), `--proxy-network`,
 `--proxy-subnet`, `--proxy-ip`, `--serve-ip`, `--target-cidr` /
 `--target-host` (the runner may reach no database until you allow one in
-`runner.toml` or here), `--keys-dir`, `--ownership`, and the passphrase
+`runner.toml` or here), `--keys-dir`, `--ownership`, the passphrase
 sources `--ca-passphrase-file`, `--ca-passphrase-stdin`,
-`--generate-ca-passphrase`. With `--non-interactive` every answer must come
+`--generate-ca-passphrase`, `--import-master-key <file>` (with
+`--master-key-check-value`), `--use-existing-ca`, and the
+[external database](#your-own-postgresql-external-database-files) flags
+`--database external`, `--db-host`, `--db-port`, `--db-name`,
+`--db-ca-file`, `--db-tls-server-name`, `--db-auth`, `--db-user`,
+`--db-admin-user`, `--db-password-file`, `--db-owner-password-file`. With `--non-interactive` every answer must come
 from flags. All answers are validated against strict patterns, so nothing
 can be injected into `.env` or the TOML files. Full reference:
 [`bekup setup init`](../reference/cli/bekup_setup_init.md).
@@ -366,8 +465,10 @@ can be injected into `.env` or the TOML files. Full reference:
   it automatically), never into `compose.yaml`: then an upgrade is a plain
   file replacement.
 - **Secrets:** three 32-byte random database passwords (base64url) and the
-  two connection URLs, the master keyring (`bekup keys generate` format) and
-  the private CA with the runner, serve and postgres certificates. The CA
+  two connection URLs (bundled database; an external one gets its two
+  password files instead), the master keyring (`bekup keys generate`
+  format, or your imported one) and the private CA with the runner, serve
+  and (bundled database) postgres certificates. The CA
   key is age-encrypted with your passphrase; there is no unencrypted option.
   `--generate-ca-passphrase` creates one and shows it once, only on a
   terminal.
@@ -522,6 +623,62 @@ Typical allowed overrides: resource limits, a disk for disk destinations
 !override` on the proxy ([reverse-proxy.md](reverse-proxy.md)), a
 hardened Prometheus on `metrics` ([operations.md](../operations.md#metrics)).
 
+## Your own PostgreSQL (external-database files)
+
+The `*.external-db.yaml` files (and the wizard's "existing PostgreSQL"
+choice, or `--database external`) connect bekup to a PostgreSQL 15-17 you
+operate: a managed service or your own server (requirements and provider
+notes: [external-database.md](external-database.md)). Compared with the
+bundled form:
+
+- there is **no `postgres` service**, no `postgres-data` volume, no
+  `deploy/postgres` and no `postgres` certificate;
+- `bekup.toml [database]` is in fields mode: `host`, `port`, `name`,
+  `user = "bekup_app"`, `password_file`, `owner_user = "bekup_owner"`,
+  `owner_password_file`, `tls_mode = "verify-full"`, `tls_ca_file` and an
+  optional `tls_server_name`;
+- the passwords live in `secrets/bekup_database_password` (serve, admin,
+  migrate) and `secrets/bekup_database_owner_password` (migrate only),
+  mounted as the Docker secrets of the same names;
+- setup copies the CA bundle you named (a PEM file inside the deployment
+  directory; only `CERTIFICATE` blocks are accepted) to
+  `secrets/bekup_database_ca.crt`, mounted as `bekup_db_ca_crt` at the
+  default `tls_ca_file` path; only that bundle is trusted;
+- the **`backend` network is not internal**: an internal network has no
+  route off the host. Docker cannot narrow it to the database's address, so
+  serve, migrate and admin can reach other hosts through it (serve already
+  can, through `egress`). **Allow only this host** in the database's
+  firewall (security group) and `pg_hba.conf`, and keep `verify-full`.
+
+setup runs without a network, so it never connects to the database. How
+bekup's roles come to exist (`--db-auth`):
+
+| Choice | What setup does | Your next step |
+|---|---|---|
+| `bootstrap` (default) | generates both role passwords | `docker compose run --rm migrate db bootstrap --admin-user <admin>`: an account with `CREATEROLE` + `CREATEDB` (or the provider's admin) creates `bekup_owner`, `bekup_app` and the database; its password is asked there, used once, never stored |
+| `existing-roles` | takes the two passwords from `--db-password-file` / `--db-owner-password-file` (files in the directory, copied; delete the originals) or the terminal | nothing to create |
+| `dba-sql` | generates the passwords and writes `secrets/bekup-roles.sql` (root, 0600) with their SCRAM verifiers, never the passwords | hand it to your DBA (`psql -v ON_ERROR_STOP=1 --no-psqlrc -f bekup-roles.sql ...`), then delete it; `setup check` warns while it exists |
+| `single-account` | takes the account's password (file or terminal); the owner password file stays empty | `docker compose run --rm migrate db bootstrap` as that account (needs `CREATEROLE` + `CREATEDB` once) |
+
+`single-account` is an **explicit weakening**: one account runs the
+migrations and the app, so a compromised serve could change the schema and
+the audit log; bekup warns at every start, audits it and alerts every admin
+daily (D-207). Then, in every case:
+
+```sh
+docker compose run --rm migrate migrate check   # reachability, TLS, roles, citext
+docker compose up -d
+```
+
+`setup check` checks the files (presence, owners, modes), that `bekup.toml`
+names exactly the mounted paths, reports a weaker `tls_mode` as a warning,
+an expired CA bundle (an error only when no certificate in it is valid),
+and `PG*` or `BEKUP_DATABASE_*` variables in `.env` as errors. The database
+itself is checked from the migrate container (`migrate check`). Switching
+between the bundled and an external database is not an upgrade: set up a
+new directory and move the data with a dump and restore
+([upgrades.md](upgrades.md)).
+
 ## Alternative: setup-first
 
 With `--write-compose --variant traefik|traefik-external|npm|full`, setup
@@ -622,8 +779,20 @@ that `bekup.toml`/`runner.toml` validate and agree with `.env`
 listen addresses, the link network of the external variants, both Docker
 GIDs), certificate expiry, variables that
 would override `.env` from the environment, and whether the CA key is still
-on disk. `--fix-ownership` re-applies the manifest (for example after
-`certs rotate`). Upgrades: [upgrades.md](upgrades.md#container-only-installs-bekup-setup).
+on disk (an expiring certificate points to `bekup setup renew`), and for an
+external database the checks [above](#your-own-postgresql-external-database-files).
+`--fix-ownership` re-applies the manifest (for example after `certs
+rotate`). Upgrades: [upgrades.md](upgrades.md#container-only-installs-bekup-setup);
+on a terminal `setup upgrade` is guided (summary, backup question,
+confirmation; `--non-interactive` skips it).
+
+### Certificate renewal
+
+`bekup setup renew` lists the internal certificates with their expiry and
+renews them from the CA you mount for the run (expiring ones, `--all`, one
+`--component`, or a CA rotation phase with `--ca stage|promote|finish`);
+it re-applies the manifest's owners and prints the services to recreate.
+Details: [mtls-certs.md](../security/mtls-certs.md#renewal-with-bekup-setup-renew).
 
 ## Configuration files
 
@@ -662,11 +831,11 @@ never become bekup's configuration.
 | `deploy/**` (`*.sh` and directories 0755) | generated-upgradable | 0:0 | 0644 |
 | `secrets/` | secret | 0:0 | 0711 |
 | `secrets/bekup_master_key` | secret | 65532:65532 | 0400 |
-| `secrets/bekup_database_url` | secret | 65532:65532 | 0400 |
-| `secrets/bekup_database_owner_url` | secret | 65532:65532 | 0400 |
-| `secrets/postgres_password` | secret | 70:70 | 0400 |
-| `secrets/bekup_owner_password` | secret | 70:70 | 0400 |
-| `secrets/bekup_app_password` | secret | 70:70 | 0400 |
+| `secrets/bekup_database_url` (bundled database) | secret | 65532:65532 | 0400 |
+| `secrets/bekup_database_owner_url` (bundled database) | secret | 65532:65532 | 0400 |
+| `secrets/postgres_password` (bundled database) | secret | 70:70 | 0400 |
+| `secrets/bekup_owner_password` (bundled database) | secret | 70:70 | 0400 |
+| `secrets/bekup_app_password` (bundled database) | secret | 70:70 | 0400 |
 | `secrets/certs/` | secret | 0:0 | 0711 |
 | `secrets/certs/serve/` | secret | 0:0 | 0711 |
 | `secrets/certs/serve/serve.crt` | secret | 0:0 | 0644 |
@@ -676,13 +845,17 @@ never become bekup's configuration.
 | `secrets/certs/runner/runner.crt` | secret | 0:0 | 0644 |
 | `secrets/certs/runner/ca.crt` | secret | 0:0 | 0644 |
 | `secrets/certs/runner/runner.key` | secret | 65532:65532 | 0400 |
-| `secrets/certs/postgres/` | secret | 0:0 | 0711 |
-| `secrets/certs/postgres/postgres.crt` | secret | 0:0 | 0644 |
-| `secrets/certs/postgres/ca.crt` | secret | 0:0 | 0644 |
-| `secrets/certs/postgres/postgres.key` | secret | 70:70 | 0400 |
+| `secrets/certs/postgres/` (bundled database) | secret | 0:0 | 0711 |
+| `secrets/certs/postgres/postgres.crt` (bundled database) | secret | 0:0 | 0644 |
+| `secrets/certs/postgres/ca.crt` (bundled database) | secret | 0:0 | 0644 |
+| `secrets/certs/postgres/postgres.key` (bundled database) | secret | 70:70 | 0400 |
 | `secrets/certs/ca/` (offline) | secret | 0:0 | 0700 |
 | `secrets/certs/ca/ca.crt` (offline) | secret | 0:0 | 0644 |
 | `secrets/certs/ca/ca.key` (offline) | secret | 0:0 | 0600 |
+| `secrets/bekup_database_password` (external database) | secret | 65532:65532 | 0400 |
+| `secrets/bekup_database_owner_password` (external database) | secret | 65532:65532 | 0400 |
+| `secrets/bekup_database_ca.crt` (external database) | operator | 0:0 | 0644 |
+| `secrets/bekup-roles.sql` (external database, `dba-sql` only) | secret | 0:0 | 0600 |
 <!-- setup-manifest:end -->
 
 Docker Desktop (macOS/Windows) maps ownership itself. For the dev stack,
@@ -707,6 +880,9 @@ receives what it needs:
 | `secrets/certs/runner/{runner.crt,runner.key,ca.crt}` | runner | server certificate + CA bundle (as `runner.{crt,key}`, `bekup_ca.crt`) |
 | `secrets/certs/postgres/{postgres.crt,postgres.key}` | postgres | app DB TLS server certificate + key (as `postgres.{crt,key}`) |
 | `secrets/certs/postgres/ca.crt` | postgres, serve, migrate, admin | CA bundle (as `postgres_ca.crt` / `bekup_db_ca.crt`, the `tls_ca_file` default) |
+| `secrets/bekup_database_password` (external database) | serve, admin, migrate | the `bekup_app` password (single-account: the account's) |
+| `secrets/bekup_database_owner_password` (external database) | migrate | the `bekup_owner` password (empty in single-account mode) |
+| `secrets/bekup_database_ca.crt` (external database) | serve, admin, migrate | your PostgreSQL's CA bundle (as `bekup_db_ca.crt`) |
 
 The CA private key (`secrets/certs/ca/ca.key`, age-encrypted) is never
 mounted into a long-running service. The URLs need no `sslmode`: TLS comes

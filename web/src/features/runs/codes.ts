@@ -19,6 +19,8 @@ const CODE_TITLES: Record<string, string> = {
   databases_excluded: "Databases excluded",
   warnings_truncated: "More warnings truncated",
   incomplete: "Incomplete",
+  version_unavailable: "Schema version unavailable",
+  version_invalid: "Schema version invalid",
 };
 
 export function codeTitle(code: string): string {

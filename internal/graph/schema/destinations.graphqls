@@ -187,6 +187,60 @@ extend type Query {
   aggregate, no paging).
   """
   destinationUsage: [DestinationUsage!]! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  The unrecorded files of a destination (D-209): files in bekup's layout
+  (`{job slug}/{timestamp}/{file}`, older than 24 hours) that no backup
+  record references, found by the daily scan. `first` is 1..200 (default
+  50); `after` is `nextCursor` of the previous page. NOT_FOUND for an
+  unknown or deleted destination.
+  """
+  destinationUnrecordedFiles(destinationId: UUID!, first: Int, after: String): UnrecordedFiles! @hasRole(roles: [ADMIN])
+}
+
+"A file in bekup's layout on a destination that no backup record references (D-209)."
+type UnrecordedFile {
+  id: UUID!
+  "The object key below the destination root (`{job slug}/{timestamp}/{file}`)."
+  key: String!
+  "Size in bytes as the destination reported it."
+  size: Float!
+  "The modification time the destination reported (null: unknown)."
+  modifiedAt: Time
+  "When the daily scan first found the file."
+  firstSeenAt: Time!
+  "When the daily scan last found the file."
+  lastSeenAt: Time!
+}
+
+"The unrecorded files of one destination (D-209)."
+type UnrecordedFiles {
+  destinationId: UUID!
+  "When the daily scan last finished on this destination (null: never)."
+  scannedAt: Time
+  "Number of recorded unrecorded files."
+  totalCount: Int!
+  "Sum of their sizes (bytes)."
+  totalBytes: Float!
+  """
+  The scan found more files than it records, or stopped at its object
+  limit: the list is incomplete.
+  """
+  truncated: Boolean!
+  "Empty directories the last scan removed."
+  prunedDirectories: Int!
+  "This page, ordered by key."
+  files: [UnrecordedFile!]!
+  "Pass as `after` for the next page (null: last page)."
+  nextCursor: String
+}
+
+"The outcome of deleteUnrecordedFile (normalized code and fixed message only)."
+type UnrecordedFileDeleteResult {
+  ok: Boolean!
+  "A storage error class (as DestinationTestStep.code); `ok` on success."
+  code: String!
+  message: String!
 }
 
 "What bekup stores on one destination."
@@ -212,7 +266,10 @@ extend type Mutation {
   Changes a destination. A settings input replaces the whole non-secret
   configuration of its type (credential fields left out keep the stored
   value). Changing an SFTP destination's host or port removes its pinned
-  host key.
+  host key. The location (disk path, S3 bucket and prefix, SFTP base path
+  and directory) can only change while no backup files are recorded as
+  present there (VALIDATION otherwise, D-209): bekup would lose track of
+  them.
   """
   updateDestination(id: UUID!, input: UpdateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
 
@@ -225,6 +282,15 @@ extend type Mutation {
   the only field of its operation.
   """
   testDestination(id: UUID!): DestinationTestResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Deletes one unrecorded file (D-209). Re-checked at delete time: still no
+  backup record references the key, the file still exists and is older
+  than 24 hours, and the destination is not in no-delete mode
+  (VALIDATION / CONFLICT otherwise). Audited. Must be the only field of its
+  operation.
+  """
+  deleteUnrecordedFile(destinationId: UUID!, id: UUID!): UnrecordedFileDeleteResult! @hasRole(roles: [ADMIN]) @stepUp
 
   """
   Trust on first use: connects to the stored host and port of an SFTP

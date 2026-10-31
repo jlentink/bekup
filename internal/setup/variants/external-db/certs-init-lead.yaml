@@ -1,0 +1,18 @@
+  # -------------------------------------------------------------------------
+  # certs-init: one-shot generation of the private CA and per-component mTLS
+  # certificates (task 0.6, `bekup certs init`). Run it explicitly:
+  #   docker compose --profile setup run --rm certs-init
+  # It prompts (no echo) for a CA key passphrase (min 16 characters) and
+  # writes below ${BEKUP_KEYS_DIR:-./secrets}/certs (docs/security/mtls-certs.md):
+  #   ca/ca.crt, ca/ca.key (age-encrypted)  -> move ca/ OFFLINE afterwards
+  #   runner/{runner.crt,runner.key,ca.crt}, serve/{serve.crt,serve.key,ca.crt}
+  # No database certificate: your PostgreSQL has its own, which serve and
+  # migrate verify against the CA bundle in bekup_db_ca.crt. It is the ONLY
+  # container that ever sees the CA private key. serve and runner each
+  # receive only their own directory's files as Docker secrets (see
+  # `secrets:`). Rotation (with ca/ temporarily restored):
+  #   docker compose --profile setup run --rm certs-init certs rotate --dir=/certs --all --no-audit
+  # certs-init has no database access, so rotations here need --no-audit
+  # (D-118): record the rotation afterwards, or run `bekup certs rotate` from a
+  # host/container that can reach the app DB so it lands in the audit log.
+  # -------------------------------------------------------------------------

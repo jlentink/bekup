@@ -13,6 +13,15 @@ export const DashboardJobsQuery = graphql(`
           scheduleDescription
           missed
           missedSince
+          retentionHolds {
+            destinationId
+            destinationName
+            destinationDeleted
+            reason
+            heldRuns
+            since
+            newestCompleteAt
+          }
           connection {
             id
             name

@@ -31,6 +31,7 @@ type Config = graphql.Config[ResolverRoot, DirectiveRoot, ComplexityRoot]
 
 type ResolverRoot interface {
 	Job() JobResolver
+	JobSchemaVersion() JobSchemaVersionResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Run() RunResolver
@@ -238,6 +239,7 @@ type ComplexityRoot struct {
 	}
 
 	ConfigStatus struct {
+		Database           func(childComplexity int) int
 		LastRequest        func(childComplexity int) int
 		ListeningProcesses func(childComplexity int) int
 		LiveKeys           func(childComplexity int) int
@@ -340,6 +342,13 @@ type ComplexityRoot struct {
 	CreatedUser struct {
 		TemporaryPassword func(childComplexity int) int
 		User              func(childComplexity int) int
+	}
+
+	DatabasePosture struct {
+		InsecureTransport func(childComplexity int) int
+		Mode              func(childComplexity int) int
+		SingleAccount     func(childComplexity int) int
+		TLSMode           func(childComplexity int) int
 	}
 
 	Destination struct {
@@ -467,8 +476,10 @@ type ComplexityRoot struct {
 		Owners                   func(childComplexity int) int
 		RecentRuns               func(childComplexity int, first *int) int
 		Retention                func(childComplexity int) int
+		RetentionHolds           func(childComplexity int) int
 		Schedule                 func(childComplexity int) int
 		ScheduleDescription      func(childComplexity int) int
+		SchemaVersion            func(childComplexity int) int
 		SharedChannelAttachments func(childComplexity int) int
 		Slug                     func(childComplexity int) int
 		TestRestore              func(childComplexity int) int
@@ -548,6 +559,14 @@ type ComplexityRoot struct {
 		KeepLast func(childComplexity int) int
 	}
 
+	JobSchemaVersion struct {
+		CustomSQL   func(childComplexity int) int
+		Mode        func(childComplexity int) int
+		Preset      func(childComplexity int) int
+		PresetLabel func(childComplexity int) int
+		Schema      func(childComplexity int) int
+	}
+
 	JobSharedChannelAttachment struct {
 		ChannelID  func(childComplexity int) int
 		DisplayURL func(childComplexity int) int
@@ -613,6 +632,7 @@ type ComplexityRoot struct {
 		DeletePasskey                 func(childComplexity int, id uuid.UUID) int
 		DeleteSharedChannel           func(childComplexity int, id uuid.UUID) int
 		DeleteTemporaryConnection     func(childComplexity int, id uuid.UUID) int
+		DeleteUnrecordedFile          func(childComplexity int, destinationID uuid.UUID, id uuid.UUID) int
 		DeleteUser                    func(childComplexity int, id uuid.UUID) int
 		DetachSharedChannel           func(childComplexity int, jobID uuid.UUID, channelID uuid.UUID) int
 		DetectVersion                 func(childComplexity int, id uuid.UUID) int
@@ -660,6 +680,7 @@ type ComplexityRoot struct {
 		SendTestEmail                 func(childComplexity int, to string) int
 		SetJobPassphrase              func(childComplexity int, jobID uuid.UUID, passphrase string) int
 		SetJobRecipient               func(childComplexity int, jobID uuid.UUID, recipient string, label *string) int
+		SetJobSchemaVersion           func(childComplexity int, jobID uuid.UUID, input model.JobSchemaVersionInput) int
 		SetJobTestRestore             func(childComplexity int, jobID uuid.UUID, input model.JobTestRestoreInput) int
 		SetNotificationPreference     func(childComplexity int, event string, channel model.NotificationChannelType, enabled bool, jobID *uuid.UUID) int
 		SetTLSMode                    func(childComplexity int, id uuid.UUID, mode model.ConnectionTLSMode) int
@@ -815,54 +836,56 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Artifacts                 func(childComplexity int, filter *model.ArtifactFilter, first *int, after *string) int
-		AuditChainStatus          func(childComplexity int) int
-		AuditLog                  func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
-		Calendar                  func(childComplexity int, from time.Time, to time.Time, timezone string, jobIds []uuid.UUID) int
-		ConfigReloadRequest       func(childComplexity int, id uuid.UUID) int
-		ConfigStatus              func(childComplexity int) int
-		Connection                func(childComplexity int, id uuid.UUID) int
-		Connections               func(childComplexity int) int
-		Destination               func(childComplexity int, id uuid.UUID) int
-		DestinationUsage          func(childComplexity int) int
-		Destinations              func(childComplexity int) int
-		EngineVersions            func(childComplexity int, engine *model.DatabaseEngine) int
-		Job                       func(childComplexity int, id uuid.UUID) int
-		Jobs                      func(childComplexity int, filter *model.JobFilter, first *int, after *string) int
-		Me                        func(childComplexity int) int
-		MyNotificationChannels    func(childComplexity int) int
-		MyNotificationPreferences func(childComplexity int) int
-		MyPasskeys                func(childComplexity int) int
-		MySessions                func(childComplexity int) int
-		MyTwoFactorStatus         func(childComplexity int) int
-		NotificationCatalog       func(childComplexity int) int
-		Notifications             func(childComplexity int, unreadOnly *bool, filter *model.NotificationInboxFilter, first *int, after *string) int
-		PreviewSchedule           func(childComplexity int, input model.ScheduleInput, count *int) int
-		Restore                   func(childComplexity int, id uuid.UUID) int
-		RestoreLogs               func(childComplexity int, restoreID uuid.UUID, afterID *string, first *int) int
-		RestorePreview            func(childComplexity int, input model.RestorePreviewInput) int
-		RestoreTargetDatabases    func(childComplexity int, artifactID uuid.UUID, targetConnectionID uuid.UUID) int
-		RestoreTargets            func(childComplexity int, artifactID uuid.UUID) int
-		Restores                  func(childComplexity int, filter *model.RestoreFilter, first *int, after *string) int
-		Run                       func(childComplexity int, id uuid.UUID) int
-		RunLogs                   func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
-		Runs                      func(childComplexity int, filter *model.RunFilter, first *int, after *string) int
-		SMTPSettings              func(childComplexity int) int
-		SecurityAlertTypes        func(childComplexity int) int
-		ServerInfo                func(childComplexity int) int
-		SharedChannels            func(childComplexity int) int
-		SsrfAllowlist             func(childComplexity int) int
-		SystemHealth              func(childComplexity int) int
-		TemporaryConnections      func(childComplexity int) int
-		TestRestore               func(childComplexity int, id uuid.UUID) int
-		TestRestores              func(childComplexity int, jobID uuid.UUID, first *int, after *string) int
-		TwoFactorPolicy           func(childComplexity int) int
-		UnreadNotificationCount   func(childComplexity int) int
-		User                      func(childComplexity int, id uuid.UUID) int
-		UserDirectory             func(childComplexity int, search *string, first *int, after *string) int
-		UserSessions              func(childComplexity int, userID uuid.UUID) int
-		Users                     func(childComplexity int, filter *model.UserFilter, first *int, after *string) int
-		WebauthnStatus            func(childComplexity int) int
+		Artifacts                  func(childComplexity int, filter *model.ArtifactFilter, first *int, after *string) int
+		AuditChainStatus           func(childComplexity int) int
+		AuditLog                   func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
+		Calendar                   func(childComplexity int, from time.Time, to time.Time, timezone string, jobIds []uuid.UUID) int
+		ConfigReloadRequest        func(childComplexity int, id uuid.UUID) int
+		ConfigStatus               func(childComplexity int) int
+		Connection                 func(childComplexity int, id uuid.UUID) int
+		Connections                func(childComplexity int) int
+		Destination                func(childComplexity int, id uuid.UUID) int
+		DestinationUnrecordedFiles func(childComplexity int, destinationID uuid.UUID, first *int, after *string) int
+		DestinationUsage           func(childComplexity int) int
+		Destinations               func(childComplexity int) int
+		EngineVersions             func(childComplexity int, engine *model.DatabaseEngine) int
+		Job                        func(childComplexity int, id uuid.UUID) int
+		Jobs                       func(childComplexity int, filter *model.JobFilter, first *int, after *string) int
+		Me                         func(childComplexity int) int
+		MyNotificationChannels     func(childComplexity int) int
+		MyNotificationPreferences  func(childComplexity int) int
+		MyPasskeys                 func(childComplexity int) int
+		MySessions                 func(childComplexity int) int
+		MyTwoFactorStatus          func(childComplexity int) int
+		NotificationCatalog        func(childComplexity int) int
+		Notifications              func(childComplexity int, unreadOnly *bool, filter *model.NotificationInboxFilter, first *int, after *string) int
+		PreviewSchedule            func(childComplexity int, input model.ScheduleInput, count *int, retention *model.JobRetentionInput) int
+		Restore                    func(childComplexity int, id uuid.UUID) int
+		RestoreLogs                func(childComplexity int, restoreID uuid.UUID, afterID *string, first *int) int
+		RestorePreview             func(childComplexity int, input model.RestorePreviewInput) int
+		RestoreTargetDatabases     func(childComplexity int, artifactID uuid.UUID, targetConnectionID uuid.UUID) int
+		RestoreTargets             func(childComplexity int, artifactID uuid.UUID) int
+		Restores                   func(childComplexity int, filter *model.RestoreFilter, first *int, after *string) int
+		Run                        func(childComplexity int, id uuid.UUID) int
+		RunLogs                    func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
+		Runs                       func(childComplexity int, filter *model.RunFilter, first *int, after *string) int
+		SMTPSettings               func(childComplexity int) int
+		SchemaVersionPresets       func(childComplexity int) int
+		SecurityAlertTypes         func(childComplexity int) int
+		ServerInfo                 func(childComplexity int) int
+		SharedChannels             func(childComplexity int) int
+		SsrfAllowlist              func(childComplexity int) int
+		SystemHealth               func(childComplexity int) int
+		TemporaryConnections       func(childComplexity int) int
+		TestRestore                func(childComplexity int, id uuid.UUID) int
+		TestRestores               func(childComplexity int, jobID uuid.UUID, first *int, after *string) int
+		TwoFactorPolicy            func(childComplexity int) int
+		UnreadNotificationCount    func(childComplexity int) int
+		User                       func(childComplexity int, id uuid.UUID) int
+		UserDirectory              func(childComplexity int, search *string, first *int, after *string) int
+		UserSessions               func(childComplexity int, userID uuid.UUID) int
+		Users                      func(childComplexity int, filter *model.UserFilter, first *int, after *string) int
+		WebauthnStatus             func(childComplexity int) int
 	}
 
 	QueueDepth struct {
@@ -995,6 +1018,25 @@ type ComplexityRoot struct {
 		Message func(childComplexity int) int
 	}
 
+	RetentionEstimate struct {
+		AtLeast    func(childComplexity int) int
+		ByKeepDays func(childComplexity int) int
+		ByKeepLast func(childComplexity int) int
+		Kept       func(childComplexity int) int
+	}
+
+	RetentionHold struct {
+		CheckedAt          func(childComplexity int) int
+		DestinationDeleted func(childComplexity int) int
+		DestinationID      func(childComplexity int) int
+		DestinationName    func(childComplexity int) int
+		DestinationType    func(childComplexity int) int
+		HeldRuns           func(childComplexity int) int
+		NewestCompleteAt   func(childComplexity int) int
+		Reason             func(childComplexity int) int
+		Since              func(childComplexity int) int
+	}
+
 	Run struct {
 		Artifacts         func(childComplexity int) int
 		Attempt           func(childComplexity int) int
@@ -1054,25 +1096,27 @@ type ComplexityRoot struct {
 	}
 
 	RunItem struct {
-		Artifacts       func(childComplexity int) int
-		Database        func(childComplexity int) int
-		DurationSeconds func(childComplexity int) int
-		ErrorCode       func(childComplexity int) int
-		ErrorMessage    func(childComplexity int) int
-		FinishedAt      func(childComplexity int) int
-		ID              func(childComplexity int) int
-		Kind            func(childComplexity int) int
-		Position        func(childComplexity int) int
-		RawSha256       func(childComplexity int) int
-		RawSize         func(childComplexity int) int
-		RunID           func(childComplexity int) int
-		Sha256          func(childComplexity int) int
-		StartedAt       func(childComplexity int) int
-		Stats           func(childComplexity int) int
-		Status          func(childComplexity int) int
-		StoredSize      func(childComplexity int) int
-		Verified        func(childComplexity int) int
-		Warnings        func(childComplexity int) int
+		Artifacts           func(childComplexity int) int
+		Database            func(childComplexity int) int
+		DurationSeconds     func(childComplexity int) int
+		ErrorCode           func(childComplexity int) int
+		ErrorMessage        func(childComplexity int) int
+		FinishedAt          func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		Kind                func(childComplexity int) int
+		Position            func(childComplexity int) int
+		RawSha256           func(childComplexity int) int
+		RawSize             func(childComplexity int) int
+		RunID               func(childComplexity int) int
+		SchemaVersion       func(childComplexity int) int
+		SchemaVersionStatus func(childComplexity int) int
+		Sha256              func(childComplexity int) int
+		StartedAt           func(childComplexity int) int
+		Stats               func(childComplexity int) int
+		Status              func(childComplexity int) int
+		StoredSize          func(childComplexity int) int
+		Verified            func(childComplexity int) int
+		Warnings            func(childComplexity int) int
 	}
 
 	RunItemStats struct {
@@ -1176,7 +1220,17 @@ type ComplexityRoot struct {
 	SchedulePreview struct {
 		Description func(childComplexity int) int
 		Next        func(childComplexity int) int
+		Retention   func(childComplexity int) int
 		Schedule    func(childComplexity int) int
+	}
+
+	SchemaVersionPreset struct {
+		Description   func(childComplexity int) int
+		Engines       func(childComplexity int) int
+		Label         func(childComplexity int) int
+		MysqlTable    func(childComplexity int) int
+		Name          func(childComplexity int) int
+		PostgresTable func(childComplexity int) int
 	}
 
 	SecondFactorReset struct {
@@ -1460,6 +1514,32 @@ type ComplexityRoot struct {
 		TotpEnrollmentPending  func(childComplexity int) int
 	}
 
+	UnrecordedFile struct {
+		FirstSeenAt func(childComplexity int) int
+		ID          func(childComplexity int) int
+		Key         func(childComplexity int) int
+		LastSeenAt  func(childComplexity int) int
+		ModifiedAt  func(childComplexity int) int
+		Size        func(childComplexity int) int
+	}
+
+	UnrecordedFileDeleteResult struct {
+		Code    func(childComplexity int) int
+		Message func(childComplexity int) int
+		Ok      func(childComplexity int) int
+	}
+
+	UnrecordedFiles struct {
+		DestinationID     func(childComplexity int) int
+		Files             func(childComplexity int) int
+		NextCursor        func(childComplexity int) int
+		PrunedDirectories func(childComplexity int) int
+		ScannedAt         func(childComplexity int) int
+		TotalBytes        func(childComplexity int) int
+		TotalCount        func(childComplexity int) int
+		Truncated         func(childComplexity int) int
+	}
+
 	User struct {
 		CreatedAt                   func(childComplexity int) int
 		DeletedAt                   func(childComplexity int) int
@@ -1522,6 +1602,7 @@ type ComplexityRoot struct {
 type JobResolver interface {
 	Missed(ctx context.Context, obj *model.Job) (bool, error)
 	MissedSince(ctx context.Context, obj *model.Job) (*time.Time, error)
+	RetentionHolds(ctx context.Context, obj *model.Job) ([]model.RetentionHold, error)
 
 	Encryption(ctx context.Context, obj *model.Job) (*model.JobEncryption, error)
 	Owners(ctx context.Context, obj *model.Job) ([]model.JobOwner, error)
@@ -1529,6 +1610,9 @@ type JobResolver interface {
 	SharedChannelAttachments(ctx context.Context, obj *model.Job) ([]model.JobSharedChannelAttachment, error)
 	LastRun(ctx context.Context, obj *model.Job) (*model.Run, error)
 	RecentRuns(ctx context.Context, obj *model.Job, first *int) ([]model.Run, error)
+}
+type JobSchemaVersionResolver interface {
+	CustomSQL(ctx context.Context, obj *model.JobSchemaVersion) (*string, error)
 }
 type MutationResolver interface {
 	Login(ctx context.Context, email string, password string) (*model.LoginResult, error)
@@ -1557,6 +1641,7 @@ type MutationResolver interface {
 	UpdateDestination(ctx context.Context, id uuid.UUID, input model.UpdateDestinationInput) (*model.Destination, error)
 	DeleteDestination(ctx context.Context, id uuid.UUID) (bool, error)
 	TestDestination(ctx context.Context, id uuid.UUID) (*model.DestinationTestResult, error)
+	DeleteUnrecordedFile(ctx context.Context, destinationID uuid.UUID, id uuid.UUID) (*model.UnrecordedFileDeleteResult, error)
 	FetchDestinationHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error)
 	ConfirmDestinationHostKey(ctx context.Context, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) (*model.Destination, error)
 	GenerateDestinationSSHKeypair(ctx context.Context, id uuid.UUID) (*model.DestinationSSHKeypair, error)
@@ -1604,6 +1689,7 @@ type MutationResolver interface {
 	RestoreGlobals(ctx context.Context, input model.RestoreGlobalsInput) (*model.Restore, error)
 	CancelRestore(ctx context.Context, id uuid.UUID) (*model.RestoreCancellation, error)
 	CancelRun(ctx context.Context, id uuid.UUID) (*model.RunCancellation, error)
+	SetJobSchemaVersion(ctx context.Context, jobID uuid.UUID, input model.JobSchemaVersionInput) (*model.Job, error)
 	SetJobTestRestore(ctx context.Context, jobID uuid.UUID, input model.JobTestRestoreInput) (*model.Job, error)
 	RunTestRestoreNow(ctx context.Context, jobID uuid.UUID) (*model.TestRestore, error)
 	BeginTotpEnrollment(ctx context.Context) (*model.TotpEnrollment, error)
@@ -1645,10 +1731,11 @@ type QueryResolver interface {
 	Destinations(ctx context.Context) ([]model.Destination, error)
 	Destination(ctx context.Context, id uuid.UUID) (*model.Destination, error)
 	DestinationUsage(ctx context.Context) ([]model.DestinationUsage, error)
+	DestinationUnrecordedFiles(ctx context.Context, destinationID uuid.UUID, first *int, after *string) (*model.UnrecordedFiles, error)
 	SMTPSettings(ctx context.Context) (*model.SMTPSettings, error)
 	Jobs(ctx context.Context, filter *model.JobFilter, first *int, after *string) (*model.JobConnection, error)
 	Job(ctx context.Context, id uuid.UUID) (*model.Job, error)
-	PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int) (*model.SchedulePreview, error)
+	PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int, retention *model.JobRetentionInput) (*model.SchedulePreview, error)
 	SystemHealth(ctx context.Context) (*model.SystemHealth, error)
 	SsrfAllowlist(ctx context.Context) (*model.SsrfAllowlist, error)
 	SharedChannels(ctx context.Context) ([]model.SharedChannel, error)
@@ -1667,6 +1754,7 @@ type QueryResolver interface {
 	Run(ctx context.Context, id uuid.UUID) (*model.Run, error)
 	RunLogs(ctx context.Context, runID uuid.UUID, afterID *string, first *int) (*model.RunLogPage, error)
 	Artifacts(ctx context.Context, filter *model.ArtifactFilter, first *int, after *string) (*model.ArtifactConnection, error)
+	SchemaVersionPresets(ctx context.Context) ([]model.SchemaVersionPreset, error)
 	SecurityAlertTypes(ctx context.Context) ([]model.SecurityAlertType, error)
 	TestRestores(ctx context.Context, jobID uuid.UUID, first *int, after *string) (*model.TestRestoreConnection, error)
 	TestRestore(ctx context.Context, id uuid.UUID) (*model.TestRestore, error)
@@ -2512,6 +2600,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ConfigReloadRequest.Trigger(childComplexity), true
 
+	case "ConfigStatus.database":
+		if e.ComplexityRoot.ConfigStatus.Database == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ConfigStatus.Database(childComplexity), true
 	case "ConfigStatus.lastRequest":
 		if e.ComplexityRoot.ConfigStatus.LastRequest == nil {
 			break
@@ -2954,6 +3048,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CreatedUser.User(childComplexity), true
+
+	case "DatabasePosture.insecureTransport":
+		if e.ComplexityRoot.DatabasePosture.InsecureTransport == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DatabasePosture.InsecureTransport(childComplexity), true
+	case "DatabasePosture.mode":
+		if e.ComplexityRoot.DatabasePosture.Mode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DatabasePosture.Mode(childComplexity), true
+	case "DatabasePosture.singleAccount":
+		if e.ComplexityRoot.DatabasePosture.SingleAccount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DatabasePosture.SingleAccount(childComplexity), true
+	case "DatabasePosture.tlsMode":
+		if e.ComplexityRoot.DatabasePosture.TLSMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DatabasePosture.TLSMode(childComplexity), true
 
 	case "Destination.createdAt":
 		if e.ComplexityRoot.Destination.CreatedAt == nil {
@@ -3466,6 +3585,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Job.Retention(childComplexity), true
+	case "Job.retentionHolds":
+		if e.ComplexityRoot.Job.RetentionHolds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Job.RetentionHolds(childComplexity), true
 	case "Job.schedule":
 		if e.ComplexityRoot.Job.Schedule == nil {
 			break
@@ -3478,6 +3603,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Job.ScheduleDescription(childComplexity), true
+	case "Job.schemaVersion":
+		if e.ComplexityRoot.Job.SchemaVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Job.SchemaVersion(childComplexity), true
 	case "Job.sharedChannelAttachments":
 		if e.ComplexityRoot.Job.SharedChannelAttachments == nil {
 			break
@@ -3770,6 +3901,37 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.JobRetention.KeepLast(childComplexity), true
+
+	case "JobSchemaVersion.customSql":
+		if e.ComplexityRoot.JobSchemaVersion.CustomSQL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobSchemaVersion.CustomSQL(childComplexity), true
+	case "JobSchemaVersion.mode":
+		if e.ComplexityRoot.JobSchemaVersion.Mode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobSchemaVersion.Mode(childComplexity), true
+	case "JobSchemaVersion.preset":
+		if e.ComplexityRoot.JobSchemaVersion.Preset == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobSchemaVersion.Preset(childComplexity), true
+	case "JobSchemaVersion.presetLabel":
+		if e.ComplexityRoot.JobSchemaVersion.PresetLabel == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobSchemaVersion.PresetLabel(childComplexity), true
+	case "JobSchemaVersion.schema":
+		if e.ComplexityRoot.JobSchemaVersion.Schema == nil {
+			break
+		}
+
+		return e.ComplexityRoot.JobSchemaVersion.Schema(childComplexity), true
 
 	case "JobSharedChannelAttachment.channelId":
 		if e.ComplexityRoot.JobSharedChannelAttachment.ChannelID == nil {
@@ -4222,6 +4384,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteTemporaryConnection(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.deleteUnrecordedFile":
+		if e.ComplexityRoot.Mutation.DeleteUnrecordedFile == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteUnrecordedFile_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteUnrecordedFile(childComplexity, args["destinationId"].(uuid.UUID), args["id"].(uuid.UUID)), true
 	case "Mutation.deleteUser":
 		if e.ComplexityRoot.Mutation.DeleteUser == nil {
 			break
@@ -4714,6 +4887,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetJobRecipient(childComplexity, args["jobId"].(uuid.UUID), args["recipient"].(string), args["label"].(*string)), true
+	case "Mutation.setJobSchemaVersion":
+		if e.ComplexityRoot.Mutation.SetJobSchemaVersion == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setJobSchemaVersion_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetJobSchemaVersion(childComplexity, args["jobId"].(uuid.UUID), args["input"].(model.JobSchemaVersionInput)), true
 	case "Mutation.setJobTestRestore":
 		if e.ComplexityRoot.Mutation.SetJobTestRestore == nil {
 			break
@@ -5517,6 +5701,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Destination(childComplexity, args["id"].(uuid.UUID)), true
+	case "Query.destinationUnrecordedFiles":
+		if e.ComplexityRoot.Query.DestinationUnrecordedFiles == nil {
+			break
+		}
+
+		args, err := ec.field_Query_destinationUnrecordedFiles_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.DestinationUnrecordedFiles(childComplexity, args["destinationId"].(uuid.UUID), args["first"].(*int), args["after"].(*string)), true
 	case "Query.destinationUsage":
 		if e.ComplexityRoot.Query.DestinationUsage == nil {
 			break
@@ -5626,7 +5821,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.PreviewSchedule(childComplexity, args["input"].(model.ScheduleInput), args["count"].(*int)), true
+		return e.ComplexityRoot.Query.PreviewSchedule(childComplexity, args["input"].(model.ScheduleInput), args["count"].(*int), args["retention"].(*model.JobRetentionInput)), true
 	case "Query.restore":
 		if e.ComplexityRoot.Query.Restore == nil {
 			break
@@ -5732,6 +5927,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SMTPSettings(childComplexity), true
+	case "Query.schemaVersionPresets":
+		if e.ComplexityRoot.Query.SchemaVersionPresets == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.SchemaVersionPresets(childComplexity), true
 	case "Query.securityAlertTypes":
 		if e.ComplexityRoot.Query.SecurityAlertTypes == nil {
 			break
@@ -6378,6 +6579,86 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RestoreWarning.Message(childComplexity), true
 
+	case "RetentionEstimate.atLeast":
+		if e.ComplexityRoot.RetentionEstimate.AtLeast == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionEstimate.AtLeast(childComplexity), true
+	case "RetentionEstimate.byKeepDays":
+		if e.ComplexityRoot.RetentionEstimate.ByKeepDays == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionEstimate.ByKeepDays(childComplexity), true
+	case "RetentionEstimate.byKeepLast":
+		if e.ComplexityRoot.RetentionEstimate.ByKeepLast == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionEstimate.ByKeepLast(childComplexity), true
+	case "RetentionEstimate.kept":
+		if e.ComplexityRoot.RetentionEstimate.Kept == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionEstimate.Kept(childComplexity), true
+
+	case "RetentionHold.checkedAt":
+		if e.ComplexityRoot.RetentionHold.CheckedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.CheckedAt(childComplexity), true
+	case "RetentionHold.destinationDeleted":
+		if e.ComplexityRoot.RetentionHold.DestinationDeleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.DestinationDeleted(childComplexity), true
+	case "RetentionHold.destinationId":
+		if e.ComplexityRoot.RetentionHold.DestinationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.DestinationID(childComplexity), true
+	case "RetentionHold.destinationName":
+		if e.ComplexityRoot.RetentionHold.DestinationName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.DestinationName(childComplexity), true
+	case "RetentionHold.destinationType":
+		if e.ComplexityRoot.RetentionHold.DestinationType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.DestinationType(childComplexity), true
+	case "RetentionHold.heldRuns":
+		if e.ComplexityRoot.RetentionHold.HeldRuns == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.HeldRuns(childComplexity), true
+	case "RetentionHold.newestCompleteAt":
+		if e.ComplexityRoot.RetentionHold.NewestCompleteAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.NewestCompleteAt(childComplexity), true
+	case "RetentionHold.reason":
+		if e.ComplexityRoot.RetentionHold.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.Reason(childComplexity), true
+	case "RetentionHold.since":
+		if e.ComplexityRoot.RetentionHold.Since == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RetentionHold.Since(childComplexity), true
+
 	case "Run.artifacts":
 		if e.ComplexityRoot.Run.Artifacts == nil {
 			break
@@ -6696,6 +6977,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RunItem.RunID(childComplexity), true
+	case "RunItem.schemaVersion":
+		if e.ComplexityRoot.RunItem.SchemaVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunItem.SchemaVersion(childComplexity), true
+	case "RunItem.schemaVersionStatus":
+		if e.ComplexityRoot.RunItem.SchemaVersionStatus == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunItem.SchemaVersionStatus(childComplexity), true
 	case "RunItem.sha256":
 		if e.ComplexityRoot.RunItem.Sha256 == nil {
 			break
@@ -7152,12 +7445,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SchedulePreview.Next(childComplexity), true
+	case "SchedulePreview.retention":
+		if e.ComplexityRoot.SchedulePreview.Retention == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchedulePreview.Retention(childComplexity), true
 	case "SchedulePreview.schedule":
 		if e.ComplexityRoot.SchedulePreview.Schedule == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SchedulePreview.Schedule(childComplexity), true
+
+	case "SchemaVersionPreset.description":
+		if e.ComplexityRoot.SchemaVersionPreset.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.Description(childComplexity), true
+	case "SchemaVersionPreset.engines":
+		if e.ComplexityRoot.SchemaVersionPreset.Engines == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.Engines(childComplexity), true
+	case "SchemaVersionPreset.label":
+		if e.ComplexityRoot.SchemaVersionPreset.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.Label(childComplexity), true
+	case "SchemaVersionPreset.mysqlTable":
+		if e.ComplexityRoot.SchemaVersionPreset.MysqlTable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.MysqlTable(childComplexity), true
+	case "SchemaVersionPreset.name":
+		if e.ComplexityRoot.SchemaVersionPreset.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.Name(childComplexity), true
+	case "SchemaVersionPreset.postgresTable":
+		if e.ComplexityRoot.SchemaVersionPreset.PostgresTable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SchemaVersionPreset.PostgresTable(childComplexity), true
 
 	case "SecondFactorReset.removedPasskeys":
 		if e.ComplexityRoot.SecondFactorReset.RemovedPasskeys == nil {
@@ -8338,6 +8674,111 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TwoFactorStatus.TotpEnrollmentPending(childComplexity), true
 
+	case "UnrecordedFile.firstSeenAt":
+		if e.ComplexityRoot.UnrecordedFile.FirstSeenAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.FirstSeenAt(childComplexity), true
+	case "UnrecordedFile.id":
+		if e.ComplexityRoot.UnrecordedFile.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.ID(childComplexity), true
+	case "UnrecordedFile.key":
+		if e.ComplexityRoot.UnrecordedFile.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.Key(childComplexity), true
+	case "UnrecordedFile.lastSeenAt":
+		if e.ComplexityRoot.UnrecordedFile.LastSeenAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.LastSeenAt(childComplexity), true
+	case "UnrecordedFile.modifiedAt":
+		if e.ComplexityRoot.UnrecordedFile.ModifiedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.ModifiedAt(childComplexity), true
+	case "UnrecordedFile.size":
+		if e.ComplexityRoot.UnrecordedFile.Size == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFile.Size(childComplexity), true
+
+	case "UnrecordedFileDeleteResult.code":
+		if e.ComplexityRoot.UnrecordedFileDeleteResult.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFileDeleteResult.Code(childComplexity), true
+	case "UnrecordedFileDeleteResult.message":
+		if e.ComplexityRoot.UnrecordedFileDeleteResult.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFileDeleteResult.Message(childComplexity), true
+	case "UnrecordedFileDeleteResult.ok":
+		if e.ComplexityRoot.UnrecordedFileDeleteResult.Ok == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFileDeleteResult.Ok(childComplexity), true
+
+	case "UnrecordedFiles.destinationId":
+		if e.ComplexityRoot.UnrecordedFiles.DestinationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.DestinationID(childComplexity), true
+	case "UnrecordedFiles.files":
+		if e.ComplexityRoot.UnrecordedFiles.Files == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.Files(childComplexity), true
+	case "UnrecordedFiles.nextCursor":
+		if e.ComplexityRoot.UnrecordedFiles.NextCursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.NextCursor(childComplexity), true
+	case "UnrecordedFiles.prunedDirectories":
+		if e.ComplexityRoot.UnrecordedFiles.PrunedDirectories == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.PrunedDirectories(childComplexity), true
+	case "UnrecordedFiles.scannedAt":
+		if e.ComplexityRoot.UnrecordedFiles.ScannedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.ScannedAt(childComplexity), true
+	case "UnrecordedFiles.totalBytes":
+		if e.ComplexityRoot.UnrecordedFiles.TotalBytes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.TotalBytes(childComplexity), true
+	case "UnrecordedFiles.totalCount":
+		if e.ComplexityRoot.UnrecordedFiles.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.TotalCount(childComplexity), true
+	case "UnrecordedFiles.truncated":
+		if e.ComplexityRoot.UnrecordedFiles.Truncated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.UnrecordedFiles.Truncated(childComplexity), true
+
 	case "User.createdAt":
 		if e.ComplexityRoot.User.CreatedAt == nil {
 			break
@@ -8566,6 +9007,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			graphql.NewInputUnmarshaler("JobEncryptionInput", ec.unmarshalInputJobEncryptionInput),
 			graphql.NewInputUnmarshaler("JobFilter", ec.unmarshalInputJobFilter),
 			graphql.NewInputUnmarshaler("JobRetentionInput", ec.unmarshalInputJobRetentionInput),
+			graphql.NewInputUnmarshaler("JobSchemaVersionInput", ec.unmarshalInputJobSchemaVersionInput),
 			graphql.NewInputUnmarshaler("JobTestRestoreInput", ec.unmarshalInputJobTestRestoreInput),
 			graphql.NewInputUnmarshaler("NotificationFilterInput", ec.unmarshalInputNotificationFilterInput),
 			graphql.NewInputUnmarshaler("NotificationInboxFilter", ec.unmarshalInputNotificationInboxFilter),
@@ -9074,8 +9516,40 @@ type ConfigReloadRequest {
   expectedProcesses: Int!
 }
 
+"How the answering serve process connects to bekup's own database (D-207)."
+enum DatabaseConfigMode {
+  "Connection URL files (the bundled stack)."
+  URL
+  "host, port, name, user and password files (an external PostgreSQL)."
+  FIELDS
+  """
+  One account for migrations and the app (database.single_account): an
+  explicit weakening, warned at every start and alerted daily.
+  """
+  SINGLE_ACCOUNT
+}
+
+"""
+The app database posture of the serve process that answered (restart-only
+settings; no host names or credentials).
+"""
+type DatabasePosture {
+  mode: DatabaseConfigMode!
+  "database.tls_mode: verify-full, require or disable."
+  tlsMode: String!
+  """
+  True when tls_mode is weaker than verify-full (D-100): the server identity
+  is not fully verified, or the connection is not encrypted.
+  """
+  insecureTransport: Boolean!
+  "True in single-account mode (D-207)."
+  singleAccount: Boolean!
+}
+
 "The configuration page."
 type ConfigStatus {
+  "The app database posture of the serve process that answered."
+  database: DatabasePosture!
   "Keys a reload applies without a restart (` + "`" + `section.key` + "`" + `)."
   liveKeys: [String!]!
   """
@@ -9804,6 +10278,60 @@ extend type Query {
   aggregate, no paging).
   """
   destinationUsage: [DestinationUsage!]! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  The unrecorded files of a destination (D-209): files in bekup's layout
+  (` + "`" + `{job slug}/{timestamp}/{file}` + "`" + `, older than 24 hours) that no backup
+  record references, found by the daily scan. ` + "`" + `first` + "`" + ` is 1..200 (default
+  50); ` + "`" + `after` + "`" + ` is ` + "`" + `nextCursor` + "`" + ` of the previous page. NOT_FOUND for an
+  unknown or deleted destination.
+  """
+  destinationUnrecordedFiles(destinationId: UUID!, first: Int, after: String): UnrecordedFiles! @hasRole(roles: [ADMIN])
+}
+
+"A file in bekup's layout on a destination that no backup record references (D-209)."
+type UnrecordedFile {
+  id: UUID!
+  "The object key below the destination root (` + "`" + `{job slug}/{timestamp}/{file}` + "`" + `)."
+  key: String!
+  "Size in bytes as the destination reported it."
+  size: Float!
+  "The modification time the destination reported (null: unknown)."
+  modifiedAt: Time
+  "When the daily scan first found the file."
+  firstSeenAt: Time!
+  "When the daily scan last found the file."
+  lastSeenAt: Time!
+}
+
+"The unrecorded files of one destination (D-209)."
+type UnrecordedFiles {
+  destinationId: UUID!
+  "When the daily scan last finished on this destination (null: never)."
+  scannedAt: Time
+  "Number of recorded unrecorded files."
+  totalCount: Int!
+  "Sum of their sizes (bytes)."
+  totalBytes: Float!
+  """
+  The scan found more files than it records, or stopped at its object
+  limit: the list is incomplete.
+  """
+  truncated: Boolean!
+  "Empty directories the last scan removed."
+  prunedDirectories: Int!
+  "This page, ordered by key."
+  files: [UnrecordedFile!]!
+  "Pass as ` + "`" + `after` + "`" + ` for the next page (null: last page)."
+  nextCursor: String
+}
+
+"The outcome of deleteUnrecordedFile (normalized code and fixed message only)."
+type UnrecordedFileDeleteResult {
+  ok: Boolean!
+  "A storage error class (as DestinationTestStep.code); ` + "`" + `ok` + "`" + ` on success."
+  code: String!
+  message: String!
 }
 
 "What bekup stores on one destination."
@@ -9829,7 +10357,10 @@ extend type Mutation {
   Changes a destination. A settings input replaces the whole non-secret
   configuration of its type (credential fields left out keep the stored
   value). Changing an SFTP destination's host or port removes its pinned
-  host key.
+  host key. The location (disk path, S3 bucket and prefix, SFTP base path
+  and directory) can only change while no backup files are recorded as
+  present there (VALIDATION otherwise, D-209): bekup would lose track of
+  them.
   """
   updateDestination(id: UUID!, input: UpdateDestinationInput!): Destination! @hasRole(roles: [ADMIN]) @stepUp
 
@@ -9842,6 +10373,15 @@ extend type Mutation {
   the only field of its operation.
   """
   testDestination(id: UUID!): DestinationTestResult! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
+  Deletes one unrecorded file (D-209). Re-checked at delete time: still no
+  backup record references the key, the file still exists and is older
+  than 24 hours, and the destination is not in no-delete mode
+  (VALIDATION / CONFLICT otherwise). Audited. Must be the only field of its
+  operation.
+  """
+  deleteUnrecordedFile(destinationId: UUID!, id: UUID!): UnrecordedFileDeleteResult! @hasRole(roles: [ADMIN]) @stepUp
 
   """
   Trust on first use: connects to the stored host and port of an SFTP
@@ -10219,6 +10759,63 @@ type SchedulePreview {
   description: String!
   "The next occurrences after now (empty for MANUAL)."
   next: [Time!]!
+  """
+  How many backups each destination keeps with the ` + "`" + `retention` + "`" + ` argument of
+  previewSchedule once the schedule has run long enough (null when the
+  argument is not set). Assumes every planned run succeeds.
+  """
+  retention: RetentionEstimate
+}
+
+"""
+An estimate of the backups kept per destination in the steady state
+(D-209). "Keep last" and "keep days" add up: a backup is kept when either
+rule keeps it, so the total is the larger of the two counts.
+"""
+type RetentionEstimate {
+  "Backups kept per destination; null when unknown (a manual schedule with a day limit)."
+  kept: Int
+  "Backups the keep-last rule keeps on its own (0 when off)."
+  byKeepLast: Int!
+  "Backups the keep-days rule keeps on its own (0 when off; null when unknown for a manual schedule)."
+  byKeepDays: Int
+  "The projection stopped at its limit: at least ` + "`" + `kept` + "`" + ` backups are kept."
+  atLeast: Boolean!
+}
+
+"Why retention keeps incomplete backups on a destination (D-209)."
+enum RetentionHoldReason {
+  "The destination holds no complete backup of the job, so retention deletes nothing there."
+  NO_COMPLETE_RUN
+  """
+  The backups newer than the newest complete backup on the destination are
+  incomplete; retention keeps them (they may hold the only copy of some
+  database) until a newer complete backup exists.
+  """
+  NEWER_THAN_NEWEST_COMPLETE
+}
+
+"""
+Retention is holding incomplete backups on one destination that no keep
+rule would keep on its own (D-209). Written by the retention sweep (after
+every backup, after a retention change and daily); cleared once a complete
+backup exists there again.
+"""
+type RetentionHold {
+  destinationId: UUID!
+  destinationName: String!
+  destinationType: DestinationType!
+  "The destination was deleted (its files are still kept)."
+  destinationDeleted: Boolean!
+  reason: RetentionHoldReason!
+  "The incomplete backups kept only for this reason."
+  heldRuns: Int!
+  "The time of the oldest held backup."
+  since: Time!
+  "The newest complete backup on this destination (null: none)."
+  newestCompleteAt: Time
+  "When a retention sweep last confirmed the hold."
+  checkedAt: Time!
 }
 
 "How many backups a job keeps per destination; at least one limit is set."
@@ -10346,6 +10943,11 @@ type Job {
   missed: Boolean!
   "The first missed occurrence of the current outage (null when not missed)."
   missedSince: Time
+  """
+  Destinations on which retention keeps incomplete backups that no keep
+  rule would keep on its own (D-209); empty when retention works normally.
+  """
+  retentionHolds: [RetentionHold!]!
   verification: JobVerification!
   destinations: [JobDestinationRef!]!
   encryption: JobEncryption!
@@ -10506,8 +11108,12 @@ extend type Query {
   """
   job(id: UUID!): Job @hasRole(roles: [ADMIN, MAINTAINER, USER])
 
-  "Validates a schedule and returns its next ` + "`" + `count` + "`" + ` occurrences (1-50, default 5)."
-  previewSchedule(input: ScheduleInput!, count: Int): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
+  """
+  Validates a schedule and returns its next ` + "`" + `count` + "`" + ` occurrences (1-50,
+  default 5). With ` + "`" + `retention` + "`" + ` it also estimates how many backups each
+  destination keeps (SchedulePreview.retention).
+  """
+  previewSchedule(input: ScheduleInput!, count: Int, retention: JobRetentionInput): SchedulePreview! @hasRole(roles: [ADMIN, MAINTAINER])
 }
 
 extend type Mutation {
@@ -12093,6 +12699,104 @@ type ServerInfo {
   devMode: Boolean!
 }
 `, BuiltIn: false},
+	{Name: "../schema/schema_version.graphqls", Input: `# Schema version per database (D-210). A job may capture the schema
+# (migration) version of every database it backs up: a preset for a common
+# migration framework (fixed, reviewed SQL kept in bekup) or a custom
+# query (a single SELECT or WITH statement, at most 2 KiB). The runner reads
+# it in the dump's statistics transaction (PostgreSQL: the snapshot the dump
+# uses), read-only and with statement and lock time limits. A failed capture
+# is a warning (version_unavailable, version_invalid) and never fails the
+# backup. Admins and maintainers change the setting; a custom query needs a
+# fresh step-up (it runs on the target with the backup role's rights).
+# Every change is audited (job.version_query_changed, with a digest of a
+# custom query, never the query).
+
+"How a job captures the schema version of its databases."
+enum SchemaVersionMode {
+  "No capture (the default)."
+  NONE
+  "A preset for a migration framework."
+  PRESET
+  "A custom SELECT or WITH query."
+  CUSTOM
+}
+
+"The outcome of a schema-version capture."
+enum SchemaVersionStatus {
+  "A version was captured."
+  OK
+  "No version: the table does not exist, has no row or the value is empty."
+  NONE
+  "The query failed (missing privilege, time limit, unexpected table layout or error)."
+  UNAVAILABLE
+  "The result was longer than 64 characters or not printable ASCII."
+  INVALID
+}
+
+"A job's schema-version capture."
+type JobSchemaVersion {
+  mode: SchemaVersionMode!
+  "The preset name (PRESET only)."
+  preset: String
+  "The preset's display name (PRESET only)."
+  presetLabel: String
+  "PostgreSQL schema of the preset's table."
+  schema: String!
+  "The custom query (CUSTOM only). Admins and maintainers only (null for backup owners)."
+  customSql: String
+}
+
+"A fixed version query for one migration framework."
+type SchemaVersionPreset {
+  "The name stored on the job."
+  name: String!
+  label: String!
+  "What the captured version is."
+  description: String!
+  "The framework table on PostgreSQL."
+  postgresTable: String!
+  "The framework table on MySQL and MariaDB."
+  mysqlTable: String!
+  engines: [DatabaseEngine!]!
+}
+
+"A job's new schema-version capture."
+input JobSchemaVersionInput {
+  mode: SchemaVersionMode!
+  "Required for PRESET."
+  preset: String
+  "PostgreSQL schema of the preset's table (PRESET only; default public)."
+  schema: String
+  "Required for CUSTOM: a single SELECT or WITH statement, at most 2048 bytes. PostgreSQL tables must be schema-qualified."
+  customSql: String
+}
+
+extend type Job {
+  "The schema-version capture (D-210)."
+  schemaVersion: JobSchemaVersion!
+}
+
+extend type RunItem {
+  "The schema version captured for this database (status OK only)."
+  schemaVersion: String
+  "The outcome of the capture; null when the job captures none or the dump did not complete."
+  schemaVersionStatus: SchemaVersionStatus
+}
+
+extend type Query {
+  "The schema-version presets, in display order."
+  schemaVersionPresets: [SchemaVersionPreset!]! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+
+extend type Mutation {
+  """
+  Changes a job's schema-version capture (audited). A custom query
+  requires a step-up within the last 5 minutes (STEP_UP_REQUIRED
+  otherwise); turning the capture off or choosing a preset does not.
+  """
+  setJobSchemaVersion(jobId: UUID!, input: JobSchemaVersionInput!): Job! @hasRole(roles: [ADMIN, MAINTAINER])
+}
+`, BuiltIn: false},
 	{Name: "../schema/security_alerts.graphqls", Input: `# Reference list of the security.system alert kinds (D-190, D-198).
 # Admin only. The server decides what raises an alert; this list only
 # documents it so clients need not hard-code it.
@@ -13276,6 +13980,8 @@ func (ec *executionContext) childFields_ConfigReloadRequest(ctx context.Context,
 
 func (ec *executionContext) childFields_ConfigStatus(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
+	case "database":
+		return ec.fieldContext_ConfigStatus_database(ctx, field)
 	case "liveKeys":
 		return ec.fieldContext_ConfigStatus_liveKeys(ctx, field)
 	case "processes":
@@ -13482,6 +14188,20 @@ func (ec *executionContext) childFields_CreatedUser(ctx context.Context, field g
 		return ec.fieldContext_CreatedUser_temporaryPassword(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type CreatedUser", field.Name)
+}
+
+func (ec *executionContext) childFields_DatabasePosture(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "mode":
+		return ec.fieldContext_DatabasePosture_mode(ctx, field)
+	case "tlsMode":
+		return ec.fieldContext_DatabasePosture_tlsMode(ctx, field)
+	case "insecureTransport":
+		return ec.fieldContext_DatabasePosture_insecureTransport(ctx, field)
+	case "singleAccount":
+		return ec.fieldContext_DatabasePosture_singleAccount(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type DatabasePosture", field.Name)
 }
 
 func (ec *executionContext) childFields_Destination(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -13730,6 +14450,8 @@ func (ec *executionContext) childFields_Job(ctx context.Context, field graphql.C
 		return ec.fieldContext_Job_missed(ctx, field)
 	case "missedSince":
 		return ec.fieldContext_Job_missedSince(ctx, field)
+	case "retentionHolds":
+		return ec.fieldContext_Job_retentionHolds(ctx, field)
 	case "verification":
 		return ec.fieldContext_Job_verification(ctx, field)
 	case "destinations":
@@ -13748,6 +14470,8 @@ func (ec *executionContext) childFields_Job(ctx context.Context, field graphql.C
 		return ec.fieldContext_Job_lastRun(ctx, field)
 	case "recentRuns":
 		return ec.fieldContext_Job_recentRuns(ctx, field)
+	case "schemaVersion":
+		return ec.fieldContext_Job_schemaVersion(ctx, field)
 	case "testRestore":
 		return ec.fieldContext_Job_testRestore(ctx, field)
 	}
@@ -13894,6 +14618,22 @@ func (ec *executionContext) childFields_JobRetention(ctx context.Context, field 
 		return ec.fieldContext_JobRetention_keepDays(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type JobRetention", field.Name)
+}
+
+func (ec *executionContext) childFields_JobSchemaVersion(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "mode":
+		return ec.fieldContext_JobSchemaVersion_mode(ctx, field)
+	case "preset":
+		return ec.fieldContext_JobSchemaVersion_preset(ctx, field)
+	case "presetLabel":
+		return ec.fieldContext_JobSchemaVersion_presetLabel(ctx, field)
+	case "schema":
+		return ec.fieldContext_JobSchemaVersion_schema(ctx, field)
+	case "customSql":
+		return ec.fieldContext_JobSchemaVersion_customSql(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type JobSchemaVersion", field.Name)
 }
 
 func (ec *executionContext) childFields_JobSharedChannelAttachment(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -14488,6 +15228,44 @@ func (ec *executionContext) childFields_RestoreWarning(ctx context.Context, fiel
 	return nil, fmt.Errorf("no field named %q was found under type RestoreWarning", field.Name)
 }
 
+func (ec *executionContext) childFields_RetentionEstimate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "kept":
+		return ec.fieldContext_RetentionEstimate_kept(ctx, field)
+	case "byKeepLast":
+		return ec.fieldContext_RetentionEstimate_byKeepLast(ctx, field)
+	case "byKeepDays":
+		return ec.fieldContext_RetentionEstimate_byKeepDays(ctx, field)
+	case "atLeast":
+		return ec.fieldContext_RetentionEstimate_atLeast(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RetentionEstimate", field.Name)
+}
+
+func (ec *executionContext) childFields_RetentionHold(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "destinationId":
+		return ec.fieldContext_RetentionHold_destinationId(ctx, field)
+	case "destinationName":
+		return ec.fieldContext_RetentionHold_destinationName(ctx, field)
+	case "destinationType":
+		return ec.fieldContext_RetentionHold_destinationType(ctx, field)
+	case "destinationDeleted":
+		return ec.fieldContext_RetentionHold_destinationDeleted(ctx, field)
+	case "reason":
+		return ec.fieldContext_RetentionHold_reason(ctx, field)
+	case "heldRuns":
+		return ec.fieldContext_RetentionHold_heldRuns(ctx, field)
+	case "since":
+		return ec.fieldContext_RetentionHold_since(ctx, field)
+	case "newestCompleteAt":
+		return ec.fieldContext_RetentionHold_newestCompleteAt(ctx, field)
+	case "checkedAt":
+		return ec.fieldContext_RetentionHold_checkedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RetentionHold", field.Name)
+}
+
 func (ec *executionContext) childFields_Run(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -14644,6 +15422,10 @@ func (ec *executionContext) childFields_RunItem(ctx context.Context, field graph
 		return ec.fieldContext_RunItem_artifacts(ctx, field)
 	case "stats":
 		return ec.fieldContext_RunItem_stats(ctx, field)
+	case "schemaVersion":
+		return ec.fieldContext_RunItem_schemaVersion(ctx, field)
+	case "schemaVersionStatus":
+		return ec.fieldContext_RunItem_schemaVersionStatus(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RunItem", field.Name)
 }
@@ -14852,8 +15634,28 @@ func (ec *executionContext) childFields_SchedulePreview(ctx context.Context, fie
 		return ec.fieldContext_SchedulePreview_description(ctx, field)
 	case "next":
 		return ec.fieldContext_SchedulePreview_next(ctx, field)
+	case "retention":
+		return ec.fieldContext_SchedulePreview_retention(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SchedulePreview", field.Name)
+}
+
+func (ec *executionContext) childFields_SchemaVersionPreset(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "name":
+		return ec.fieldContext_SchemaVersionPreset_name(ctx, field)
+	case "label":
+		return ec.fieldContext_SchemaVersionPreset_label(ctx, field)
+	case "description":
+		return ec.fieldContext_SchemaVersionPreset_description(ctx, field)
+	case "postgresTable":
+		return ec.fieldContext_SchemaVersionPreset_postgresTable(ctx, field)
+	case "mysqlTable":
+		return ec.fieldContext_SchemaVersionPreset_mysqlTable(ctx, field)
+	case "engines":
+		return ec.fieldContext_SchemaVersionPreset_engines(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SchemaVersionPreset", field.Name)
 }
 
 func (ec *executionContext) childFields_SecondFactorReset(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -15396,6 +16198,58 @@ func (ec *executionContext) childFields_TwoFactorStatus(ctx context.Context, fie
 		return ec.fieldContext_TwoFactorStatus_recoveryCodesRemaining(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type TwoFactorStatus", field.Name)
+}
+
+func (ec *executionContext) childFields_UnrecordedFile(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_UnrecordedFile_id(ctx, field)
+	case "key":
+		return ec.fieldContext_UnrecordedFile_key(ctx, field)
+	case "size":
+		return ec.fieldContext_UnrecordedFile_size(ctx, field)
+	case "modifiedAt":
+		return ec.fieldContext_UnrecordedFile_modifiedAt(ctx, field)
+	case "firstSeenAt":
+		return ec.fieldContext_UnrecordedFile_firstSeenAt(ctx, field)
+	case "lastSeenAt":
+		return ec.fieldContext_UnrecordedFile_lastSeenAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type UnrecordedFile", field.Name)
+}
+
+func (ec *executionContext) childFields_UnrecordedFileDeleteResult(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "ok":
+		return ec.fieldContext_UnrecordedFileDeleteResult_ok(ctx, field)
+	case "code":
+		return ec.fieldContext_UnrecordedFileDeleteResult_code(ctx, field)
+	case "message":
+		return ec.fieldContext_UnrecordedFileDeleteResult_message(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type UnrecordedFileDeleteResult", field.Name)
+}
+
+func (ec *executionContext) childFields_UnrecordedFiles(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "destinationId":
+		return ec.fieldContext_UnrecordedFiles_destinationId(ctx, field)
+	case "scannedAt":
+		return ec.fieldContext_UnrecordedFiles_scannedAt(ctx, field)
+	case "totalCount":
+		return ec.fieldContext_UnrecordedFiles_totalCount(ctx, field)
+	case "totalBytes":
+		return ec.fieldContext_UnrecordedFiles_totalBytes(ctx, field)
+	case "truncated":
+		return ec.fieldContext_UnrecordedFiles_truncated(ctx, field)
+	case "prunedDirectories":
+		return ec.fieldContext_UnrecordedFiles_prunedDirectories(ctx, field)
+	case "files":
+		return ec.fieldContext_UnrecordedFiles_files(ctx, field)
+	case "nextCursor":
+		return ec.fieldContext_UnrecordedFiles_nextCursor(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type UnrecordedFiles", field.Name)
 }
 
 func (ec *executionContext) childFields_User(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -16180,6 +17034,28 @@ func (ec *executionContext) field_Mutation_deleteTemporaryConnection_args(ctx co
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_deleteUnrecordedFile_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "destinationId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["destinationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_deleteUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -16872,6 +17748,28 @@ func (ec *executionContext) field_Mutation_setJobRecipient_args(ctx context.Cont
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_setJobSchemaVersion_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "jobId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["jobId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.JobSchemaVersionInput, error) {
+			return ec.unmarshalNJobSchemaVersionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobSchemaVersionInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_setJobTestRestore_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -17366,6 +18264,36 @@ func (ec *executionContext) field_Query_connection_args(ctx context.Context, raw
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_destinationUnrecordedFiles_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "destinationId",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["destinationId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after",
+		func(ctx context.Context, v any) (*string, error) {
+			return ec.unmarshalOString2ᚖstring(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_destination_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -17495,6 +18423,14 @@ func (ec *executionContext) field_Query_previewSchedule_args(ctx context.Context
 		return nil, err
 	}
 	args["count"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "retention",
+		func(ctx context.Context, v any) (*model.JobRetentionInput, error) {
+			return ec.unmarshalOJobRetentionInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobRetentionInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["retention"] = arg2
 	return args, nil
 }
 
@@ -21088,6 +22024,38 @@ func (ec *executionContext) fieldContext_ConfigReloadRequest_expectedProcesses(_
 	return graphql.NewScalarFieldContext("ConfigReloadRequest", field, false, false, "Int")
 }
 
+func (ec *executionContext) _ConfigStatus_database(ctx context.Context, field graphql.CollectedField, obj *model.ConfigStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ConfigStatus_database(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Database, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DatabasePosture) graphql.Marshaler {
+			return ec.marshalNDatabasePosture2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabasePosture(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ConfigStatus_database(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ConfigStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DatabasePosture(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ConfigStatus_liveKeys(ctx context.Context, field graphql.CollectedField, obj *model.ConfigStatus) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22877,6 +23845,98 @@ func (ec *executionContext) fieldContext_CreatedUser_temporaryPassword(_ context
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _DatabasePosture_mode(ctx context.Context, field graphql.CollectedField, obj *model.DatabasePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DatabasePosture_mode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DatabaseConfigMode) graphql.Marshaler {
+			return ec.marshalNDatabaseConfigMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseConfigMode(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DatabasePosture_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DatabasePosture", field, false, false, "DatabaseConfigMode")
+}
+
+func (ec *executionContext) _DatabasePosture_tlsMode(ctx context.Context, field graphql.CollectedField, obj *model.DatabasePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DatabasePosture_tlsMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TLSMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DatabasePosture_tlsMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DatabasePosture", field, false, false, "String")
+}
+
+func (ec *executionContext) _DatabasePosture_insecureTransport(ctx context.Context, field graphql.CollectedField, obj *model.DatabasePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DatabasePosture_insecureTransport(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.InsecureTransport, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DatabasePosture_insecureTransport(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DatabasePosture", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _DatabasePosture_singleAccount(ctx context.Context, field graphql.CollectedField, obj *model.DatabasePosture) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DatabasePosture_singleAccount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SingleAccount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DatabasePosture_singleAccount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DatabasePosture", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _Destination_id(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
@@ -24827,6 +25887,38 @@ func (ec *executionContext) fieldContext_Job_missedSince(_ context.Context, fiel
 	return graphql.NewScalarFieldContext("Job", field, true, true, "Time")
 }
 
+func (ec *executionContext) _Job_retentionHolds(ctx context.Context, field graphql.CollectedField, obj *model.Job) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Job_retentionHolds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Job().RetentionHolds(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RetentionHold) graphql.Marshaler {
+			return ec.marshalNRetentionHold2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHoldᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Job_retentionHolds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Job",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RetentionHold(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Job_verification(ctx context.Context, field graphql.CollectedField, obj *model.Job) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25096,6 +26188,38 @@ func (ec *executionContext) fieldContext_Job_recentRuns(ctx context.Context, fie
 	if fc.Args, err = ec.field_Job_recentRuns_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Job_schemaVersion(ctx context.Context, field graphql.CollectedField, obj *model.Job) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Job_schemaVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SchemaVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.JobSchemaVersion) graphql.Marshaler {
+			return ec.marshalNJobSchemaVersion2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobSchemaVersion(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Job_schemaVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Job",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_JobSchemaVersion(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -26118,6 +27242,121 @@ func (ec *executionContext) _JobRetention_keepDays(ctx context.Context, field gr
 }
 func (ec *executionContext) fieldContext_JobRetention_keepDays(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("JobRetention", field, false, false, "Int")
+}
+
+func (ec *executionContext) _JobSchemaVersion_mode(ctx context.Context, field graphql.CollectedField, obj *model.JobSchemaVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobSchemaVersion_mode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.SchemaVersionMode) graphql.Marshaler {
+			return ec.marshalNSchemaVersionMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionMode(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_JobSchemaVersion_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobSchemaVersion", field, false, false, "SchemaVersionMode")
+}
+
+func (ec *executionContext) _JobSchemaVersion_preset(ctx context.Context, field graphql.CollectedField, obj *model.JobSchemaVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobSchemaVersion_preset(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Preset, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobSchemaVersion_preset(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobSchemaVersion", field, false, false, "String")
+}
+
+func (ec *executionContext) _JobSchemaVersion_presetLabel(ctx context.Context, field graphql.CollectedField, obj *model.JobSchemaVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobSchemaVersion_presetLabel(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PresetLabel, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobSchemaVersion_presetLabel(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobSchemaVersion", field, false, false, "String")
+}
+
+func (ec *executionContext) _JobSchemaVersion_schema(ctx context.Context, field graphql.CollectedField, obj *model.JobSchemaVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobSchemaVersion_schema(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Schema, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_JobSchemaVersion_schema(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobSchemaVersion", field, false, false, "String")
+}
+
+func (ec *executionContext) _JobSchemaVersion_customSql(ctx context.Context, field graphql.CollectedField, obj *model.JobSchemaVersion) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_JobSchemaVersion_customSql(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.JobSchemaVersion().CustomSQL(ctx, obj)
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_JobSchemaVersion_customSql(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("JobSchemaVersion", field, true, true, "String")
 }
 
 func (ec *executionContext) _JobSharedChannelAttachment_channelId(ctx context.Context, field graphql.CollectedField, obj *model.JobSharedChannelAttachment) (ret graphql.Marshaler) {
@@ -28284,6 +29523,75 @@ func (ec *executionContext) fieldContext_Mutation_testDestination(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_testDestination_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteUnrecordedFile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_deleteUnrecordedFile(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteUnrecordedFile(ctx, fc.Args["destinationId"].(uuid.UUID), fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.UnrecordedFileDeleteResult
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.UnrecordedFileDeleteResult
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.UnrecordedFileDeleteResult
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.UnrecordedFileDeleteResult) graphql.Marshaler {
+			return ec.marshalNUnrecordedFileDeleteResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFileDeleteResult(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_deleteUnrecordedFile(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_UnrecordedFileDeleteResult(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteUnrecordedFile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -31266,6 +32574,68 @@ func (ec *executionContext) fieldContext_Mutation_cancelRun(ctx context.Context,
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_cancelRun_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setJobSchemaVersion(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setJobSchemaVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetJobSchemaVersion(ctx, fc.Args["jobId"].(uuid.UUID), fc.Args["input"].(model.JobSchemaVersionInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal *model.Job
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Job
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Job) graphql.Marshaler {
+			return ec.marshalNJob2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJob(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setJobSchemaVersion(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Job(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setJobSchemaVersion_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -35459,6 +36829,68 @@ func (ec *executionContext) fieldContext_Query_destinationUsage(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_destinationUnrecordedFiles(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_destinationUnrecordedFiles(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().DestinationUnrecordedFiles(ctx, fc.Args["destinationId"].(uuid.UUID), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.UnrecordedFiles
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.UnrecordedFiles
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.UnrecordedFiles) graphql.Marshaler {
+			return ec.marshalNUnrecordedFiles2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFiles(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_destinationUnrecordedFiles(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_UnrecordedFiles(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_destinationUnrecordedFiles_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_smtpSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35643,7 +37075,7 @@ func (ec *executionContext) _Query_previewSchedule(ctx context.Context, field gr
 		},
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().PreviewSchedule(ctx, fc.Args["input"].(model.ScheduleInput), fc.Args["count"].(*int))
+			return ec.Resolvers.Query().PreviewSchedule(ctx, fc.Args["input"].(model.ScheduleInput), fc.Args["count"].(*int), fc.Args["retention"].(*model.JobRetentionInput))
 		},
 		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
 			directive0 := next
@@ -36689,6 +38121,56 @@ func (ec *executionContext) fieldContext_Query_artifacts(ctx context.Context, fi
 	if fc.Args, err = ec.field_Query_artifacts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_schemaVersionPresets(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_schemaVersionPresets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().SchemaVersionPresets(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER"})
+				if err != nil {
+					var zeroVal []model.SchemaVersionPreset
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.SchemaVersionPreset
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.SchemaVersionPreset) graphql.Marshaler {
+			return ec.marshalNSchemaVersionPreset2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionPresetᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_schemaVersionPresets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SchemaVersionPreset(ctx, field)
+		},
 	}
 	return fc, nil
 }
@@ -39475,6 +40957,305 @@ func (ec *executionContext) fieldContext_RestoreWarning_message(_ context.Contex
 	return graphql.NewScalarFieldContext("RestoreWarning", field, false, false, "String")
 }
 
+func (ec *executionContext) _RetentionEstimate_kept(ctx context.Context, field graphql.CollectedField, obj *model.RetentionEstimate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionEstimate_kept(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Kept, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionEstimate_kept(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionEstimate", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RetentionEstimate_byKeepLast(ctx context.Context, field graphql.CollectedField, obj *model.RetentionEstimate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionEstimate_byKeepLast(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ByKeepLast, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionEstimate_byKeepLast(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionEstimate", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RetentionEstimate_byKeepDays(ctx context.Context, field graphql.CollectedField, obj *model.RetentionEstimate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionEstimate_byKeepDays(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ByKeepDays, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionEstimate_byKeepDays(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionEstimate", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RetentionEstimate_atLeast(ctx context.Context, field graphql.CollectedField, obj *model.RetentionEstimate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionEstimate_atLeast(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AtLeast, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionEstimate_atLeast(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionEstimate", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RetentionHold_destinationId(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_destinationId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DestinationID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_destinationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RetentionHold_destinationName(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_destinationName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DestinationName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_destinationName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "String")
+}
+
+func (ec *executionContext) _RetentionHold_destinationType(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_destinationType(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DestinationType, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.DestinationType) graphql.Marshaler {
+			return ec.marshalNDestinationType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationType(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_destinationType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "DestinationType")
+}
+
+func (ec *executionContext) _RetentionHold_destinationDeleted(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_destinationDeleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DestinationDeleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_destinationDeleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RetentionHold_reason(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RetentionHoldReason) graphql.Marshaler {
+			return ec.marshalNRetentionHoldReason2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHoldReason(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "RetentionHoldReason")
+}
+
+func (ec *executionContext) _RetentionHold_heldRuns(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_heldRuns(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HeldRuns, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_heldRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RetentionHold_since(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_since(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Since, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_since(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RetentionHold_newestCompleteAt(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_newestCompleteAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NewestCompleteAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_newestCompleteAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RetentionHold_checkedAt(ctx context.Context, field graphql.CollectedField, obj *model.RetentionHold) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RetentionHold_checkedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CheckedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RetentionHold_checkedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Time")
+}
+
 func (ec *executionContext) _Run_id(ctx context.Context, field graphql.CollectedField, obj *model.Run) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -40965,6 +42746,52 @@ func (ec *executionContext) fieldContext_RunItem_stats(_ context.Context, field 
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _RunItem_schemaVersion(ctx context.Context, field graphql.CollectedField, obj *model.RunItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunItem_schemaVersion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SchemaVersion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RunItem_schemaVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunItem", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunItem_schemaVersionStatus(ctx context.Context, field graphql.CollectedField, obj *model.RunItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunItem_schemaVersionStatus(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SchemaVersionStatus, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.SchemaVersionStatus) graphql.Marshaler {
+			return ec.marshalOSchemaVersionStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionStatus(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RunItem_schemaVersionStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunItem", field, false, false, "SchemaVersionStatus")
 }
 
 func (ec *executionContext) _RunItemStats_level(ctx context.Context, field graphql.CollectedField, obj *model.RunItemStats) (ret graphql.Marshaler) {
@@ -42610,6 +44437,176 @@ func (ec *executionContext) _SchedulePreview_next(ctx context.Context, field gra
 }
 func (ec *executionContext) fieldContext_SchedulePreview_next(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SchedulePreview", field, false, false, "Time")
+}
+
+func (ec *executionContext) _SchedulePreview_retention(ctx context.Context, field graphql.CollectedField, obj *model.SchedulePreview) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchedulePreview_retention(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Retention, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RetentionEstimate) graphql.Marshaler {
+			return ec.marshalORetentionEstimate2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionEstimate(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SchedulePreview_retention(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SchedulePreview",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RetentionEstimate(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SchemaVersionPreset_name(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "String")
+}
+
+func (ec *executionContext) _SchemaVersionPreset_label(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_label(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "String")
+}
+
+func (ec *executionContext) _SchemaVersionPreset_description(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_description(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "String")
+}
+
+func (ec *executionContext) _SchemaVersionPreset_postgresTable(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_postgresTable(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PostgresTable, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_postgresTable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "String")
+}
+
+func (ec *executionContext) _SchemaVersionPreset_mysqlTable(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_mysqlTable(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.MysqlTable, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_mysqlTable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "String")
+}
+
+func (ec *executionContext) _SchemaVersionPreset_engines(ctx context.Context, field graphql.CollectedField, obj *model.SchemaVersionPreset) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SchemaVersionPreset_engines(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Engines, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.DatabaseEngine) graphql.Marshaler {
+			return ec.marshalNDatabaseEngine2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngineᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SchemaVersionPreset_engines(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SchemaVersionPreset", field, false, false, "DatabaseEngine")
 }
 
 func (ec *executionContext) _SecondFactorReset_user(ctx context.Context, field graphql.CollectedField, obj *model.SecondFactorReset) (ret graphql.Marshaler) {
@@ -47330,6 +49327,406 @@ func (ec *executionContext) fieldContext_TwoFactorStatus_recoveryCodesRemaining(
 	return graphql.NewScalarFieldContext("TwoFactorStatus", field, false, false, "Int")
 }
 
+func (ec *executionContext) _UnrecordedFile_id(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _UnrecordedFile_key(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_key(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "String")
+}
+
+func (ec *executionContext) _UnrecordedFile_size(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_size(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Size, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "Float")
+}
+
+func (ec *executionContext) _UnrecordedFile_modifiedAt(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_modifiedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ModifiedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_modifiedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "Time")
+}
+
+func (ec *executionContext) _UnrecordedFile_firstSeenAt(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_firstSeenAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FirstSeenAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_firstSeenAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "Time")
+}
+
+func (ec *executionContext) _UnrecordedFile_lastSeenAt(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFile_lastSeenAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFile_lastSeenAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFile", field, false, false, "Time")
+}
+
+func (ec *executionContext) _UnrecordedFileDeleteResult_ok(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFileDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFileDeleteResult_ok(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Ok, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFileDeleteResult_ok(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFileDeleteResult", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _UnrecordedFileDeleteResult_code(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFileDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFileDeleteResult_code(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFileDeleteResult_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFileDeleteResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _UnrecordedFileDeleteResult_message(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFileDeleteResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFileDeleteResult_message(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFileDeleteResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFileDeleteResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _UnrecordedFiles_destinationId(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_destinationId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DestinationID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_destinationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _UnrecordedFiles_scannedAt(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_scannedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ScannedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_scannedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "Time")
+}
+
+func (ec *executionContext) _UnrecordedFiles_totalCount(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_totalCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "Int")
+}
+
+func (ec *executionContext) _UnrecordedFiles_totalBytes(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_totalBytes(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TotalBytes, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v float64) graphql.Marshaler {
+			return ec.marshalNFloat2float64(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_totalBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "Float")
+}
+
+func (ec *executionContext) _UnrecordedFiles_truncated(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_truncated(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Truncated, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_truncated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _UnrecordedFiles_prunedDirectories(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_prunedDirectories(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PrunedDirectories, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_prunedDirectories(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "Int")
+}
+
+func (ec *executionContext) _UnrecordedFiles_files(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_files(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Files, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.UnrecordedFile) graphql.Marshaler {
+			return ec.marshalNUnrecordedFile2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFileᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_files(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UnrecordedFiles",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_UnrecordedFile(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UnrecordedFiles_nextCursor(ctx context.Context, field graphql.CollectedField, obj *model.UnrecordedFiles) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_UnrecordedFiles_nextCursor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NextCursor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_UnrecordedFiles_nextCursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("UnrecordedFiles", field, false, false, "String")
+}
+
 func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -50322,6 +52719,69 @@ func UnmarshalJobRetentionInput(ctx context.Context, raw any) (model.JobRetentio
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputJobSchemaVersionInput(ctx context.Context, obj any) (model.JobSchemaVersionInput, error) {
+	var it model.JobSchemaVersionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"mode", "preset", "schema", "customSql"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalNSchemaVersionMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionMode(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "preset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("preset"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Preset = data
+		case "schema":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("schema"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Schema = data
+		case "customSql":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("customSql"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CustomSQL = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalJobSchemaVersionInput unmarshals raw into the JobSchemaVersionInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalJobSchemaVersionInput(ctx context.Context, raw any) (model.JobSchemaVersionInput, error) {
+	var out model.JobSchemaVersionInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "JobSchemaVersionInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputJobTestRestoreInput(ctx context.Context, obj any) (model.JobTestRestoreInput, error) {
 	var it model.JobTestRestoreInput
 	if obj == nil {
@@ -53235,6 +55695,11 @@ func (ec *executionContext) _ConfigStatus(ctx context.Context, sel ast.Selection
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("ConfigStatus")
+		case "database":
+			out.Values[i] = ec._ConfigStatus_database(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "liveKeys":
 			out.Values[i] = ec._ConfigStatus_liveKeys(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -53872,6 +56337,54 @@ func (ec *executionContext) _CreatedUser(ctx context.Context, sel ast.SelectionS
 			}
 		case "temporaryPassword":
 			out.Values[i] = ec._CreatedUser_temporaryPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var databasePostureImplementors = []string{"DatabasePosture"}
+
+func (ec *executionContext) _DatabasePosture(ctx context.Context, sel ast.SelectionSet, obj *model.DatabasePosture) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, databasePostureImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("DatabasePosture")
+		case "mode":
+			out.Values[i] = ec._DatabasePosture_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tlsMode":
+			out.Values[i] = ec._DatabasePosture_tlsMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "insecureTransport":
+			out.Values[i] = ec._DatabasePosture_insecureTransport(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "singleAccount":
+			out.Values[i] = ec._DatabasePosture_singleAccount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -54697,6 +57210,12 @@ func (ec *executionContext) _Job(ctx context.Context, sel ast.SelectionSet, obj 
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Job_missedSince(ctx, field, obj)
 				})
+		case "retentionHolds":
+			out.ResolveConcurrently(ec.OperationContext, &deferred, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Job_retentionHolds(ctx, field, obj)
+				})
 		case "verification":
 			out.Values[i] = ec._Job_verification(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -54747,6 +57266,11 @@ func (ec *executionContext) _Job(ctx context.Context, sel ast.SelectionSet, obj 
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Job_recentRuns(ctx, field, obj)
 				})
+		case "schemaVersion":
+			out.Values[i] = ec._Job_schemaVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "testRestore":
 			out.Values[i] = ec._Job_testRestore(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -55254,6 +57778,60 @@ func (ec *executionContext) _JobRetention(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var jobSchemaVersionImplementors = []string{"JobSchemaVersion"}
+
+func (ec *executionContext) _JobSchemaVersion(ctx context.Context, sel ast.SelectionSet, obj *model.JobSchemaVersion) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, jobSchemaVersionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("JobSchemaVersion")
+		case "mode":
+			out.Values[i] = ec._JobSchemaVersion_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "preset":
+			out.Values[i] = ec._JobSchemaVersion_preset(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "presetLabel":
+			out.Values[i] = ec._JobSchemaVersion_presetLabel(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "schema":
+			out.Values[i] = ec._JobSchemaVersion_schema(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "customSql":
+			out.ResolveConcurrently(ec.OperationContext, &deferred, i,
+				true, false,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._JobSchemaVersion_customSql(ctx, field, obj)
+				})
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var jobSharedChannelAttachmentImplementors = []string{"JobSharedChannelAttachment"}
 
 func (ec *executionContext) _JobSharedChannelAttachment(ctx context.Context, sel ast.SelectionSet, obj *model.JobSharedChannelAttachment) graphql.Marshaler {
@@ -55672,6 +58250,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "deleteUnrecordedFile":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteUnrecordedFile(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "fetchDestinationHostKey":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_fetchDestinationHostKey(ctx, field)
@@ -55997,6 +58582,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "cancelRun":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_cancelRun(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "setJobSchemaVersion":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setJobSchemaVersion(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -57181,6 +59773,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_destinationUsage(ctx, field)
 				})
+		case "destinationUnrecordedFiles":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_destinationUnrecordedFiles(ctx, field)
+				})
 		case "smtpSettings":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -57312,6 +59910,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				true, true,
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_artifacts(ctx, field)
+				})
+		case "schemaVersionPresets":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_schemaVersionPresets(ctx, field)
 				})
 		case "securityAlertTypes":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
@@ -58255,6 +60859,127 @@ func (ec *executionContext) _RestoreWarning(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var retentionEstimateImplementors = []string{"RetentionEstimate"}
+
+func (ec *executionContext) _RetentionEstimate(ctx context.Context, sel ast.SelectionSet, obj *model.RetentionEstimate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, retentionEstimateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RetentionEstimate")
+		case "kept":
+			out.Values[i] = ec._RetentionEstimate_kept(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "byKeepLast":
+			out.Values[i] = ec._RetentionEstimate_byKeepLast(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "byKeepDays":
+			out.Values[i] = ec._RetentionEstimate_byKeepDays(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "atLeast":
+			out.Values[i] = ec._RetentionEstimate_atLeast(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var retentionHoldImplementors = []string{"RetentionHold"}
+
+func (ec *executionContext) _RetentionHold(ctx context.Context, sel ast.SelectionSet, obj *model.RetentionHold) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, retentionHoldImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RetentionHold")
+		case "destinationId":
+			out.Values[i] = ec._RetentionHold_destinationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "destinationName":
+			out.Values[i] = ec._RetentionHold_destinationName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "destinationType":
+			out.Values[i] = ec._RetentionHold_destinationType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "destinationDeleted":
+			out.Values[i] = ec._RetentionHold_destinationDeleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._RetentionHold_reason(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "heldRuns":
+			out.Values[i] = ec._RetentionHold_heldRuns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "since":
+			out.Values[i] = ec._RetentionHold_since(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "newestCompleteAt":
+			out.Values[i] = ec._RetentionHold_newestCompleteAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "checkedAt":
+			out.Values[i] = ec._RetentionHold_checkedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var runImplementors = []string{"Run"}
 
 func (ec *executionContext) _Run(ctx context.Context, sel ast.SelectionSet, obj *model.Run) graphql.Marshaler {
@@ -58734,6 +61459,16 @@ func (ec *executionContext) _RunItem(ctx context.Context, sel ast.SelectionSet, 
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._RunItem_stats(ctx, field, obj)
 				})
+		case "schemaVersion":
+			out.Values[i] = ec._RunItem_schemaVersion(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "schemaVersionStatus":
+			out.Values[i] = ec._RunItem_schemaVersionStatus(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -59407,6 +62142,69 @@ func (ec *executionContext) _SchedulePreview(ctx context.Context, sel ast.Select
 			}
 		case "next":
 			out.Values[i] = ec._SchedulePreview_next(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retention":
+			out.Values[i] = ec._SchedulePreview_retention(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var schemaVersionPresetImplementors = []string{"SchemaVersionPreset"}
+
+func (ec *executionContext) _SchemaVersionPreset(ctx context.Context, sel ast.SelectionSet, obj *model.SchemaVersionPreset) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, schemaVersionPresetImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SchemaVersionPreset")
+		case "name":
+			out.Values[i] = ec._SchemaVersionPreset_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._SchemaVersionPreset_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._SchemaVersionPreset_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "postgresTable":
+			out.Values[i] = ec._SchemaVersionPreset_postgresTable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mysqlTable":
+			out.Values[i] = ec._SchemaVersionPreset_mysqlTable(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "engines":
+			out.Values[i] = ec._SchemaVersionPreset_engines(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -61204,6 +64002,175 @@ func (ec *executionContext) _TwoFactorStatus(ctx context.Context, sel ast.Select
 	return out
 }
 
+var unrecordedFileImplementors = []string{"UnrecordedFile"}
+
+func (ec *executionContext) _UnrecordedFile(ctx context.Context, sel ast.SelectionSet, obj *model.UnrecordedFile) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, unrecordedFileImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UnrecordedFile")
+		case "id":
+			out.Values[i] = ec._UnrecordedFile_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "key":
+			out.Values[i] = ec._UnrecordedFile_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "size":
+			out.Values[i] = ec._UnrecordedFile_size(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "modifiedAt":
+			out.Values[i] = ec._UnrecordedFile_modifiedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "firstSeenAt":
+			out.Values[i] = ec._UnrecordedFile_firstSeenAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastSeenAt":
+			out.Values[i] = ec._UnrecordedFile_lastSeenAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var unrecordedFileDeleteResultImplementors = []string{"UnrecordedFileDeleteResult"}
+
+func (ec *executionContext) _UnrecordedFileDeleteResult(ctx context.Context, sel ast.SelectionSet, obj *model.UnrecordedFileDeleteResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, unrecordedFileDeleteResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UnrecordedFileDeleteResult")
+		case "ok":
+			out.Values[i] = ec._UnrecordedFileDeleteResult_ok(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "code":
+			out.Values[i] = ec._UnrecordedFileDeleteResult_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._UnrecordedFileDeleteResult_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var unrecordedFilesImplementors = []string{"UnrecordedFiles"}
+
+func (ec *executionContext) _UnrecordedFiles(ctx context.Context, sel ast.SelectionSet, obj *model.UnrecordedFiles) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, unrecordedFilesImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UnrecordedFiles")
+		case "destinationId":
+			out.Values[i] = ec._UnrecordedFiles_destinationId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "scannedAt":
+			out.Values[i] = ec._UnrecordedFiles_scannedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._UnrecordedFiles_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalBytes":
+			out.Values[i] = ec._UnrecordedFiles_totalBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "truncated":
+			out.Values[i] = ec._UnrecordedFiles_truncated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prunedDirectories":
+			out.Values[i] = ec._UnrecordedFiles_prunedDirectories(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "files":
+			out.Values[i] = ec._UnrecordedFiles_files(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nextCursor":
+			out.Values[i] = ec._UnrecordedFiles_nextCursor(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var userImplementors = []string{"User"}
 
 func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *model.User) graphql.Marshaler {
@@ -62390,6 +65357,16 @@ func (ec *executionContext) marshalNCreatedUser2ᚖgithubᚗcomᚋjlentinkᚋbek
 	return ec._CreatedUser(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNDatabaseConfigMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseConfigMode(ctx context.Context, v any) (model.DatabaseConfigMode, error) {
+	var res model.DatabaseConfigMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDatabaseConfigMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseConfigMode(ctx context.Context, sel ast.SelectionSet, v model.DatabaseConfigMode) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, v any) (model.DatabaseEngine, error) {
 	var res model.DatabaseEngine
 	err := res.UnmarshalGQL(v)
@@ -62398,6 +65375,44 @@ func (ec *executionContext) unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋb
 
 func (ec *executionContext) marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx context.Context, sel ast.SelectionSet, v model.DatabaseEngine) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNDatabaseEngine2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngineᚄ(ctx context.Context, v any) ([]model.DatabaseEngine, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]model.DatabaseEngine, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNDatabaseEngine2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngineᚄ(ctx context.Context, sel ast.SelectionSet, v []model.DatabaseEngine) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNDatabaseEngine2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabaseEngine(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNDatabasePosture2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDatabasePosture(ctx context.Context, sel ast.SelectionSet, v *model.DatabasePosture) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "DatabasePosture!")
+		return graphql.Null
+	}
+	return ec._DatabasePosture(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDestination2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx context.Context, sel ast.SelectionSet, v model.Destination) graphql.Marshaler {
@@ -62780,6 +65795,19 @@ func (ec *executionContext) marshalNJobRetention2ᚖgithubᚗcomᚋjlentinkᚋbe
 func (ec *executionContext) unmarshalNJobRetentionInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobRetentionInput(ctx context.Context, v any) (*model.JobRetentionInput, error) {
 	res, err := ec.unmarshalInputJobRetentionInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNJobSchemaVersion2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobSchemaVersion(ctx context.Context, sel ast.SelectionSet, v *model.JobSchemaVersion) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "JobSchemaVersion!")
+		return graphql.Null
+	}
+	return ec._JobSchemaVersion(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNJobSchemaVersionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobSchemaVersionInput(ctx context.Context, v any) (model.JobSchemaVersionInput, error) {
+	res, err := ec.unmarshalInputJobSchemaVersionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNJobSharedChannelAttachment2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobSharedChannelAttachment(ctx context.Context, sel ast.SelectionSet, v model.JobSharedChannelAttachment) graphql.Marshaler {
@@ -63420,6 +66448,36 @@ func (ec *executionContext) marshalNRestoreWarning2ᚕgithubᚗcomᚋjlentinkᚋ
 	return ret
 }
 
+func (ec *executionContext) marshalNRetentionHold2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHold(ctx context.Context, sel ast.SelectionSet, v model.RetentionHold) graphql.Marshaler {
+	return ec._RetentionHold(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRetentionHold2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHoldᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RetentionHold) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRetentionHold2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHold(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNRetentionHoldReason2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHoldReason(ctx context.Context, v any) (model.RetentionHoldReason, error) {
+	var res model.RetentionHoldReason
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRetentionHoldReason2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionHoldReason(ctx context.Context, sel ast.SelectionSet, v model.RetentionHoldReason) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNRole2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (model.Role, error) {
 	var res model.Role
 	err := res.UnmarshalGQL(v)
@@ -63756,6 +66814,36 @@ func (ec *executionContext) marshalNSchedulePreview2ᚖgithubᚗcomᚋjlentink�
 		return graphql.Null
 	}
 	return ec._SchedulePreview(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSchemaVersionMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionMode(ctx context.Context, v any) (model.SchemaVersionMode, error) {
+	var res model.SchemaVersionMode
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSchemaVersionMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionMode(ctx context.Context, sel ast.SelectionSet, v model.SchemaVersionMode) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNSchemaVersionPreset2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionPreset(ctx context.Context, sel ast.SelectionSet, v model.SchemaVersionPreset) graphql.Marshaler {
+	return ec._SchemaVersionPreset(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSchemaVersionPreset2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionPresetᚄ(ctx context.Context, sel ast.SelectionSet, v []model.SchemaVersionPreset) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSchemaVersionPreset2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionPreset(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNSecondFactorKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecondFactorKind(ctx context.Context, v any) (model.SecondFactorKind, error) {
@@ -64484,6 +67572,42 @@ func (ec *executionContext) marshalNUUID2ᚕgithubᚗcomᚋgoogleᚋuuidᚐUUID�
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalNUnrecordedFile2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFile(ctx context.Context, sel ast.SelectionSet, v model.UnrecordedFile) graphql.Marshaler {
+	return ec._UnrecordedFile(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNUnrecordedFile2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFileᚄ(ctx context.Context, sel ast.SelectionSet, v []model.UnrecordedFile) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUnrecordedFile2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFile(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNUnrecordedFileDeleteResult2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFileDeleteResult(ctx context.Context, sel ast.SelectionSet, v *model.UnrecordedFileDeleteResult) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "UnrecordedFileDeleteResult!")
+		return graphql.Null
+	}
+	return ec._UnrecordedFileDeleteResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNUnrecordedFiles2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUnrecordedFiles(ctx context.Context, sel ast.SelectionSet, v *model.UnrecordedFiles) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "UnrecordedFiles!")
+		return graphql.Null
+	}
+	return ec._UnrecordedFiles(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUpdateConnectionInput(ctx context.Context, v any) (model.UpdateConnectionInput, error) {
@@ -65390,6 +68514,13 @@ func (ec *executionContext) marshalORestoreStatus2ᚖgithubᚗcomᚋjlentinkᚋb
 	return v
 }
 
+func (ec *executionContext) marshalORetentionEstimate2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRetentionEstimate(ctx context.Context, sel ast.SelectionSet, v *model.RetentionEstimate) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RetentionEstimate(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalORole2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (*model.Role, error) {
 	if v == nil {
 		return nil, nil
@@ -65546,6 +68677,22 @@ func (ec *executionContext) unmarshalOScheduleUnit2ᚖgithubᚗcomᚋjlentinkᚋ
 }
 
 func (ec *executionContext) marshalOScheduleUnit2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐScheduleUnit(ctx context.Context, sel ast.SelectionSet, v *model.ScheduleUnit) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOSchemaVersionStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionStatus(ctx context.Context, v any) (*model.SchemaVersionStatus, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.SchemaVersionStatus)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOSchemaVersionStatus2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSchemaVersionStatus(ctx context.Context, sel ast.SelectionSet, v *model.SchemaVersionStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -27,6 +28,57 @@ type myConn struct {
 	db  *sql.DB
 	c   *sql.Conn
 	eng engine.Engine
+	// budget bounds what the session reads while armed (nil in tests
+	// that build a myConn by hand).
+	budget *budgetConn
+}
+
+// errReadBudget ends a read past the armed budget (the driver then drops
+// the connection).
+var errReadBudget = errors.New("dbprobe: read budget exceeded")
+
+// budgetConn is the session's network connection with an optional read
+// budget. The MySQL driver buffers whole rows without a limit of its own;
+// while armed (a version capture, D-210) at most the budget is read, then
+// reads fail.
+type budgetConn struct {
+	net.Conn
+	// left is the remaining budget; negative: unlimited.
+	left atomic.Int64
+}
+
+func newBudgetConn(c net.Conn) *budgetConn {
+	b := &budgetConn{Conn: c}
+	b.left.Store(-1)
+	return b
+}
+
+func (b *budgetConn) Read(p []byte) (int, error) {
+	left := b.left.Load()
+	if left == 0 {
+		return 0, errReadBudget
+	}
+	if left > 0 && int64(len(p)) > left {
+		p = p[:left]
+	}
+	n, err := b.Conn.Read(p)
+	if left > 0 {
+		b.left.Add(-int64(n))
+	}
+	return n, err
+}
+
+// arm limits the following reads to n bytes; disarm lifts the limit.
+func (b *budgetConn) arm(n int64) {
+	if b != nil {
+		b.left.Store(n)
+	}
+}
+
+func (b *budgetConn) disarm() {
+	if b != nil {
+		b.left.Store(-1)
+	}
 }
 
 func openMySQL(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, error) {
@@ -50,7 +102,16 @@ func openMySQL(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, er
 		cfg.TLSConfig = "false"
 	}
 	dial := p.Dial
-	cfg.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx) }
+	var budget atomic.Pointer[budgetConn]
+	cfg.DialFunc = func(ctx context.Context, _, _ string) (net.Conn, error) {
+		nc, err := dial(ctx)
+		if err != nil {
+			return nil, err
+		}
+		b := newBudgetConn(nc)
+		budget.Store(b)
+		return b, nil
+	}
 	// The connector keeps its own copy of the configuration (and the
 	// password string, which Go cannot zero; D-134 limitation).
 	conn, err := mysql.NewConnector(cfg)
@@ -65,7 +126,7 @@ func openMySQL(cctx, ctx context.Context, p Params, eng engine.Engine) (Conn, er
 		discardErr(db.Close())
 		return nil, connectFailure(ctx, err, myReason)
 	}
-	return &myConn{db: db, c: c, eng: eng}, nil
+	return &myConn{db: db, c: c, eng: eng, budget: budget.Load()}, nil
 }
 
 // myReason maps MySQL/MariaDB server errors and the driver's

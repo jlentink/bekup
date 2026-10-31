@@ -47,6 +47,9 @@ WORKDIR /src/web
 # Manifests first so the dependency layer stays cached while only sources
 # change. The globs make every file optional (VERSION always matches).
 COPY --from=websrc /websrc/VERSION /websrc/package.json* /websrc/pnpm-lock.yaml* /websrc/pnpm-workspace.yaml* /websrc/.npmrc* ./
+# pnpm's patchedDependencies (pnpm-workspace.yaml) must exist before install.
+# A matched directory copies its contents; VERSION keeps the glob optional.
+COPY --from=websrc /websrc/VERSION /websrc/patche[s] ./patches/
 
 # pnpm comes from corepack at the exact version in package.json's
 # "packageManager" field. --frozen-lockfile refuses any lockfile drift, and
@@ -96,6 +99,8 @@ ENV CGO_ENABLED=0 \
 WORKDIR /src
 
 COPY go.mod go.sum* ./
+# Local replace targets of go.mod (D-208: the inert clipboard module).
+COPY third_party/ ./third_party/
 RUN --mount=type=cache,id=bekup-gomod,target=/go/pkg/mod \
     go mod download && go mod verify
 

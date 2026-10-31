@@ -25,6 +25,7 @@ import (
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
+	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/downloads"
 	"github.com/jlentink/bekup/internal/egress"
@@ -115,12 +116,15 @@ type Options struct {
 
 // App is a started-up serve instance.
 type App struct {
-	opts    Options
-	pool    *pgxpool.Pool
-	keyring *crypto.Keyring
-	auditor *audit.Auditor
-	auth    *auth.Service
-	users   *auth.UserAdmin
+	opts Options
+	pool *pgxpool.Pool
+	// dbLoginFindings are the dangerous attributes and memberships of the
+	// single-account login role (D-207; nil with two roles).
+	dbLoginFindings []string
+	keyring         *crypto.Keyring
+	auditor         *audit.Auditor
+	auth            *auth.Service
+	users           *auth.UserAdmin
 	// factors aggregates the second-factor checkers (passkeys: task 1.8,
 	// TOTP: task 1.7); see secondFactors.
 	factors  *auth.SecondFactors
@@ -230,6 +234,9 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.auditInsecureDBTLS(ctx); err != nil {
 		return nil, err
 	}
+	if err := a.auditInsecureDBRoles(ctx); err != nil {
+		return nil, err
+	}
 	signer, err := a.newAuditHeadSigner(ctx)
 	if err != nil {
 		return nil, err
@@ -337,6 +344,9 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 	if err := a.auditInsecureDBTLS(ctx); err != nil {
 		return err
 	}
+	if err := a.auditInsecureDBRoles(ctx); err != nil {
+		return err
+	}
 	if err := a.loadKeyring(ctx); err != nil {
 		return err
 	}
@@ -393,23 +403,55 @@ func (a *App) openDB(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	url, err := cfg.DatabaseURL()
+	creds, err := cfg.AppDBCredentials()
 	if err != nil {
-		return fmt.Errorf("read database URL: %w", err)
+		return fmt.Errorf("read database credentials: %w", err)
+	}
+	login := ""
+	if creds.SetRole != "" {
+		login = creds.User
 	}
 	cctx, cancel := context.WithTimeout(ctx, startupTimeout(cfg))
 	defer cancel()
-	a.pool, err = db.NewPool(cctx, url, poolOpts)
-	config.Zero(url)
+	a.pool, err = db.NewPool(cctx, creds, poolOpts)
+	creds.Zero()
 	if err != nil {
 		return err
 	}
-	if err := db.CheckAppRole(cctx, a.pool); err != nil {
+	if err := db.CheckAppRole(cctx, a.pool, login); err != nil {
 		return fmt.Errorf("refusing to start: database role check failed: %w", err)
 	}
 	if err := db.CheckSchemaVersion(cctx, a.pool); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
+	return a.logDBConnection(cctx, poolOpts.TLS, login)
+}
+
+// logDBConnection logs the facts of the app DB connection once at startup
+// (D-207): the configuration mode and the TLS state, never the host or
+// credentials. In single-account mode it also records the login role's
+// dangerous attributes and memberships for the warning and the audit entry.
+func (a *App) logDBConnection(ctx context.Context, o db.TLSOptions, login string) error {
+	conn, err := a.pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	defer conn.Release()
+	f := db.ConnTLSFacts(conn.Conn().PgConn(), o)
+	a.opts.Logger.InfoContext(ctx, "app database connected",
+		slog.String("config_mode", a.opts.Config.Database.DatabaseMode()),
+		slog.String("tls_mode", f.Mode), slog.Bool("encrypted", f.Encrypted), slog.String("tls_version", f.Version),
+		slog.Bool("chain_verified", f.ChainVerified), slog.Bool("host_verified", f.HostVerified),
+		slog.Bool("tls_server_name_set", f.ServerNameOverride), slog.Bool("channel_binding", f.ChannelBinding))
+	if login == "" {
+		return nil
+	}
+	a.dbLoginFindings, err = db.LoginFindings(ctx, sqlc.New(conn), login)
+	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	a.opts.Logger.WarnContext(ctx, "app database single-account mode: one account runs migrations and the app and can alter the schema and the audit log (database.single_account, D-207)",
+		slog.Any("login_role_findings", a.dbLoginFindings))
 	return nil
 }
 
@@ -586,6 +628,8 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		Egress:        a.egress,
 		AuditChain:    a.auditor,
 		ConfigReload:  a.reloadAPI,
+		// Retention holds of the sweep (D-209).
+		RetentionHolds: retention.HoldReader{DB: a.pool},
 	})
 }
 

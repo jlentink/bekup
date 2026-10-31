@@ -1,6 +1,6 @@
 ## bekup migrate up
 
-Apply all pending migrations (default)
+Run the preflight, then apply all pending migrations (default)
 
 ```
 bekup migrate up [flags]

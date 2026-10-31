@@ -280,6 +280,61 @@ func (o *outline) replaceComment(marker, text string) error {
 	return nil
 }
 
+// replaceLine replaces the one comment line that is exactly line with the
+// fragment (comments only).
+// renameInComment replaces old with repl in the one comment line that
+// contains old (a file name in a header, for example).
+func (o *outline) renameInComment(old, repl string) error {
+	if old == "" {
+		return errors.New("outline: empty rename")
+	}
+	at := -1
+	for i, l := range o.lines {
+		if !isCommentLine(l) || !strings.Contains(l, old) {
+			continue
+		}
+		if at >= 0 || strings.Count(l, old) > 1 {
+			return fmt.Errorf("outline: %q is not unique in the comments", old)
+		}
+		at = i
+	}
+	if at < 0 {
+		return fmt.Errorf("outline: %q not found in the comments", old)
+	}
+	o.lines[at] = strings.Replace(o.lines[at], old, repl, 1)
+	return nil
+}
+
+func (o *outline) replaceLine(line, text string) error {
+	if !isCommentLine(line) {
+		return fmt.Errorf("outline: line %q: only comment lines can be replaced", line)
+	}
+	at := -1
+	for i, l := range o.lines {
+		if l != line {
+			continue
+		}
+		if at >= 0 {
+			return fmt.Errorf("outline: line %q is not unique", line)
+		}
+		at = i
+	}
+	if at < 0 {
+		return fmt.Errorf("outline: line %q not found", line)
+	}
+	frag := fragmentLines(text)
+	if len(frag) == 0 {
+		return fmt.Errorf("outline: line %q: empty replacement", line)
+	}
+	for _, l := range frag {
+		if !isCommentLine(l) {
+			return fmt.Errorf("outline: line %q: the fragment may hold comments only", line)
+		}
+	}
+	o.splice(at, at+1, frag)
+	return nil
+}
+
 // replaceHeader replaces the file's leading comment block.
 func (o *outline) replaceHeader(text string) error {
 	end := 0

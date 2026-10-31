@@ -29,4 +29,15 @@
 // delete runs under runstate.LockForDeletionTx: an artifact a download (or
 // a restore) holds is skipped until a later sweep, and no hold can be taken
 // while it is being deleted (D-155).
+//
+// Visibility (D-209): every sweep records per destination the incomplete
+// runs kept only by the newer-incomplete or no-complete rule (Plan's
+// Hold) in retention_holds and emits retention.blocked (once per job,
+// destination and day). A changed retention policy enqueues a sweep of the
+// job (reason policy_changed). The daily fan-out first fails runs no worker
+// will finish (RunReaper), then, per destination, removes leftover
+// temporary files and runs the unrecorded-file scan with empty-directory
+// pruning (UnrecordedScanner). EstimateKept is the editor's preview of
+// how many backups a policy keeps for a schedule, with the same keep
+// rules.
 package retention
