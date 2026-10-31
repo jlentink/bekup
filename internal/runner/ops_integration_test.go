@@ -45,6 +45,7 @@ import (
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runner/spec"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 )
 
 const (
@@ -251,6 +252,25 @@ func itExec(t *testing.T, c *client.Client, id string, cmd ...string) string {
 
 func itExecCode(t *testing.T, c *client.Client, id string, cmd ...string) (string, int) {
 	t.Helper()
+	stdout, stderr, code := itExecSplit(t, c, id, cmd...)
+	return stdout + stderr, code
+}
+
+// itExecStdout runs cmd like itExec but returns only its stdout: stderr
+// (e.g. the mysql client's "Using a password on the command line" warning)
+// is written by the tool independently of stdout, so a combined buffer
+// interleaves them in no fixed order. stderr is shown on failure only.
+func itExecStdout(t *testing.T, c *client.Client, id string, cmd ...string) string {
+	t.Helper()
+	stdout, stderr, code := itExecSplit(t, c, id, cmd...)
+	if code != 0 {
+		t.Fatalf("exec %v: exit %d: %s%s", cmd, code, stdout, stderr)
+	}
+	return stdout
+}
+
+func itExecSplit(t *testing.T, c *client.Client, id string, cmd ...string) (stdout, stderr string, code int) {
+	t.Helper()
 	ex, err := c.ExecCreate(t.Context(), id, client.ExecCreateOptions{User: "root", Cmd: cmd, AttachStdout: true, AttachStderr: true})
 	if err != nil {
 		t.Fatal(err)
@@ -260,13 +280,13 @@ func itExecCode(t *testing.T, c *client.Client, id string, cmd ...string) (strin
 		t.Fatal(err)
 	}
 	defer att.Close()
-	var out bytes.Buffer
-	itIgnore2(stdcopy.StdCopy(&out, &out, att.Reader))
+	var out, errOut bytes.Buffer
+	itIgnore2(stdcopy.StdCopy(&out, &errOut, att.Reader))
 	ins, err := c.ExecInspect(t.Context(), ex.ID, client.ExecInspectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out.String(), ins.ExitCode
+	return out.String(), errOut.String(), ins.ExitCode
 }
 
 func itLogs(c *client.Client, id string) string {
@@ -294,16 +314,7 @@ func itWaitLog(t *testing.T, c *client.Client, id, needle string, count int, tim
 
 func itEnsureImage(t *testing.T, c *client.Client, ref string) {
 	t.Helper()
-	if _, err := c.ImageInspect(t.Context(), ref); err == nil {
-		return
-	}
-	resp, err := c.ImagePull(t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := resp.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	imagepull.Ensure(t, c, ref)
 }
 
 // itStartDB starts one target database on the targets network.

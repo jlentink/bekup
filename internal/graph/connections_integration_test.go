@@ -56,6 +56,7 @@ import (
 	"github.com/jlentink/bekup/internal/runner/spec"
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 	"github.com/jlentink/bekup/internal/testutil/runnertest"
 )
 
@@ -244,31 +245,7 @@ func (h *crHarness) network(name string, internal bool) (string, string) {
 
 func (h *crHarness) ensureImage(ref string) {
 	h.t.Helper()
-	if _, err := h.c.ImageInspect(h.t.Context(), ref); err == nil {
-		return
-	}
-	// Registries rate-limit bursts of pulls (CI: "toomanyrequests"):
-	// retry those with a growing pause, fail on anything else.
-	var err error
-	for attempt := range 5 {
-		if attempt > 0 {
-			select {
-			case <-h.t.Context().Done():
-				h.t.Fatal(h.t.Context().Err())
-			case <-time.After(time.Duration(attempt) * 3 * time.Second):
-			}
-		}
-		var resp client.ImagePullResponse
-		if resp, err = h.c.ImagePull(h.t.Context(), ref, client.ImagePullOptions{}); err == nil {
-			err = resp.Wait(h.t.Context())
-		}
-		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "toomanyrequests") {
-			break
-		}
-	}
-	if err != nil {
-		h.t.Fatal(err)
-	}
+	imagepull.Ensure(h.t, h.c, ref)
 }
 
 func (h *crHarness) copy(id string, files map[string][]byte, modes map[string]int64) {

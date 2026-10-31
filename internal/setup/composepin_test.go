@@ -34,6 +34,7 @@ func renderedVariantDB(t testing.TB, v Variant, db DBMode) string {
 // the shipped files use (rendered with a pinned image), and they use no
 // other `$`.
 func TestComposeVarAllowlist(t *testing.T) {
+	t.Parallel()
 	got := map[string]bool{}
 	for _, v := range AllVariants {
 		for _, db := range DBModes {
@@ -82,6 +83,7 @@ func TestComposeVarAllowlist(t *testing.T) {
 // compose's !reset/!override are refused (the variable scan reads node
 // text, which is not what compose-go interpolates for !!binary).
 func TestComposeYAMLTags(t *testing.T) {
+	t.Parallel()
 	for _, in := range []string{
 		"name: !!binary JHtVU0VSOi1iZWt1cH0=\n",
 		"!!binary eA==: 1\n",
@@ -133,6 +135,7 @@ func addedService(extra string) string {
 // security re-check (H1, H2, M1-M3, L1-L6, info), each in a customized
 // compose.yaml and in compose.override.yaml.
 func TestStructuralLint(t *testing.T) {
+	t.Parallel()
 	type tc struct {
 		name    string
 		v       Variant
@@ -288,6 +291,7 @@ func TestStructuralLint(t *testing.T) {
 		}
 		if c.over != "" {
 			t.Run(c.name+"/override", func(t *testing.T) {
+				t.Parallel()
 				fs := lintWith(t, nil, []byte(c.over), v, env)
 				if !hasFinding(fs, sev, c.want) {
 					t.Fatalf("no %s %q in %v", sev, c.want, fs)
@@ -298,6 +302,7 @@ func TestStructuralLint(t *testing.T) {
 			continue
 		}
 		t.Run(c.name+"/compose.yaml", func(t *testing.T) {
+			t.Parallel()
 			var s string
 			switch {
 			case c.top != "":
@@ -316,6 +321,7 @@ func TestStructuralLint(t *testing.T) {
 // TestOperatorTunables: the documented overrides and the operator-tunable
 // attributes pass; anything beyond them is an error.
 func TestOperatorTunables(t *testing.T) {
+	t.Parallel()
 	staticTraefik := renderOverride(&Answers{Proxy: ProxyTraefik})
 	staticNginx := renderOverride(&Answers{Proxy: ProxyNginx})
 	for _, tc := range []struct {
@@ -341,6 +347,7 @@ func TestOperatorTunables(t *testing.T) {
 		{name: "own proxy on frontend (full, proxy none)", v: VariantFull, over: "services:\n  myproxy:\n    image: caddy:2@" + testDigest2 + "\n" + hardened + "    networks:\n      frontend:\n        ipv4_address: 10.213.250.6\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			v := tc.v
 			if v == "" {
 				v = VariantTraefik
@@ -382,6 +389,7 @@ func TestOperatorTunables(t *testing.T) {
 		{"profiles on serve", "services:\n  serve:\n    profiles: [off]\n", "profiles"},
 	} {
 		t.Run("deny/"+tc.name, func(t *testing.T) {
+			t.Parallel()
 			if fs := lintWith(t, nil, []byte(tc.over), VariantTraefik, nil); !hasFinding(fs, SeverityError, tc.want) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
 			}
@@ -392,6 +400,7 @@ func TestOperatorTunables(t *testing.T) {
 // TestShippedVariantsPass: every shipped variant (release and full) lints
 // clean, also with non-default .env values.
 func TestShippedVariantsPass(t *testing.T) {
+	t.Parallel()
 	env := map[string]string{
 		"SERVE_PROXY_IP": "10.213.253.11", "RUNNER_CTL_SUBNET": "10.9.0.0/24", "RUNNER_CTL_IP": "10.9.0.10",
 		"DOCKER_GID": "998", "BEKUP_DOMAIN": "b.example.com", "BEKUP_KEYS_DIR": "./keys",
@@ -411,6 +420,7 @@ func TestShippedVariantsPass(t *testing.T) {
 // symlink walk, so the lint itself refuses a symlink on the way to a bind
 // source, env_file or secret file (M3).
 func TestLintSymlinkedBindSource(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Symlink("/", filepath.Join(dir, "data")); err != nil {
 		t.Fatal(err)
@@ -446,6 +456,7 @@ func TestLintSymlinkedBindSource(t *testing.T) {
 // the comparison), setup has none, and the comparison covers every
 // attribute of the pinned compose-go version.
 func TestOperatorTunableKeys(t *testing.T) {
+	t.Parallel()
 	if len(operatorTunable("setup")) > 0 {
 		t.Fatal("setup must have no tunables")
 	}

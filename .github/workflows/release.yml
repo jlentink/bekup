@@ -88,11 +88,13 @@ jobs:
           fetch-depth: 0
 
       # actions/checkout may store the tag as the bare commit (no tag
-      # object); fetch the annotated tag object itself. The token is passed
-      # for this one command only (checkout does not persist it), through
-      # git's GIT_CONFIG_* environment, never on the command line (argv is
+      # object); fetch the annotated tag object itself. On a tag push it
+      # does not create refs/remotes/origin/main either, which the ancestry
+      # check below needs: fetch main explicitly. The token is passed for
+      # this one command only (checkout does not persist it), through git's
+      # GIT_CONFIG_* environment, never on the command line (argv is
       # visible to every process on the runner).
-      - name: Fetch the tag object
+      - name: Fetch the tag object and main
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -101,7 +103,9 @@ jobs:
           GIT_CONFIG_COUNT=1 \
             GIT_CONFIG_KEY_0="http.$GITHUB_SERVER_URL/.extraheader" \
             GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
-            git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+            git fetch --no-tags --force origin \
+              "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME" \
+              "+refs/heads/main:refs/remotes/origin/main"
 
       - name: Tag matches VERSION, is annotated, names itself and is on main
         id: tag

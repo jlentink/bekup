@@ -31,6 +31,7 @@ func hasFinding(fs []Finding, sev Severity, substr string) bool {
 }
 
 func TestCheckFindings(t *testing.T) {
+	t.Parallel()
 	type tc struct {
 		name string
 		mut  func(t *testing.T, dir string)
@@ -128,6 +129,7 @@ func TestCheckFindings(t *testing.T) {
 
 // check never opens secret files: make them unreadable and it still passes.
 func TestCheckDoesNotReadSecrets(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root reads everything")
 	}
@@ -158,6 +160,7 @@ func TestCheckDoesNotReadSecrets(t *testing.T) {
 }
 
 func TestCheckFixOwnership(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, testAnswers(t, ProxyTraefik))
 	if err := os.Chmod(pathIn(dir, "secrets"), 0o755); err != nil { //nolint:gosec // G302: the test needs a wrong mode

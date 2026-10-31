@@ -39,6 +39,7 @@ func secretValues(t *testing.T, dir string, entries []Entry) [][]byte {
 }
 
 func TestInitWritesDeployment(t *testing.T) {
+	t.Parallel()
 	for _, proxy := range []Proxy{ProxyTraefik, ProxyNginx, ProxyNone} {
 		t.Run(string(proxy), func(t *testing.T) {
 			dir := t.TempDir()
@@ -110,6 +111,7 @@ func testOptionsAssets() fs.FS { o := Options{}; o.defaults(); return o.assets }
 
 // The real passphrase path: the CA key is age-encrypted.
 func TestInitRealPassphrase(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	o := testOptions(t, dir, testAnswers(t, ProxyTraefik))
 	o.certsInit = certs.Init
@@ -133,6 +135,7 @@ func TestInitRealPassphrase(t *testing.T) {
 }
 
 func TestInitRefusesExistingAndKeepExisting(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -164,6 +167,7 @@ func TestInitRefusesExistingAndKeepExisting(t *testing.T) {
 }
 
 func TestInitForceRewritesOnlyNonSecrets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -184,6 +188,7 @@ func TestInitForceRewritesOnlyNonSecrets(t *testing.T) {
 }
 
 func TestInitPartialSecretsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -198,6 +203,7 @@ func TestInitPartialSecretsRefused(t *testing.T) {
 }
 
 func TestInitRollback(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	// A pre-existing, Docker-created mount point of the offline CA.
 	if err := os.MkdirAll(pathIn(dir, "secrets/certs/ca"), 0o750); err != nil {
@@ -227,6 +233,7 @@ func TestInitRollback(t *testing.T) {
 }
 
 func TestInitRegenerateSecrets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -247,6 +254,7 @@ func TestInitRegenerateSecrets(t *testing.T) {
 }
 
 func TestInitStaticTLSAndKeysDir(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyNginx)
 	a.TLSMode, a.ACMEEmail, a.KeysDir = TLSStatic, "", "vault/bekup"
@@ -276,6 +284,7 @@ func TestInitStaticTLSAndKeysDir(t *testing.T) {
 }
 
 func TestInitRefusesSymlinkedDirs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Symlink(t.TempDir(), filepath.Join(dir, "secrets")); err != nil {
 		t.Fatal(err)
@@ -286,6 +295,7 @@ func TestInitRefusesSymlinkedDirs(t *testing.T) {
 }
 
 func TestInitPrintOwnership(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	o := testOptions(t, dir, testAnswers(t, ProxyTraefik))
 	o.Ownership = OwnershipAuto // fake euid 1000 -> print

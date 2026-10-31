@@ -31,6 +31,7 @@ func chownedSys(t *testing.T, dir string) *fakeSys {
 // Regression: re-applying the manifest to a tree whose secrets already
 // belong to 65532/70 must not chmod them (EPERM without CAP_FOWNER).
 func TestOwnershipOnChownedTree(t *testing.T) {
+	t.Parallel()
 	a := testAnswers(t, ProxyTraefik)
 	t.Run("upgrade", func(t *testing.T) {
 		dir := t.TempDir()
@@ -101,6 +102,7 @@ func TestOwnershipOnChownedTree(t *testing.T) {
 // The deployment directory must belong to root and not be group/world
 // writable.
 func TestCheckDeploymentRoot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, testAnswers(t, ProxyTraefik))
 	if err := os.Chmod(dir, 0o777); err != nil { //nolint:gosec // G302: the test needs a wrong mode
@@ -123,6 +125,7 @@ func TestCheckDeploymentRoot(t *testing.T) {
 
 // Init warns about a writable deployment directory and narrows it.
 func TestInitWarnsWritableRoot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o777); err != nil { //nolint:gosec // G302: the test needs a wrong mode
 		t.Fatal(err)
@@ -138,6 +141,7 @@ func TestInitWarnsWritableRoot(t *testing.T) {
 
 // An offline CA on its own mount (FAT/exFAT) only warns about its modes.
 func TestCheckOfflineMediaModes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, testAnswers(t, ProxyTraefik))
 	if err := os.Chmod(pathIn(dir, "secrets/certs/ca/ca.key"), 0o755); err != nil { //nolint:gosec // G302: FAT-like mode

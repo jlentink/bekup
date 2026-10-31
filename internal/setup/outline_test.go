@@ -28,6 +28,7 @@ f:
 `
 
 func TestOutlineFind(t *testing.T) {
+	t.Parallel()
 	o, err := newOutline(outlineSrc)
 	if err != nil {
 		t.Fatal(err)
@@ -77,6 +78,7 @@ func TestOutlineFind(t *testing.T) {
 }
 
 func TestOutlineEdits(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		edit func(o *outline) error

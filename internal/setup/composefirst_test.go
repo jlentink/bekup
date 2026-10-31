@@ -57,6 +57,7 @@ func composeFirstInit(t *testing.T, dir string, v Variant, mut func(*Options)) (
 }
 
 func TestInspectComposeRecognition(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, variantImage)
 	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
@@ -128,6 +129,7 @@ func FuzzInspectCompose(f *testing.F) {
 }
 
 func TestLintCompose(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, variantImage)
 	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
@@ -158,6 +160,7 @@ func TestLintCompose(t *testing.T) {
 		{"extends file", edit(serveCmd, serveCmd+"    extends:\n      file: x.yml\n      service: s\n"), "`include` and `extends.file`"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			fs := lintWith(t, []byte(tc.yaml), nil, VariantTraefik, nil)
 			if !hasFinding(fs, SeverityError, tc.want) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
@@ -187,6 +190,7 @@ func TestLintCompose(t *testing.T) {
 }
 
 func TestInitComposeFirst(t *testing.T) {
+	t.Parallel()
 	for _, v := range ReleaseVariants {
 		t.Run(string(v), func(t *testing.T) {
 			dir := t.TempDir()
@@ -255,6 +259,7 @@ func TestInitComposeFirst(t *testing.T) {
 }
 
 func TestInitComposeFirstRefusals(t *testing.T) {
+	t.Parallel()
 	// No compose.yaml.
 	dir := t.TempDir()
 	if _, err := composeFirstInit(t, dir, VariantTraefik, nil); !errors.Is(err, ErrNoCompose) || !strings.Contains(err.Error(), ReleaseURL) {
@@ -311,6 +316,7 @@ func TestInitComposeFirstRefusals(t *testing.T) {
 }
 
 func TestInitWriteComposeVariant(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := variantAnswers(VariantTraefikExternal)
 	a.Image, a.Variant = mustRef(t, variantImage), VariantTraefikExternal
@@ -340,6 +346,7 @@ func TestInitWriteComposeVariant(t *testing.T) {
 }
 
 func TestUpgradeComposeFirst(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeRelease(t, dir, VariantTraefik, variantImage)
 	if _, err := composeFirstInit(t, dir, VariantTraefik, nil); err != nil {
@@ -410,6 +417,7 @@ func TestUpgradeComposeFirst(t *testing.T) {
 }
 
 func TestCheckComposeFirst(t *testing.T) {
+	t.Parallel()
 	setupDir := func(t *testing.T, v Variant) string {
 		dir := t.TempDir()
 		writeRelease(t, dir, v, variantImage)
@@ -472,6 +480,7 @@ func TestCheckComposeFirst(t *testing.T) {
 		}, SeverityError, "no compose.yaml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := setupDir(t, tc.variant)
 			tc.mut(t, dir)
 			fs, out, err := runCheck(t, dir, nil)

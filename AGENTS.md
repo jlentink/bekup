@@ -194,7 +194,8 @@ internal/
                   notify.go (API, codes, events) testrestore*.go (4.6);
                   mysqlit/ holds the MySQL/MariaDB integration harness
                 testutil (test-only helpers: dockertest skip policy,
-                  runnertest.WaitDockerOK for real-runner harnesses);
+                  runnertest.WaitDockerOK for real-runner harnesses,
+                  imagepull (image pulls with the rate-limit retry, D-214));
                   storage/sftp/sftptest (atmoz/sftp test server);
                   db/externaltest (plain PostgreSQL 15-17 with a test CA
                   for the external-database tests, D-207)
@@ -272,7 +273,12 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   but fails with `CI=true`. Harnesses with a real runner wait for
   `runnertest.WaitDockerOK` (Health reports `DOCKER_STATUS_OK`), never
   only for the "runner listening" log line; SFTP tests start the server
-  with `sftptest.Start`.
+  with `sftptest.Start`. Tests pull images only through
+  `imagepull.Ensure` / `imagepull.Pull` (`internal/testutil/imagepull`:
+  backoff on registry rate limits; CI pulls Docker Hub images through
+  `mirror.gcr.io`, D-214). `go test` runs with `-timeout 20m`
+  (`just test`, CI); mark independent tests `t.Parallel()` (never with
+  `t.Setenv` or process-wide changes).
   Integration tests that create containers from a catalog image call
   `ensureImage` (or pull) first: `ContainerCreate` never pulls. Stream
   integration tests run a `pubsub.Listener` on the test bus
@@ -988,6 +994,12 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `*BlockedAddressError` details to admins only; return
   `netguard.Normalize(err)` to everyone else. Never set
   `http.Transport.Proxy` or use `http.DefaultClient` for such endpoints.
+- setup compose lint (D-205, D-213): compose files reach compose-go only
+  through `loadProjectMode` (`internal/setup/composemodel.go`): first
+  `singleDocument` (one document, no alias cycles, ≤ 1,000 aliases,
+  ≤ 100,000 nodes with aliases expanded), then the load under
+  `loadWithTimeout` (one-minute deadline). Never call compose-go's loader
+  elsewhere.
 - Engines (`internal/engine`, D-123): dump/restore images come only from
   `engine.Embedded()` (+ `Catalog.WithExtra` for the runner's extra file);
   never build an `Entry` or image reference yourself. Pick clients with

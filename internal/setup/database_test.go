@@ -55,6 +55,7 @@ const (
 )
 
 func TestInitExternalDatabase(t *testing.T) {
+	t.Parallel()
 	for _, auth := range DBAuths {
 		t.Run(string(auth), func(t *testing.T) {
 			dir := t.TempDir()
@@ -167,6 +168,7 @@ func TestInitExternalDatabase(t *testing.T) {
 }
 
 func TestDatabaseAnswersValidate(t *testing.T) {
+	t.Parallel()
 	base := func() Database {
 		return Database{Mode: DBExternal, Host: "db.example.com", CAFile: "ca.pem"}
 	}
@@ -226,6 +228,7 @@ func TestDatabaseAnswersValidate(t *testing.T) {
 }
 
 func TestInitExternalDatabaseInputs(t *testing.T) {
+	t.Parallel()
 	t.Run("password files", func(t *testing.T) {
 		dir := t.TempDir()
 		a := externalAnswers(t, dir, DBAuthExistingRoles)
@@ -332,8 +335,10 @@ func TestInitExternalDatabaseInputs(t *testing.T) {
 }
 
 func TestComposeFirstExternalDatabase(t *testing.T) {
+	t.Parallel()
 	for _, v := range ReleaseVariants {
 		t.Run(string(v), func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			img := mustRef(t, variantImage)
 			data, err := RenderRelease(v, DBExternal, &img)
@@ -397,6 +402,7 @@ func TestComposeFirstExternalDatabase(t *testing.T) {
 }
 
 func TestCheckExternalDatabase(t *testing.T) {
+	t.Parallel()
 	setupDir := func(t *testing.T, auth DBAuth) string {
 		dir := t.TempDir()
 		a := externalAnswers(t, dir, auth)
@@ -473,6 +479,7 @@ func TestCheckExternalDatabase(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := setupDir(t, tc.auth)
 			tc.mut(t, dir)
 			fs, out := checkFindings(t, dir)
@@ -494,6 +501,7 @@ func TestCheckExternalDatabase(t *testing.T) {
 }
 
 func TestInitImportMasterKey(t *testing.T) {
+	t.Parallel()
 	k, err := crypto.GenerateKeyring(time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -556,6 +564,7 @@ func TestInitImportMasterKey(t *testing.T) {
 }
 
 func TestInitUseExistingCA(t *testing.T) {
+	t.Parallel()
 	// The CA of an earlier deployment, as on the offline media.
 	src := t.TempDir()
 	mustInit(t, src, testAnswers(t, ProxyTraefik))

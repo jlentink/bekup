@@ -277,7 +277,7 @@ lint:
 test: test-scripts
     {{ lib }}
     info "go test"
-    go test -race -count=1 ./...
+    go test -race -count=1 -timeout 20m ./...
     if has_web; then
         web_deps
         info "vitest"

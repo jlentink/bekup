@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"filippo.io/age/armor"
 )
 
 const testPass = "correct horse battery staple"
@@ -632,4 +635,49 @@ func FuzzParseClientID(f *testing.F) {
 			t.Fatalf("not canonical: %q -> %q (%v)", id, again, err)
 		}
 	})
+}
+
+// TestSealKeyProductionWorkFactor: without the test-only workFactor
+// override the CA key is sealed with scrypt work factor 18 (D-088), and
+// opening refuses a header that asks for more.
+func TestSealKeyProductionWorkFactor(t *testing.T) {
+	if defaultScryptWorkFactor != 18 {
+		t.Fatalf("defaultScryptWorkFactor = %d, want 18", defaultScryptWorkFactor)
+	}
+	keyPEM := []byte("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")
+	sealed, err := sealKey(keyPEM, []byte(testPass), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := scryptStanzaWorkFactor(t, sealed); got != "18" {
+		t.Fatalf("work factor %q, want 18", got)
+	}
+	if out, err := openKey(sealed, []byte(testPass)); err != nil || !bytes.Equal(out, keyPEM) {
+		t.Fatalf("open: %v", err)
+	}
+	// A header asking for more than the default is refused before scrypt.
+	high, err := sealKey(keyPEM, []byte(testPass), defaultScryptWorkFactor+1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openKey(high, []byte(testPass)); err == nil {
+		t.Fatal("work factor 19 accepted")
+	}
+}
+
+// scryptStanzaWorkFactor returns the work factor of the scrypt stanza in
+// an armored age file.
+func scryptStanzaWorkFactor(t *testing.T, sealed []byte) string {
+	t.Helper()
+	plain, err := io.ReadAll(armor.NewReader(bytes.NewReader(sealed)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range strings.Split(string(plain), "\n") {
+		if f := strings.Fields(l); len(f) == 4 && f[0] == "->" && f[1] == "scrypt" {
+			return f[3]
+		}
+	}
+	t.Fatal("no scrypt stanza")
+	return ""
 }

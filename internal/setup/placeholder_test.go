@@ -22,6 +22,7 @@ const committedDir = "deploy/compose"
 // the release assets only in the x-bekup-image line, and they are neither
 // embedded nor shipped as a deploy asset.
 func TestCommittedComposeFiles(t *testing.T) {
+	t.Parallel()
 	root := repoRoot(t)
 	img := mustRef(t, variantImage)
 	entries, err := os.ReadDir(filepath.Join(root, committedDir))
@@ -113,6 +114,7 @@ func writePlaceholderDB(t *testing.T, dir string, v Variant, db DBMode) []byte {
 }
 
 func TestComposeImagePlaceholder(t *testing.T) {
+	t.Parallel()
 	src, err := RenderRelease(VariantNPM, DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -140,6 +142,7 @@ func TestComposeImagePlaceholder(t *testing.T) {
 }
 
 func TestInspectComposePlaceholder(t *testing.T) {
+	t.Parallel()
 	fsys := bekup.Assets()
 	src, err := RenderRelease(VariantTraefikExternal, DBBundled, nil)
 	if err != nil {
@@ -202,6 +205,7 @@ func TestInspectComposePlaceholder(t *testing.T) {
 }
 
 func TestSetEnvLine(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ in, value, want string }{
 		{"", "x", "BEKUP_IMAGE=x\n"},
 		{"A=1\n", "x", "A=1\nBEKUP_IMAGE=x\n"},

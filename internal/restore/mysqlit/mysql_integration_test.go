@@ -49,6 +49,7 @@ import (
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 )
 
 const (
@@ -143,16 +144,7 @@ func myLogs(c *client.Client, id string) string {
 
 func myEnsureImage(t *testing.T, c *client.Client, ref string) {
 	t.Helper()
-	if _, err := c.ImageInspect(t.Context(), ref); err == nil {
-		return
-	}
-	resp, err := c.ImagePull(t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := resp.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	imagepull.Ensure(t, c, ref)
 }
 
 func myExecCode(t *testing.T, c *client.Client, id string, cmd ...string) (string, int) {

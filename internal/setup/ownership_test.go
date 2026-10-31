@@ -18,6 +18,7 @@ const mountinfoSample = `22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw
 `
 
 func TestParseMountinfo(t *testing.T) {
+	t.Parallel()
 	ms, err := ParseMountinfo(strings.NewReader(mountinfoSample))
 	if err != nil {
 		t.Fatal(err)
@@ -57,6 +58,7 @@ func FuzzParseMountinfo(f *testing.F) {
 }
 
 func TestResolveOwnership(t *testing.T) {
+	t.Parallel()
 	ms, err := ParseMountinfo(strings.NewReader(mountinfoSample))
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +101,7 @@ func openRoot(t *testing.T, dir string) *os.Root {
 }
 
 func TestApplyOwnershipChmodBeforeChown(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "s"), 0o750); err != nil {
 		t.Fatal(err)
@@ -151,6 +154,7 @@ func TestApplyOwnershipChmodBeforeChown(t *testing.T) {
 // A file already handed to another UID cannot be chmod'ed with CAP_CHOWN
 // alone: setup takes it over, chmods it and hands it back.
 func TestApplyOwnershipChownedFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, f := range []string{"k", "ok"} {
 		if err := os.WriteFile(pathIn(dir, f), []byte("x"), 0o600); err != nil {
@@ -189,6 +193,7 @@ func TestApplyOwnershipChownedFiles(t *testing.T) {
 
 // The deployment directory itself only loses group/world write bits.
 func TestApplyOwnershipRootUpperBound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o777); err != nil { //nolint:gosec // G302: the test needs a wrong mode
 		t.Fatal(err)
@@ -213,6 +218,7 @@ func TestApplyOwnershipRootUpperBound(t *testing.T) {
 // Offline CA media without Unix modes/owners (FAT/exFAT) are tolerated with
 // a warning; the same errors elsewhere are not.
 func TestApplyOwnershipOfflineMedia(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(pathIn(dir, "secrets/certs/ca"), 0o755); err != nil { //nolint:gosec // G301: FAT-like modes
 		t.Fatal(err)
@@ -249,6 +255,7 @@ func TestApplyOwnershipOfflineMedia(t *testing.T) {
 }
 
 func TestPrintChownGolden(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	entries := Manifest(Layout{KeysDir: "secrets"}, []string{"deploy/postgres/entrypoint.sh"}, ManifestOptions{})
 	if err := printChown(&b, entries); err != nil {
@@ -271,6 +278,7 @@ func TestPrintChownGolden(t *testing.T) {
 // L2: ownership changes go through a descriptor opened without following
 // symlinks, with the entry type re-checked on the descriptor.
 func TestEntryFDRefusesSymlinksAndTypeChanges(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "target"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
@@ -335,6 +343,7 @@ func TestEntryFDRefusesSymlinksAndTypeChanges(t *testing.T) {
 // re-applies the manifest to an already chowned tree (setup check
 // --fix-ownership).
 func TestApplyOwnershipRealChown(t *testing.T) {
+	t.Parallel()
 	if os.Geteuid() != 0 {
 		t.Skip("needs root (CAP_CHOWN)")
 	}

@@ -45,6 +45,7 @@ import (
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runner/spec"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 )
 
 const (
@@ -240,16 +241,7 @@ func waitLog(t *testing.T, c *client.Client, id, needle string, count int, timeo
 
 func ensureImage(t *testing.T, c *client.Client, ref string) {
 	t.Helper()
-	if _, err := c.ImageInspect(t.Context(), ref); err == nil {
-		return
-	}
-	resp, err := c.ImagePull(t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := resp.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	imagepull.Ensure(t, c, ref)
 }
 
 func TestIntegrationExecutorIsolation(t *testing.T) {

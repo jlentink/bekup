@@ -13,6 +13,7 @@ import (
 )
 
 func TestAnswersValidate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		mut   func(*Answers)
@@ -191,6 +192,7 @@ func FuzzAnswers(f *testing.F) {
 }
 
 func TestLinkCreateCommand(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		l    LinkNetwork
 		want string

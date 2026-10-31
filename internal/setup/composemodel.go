@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -31,13 +32,27 @@ type composeSrc struct {
 	data []byte
 }
 
-// maxComposeNodes bounds compose-go's merge/reset walk and the document
-// scan (alias bombs).
+// maxComposeNodes bounds compose-go's merge/reset walk, the document scan
+// and the size of a document with every alias expanded (alias bombs).
 const maxComposeNodes = 100000
+
+// maxComposeAliases bounds the alias nodes (`*name`) of one document. The
+// shipped files use about a dozen. compose-go's `!reset` walk compares
+// every visit of an anchor with all earlier visits of it (quadratic: 40,000
+// aliases of one anchor in a 120 KB file take about 20 s per load), so the
+// count is bounded before compose-go sees the file.
+const maxComposeAliases = 1000
+
+// composeLoadTimeout bounds one compose-go load. With the checks of
+// singleDocument a load takes milliseconds; the guard turns anything
+// compose-go might still spin on into an error instead of a hang.
+const composeLoadTimeout = time.Minute
 
 // singleDocument refuses a compose file with more than one YAML document:
 // docker compose merges every `---` document, so a second one could
-// silently change what the first declares.
+// silently change what the first declares. It also refuses alias cycles,
+// more than maxComposeAliases aliases and documents that expand to more
+// than maxComposeNodes nodes (checkAliases).
 func singleDocument(name string, data []byte) error {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	n := 0
@@ -54,7 +69,71 @@ func singleDocument(name string, data []byte) error {
 		if n > 1 {
 			return fmt.Errorf("%s has more than one YAML document (`---`): docker compose merges them all; keep a single document", name)
 		}
+		if err := checkAliases(&node); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
 	}
+}
+
+// checkAliases walks one YAML document before compose-go resolves it. An
+// alias inside the node it refers to (`x: &a {<<: *a}`, `x: &a [*a]`) is a
+// cycle: compose-go's merge-key handling skips its cycle check and spins
+// up to its visit limit (quadratic, seconds per load), and docker compose
+// cannot load such a file either. Anchors are defined before their
+// aliases, so a cycle is exactly an alias whose target is an ancestor.
+// The alias count and the expanded size are bounded too.
+func checkAliases(doc *yaml.Node) error {
+	onPath := map[*yaml.Node]bool{}
+	size := map[*yaml.Node]int{} // expanded size of finished nodes
+	aliases := 0
+	var walk func(n *yaml.Node) (int, error)
+	walk = func(n *yaml.Node) (int, error) {
+		if n == nil {
+			return 0, nil
+		}
+		if n.Kind == yaml.AliasNode {
+			aliases++
+			if aliases > maxComposeAliases {
+				return 0, fmt.Errorf("line %d: more than %d YAML aliases (*name); write the values out", n.Line, maxComposeAliases)
+			}
+			if n.Alias == nil {
+				return 0, fmt.Errorf("line %d: the YAML alias *%s has no anchor", n.Line, bounded(n.Value))
+			}
+			if onPath[n.Alias] {
+				return 0, fmt.Errorf("line %d: the YAML alias *%s is used inside its own anchor (a cycle); docker compose cannot load it", n.Line, bounded(n.Value))
+			}
+			s, ok := size[n.Alias]
+			if !ok {
+				// Not reachable from the document root before the alias
+				// (yaml.v3 links only defined anchors): walk it once.
+				var err error
+				if s, err = walk(n.Alias); err != nil {
+					return 0, err
+				}
+			}
+			return s, nil
+		}
+		if s, ok := size[n]; ok {
+			return s, nil
+		}
+		onPath[n] = true
+		total := 1
+		for _, c := range n.Content {
+			s, err := walk(c)
+			if err != nil {
+				return 0, err
+			}
+			total += s
+			if total > maxComposeNodes {
+				return 0, fmt.Errorf("line %d: the document expands to more than %d YAML nodes (aliases included)", n.Line, maxComposeNodes)
+			}
+		}
+		delete(onPath, n)
+		size[n] = total
+		return total, nil
+	}
+	_, err := walk(doc)
+	return err
 }
 
 // errOtherComposeFile is returned for `include` and `extends.file`.
@@ -145,7 +224,7 @@ func loadProjectMode(root string, env map[string]string, raw bool, docs ...compo
 	if name == "" {
 		name = "bekup"
 	}
-	p, err = loader.LoadWithContext(context.Background(), details, func(o *loader.Options) {
+	p, err = loadWithTimeout(details, func(o *loader.Options) {
 		o.SetProjectName(name, false)
 		o.Profiles = []string{"*"}
 		o.SkipInterpolation = raw
@@ -160,6 +239,48 @@ func loadProjectMode(root string, env map[string]string, raw bool, docs ...compo
 		return nil, fmt.Errorf("docker compose would not load it: %s", bounded(strings.ReplaceAll(msg, lintRoot, ".")))
 	}
 	return p, nil
+}
+
+// errComposeLoadTimeout is returned when compose-go does not finish within
+// composeLoadTimeout.
+var errComposeLoadTimeout = fmt.Errorf("resolving the file took longer than %s (too complex)", composeLoadTimeout)
+
+// loadWithTimeout runs compose-go's loader with a deadline. The loader
+// does no I/O here (denyLoader) and does not watch its context while it
+// resolves `!reset`/merge keys, so the load runs in its own goroutine and
+// a load past the deadline is an error. That goroutine ends on its own: the
+// walk is bounded by MaxNodeVisits and the result channel is buffered.
+func loadWithTimeout(details types.ConfigDetails, opts func(*loader.Options)) (*types.Project, error) {
+	return loadWithin(composeLoadTimeout, func(ctx context.Context) (*types.Project, error) {
+		return loader.LoadWithContext(ctx, details, opts)
+	})
+}
+
+// loadWithin runs load with a deadline of d (see loadWithTimeout); a
+// panic in load is an error.
+func loadWithin(d time.Duration, load func(context.Context) (*types.Project, error)) (*types.Project, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	type result struct {
+		p   *types.Project
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- result{err: fmt.Errorf("the compose loader failed on this input: %v", r)}
+			}
+		}()
+		p, err := load(ctx)
+		done <- result{p: p, err: err}
+	}()
+	select {
+	case r := <-done:
+		return r.p, r.err
+	case <-ctx.Done():
+		return nil, errComposeLoadTimeout
+	}
 }
 
 var envLineRe = regexp.MustCompile(`^([A-Z][A-Z0-9_]{0,63})=([^\s"'$#\\` + "`" + `]*)$`)

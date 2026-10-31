@@ -52,6 +52,7 @@ func insertLineAfter(t testing.TB, s, line, add string) string {
 // on the resolved model, both in a customized compose.yaml and in
 // compose.override.yaml (D-205 amendment).
 func TestLintBypasses(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, variantImage)
 	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
@@ -147,6 +148,7 @@ func TestLintBypasses(t *testing.T) {
 		}
 		body += tc.svc
 		t.Run(tc.name+"/compose.yaml", func(t *testing.T) {
+			t.Parallel()
 			c := insertLineAfter(t, s, "services:", body)
 			for sec, entries := range tc.top {
 				c = insertLineAfter(t, c, sec+":", entries)
@@ -156,6 +158,7 @@ func TestLintBypasses(t *testing.T) {
 			}
 		})
 		t.Run(tc.name+"/override", func(t *testing.T) {
+			t.Parallel()
 			var o strings.Builder
 			o.WriteString("services:\n" + body)
 			for sec, entries := range tc.top {
@@ -172,6 +175,7 @@ func TestLintBypasses(t *testing.T) {
 // !reset/!override and removed hardening are judged like docker compose
 // resolves them.
 func TestLintResolvedModel(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, variantImage)
 	src, err := RenderRelease(VariantTraefik, DBBundled, &img)
 	if err != nil {
@@ -195,6 +199,7 @@ func TestLintResolvedModel(t *testing.T) {
 		{"runner socket elsewhere", strings.Replace(s, "      - /var/run/docker.sock:/var/run/docker.sock:ro\n", "      - /var/run/docker.sock:/tmp/d.sock:ro\n", 1), "container engine socket"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if tc.compose == s {
 				t.Fatal("edit did not apply")
 			}
@@ -235,6 +240,7 @@ func TestLintResolvedModel(t *testing.T) {
 		{"include", "include: [x.yaml]\n", "`include` and `extends.file`"},
 	} {
 		t.Run("override/"+tc.name, func(t *testing.T) {
+			t.Parallel()
 			if fs := lintWith(t, nil, []byte(tc.override), VariantTraefik, nil); !hasFinding(fs, SeverityError, tc.want) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
 			}
@@ -271,6 +277,7 @@ func TestLintResolvedModel(t *testing.T) {
 // same way for recognition and lint, and the environment overrides .env
 // for referenced variables.
 func TestComposeEnvInterpolation(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, variantImage)
 	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
@@ -340,6 +347,7 @@ var reviewedServiceKeys = map[string]string{
 }
 
 func TestServiceKeysReviewed(t *testing.T) {
+	t.Parallel()
 	var walk func(rt reflect.Type)
 	walk = func(rt reflect.Type) {
 		for f := range rt.Fields() {

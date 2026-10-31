@@ -56,6 +56,7 @@ import (
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 	"github.com/jlentink/bekup/internal/testutil/runnertest"
 )
 
@@ -155,16 +156,7 @@ func (d *pgiDocker) network(name string, internal bool) (string, string) {
 
 func (d *pgiDocker) ensureImage(ref string) {
 	d.t.Helper()
-	if _, err := d.c.ImageInspect(d.t.Context(), ref); err == nil {
-		return
-	}
-	resp, err := d.c.ImagePull(d.t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		d.t.Fatal(err)
-	}
-	if err := resp.Wait(d.t.Context()); err != nil {
-		d.t.Fatal(err)
-	}
+	imagepull.Ensure(d.t, d.c, ref)
 }
 
 func (d *pgiDocker) logs(id string) string {

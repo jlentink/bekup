@@ -3,6 +3,7 @@
 package graph_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,9 @@ func TestRestoresUpdatedStream(t *testing.T) {
 		ID, Status string
 		Job        struct{ ID string }
 	}
+	// Before the streams open: raising the admin session to AAL2 later
+	// would end the admin's stream at its next re-validation (D-118).
+	e.fresh2FA(admin.ID)
 	adminCh := e.openStream(adminC, restoresUpdatedSub, nil)
 	ownerCh := e.openStream(ownerC, restoresUpdatedSub, nil)
 	otherCh := e.openStream(otherC, restoresUpdatedSub, nil)
@@ -45,7 +49,6 @@ func TestRestoresUpdatedStream(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	e.fresh2FA(admin.ID)
 	var r struct{ ID string }
 	e.mustGQL(adminC, restoreArtMut, map[string]any{"in": map[string]any{
 		"artifactId": e.art, "targetConnectionId": e.conn, "mode": "NEW_DB", "targetDatabase": "live",
@@ -57,6 +60,25 @@ func TestRestoresUpdatedStream(t *testing.T) {
 		nextData(t, ch, "restoresUpdated", &ev)
 		if ev.ID != id.String() || ev.Status != "QUEUED" || ev.Job.ID != e.job.String() {
 			t.Fatalf("%s: first event %+v", name, ev)
+		}
+	}
+
+	// Creating a restore can announce it more than once; an announcement
+	// loaded and authorized before the access change below may still be
+	// in flight on a stream. Drain until the streams are quiet: the owner
+	// may only see this restore QUEUED again, the non-owner nothing.
+	for name, ch := range map[string]<-chan sseEv{"owner": ownerCh, "non-owner": otherCh} {
+		for {
+			x, ok := nextEv(ch, time.Second)
+			if !ok {
+				break
+			}
+			if x.event != "next" {
+				continue
+			}
+			if name == "non-owner" || !strings.Contains(x.data, id.String()) || !strings.Contains(x.data, `"QUEUED"`) {
+				t.Fatalf("%s received %+v before the access change", name, x)
+			}
 		}
 	}
 

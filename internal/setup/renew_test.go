@@ -38,6 +38,7 @@ func fingerprints(t *testing.T, dir string) map[string]string {
 }
 
 func TestRenewExpiryAndLeaves(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, testAnswers(t, ProxyTraefik))
 	p, err := InspectCertificates(dir, time.Now(), 0)
@@ -155,6 +156,7 @@ func TestRenewExpiryAndLeaves(t *testing.T) {
 }
 
 func TestRenewNeedsMountedCA(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := externalAnswers(t, dir, DBAuthBootstrap)
 	mustInit(t, dir, a)
@@ -177,6 +179,7 @@ func TestRenewNeedsMountedCA(t *testing.T) {
 }
 
 func TestRenewCARotation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, testAnswers(t, ProxyTraefik))
 	start := fingerprints(t, dir)

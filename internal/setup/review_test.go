@@ -14,6 +14,7 @@ import (
 // An existing CA (e.g. offline media mounted at secrets/certs/ca) is never
 // reused, overwritten or deleted by a failed init.
 func TestInitRefusesExistingCA(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	caDir := pathIn(dir, "secrets/certs/ca")
 	if err := os.MkdirAll(caDir, 0o700); err != nil {
@@ -61,6 +62,7 @@ func TestInitRefusesExistingCA(t *testing.T) {
 // --regenerate-secrets keeps the old secrets until the run succeeded: a
 // failure midway restores every one of them.
 func TestInitRegenerateRollback(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -92,6 +94,7 @@ func TestInitRegenerateRollback(t *testing.T) {
 }
 
 func TestCheckOverride(t *testing.T) {
+	t.Parallel()
 	const pinned = "nginx:1.27@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	for _, tc := range []struct {
 		name, yaml string
@@ -116,6 +119,7 @@ func TestCheckOverride(t *testing.T) {
 		{"invalid", "services: [\n", "not valid YAML"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ps := lintWith(t, nil, []byte(tc.yaml), VariantFull, nil)
 			if tc.want == "" {
 				if len(ps) > 0 {
@@ -142,6 +146,7 @@ func FuzzCheckOverride(f *testing.F) {
 }
 
 func TestCheckComposeBypass(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		mut  func(t *testing.T, dir string)
@@ -177,6 +182,7 @@ func TestCheckComposeBypass(t *testing.T) {
 		{name: "project name", env: map[string]string{"COMPOSE_PROJECT_NAME": "x"}, sev: SeverityWarning, want: "renames the compose project"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			mustInit(t, dir, testAnswers(t, ProxyTraefik))
 			if tc.mut != nil {
@@ -198,6 +204,7 @@ func TestCheckComposeBypass(t *testing.T) {
 // L7: a file of the operator at a path that becomes generated is never
 // overwritten silently.
 func TestUpgradeForeignFileAtNewAsset(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -227,6 +234,7 @@ func TestUpgradeForeignFileAtNewAsset(t *testing.T) {
 
 // L8: CIDR answers are bounded.
 func TestCIDRBounds(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		cidr string
 		ok   bool

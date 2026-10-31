@@ -88,11 +88,11 @@ func (in *itInner) sql(t *testing.T, name, db, stmt string) string {
 	tg := in.h.Targets[name]
 	switch tg.Kind {
 	case engine.KindPostgres:
-		return strings.TrimSpace(itExec(t, in.dc, tg.Container, "psql", "-U", itPGUser, "-d", db, "-At", "-v", "ON_ERROR_STOP=1", "-c", stmt))
+		return strings.TrimSpace(itExecStdout(t, in.dc, tg.Container, "psql", "-U", itPGUser, "-d", db, "-At", "-v", "ON_ERROR_STOP=1", "-c", stmt))
 	case engine.KindMySQL:
-		return strings.TrimSpace(itExec(t, in.dc, tg.Container, "mysql", "-uroot", "-p"+in.h.Password, "-N", "-D", db, "-e", stmt))
+		return strings.TrimSpace(itExecStdout(t, in.dc, tg.Container, "mysql", "-uroot", "-p"+in.h.Password, "-N", "-D", db, "-e", stmt))
 	default:
-		return strings.TrimSpace(itExec(t, in.dc, tg.Container, "mariadb", "-uroot", "-p"+in.h.Password, "-N", "-D", db, "-e", stmt))
+		return strings.TrimSpace(itExecStdout(t, in.dc, tg.Container, "mariadb", "-uroot", "-p"+in.h.Password, "-N", "-D", db, "-e", stmt))
 	}
 }
 

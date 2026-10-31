@@ -22,6 +22,7 @@ import (
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runner/preamble"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 )
 
 // checkScript runs as "$@" after the preamble wrapper (in place of the
@@ -282,11 +283,7 @@ func ensureImage(t *testing.T, c *client.Client, ref string) client.ImageInspect
 	if ins, err := c.ImageInspect(t.Context(), ref); err == nil {
 		return ins
 	}
-	resp, err := c.ImagePull(t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		t.Fatalf("pull %s: %v", ref, err)
-	}
-	if err := resp.Wait(t.Context()); err != nil {
+	if err := imagepull.Pull(t.Context(), c, ref); err != nil {
 		t.Fatalf("pull %s: %v", ref, err)
 	}
 	ins, err := c.ImageInspect(t.Context(), ref)

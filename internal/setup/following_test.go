@@ -19,6 +19,7 @@ func followingAnswers(t *testing.T) Answers {
 }
 
 func TestCheckVersionTagLatest(t *testing.T) {
+	t.Parallel()
 	if err := CheckVersionTag(mustRef(t, latestImage), "1.2.3"); err != nil {
 		t.Fatalf("latest: %v", err)
 	}
@@ -32,6 +33,7 @@ func TestCheckVersionTagLatest(t *testing.T) {
 }
 
 func TestStateImageMode(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, followingAnswers(t))
 	st := mustState(t, dir)
@@ -57,6 +59,7 @@ func TestStateImageMode(t *testing.T) {
 }
 
 func TestInitFollowingSetupFirst(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	out := mustInit(t, dir, followingAnswers(t)).String()
 	if !strings.Contains(out, "NOT pinned by digest") || !strings.Contains(out, "docker compose run --rm setup upgrade") {
@@ -80,6 +83,7 @@ func TestInitFollowingSetupFirst(t *testing.T) {
 }
 
 func TestCheckFollowingFindings(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		mut     func(t *testing.T, dir string)
@@ -117,6 +121,7 @@ func TestCheckFollowingFindings(t *testing.T) {
 }
 
 func TestLintFollowingAllowance(t *testing.T) {
+	t.Parallel()
 	img := mustRef(t, latestImage)
 	src, err := RenderRelease(VariantNPM, DBBundled, &img)
 	if err != nil {
@@ -148,6 +153,7 @@ func TestLintFollowingAllowance(t *testing.T) {
 }
 
 func TestUpgradeFollowing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	mustInit(t, dir, followingAnswers(t))
 	// The plain `docker compose run --rm setup upgrade` of the new image:

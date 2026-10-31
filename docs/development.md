@@ -229,6 +229,30 @@ arm64 hosts), 22/tcp is published on 127.0.0.1 only, readiness waits for
 a real SSH banner, and a failed container start is retried with a fresh
 container (up to three times, with the container log in the error).
 
+Tests that pull images through the Docker API use
+`imagepull.Ensure` / `imagepull.Pull` (`internal/testutil/imagepull`),
+never `ImagePull` directly: registries rate-limit bursts of pulls (Docker
+Hub answers `toomanyrequests` when many packages start their containers at
+once), so rate-limit errors are retried with exponential backoff and
+jitter (about 5 s doubling to 60 s, roughly three minutes in all); any
+other pull error fails at once. testcontainers-go retries its own pulls.
+In CI the `go-integration` and `setup-install` jobs also configure the
+Docker daemon with the pull-through mirror `mirror.gcr.io`
+(`registry-mirrors` in `/etc/docker/daemon.json`; dockerd falls back to
+Docker Hub when the mirror fails). Test images are digest-pinned, so the
+mirror cannot substitute their content; only testcontainers' Ryuk reaper is
+pulled by tag.
+
+`just test` runs the unit tests with `-timeout 20m` (the CI `go` job does
+the same; `just test-int` uses `-timeout 30m`). Keep tests fast anyway:
+mark independent tests and subtests `t.Parallel()` (never together with
+`t.Setenv` or a process-wide change such as `syscall.Umask`), and keep the
+scrypt sealing of the CA key (work factor 18, about 256 MiB per run) out
+of tests that do not test it: `internal/certs` tests pass the unexported
+`workFactor` option, `internal/setup` tests use `fastCerts` (an unencrypted
+test CA) except `TestInitRealPassphrase`; `TestSealKeyProductionWorkFactor`
+asserts the production default.
+
 ## Releases and version bumping
 
 The version lives in [`VERSION`](../VERSION) (plain `MAJOR.MINOR.PATCH`) and is
@@ -546,14 +570,14 @@ call the same `just` recipes you run locally where possible, so a green
 
 | Job | What it runs | Local equivalent |
 |---|---|---|
-| `go` | `go build ./...`, `go vet ./...`, `go test -race ./...`, golangci-lint `GOLANGCI_LINT_VERSION` (incl. gosec; with and without `--build-tags integration`), `sqlc vet`, `sqlc diff` | `just lint` + `just test` |
-| `go-integration` | Integration tests with testcontainers (Docker on the runner, checked first; `CI=true`, so Docker-dependent tests fail instead of skipping) | `just test-int` |
+| `go` | `go build ./...`, `go vet ./...`, `go test -race -timeout 20m ./...`, golangci-lint `GOLANGCI_LINT_VERSION` (incl. gosec; with and without `--build-tags integration`), `sqlc vet`, `sqlc diff` | `just lint` + `just test` |
+| `go-integration` | Integration tests with testcontainers (Docker Hub pulls through the `mirror.gcr.io` mirror; Docker on the runner, checked first; `CI=true`, so Docker-dependent tests fail instead of skipping) | `just test-int` |
 | `web` | frozen `pnpm install`, `lint`, `typecheck`, `test`, `build`, `csp-check` (headless Google Chrome) | `just lint` + `just test` + `just build`, then `pnpm csp-check` |
 | `security` | govulncheck + osv-scanner (pinned versions) | `just sec` |
 | `generated` | `go mod tidy -diff`, `just gen`, then fails on any uncommitted change (generated code and `deploy/compose/*`) | `go mod tidy && just gen`, then commit |
 | `scripts` | `just --fmt --check`, `scripts/shellcheck.sh` (`shellcheck -x` 0.9.0 on `scripts/*.sh`, `scripts/lib.bash` and `deploy/**/*.sh`; findings of every severity fail), `just test-scripts` | same commands (`just lint` runs the shellcheck script) |
 | `compose` | `docker compose config` for `docker-compose.yml` and the dev overlay, all profiles | same commands |
-| `setup-install` | Builds the image, pushes it to a loopback registry for a digest-pinned reference. Setup-first: `bekup setup init --write-compose --variant full` (root + `CAP_CHOWN`, no network), the owners of key files, `docker compose config`, `setup check`, a no-op `setup upgrade --write-compose` and `check --fix-ownership` (D-203). Compose-first, end to end as in the README (D-205): the own-Traefik variant with a static self-signed `bekup.test` certificate (`compose run --rm -T setup`, `up -d --wait`, `/healthz` and the security headers through Traefik, the first admin, `setup check`, `down -v`) and the Nginx Proxy Manager variant on the `bekup-proxy` link network with a pinned curl container as the proxy at `10.213.253.5` (incl. the untrusted-`X-Forwarded-For` warning) | the steps in the job, see [compose.md](installation/compose.md#install-with-bekup-setup-container-only) |
+| `setup-install` | Docker Hub pulls through the `mirror.gcr.io` mirror. Builds the image, pushes it to a loopback registry for a digest-pinned reference. Setup-first: `bekup setup init --write-compose --variant full` (root + `CAP_CHOWN`, no network), the owners of key files, `docker compose config`, `setup check`, a no-op `setup upgrade --write-compose` and `check --fix-ownership` (D-203). Compose-first, end to end as in the README (D-205): the own-Traefik variant with a static self-signed `bekup.test` certificate (`compose run --rm -T setup`, `up -d --wait`, `/healthz` and the security headers through Traefik, the first admin, `setup check`, `down -v`) and the Nginx Proxy Manager variant on the `bekup-proxy` link network with a pinned curl container as the proxy at `10.213.253.5` (incl. the untrusted-`X-Forwarded-For` warning) | the steps in the job, see [compose.md](installation/compose.md#install-with-bekup-setup-container-only) |
 | `workflows` | actionlint (with shellcheck on `run:` blocks) and zizmor | `actionlint` and `zizmor .github/` |
 
 CI security rules (D-061, D-091). A change to `.github/` that breaks one of them
@@ -607,7 +631,7 @@ published from a branch. Its logic lives in
 
 | Job | What it does | Permissions |
 |---|---|---|
-| `verify` | Fetches the annotated tag object with the token (checkout may store only the commit; the auth header reaches git through `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, never argv); the tag equals `v$(cat VERSION)`, is annotated, the name inside the tag object equals the pushed tag (`release_ci.sh tag-object-name`), it points at the run's commit and that commit is on `main`; the tag signature verifies with `git verify-tag` against [`.github/release-signers.asc`](../.github/release-signers.asc) in a temporary GnuPG home, and the signing key's **primary fingerprint** equals `RELEASE_SIGNER_FPR` in the workflow | `contents: read` |
+| `verify` | Fetches the annotated tag object and `main` (into `refs/remotes/origin/main`) with the token (on a tag push checkout may store only the commit and creates no `origin/main`; the auth header reaches git through `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0`, never argv); the tag equals `v$(cat VERSION)`, is annotated, the name inside the tag object equals the pushed tag (`release_ci.sh tag-object-name`), it points at the run's commit and that commit is on `main`; the tag signature verifies with `git verify-tag` against [`.github/release-signers.asc`](../.github/release-signers.asc) in a temporary GnuPG home, and the signing key's **primary fingerprint** equals `RELEASE_SIGNER_FPR` in the workflow | `contents: read` |
 | `ci` | The full `ci.yml` (`workflow_call`, `disable_cache: true`) | `contents: read` |
 | `build` | Needs `verify` and `ci`. Only `docker/*` actions. Refuses when `:X.Y.Z` exists (`release_ci.sh tag-state`: only a registry "not found" counts as absent, any other error fails); builds `linux/amd64` + `linux/arm64` (`target: runtime`, `pull`, no cache, `SOURCE_DATE_EPOCH` and `BUILD_DATE` from the commit time, max-mode provenance, SBOM with the generator pinned in `scripts/publish.sh`) and **pushes by digest only** | `contents: read`, `packages: write` |
 | `scan` | Trivy on both platforms of the digest (HIGH/CRITICAL with a fix fail, exceptions only in [`.trivyignore`](../.trivyignore) with an expiry) | `contents: read`, `packages: read` |

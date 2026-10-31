@@ -17,6 +17,7 @@ func validState() *State {
 }
 
 func TestParseState(t *testing.T) {
+	t.Parallel()
 	data, err := validState().Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +120,7 @@ func FuzzParseState(f *testing.F) {
 }
 
 func TestVersionChecks(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		tag, version string
 		ok           bool
@@ -149,6 +151,7 @@ func TestVersionChecks(t *testing.T) {
 }
 
 func TestLineDiff(t *testing.T) {
+	t.Parallel()
 	d := LineDiff("a\nb\nc\n", "a\nB\nc\n", 10)
 	if d != "  + B\n  - b\n" && d != "  - b\n  + B\n" {
 		t.Fatalf("%q", d)

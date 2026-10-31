@@ -17,6 +17,7 @@ import (
 // The embedded assets are byte-equal to the repository files, and every
 // file below the embedded deploy directories is embedded.
 func TestEmbeddedAssetsEqualRepo(t *testing.T) {
+	t.Parallel()
 	root := repoRoot(t)
 	repo := os.DirFS(root)
 	fsys := bekup.Assets()
@@ -91,6 +92,7 @@ func loadCompose(t *testing.T) composeDoc {
 // Every ./deploy/... bind source of each variant is embedded in the
 // variant's asset set, and every asset of the set is mounted.
 func TestDeploySourcesEmbedded(t *testing.T) {
+	t.Parallel()
 	for _, v := range AllVariants {
 		t.Run(string(v), func(t *testing.T) {
 			out, err := RenderRelease(v, DBBundled, nil)
@@ -152,6 +154,7 @@ func TestDeploySourcesEmbedded(t *testing.T) {
 // that consumes it; public files are world-readable; the compose secret
 // paths and configs are exactly the manifest's.
 func TestManifestMatchesComposeUsers(t *testing.T) {
+	t.Parallel()
 	doc := loadCompose(t)
 	l := Layout{KeysDir: DefaultKeysDir}
 	byPath := map[string]Entry{}
@@ -209,6 +212,7 @@ func TestManifestMatchesComposeUsers(t *testing.T) {
 
 // The rendered TOML files pass the bekup validators for every proxy choice.
 func TestRenderedConfigsValidate(t *testing.T) {
+	t.Parallel()
 	variants := map[string]func() Answers{
 		"traefik": func() Answers { return testAnswers(t, ProxyTraefik) },
 		"nginx-static": func() Answers {
@@ -244,6 +248,7 @@ func TestRenderedConfigsValidate(t *testing.T) {
 }
 
 func TestEnvFile(t *testing.T) {
+	t.Parallel()
 	a := testAnswers(t, ProxyTraefik)
 	a.ACMEStaging = true
 	a.Network.RunnerCtlSubnet, a.Network.RunnerCtlIP = "172.30.2.0/24", "172.30.2.10"
@@ -281,6 +286,7 @@ func TestEnvFile(t *testing.T) {
 }
 
 func TestOverrideOnlyForStaticTLS(t *testing.T) {
+	t.Parallel()
 	a := testAnswers(t, ProxyNginx)
 	a.TLSMode, a.ACMEEmail = TLSStatic, ""
 	files := operatorFiles(&a, "1.2.3")
@@ -301,6 +307,7 @@ func TestOverrideOnlyForStaticTLS(t *testing.T) {
 }
 
 func TestManifestTableInDocs(t *testing.T) {
+	t.Parallel()
 	doc := string(readFile(t, repoRoot(t), "docs/installation/compose.md"))
 	const begin, end = "<!-- setup-manifest:begin -->\n", "<!-- setup-manifest:end -->"
 	i, j := strings.Index(doc, begin), strings.Index(doc, end)
@@ -313,6 +320,7 @@ func TestManifestTableInDocs(t *testing.T) {
 }
 
 func TestIsAssetPath(t *testing.T) {
+	t.Parallel()
 	for p, want := range map[string]bool{
 		ComposeFile: true, "deploy/traefik/x.yml": true, "reference/bekup.example.toml": true,
 		"deploy/dev/x": false, "deploy/traefik/../../x": false, ".env": false, "secrets/x": false,
@@ -327,6 +335,7 @@ func TestIsAssetPath(t *testing.T) {
 // .dockerignore must not exclude an embedded asset (the image build would
 // fail or, worse, embed nothing): a simplified dockerignore matcher.
 func TestDockerignoreKeepsEmbeddedAssets(t *testing.T) {
+	t.Parallel()
 	data := string(readFile(t, repoRoot(t), ".dockerignore"))
 	var patterns []string
 	for _, l := range strings.Split(data, "\n") {

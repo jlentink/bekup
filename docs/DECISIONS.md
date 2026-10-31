@@ -235,6 +235,8 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-210](#d-210-schema-version-per-database-framework-presets-and-a-bounded-custom-query-read-on-the-dumps-snapshot) | Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot | proposed |
 | [D-211](#d-211-web-dev-tooling-minimatch-forced-to-the-fixed-11x-line-with-a-pnpm-patch-for-eslint-plugin-jsx-a11y) | Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y | proposed |
 | [D-212](#d-212-follow-ghcriojlentinkbekuplatest-an-opt-in-mutable-tag-for-the-bekup-image-with-a-setup-version-guard) | Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard | proposed |
+| [D-213](#d-213-setup-compose-lint-yaml-alias-limits-before-compose-go-and-a-load-deadline) | setup compose lint: YAML alias limits before compose-go and a load deadline | proposed |
+| [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
 
 ---
 
@@ -12796,3 +12798,78 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `cmd/bekup/db_cmd.go`, `internal/runner/executor/self.go`,
   `internal/app/image.go`, `proto/runner/v1/runner.proto`
   (`HealthResponse.image_pinned`).
+
+## D-213: setup compose lint: YAML alias limits before compose-go and a load deadline
+
+- **Date:** 2026-10-31
+- **Status:** proposed
+- **Decided by:** agent
+- **Context:** `bekup setup init/check/upgrade` resolve `compose.yaml` and
+  `compose.override.yaml` with compose-go (D-205 amendment), files an
+  operator (or whoever can write the deployment directory) controls.
+  compose-go v2.16.2 (the newest release) has two cost problems in its
+  `!reset` walk (`loader/reset.go`): an alias merged into its own anchor
+  (`x: &a {<<: *a}`) skips the cycle check (merge-key paths are exempt) and
+  recurses up to `MaxNodeVisits` (100,000), and its cycle check compares
+  every visit of an anchor with all earlier visits of it, so both cases
+  are quadratic: the self-merge takes about 5 s per load (minutes under
+  `-race`; it hung the CI `internal/setup` tests at the 10-minute timeout
+  through the `FuzzCheckOverride` seed), and 40,000 aliases of one anchor
+  in a 120 KB file about 20 s per load (the lint loads each file up to
+  four times; a 4 MiB file reaches the visit cap at minutes per load).
+- **Decision:** before compose-go sees a document, `singleDocument`
+  (`internal/setup/composemodel.go`) walks the yaml.v3 node tree
+  (`checkAliases`) and refuses: an alias used inside its own anchor (a
+  cycle; anchors precede their aliases, so this is exactly an alias whose
+  target is an ancestor); more than 1,000 aliases per document
+  (`maxComposeAliases`; the shipped files use about a dozen); a document
+  whose alias-expanded size exceeds `maxComposeNodes` (100,000; alias
+  bombs). Errors name the line, never file content beyond a bounded alias
+  name. Every compose-go load also runs under a one-minute deadline
+  (`loadWithTimeout`) in its own goroutine (compose-go does not watch the
+  context while it resolves); a late load is the error "resolving the file
+  took longer than 1m0s (too complex)", a panic is an error. The goroutine
+  is bounded by `MaxNodeVisits` and a buffered result channel.
+- **Alternatives considered:** a lower `MaxNodeVisits` only (rejected:
+  still quadratic below the cap, and the self-merge would only fail later
+  with a less clear message); waiting for an upstream fix (none released;
+  worth reporting upstream); the deadline alone (rejected: a timed-out
+  load keeps burning CPU until the visit cap).
+- **Consequences:** a crafted compose file can no longer make setup spin;
+  compose files with alias cycles (which docker compose cannot load
+  either) or more than 1,000 aliases are refused with a clear finding.
+  Security impact: removes a CPU denial of service of setup by a writer of
+  the deployment directory. No trust boundary changes.
+- **Related:** D-001, D-203, D-205; `internal/setup/composemodel.go`,
+  `internal/setup/composemodel_test.go`, `FuzzCheckOverride`.
+
+## D-214: CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls
+
+- **Date:** 2026-10-31
+- **Status:** proposed
+- **Decided by:** agent (plan robust-giggling-tide, approved by the user)
+- **Context:** the CI integration job failed on Docker Hub's anonymous
+  pull limit (`toomanyrequests`) when several test packages start their
+  containers at once; only one test helper retried.
+- **Decision:** the `go-integration` and `setup-install` jobs extend the
+  runner's `/etc/docker/daemon.json` with `registry-mirrors:
+  ["https://mirror.gcr.io"]` (Google's public Docker Hub pull-through
+  cache) and restart dockerd, after harden-runner and checkout. Test code
+  pulls images only through `internal/testutil/imagepull` (`Ensure`,
+  `Pull`): rate-limit answers are retried with exponential backoff and
+  jitter (5 s doubling to 60 s, seven attempts), every other error fails
+  at once.
+- **Alternatives considered:** a Docker Hub account (rejected: CI uses no
+  secrets, D-061); GHCR copies of every test image (rejected for now:
+  maintenance of mirrored images); retries only (rejected: a sustained
+  limit outlasts any sensible backoff).
+- **Consequences:** fewer flaky CI runs. Security impact: Google's mirror
+  becomes an additional source of Docker Hub content in CI only. bekup's
+  test and deployment image references are digest-pinned, so the mirror
+  cannot substitute their content; testcontainers' Ryuk reaper image is
+  pulled by tag (testcontainers-go pins only a tag), so for it the mirror
+  is trusted like Docker Hub. dockerd falls back to Docker Hub when the
+  mirror fails. Release images are not affected (the release `build` job
+  does not use the mirror).
+- **Related:** D-027, D-061, D-091; `.github/workflows/ci.yml`,
+  `internal/testutil/imagepull`, `docs/development.md`.

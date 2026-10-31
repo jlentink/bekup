@@ -141,6 +141,9 @@ func TestActivityUpdatedStream(t *testing.T) {
 	e.own(e.job, owner.ID)
 	adminC, ownerC, otherC := e.mustLogin(admin.Email), e.mustLogin(owner.Email), e.mustLogin(other.Email)
 
+	// Before the streams open: raising the admin session to AAL2 later
+	// ends the admin's stream at its next session check (D-118).
+	e.fresh2FA(admin.ID)
 	adminCh := e.openStream(adminC, activityUpdatedSub, nil)
 	ownerCh := e.openStream(ownerC, activityUpdatedSub, nil)
 	otherCh := e.openStream(otherC, activityUpdatedSub, nil)
@@ -161,7 +164,6 @@ func TestActivityUpdatedStream(t *testing.T) {
 		}
 	}
 
-	e.fresh2FA(admin.ID)
 	var r struct{ ID string }
 	e.mustGQL(adminC, restoreArtMut, map[string]any{"in": map[string]any{
 		"artifactId": e.art, "targetConnectionId": e.conn, "mode": "NEW_DB", "targetDatabase": "live",

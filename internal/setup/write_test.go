@@ -39,6 +39,7 @@ func TestWriterCreate(t *testing.T) {
 }
 
 func TestWriterRefusesSymlinks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
@@ -76,6 +77,7 @@ func TestWriterRefusesSymlinks(t *testing.T) {
 }
 
 func TestWriterRollback(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("old"), 0o600); err != nil {
 		t.Fatal(err)

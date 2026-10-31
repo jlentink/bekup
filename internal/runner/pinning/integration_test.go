@@ -41,6 +41,7 @@ import (
 	"github.com/jlentink/bekup/internal/runner/validate"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/testutil/dockertest"
+	"github.com/jlentink/bekup/internal/testutil/imagepull"
 	"github.com/jlentink/bekup/internal/tunnel"
 )
 
@@ -157,16 +158,7 @@ func tarOf(t *testing.T, files map[string][]byte, mode int64) io.Reader {
 
 func ensureImage(t *testing.T, c *client.Client, ref string) {
 	t.Helper()
-	if _, err := c.ImageInspect(t.Context(), ref); err == nil {
-		return
-	}
-	resp, err := c.ImagePull(t.Context(), ref, client.ImagePullOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := resp.Wait(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	imagepull.Ensure(t, c, ref)
 }
 
 func createContainer(t *testing.T, c *client.Client, opts client.ContainerCreateOptions) string {

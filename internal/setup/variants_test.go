@@ -48,6 +48,7 @@ func keys[V any](m map[string]V) []string {
 }
 
 func TestVariantServiceSets(t *testing.T) {
+	t.Parallel()
 	want := map[Variant][]string{
 		VariantTraefik:         {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
 		VariantTraefikExternal: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup"},
@@ -95,6 +96,7 @@ func TestVariantServiceSets(t *testing.T) {
 }
 
 func TestVariantExternalNetworks(t *testing.T) {
+	t.Parallel()
 	for _, v := range []Variant{VariantTraefikExternal, VariantNPM} {
 		t.Run(string(v), func(t *testing.T) {
 			_, doc := renderVariantT(t, v)
@@ -132,6 +134,7 @@ func TestVariantExternalNetworks(t *testing.T) {
 }
 
 func TestVariantLabels(t *testing.T) {
+	t.Parallel()
 	want := map[string]any{
 		"traefik.enable":                                                            "true",
 		"traefik.docker.network":                                                    "${BEKUP_PROXY_NETWORK:-bekup-proxy}",
@@ -176,6 +179,7 @@ func TestVariantLabels(t *testing.T) {
 // The setup service is exactly the hardened one-shot installer in every
 // variant.
 func TestVariantSetupService(t *testing.T) {
+	t.Parallel()
 	want := map[string]any{
 		"image":        variantImage,
 		"profiles":     []any{"setup"},
@@ -221,6 +225,7 @@ func equalYAML(a, b any) bool {
 
 // Every node a variant does not edit is byte-identical to the base.
 func TestVariantUntouchedBlocksByteEqual(t *testing.T) {
+	t.Parallel()
 	src, err := fs.ReadFile(bekup.Assets(), composeSource)
 	if err != nil {
 		t.Fatal(err)
@@ -282,6 +287,7 @@ func TestVariantUntouchedBlocksByteEqual(t *testing.T) {
 
 // Overlays never name an image and never use build.
 func TestOverlaysHaveNoImage(t *testing.T) {
+	t.Parallel()
 	n := 0
 	err := fs.WalkDir(variantFS, "variants", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -331,6 +337,7 @@ func TestOverlaysHaveNoImage(t *testing.T) {
 
 // Base style lint for the repository compose file.
 func TestBaseComposeStyle(t *testing.T) {
+	t.Parallel()
 	src := string(readFile(t, repoRoot(t), composeSource))
 	if strings.Count(src, "\n"+ComposeImageLine+"\n") != 1 || len(imageVarRefRe.FindAllStringIndex(src, -1)) != 1 {
 		t.Fatal("the image must appear only in the x-bekup-image line")
@@ -385,6 +392,7 @@ func TestBaseComposeStyle(t *testing.T) {
 }
 
 func TestRenderVariantRefusesBadSources(t *testing.T) {
+	t.Parallel()
 	src := string(readFile(t, repoRoot(t), composeSource))
 	img := mustRef(t, variantImage)
 	for name, bad := range map[string]string{
@@ -418,6 +426,7 @@ func TestRenderVariantRefusesBadSources(t *testing.T) {
 }
 
 func TestVariantNames(t *testing.T) {
+	t.Parallel()
 	for v, name := range map[Variant]string{VariantTraefik: "compose.yaml", VariantTraefikExternal: "compose.traefik-external.yaml", VariantNPM: "compose.npm.yaml"} {
 		if v.AssetName(DBBundled) != name {
 			t.Errorf("%s: %s", v, v.AssetName(DBBundled))
@@ -435,6 +444,7 @@ func TestVariantNames(t *testing.T) {
 // about the bundled postgres service, names its own release asset and
 // asks for the CA bundle in the install steps.
 func TestExternalDBComments(t *testing.T) {
+	t.Parallel()
 	for _, v := range AllVariants {
 		out, err := RenderRelease(v, DBExternal, nil)
 		if err != nil {

@@ -53,7 +53,7 @@ jobs:
   go:
     name: Go (build, vet, test, lint)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -80,8 +80,10 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Explicit timeout (the default is 10 minutes per package binary);
+      # same as `just test`.
       - name: Unit tests (race detector)
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -timeout 20m ./...
 
       - name: golangci-lint (incl. gosec)
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -130,7 +132,9 @@ jobs:
   go-integration:
     name: Go integration tests (testcontainers)
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    # The suite takes about 30 minutes (packages in parallel, each bounded
+    # by `just test-int`'s -timeout 30m); leave headroom.
+    timeout-minutes: 50
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -141,6 +145,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Docker Hub rate-limits anonymous pulls per runner address
+      # ("toomanyrequests"). Pull through Google's public Docker Hub mirror
+      # instead; dockerd falls back to Docker Hub when the mirror fails.
+      # bekup's own image references are digest-pinned, so the mirror cannot
+      # substitute their content (a digest mismatch fails the pull); only
+      # testcontainers' Ryuk reaper is pulled by tag. The existing
+      # daemon.json of the runner image is kept and only extended.
+      - name: Docker Hub pull-through mirror
+        run: |
+          cfg=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$cfg"; then current=$(sudo cat "$cfg"); fi
+          printf '%s' "$current" | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' >"$RUNNER_TEMP/daemon.json"
+          sudo install -d -m 0755 /etc/docker
+          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" "$cfg"
+          sudo systemctl restart docker
+          for _ in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+          docker info --format 'registry mirrors: {{json .RegistryConfig.Mirrors}}'
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -379,6 +402,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # Docker Hub rate-limits anonymous pulls per runner address
+      # ("toomanyrequests"). Pull through Google's public Docker Hub mirror
+      # instead; dockerd falls back to Docker Hub when the mirror fails.
+      # bekup's own image references are digest-pinned, so the mirror cannot
+      # substitute their content (a digest mismatch fails the pull); only
+      # testcontainers' Ryuk reaper is pulled by tag. The existing
+      # daemon.json of the runner image is kept and only extended.
+      - name: Docker Hub pull-through mirror
+        run: |
+          cfg=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$cfg"; then current=$(sudo cat "$cfg"); fi
+          printf '%s' "$current" | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' >"$RUNNER_TEMP/daemon.json"
+          sudo install -d -m 0755 /etc/docker
+          sudo install -m 0644 "$RUNNER_TEMP/daemon.json" "$cfg"
+          sudo systemctl restart docker
+          for _ in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 1; done
+          docker info --format 'registry mirrors: {{json .RegistryConfig.Mirrors}}'
 
       - name: Build image
         run: docker build --build-arg WEB_BUILD=skip --build-arg VERSION=0.0.0 -t bekup:0.0.0 .

@@ -40,6 +40,7 @@ func onlyChanged(before, after map[string]string, allowed ...string) []string {
 }
 
 func TestUpgradeSameImageNoChanges(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -57,6 +58,7 @@ func TestUpgradeSameImageNoChanges(t *testing.T) {
 }
 
 func TestUpgradeNewImage(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -82,6 +84,7 @@ func TestUpgradeNewImage(t *testing.T) {
 }
 
 func TestUpgradeLocalEdits(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -111,6 +114,7 @@ func TestUpgradeLocalEdits(t *testing.T) {
 }
 
 func TestUpgradeDowngradeAndInvalidConfig(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
@@ -143,6 +147,7 @@ func TestUpgradeDowngradeAndInvalidConfig(t *testing.T) {
 // Stale assets are removed, new ones added, secrets and operator files
 // untouched.
 func TestUpgradeStaleAssets(t *testing.T) {
+	t.Parallel()
 	base := bekup.Assets()
 	withExtra := fstest.MapFS{}
 	err := fs.WalkDir(base, ".", func(p string, d fs.DirEntry, err error) error {
@@ -180,6 +185,7 @@ func TestUpgradeStaleAssets(t *testing.T) {
 // A secret group that is new in the manifest is generated; existing ones
 // are never touched.
 func TestUpgradeGeneratesNewSecretGroups(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := testAnswers(t, ProxyTraefik)
 	mustInit(t, dir, a)
