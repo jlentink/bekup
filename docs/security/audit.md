@@ -335,6 +335,14 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   mode (`database.single_account`, D-207), with `single_account`, `process`
   and `login_role_findings` (dangerous attributes and memberships of the one
   account, e.g. `CREATEROLE`); fail closed like the entries above.
+- `security.serve_alias_conflict` (actor `system`, target `server`) is
+  recorded by `serve` in the own-proxy compose shapes when its network
+  alias `bekup-serve` also resolves to an address that is not one of its
+  own interfaces (another container took the alias on the proxy network;
+  D-215), with `alias`, `addresses` (the other container's addresses only)
+  and `process`; once per new set of addresses (a failed write is retried
+  at the next check, every 20 s). It raises the critical
+  `serve_alias_conflict` security alert.
 - `security.unpinned_image` (actor `system`, target `server`) is recorded
   at every `serve` and `worker` startup outside dev mode when the bekup
   image follows a tag instead of a digest (`BEKUP_IMAGE_MODE=following`, or

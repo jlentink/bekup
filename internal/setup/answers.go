@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/hostname"
 	"github.com/jlentink/bekup/internal/imageref"
 )
@@ -23,10 +24,50 @@ const (
 	// ProxyNone runs no bundled proxy: the operator's own proxy attaches to
 	// the frontend network and is named with TrustedProxies (variant full).
 	ProxyNone Proxy = "none"
-	// ProxyExternal is the operator's Traefik or Nginx Proxy Manager on the
-	// bekup-proxy link network (variants traefik-external and npm, D-205).
+	// ProxyExternal is the operator's own reverse proxy on this Docker
+	// host (variant own-proxy, D-215; the flag value is "own"): serve joins
+	// its network, or, in link mode, the bekup-proxy link network (D-205).
 	ProxyExternal Proxy = "external"
 )
+
+// ProxyNetworkMode is how serve reaches the operator's own proxy (variant
+// own-proxy, D-215).
+type ProxyNetworkMode string
+
+// Proxy network modes.
+const (
+	// ProxyJoin (default): serve joins the Docker network the proxy is on
+	// (external, BEKUP_PROXY_NETWORK) under the alias bekup-serve, listens
+	// on 0.0.0.0:8080 and trusts the proxy by its container name
+	// (server.trusted_proxy_hosts).
+	ProxyJoin ProxyNetworkMode = "join"
+	// ProxyLink (advanced): the dedicated bekup-proxy link network with
+	// fixed addresses and a /32 trust (D-205), an overlay in
+	// compose.override.yaml.
+	ProxyLink ProxyNetworkMode = "link"
+)
+
+// ParseProxyNetworkMode validates a --proxy-network-mode value.
+func ParseProxyNetworkMode(s string) (ProxyNetworkMode, error) {
+	switch ProxyNetworkMode(s) {
+	case ProxyJoin, ProxyLink:
+		return ProxyNetworkMode(s), nil
+	}
+	return "", fmt.Errorf("--proxy-network-mode must be join or link (got %q)", bounded(s))
+}
+
+// ParseProxy validates a --proxy value: traefik, nginx or none (variant
+// full) or own (variant own-proxy). "external" is only the recorded form
+// of own in setup.json, never a flag value.
+func ParseProxy(s string) (Proxy, error) {
+	switch s {
+	case "own":
+		return ProxyExternal, nil
+	case string(ProxyTraefik), string(ProxyNginx), string(ProxyNone):
+		return Proxy(s), nil
+	}
+	return "", fmt.Errorf("--proxy must be traefik, own, nginx or none (got %q)", bounded(s))
+}
 
 // TLSMode is the proxy's certificate source (PROXY_TLS_MODE).
 type TLSMode string
@@ -98,8 +139,8 @@ func (n *Network) vars() []struct {
 	}
 }
 
-// LinkNetwork is the bekup-proxy link network of the external-proxy
-// variants (D-205): an external Docker network the operator creates once
+// LinkNetwork is the bekup-proxy link network of the own-proxy link mode
+// (D-205, D-215): an external Docker network the operator creates once
 // (CreateCommand: internal, the subnet and an --ip-range without the
 // fixed addresses), joined by the operator's proxy at ProxyIP and by serve
 // at ServeIP.
@@ -155,7 +196,7 @@ func linkIPRange(p netip.Prefix, fixed ...string) (netip.Prefix, bool) {
 	return netip.Prefix{}, false
 }
 
-// DefaultLinkNetwork returns the defaults of the external variants.
+// DefaultLinkNetwork returns the defaults of the link mode.
 func DefaultLinkNetwork() LinkNetwork {
 	return LinkNetwork{Name: "bekup-proxy", Subnet: "10.213.253.0/28", ProxyIP: "10.213.253.5", ServeIP: "10.213.253.10"}
 }
@@ -177,7 +218,7 @@ func (l LinkNetwork) withDefaults() LinkNetwork {
 	return l
 }
 
-// Defaults of the Traefik labels (variant traefik-external).
+// Defaults of the Traefik labels (--proxy-labels, variant own-proxy).
 const (
 	DefaultTraefikEntrypoint   = "websecure"
 	DefaultTraefikCertResolver = "letsencrypt"
@@ -218,10 +259,21 @@ type Answers struct {
 	TrustedProxies []string // proxy none only (CIDRs of the operator's proxy)
 	KeysDir        string   // relative to the deployment directory
 	Network        Network
-	// Link is the bekup-proxy link network (external variants only).
+	// ProxyMode is how serve reaches the operator's own proxy (variant
+	// own-proxy; empty means join).
+	ProxyMode ProxyNetworkMode
+	// ProxyNetwork and ProxyContainer name the operator's proxy network
+	// and the proxy's container (variant own-proxy, join mode, D-215).
+	ProxyNetwork   string
+	ProxyContainer string
+	// ProxyLabels adds the Traefik Docker-provider labels on serve
+	// (variant own-proxy; an overlay in compose.override.yaml).
+	ProxyLabels bool
+	// Link is the bekup-proxy link network (variant own-proxy, link mode
+	// only).
 	Link LinkNetwork
 	// TraefikEntrypoint and TraefikCertResolver name the operator's
-	// Traefik entrypoint and certificate resolver (traefik-external only).
+	// Traefik entrypoint and certificate resolver (ProxyLabels only).
 	TraefikEntrypoint   string
 	TraefikCertResolver string
 	// ImageInEnv: compose.yaml takes the image from BEKUP_IMAGE (the
@@ -379,9 +431,35 @@ func wideCIDRWarnings(a *Answers) []string {
 }
 
 // ValidateNetworkName checks a Docker network name (--proxy-network).
-func ValidateNetworkName(s string) error {
+func ValidateNetworkName(s string) error { return ValidateDockerNetwork("proxy-network", s) }
+
+// ValidateDockerNetwork checks the name of an existing Docker network bekup
+// joins (field names the flag): Docker's rule, and never Docker's
+// predefined bridge, host or none networks (no DNS for container names on
+// bridge; host and none are not networks to share).
+func ValidateDockerNetwork(field, s string) error {
 	if !networkNameRe.MatchString(s) {
-		return fieldErr("proxy-network", "must be a Docker network name (letters, digits, _ . -; at most 63 characters)")
+		return fieldErr(field, "must be a Docker network name (letters, digits, _ . -; at most 63 characters)")
+	}
+	// Docker network names are case-sensitive: only these exact names are
+	// the predefined networks ("Bridge" is a user-defined one).
+	switch s {
+	case "bridge", "host", "none":
+		return fieldErr(field, "%q is one of Docker's predefined networks: put the container on a user-defined network (docker network create <name>; docker network connect <name> <container>)", s)
+	}
+	return nil
+}
+
+// ValidateContainerName checks a Docker container name or network alias
+// that serve resolves through Docker's DNS and trusts as the proxy (field
+// names the flag; D-215): no dots and none of bekup's own service names
+// (config.ValidContainerName).
+func ValidateContainerName(field, s string) error {
+	if config.IsReservedContainerName(s) {
+		return fieldErr(field, "%q is the name of one of bekup's own services (%s): name your proxy's container", s, strings.Join(config.ReservedContainerNames, ", "))
+	}
+	if !config.ValidContainerName(s) {
+		return fieldErr(field, "must be a Docker container name or network alias (letters, digits, _ -; no dots; at most 63 characters; not one of bekup's own service names)")
 	}
 	return nil
 }
@@ -534,49 +612,33 @@ func (a *Answers) Validate() error {
 		a.Variant = VariantFull
 	}
 	if _, err := ParseVariant(string(a.Variant)); err != nil {
-		return fieldErr("variant", "must be traefik, traefik-external, npm or full")
+		return fieldErr("variant", "must be traefik, own-proxy or full")
 	}
 	if want := a.Variant.proxy(); want != "" {
 		if a.Proxy != "" && a.Proxy != want {
-			return fieldErr("proxy", "--proxy applies to --variant full only (variant %s implies %s)", a.Variant, want)
+			return fieldErr("proxy", "--proxy %s does not fit the %s variant (it implies %s)", a.Proxy, a.Variant, proxyFlag(want))
 		}
 		a.Proxy = want
 	}
 	switch a.Proxy {
 	case ProxyTraefik, ProxyNginx, ProxyNone:
 	case ProxyExternal:
-		if !a.Variant.External() {
-			return fieldErr("proxy", "must be traefik, nginx or none")
+		if !a.Variant.OwnProxy() {
+			return fieldErr("proxy", "must be traefik, nginx or none with the full variant (own is the own-proxy variant)")
 		}
 	default:
-		return fieldErr("proxy", "must be traefik, nginx or none")
+		return fieldErr("proxy", "must be traefik, own, nginx or none")
 	}
 	if err := ValidateDomain(a.Domain); err != nil {
 		return err
 	}
-	if a.Variant == VariantTraefikExternal {
-		if a.TraefikEntrypoint == "" {
-			a.TraefikEntrypoint = DefaultTraefikEntrypoint
-		}
-		if a.TraefikCertResolver == "" {
-			a.TraefikCertResolver = DefaultTraefikCertResolver
-		}
-		if err := ValidateTraefikName("traefik-entrypoint", a.TraefikEntrypoint); err != nil {
-			return err
-		}
-		if err := ValidateTraefikName("traefik-certresolver", a.TraefikCertResolver); err != nil {
-			return err
-		}
-	} else if a.TraefikEntrypoint != "" || a.TraefikCertResolver != "" {
-		return fieldErr("traefik-entrypoint", "--traefik-entrypoint and --traefik-certresolver apply to --variant traefik-external only")
+	if err := a.validateOwnProxy(); err != nil {
+		return err
 	}
-	if !a.Variant.External() && a.Link != (LinkNetwork{}) {
-		return fieldErr("proxy-network", "--proxy-network and --proxy-subnet apply to the traefik-external and npm variants only")
-	}
-	if def := DefaultNetwork(); a.Variant.External() && (a.Network.FrontendSubnet != "" && a.Network.FrontendSubnet != def.FrontendSubnet ||
+	if def := DefaultNetwork(); a.Variant.OwnProxy() && (a.Network.FrontendSubnet != "" && a.Network.FrontendSubnet != def.FrontendSubnet ||
 		a.Network.ServeFrontendIP != "" && a.Network.ServeFrontendIP != def.ServeFrontendIP ||
 		a.Network.ProxyFrontendIP != "" && a.Network.ProxyFrontendIP != def.ProxyFrontendIP) {
-		return fieldErr("frontend-subnet", "the traefik-external and npm variants have no frontend network (use --proxy-subnet, --proxy-ip, --serve-ip)")
+		return fieldErr("frontend-subnet", "the own-proxy variant has no frontend network (link mode: --proxy-subnet, --proxy-ip, --serve-ip)")
 	}
 	switch a.Proxy {
 	case ProxyExternal:
@@ -584,7 +646,7 @@ func (a *Answers) Validate() error {
 			return fieldErr("tls-mode", "--tls-mode, --acme-email and --acme-staging apply to the bundled proxy only (your proxy terminates TLS)")
 		}
 		if len(a.TrustedProxies) > 0 {
-			return fieldErr("trusted-proxy", "applies to --proxy none only (the link network's proxy address is trusted automatically)")
+			return fieldErr("trusted-proxy", "applies to --proxy none only (your proxy is trusted by its container name, or in link mode by its fixed address)")
 		}
 	case ProxyNone:
 		if a.TLSMode != "" || a.ACMEEmail != "" || a.ACMEStaging {
@@ -657,11 +719,103 @@ func (a *Answers) Validate() error {
 			}
 		}
 	}
-	if a.Variant.External() {
+	if a.Variant.OwnProxy() && a.ProxyMode == ProxyLink {
 		a.Link = a.Link.withDefaults()
-		return validateLink(a.Link, a.Network)
+		if err := validateLink(a.Link, a.Network); err != nil {
+			return err
+		}
+	}
+	if a.DB.Location == DBDocker && a.Variant.OwnProxy() {
+		proxyNet := a.ProxyNetwork
+		if a.ProxyMode == ProxyLink {
+			proxyNet = a.Link.Name // the bekup-proxy link network (D-205)
+		}
+		if strings.EqualFold(a.DB.Network, proxyNet) {
+			return fieldErr("db-network", "is your proxy's network too: serve can join it only once. Put the database on a network of its own (a proxy network should not reach databases), e.g. docker network create bekup-db && docker network connect bekup-db <database container>")
+		}
 	}
 	return nil
+}
+
+// validateOwnProxy checks the answers of the own-proxy variant (D-215)
+// and refuses them elsewhere.
+func (a *Answers) validateOwnProxy() error {
+	if !a.Variant.OwnProxy() {
+		switch {
+		case a.ProxyMode != "" || a.ProxyNetwork != "" || a.ProxyContainer != "" || a.Link != (LinkNetwork{}):
+			return fieldErr("proxy-network", "--proxy-network, --proxy-container, --proxy-network-mode and the link network flags apply to the own-proxy variant only")
+		case a.ProxyLabels:
+			return fieldErr("proxy-labels", "applies to the own-proxy variant only")
+		case a.TraefikEntrypoint != "" || a.TraefikCertResolver != "":
+			return fieldErr("traefik-entrypoint", "--traefik-entrypoint and --traefik-certresolver apply to --proxy-labels only")
+		}
+		return nil
+	}
+	if a.ProxyMode == "" {
+		a.ProxyMode = ProxyJoin
+	}
+	switch a.ProxyMode {
+	case ProxyJoin:
+		if a.Link != (LinkNetwork{}) {
+			return fieldErr("proxy-subnet", "--proxy-subnet, --proxy-ip and --serve-ip apply to --proxy-network-mode link only")
+		}
+		if a.ProxyNetwork == "" {
+			return fieldErr("proxy-network", "is required: the Docker network your reverse proxy is on (docker inspect <proxy> --format '{{json .NetworkSettings.Networks}}')")
+		}
+		if err := ValidateDockerNetwork("proxy-network", a.ProxyNetwork); err != nil {
+			return err
+		}
+		if a.ProxyContainer == "" {
+			return fieldErr("proxy-container", "is required: your reverse proxy's container name (docker ps), which serve trusts")
+		}
+		if err := ValidateContainerName("proxy-container", a.ProxyContainer); err != nil {
+			return err
+		}
+	case ProxyLink:
+		if a.ProxyNetwork != "" || a.ProxyContainer != "" {
+			return fieldErr("proxy-container", "--proxy-container applies to --proxy-network-mode join only (link mode trusts the proxy's fixed address; name the link network with --proxy-network)")
+		}
+	default:
+		return fieldErr("proxy-network-mode", "must be join or link")
+	}
+	if !a.ProxyLabels {
+		if a.TraefikEntrypoint != "" || a.TraefikCertResolver != "" {
+			return fieldErr("traefik-entrypoint", "--traefik-entrypoint and --traefik-certresolver apply to --proxy-labels only")
+		}
+		return nil
+	}
+	if a.TraefikEntrypoint == "" {
+		a.TraefikEntrypoint = DefaultTraefikEntrypoint
+	}
+	if a.TraefikCertResolver == "" {
+		a.TraefikCertResolver = DefaultTraefikCertResolver
+	}
+	if err := ValidateTraefikName("traefik-entrypoint", a.TraefikEntrypoint); err != nil {
+		return err
+	}
+	return ValidateTraefikName("traefik-certresolver", a.TraefikCertResolver)
+}
+
+// proxyFlag is the --proxy value of a Proxy.
+func proxyFlag(p Proxy) string {
+	if p == ProxyExternal {
+		return "own"
+	}
+	return string(p)
+}
+
+// overlays are the setup-only compose overlays of the answers (D-215).
+func (a *Answers) overlays() Overlays {
+	return Overlays{
+		ProxyLabels: a.Variant.OwnProxy() && a.ProxyLabels,
+		ProxyLink:   a.Variant.OwnProxy() && a.ProxyMode == ProxyLink,
+		DBNetwork:   a.DB.External() && a.DB.Location == DBDocker,
+	}
+}
+
+// ownProxyJoin reports the own-proxy variant in join mode.
+func (a *Answers) ownProxyJoin() bool {
+	return a.Variant.OwnProxy() && a.ProxyMode != ProxyLink
 }
 
 // ImpliedProxy is the Proxy a variant implies ("" for full: --proxy
@@ -673,31 +827,49 @@ func (v Variant) proxy() Proxy {
 	switch v {
 	case VariantTraefik:
 		return ProxyTraefik
-	case VariantTraefikExternal, VariantNPM:
+	case VariantOwnProxy:
 		return ProxyExternal
 	default:
 		return ""
 	}
 }
 
-// trustedProxies returns the trusted proxy CIDRs bekup.toml must name.
+// trustedProxies returns the trusted proxy CIDRs bekup.toml must name
+// (none in the own-proxy join mode: trustedProxyHosts).
 func (a *Answers) trustedProxies() []string {
-	switch a.Proxy {
-	case ProxyNone:
+	switch {
+	case a.Proxy == ProxyNone:
 		return a.TrustedProxies
-	case ProxyExternal:
+	case a.ownProxyJoin():
+		return []string{}
+	case a.Proxy == ProxyExternal:
 		return []string{a.Link.ProxyIP + "/32"}
 	default:
 		return []string{a.Network.ProxyFrontendIP + "/32"}
 	}
 }
 
-// serveIP is serve's address on the network it shares with the proxy.
-func (a *Answers) serveIP() string {
-	if a.Proxy == ProxyExternal {
-		return a.Link.ServeIP
+// trustedProxyHosts returns the container names bekup.toml trusts
+// (own-proxy join mode only).
+func (a *Answers) trustedProxyHosts() []string {
+	if a.ownProxyJoin() {
+		return []string{a.ProxyContainer}
 	}
-	return a.Network.ServeFrontendIP
+	return nil
+}
+
+// serveListen is server.listen: serve's address on the network it shares
+// with the proxy, or 0.0.0.0:8080 in the own-proxy join mode (Docker
+// assigns the address there).
+func (a *Answers) serveListen() string {
+	switch {
+	case a.ownProxyJoin():
+		return config.OwnProxyJoinListen
+	case a.Proxy == ProxyExternal:
+		return a.Link.ServeIP + ":8080"
+	default:
+		return a.Network.ServeFrontendIP + ":8080"
+	}
 }
 
 // bundledProxy reports whether the deployment runs a bundled proxy

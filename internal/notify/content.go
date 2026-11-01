@@ -169,6 +169,7 @@ var systemMessages = map[string]string{
 	KindInsecureDBTLS:               "bekup connects to its database with a weakened TLS mode (the server identity is not fully verified).",
 	KindInsecureDBRoles:             "bekup runs migrations and the app with one database account (single-account mode), so a compromised server process could alter the schema and the audit log.",
 	KindUnpinnedImage:               "bekup runs an image that follows a tag (such as :latest) instead of a digest, so whoever moves the tag decides which code runs; pin a digest with setup upgrade --image to remove this warning.",
+	KindServeAliasConflict:          "The network alias bekup-serve on your reverse proxy's Docker network also points to another container, so requests your proxy sends to http://bekup-serve:8080 may reach it. Remove that container's alias, or point the proxy at serve's container name.",
 	KindAuditHeadExportFailed:       "The signed audit chain head could not be exported.",
 	KindCLIAction:                   "A break-glass command was run on the bekup host.",
 	KindSSRFAllowlistWidened:        "The SSRF allowlist was widened: bekup may now connect to more private hosts or networks. Review the change in the audit log.",

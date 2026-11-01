@@ -5,6 +5,7 @@
       - bekup_database_owner_password
       - bekup_database_password
       # CA bundle of your PostgreSQL's server certificate: [database]
-      # tls_ca_file (default path), verified with tls_mode = "verify-full".
+      # tls_ca_file (default path), verified with tls_mode = "verify-full"
+      # (empty when another TLS choice needs none, D-215).
       - source: bekup_db_ca_crt
         target: bekup_db_ca.crt

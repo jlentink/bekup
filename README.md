@@ -153,10 +153,14 @@ The image exists once the first release is published (the release workflow
 moves `:latest` to the newest release); before that, build and publish your
 own with `just publish` and use its reference.
 
-The wizard asks for the reverse proxy (bekup's own Traefik, your Traefik,
-Nginx Proxy Manager or none), the domain, the database (bundled, or your
-existing PostgreSQL 15-17), the master key and the internal CA, shows a
-summary and writes everything, `compose.yaml` included. Esc goes back;
+The wizard asks for the reverse proxy (bekup's own Traefik, or your own
+reverse proxy on this Docker host), the domain, the
+database (bundled, or your existing PostgreSQL 15-17), the master key and
+the internal CA, shows a summary and writes everything, `compose.yaml`
+included. For your own proxy it asks for the Docker network the proxy is
+on and its container name; afterwards point the proxy at
+`http://bekup-serve:8080` (the report prints the settings,
+[docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#own-reverse-proxy)). Esc goes back;
 nothing is written before the summary. The container has no network and
 only `CAP_CHOWN`; `--log-driver none` keeps a generated passphrase out of
 Docker's logs. With your own PostgreSQL, run the one command it prints
@@ -183,11 +187,13 @@ runs), with the same `docker run` options as above; the recipe is in
 
 ### Advanced: start from a compose file
 
-Pick the variant that matches your reverse proxy. Each also exists as
-`*.external-db.yaml` for your own PostgreSQL: save that file as
-`compose.yaml`, put your PostgreSQL's CA bundle (PEM) into the directory
-before step 2 (setup asks for its path and copies it), and run the
-bootstrap command setup prints
+Pick the variant that matches your reverse proxy: bekup's own Traefik
+(`compose.yaml`) or your own reverse proxy on this Docker host
+(`compose.own-proxy.yaml`). Each also exists as `*.external-db.yaml` for
+your own PostgreSQL: save that file as `compose.yaml`, put your
+PostgreSQL's CA bundle (PEM) into the directory before step 2 when its
+certificate comes from your own CA (setup asks for the TLS mode and the
+file's path and copies it), and run the bootstrap command setup prints
 (`docker compose run --rm migrate db bootstrap --admin-user <admin>`)
 before `docker compose up -d`
 ([docs/installation/external-database.md](docs/installation/external-database.md)).
@@ -232,90 +238,35 @@ release file already pins it: drop `BEKUP_IMAGE=…` there.
 </details>
 
 <details>
-<summary><b>Behind your existing Traefik</b></summary>
+<summary><b>Behind your own reverse proxy</b> (Nginx Proxy Manager, Traefik, Caddy, nginx, ... on this Docker host)</summary>
 
-Once: create the link network and give your Traefik a fixed address on it.
-
-```sh
-docker network create --internal --subnet 10.213.253.0/28 \
-  --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
-```
-
-(`--ip-range` keeps Docker's automatic addresses away from the fixed `.5`
-and `.10`.) In Traefik's compose file add `bekup-proxy` **next to the
-networks Traefik already has**, then recreate Traefik
-(`docker compose up -d traefik` in its directory):
-
-```yaml
-services:
-  traefik:
-    networks:
-      default: {}                  # keep every network Traefik already uses
-      web: {}                      # (example: your existing proxy network)
-      bekup-proxy:
-        ipv4_address: 10.213.253.5
-networks:
-  web:
-    external: true                 # as before
-  bekup-proxy:
-    external: true
-```
-
-A list such as `networks: [web]` must become the map form above (`web: {}`)
-to carry the address; a service without a `networks:` key is on `default`
-and must list `default: {}`, or it loses its other networks.
-
-Then the same three steps as above, with
-`compose.traefik-external.yaml` saved as `compose.yaml`:
+bekup joins the Docker network your proxy is already on; nothing changes in
+your proxy's own setup. In a second terminal, look up that network and the
+proxy's container name (setup asks for both; it has no Docker access
+itself):
 
 ```sh
-sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.traefik-external.yaml
-# or, once releases exist (pinned, attested):
-sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.traefik-external.yaml
-gh attestation verify compose.yaml --repo jlentink/bekup
+docker ps --format '{{.Names}}'
+docker inspect <proxy container> --format '{{json .NetworkSettings.Networks}}'
 ```
 
-bekup sets the router labels on `serve` itself (entrypoint `websecure`,
-certificate resolver `letsencrypt`; change them with
-`--traefik-entrypoint` / `--traefik-certresolver`). Traefik needs
-`exposedByDefault=false` and must not trust forwarded headers from
-everyone: [docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#existing-traefik).
-
-</details>
-
-<details>
-<summary><b>Behind Nginx Proxy Manager</b></summary>
-
-Once: the same network setup as for Traefik: the `docker network create`
-command above, and in NPM's compose file its service (usually `app`) gets
-`bekup-proxy` with `ipv4_address: 10.213.253.5` **next to its existing
-networks** (`default: {}` when it had none), the network declared
-`external: true`; then recreate NPM.
-
-Then the same three steps, with `compose.npm.yaml` saved as
+Then the same three steps as above, with `compose.own-proxy.yaml` saved as
 `compose.yaml`:
 
 ```sh
-sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.npm.yaml
+sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.own-proxy.yaml
 # or, once releases exist (pinned, attested):
-sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.npm.yaml
+sudo curl -fsSLo compose.yaml https://github.com/jlentink/bekup/releases/latest/download/compose.own-proxy.yaml
 gh attestation verify compose.yaml --repo jlentink/bekup
 ```
 
-Finally add a Proxy Host in NPM:
-
-| Field | Value |
-|---|---|
-| Domain Names | your DNS name, e.g. `backup.example.com` |
-| Scheme | `http` |
-| Forward Hostname / IP | `10.213.253.10` |
-| Forward Port | `8080` |
-| Cache Assets | off |
-| Block Common Exploits | on |
-| Websockets Support | **off** (bekup uses Server-Sent Events) |
-| SSL | Request a new certificate (Let's Encrypt), Force SSL on, HTTP/2 on, HSTS **off** (bekup sends HSTS itself) |
-
-and in the **Advanced** tab:
+`serve` joins that network under the name `bekup-serve`, and bekup trusts
+forwarded client addresses only from the container you named. Finally point
+your proxy at **`http://bekup-serve:8080`** for your domain, for example a
+Proxy Host in Nginx Proxy Manager with scheme `http`, Forward Hostname
+`bekup-serve`, port `8080`, Websockets Support **off** (bekup uses
+Server-Sent Events), Let's Encrypt with Force SSL and HTTP/2, HSTS **off**
+(bekup sends HSTS itself), and in the **Advanced** tab:
 
 ```nginx
 proxy_http_version 1.1;
@@ -325,12 +276,16 @@ proxy_read_timeout 3600s;
 client_max_body_size 2m;
 ```
 
-Details and verification:
-[docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#nginx-proxy-manager).
+setup prints these settings for Nginx Proxy Manager, Traefik, Caddy and
+nginx. A Traefik that reads container labels gets them with
+`--proxy-labels` (wizard: "Traefik Docker labels?"). Details, the residual
+risk of a shared network and the stricter link-network option:
+[docs/installation/reverse-proxy.md](docs/installation/reverse-proxy.md#own-reverse-proxy).
 
 </details>
 
-Setup asks for the domain, the ACME e-mail (own Traefik only) and a
+Setup asks for the domain, the ACME e-mail (own Traefik only), your
+proxy's network and container name (own reverse proxy only) and a
 passphrase for the CA key, writes everything except `compose.yaml` and
 hands every file to the container user that reads it. Escrow the master key
 offline and move the CA directory to offline media (`setup` prints how).
@@ -348,8 +303,10 @@ replace `compose.yaml` with the new release file, then
 
 Certificates are renewed with `bekup setup renew`
 ([docs/security/mtls-certs.md](docs/security/mtls-certs.md#renewal-with-bekup-setup-renew)).
-Using nginx or the full setup with every service? See the setup-first
-install in
+Using bekup's nginx or the full setup with every service? A proxy on
+another machine is not a wizard choice: the advanced `--proxy none` path
+(run a small proxy on this host, or route to bekup's `frontend` network
+yourself) is the setup-first install in
 [docs/installation/compose.md](docs/installation/compose.md#alternative-setup-first).
 
 <details>

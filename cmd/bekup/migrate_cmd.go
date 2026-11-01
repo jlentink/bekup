@@ -57,7 +57,7 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	if err != nil {
 		return err
 	}
-	logLoaded(c, logger, res.Path, res.Warnings)
+	logLoaded(c, logger, res.Path, withoutListenWarning(res.Config, res.Warnings))
 	if action == "down-one" && !res.Dev {
 		return errDownOneNeedsDev
 	}

@@ -50,10 +50,9 @@ func keys[V any](m map[string]V) []string {
 func TestVariantServiceSets(t *testing.T) {
 	t.Parallel()
 	want := map[Variant][]string{
-		VariantTraefik:         {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
-		VariantTraefikExternal: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup"},
-		VariantNPM:             {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup"},
-		VariantFull:            {"admin", "certbot", "certs-init", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
+		VariantTraefik:  {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
+		VariantOwnProxy: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup"},
+		VariantFull:     {"admin", "certbot", "certs-init", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
 	}
 	for _, v := range AllVariants {
 		t.Run(string(v), func(t *testing.T) {
@@ -97,7 +96,7 @@ func TestVariantServiceSets(t *testing.T) {
 
 func TestVariantExternalNetworks(t *testing.T) {
 	t.Parallel()
-	for _, v := range []Variant{VariantTraefikExternal, VariantNPM} {
+	for _, v := range []Variant{VariantOwnProxy} {
 		t.Run(string(v), func(t *testing.T) {
 			_, doc := renderVariantT(t, v)
 			for _, n := range []string{"frontend", "edge"} {
@@ -121,8 +120,14 @@ func TestVariantExternalNetworks(t *testing.T) {
 			}
 			serveNets, _ := doc.Services["serve"]["networks"].(map[string]any) //nolint:errcheck // checked below
 			proxy, _ := serveNets["proxy"].(map[string]any)                    //nolint:errcheck // checked below
-			if proxy["ipv4_address"] != "${SERVE_PROXY_IP:-10.213.253.10}" {
-				t.Fatalf("serve proxy address %v", proxy)
+			// Join mode (D-215): no fixed address, the alias bekup-serve, and
+			// the listen shape for the wildcard address.
+			if _, fixed := proxy["ipv4_address"]; fixed || !equalYAML(proxy["aliases"], []any{"bekup-serve"}) {
+				t.Fatalf("serve on the proxy network %v", proxy)
+			}
+			envm, _ := doc.Services["serve"]["environment"].(map[string]any) //nolint:errcheck // checked below
+			if envm["BEKUP_LISTEN_SHAPE"] != "own-proxy-join" {
+				t.Fatalf("serve environment %v", envm)
 			}
 			for _, vol := range []string{"traefik-acme", "nginx-certs", "nginx-acme-webroot"} {
 				if _, ok := doc.Volumes[vol]; ok {
@@ -146,34 +151,103 @@ func TestVariantLabels(t *testing.T) {
 		"traefik.http.services.bekup.loadbalancer.server.port":                      "8080",
 		"traefik.http.services.bekup.loadbalancer.responseforwarding.flushinterval": "-1ms",
 	}
+	// No release file carries labels (D-215: an overlay).
 	for _, v := range AllVariants {
 		out, doc := renderVariantT(t, v)
 		for name, svc := range doc.Services {
-			labels, ok := svc["labels"]
-			switch {
-			case v == VariantTraefikExternal && name == "serve":
-				m, isMap := labels.(map[string]any)
-				if !isMap || len(m) != len(want) {
-					t.Fatalf("serve labels %v", labels)
-				}
-				for k, val := range want {
-					if m[k] != val {
-						t.Errorf("label %s = %v, want %v", k, m[k], val)
-					}
-				}
-				for k := range m {
-					if strings.Contains(k, "middlewares") {
-						t.Errorf("middleware label %s", k)
-					}
-				}
-			case ok:
+			if _, ok := svc["labels"]; ok {
 				t.Errorf("%s: %s has labels", v, name)
 			}
 		}
-		if v != VariantTraefikExternal && strings.Contains(string(out), "traefik.enable") {
+		if strings.Contains(string(out), "traefik.enable") {
 			t.Errorf("%s mentions traefik labels", v)
 		}
 	}
+	var doc variantDoc
+	if err := yaml.Unmarshal([]byte(overlayDoc(Overlays{ProxyLabels: true}, "")), &doc); err != nil {
+		t.Fatal(err)
+	}
+	m, isMap := doc.Services["serve"]["labels"].(map[string]any)
+	if !isMap || len(m) != len(want) || len(doc.Services) != 1 {
+		t.Fatalf("overlay labels %v", doc.Services)
+	}
+	for k, val := range want {
+		if m[k] != val {
+			t.Errorf("label %s = %v, want %v", k, m[k], val)
+		}
+	}
+	for k := range m {
+		if strings.Contains(k, "middlewares") {
+			t.Errorf("middleware label %s", k)
+		}
+	}
+}
+
+// TestOverlayDocs: every combination of the setup-only overlays (D-215)
+// renders the blocks it names, only those, and merges with its variant
+// into a project that passes the lint of exactly that form.
+func TestOverlayDocs(t *testing.T) {
+	t.Parallel()
+	for _, v := range AllVariants {
+		for _, db := range DBModes {
+			for _, ov := range overlayCombos(v, db) {
+				doc := overlayDoc(ov, "")
+				if !ov.Any() {
+					if doc != "" {
+						t.Fatalf("%s/%s: empty overlays render %q", v, db, doc)
+					}
+					continue
+				}
+				var d variantDoc
+				if err := yaml.Unmarshal([]byte(doc), &d); err != nil {
+					t.Fatalf("%+v: %v", ov, err)
+				}
+				serveNets, _ := d.Services["serve"]["networks"].(map[string]any) //nolint:errcheck // checked below
+				if _, ok := serveNets["database"]; ok != ov.DBNetwork {
+					t.Errorf("%+v: serve on database %v", ov, ok)
+				}
+				if _, ok := serveNets["proxy"]; ok != ov.ProxyLink {
+					t.Errorf("%+v: serve link %v", ov, ok)
+				}
+				for _, svc := range []string{"migrate", "admin"} {
+					if _, ok := d.Services[svc]; ok != ov.DBNetwork {
+						t.Errorf("%+v: %s %v", ov, svc, ok)
+					}
+				}
+				if ov.DBNetwork && (d.Networks["database"]["external"] != true || d.Networks["database"]["name"] != "${BEKUP_DB_NETWORK:-bekup-db}" || d.Networks["backend"]["internal"] != true) {
+					t.Errorf("%+v: networks %v", ov, d.Networks)
+				}
+				compose := []byte(renderedVariantDB(t, v, db))
+				in := composeInput{root: "/deploy", compose: compose, override: []byte(overlayHeader + doc)}
+				findings := lintComposeFiles(&in, projectEnv(nil, nil, in.docs()...), v, variantImage, expectedDocs(compose, ov), false)
+				if len(findings) > 0 {
+					t.Errorf("%s/%s %+v: %v", v, db, ov, findings)
+				}
+				// Without the override the lint holds the deployment to it.
+				in.override = nil
+				if findings := lintComposeFiles(&in, projectEnv(nil, nil, in.docs()...), v, variantImage, expectedDocs(compose, ov), false); !hasErrors(findings) {
+					t.Errorf("%s/%s %+v: a missing override passes", v, db, ov)
+				}
+			}
+		}
+	}
+}
+
+// overlayCombos are the overlay combinations a variant and database mode
+// allow.
+func overlayCombos(v Variant, db DBMode) []Overlays {
+	var out []Overlays
+	for _, labels := range []bool{false, true} {
+		for _, link := range []bool{false, true} {
+			for _, dbn := range []bool{false, true} {
+				if (labels || link) && !v.OwnProxy() || dbn && db != DBExternal {
+					continue
+				}
+				out = append(out, Overlays{ProxyLabels: labels, ProxyLink: link, DBNetwork: dbn})
+			}
+		}
+	}
+	return out
 }
 
 // The setup service is exactly the hardened one-shot installer in every
@@ -235,9 +309,8 @@ func TestVariantUntouchedBlocksByteEqual(t *testing.T) {
 		t.Fatal(err)
 	}
 	edited := map[Variant][]string{
-		VariantTraefik:         {"services/traefik-init", "services/traefik"},
-		VariantTraefikExternal: {"services/serve"},
-		VariantNPM:             {"services/serve"},
+		VariantTraefik:  {"services/traefik-init", "services/traefik"},
+		VariantOwnProxy: {"services/serve"},
 	}
 	var doc variantDoc
 	if err := yaml.Unmarshal(src, &doc); err != nil {
@@ -414,7 +487,7 @@ func TestRenderVariantRefusesBadSources(t *testing.T) {
 	}
 	// Without an image the line becomes the placeholder of the committed
 	// files (deploy/compose/).
-	out, err := RenderVariant([]byte(src), VariantNPM, DBBundled, nil)
+	out, err := RenderVariant([]byte(src), VariantOwnProxy, DBBundled, nil)
 	if err != nil || !hasLine(string(out), ComposePlaceholderLine) || hasLine(string(out), ComposeImageLine) {
 		t.Fatalf("example: %v", err)
 	}
@@ -427,7 +500,7 @@ func TestRenderVariantRefusesBadSources(t *testing.T) {
 
 func TestVariantNames(t *testing.T) {
 	t.Parallel()
-	for v, name := range map[Variant]string{VariantTraefik: "compose.yaml", VariantTraefikExternal: "compose.traefik-external.yaml", VariantNPM: "compose.npm.yaml"} {
+	for v, name := range map[Variant]string{VariantTraefik: "compose.yaml", VariantOwnProxy: "compose.own-proxy.yaml"} {
 		if v.AssetName(DBBundled) != name {
 			t.Errorf("%s: %s", v, v.AssetName(DBBundled))
 		}
@@ -437,6 +510,11 @@ func TestVariantNames(t *testing.T) {
 	}
 	if _, err := ParseVariant("traefik "); err == nil {
 		t.Error("bad variant accepted")
+	}
+	for _, retired := range []string{"traefik-external", "npm"} {
+		if _, err := ParseVariant(retired); err == nil || !strings.Contains(err.Error(), "own-proxy") {
+			t.Errorf("retired %s: %v", retired, err)
+		}
 	}
 }
 

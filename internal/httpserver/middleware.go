@@ -104,24 +104,44 @@ const missingXFFWarnInterval = 5 * time.Minute
 // Health checks are exempt (probes often come from the proxy host
 // directly). Only the peer address is logged, never header values.
 type xffWarner struct {
-	logger        *slog.Logger
-	now           func() time.Time
+	logger *slog.Logger
+	now    func() time.Time
+	// untrusted is called for every X-Forwarded-For from an untrusted
+	// peer: the trusted proxy hosts are re-resolved (D-215; a recreated
+	// proxy container has a new address).
+	untrusted func()
+	// peer is called with every request's peer: a peer trusted through a
+	// proxy host name keeps its resolution fresh (D-215; a removed proxy
+	// container's address may be handed to another container).
+	peer          func(netip.Addr)
 	mu            sync.Mutex
 	last          time.Time
 	lastUntrusted time.Time
 }
 
 func (x *xffWarner) check(r *http.Request, trusted []netip.Prefix) {
-	if x == nil || x.logger == nil || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+	if x == nil {
 		return
 	}
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err != nil {
 		return
 	}
-	peer := ap.Addr().Unmap()
+	peer := canonicalIP(ap.Addr())
 	hasXFF := len(r.Header.Values("X-Forwarded-For")) > 0
-	switch trustedPeer := isTrusted(peer, trusted); {
+	trustedPeer := isTrusted(peer, trusted)
+	// The re-resolution hooks run for every request, health checks
+	// included (D-215 review L4); only the warnings skip them.
+	if x.peer != nil {
+		x.peer(peer)
+	}
+	if hasXFF && !trustedPeer && x.untrusted != nil {
+		x.untrusted()
+	}
+	if x.logger == nil || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+		return
+	}
+	switch {
 	case !hasXFF && trustedPeer:
 		if x.allow(&x.last) {
 			x.logger.LogAttrs(r.Context(), slog.LevelWarn,
@@ -130,7 +150,7 @@ func (x *xffWarner) check(r *http.Request, trusted []netip.Prefix) {
 	case hasXFF && !trustedPeer:
 		if x.allow(&x.lastUntrusted) {
 			x.logger.LogAttrs(r.Context(), slog.LevelWarn,
-				"X-Forwarded-For from a peer that is not in server.trusted_proxies; the header is ignored (is the reverse proxy at its configured fixed address?)", warnAttrs(r, peer)...)
+				"X-Forwarded-For from a peer that is not in server.trusted_proxies (or trusted_proxy_hosts); the header is ignored (is the reverse proxy at its configured fixed address, or its container name right?)", warnAttrs(r, peer)...)
 		}
 	}
 }

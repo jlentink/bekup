@@ -258,10 +258,11 @@ func validateBekup(c *Bekup, dev bool) []error {
 	httpAllowed := dev || c.Server.AllowInsecureHTTP
 	validateBaseURL(&v, c.Server.BaseURL, httpAllowed)
 	v.cidrs("server.trusted_proxies", c.Server.TrustedProxies)
+	v.trustedProxyHosts("server.trusted_proxy_hosts", c.Server.TrustedProxyHosts)
 	// Without TLS there is no reverse proxy to trust (D-095).
 	noProxy := httpAllowed && c.InsecureTransport()
-	if len(c.Server.TrustedProxies) == 0 && !dev && !noProxy {
-		v.addf("server.trusted_proxies", "is required outside dev mode (CIDRs of the reverse proxy)")
+	if len(c.Server.TrustedProxies) == 0 && len(c.Server.TrustedProxyHosts) == 0 && !dev && !noProxy {
+		v.addf("server.trusted_proxies", "is required outside dev mode (CIDRs of the reverse proxy, or its container names in server.trusted_proxy_hosts)")
 	}
 	v.duration("server.read_header_timeout", c.Server.ReadHeaderTimeout, time.Second, 0)
 	v.duration("server.read_timeout", c.Server.ReadTimeout, time.Second, 0)

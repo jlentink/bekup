@@ -50,6 +50,18 @@ func TestComposeVarAllowlist(t *testing.T) {
 			}
 		}
 	}
+	// The setup-only overlays (D-215) belong to the shipped forms too.
+	all := overlayDoc(Overlays{ProxyLabels: true, ProxyLink: true, DBNetwork: true}, "")
+	vars, bad, err := composeVarRefs([]byte(all), false)
+	if err != nil || bad {
+		t.Fatalf("overlays: %v bad=%v", err, bad)
+	}
+	for k := range vars {
+		got[k] = true
+	}
+	if fs := interpolationFindings(OverrideFile, []byte(all), false); len(fs) > 0 {
+		t.Fatalf("overlays: %v", fs)
+	}
 	keys := sortedKeys(got)
 	want := slices.Clone(composeVarAllowlist)
 	slices.Sort(want)
@@ -213,7 +225,7 @@ func TestStructuralLint(t *testing.T) {
 		{name: "M2 added on backend", anchor: "services:\n", compose: addedService("    networks: [backend]\n"), over: "services:\n" + addedService("    networks: [backend]\n"), want: `may not join bekup's network "backend"`},
 		{name: "M2 added on runner-ctl", over: "services:\n" + addedService("    networks: [runner-ctl]\n"), want: `bekup's network "runner-ctl"`},
 		{name: "M2 added on frontend", over: "services:\n" + addedService("    networks: [frontend]\n"), want: `bekup's network "frontend"`},
-		{name: "M2 added on proxy link", v: VariantNPM, over: "services:\n" + addedService("    networks: [proxy]\n"), want: `bekup's network "proxy"`},
+		{name: "M2 added on proxy link", v: VariantOwnProxy, over: "services:\n" + addedService("    networks: [proxy]\n"), want: `bekup's network "proxy"`},
 		{name: "M2 added alias on metrics", over: "services:\n" + addedService("    networks:\n      metrics:\n        aliases: [serve]\n"), want: "network aliases"},
 		{name: "M2 added external_links", over: "services:\n" + addedService("    external_links: [x]\n"), want: "`external_links`"},
 		{name: "M2 added container_name", over: "services:\n" + addedService("    container_name: serve\n    networks: [metrics]\n"), want: "`container_name`"},
@@ -243,7 +255,7 @@ func TestStructuralLint(t *testing.T) {
 		// L6: labels.
 		{name: "L6 traefik label on added", anchor: "services:\n", compose: addedService("    labels: {traefik.http.routers.x.rule: \"Host(`bekup.example.com`)\"}\n"), over: "services:\n" + addedService("    labels: {traefik.http.routers.x.rule: \"Host(`bekup.example.com`)\"}\n"), want: `label "traefik.http.routers.x.rule"`},
 		{name: "L6 deploy label", over: "services:\n" + addedService("    deploy: {labels: {Traefik.enable: \"true\"}}\n"), want: `label "Traefik.enable"`},
-		{name: "L6 serve label", v: VariantTraefikExternal, over: "services:\n  serve:\n    labels: {traefik.http.routers.bekup.middlewares: evil}\n", want: "labels"},
+		{name: "L6 serve label", v: VariantOwnProxy, over: "services:\n  serve:\n    labels: {traefik.http.routers.bekup.middlewares: evil}\n", want: "labels"},
 		{name: "L6 postgres label", over: "services:\n  postgres:\n    labels: {traefik.enable: \"true\"}\n", want: "labels"},
 		// Info: userns_mode and SELinux.
 		{name: "userns serve", anchor: serveAnchor, compose: "    userns_mode: host\n", over: "services:\n  serve:\n    userns_mode: host\n", want: "`userns_mode: host` is allowed only on the runner"},
@@ -444,7 +456,7 @@ func TestLintSymlinkedBindSource(t *testing.T) {
 		"services:\n  serve:\n    volumes: [\"./data:/var/lib/bekup/backups/d\"]\n",
 	} {
 		in := composeInput{root: dir, compose: expected, override: []byte(over)}
-		fs := lintComposeFiles(&in, projectEnv(nil, nil, in.docs()...), VariantTraefik, variantImage, expected, false)
+		fs := lintComposeFiles(&in, projectEnv(nil, nil, in.docs()...), VariantTraefik, variantImage, expectedDocs(expected, Overlays{}), false)
 		if !hasFinding(fs, SeverityError, "is a symlink") {
 			t.Errorf("%q: %v", over, fs)
 		}

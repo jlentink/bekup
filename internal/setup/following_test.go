@@ -123,7 +123,7 @@ func TestCheckFollowingFindings(t *testing.T) {
 func TestLintFollowingAllowance(t *testing.T) {
 	t.Parallel()
 	img := mustRef(t, latestImage)
-	src, err := RenderRelease(VariantNPM, DBBundled, &img)
+	src, err := RenderRelease(VariantOwnProxy, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestLintFollowingAllowance(t *testing.T) {
 		"other tag":   "  extra:\n    image: ghcr.io/jlentink/bekup:1.2.3\n" + hardened,
 	} {
 		s := strings.Replace(string(src), "\nservices:\n", "\nservices:\n"+edit, 1)
-		info, err := inspectComposeData(fsys, composeInput{compose: []byte(s), following: true}, VariantNPM, "")
+		info, err := inspectComposeData(fsys, composeInput{compose: []byte(s), following: true}, VariantOwnProxy, "")
 		if err != nil || !hasFinding(info.Findings, SeverityError, "is not digest-pinned") {
 			t.Fatalf("%s: %+v %v", name, info, err)
 		}

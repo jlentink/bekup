@@ -215,16 +215,15 @@ for needle in \
 	"--certificate-identity 'https://github.com/jlentink/bekup/.github/workflows/release.yml@refs/tags/v1.2.3'" \
 	'--certificate-oidc-issuer https://token.actions.githubusercontent.com' \
 	"gh attestation verify oci://ghcr.io/jlentink/bekup@$digest --repo jlentink/bekup" \
-	'compose.traefik-external.yaml' \
-	'compose.npm.yaml' \
+	'compose.own-proxy.yaml' \
 	'compose.external-db.yaml' \
-	'compose.npm.external-db.yaml' \
+	'compose.own-proxy.external-db.yaml' \
+	'http://bekup-serve:8080' \
 	'docker compose run --rm migrate db bootstrap --admin-user <admin>' \
 	"-e BEKUP_IMAGE=ghcr.io/jlentink/bekup:1.2.3@$digest" \
 	'-v "$PWD":/deploy ghcr.io/jlentink/bekup:1.2.3@'"$digest"' setup' \
 	'DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup' \
 	'docker compose run --rm setup upgrade' \
-	'docker network create --internal --subnet 10.213.253.0/28 --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy' \
 	'sudo curl -fsSLO https://github.com/jlentink/bekup/releases/download/v1.2.3/$f' \
 	'gh attestation verify "$f" --repo jlentink/bekup' \
 	'[ "$f" = compose.yaml ] || sudo mv "$f" compose.yaml' \
@@ -272,7 +271,7 @@ fixture() {
 }
 assets() { # assets <dir> [file-to-break value extra]
 	rm -rf "$1" && mkdir -p "$1"
-	for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml; do
+	for f in compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml; do
 		fixture "$1/$f" "$cref"
 	done
 }
@@ -288,14 +287,14 @@ broken() {
 	fixture "$tmp/cb/$2" "$3" "${4:-}"
 	refuse "$rc" compose-assets "$cref" "$tmp/cb"
 }
-broken other-digest compose.npm.yaml "ghcr.io/jlentink/bekup:1.2.3@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+broken other-digest compose.own-proxy.yaml "ghcr.io/jlentink/bekup:1.2.3@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
 broken other-repo compose.yaml "ghcr.io/evil/bekup:1.2.3@$digest"
 # shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE...} is the point
 broken variable compose.yaml '${BEKUP_IMAGE:-bekup:dev}'
 broken second-line compose.yaml "$cref" "x-bekup-image: &x $cref"
 # shellcheck disable=SC2016 # a literal ${BEKUP_IMAGE} outside the image line
 broken variable-elsewhere compose.yaml "$cref" 'x-extra: ${BEKUP_IMAGE}'
-broken unpinned-image compose.traefik-external.yaml "$cref" '  traefik:
+broken unpinned-image compose.own-proxy.yaml "$cref" '  traefik:
     image: traefik:v3'
 # shellcheck disable=SC2016 # literal variable reference
 broken variable-image compose.yaml "$cref" '  traefik:
@@ -305,12 +304,12 @@ broken build compose.yaml "$cref" '  x:
 # shellcheck disable=SC2016 # literal variable reference
 broken leftover-var compose.yaml "$cref" '  x:
     environment: {A: ${BEKUP_IMAGE}}'
-assets "$tmp/cc" && rm "$tmp/cc/compose.npm.yaml"
+assets "$tmp/cc" && rm "$tmp/cc/compose.own-proxy.yaml"
 refuse "$rc" compose-assets "$cref" "$tmp/cc"
-assets "$tmp/cc" && rm "$tmp/cc/compose.npm.external-db.yaml"
+assets "$tmp/cc" && rm "$tmp/cc/compose.own-proxy.external-db.yaml"
 refuse "$rc" compose-assets "$cref" "$tmp/cc"
-broken external-other-digest compose.traefik-external.external-db.yaml "ghcr.io/jlentink/bekup:1.2.3@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
-assets "$tmp/cd" && rm "$tmp/cd/compose.yaml" && ln -s compose.npm.yaml "$tmp/cd/compose.yaml"
+broken external-other-digest compose.own-proxy.external-db.yaml "ghcr.io/jlentink/bekup:1.2.3@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+assets "$tmp/cd" && rm "$tmp/cd/compose.yaml" && ln -s compose.own-proxy.yaml "$tmp/cd/compose.yaml"
 refuse "$rc" compose-assets "$cref" "$tmp/cd"
 # render-compose: a stub docker that checks the hardening flags and prints
 # a fixture for the requested variant.
@@ -334,9 +333,9 @@ render() { # render <ref-to-print>
 }
 want "release_ci: compose assets pinned to $cref" render "$cref"
 count=$((count + 1))
-if [ "$(grep -c "ghcr.io/jlentink/bekup@$digest setup compose --variant" "$tmp/render.log")" != 6 ] ||
-	! grep -q -- "--variant traefik-external --database bundled --image $cref" "$tmp/render.log" ||
-	! grep -q -- "--variant npm --database external --image $cref" "$tmp/render.log"; then
+if [ "$(grep -c "ghcr.io/jlentink/bekup@$digest setup compose --variant" "$tmp/render.log")" != 4 ] ||
+	! grep -q -- "--variant own-proxy --database bundled --image $cref" "$tmp/render.log" ||
+	! grep -q -- "--variant own-proxy --database external --image $cref" "$tmp/render.log"; then
 	printf 'FAIL: render-compose: docker runs:\n%s\n' "$(cat "$tmp/render.log")" >&2
 	fail=1
 fi
@@ -348,7 +347,7 @@ refuse "$rc" render-compose 'ghcr.io/jlentink/bekup:1.2.3@sha256:x;id' "$tmp/ren
 # the release reference are what the release renders.
 placeholder_line=$(grep '^x-bekup-image:' "$here/../deploy/compose/compose.yaml")
 rm -rf "$tmp/cr" && mkdir -p "$tmp/cr"
-for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml; do
+for f in compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml; do
 	sed "s|^x-bekup-image:.*\$|x-bekup-image: \&bekup-image $cref|" "$here/../deploy/compose/$f" >"$tmp/cr/$f"
 done
 want "release_ci: committed compose files match the release files" "$rc" committed-compose "$tmp/cr" "$here/../deploy/compose"
@@ -356,7 +355,7 @@ want "release_ci: compose assets pinned to $cref" "$rc" compose-assets "$cref" "
 # committed_case <name> <sed expression on one committed copy>
 committed_case() {
 	rm -rf "$tmp/cm" && cp -R "$here/../deploy/compose" "$tmp/cm"
-	sed "$2" "$tmp/cm/compose.npm.yaml" >"$tmp/cm/x" && mv "$tmp/cm/x" "$tmp/cm/compose.npm.yaml"
+	sed "$2" "$tmp/cm/compose.own-proxy.yaml" >"$tmp/cm/x" && mv "$tmp/cm/x" "$tmp/cm/compose.own-proxy.yaml"
 	refuse "$rc" committed-compose "$tmp/cr" "$tmp/cm"
 }
 committed_case body-edit 's/memory: 2G/memory: 3G/'
@@ -379,7 +378,7 @@ fi
 
 # --- assets-digest -----------------------------------------------------------
 install -d "$tmp/ad"
-for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml SHA256SUMS; do
+for f in compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml SHA256SUMS; do
 	printf '%s\n' "$f" >"$tmp/ad/$f"
 	printf '{"b":"%s"}\n' "$f" >"$tmp/ad/$f.sigstore.json"
 done
@@ -394,7 +393,7 @@ if [ "$bad" = 1 ]; then
 	printf 'FAIL: assets-digest: got %s\n' "$ad1" >&2
 	fail=1
 fi
-printf 'x\n' >>"$tmp/ad/compose.npm.yaml.sigstore.json" # a changed bundle changes the digest
+printf 'x\n' >>"$tmp/ad/compose.own-proxy.yaml.sigstore.json" # a changed bundle changes the digest
 ad2=$("$rc" assets-digest "$tmp/ad" 2>/dev/null) || ad2='<error>'
 count=$((count + 1))
 if [ "$ad2" = "$ad1" ] || [ "$ad2" = '<error>' ]; then

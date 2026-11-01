@@ -82,10 +82,11 @@ type lintOptions struct {
 
 // lintComposeFiles resolves compose.yaml (+ compose.override.yaml) like
 // docker compose and runs the hardening lint on the result. expected is
-// the shipped variant's compose file: every service, network, volume,
-// secret and config it ships is pinned to it. placeholder: compose.yaml
+// the shipped variant's compose file plus the setup-only overlays of the
+// deployment (D-215): every service, network, volume, secret and config
+// it ships is pinned to them. placeholder: compose.yaml
 // takes the image from BEKUP_IMAGE (the committed files in deploy/compose/).
-func lintComposeFiles(in *composeInput, env map[string]string, v Variant, image string, expected []byte, placeholder bool) []Finding {
+func lintComposeFiles(in *composeInput, env map[string]string, v Variant, image string, expected []composeSrc, placeholder bool) []Finding {
 	label := ComposeFile
 	if in.override != nil {
 		label = ComposeFile + " + " + OverrideFile
@@ -101,12 +102,11 @@ func lintComposeFiles(in *composeInput, env map[string]string, v Variant, image 
 	if err != nil {
 		return append(out, Finding{Severity: SeverityError, Path: label, Msg: err.Error()})
 	}
-	expSrc := composeSrc{name: ComposeFile, data: expected}
-	exp, err := loadProject(in.root, env, expSrc)
+	exp, err := loadProject(in.root, env, expected...)
 	if err != nil {
 		return append(out, Finding{Severity: SeverityError, Path: label, Msg: "resolving the shipped " + string(v) + " variant: " + err.Error()})
 	}
-	expRaw, err := loadRawProject(in.root, expSrc)
+	expRaw, err := loadRawProject(in.root, expected...)
 	if err != nil {
 		return append(out, Finding{Severity: SeverityError, Path: label, Msg: "resolving the shipped " + string(v) + " variant: " + err.Error()})
 	}

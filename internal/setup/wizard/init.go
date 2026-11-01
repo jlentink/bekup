@@ -65,12 +65,18 @@ func (p *InitPlan) Destroy() {
 	p.secrets = nil
 }
 
-// Proxy choices of the wizard (each maps to a variant).
+// Proxy choices of the wizard (each maps to a variant). A proxy on
+// another machine is not a wizard choice (D-215 amendment): the flags
+// --variant full --proxy none --trusted-proxy stay the advanced path.
 const (
-	proxyOwnTraefik      = "own-traefik"
-	proxyExistingTraefik = "existing-traefik"
-	proxyNPM             = "npm"
-	proxyNone            = "none"
+	proxyOwnTraefik = "own-traefik"
+	proxyOwn        = "own"
+)
+
+// Database location choices.
+const (
+	dbHere   = "docker"
+	dbRemote = "remote"
 )
 
 // Consent choices.
@@ -187,12 +193,15 @@ func initSteps() []step[*initState] {
 		{name: "welcome", run: (*initState).welcome},
 		{name: "image", skip: func(st *initState) bool { return st.compose != nil }, run: (*initState).image},
 		{name: "proxy", skip: setupFirst, run: (*initState).askProxy},
-		{name: "trusted-proxy", skip: func(st *initState) bool { return st.a.Proxy != setup.ProxyNone }, run: (*initState).trustedProxy},
-		{name: "traefik-names", skip: func(st *initState) bool { return st.a.Variant != setup.VariantTraefikExternal }, run: (*initState).traefikNames},
+		{name: "own-proxy", skip: func(st *initState) bool { return !st.a.Variant.OwnProxy() }, run: (*initState).ownProxy},
+		{name: "proxy-labels", skip: func(st *initState) bool { return !st.a.Variant.OwnProxy() }, run: (*initState).proxyLabels},
+		{name: "traefik-names", skip: func(st *initState) bool { return !st.a.ProxyLabels }, run: (*initState).traefikNames},
 		{name: "domain", run: (*initState).domain},
 		{name: "acme", skip: func(st *initState) bool { return st.a.Variant != setup.VariantTraefik }, run: (*initState).acme},
 		{name: "database", skip: setupFirst, run: (*initState).database},
+		{name: "db-location", skip: notExternal, run: (*initState).dbLocation},
 		{name: "db-server", skip: notExternal, run: (*initState).dbServer},
+		{name: "db-tls", skip: notExternal, run: (*initState).dbTLS},
 		{name: "db-auth", skip: notExternal, run: (*initState).dbAuth},
 		{name: "db-passwords", skip: func(st *initState) bool {
 			auth := st.auth()
@@ -350,46 +359,71 @@ func (st *initState) askProxy() error {
 	}
 	v, err := st.ui.Select("Reverse proxy", "Who terminates HTTPS for the web UI?", []Option{
 		{proxyOwnTraefik, "bekup's own Traefik (Let's Encrypt; needs ports 80 and 443)"},
-		{proxyExistingTraefik, "my existing Traefik (Docker provider)"},
-		{proxyNPM, "my Nginx Proxy Manager"},
-		{proxyNone, "none here: my own proxy joins bekup's frontend network"},
+		{proxyOwn, "my own reverse proxy on this Docker host (Nginx Proxy Manager, Traefik,\nCaddy, nginx, ...)"},
 	}, def)
 	if err != nil {
 		return err
 	}
 	st.proxy = v
 	st.a.TLSMode, st.a.Proxy, st.a.TrustedProxies = "", "", nil
-	if v != proxyExistingTraefik {
+	if v != proxyOwn {
+		st.a.ProxyNetwork, st.a.ProxyContainer, st.a.ProxyLabels = "", "", false
 		st.a.TraefikEntrypoint, st.a.TraefikCertResolver = "", ""
 	}
-	switch v {
-	case proxyOwnTraefik:
-		st.a.Variant, st.a.Proxy, st.a.TLSMode = setup.VariantTraefik, setup.ProxyTraefik, setup.TLSACME
-	case proxyExistingTraefik:
-		st.a.Variant, st.a.Proxy = setup.VariantTraefikExternal, setup.ProxyExternal
-	case proxyNPM:
-		st.a.Variant, st.a.Proxy = setup.VariantNPM, setup.ProxyExternal
-	default:
-		st.a.Variant, st.a.Proxy = setup.VariantFull, setup.ProxyNone
+	if v == proxyOwn {
+		st.a.Variant, st.a.Proxy = setup.VariantOwnProxy, setup.ProxyExternal
+		return nil
 	}
+	st.a.Variant, st.a.Proxy, st.a.TLSMode = setup.VariantTraefik, setup.ProxyTraefik, setup.TLSACME
 	return nil
 }
 
-func (st *initState) trustedProxy() error {
-	def := ""
-	if len(st.a.TrustedProxies) > 0 {
-		def = st.a.TrustedProxies[0]
+// ownProxy asks for the Docker network the operator's proxy is on and its
+// container name (D-215): serve joins that network and trusts the proxy
+// by its name.
+func (st *initState) ownProxy() error {
+	if st.a.ProxyMode == setup.ProxyLink {
+		return nil // advanced, flag-only (--proxy-network-mode link)
 	}
-	s, err := st.ui.Input("Your proxy's address", "The CIDR of your reverse proxy on bekup's frontend network\n(10.213.250.0/24; not .5 or .10), e.g. 10.213.250.6/32.", def, setup.ValidateTrustedProxy)
+	net, err := st.ui.Input("Your proxy's Docker network", `serve joins the Docker network your reverse proxy is on, so the proxy reaches
+it as http://bekup-serve:8080 (nothing to add to the proxy's own setup).
+This container has no Docker access: find the network in a second terminal
+on the host:
+  docker network ls
+  docker inspect <proxy container> --format '{{json .NetworkSettings.Networks}}'`, st.a.ProxyNetwork, func(s string) error {
+		return setup.ValidateDockerNetwork("proxy-network", s)
+	})
 	if err != nil {
 		return err
 	}
-	st.a.TrustedProxies = []string{s}
+	name, err := st.ui.Input("Your proxy's container name", `bekup trusts the client addresses (X-Forwarded-For) only from this
+container: serve resolves its name on that network (docker ps shows it).`, st.a.ProxyContainer, func(s string) error {
+		return setup.ValidateContainerName("proxy-container", s)
+	})
+	if err != nil {
+		return err
+	}
+	st.a.ProxyNetwork, st.a.ProxyContainer = net, name
+	return nil
+}
+
+// proxyLabels offers the Traefik Docker-provider labels (default no).
+func (st *initState) proxyLabels() error {
+	labels, err := st.ui.Confirm("Traefik Docker labels?", `Only for a Traefik that reads container labels (Docker provider): add the
+routing labels to serve. Every other proxy (and Traefik with the file
+provider) is pointed at http://bekup-serve:8080 by hand.`, st.a.ProxyLabels)
+	if err != nil {
+		return err
+	}
+	st.a.ProxyLabels = labels
+	if !labels {
+		st.a.TraefikEntrypoint, st.a.TraefikCertResolver = "", ""
+	}
 	return nil
 }
 
 // traefikNames asks for the entrypoint and certificate resolver of the
-// operator's Traefik (traefik-external; the defaults are the flags').
+// operator's Traefik (--proxy-labels; the defaults are the flags').
 func (st *initState) traefikNames() error {
 	ep := st.a.TraefikEntrypoint
 	if ep == "" {
@@ -480,9 +514,44 @@ func dbField(d setup.Database, field string) error {
 	return nil
 }
 
-func (st *initState) dbServer() error {
+// dbLocation asks whether the database is a container on this Docker
+// host (D-215): then its Docker network and container name.
+func (st *initState) dbLocation() error {
 	d := &st.a.DB
-	host, err := st.ui.Input("PostgreSQL host", "Host name (or IP address) bekup connects to; connect directly, not through\na pooler (SCRAM channel binding).", d.Host, func(s string) error {
+	def := dbRemote
+	if d.Location == setup.DBDocker {
+		def = dbHere
+	}
+	v, err := st.ui.Select("Where does your PostgreSQL run?", "Is it a container on this Docker host?", []Option{
+		{dbHere, "a container on this Docker host (bekup joins its Docker network)"},
+		{dbRemote, "another server or a managed service (host name or IP address)"},
+	}, def)
+	if err != nil {
+		return err
+	}
+	if v == dbRemote {
+		if d.Location == setup.DBDocker {
+			d.Host = ""
+		}
+		d.Location, d.Network = "", "" // remote is the flag's default
+		return nil
+	}
+	net, err := st.ui.Input("The database's Docker network", `migrate, serve and admin join it (setup adds it in compose.override.yaml;
+bekup's own backend network stays internal). In a second terminal on the
+host:
+  docker inspect <database container> --format '{{json .NetworkSettings.Networks}}'`, d.Network, func(s string) error {
+		if err := setup.ValidateDockerNetwork("db-network", s); err != nil {
+			return err
+		}
+		if st.a.Variant.OwnProxy() && strings.EqualFold(s, st.a.ProxyNetwork) {
+			return errors.New("that is your proxy's network: put the database on a network of its own (a proxy network should not reach databases)")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	host, err := st.ui.Input("The database's container name", "Its container name or a network alias on that network (a name with _ is no\nvalid host name: use its compose service name instead).", d.Host, func(s string) error {
 		if s == "" {
 			return errors.New("required")
 		}
@@ -490,6 +559,28 @@ func (st *initState) dbServer() error {
 	})
 	if err != nil {
 		return err
+	}
+	if d.Location != setup.DBDocker {
+		d.Port, d.Name = 0, ""
+	}
+	d.Location, d.Network, d.Host = setup.DBDocker, net, host
+	return nil
+}
+
+func (st *initState) dbServer() error {
+	d := &st.a.DB
+	host := d.Host
+	if d.Location != setup.DBDocker {
+		var err error
+		host, err = st.ui.Input("PostgreSQL host", "Host name (or IP address) bekup connects to; connect directly, not through\na pooler (SCRAM channel binding).", d.Host, func(s string) error {
+			if s == "" {
+				return errors.New("required")
+			}
+			return dbField(setup.Database{Host: s}, "db-host")
+		})
+		if err != nil {
+			return err
+		}
 	}
 	port := "5432"
 	if d.Port != 0 {
@@ -515,35 +606,11 @@ func (st *initState) dbServer() error {
 	if err != nil {
 		return err
 	}
-	ca, err := st.ui.Input("CA bundle", "The PEM file with the CA that signed the server certificate (your\nprovider's bundle), saved inside the deployment directory, e.g. db-ca.pem.\nOnly this CA is trusted (TLS verify-full); setup copies it.", d.CAFile, func(s string) error {
-		if s == "" {
-			return errors.New("required")
-		}
-		if err := dbField(setup.Database{CAFile: s}, "db-ca-file"); err != nil {
-			return err
-		}
-		if _, err := os.Stat(filepath.Join(st.env.Dir, filepath.FromSlash(s))); err != nil {
-			return fmt.Errorf("%s: not found in the deployment directory", s)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	sni, err := st.ui.Input("TLS server name (optional)", "The name in the server certificate, when the host above is an IP address.\nEmpty: the host itself.", d.TLSServerName, func(s string) error {
-		if s == "" {
-			return nil
-		}
-		return dbField(setup.Database{TLSServerName: s}, "db-tls-server-name")
-	})
-	if err != nil {
-		return err
-	}
 	p, err := strconv.Atoi(ps)
 	if err != nil {
 		return err
 	}
-	d.Host, d.CAFile, d.TLSServerName, d.Name = host, ca, sni, name
+	d.Host, d.Name = host, name
 	d.Port = p
 	if p == 5432 {
 		d.Port = 0 // the default, like the flag
@@ -552,6 +619,84 @@ func (st *initState) dbServer() error {
 		d.Name = ""
 	}
 	return nil
+}
+
+// dbTLS asks for the TLS choice (D-215): verified against a CA file
+// (default) or the system bundle, or one of the explicit weakenings
+// (confirmed after a warning).
+func (st *initState) dbTLS() error {
+	d := &st.a.DB
+	for {
+		v, err := st.ui.Select("TLS to your PostgreSQL", "Username and password (SCRAM) work in every mode; only the first two verify\nthat bekup talks to your server.", []Option{
+			{string(setup.DBTLSVerifyCAFile), "verify with a CA file (recommended): your server's CA bundle (PEM)"},
+			{string(setup.DBTLSVerifySystem), "verify with the system CA bundle (a certificate from a public CA)"},
+			{string(setup.DBTLSRequire), "encrypted, but not verified (WEAKENED)"},
+			{string(setup.DBTLSDisable), "no TLS (WEAKENED; prefer the one above, even on a private Docker network)"},
+		}, string(d.TLS.OrDefault()))
+		if err != nil {
+			return err
+		}
+		choice := setup.DBTLS(v)
+		if choice.Weak() {
+			warn := setup.DBTLSRequireWarning
+			if choice == setup.DBTLSDisable {
+				warn = setup.DBTLSDisableWarning
+			}
+			ok, err := st.ui.Confirm("An explicit weakening", strings.TrimSpace(warn)+`
+bekup warns at every start, audits it and alerts every admin daily; the
+admin pages show it. The printed bootstrap command needs
+--allow-insecure-admin-connection. Use it anyway?`, false)
+			if errors.Is(err, ErrBack) || err == nil && !ok {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			d.TLS, d.CAFile, d.TLSServerName = choice, "", ""
+			return nil
+		}
+		if choice == setup.DBTLSVerifyCAFile {
+			ca, err := st.ui.Input("CA bundle", "The PEM file with the CA that signed the server certificate (your\nprovider's bundle), saved inside the deployment directory, e.g. db-ca.pem.\nOnly this CA is trusted (TLS verify-full); setup copies it.", d.CAFile, func(s string) error {
+				if s == "" {
+					return errors.New("required")
+				}
+				if err := dbField(setup.Database{CAFile: s}, "db-ca-file"); err != nil {
+					return err
+				}
+				if _, err := os.Stat(filepath.Join(st.env.Dir, filepath.FromSlash(s))); err != nil {
+					return fmt.Errorf("%s: not found in the deployment directory", s)
+				}
+				return nil
+			})
+			if errors.Is(err, ErrBack) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			d.CAFile = ca
+		} else {
+			d.CAFile = ""
+		}
+		sni, err := st.ui.Input("TLS server name (optional)", "The name in the server certificate, when the host is an IP address.\nEmpty: the host itself.", d.TLSServerName, func(s string) error {
+			if s == "" {
+				return nil
+			}
+			return dbField(setup.Database{TLSServerName: s}, "db-tls-server-name")
+		})
+		if errors.Is(err, ErrBack) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		d.TLSServerName = sni
+		d.TLS = choice
+		if choice == setup.DBTLSVerifyCAFile {
+			d.TLS = "" // the flag's default
+		}
+		return nil
+	}
 }
 
 func (st *initState) dbAuth() error {
@@ -916,8 +1061,29 @@ func (st *initState) summary() error {
 		fmt.Fprintf(&b, "Compose:    compose.yaml, the %s variant (written)\n", a.Variant)
 	}
 	fmt.Fprintf(&b, "Domain:     https://%s\n", a.Domain)
+	switch {
+	case a.ProxyMode == setup.ProxyJoin:
+		fmt.Fprintf(&b, "Proxy:      your %s on %s; point it at %s\n", a.ProxyContainer, a.ProxyNetwork, a.ProxyTarget())
+	case a.Variant.OwnProxy():
+		fmt.Fprintf(&b, "Proxy:      link network %s; point your proxy at %s\n", a.Link.Name, a.ProxyTarget())
+	}
+	if a.ProxyLabels {
+		fmt.Fprintf(&b, "            Traefik labels on serve (%s, %s)\n", a.TraefikEntrypoint, a.TraefikCertResolver)
+	}
 	if a.DB.External() {
-		fmt.Fprintf(&b, "Database:   %s:%d/%s (%s), CA %s\n", a.DB.Host, a.DB.Port, a.DB.Name, a.DB.Auth, a.DB.CAFile)
+		where := ""
+		if a.DB.Location == setup.DBDocker {
+			where = " on the Docker network " + a.DB.Network
+		}
+		fmt.Fprintf(&b, "Database:   %s:%d/%s%s (%s)\n", a.DB.Host, a.DB.Port, a.DB.Name, where, a.DB.Auth)
+		switch a.DB.TLS.OrDefault() {
+		case setup.DBTLSVerifyCAFile:
+			fmt.Fprintf(&b, "DB TLS:     verify-full against %s\n", a.DB.CAFile)
+		case setup.DBTLSVerifySystem:
+			b.WriteString("DB TLS:     verify-full against the system CA bundle\n")
+		default:
+			fmt.Fprintf(&b, "DB TLS:     %s (WEAKENED)\n", a.DB.TLS)
+		}
 	} else {
 		b.WriteString("Database:   bundled postgres\n")
 	}
@@ -984,6 +1150,12 @@ func (st *initState) flags() []string {
 	if a.Variant == setup.VariantFull {
 		f = append(f, "--proxy", string(a.Proxy))
 	}
+	if a.Variant.OwnProxy() && a.ProxyMode != setup.ProxyLink {
+		f = append(f, "--proxy-network", a.ProxyNetwork, "--proxy-container", a.ProxyContainer)
+	}
+	if a.ProxyLabels {
+		f = append(f, "--proxy-labels")
+	}
 	for _, c := range a.TrustedProxies {
 		f = append(f, "--trusted-proxy", c)
 	}
@@ -1001,6 +1173,9 @@ func (st *initState) flags() []string {
 		}
 	}
 	if d := a.DB; d.External() {
+		if d.Location == setup.DBDocker {
+			f = append(f, "--db-location", "docker", "--db-network", d.Network)
+		}
 		f = append(f, "--db-host", d.Host)
 		if d.Port != 0 {
 			f = append(f, "--db-port", strconv.Itoa(d.Port))
@@ -1008,7 +1183,12 @@ func (st *initState) flags() []string {
 		if d.Name != "" {
 			f = append(f, "--db-name", d.Name)
 		}
-		f = append(f, "--db-ca-file", d.CAFile)
+		if d.TLS != "" {
+			f = append(f, "--db-tls", string(d.TLS))
+		}
+		if d.CAFile != "" {
+			f = append(f, "--db-ca-file", d.CAFile)
+		}
 		if d.TLSServerName != "" {
 			f = append(f, "--db-tls-server-name", d.TLSServerName)
 		}

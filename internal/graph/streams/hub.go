@@ -62,7 +62,7 @@ const (
 	sessionNoticeBuffer         = 8
 	minRevalidateInterval       = time.Second
 	followUpAfterEventFirst     = 200 * time.Millisecond
-	followUpAfterEventSecond    = time.Second
+	followUpAfterEventSecond    = time.Second //nolint:revive // "Second" is the ordinal (first, second, third follow-up), not a unit
 	followUpAfterEventThird     = 3 * time.Second
 	sessionEventSubscriberQueue = 256
 )

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -46,8 +47,33 @@ type Options struct {
 	BaseURL string
 	// Dev additionally allows the Vite dev server origins (DevOrigins).
 	Dev bool
-	// TrustedProxies are the only peers whose forwarding headers are used.
+	// TrustedProxies are the only peers whose forwarding headers are used,
+	// together with the addresses of TrustedProxyHosts.
 	TrustedProxies []netip.Prefix
+	// TrustedProxyHosts are container names resolved through Docker's
+	// DNS (server.trusted_proxy_hosts, D-215); ProxyHosts must run.
+	TrustedProxyHosts []string
+	// ProxyHostResolver resolves TrustedProxyHosts and ServeAlias (nil:
+	// the process resolver; tests).
+	ProxyHostResolver ProxyHostResolver
+	// InterfaceAddrs lists this container's interface addresses (nil:
+	// net.InterfaceAddrs; tests).
+	InterfaceAddrs InterfaceAddrs
+	// OwnProxy: serve runs in an own-proxy compose shape and carries the
+	// network alias ServeAlias on the proxy network (D-215): every answer
+	// for it must be an own address, else SelfConflict is reported and
+	// /readyz fails. The alias is also checked whenever TrustedProxyHosts
+	// are set (it locates the proxy network).
+	OwnProxy bool
+	// JoinMode: the own-proxy join shape with the wildcard listener
+	// (implies OwnProxy). WrapListener then serves only connections on
+	// serve's own address on the proxy network (and loopback), and
+	// /readyz fails while that address is unknown.
+	JoinMode bool
+	// SelfConflict reports another container's addresses behind
+	// ServeAlias (internal/app: audited security alert); an error is
+	// retried at the next resolution.
+	SelfConflict func(ctx context.Context, foreign []netip.Addr) error
 	// MaxBodyBytes caps request bodies.
 	MaxBodyBytes int64
 	// RateLimit configures the per-client-IP limiter.
@@ -93,10 +119,11 @@ func OptionsFromConfig(c *config.Server, dev bool) (Options, error) {
 		return Options{}, err
 	}
 	return Options{
-		BaseURL:        c.BaseURL,
-		Dev:            dev,
-		TrustedProxies: proxies,
-		MaxBodyBytes:   c.MaxBodyBytes,
+		BaseURL:           c.BaseURL,
+		Dev:               dev,
+		TrustedProxies:    proxies,
+		TrustedProxyHosts: slices.Clone(c.TrustedProxyHosts),
+		MaxBodyBytes:      c.MaxBodyBytes,
 		RateLimit: RateLimitOptions{
 			PerSecond:  c.RateLimitPerSecond,
 			Burst:      c.RateLimitBurst,
@@ -168,7 +195,13 @@ func New(opts Options) (*Server, error) {
 			return nil, err
 		}
 	}
-	live := newLive(opts.TrustedProxies, opts.MaxBodyBytes, limiter, users)
+	if err := validateProxyHosts(opts.TrustedProxyHosts); err != nil {
+		return nil, err
+	}
+	live := newLive(opts.TrustedProxies, liveOptions{hosts: opts.TrustedProxyHosts, ph: proxyHostsOptions{
+		resolve: opts.ProxyHostResolver, ifaces: opts.InterfaceAddrs, logger: opts.Logger,
+		checkSelf: opts.OwnProxy, strict: opts.JoinMode, onConflict: opts.SelfConflict,
+	}}, opts.MaxBodyBytes, limiter, users)
 	spa, err := newSPA(opts.UI)
 	if err != nil {
 		return nil, err
@@ -177,7 +210,7 @@ func New(opts Options) (*Server, error) {
 	r := chi.NewRouter()
 	r.Use(
 		requestID,
-		clientIP(live.trustedProxies, &xffWarner{logger: opts.Logger, now: time.Now}),
+		clientIP(live.trustedProxies, &xffWarner{logger: opts.Logger, now: time.Now, untrusted: live.hosts.kick, peer: live.seenPeer}),
 		accessLog(opts.Logger, opts.RedactedPathPrefixes),
 		recoverer(opts.Logger),
 		securityHeaders(strings.EqualFold(base.Scheme, "https")),
@@ -187,7 +220,14 @@ func New(opts Options) (*Server, error) {
 	)
 	r.Get("/healthz", healthz)
 	r.Head("/healthz", healthz)
-	ready := readyz(opts.Ready, opts.ReadyTimeout, opts.Logger)
+	// The ServeAlias check is part of readiness (D-215): an alias
+	// conflict, or an unknown own address in the join shape.
+	ready := readyz(func(ctx context.Context) error {
+		if err := live.hosts.readyErr(); err != nil {
+			return err
+		}
+		return opts.Ready(ctx)
+	}, opts.ReadyTimeout, opts.Logger)
 	r.Get("/readyz", ready)
 	r.Head("/readyz", ready)
 	// Exactly /graphql; no sub-paths (the GraphQL handler enforces POST +

@@ -115,7 +115,7 @@ func writePlaceholderDB(t *testing.T, dir string, v Variant, db DBMode) []byte {
 
 func TestComposeImagePlaceholder(t *testing.T) {
 	t.Parallel()
-	src, err := RenderRelease(VariantNPM, DBBundled, nil)
+	src, err := RenderRelease(VariantOwnProxy, DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,13 +144,13 @@ func TestComposeImagePlaceholder(t *testing.T) {
 func TestInspectComposePlaceholder(t *testing.T) {
 	t.Parallel()
 	fsys := bekup.Assets()
-	src, err := RenderRelease(VariantTraefikExternal, DBBundled, nil)
+	src, err := RenderRelease(VariantOwnProxy, DBBundled, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	dotenv := map[string]string{ImageEnvVar: variantImage}
 	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: dotenv}, "", "")
-	if err != nil || !info.FromEnv || info.Level != RecognizedExact || info.Variant != VariantTraefikExternal || info.Image.String() != variantImage || len(info.Findings) > 0 {
+	if err != nil || !info.FromEnv || info.Level != RecognizedExact || info.Variant != VariantOwnProxy || info.Image.String() != variantImage || len(info.Findings) > 0 {
 		t.Fatalf("exact: %+v %v", info, err)
 	}
 	// The environment (the setup container's BEKUP_IMAGE) beats .env.
@@ -184,7 +184,7 @@ func TestInspectComposePlaceholder(t *testing.T) {
 	if custom == string(src) {
 		t.Fatal("edit did not apply")
 	}
-	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom), dotenv: dotenv}, VariantTraefikExternal, "")
+	info, err = inspectComposeData(fsys, composeInput{compose: []byte(custom), dotenv: dotenv}, VariantOwnProxy, "")
 	if err != nil || !hasFinding(info.Findings, SeverityError, "${BEKUP_IMAGE} is not one of bekup's compose variables") {
 		t.Fatalf("extra reference: %+v %v", info, err)
 	}
@@ -195,7 +195,7 @@ func TestInspectComposePlaceholder(t *testing.T) {
 	}
 	// The release file (literal) keeps working and is not FromEnv.
 	img := mustRef(t, variantImage)
-	rel, err := RenderRelease(VariantTraefikExternal, DBBundled, &img)
+	rel, err := RenderRelease(VariantOwnProxy, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,17 +267,17 @@ func TestInitPlaceholder(t *testing.T) {
 
 func TestInitPlaceholderRefusals(t *testing.T) {
 	dir := t.TempDir()
-	writePlaceholder(t, dir, VariantNPM)
+	writePlaceholder(t, dir, VariantOwnProxy)
 	t.Setenv(ImageEnvVar, "")
-	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err == nil || !strings.Contains(err.Error(), "it is not set") {
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, nil); err == nil || !strings.Contains(err.Error(), "it is not set") {
 		t.Fatalf("missing: %v", err)
 	}
 	t.Setenv(ImageEnvVar, "registry.example.com/bekup:1.2.3")
-	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err == nil || !strings.Contains(err.Error(), "not digest-pinned") {
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, nil); err == nil || !strings.Contains(err.Error(), "not digest-pinned") {
 		t.Fatalf("unpinned: %v", err)
 	}
 	t.Setenv(ImageEnvVar, variantImage)
-	if _, err := composeFirstInit(t, dir, VariantNPM, func(o *Options) {
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, func(o *Options) {
 		o.Answers.Image = mustRef(t, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest2)
 	}); err == nil || !strings.Contains(err.Error(), "does not match BEKUP_IMAGE=") {
 		t.Fatalf("mismatch: %v", err)
@@ -289,7 +289,7 @@ func TestInitPlaceholderRefusals(t *testing.T) {
 	if err := os.WriteFile(pathIn(dir, EnvFile), []byte("# mine\nBEKUP_DOMAIN=backup.example.com\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := composeFirstInit(t, dir, VariantNPM, func(o *Options) { o.KeepExisting = true }); err != nil {
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, func(o *Options) { o.KeepExisting = true }); err != nil {
 		t.Fatal(err)
 	}
 	if env := string(readFile(t, dir, EnvFile)); env != "# mine\nBEKUP_DOMAIN=backup.example.com\nBEKUP_SETUP_VERSION=1.2.3\nBEKUP_IMAGE="+variantImage+"\n" {
@@ -341,11 +341,11 @@ func TestCheckPlaceholder(t *testing.T) {
 	// A deployment set up with the release file that now has the
 	// committed file is told to run upgrade.
 	dir := t.TempDir()
-	writeRelease(t, dir, VariantNPM, variantImage)
-	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err != nil {
+	writeRelease(t, dir, VariantOwnProxy, variantImage)
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, nil); err != nil {
 		t.Fatal(err)
 	}
-	writePlaceholder(t, dir, VariantNPM)
+	writePlaceholder(t, dir, VariantOwnProxy)
 	findings, out, err := runCheck(t, dir, func(o *CheckOptions) {
 		o.LookupEnv = func(k string) (string, bool) { return variantImage, k == ImageEnvVar }
 	})
@@ -357,8 +357,8 @@ func TestCheckPlaceholder(t *testing.T) {
 func TestUpgradePlaceholder(t *testing.T) {
 	t.Setenv(ImageEnvVar, variantImage)
 	dir := t.TempDir()
-	compose := writePlaceholder(t, dir, VariantNPM)
-	if _, err := composeFirstInit(t, dir, VariantNPM, nil); err != nil {
+	compose := writePlaceholder(t, dir, VariantOwnProxy)
+	if _, err := composeFirstInit(t, dir, VariantOwnProxy, nil); err != nil {
 		t.Fatal(err)
 	}
 	opts := func(image string) UpgradeOptions {
@@ -420,7 +420,7 @@ func TestUpgradePlaceholder(t *testing.T) {
 	// Switching to the release file: the .env line goes, the state records
 	// the pinned file.
 	t.Setenv(ImageEnvVar, next)
-	writeRelease(t, dir, VariantNPM, next)
+	writeRelease(t, dir, VariantOwnProxy, next)
 	o = opts(next)
 	if err := Upgrade(o); err != nil {
 		t.Fatal(err)

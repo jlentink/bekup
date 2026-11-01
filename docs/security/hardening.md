@@ -110,7 +110,12 @@ mounts only the Go sources read-only, never `secrets/` (D-081).
       handshakes rejected, HSTS (2 years, preload-ready), the HTTP→HTTPS
       redirect, 2 MiB request bodies and per-IP rate limits (D-093).
 - [ ] `base_url` is `https://…` and `trusted_proxies = ["10.213.250.5/32"]`
-      (the proxy's fixed address, never the subnet).
+      (the proxy's fixed address, never the subnet). Own reverse proxy in
+      join mode: `trusted_proxies = []` and `trusted_proxy_hosts` names only
+      your proxy's container (D-215). Keep other containers off the proxy
+      network where you can, and point the proxy at serve's container name
+      (for example `bekup-serve-1`) rather than the alias `bekup-serve`
+      where your proxy allows it; for strict isolation use link mode.
 - [ ] Run the [reverse-proxy security checklist](../installation/reverse-proxy.md#security-checklist),
       including an external `testssl.sh` scan.
 
@@ -175,6 +180,10 @@ values (D-073, D-107).
       or SMTP relay); then allowlist the narrowest CIDR (`10.20.0.5/32`) or
       exact host instead of whole RFC 1918 ranges. `*.suffix` entries
       allow every subdomain, so use them only for zones you control.
+      With your own reverse proxy (D-215) `serve` also sits on the
+      proxy's Docker network and, with a database container, on its
+      network: an entry such as `172.16.0.0/12` then lets destinations,
+      SMTP and webhooks reach every container on those networks too.
 - [ ] Loopback, link-local, cloud metadata, multicast, broadcast and
       reserved ranges (including their IPv4-mapped, NAT64, 6to4 and Teredo
       forms) are always denied and cannot be allowlisted; loopback is

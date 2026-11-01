@@ -21,7 +21,7 @@
 #       Prints the GitHub release notes: the changelog section, the pinned
 #       image, pull/verify commands and the compose-first install (verify
 #       the compose file under its release name, save it as compose.yaml,
-#       the three steps, the link network of the external variants, the
+#       the three steps, the own reverse proxy's network, the
 #       external-database files) and the wizard (`docker run ... setup`).
 #   release_ci.sh sbom-generator [publish.sh]
 #       Prints the digest-pinned SBOM generator (single pin in publish.sh,
@@ -36,16 +36,15 @@
 #       Reads `git cat-file tag <ref>` from stdin and prints the tag name
 #       recorded in the annotated tag object (header `tag` line).
 #   release_ci.sh render-compose <repo:x.y.z@sha256:digest> <dir>
-#       Renders the six release compose files (D-205, D-208: three proxy
-#       variants, each with the bundled and an external database) into
+#       Renders the four release compose files (D-205, D-208, D-215: two
+#       proxy variants, each with the bundled and an external database) into
 #       <dir> by running the
 #       published image itself (`bekup setup compose`) with no network, a
 #       read-only root, UID 65532 and no capabilities ($RELEASE_CI_DOCKER
 #       replaces docker in tests), then checks them with compose-assets.
 #   release_ci.sh compose-assets <repo:x.y.z@sha256:digest> <dir>
 #       Checks the compose files in <dir>: each of compose.yaml,
-#       compose.traefik-external.yaml, compose.npm.yaml and their
-#       *.external-db.yaml forms exists, has
+#       compose.own-proxy.yaml and their *.external-db.yaml forms exists, has
 #       exactly one x-bekup-image line naming exactly the release reference,
 #       no ${BEKUP_IMAGE} left, no build:, and every image: line pinned by
 #       digest.
@@ -57,7 +56,7 @@
 #       committed files are the release assets without the pinned image.
 #   release_ci.sh assets-digest <dir>
 #       Prints one SHA-256 over the sha256sum lines of the release assets in
-#       <dir> (the six compose files, SHA256SUMS and their .sigstore.json
+#       <dir> (the four compose files, SHA256SUMS and their .sigstore.json
 #       bundles; each must be a regular file). The compose job publishes it
 #       as a job output and the release job recomputes it before uploading.
 #
@@ -236,11 +235,9 @@ with a cosign bundle each):
 | File | Variant |
 |---|---|
 | \`compose.yaml\` | bekup with its own Traefik (ports 80/443, Let's Encrypt) |
-| \`compose.traefik-external.yaml\` | behind your existing Traefik |
-| \`compose.npm.yaml\` | behind Nginx Proxy Manager |
+| \`compose.own-proxy.yaml\` | behind your own reverse proxy on this Docker host (Nginx Proxy Manager, Traefik, Caddy, nginx, ...) |
 | \`compose.external-db.yaml\` | own Traefik, your own PostgreSQL 15-17 |
-| \`compose.traefik-external.external-db.yaml\` | your Traefik, your own PostgreSQL |
-| \`compose.npm.external-db.yaml\` | Nginx Proxy Manager, your own PostgreSQL |
+| \`compose.own-proxy.external-db.yaml\` | your own reverse proxy, your own PostgreSQL |
 
 The easiest path needs no download: the setup wizard of the image asks for
 the proxy, the domain and the database and writes everything, compose.yaml
@@ -262,7 +259,7 @@ Or with a compose file of this release:
 
    \`\`\`sh
    sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
-   f=compose.yaml   # or one of the other five files above
+   f=compose.yaml   # or one of the other three files above
    sudo curl -fsSLO $url/releases/download/v$version/\$f
    gh attestation verify "\$f" --repo $gh_repo
    [ "\$f" = compose.yaml ] || sudo mv "\$f" compose.yaml
@@ -288,17 +285,18 @@ Or with a compose file of this release:
 3. \`docker compose up -d\`, then
    \`docker compose run --rm admin create --email you@example.com --display-name "Your Name"\`
 
-With your own PostgreSQL (an \`*.external-db.yaml\` file), put its CA bundle
-into the directory first; setup asks for the host and prints the one command
-that creates bekup's roles before step 3
+With your own PostgreSQL (an \`*.external-db.yaml\` file), setup asks whether
+it is a container on this Docker host (then its Docker network) or another
+server, and for the TLS mode (for verification with your own CA, put its CA
+bundle into the directory first); it prints the one command that creates
+bekup's roles before step 3
 (\`docker compose run --rm migrate db bootstrap --admin-user <admin>\`;
 docs/installation/external-database.md).
 
-Behind your own proxy, create the link network once first
-(\`docker network create --internal --subnet 10.213.253.0/28 --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy\`;
-the range keeps Docker's automatic addresses off the fixed ones) and add it
-to the proxy's networks, next to the ones it already has, with the address
-10.213.253.5 (docs/installation/reverse-proxy.md).
+Behind your own reverse proxy (\`compose.own-proxy*.yaml\`), setup asks for the
+Docker network your proxy is on and its container name; bekup joins that
+network, and you point the proxy at \`http://bekup-serve:8080\`
+(docs/installation/reverse-proxy.md).
 
 Upgrade (docs/installation/upgrades.md): back up, replace \`compose.yaml\` with
 this release's file of the same variant, then:
@@ -341,7 +339,7 @@ tag_object_name() {
 
 # compose_variants: "<variant>:<database>:<asset file>" triples of the
 # release assets (D-205, D-208).
-compose_variants='traefik:bundled:compose.yaml traefik-external:bundled:compose.traefik-external.yaml npm:bundled:compose.npm.yaml traefik:external:compose.external-db.yaml traefik-external:external:compose.traefik-external.external-db.yaml npm:external:compose.npm.external-db.yaml'
+compose_variants='traefik:bundled:compose.yaml own-proxy:bundled:compose.own-proxy.yaml traefik:external:compose.external-db.yaml own-proxy:external:compose.own-proxy.external-db.yaml'
 
 # compose_file and compose_variant split a triple.
 compose_file() { printf '%s\n' "${1##*:}"; }

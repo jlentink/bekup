@@ -198,8 +198,11 @@ type Given struct {
 	// flags or defaults.
 	ComposeFirst bool
 	// Database: the database mode is decided (--database, or compose.yaml);
-	// DBHost, DBCAFile, DBAuth: those external database flags were given.
-	Database, DBHost, DBCAFile, DBAuth bool
+	// DBHost, DBCAFile, DBAuth, DBLocation, DBNetwork, DBTLS: those
+	// external database flags were given.
+	Database, DBHost, DBCAFile, DBAuth, DBLocation, DBNetwork, DBTLS bool
+	// ProxyNetwork, ProxyContainer: the own-proxy join answers were given.
+	ProxyNetwork, ProxyContainer bool
 }
 
 // Complete fills the answers that were not given: on a terminal by asking,
@@ -311,6 +314,34 @@ func Complete(a *Answers, g Given, imageRaw string, t *Terminal, nonInteractive 
 			a.ACMEStaging = s == "yes"
 		}
 	}
+	if a.Variant.OwnProxy() && a.ProxyMode != ProxyLink {
+		if !g.ProxyNetwork && a.ProxyNetwork == "" {
+			if ask {
+				s, err := t.Ask("Docker network your reverse proxy is on (docker inspect <proxy> --format '{{json .NetworkSettings.Networks}}')", "", func(s string) error {
+					return ValidateDockerNetwork("proxy-network", s)
+				})
+				if err != nil {
+					return err
+				}
+				a.ProxyNetwork = s
+			} else {
+				need("--proxy-network")
+			}
+		}
+		if !g.ProxyContainer && a.ProxyContainer == "" {
+			if ask {
+				s, err := t.Ask("Your reverse proxy's container name (docker ps)", "", func(s string) error {
+					return ValidateContainerName("proxy-container", s)
+				})
+				if err != nil {
+					return err
+				}
+				a.ProxyContainer = s
+			} else {
+				need("--proxy-container")
+			}
+		}
+	}
 	if a.Proxy == ProxyNone && !g.TrustedProxy {
 		if ask {
 			s, err := t.Ask("CIDR of your own reverse proxy on the frontend network (e.g. 10.213.250.5/32)", "", func(s string) error {
@@ -389,9 +420,36 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 	if a.DB.Mode != DBExternal {
 		return nil
 	}
-	if !g.DBHost && a.DB.Host == "" {
+	if !g.DBLocation && a.DB.Location == "" && ask {
+		s, err := t.Ask("Is your PostgreSQL a container on this Docker host? (docker = yes, remote = another server)", string(DBRemote), func(s string) error {
+			_, err := ParseDBLocation(s)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		a.DB.Location = DBLocation(s)
+	}
+	if a.DB.Location == DBDocker && !g.DBNetwork && a.DB.Network == "" {
 		if ask {
-			s, err := t.Ask("Host name or IP address of your PostgreSQL", "", func(s string) error {
+			s, err := t.Ask("Docker network of the database container", "", func(s string) error {
+				return ValidateDockerNetwork("db-network", s)
+			})
+			if err != nil {
+				return err
+			}
+			a.DB.Network = s
+		} else {
+			need("--db-network")
+		}
+	}
+	if !g.DBHost && a.DB.Host == "" {
+		label := "Host name or IP address of your PostgreSQL"
+		if a.DB.Location == DBDocker {
+			label = "The database container's name or network alias"
+		}
+		if ask {
+			s, err := t.Ask(label, "", func(s string) error {
 				d := Database{Mode: DBExternal, Host: s, CAFile: "x"}
 				return d.validate()
 			})
@@ -403,7 +461,14 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 			need("--db-host")
 		}
 	}
-	if !g.DBCAFile && a.DB.CAFile == "" {
+	if !g.DBTLS && a.DB.TLS == "" && ask {
+		choice, err := askDBTLS(t)
+		if err != nil {
+			return err
+		}
+		a.DB.TLS = choice
+	}
+	if !g.DBCAFile && a.DB.CAFile == "" && a.DB.TLS.OrDefault() == DBTLSVerifyCAFile {
 		if ask {
 			s, err := t.Ask("CA bundle (PEM) of its server certificate, a file in the deployment directory", "", func(s string) error {
 				return checkSourcePath("db-ca-file", s)
@@ -441,6 +506,46 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 		}
 	}
 	return nil
+}
+
+// askDBTLS asks for the database TLS choice; a weak one (require,
+// disable) is taken only after the warning and an explicit "yes", like
+// the wizard (D-215), otherwise the choice is asked again.
+func askDBTLS(t *Terminal) (DBTLS, error) {
+	for range 5 {
+		s, err := t.Ask("TLS: verify-ca-file (verify against your CA bundle; default), verify-system (a public CA), require (WEAKENED: not verified) or disable (WEAKENED: no TLS; prefer require, even on a private Docker network)", string(DBTLSVerifyCAFile), func(s string) error {
+			_, err := ParseDBTLS(s)
+			return err
+		})
+		if err != nil {
+			return "", err
+		}
+		choice := DBTLS(s)
+		if !choice.Weak() {
+			if choice == DBTLSVerifyCAFile {
+				return "", nil // the flag's default
+			}
+			return choice, nil
+		}
+		warn := DBTLSRequireWarning
+		if choice == DBTLSDisable {
+			warn = DBTLSDisableWarning
+		}
+		fmt.Fprintf(t.Out, "\nWARNING: --db-tls %s is an EXPLICIT WEAKENING (D-100): %s\n  bekup warns at every start, audits it and alerts every admin daily; the admin\n  pages show it. The printed bootstrap command needs --allow-insecure-admin-connection.\n", choice, warn)
+		ok, err := t.Ask("Use it anyway? (yes/no)", "no", func(s string) error {
+			if s == "yes" || s == "no" {
+				return nil
+			}
+			return errors.New("yes or no")
+		})
+		if err != nil {
+			return "", err
+		}
+		if ok == "yes" {
+			return choice, nil
+		}
+	}
+	return "", errors.New("TLS: too many answers without a choice")
 }
 
 // PinHelp explains how to obtain a digest-pinned reference.

@@ -147,12 +147,39 @@ func wizardCases(t *testing.T) []wizardCase {
 	extDB := func(auth string) []wizard.Answer {
 		return []wizard.Answer{
 			{Title: "Database", Value: "external"},
+			{Title: "Where does your PostgreSQL run?", Value: "remote"},
 			{Title: "PostgreSQL host", Value: "db.example.com"},
 			{Title: "PostgreSQL port", Value: "5433"},
 			{Title: "Database name"},
+			{Title: "TLS to your PostgreSQL", Value: "verify-ca-file"},
 			{Title: "CA bundle", Value: "db-ca.pem"},
 			{Title: "TLS server name"},
 			{Title: "Roles and database", Value: auth},
+		}
+	}
+	// A database container on a Docker network (D-215) with a TLS choice.
+	dockerDB := func(tls string, confirm bool) []wizard.Answer {
+		out := []wizard.Answer{
+			{Title: "Where does your PostgreSQL run?", Value: "docker"},
+			{Title: "The database's Docker network", Value: "dbnet"},
+			{Title: "The database's container name", Value: "postgres"},
+			{Title: "PostgreSQL port"},
+			{Title: "Database name"},
+			{Title: "TLS to your PostgreSQL", Value: tls},
+		}
+		switch {
+		case confirm:
+			out = append(out, wizard.Answer{Title: "An explicit weakening", Value: "yes"})
+		case tls == "verify-system":
+			out = append(out, wizard.Answer{Title: "TLS server name", Value: "db.example.com"})
+		}
+		return append(out, wizard.Answer{Title: "Roles and database", Value: "bootstrap"}, wizard.Answer{Title: "Admin role"})
+	}
+	ownProxy := func(labels string) []wizard.Answer {
+		return []wizard.Answer{
+			{Title: "Your proxy's Docker network", Value: "npm_default"},
+			{Title: "Your proxy's container name", Value: "nginx-proxy-manager-app-1"},
+			{Title: "Traefik Docker labels?", Value: labels},
 		}
 	}
 	return []wizardCase{
@@ -169,33 +196,70 @@ func wizardCases(t *testing.T) []wizardCase {
 			real: true,
 		},
 		{
-			name: "existing-traefik-bundled-entered",
+			name: "own-proxy-labels-bundled-entered",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
-				{Title: "Reverse proxy", Value: "existing-traefik"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("yes"), []wizard.Answer{
 				{Title: "Traefik entrypoint", Value: "https"},
 				{Title: "Traefik certificate resolver", Value: "le"},
 				{Title: "Domain", Value: "backup.example.com"},
 				{Title: "Database", Value: "bundled"},
 			}, commonTail("enter"), commonEnd(true, false)),
 			stdin: wizPass + "\n",
+			real:  true,
 		},
 		{
-			name: "compose-first-traefik-external",
+			name: "compose-first-own-proxy-labels",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
+			}, ownProxy("yes"), []wizard.Answer{
 				{Title: "Traefik entrypoint"},
 				{Title: "Traefik certificate resolver", Value: "myresolver"},
 				{Title: "Domain", Value: "backup.example.com"},
 			}, commonTail("generate"), commonEnd(true, true)),
-			files: map[string]string{setup.ComposeFile: composeFile(t, setup.VariantTraefikExternal, setup.DBBundled)},
+			files: map[string]string{setup.ComposeFile: composeFile(t, setup.VariantOwnProxy, setup.DBBundled)},
 			real:  true,
+		},
+		{
+			name: "compose-first-own-proxy-db-container-disable",
+			answers: cat([]wizard.Answer{
+				{Title: "bekup setup"},
+			}, ownProxy("no"), []wizard.Answer{
+				{Title: "Domain", Value: "backup.example.com"},
+			}, dockerDB("disable", true), commonTail("generate"), commonEnd(false, true)),
+			files: map[string]string{setup.ComposeFile: composeFile(t, setup.VariantOwnProxy, setup.DBExternal)},
+			real:  true,
+		},
+		{
+			name: "own-proxy-db-container-require",
+			answers: cat([]wizard.Answer{
+				{Title: "bekup setup"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("no"), []wizard.Answer{
+				{Title: "Domain", Value: "backup.example.com"},
+				{Title: "Database", Value: "external"},
+			}, dockerDB("require", true), commonTail("generate"), commonEnd(false, true)),
+			real: true,
+		},
+		{
+			name: "own-traefik-db-container-verify-system",
+			answers: cat([]wizard.Answer{
+				{Title: "bekup setup"},
+				{Title: "Reverse proxy", Value: "own-traefik"},
+				{Title: "Domain", Value: "backup.example.com"},
+				{Title: "Let's Encrypt e-mail", Value: "ops@example.com"},
+				{Title: "Let's Encrypt staging?", Value: "no"},
+				{Title: "Database", Value: "external"},
+			}, dockerDB("verify-system", false), commonTail("generate"), commonEnd(false, true)),
+			real: true,
 		},
 		{
 			name: "import-master-key-existing-ca",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
-				{Title: "Reverse proxy", Value: "npm"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
 				{Title: "Database", Value: "bundled"},
 				{Title: "Master encryption key", Value: "import"},
@@ -210,10 +274,11 @@ func wizardCases(t *testing.T) []wizardCase {
 			real:  true,
 		},
 		{
-			name: "npm-external-bootstrap",
+			name: "own-proxy-external-bootstrap",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
-				{Title: "Reverse proxy", Value: "npm"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
 			}, extDB("bootstrap"), []wizard.Answer{{Title: "Admin role", Value: "postgres"}}, commonTail("enter"), commonEnd(false, false)),
 			files: map[string]string{"db-ca.pem": ca},
@@ -221,11 +286,15 @@ func wizardCases(t *testing.T) []wizardCase {
 			real:  true,
 		},
 		{
-			name: "none-external-existing-roles",
+			// A proxy on another machine is no wizard choice (D-215
+			// amendment): the full variant stays a flag-only path.
+			name: "own-proxy-labels-external-existing-roles",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
-				{Title: "Reverse proxy", Value: "none"},
-				{Title: "Your proxy's address", Value: "10.213.250.6/32"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("yes"), []wizard.Answer{
+				{Title: "Traefik entrypoint"},
+				{Title: "Traefik certificate resolver"},
 				{Title: "Domain", Value: "backup.example.com"},
 			}, extDB("existing-roles"), []wizard.Answer{
 				{Title: "Password of bekup_app", Value: wizAppPW},
@@ -255,10 +324,11 @@ func wizardCases(t *testing.T) []wizardCase {
 			flagExtra: []string{"--db-password-file", "app.pw"},
 		},
 		{
-			name: "npm-external-dba-sql",
+			name: "own-proxy-external-dba-sql",
 			answers: cat([]wizard.Answer{
 				{Title: "bekup setup"},
-				{Title: "Reverse proxy", Value: "npm"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
 			}, extDB("dba-sql"), commonTail("generate"), commonEnd(false, true)),
 			files: map[string]string{"db-ca.pem": ca},

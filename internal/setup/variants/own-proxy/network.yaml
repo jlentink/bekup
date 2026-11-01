@@ -1,0 +1,8 @@
+  # YOUR reverse proxy's network (D-215): it exists already (your proxy is
+  # on it), so it is external; setup writes its name to .env
+  # (BEKUP_PROXY_NETWORK). Only serve joins it. Other containers on it can
+  # reach serve:8080 directly, but cannot forge client addresses: only the
+  # proxy containers named in trusted_proxy_hosts are trusted.
+  proxy:
+    external: true
+    name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}

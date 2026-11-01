@@ -1,0 +1,9 @@
+      # The own-proxy shape (D-215): Docker assigns serve's address on your
+      # proxy's network, so bekup.toml [server] listen = "0.0.0.0:8080" with
+      # allow_wildcard_listen. With this literal serve accepts connections
+      # only on its own address on your proxy's network (the alias
+      # bekup-serve; plus loopback for the healthcheck) and closes every
+      # other one (bekup's internal networks, the database network), and it
+      # skips the wildcard warning for exactly that address. No port is
+      # published.
+      BEKUP_LISTEN_SHAPE: own-proxy-join

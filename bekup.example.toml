@@ -42,6 +42,15 @@ allow_insecure_http = false
 # compose proxy profiles (traefik | nginx) name exactly the proxy's fixed
 # `frontend` address (PROXY_FRONTEND_IP), not the whole subnet.
 trusted_proxies = ["10.213.250.5/32"]
+# Container names of your own reverse proxy on a Docker network serve has
+# joined (D-215; `bekup setup` writes it for "own reverse proxy on this
+# Docker host"): serve resolves them through Docker's DNS every 20 s and
+# trusts the returned private addresses inside its own subnet on that
+# network (found through its alias bekup-serve), one per address family.
+# At most 8 names, no IP addresses, no wildcards, no dots, none of bekup's
+# own service names. Either this or trusted_proxies is required outside
+# dev mode.
+trusted_proxy_hosts = []
 read_header_timeout = "10s"
 # Whole-request read limit (headers + body).
 read_timeout = "30s"

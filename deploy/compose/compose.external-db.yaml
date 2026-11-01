@@ -13,7 +13,8 @@
 # Install, as root in an empty directory (e.g. /opt/bekup); needs a DNS name
 # pointing at this host and ports 80/443 free:
 #   1. Save this file there as compose.yaml, and your PostgreSQL's CA bundle
-#      (PEM) next to it: setup asks for its path and copies it.
+#      (PEM) next to it when its certificate comes from your own CA: setup
+#      asks for the TLS mode and that file's path, and copies it.
 #   2. DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup
 #      (repository copy: prefix BEKUP_IMAGE=<repo>:<tag>@sha256:<digest>,
 #      or BEKUP_IMAGE=ghcr.io/jlentink/bekup:latest to follow the releases)
@@ -37,7 +38,7 @@
 #
 # Components and trust boundaries:
 #   traefik (80/443, Let's Encrypt) ──frontend──> serve
-#   serve, migrate ──backend (NOT internal; TLS, verify-full)──> YOUR PostgreSQL  (bekup.toml [database]; role bekup_app; migrations as bekup_owner)
+#   serve, migrate ──backend (NOT internal; TLS verify-full by default)──> YOUR PostgreSQL  (bekup.toml [database]; role bekup_app; migrations as bekup_owner)
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
@@ -78,8 +79,10 @@ x-bekup-hardening: &bekup-hardening
 # ---------------------------------------------------------------------------
 # App database: YOUR PostgreSQL 15-17 (D-207, D-208), configured in
 # bekup.toml [database] (fields mode: host, port, name, the fixed roles
-# bekup_app / bekup_owner, TLS verify-full against the CA bundle that setup
-# copied to <keys>/bekup_database_ca.crt). There is no postgres service.
+# bekup_app / bekup_owner, the TLS mode you chose: verify-full against the CA
+# bundle that setup copied to <keys>/bekup_database_ca.crt (the default) or
+# against the system CA bundle, or the weakened require / disable, D-215).
+# There is no postgres service.
 # Create the roles and the database once, before the first `up -d` (setup
 # prints the exact command for your choice; docs/installation/
 # external-database.md):
@@ -87,7 +90,9 @@ x-bekup-hardening: &bekup-hardening
 #   docker compose run --rm migrate migrate check
 # serve, migrate and admin reach it over the `backend` network, which is
 # therefore NOT internal: allow only this host in the database's firewall
-# and pg_hba.conf.
+# and pg_hba.conf. A database CONTAINER on this Docker host is reached over
+# its own Docker network instead (setup adds it in compose.override.yaml,
+# and `backend` stays internal; D-215).
 # ---------------------------------------------------------------------------
 
 services:
@@ -208,7 +213,8 @@ services:
       - bekup_database_owner_password
       - bekup_database_password
       # CA bundle of your PostgreSQL's server certificate: [database]
-      # tls_ca_file (default path), verified with tls_mode = "verify-full".
+      # tls_ca_file (default path), verified with tls_mode = "verify-full"
+      # (empty when another TLS choice needs none, D-215).
       - source: bekup_db_ca_crt
         target: bekup_db_ca.crt
     networks: [backend]
@@ -594,6 +600,7 @@ secrets:
     file: ${BEKUP_KEYS_DIR:-./secrets}/certs/runner/runner.key
   # CA bundle (PEM) of your PostgreSQL's server certificate ([database]
   # tls_ca_file), copied by setup from the file you named; public, not a
-  # secret (serve, admin, migrate).
+  # secret (serve, admin, migrate). Empty when you chose the system CA
+  # bundle, require or disable (D-215): compose still mounts it.
   bekup_db_ca_crt:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_ca.crt

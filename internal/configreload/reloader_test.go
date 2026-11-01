@@ -660,3 +660,56 @@ func TestReloadWarningsFromMergedConfig(t *testing.T) {
 		t.Fatalf("a warning of a restart-only value was logged: %s", buf.String())
 	}
 }
+
+// TestReloadKeepsSuppressedWarningQuiet (D-215 review M1): serve drops the
+// wildcard listen warning of the own-proxy join shape at startup and hands
+// it to the reloader as known (app.Options.KnownWarnings); an unchanged
+// SIGHUP reload must not log it as a new warning. Without it as known the
+// same reload would log it (control).
+func TestReloadKeepsSuppressedWarningQuiet(t *testing.T) {
+	const joinTOML = `
+[server]
+listen = "0.0.0.0:8080"
+allow_wildcard_listen = true
+base_url = "https://backup.example.com"
+trusted_proxies = []
+trusted_proxy_hosts = ["npm"]
+`
+	for _, known := range []bool{true, false} {
+		path := filepath.Join(t.TempDir(), "bekup.toml")
+		writeConfig(t, path, joinTOML)
+		opts := isolated()
+		opts.ConfigPath = path
+		res, err := config.LoadBekup(opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := res.Config.WildcardListenWarning()
+		if w == "" || !slices.Contains(res.Warnings, w) {
+			t.Fatalf("the join shape has the wildcard warning: %v", res.Warnings)
+		}
+		// What serve_cmd does: drop it from the logged warnings ...
+		res.Warnings = slices.DeleteFunc(slices.Clone(res.Warnings), func(s string) bool { return s == w })
+		if known {
+			// ... and app.newReloader passes it as known.
+			res.Warnings = append(res.Warnings, w)
+		}
+		e := newEnvFrom(t, opts, path, res)
+		var buf strings.Builder
+		var mu sync.Mutex
+		e.r.o.Logger = slog.New(slog.NewJSONHandler(&lockedWriter{w: &buf, mu: &mu}, nil))
+		res2, err := e.r.Reload(t.Context(), Request{ID: uuid.New(), Trigger: TriggerSignal})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res2.Status == StatusFailed {
+			t.Fatalf("result %+v", res2)
+		}
+		mu.Lock()
+		logged := strings.Contains(buf.String(), "allow_wildcard_listen")
+		mu.Unlock()
+		if logged == known {
+			t.Fatalf("known=%v: wildcard warning logged=%v:\n%s", known, logged, buf.String())
+		}
+	}
+}

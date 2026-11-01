@@ -36,6 +36,8 @@ func TestWeakened(t *testing.T) {
 		{"server.trusted_proxies", func(c *config.Bekup) { c.Server.TrustedProxies = []string{"::/0"} }, true},
 		{"server.trusted_proxies", func(c *config.Bekup) { c.Server.TrustedProxies = []string{"garbage"} }, true},
 		{"server.trusted_proxies", func(c *config.Bekup) { c.Server.TrustedProxies = nil }, false},
+		{"server.trusted_proxy_hosts", func(c *config.Bekup) { c.Server.TrustedProxyHosts = []string{"npm"} }, true},
+		{"server.trusted_proxy_hosts", func(c *config.Bekup) { c.Server.TrustedProxyHosts = nil }, false},
 		{"server.max_body_bytes", func(c *config.Bekup) { c.Server.MaxBodyBytes++ }, true},
 		{"server.max_body_bytes", func(c *config.Bekup) { c.Server.MaxBodyBytes-- }, false},
 		{"server.rate_limit_per_second", func(c *config.Bekup) { c.Server.RateLimitPerSecond++ }, true},
@@ -82,5 +84,26 @@ func TestWeakened(t *testing.T) {
 	old := config.DefaultBekup()
 	if got := Weakened(&old, &old, []string{"server.base_url"}); !slices.Equal(got, []string{"server.base_url"}) {
 		t.Fatalf("unknown key: %v", got)
+	}
+}
+
+func TestTrustedProxyHostsWeakening(t *testing.T) {
+	old := config.DefaultBekup()
+	old.Server.TrustedProxyHosts = []string{"npm", "traefik"}
+	for _, c := range []struct {
+		next []string
+		want bool
+	}{
+		{[]string{"NPM"}, false},
+		{[]string{"traefik", "npm"}, false},
+		{nil, false},
+		{[]string{"npm", "caddy"}, true},
+	} {
+		next := old
+		next.Server.TrustedProxyHosts = c.next
+		got := Weakened(&old, &next, []string{"server.trusted_proxy_hosts"})
+		if (len(got) == 1) != c.want {
+			t.Errorf("%v -> %v: weakened = %v, want %v", old.Server.TrustedProxyHosts, c.next, got, c.want)
+		}
 	}
 }

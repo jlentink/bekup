@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -122,7 +123,7 @@ func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte, version str
 		op[layout.keys(dbCAName)] = dbCA
 	}
 	return &plan{
-		entries:   Manifest(layout, assets, ManifestOptions{StaticTLS: static, ComposeOperator: !writeCompose, ExternalDB: a.DB.External()}),
+		entries:   Manifest(layout, assets, ManifestOptions{StaticTLS: static, Overlays: a.overlays().Any(), ComposeOperator: !writeCompose, ExternalDB: a.DB.External()}),
 		generated: gen,
 		operator:  op,
 		assets:    assets,
@@ -175,7 +176,7 @@ func Init(opts Options) (retErr error) {
 		if err != nil {
 			return err
 		}
-		if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, nil, os.LookupEnv, true); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, Overlays{}, nil, os.LookupEnv, true); err != nil {
 			return err
 		}
 		if a.Variant == "" {
@@ -202,19 +203,66 @@ func Init(opts Options) (retErr error) {
 		return err
 	}
 	if compose != nil {
+		// An existing compose.override.yaml must already carry the
+		// setup-only overlays of the answers (D-215; setup writes them only
+		// into a new override).
+		ov := a.overlays()
+		hasOverride, err := checkNoSymlinks(root, OverrideFile)
+		if err != nil {
+			return err
+		}
+		if ov.Any() && hasOverride != nil {
+			if compose, err = inspectCompose(root, opts.assets, a.Variant, a.DB.Mode, ov, nil, os.LookupEnv, true); err != nil {
+				return err
+			}
+		}
 		if err := composeMatches(compose, a); err != nil {
+			if ov.Any() && hasOverride != nil {
+				return fmt.Errorf("%w\n%s exists already, so setup does not write it: add these blocks to it (merged into its own services: and networks: keys), then run setup again:\n%s", err, OverrideFile, overlayDoc(ov, ""))
+			}
 			return err
 		}
 	}
 	var dbCA []byte
-	if a.DB.External() {
+	switch {
+	case a.DB.External() && a.DB.TLS.OrDefault() == DBTLSVerifyCAFile:
 		if dbCA, err = readDBCA(root, a.DB.CAFile); err != nil {
 			return err
 		}
+	case a.DB.External():
+		// No CA file for this TLS choice (D-215): compose still mounts the
+		// secret, so it exists, empty.
+		dbCA = []byte{}
 	}
 	p, err := newPlan(opts.assets, a, opts.WriteCompose, dbCA, opts.Version)
 	if err != nil {
 		return err
+	}
+	// An existing compose.override.yaml is the operator's: never rewritten,
+	// also not with --force (D-215). Compose-first checked it above; here
+	// setup-first: it must carry the overlays on top of the compose.yaml
+	// this run writes.
+	existingOverride, err := readManaged(root, OverrideFile)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		existingOverride = nil
+	case err != nil:
+		return err
+	case existingOverride == nil:
+		existingOverride = []byte{} // exists, empty
+	}
+	switch {
+	case existingOverride == nil:
+	case opts.WriteCompose:
+		if err := checkSetupFirstOverride(root, p.generated[ComposeFile], existingOverride, a.Variant, a.Image, a.overlays(), os.LookupEnv); err != nil {
+			return err
+		}
+	}
+	keptOverride := ""
+	if existingOverride != nil {
+		if want := renderOverride(a); want != nil && !bytes.Equal(want, existingOverride) {
+			keptOverride = fmt.Sprintf("%s exists and was kept (setup never rewrites it, also not with --force)%s", OverrideFile, staticTLSKeptNote(a))
+		}
 	}
 	layout := Layout{KeysDir: a.KeysDir}
 	comps := certComponentsFor(a.DB.Mode)
@@ -309,6 +357,9 @@ func Init(opts Options) (retErr error) {
 	}
 	mode, why := resolveOwnership(opts.Ownership, root, *opts.sys)
 	warnings := rootWarnings(w, mode, *opts.sys)
+	if keptOverride != "" {
+		warnings = append(warnings, keptOverride)
+	}
 
 	committed := false
 	defer func() {
@@ -353,6 +404,8 @@ func Init(opts Options) (retErr error) {
 			switch {
 			case fi == nil:
 				err = w.create(e.Path, data, e.Mode)
+			case e.Path == OverrideFile:
+				// The operator's file: never rewritten (checked above).
 			case opts.Force:
 				err = w.replace(e.Path, data, e.Mode)
 			}
@@ -427,6 +480,7 @@ func Init(opts Options) (retErr error) {
 	}
 	if a.DB.External() {
 		st.DatabaseAuth = a.DB.Auth
+		st.DatabaseLocation, st.DBNetwork, st.DatabaseTLS = a.DB.Location, a.DB.Network, a.DB.TLS.OrDefault()
 	}
 	st.ImportedFiles = importedFiles(a.DB, dbPw != nil, opts.ImportMasterKey, importKey != nil)
 	if compose != nil {
@@ -435,8 +489,13 @@ func Init(opts Options) (retErr error) {
 			st.ImageSource = ImageSourceEnv
 		}
 	}
-	if a.Variant.External() {
-		st.ProxyNetwork, st.ProxySubnet, st.ProxyIP, st.ServeIP = a.Link.Name, a.Link.Subnet, a.Link.ProxyIP, a.Link.ServeIP
+	if a.Variant.OwnProxy() {
+		st.ProxyNetworkMode, st.ProxyLabels = a.ProxyMode, a.ProxyLabels
+		if a.ProxyMode == ProxyLink {
+			st.ProxyNetwork, st.ProxySubnet, st.ProxyIP, st.ServeIP = a.Link.Name, a.Link.Subnet, a.Link.ProxyIP, a.Link.ServeIP
+		} else {
+			st.ProxyNetwork, st.ProxyContainer = a.ProxyNetwork, a.ProxyContainer
+		}
 	}
 	for path, data := range p.generated {
 		st.Assets[path] = hashOf(data)
@@ -482,6 +541,15 @@ func Init(opts Options) (retErr error) {
 	}
 	rd.warnings = warnings
 	return report(opts.Out, rd)
+}
+
+// staticTLSKeptNote is the hint for a kept override when the bundled
+// proxy uses a static certificate: setup would have added the mount.
+func staticTLSKeptNote(a *Answers) string {
+	if !a.bundledProxy() || a.TLSMode != TLSStatic {
+		return ""
+	}
+	return ": with --tls-mode static it must mount your certificate directory into the proxy, e.g.\n" + staticTLSBlock(a.Proxy)
 }
 
 // importedFiles lists the secret source files this run copied (recorded
@@ -689,13 +757,22 @@ func report(out io.Writer, r *reportData) error {
 			proxy += ", ACME staging"
 		}
 		proxy += ")"
+	case a.ownProxyJoin():
+		proxy = fmt.Sprintf("your proxy %s on its network %s; serve joins it as bekup-serve:8080", a.ProxyContainer, a.ProxyNetwork)
 	case a.Proxy == ProxyExternal:
-		proxy = fmt.Sprintf("your proxy at %s on the external network %s (%s); serve at %s:8080", a.Link.ProxyIP, a.Link.Name, a.Link.Subnet, a.Link.ServeIP)
+		proxy = fmt.Sprintf("your proxy at %s on the link network %s (%s); serve at %s:8080", a.Link.ProxyIP, a.Link.Name, a.Link.Subnet, a.Link.ServeIP)
+	}
+	if a.ProxyLabels {
+		proxy += "; Traefik labels on serve (" + OverrideFile + ")"
 	}
 	fmt.Fprintf(&b, "  proxy:      %s\n", proxy)
 	fmt.Fprintf(&b, "  domain:     https://%s\n", a.Domain)
 	if a.DB.External() {
-		fmt.Fprintf(&b, "  database:   your PostgreSQL at %s, database %s (%s; TLS verify-full against %s)\n", a.DB.dbAddress(), a.DB.Name, a.DB.Auth, l.keys(dbCAName))
+		where := ""
+		if a.DB.Location == DBDocker {
+			where = " on the Docker network " + a.DB.Network
+		}
+		fmt.Fprintf(&b, "  database:   your PostgreSQL at %s%s, database %s (%s; %s)\n", a.DB.dbAddress(), where, a.DB.Name, a.DB.Auth, dbTLSSummary(a.DB.TLS, l))
 	} else {
 		b.WriteString("  database:   the bundled postgres service\n")
 	}
@@ -709,6 +786,13 @@ func report(out io.Writer, r *reportData) error {
 	}
 	if a.Image.IsMutable() {
 		b.WriteString(followingWarning)
+	}
+	switch a.DB.TLS {
+	case DBTLSRequire:
+		b.WriteString("\nWARNING: --db-tls require is an EXPLICIT WEAKENING (D-100): " + DBTLSRequireWarning + "\n  serve warns at every start, audits it and alerts every admin daily.\n")
+	case DBTLSDisable:
+		b.WriteString("\nWARNING: --db-tls disable is an EXPLICIT WEAKENING (D-100): " + DBTLSDisableWarning + "\n  serve warns at every start, audits it and alerts every admin daily.\n")
+	case DBTLSVerifyCAFile, DBTLSVerifySystem, "":
 	}
 	if a.DB.External() && a.DB.Auth == DBAuthSingleAccount {
 		fmt.Fprintf(&b, "\nWARNING: single-account mode (D-207) is an EXPLICIT WEAKENING: %s runs migrations\n  and the app, so a compromised serve can alter the schema and the audit log. bekup\n  warns at every start, audits it and alerts every admin daily. Prefer bootstrap.\n", a.DB.User)
@@ -763,7 +847,7 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 	}
 	b.WriteString("\nNext steps (in the deployment directory on the host):\n")
 	step := 1
-	if a.Proxy == ProxyExternal {
+	if a.Proxy == ProxyExternal && a.ProxyMode == ProxyLink {
 		fmt.Fprintf(&b, `  %d. Once: the link network and your proxy on it (skip what exists):
        %s
        In your proxy's compose file add %s to its networks with
@@ -782,8 +866,8 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 	}
 	fmt.Fprintf(&b, "  %d. docker compose config -q && docker compose up -d\n", step)
 	fmt.Fprintf(&b, "  %d. docker compose run --rm admin create --email you@example.com --display-name \"You\"\n", step+1)
-	if a.Variant == VariantNPM {
-		fmt.Fprintf(&b, "  %d. In Nginx Proxy Manager: a Proxy Host for %s -> http://%s:8080 (Websockets off, SSL + Force SSL + HTTP/2, HSTS off, the Advanced block from the docs)\n", step+2, a.Domain, a.Link.ServeIP)
+	if a.Proxy == ProxyExternal {
+		fmt.Fprintf(&b, "  %d. Point your reverse proxy at %s for https://%s:\n%s", step+2, a.proxyTarget(), a.Domain, ProxyHints(a.proxyTarget(), a.ProxyLabels))
 		step++
 	}
 	fmt.Fprintf(&b, "  %d. docker compose -f compose.yaml run --rm setup check   (re-run after every change;\n     -f compose.yaml keeps compose.override.yaml away from the checking container, check still lints it)\n", step+2)
@@ -794,6 +878,63 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 	}
 	_, err := io.WriteString(out, b.String())
 	return err
+}
+
+// proxyTarget is the URL the operator's own proxy forwards to.
+func (a *Answers) proxyTarget() string {
+	if a.ownProxyJoin() {
+		return "http://bekup-serve:8080"
+	}
+	return "http://" + a.Link.ServeIP + ":8080"
+}
+
+// ProxyTarget is the URL the operator's own proxy forwards to (variant
+// own-proxy; "" otherwise).
+func (a *Answers) ProxyTarget() string {
+	if !a.Variant.OwnProxy() {
+		return ""
+	}
+	return a.proxyTarget()
+}
+
+// ProxyHints are the settings of the common reverse proxies for target
+// (docs/installation/reverse-proxy.md#own-reverse-proxy), indented for
+// the report.
+func ProxyHints(target string, labels bool) string {
+	hostPort := strings.TrimPrefix(target, "http://")
+	traefik := `       Traefik (file provider): a router for the domain on your HTTPS entrypoint
+         with a service whose loadBalancer url is ` + target + ` and
+         responseForwarding.flushInterval -1ms; no header middlewares.
+`
+	if labels {
+		traefik = `       Traefik (Docker provider): the labels on serve in ` + OverrideFile + ` route it
+         (TRAEFIK_ENTRYPOINT / TRAEFIK_CERTRESOLVER in .env); exposedByDefault=false.
+`
+	}
+	return `       Nginx Proxy Manager: Proxy Host, scheme http, forward hostname ` + strings.Split(hostPort, ":")[0] + `,
+         port 8080, Websockets Support OFF, Let's Encrypt + Force SSL + HTTP/2, HSTS OFF
+         (bekup sends it), Advanced: proxy_http_version 1.1; proxy_buffering off;
+         proxy_cache off; proxy_read_timeout 3600s; client_max_body_size 2m;
+` + traefik + `       Caddy: reverse_proxy ` + hostPort + ` { flush_interval -1 }
+       nginx: proxy_pass ` + target + `; proxy_buffering off; proxy_read_timeout 3600s;
+         X-Forwarded-For $remote_addr; X-Forwarded-Proto https
+       Never let the proxy add HSTS or trust forwarded headers from everyone.
+       docs/installation/reverse-proxy.md#own-reverse-proxy
+`
+}
+
+// dbTLSSummary describes the database TLS choice for the report.
+func dbTLSSummary(t DBTLS, l Layout) string {
+	switch t.OrDefault() {
+	case DBTLSVerifySystem:
+		return "TLS verify-full against the system CA bundle"
+	case DBTLSRequire:
+		return "TLS require: encrypted, NOT verified"
+	case DBTLSDisable:
+		return "NO TLS"
+	default:
+		return "TLS verify-full against " + l.keys(dbCAName)
+	}
 }
 
 // followingWarning explains the image mode following (D-212) in the

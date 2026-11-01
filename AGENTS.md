@@ -32,9 +32,11 @@ Components (one Go binary, several subcommands; D-025):
   Traefik with the **file provider, no Docker socket** (D-093; variant
   `traefik`, or a profile of the `full` variant) or **unprivileged nginx +
   certbot** (D-094, profile). Neither bundled proxy has Docker access.
-  Behind the operator's own Traefik or Nginx Proxy Manager (variants
-  `traefik-external`, `npm`), `serve` joins the external `bekup-proxy`
-  link network instead (D-205). Without a proxy, dev serves
+  Behind the operator's own reverse proxy on the same Docker host
+  (variant `own-proxy`, D-215), `serve` joins the proxy's own Docker
+  network (alias `bekup-serve`) and trusts the proxy by its container
+  name (`server.trusted_proxy_hosts`); the `bekup-proxy` link network
+  (D-205) stays as the advanced link mode. Without a proxy, dev serves
   plain HTTP on `127.0.0.1:8080` with a persistent warning (D-095).
 - **`bekup serve`**: GraphQL API, sessions, embedded UI, scheduler, River
   workers (backup, restore, retention, notify), pipeline and uploads to
@@ -67,9 +69,9 @@ Trust boundaries:
 | `serve` → runner | mTLS (TLS 1.3, private CA, SAN check), typed RPCs only (D-030) |
 | runner → Docker / target DBs | image allowlist, fixed container spec, per-run isolated networks, target allowlist, DB certificate pinning (D-029, D-031, D-034) |
 | `serve` → destinations, SMTP, webhooks | dial-time SSRF guard (one guard per scope; personal webhooks only through entries scoped to them, D-198), TLS ≥1.2, no redirects (D-049, D-055); SMTP TLS follows the server and may be unencrypted in `auto`/`none` (D-180) |
-| `serve` → app DB | one connection builder, TLS verify-full by default (D-100) with SCRAM-only auth and channel binding, least-privilege roles checked by `session_user`, envelope-encrypted secrets, append-only audit log (D-046, D-054); external PostgreSQL in fields mode, single-account mode only as an audited weakening (D-207); its compose files make `backend` non-internal, the operator firewalls the DB (D-208) |
+| `serve` → app DB | one connection builder, TLS verify-full by default (D-100) with SCRAM-only auth and channel binding, least-privilege roles checked by `session_user`, envelope-encrypted secrets, append-only audit log (D-046, D-054); external PostgreSQL in fields mode, single-account mode only as an audited weakening (D-207); its compose files make `backend` non-internal, the operator firewalls the DB (D-208); a database container on this host is reached over its own Docker network instead (`backend` internal), setup's TLS choices `require`/`disable` are D-100 weakenings (D-215) |
 | Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
-| External proxy (operator's Traefik / NPM) → `serve` | only over the external, internal `bekup-proxy` link network (/28): proxy at a fixed address, `serve` the only bekup member, no published ports, `trusted_proxies` exactly the proxy's /32 (`setup check` errors otherwise), untrusted `X-Forwarded-For` ignored and logged (D-205) |
+| Own reverse proxy (variant `own-proxy`) → `serve` | join mode (default): `serve` the only bekup member of the proxy's own Docker network (alias `bekup-serve`, no published port, listen `0.0.0.0:8080` only in this shape), the wildcard listener serves only serve's own address on the proxy network (alias `bekup-serve` matched with its interfaces) and loopback, fail closed while unknown; an alias held by another container is alerted (`serve_alias_conflict`) and fails `/readyz`; forwarding headers only from the proxy's container name resolved through Docker DNS (`trusted_proxy_hosts`: private addresses inside serve's proxy-network subnet, one per family, /32 per address, re-resolved in parallel every 20 s / on untrusted XFF / while active, untrusted when older than 30 s, unresolvable or colliding = no trust; D-215); link mode: the internal `bekup-proxy` /28 with fixed addresses and the proxy's /32 (D-205); untrusted `X-Forwarded-For` ignored and logged; `setup check` errors on anything else |
 | Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image (or, opt-in, the official `:latest` tag with the setup version guard, D-212); writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
 
 `serve` can **never** reach target DBs or Docker.
@@ -374,7 +376,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   also by `SYSTEM_USER`, D-207).
 - HTTP layer (`internal/httpserver`, D-102): every response carries the
   exact D-082 CSP and the security headers; forwarded headers are used only
-  from `trusted_proxies` and then stripped (use `httpserver.ClientIP(ctx)`,
+  from `trusted_proxies` or the resolved addresses of `trusted_proxy_hosts`
+  (D-215: only inside serve's proxy-network subnet, one per address
+  family, fresh ≤ 30 s) and then stripped (use `httpserver.ClientIP(ctx)`,
   never `X-Forwarded-*` or `Host`); state-changing requests (and any
   upgrade request; none is served) must pass the Origin/`Sec-Fetch-Site`
   check; per-IP rate limit and body limit apply to all routes; long-lived
@@ -1420,7 +1424,8 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   &bekup-image ${BEKUP_IMAGE:-bekup:dev}` of `docker-compose.yml`
   (`x-bekup-hardening` and the `setup` service use `*bekup-image`);
   release and setup replace exactly that line. Deployment variants
-  (`traefik`, `traefik-external`, `npm`, `full`) are **overlays only**:
+  (`traefik`, `own-proxy`, `full`; D-215 retired `traefik-external` and
+  `npm`) are **overlays only**:
   an edit list in `internal/setup/variants.go` applied by the
   path-addressed line editor (`outline.go`) with fragments in
   `internal/setup/variants/`; never commit a full copy of a compose file,
@@ -1498,9 +1503,46 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   migrations, bootstrap or starts serve/worker/runner without the guard. A compose variable
   whose name starts with `BEKUP_IMAGE` must not be counted as
   `BEKUP_IMAGE` (`imageVarRefRe`).
+- Own reverse proxy, setup-only overlays and database TLS choices
+  (D-215, proposed): the release and committed compose files are exactly
+  four (`traefik` / `own-proxy` x bundled / external database). Optional
+  shapes are **setup-only overlays** (`internal/setup/overlay.go`
+  `Overlays`: Traefik labels, link mode, database container network):
+  setup writes `overlayDoc` into a **new** `compose.override.yaml`, never
+  into `compose.yaml`, never rewrites an existing override (init prints
+  the blocks, upgrade leaves it), records them in the state
+  (`proxy_network_mode`, `proxy_labels`, `database_location`,
+  `db_network`) and the lint's expected project is the release file
+  merged with exactly `expectedOverlay` (`expectedDocs`); a new overlay
+  needs a flag, a wizard step, state fields, check rules, a
+  `TestOverlayDocs` case and the `docker compose config` integration
+  case, and its variables in `composeVarAllowlist`. Trust by container
+  name only through `server.trusted_proxy_hosts` (httpserver
+  `proxyHosts`: absolute names without dots and never bekup's own service
+  names (`config.ValidContainerName`), private addresses inside the subnet
+  of serve's interface found through the alias `httpserver.ServeAlias`,
+  one per address family, parallel lookups, publishes ordered under the
+  lock, fail closed; a live key with a weakening rule); the wildcard
+  `server.listen` is written only for the join shape, its listener is
+  always `Server.WrapListener` (only serve's proxy-network address and
+  loopback; `httpserver.Options.JoinMode`), its warning dropped only via
+  `deployguard.ExpectedWildcardListen` with the literal
+  `BEKUP_LISTEN_SHAPE` of the shipped serve service, `trusted_proxy_hosts`
+  set and `trusted_proxies` empty, and passed to the reloader as
+  `app.Options.KnownWarnings`. Another container behind `bekup-serve` is
+  audited (`security.serve_alias_conflict`, `Options.SelfConflict`) and
+  fails `/readyz`. External database TLS
+  is a `setup.DBTLS` choice mapped by `configMode`; weak choices keep the
+  D-100 treatment and the printed bootstrap needs
+  `--allow-insecure-admin-connection`; the system bundle path is
+  `config.SystemCABundle`, loaded leniently only on that path
+(`db.LoadSystemCABundle`: unparsable certificates skipped and counted, ≥ 1
+required; operator CA files stay strict) and the Dockerfile runs the same
+loader (`internal/db/cabundlecheck`) on the runtime image's bundle. Retired variants are
+  mapped by `State.mapLegacy` and migrated by `setup upgrade` only.
 - Setup database dimension, wizard and renewal (D-208, proposed): every
   variant renders with `DBMode` bundled and external (`externalDBEdits`,
-  `variants/external-db/`; six release and committed files): a change to
+  `variants/external-db/`; four release and committed files, D-215): a change to
   `docker-compose.yml` or an overlay must work in both modes (the
   `postgres` service, its secrets and `backend` are what the external form
   rewrites). External-database files go through the manifest

@@ -14,7 +14,15 @@ import (
 const (
 	EnvSetupVersion = "BEKUP_SETUP_VERSION"
 	EnvImageMode    = "BEKUP_IMAGE_MODE"
+	// EnvListenShape names serve's listener shape in the compose file
+	// (D-215): a literal in the shipped serve service, never a variable.
+	EnvListenShape = "BEKUP_LISTEN_SHAPE"
 )
+
+// ListenShapeOwnProxyJoin is the BEKUP_LISTEN_SHAPE of the own-proxy
+// compose files: serve joins the operator's proxy network, where Docker
+// assigns its address, so it listens on 0.0.0.0:8080 inside its container.
+const ListenShapeOwnProxyJoin = "own-proxy-join"
 
 // Image modes (the values of BEKUP_IMAGE_MODE).
 const (
@@ -37,6 +45,8 @@ type Deployment struct {
 	SetupVersion string
 	// ImageFollowing: BEKUP_IMAGE_MODE=following.
 	ImageFollowing bool
+	// OwnProxyJoin: BEKUP_LISTEN_SHAPE=own-proxy-join (D-215).
+	OwnProxyJoin bool
 }
 
 // FromEnv reads the deployment facts with lookup (os.LookupEnv). An empty
@@ -60,7 +70,25 @@ func FromEnv(lookup func(string) (string, bool)) (Deployment, error) {
 			return Deployment{}, fmt.Errorf("%s=%q: want %s or %s (it is written by `bekup setup`)", EnvImageMode, bounded(v), ImageModeFollowing, ImageModePinned)
 		}
 	}
+	if v, ok := lookup(EnvListenShape); ok {
+		switch strings.TrimSpace(v) {
+		case "":
+		case ListenShapeOwnProxyJoin:
+			d.OwnProxyJoin = true
+		default:
+			return Deployment{}, fmt.Errorf("%s=%q: want %s or nothing (it is set by the own-proxy compose files)", EnvListenShape, bounded(v), ListenShapeOwnProxyJoin)
+		}
+	}
 	return d, nil
+}
+
+// ExpectedWildcardListen reports whether a wildcard server.listen of
+// exactly listen is the compose shape's own (D-215): the own-proxy join
+// shape listens on joinListen because Docker assigns serve's address on
+// the operator's proxy network. Only then the startup warning of
+// allow_wildcard_listen is dropped (the listener itself is unchanged).
+func (d Deployment) ExpectedWildcardListen(listen, joinListen string) bool {
+	return d.OwnProxyJoin && listen == joinListen
 }
 
 // ErrVersionMismatch is wrapped by CheckVersion's refusal.

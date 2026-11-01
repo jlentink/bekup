@@ -23,23 +23,32 @@ const (
 	// VariantTraefik runs bekup with its own Traefik (release asset
 	// compose.yaml).
 	VariantTraefik Variant = "traefik"
-	// VariantTraefikExternal runs bekup behind the operator's Traefik on
-	// the bekup-proxy link network (compose.traefik-external.yaml).
-	VariantTraefikExternal Variant = "traefik-external"
-	// VariantNPM runs bekup behind Nginx Proxy Manager on the bekup-proxy
-	// link network (compose.npm.yaml).
-	VariantNPM Variant = "npm"
+	// VariantOwnProxy runs bekup behind the operator's own reverse proxy
+	// on this Docker host (D-215, compose.own-proxy.yaml): serve joins the
+	// proxy's Docker network (external, BEKUP_PROXY_NETWORK) under the
+	// alias bekup-serve and trusts the proxy by its container name
+	// (server.trusted_proxy_hosts). The bekup-proxy link network of D-205
+	// is the advanced link mode (an overlay).
+	VariantOwnProxy Variant = "own-proxy"
 	// VariantFull is the repository compose file itself (every service,
 	// proxy profiles traefik | nginx); setup-first only.
 	VariantFull Variant = "full"
 )
 
+// Retired variants (D-215): recorded by setup states of earlier versions
+// and mapped to own-proxy in link mode (with the Traefik labels for
+// traefik-external) when such a state is read.
+const (
+	legacyVariantTraefikExternal Variant = "traefik-external"
+	legacyVariantNPM             Variant = "npm"
+)
+
 // ReleaseVariants are the variants published as release assets, in
 // recognition order.
-var ReleaseVariants = []Variant{VariantTraefik, VariantTraefikExternal, VariantNPM}
+var ReleaseVariants = []Variant{VariantTraefik, VariantOwnProxy}
 
 // AllVariants lists every variant.
-var AllVariants = []Variant{VariantTraefik, VariantTraefikExternal, VariantNPM, VariantFull}
+var AllVariants = []Variant{VariantTraefik, VariantOwnProxy, VariantFull}
 
 // ParseVariant validates a --variant value.
 func ParseVariant(s string) (Variant, error) {
@@ -48,12 +57,15 @@ func ParseVariant(s string) (Variant, error) {
 			return v, nil
 		}
 	}
-	return "", fmt.Errorf("--variant must be traefik, traefik-external, npm or full (got %q)", bounded(s))
+	if Variant(s) == legacyVariantTraefikExternal || Variant(s) == legacyVariantNPM {
+		return "", fmt.Errorf("--variant %s was retired (D-215): use own-proxy (any reverse proxy on this Docker host; --proxy-labels adds the Traefik labels, --proxy-network-mode link keeps the bekup-proxy link network)", s)
+	}
+	return "", fmt.Errorf("--variant must be traefik, own-proxy or full (got %q)", bounded(s))
 }
 
-// External reports whether the variant sits behind the operator's own
-// reverse proxy on the bekup-proxy link network.
-func (v Variant) External() bool { return v == VariantTraefikExternal || v == VariantNPM }
+// OwnProxy reports whether the variant sits behind the operator's own
+// reverse proxy on this Docker host.
+func (v Variant) OwnProxy() bool { return v == VariantOwnProxy }
 
 // DBMode is the second overlay dimension (D-208): bekup's own app database
 // is the bundled postgres service or the operator's PostgreSQL (fields
@@ -93,10 +105,8 @@ func (d DBMode) OrBundled() DBMode {
 }
 
 // AssetName is the release asset name of a variant with a database mode:
-// compose.yaml, compose.traefik-external.yaml, compose.npm.yaml and, for
-// an external database, compose.external-db.yaml,
-// compose.traefik-external.external-db.yaml and
-// compose.npm.external-db.yaml.
+// compose.yaml and compose.own-proxy.yaml and, for an external database,
+// compose.external-db.yaml and compose.own-proxy.external-db.yaml.
 func (v Variant) AssetName(db DBMode) string {
 	name := "compose"
 	if v != VariantTraefik {
@@ -115,7 +125,7 @@ func (v Variant) assetDirs(db DBMode) []string {
 	switch v {
 	case VariantTraefik:
 		dirs = []string{"deploy/postgres", "deploy/traefik"}
-	case VariantTraefikExternal, VariantNPM:
+	case VariantOwnProxy:
 		dirs = []string{"deploy/postgres"}
 	default:
 		dirs = assetDirs
@@ -172,19 +182,23 @@ func renameInComment(old, repl string) edit { return edit{editRenameInComment, o
 // services in the repository compose file.
 const proxyBanner = "Reverse proxy (task 0.7b)"
 
-// externalEdits turn the repository compose file into a variant behind
-// the operator's own proxy: no bundled proxy, no frontend/edge network,
-// serve on the external link network.
-var externalEdits = []edit{
+// ownProxyEdits turn the repository compose file into the own-proxy
+// variant (D-215): no bundled proxy, no frontend/edge network, serve on the
+// operator's proxy network (external, BEKUP_PROXY_NETWORK) under the alias
+// bekup-serve, listening on 0.0.0.0:8080 (BEKUP_LISTEN_SHAPE).
+var ownProxyEdits = []edit{
+	header("own-proxy/header.yaml"),
 	replaceComment(proxyBanner, ""),
 	remove("services/traefik-init"),
 	remove("services/traefik"),
 	remove("services/nginx-init"),
 	remove("services/nginx"),
 	remove("services/certbot"),
-	replace("services/serve/networks/frontend", "external/serve-network.yaml"),
-	replaceLead("networks", "external/networks-lead.yaml"),
-	replace("networks/frontend", "external/network.yaml"),
+	replaceLead("services/serve", "own-proxy/serve-lead.yaml"),
+	insertAfter("services/serve/environment/BEKUP_IMAGE_MODE", "own-proxy/serve-environment.yaml"),
+	replace("services/serve/networks/frontend", "own-proxy/serve-network.yaml"),
+	replaceLead("networks", "own-proxy/networks-lead.yaml"),
+	replace("networks/frontend", "own-proxy/network.yaml"),
 	remove("networks/edge"),
 	remove("volumes/traefik-acme"),
 	remove("volumes/nginx-certs"),
@@ -206,13 +220,7 @@ var variantEdits = map[Variant][]edit{
 		remove("volumes/nginx-certs"),
 		remove("volumes/nginx-acme-webroot"),
 	},
-	VariantTraefikExternal: append([]edit{
-		header("traefik-external/header.yaml"),
-		insertAfter("services/serve/command", "traefik-external/labels.yaml"),
-	}, externalEdits...),
-	VariantNPM: append([]edit{
-		header("npm/header.yaml"),
-	}, externalEdits...),
+	VariantOwnProxy: ownProxyEdits,
 	VariantFull: {
 		header("full/header.yaml"),
 	},

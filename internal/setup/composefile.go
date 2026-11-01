@@ -78,13 +78,13 @@ var ErrNoCompose = errors.New("no " + ComposeFile)
 
 func noComposeError(root string) error {
 	return fmt.Errorf(`%w in %s: download it from %s
-(compose.yaml: bekup with its own Traefik; compose.traefik-external.yaml or
-compose.npm.yaml behind your proxy; the *.external-db.yaml files use your own
-PostgreSQL; save it as compose.yaml), verify it with
+(compose.yaml: bekup with its own Traefik; compose.own-proxy.yaml behind your
+own reverse proxy on this Docker host; the *.external-db.yaml files use your
+own PostgreSQL; save it as compose.yaml), verify it with
 'gh attestation verify compose.yaml --repo jlentink/bekup' and run
 'docker compose run --rm setup' next to it. To let setup write the compose
 file instead (setup-first), run the wizard ('bekup setup' on a terminal) or
-pass --write-compose --variant traefik|traefik-external|npm|full [--database external]`,
+pass --write-compose --variant traefik|own-proxy|full [--database external]`,
 		ErrNoCompose, root, ReleaseURL)
 }
 
@@ -93,12 +93,14 @@ pass --write-compose --variant traefik|traefik-external|npm|full [--database ext
 // resolved project (compose.yaml, compose.override.yaml when present, and
 // .env). A customized file needs requested (the variant it is based on);
 // a recognized file must match requested (and requestedDB) when given.
+// The lint expects no setup-only overlays (D-215; Init re-checks with the
+// overlays of its answers).
 func InspectCompose(dir string, requested Variant, requestedDB DBMode) (*ComposeInfo, error) {
 	root, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, err
 	}
-	return inspectCompose(root, bekup.Assets(), requested, requestedDB, nil, os.LookupEnv, true)
+	return inspectCompose(root, bekup.Assets(), requested, requestedDB, Overlays{}, nil, os.LookupEnv, true)
 }
 
 // composeInput is what docker compose would read in the deployment
@@ -113,6 +115,9 @@ type composeInput struct {
 	// repository (D-212): init and upgrade, where the operator names the
 	// image explicitly, and check of a deployment recorded as following.
 	following bool
+	// overlays are the setup-only overlays the lint expects in
+	// compose.override.yaml (D-215).
+	overlays Overlays
 }
 
 // realRoot is the deployment directory on disk (for the symlink scan).
@@ -129,7 +134,7 @@ func (in *composeInput) docs() []composeSrc {
 // inspectCompose reads compose.yaml, compose.override.yaml and (when
 // dotenv is nil) .env below root. following permits a followed tag of the
 // official repository as the bekup image (D-212).
-func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMode, dotenv map[string]string, lookup func(string) (string, bool), following bool) (*ComposeInfo, error) {
+func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMode, ov Overlays, dotenv map[string]string, lookup func(string) (string, bool), following bool) (*ComposeInfo, error) {
 	data, err := readManaged(root, ComposeFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, noComposeError(root)
@@ -151,7 +156,7 @@ func inspectCompose(root string, fsys fs.FS, requested Variant, requestedDB DBMo
 			return nil, err
 		}
 	}
-	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup, following: following}, requested, requestedDB)
+	return inspectComposeData(fsys, composeInput{root: root, compose: data, override: override, dotenv: dotenv, lookup: lookup, following: following, overlays: ov}, requested, requestedDB)
 }
 
 var composeImageLineRe = regexp.MustCompile(`^x-bekup-image: &bekup-image (\S.*)$`)
@@ -228,7 +233,7 @@ func envImage(env map[string]string) (imageref.Ref, error) {
 // Every release variant is tried with both database modes (D-208).
 func inspectComposeData(fsys fs.FS, in composeInput, requested Variant, requestedDB DBMode) (*ComposeInfo, error) {
 	if requested != "" && !slices.Contains(ReleaseVariants, requested) {
-		return nil, fmt.Errorf("--variant %s: a compose-first deployment uses one of the release files (traefik, traefik-external, npm); the full variant is setup-first only (--write-compose)", requested)
+		return nil, fmt.Errorf("--variant %s: a compose-first deployment uses one of the release files (traefik, own-proxy); the full variant is setup-first only (--write-compose)", requested)
 	}
 	if in.root == "" {
 		in.root = "/deploy"
@@ -298,7 +303,7 @@ recognize:
 	case info.Variant != "" && requestedDB != "" && requestedDB != info.DB:
 		return nil, fmt.Errorf("%s uses the %s database, not %s (%s)", ComposeFile, info.DB, requestedDB, dbFileHint(info.DB))
 	case info.Variant == "" && requested == "":
-		return nil, fmt.Errorf("%s is customized: it matches none of the release files of bekup %s. Pass --variant traefik|traefik-external|npm (and --database bundled|external) to name the file it is based on (the hardening lint then checks it), or start from the unchanged release file and put changes into %s", ComposeFile, img.Tag, OverrideFile)
+		return nil, fmt.Errorf("%s is customized: it matches none of the release files of bekup %s. Pass --variant traefik|own-proxy (and --database bundled|external) to name the file it is based on (the hardening lint then checks it), or start from the unchanged release file and put changes into %s (the files for your Traefik or Nginx Proxy Manager were replaced by compose.own-proxy.yaml, D-215)", ComposeFile, img.Tag, OverrideFile)
 	case info.Variant == "":
 		info.Variant, info.Level = requested, RecognizedCustom
 		info.DB = requestedDB
@@ -318,7 +323,7 @@ recognize:
 	if err != nil {
 		return nil, err
 	}
-	info.Findings = lintComposeFiles(&in, env, info.Variant, img.String(), expected, placeholder)
+	info.Findings = lintComposeFiles(&in, env, info.Variant, img.String(), expectedDocs(expected, in.overlays), placeholder)
 	return info, nil
 }
 
@@ -328,4 +333,10 @@ func dbFileHint(db DBMode) string {
 		return "an *.external-db.yaml release file"
 	}
 	return "a release file without .external-db"
+}
+
+// expectedDocs is the lint's expected project: the shipped compose file
+// plus the setup-only overlays (D-215).
+func expectedDocs(compose []byte, ov Overlays) []composeSrc {
+	return append([]composeSrc{{name: ComposeFile, data: compose}}, expectedOverlay(ov)...)
 }

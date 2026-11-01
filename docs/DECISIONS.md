@@ -227,16 +227,17 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-202](#d-202-manual-multi-arch-image-publishing-to-the-operators-own-registry-just-publish) | Manual multi-arch image publishing to the operator's own registry (`just publish`) | proposed |
 | [D-203](#d-203-container-only-compose-install-bekup-setup-with-embedded-assets-an-ownership-manifest-and-a-root--cap_chown-setup-container) | Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container | proposed (partly superseded by D-205) |
 | [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205) |
-| [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder) |
+| [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder; variant names and the link network as the default superseded by D-215) |
 | [D-206](#d-206-mobile-apps-and-the-push-channel-dropped-from-the-roadmap) | Mobile apps and the push channel dropped from the roadmap | proposed |
-| [D-207](#d-207-external-postgresql-for-the-app-database-fields-mode-one-connection-builder-db-bootstrap--roles-sql-migrate-preflight-and-an-opt-in-single-account-mode) | External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode | proposed |
-| [D-208](#d-208-setup-for-an-external-database-the-bubble-tea-setup-wizard-setup-renew-and-the-guided-upgrade) | Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade | proposed |
+| [D-207](#d-207-external-postgresql-for-the-app-database-fields-mode-one-connection-builder-db-bootstrap--roles-sql-migrate-preflight-and-an-opt-in-single-account-mode) | External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode | proposed (amended by D-215) |
+| [D-208](#d-208-setup-for-an-external-database-the-bubble-tea-setup-wizard-setup-renew-and-the-guided-upgrade) | Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade | proposed (amended by D-215) |
 | [D-209](#d-209-retention-visibility-and-disk-cleanup-live-keep-estimate-retention-holds-and-retentionblocked-interrupted-runs-empty-folder-pruning-unrecorded-files-and-fixed-destination-locations) | Retention visibility and disk cleanup: live keep estimate, retention holds and `retention.blocked`, interrupted runs, empty-folder pruning, unrecorded files and fixed destination locations | proposed |
 | [D-210](#d-210-schema-version-per-database-framework-presets-and-a-bounded-custom-query-read-on-the-dumps-snapshot) | Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot | proposed |
 | [D-211](#d-211-web-dev-tooling-minimatch-forced-to-the-fixed-11x-line-with-a-pnpm-patch-for-eslint-plugin-jsx-a11y) | Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y | proposed |
 | [D-212](#d-212-follow-ghcriojlentinkbekuplatest-an-opt-in-mutable-tag-for-the-bekup-image-with-a-setup-version-guard) | Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard | proposed |
 | [D-213](#d-213-setup-compose-lint-yaml-alias-limits-before-compose-go-and-a-load-deadline) | setup compose lint: YAML alias limits before compose-go and a load deadline | proposed |
 | [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
+| [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle) |
 
 ---
 
@@ -11332,7 +11333,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-205: Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets
 
 - **Date:** 2026-10-29
-- **Status:** proposed
+- **Status:** proposed (variant names traefik-external/npm and the link network as the default superseded by D-215)
 - **Decided by:** agent (recording the user's decisions: the README leads with three steps (download a copyable `compose.yaml`, `docker compose run --rm setup`, `docker compose up -d`) in three variants (own Traefik as the default, behind an existing Traefik, behind Nginx Proxy Manager); full hardening in the copyable file; a dedicated `bekup-proxy` link network for external proxies; the files only as release downloads, pinned by digest and attested; the deployment file name `compose.yaml`; nothing committed under `examples/`)
 - **Context:** D-203 made `bekup setup init` write the whole deployment
   directory, compose file included, from a `docker run` with a long list of
@@ -11884,7 +11885,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-207: External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode
 
 - **Date:** 2026-10-30
-- **Status:** proposed
+- **Status:** proposed (amended by D-215)
 - **Decided by:** agent (implementing the user's request for "existing
   Postgres" support with plain connection fields, bootstrap with an admin
   account as the default and single-account mode as an explicit weakening;
@@ -12113,7 +12114,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-208: Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade
 
 - **Date:** 2026-10-30
-- **Status:** proposed
+- **Status:** proposed (amended by D-215)
 - **Decided by:** agent (Part S of `plans/robust-giggling-tide.md`; user
   requests: an interactive setup inside the bekup image built on Bubble
   Tea that asks for the proxy and an existing database and writes
@@ -12873,3 +12874,284 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   does not use the mirror).
 - **Related:** D-027, D-061, D-091; `.github/workflows/ci.yml`,
   `internal/testutil/imagepull`, `docs/development.md`.
+
+## D-215: Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays
+
+- **Date:** 2026-11-01
+- **Status:** proposed
+- **Decided by:** agent (implementing the user's decisions of
+  `plans/robust-giggling-tide.md`: one "own reverse proxy" choice instead of
+  "existing Traefik" and "Nginx Proxy Manager"; bekup joins the Docker
+  network the proxy is on; an optional Traefik-labels follow-up, default no;
+  "database container on this Docker host" or "another server"; four
+  database TLS choices with verify-with-a-CA-file as the default)
+- **Context:** Testing the wizard showed three blocking gaps. A database
+  that is a container on the same Docker host could not be reached (the
+  wizard never asked for its network). The proxy choices named two
+  products, and both needed the dedicated `bekup-proxy` link network with
+  fixed addresses (D-205), which means editing the proxy's own compose
+  file. The external-database path required a CA PEM file (D-208: setup
+  wrote only `verify-full`), although many operators run PostgreSQL with a
+  public certificate, an unverifiable one, or on a private Docker network
+  without TLS. Docker assigns container addresses on networks without a
+  subnet, so a proxy network the operator already has cannot carry fixed
+  addresses.
+- **Decision:**
+  1. **Variants: two proxy forms.** `traefik` (bekup's own) and `own-proxy`
+     (any reverse proxy on this Docker host) replace `traefik`,
+     `traefik-external` and `npm`. With the database dimension (D-208)
+     there are four committed and released compose files:
+     `compose.yaml`, `compose.external-db.yaml`, `compose.own-proxy.yaml`,
+     `compose.own-proxy.external-db.yaml` (`just gen`,
+     `scripts/gen_compose.sh`, `release_ci.sh`, `release.yml`).
+     `--variant traefik-external|npm` are refused with a pointer to
+     own-proxy.
+  2. **Join mode (the own-proxy default).** serve joins the proxy's network
+     as the external network `proxy` (`name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}`,
+     setup writes the name to `.env`) under the network alias
+     `bekup-serve`, without a fixed address. The operator points the proxy
+     at `http://bekup-serve:8080`; nothing changes in the proxy's own
+     setup. setup refuses Docker's predefined `bridge`, `host` and `none`
+     networks (no container DNS on `bridge`).
+  3. **Trust by container name** (`server.trusted_proxy_hosts`, new, live
+     key): at most 8 Docker container names or aliases (no IP literals, no
+     wildcards). serve resolves them through the process resolver (in the
+     container: Docker's embedded DNS) as absolute names (a trailing dot,
+     so the host's search domains never turn a container name into a
+     public name), accepts only private IPv4 and IPv6 ULA addresses (at
+     most 16 per name) and trusts each as /32 or /128, in addition to
+     `trusted_proxies`. It resolves at start, every 30 s, at most every
+     5 s when `X-Forwarded-For` arrives from an untrusted peer (a recreated
+     proxy has a new address), and at most every 5 s while a peer trusted
+     through a name sends requests (a removed proxy's address may be handed
+     to another container; the name then stops resolving). A name that
+     does not resolve trusts nothing; changes and failures are logged
+     (names and addresses only). Either `trusted_proxies` or
+     `trusted_proxy_hosts` satisfies the "trusted proxy required outside
+     dev mode" rule. Reload (D-200): removed names lose their trust at
+     once, added ones after their first resolution; an added name counts
+     as a weakening (alert to every admin).
+  4. **Wildcard listener in exactly this shape (relation to D-098).**
+     Docker assigns serve's address on the operator's network, so setup
+     writes `server.listen = "0.0.0.0:8080"` with
+     `allow_wildcard_listen = true` for join mode only. D-098 refuses
+     wildcard listeners because they expose the port on networks nobody
+     intended; here every network serve is on is bekup's own (backend,
+     runner-ctl, egress, metrics, all with a pinned membership) or the
+     operator's proxy network, serve publishes no port, and the hardening
+     lint pins serve's network set and refuses foreign services on bekup's
+     networks. The startup warning is suppressed only when the shipped
+     own-proxy serve service passes the literal `BEKUP_LISTEN_SHAPE=own-proxy-join`
+     (a value, never a variable; the lint pins serve's environment) and
+     `server.listen` is exactly `0.0.0.0:8080`; serve then logs an INFO line
+     instead. Any other wildcard keeps the warning; `setup check` errors
+     unless join mode has exactly that listen address, the flag, no CIDRs in
+     `trusted_proxies` and exactly the recorded proxy container in
+     `trusted_proxy_hosts` (and `BEKUP_PROXY_NETWORK` equal to the
+     recorded network).
+  5. **Link mode stays, as an advanced option** (`--proxy-network-mode
+     link`, flags only): the D-205 link network with fixed addresses and a
+     /32 trust, for operators who want no other container next to serve.
+  6. **The proxy on another machine is not a wizard choice** (user
+     decision, amendment 1): the wizard offers only bekup's own Traefik or
+     the operator's own reverse proxy on this Docker host. The flags
+     `--write-compose --variant full --proxy none --trusted-proxy <CIDR>`
+     (setup-first, the `frontend` network) stay as the documented advanced
+     path: run a small proxy on this host, or route to bekup's `frontend`
+     network yourself. No published port is added for serve: the lint
+     refuses ports on bekup's services and plain HTTP across hosts would
+     carry session cookies unencrypted. `--proxy external` is no flag
+     value any more (`external` is only the recorded form of `own`).
+  7. **Setup-only overlays in `compose.override.yaml`.** The Traefik
+     Docker-provider labels on serve (`--proxy-labels`, default off; the
+     D-205 label set with `traefik.docker.network=${BEKUP_PROXY_NETWORK:-bekup-proxy}`),
+     serve's fixed link address (link mode) and the database container's
+     network (below) are never part of a release file: setup writes them
+     into a new `compose.override.yaml` (compose-first and setup-first), so
+     `compose.yaml` stays the byte-exact release file and an upgrade stays a
+     file replacement. The state records them; the lint's expected project
+     is the release file merged with exactly these blocks, so a missing,
+     changed or extended block is an error and `setup check` prints the
+     blocks. An existing override is never rewritten: init refuses and
+     prints the blocks to add; upgrade never touches it.
+  8. **Database container on a Docker network.** `--db-location docker
+     --db-network <net>`: migrate, serve and admin join the database's
+     network as the external network `database` (`BEKUP_DB_NETWORK`), and
+     `backend` becomes internal again (no egress needed); `database.host`
+     is the container's name or alias (a valid host name: no `_`). The
+     state records `database_location` (`remote` default, `docker`) and
+     `db_network`; the lint pins the four memberships (migrate, serve,
+     admin; there is no separate worker service) and refuses every other
+     service on that network; setup refuses the proxy's own network as the
+     database network (serve would join it twice, and a proxy network
+     should not reach databases).
+  9. **Database TLS choices.** `--db-tls verify-ca-file` (default:
+     `verify-full` against the copied CA bundle), `verify-system`
+     (`verify-full` against the image's system bundle
+     `/etc/ssl/certs/ca-certificates.crt`; the Dockerfile fails the build
+     when the runtime image lacks it, a test keeps the path equal),
+     `require` (encrypted, not verified, `tls_ca_file = ""`) and `disable`.
+     `--db-ca-file` only with `verify-ca-file`, `--db-tls-server-name` only
+     with the verifying choices. The weak choices need an explicit
+     confirmation in the wizard after a warning, are recorded
+     (`database_tls`), are reported by `setup check` as warnings, and keep
+     the D-100 treatment (startup WARN, `security.insecure_db_tls` audit,
+     daily alert, admin badge); no new weakening mechanics. SCRAM
+     (`require_auth=scram-sha-256`) applies in every mode, channel binding
+     whenever TLS is on (D-104; `require` binds to the presented
+     certificate). The CA secret file stays mounted and is empty for the
+     choices without a CA file. The printed bootstrap command adds
+     `--allow-insecure-admin-connection` for `require`/`disable` (D-207
+     item 10) with a warning; the DBA's psql line follows the choice.
+  10. **Flags = wizard.** `--proxy traefik|own` (`own` names the own-proxy
+      variant; `--write-compose` without `--variant` takes it from
+      `--proxy`), `--proxy-network`, `--proxy-container`, `--proxy-labels`,
+      `--proxy-network-mode join|link`, `--db-location docker|remote`,
+      `--db-network`, `--db-tls`; Docker network names follow
+      `^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`, container names Docker's rule
+      bounded to 63 characters. The wizard asks "my own reverse proxy on
+      this Docker host" with its network and container name, the labels
+      follow-up, "is your database a container on this Docker host?" and
+      the TLS choice; the summary and the report say where to point the
+      proxy (`http://bekup-serve:8080`) with the settings for NPM, Traefik,
+      Caddy and nginx.
+  11. **Retired variants.** A state recorded as `traefik-external` or `npm`
+      is read as own-proxy in link mode (with the labels for
+      traefik-external); `setup check` reports it, and `setup upgrade`
+      (after the operator replaced `compose.yaml` with the own-proxy release
+      file, or setup-first with `--write-compose`) writes the link and label
+      blocks into a new `compose.override.yaml` (an existing one must carry
+      them), rewrites the state and prints a notice.
+- **Amendment 1 (2026-11-01, review findings; agent, proposed):**
+  1. **Listener filter (item 4).** In the join shape (`BEKUP_LISTEN_SHAPE=own-proxy-join`
+     and `server.listen = "0.0.0.0:8080"`) serve keeps the wildcard bind
+     but wraps the listener (`httpserver.Server.WrapListener`): a
+     connection is served only when its local address is serve's own
+     address on the proxy network and its peer is in that subnet, or on
+     loopback (the healthcheck); every other connection (bekup's
+     `backend`, `runner-ctl`, `egress`, `metrics` networks, a database
+     network) is closed before a byte is read (rate-limited WARN). serve's
+     address on the proxy network is found by resolving its alias
+     `bekup-serve.` and keeping the answers that are addresses of its own
+     interfaces (`net.InterfaceAddrs`), re-evaluated with every
+     resolution; until it is known every non-loopback connection is
+     refused (fail closed, clear WARN) and `/readyz` fails. The wildcard
+     warning is dropped only when additionally `trusted_proxy_hosts` is
+     set and `trusted_proxies` is empty; the dropped warning is handed to
+     the config reloader as known (`app.Options.KnownWarnings`), so a
+     SIGHUP reload does not log it again (also the listener warning that
+     `bekup worker` drops).
+  2. **Alias takeover check (new).** At start and with every resolution
+     (every 20 s) every answer for `bekup-serve.` must be an own interface
+     address. Otherwise another container carries the alias on a network
+     serve shares and Docker's DNS may hand it the proxy's requests: serve
+     logs a WARN, records `security.serve_alias_conflict` (system actor,
+     the foreign addresses only; once per new address set, retried after
+     a failed write) and the audit observer raises the new critical
+     `serve_alias_conflict` security alert to every admin (deduplicated
+     per address set and day); `/readyz` fails while it lasts. Active in
+     the own-proxy shapes and whenever `trusted_proxy_hosts` are set.
+     Detected, not prevented: operators are told to point the proxy at
+     serve's daemon-unique container name where possible, or to use link
+     mode for strict isolation.
+  3. **Trust by name narrowed (item 3).** Resolved addresses are trusted
+     only inside the subnet of serve's own interface on the proxy network
+     (the same lookup), never serve's own address, and at most one per
+     address family: more is a name or alias collision and the name
+     trusts nothing (WARN). While serve's own address is unknown no name
+     is trusted. Names may not contain dots and may not be one of bekup's
+     own service names (`serve`, `runner`, `migrate`, `admin`, `setup`,
+     `certs-init`, `postgres`, `bekup-serve`, `worker`, `traefik`,
+     `traefik-init`; `config.ValidContainerName`, also in setup). Names
+     and the alias are resolved in parallel every 20 s (was 30 s) and on
+     the 5 s kicks (also from health-check requests and from refused
+     connections while the own address is unknown); addresses trusted
+     through a name count only while their resolution is at most 30 s old.
+     Publishes of resolutions happen under the resolver's lock with a
+     generation counter, so an older resolution can never overwrite a
+     newer one or a reload.
+  4. **Database TLS (item 9).** `verify-system` loads the image's bundle
+     leniently (`db.LoadSystemCABundle`: certificates Go's parser refuses,
+     for example with a negative serial number, are skipped and counted,
+     at least one must parse, serve logs the counts once); operator CA
+     files stay strictly parsed. The Dockerfile build stage runs the same
+     loader (`internal/db/cabundlecheck`) on the runtime image's
+     `/etc/ssl/certs/ca-certificates.crt` instead of a grep.
+  5. **Setup (items 2, 7, 8, 9).** Proxy container names follow item 3's
+     rule (no dots, no bekup service names; flags, wizard, state). setup
+     never rewrites an existing `compose.override.yaml`: not `setup init`
+     (also not with `--force`) and not `setup upgrade`; setup-first
+     `init --force` keeps it and lints it with the `compose.yaml` it
+     writes against the release file plus the recorded overlay blocks,
+     refusing and printing the blocks when they are missing, and reports a
+     kept override that differs. A setup-first upgrade, also of a retired
+     traefik-external/npm state, checks an existing override the same way
+     (the check hint is `docker compose run --rm setup upgrade
+     --write-compose --image <image>`). A database container's network may
+     be neither the proxy's network (join mode) nor the link network (link
+     mode). Docker's predefined networks are refused case-sensitively
+     (`bridge`, `host`, `none`; Docker network names are case-sensitive).
+     The weak database TLS texts (wizard, line prompt, report, bootstrap
+     note, docs) name ARP spoofing on Docker networks (containers have
+     `CAP_NET_RAW` by default); with `disable` there is no channel binding,
+     so the SCRAM login can be relayed and the session hijacked, including
+     `bekup_owner` during migrate and the admin account during bootstrap,
+     while `require` keeps channel binding to the presented certificate,
+     so `require` is recommended over `disable` even on a private Docker
+     network; the line prompt asks for the same explicit confirmation as
+     the wizard. Both write `tls_ca_file = ""`.
+  6. **Residual risks (Consequences).** The listener filter removes direct
+     access from bekup's internal networks and the database network; what
+     remains: containers on the proxy network reach `serve:8080` directly;
+     an alias takeover is alerted, not prevented; a container holding the
+     proxy's name is trusted once it is the only holder; a removed proxy's
+     address can be reused within the re-resolution window (a few seconds
+     while active, at most 30 s idle); an admin SSRF allowlist entry for a
+     private range now also covers the containers on the proxy and
+     database networks; Docker address pools outside the private ranges
+     (CGNAT, global IPv6) are never trusted (fail closed; troubleshooting
+     in reverse-proxy.md).
+- **Alternatives considered:** keeping fixed addresses on the operator's
+  network (impossible without a subnet there); trusting the whole proxy
+  network (any container on it could forge client addresses); resolving
+  names only at startup (a recreated proxy would lose its trust or, worse,
+  its old address another container's); a `container_name` for serve
+  (global across Docker, collides between deployments; an alias is per
+  network); six or eight compose files with the overlays baked in (more
+  files to attest and verify; an upgrade would need the operator to pick
+  the right one again); writing the overlays into compose.yaml in
+  compose-first mode (the file would no longer be the release file);
+  publishing serve's port for a proxy on another machine (plain HTTP across
+  hosts; refused by the lint); a separate "system bundle" copy in the keys
+  directory (would go stale across image upgrades).
+- **Consequences:** An existing reverse proxy is attached by naming its
+  network and container; nothing in the proxy's own compose file changes.
+  A database container on the same host works without opening `backend`.
+  Security impact: in join mode every container on the operator's proxy
+  network can reach `serve:8080` directly, bypassing the proxy (they cannot
+  forge client addresses: only the named proxy is trusted; the UI's own
+  authentication, CSP, Origin checks and rate limits apply as for every
+  request). serve listens on all its interfaces (amendment 1: it serves
+  only its address on the proxy network and loopback, so containers on
+  bekup's internal networks and on the database's network can no longer
+  reach port 8080). Container address reuse after the proxy is removed
+  leaves a window of at most a few seconds (active requests re-resolve
+  every 5 s, idle every 30 s) in which another container with that address
+  could forge `X-Forwarded-For` (client IP for rate limits and audit
+  entries only). A name that resolves through Docker's DNS can be taken by
+  another container with the same name or alias on that network (the
+  operator controls the network; documented). The weak database TLS
+  choices are explicit, warned, audited and alerted (D-100). The link mode
+  keeps D-205's stricter isolation for those who need it. SECURITY.md B2b
+  describes the join mode and its residual risks.
+- **Related:** D-048, D-098, D-100, D-102, D-103, D-104, D-200, D-205
+  (variant names and the link network as the default superseded), D-207
+  and D-208 (amended: TLS choices, four files, the database container);
+  `internal/config/proxyhosts.go`, `internal/httpserver/proxyhosts.go`,
+  `internal/configreload/weaken.go`, `internal/deployguard`,
+  `cmd/bekup/serve_cmd.go`, `internal/setup/{variants,overlay,answers,database,state,check,upgrade,render,setup}.go`,
+  `internal/setup/variants/own-proxy/`, `internal/setup/wizard/init.go`,
+  `cmd/bekup/setup_cmd.go`, `Dockerfile`, `deploy/compose/`,
+  `scripts/{gen_compose,release_ci}.sh`, `.github/workflows/{ci,release}.yml`,
+  `README.md`, `docs/installation/{compose,reverse-proxy,external-database}.md`,
+  `docs/security/app-db-tls.md`, `SECURITY.md`, `AGENTS.md`.

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,12 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		// image is the bekup image ("" = the pinned test image); a tag of
 		// the official repository follows the releases (D-212).
 		image string
+		// mut changes the answers (D-215: own-proxy modes, labels).
+		mut func(*Answers)
+		// dbDocker: the external database is a container on a Docker
+		// network (D-215), with tls as the TLS choice.
+		dbDocker bool
+		tls      DBTLS
 	}
 	cases := map[string]tc{}
 	for name, mk := range variants {
@@ -79,8 +86,29 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			}
 			cases["compose-first-"+suffix] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, db: db}
 			cases["placeholder-"+suffix] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, placeholder: true, db: db}
+			if db == DBExternal {
+				// Every TLS choice with a database container (D-215).
+				for _, tls := range DBTLSChoices {
+					cases["compose-first-"+suffix+"-db-container-"+string(tls)] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, db: db, dbDocker: true, tls: tls}
+				}
+			}
 		}
 	}
+	// The own-proxy overlays (D-215): labels, link mode, both, with a
+	// database container.
+	labels := func(a *Answers) { a.ProxyLabels = true }
+	link := func(a *Answers) { a.ProxyNetwork, a.ProxyContainer, a.ProxyMode = "", "", ProxyLink }
+	cases["compose-first-own-proxy-labels"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy, mut: labels}
+	cases["compose-first-own-proxy-link"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy, mut: link}
+	cases["placeholder-own-proxy-link-labels-db-container"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy, placeholder: true,
+		mut: func(a *Answers) { link(a); labels(a) }, db: DBExternal, dbDocker: true, tls: DBTLSRequire}
+	cases["setup-first-own-proxy-join-db-container"] = tc{answers: func() Answers {
+		a := testAnswers(t, ProxyNone)
+		a.Variant, a.Proxy, a.TrustedProxies = VariantOwnProxy, "", nil
+		a.ProxyNetwork, a.ProxyContainer = "web", "npm"
+		return a
+	}, db: DBExternal, dbDocker: true, tls: DBTLSVerifySystem}
+	cases["setup-first-full-db-container"] = tc{answers: func() Answers { return testAnswers(t, ProxyTraefik) }, db: DBExternal, dbDocker: true}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -92,6 +120,12 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			if c.db == DBExternal {
 				testDBCA(t, dir, "db-ca.pem", time.Now(), 0)
 				dbAnswers = Database{Mode: DBExternal, Host: "db.example.com", CAFile: "db-ca.pem"}
+				if c.dbDocker {
+					dbAnswers.Location, dbAnswers.Network, dbAnswers.Host, dbAnswers.TLS = DBDocker, "dbnet", "postgres", c.tls
+					if c.tls.OrDefault() != DBTLSVerifyCAFile {
+						dbAnswers.CAFile = ""
+					}
+				}
 				if strings.HasSuffix(name, "single-account") {
 					dbAnswers.Auth, dbAnswers.User, dbAnswers.PasswordFile = DBAuthSingleAccount, "acct", "acct.pw"
 					if err := os.WriteFile(pathIn(dir, "acct.pw"), []byte(testAppPW), 0o600); err != nil {
@@ -99,7 +133,12 @@ func TestIntegrationComposeConfig(t *testing.T) {
 					}
 				}
 			}
-			withDB := func(o *Options) { o.Answers.DB = dbAnswers }
+			withDB := func(o *Options) {
+				o.Answers.DB = dbAnswers
+				if c.mut != nil {
+					c.mut(&o.Answers)
+				}
+			}
 			switch {
 			case c.variant == "":
 				o := testOptions(t, dir, c.answers())
@@ -156,7 +195,17 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			var project struct {
 				Services map[string]struct {
 					Environment map[string]*string `json:"environment"`
+					Networks    map[string]*struct {
+						Aliases     []string `json:"aliases"`
+						Ipv4Address string   `json:"ipv4_address"`
+					} `json:"networks"`
+					Labels map[string]string `json:"labels"`
 				} `json:"services"`
+				Networks map[string]struct {
+					Name     string `json:"name"`
+					External bool   `json:"external"`
+					Internal bool   `json:"internal"`
+				} `json:"networks"`
 			}
 			if err := json.Unmarshal(out, &project); err != nil {
 				t.Fatal(err)
@@ -181,6 +230,42 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			for _, name := range []string{"migrate", "serve", "runner"} {
 				if _, ok := project.Services[name]; !ok {
 					t.Fatalf("no %s service", name)
+				}
+			}
+			// D-215: the own-proxy shapes and the database container's
+			// network as docker compose resolves them (with the override).
+			st := mustState(t, dir)
+			ov := st.overlays()
+			if st.Variant == VariantOwnProxy {
+				proxy := project.Services["serve"].Networks["proxy"]
+				net := project.Networks["proxy"]
+				if proxy == nil || !slices.Contains(proxy.Aliases, "bekup-serve") || !net.External || net.Name != st.ProxyNetwork {
+					t.Fatalf("serve on the proxy network: %+v %+v", proxy, net)
+				}
+				if (proxy.Ipv4Address != "") != ov.ProxyLink {
+					t.Fatalf("link address %q, link mode %v", proxy.Ipv4Address, ov.ProxyLink)
+				}
+				if (project.Services["serve"].Labels["traefik.enable"] == "true") != ov.ProxyLabels {
+					t.Fatalf("labels %v, overlay %v", project.Services["serve"].Labels, ov.ProxyLabels)
+				}
+				for name, svc := range project.Services {
+					if _, on := svc.Networks["proxy"]; on && name != "serve" {
+						t.Fatalf("%s on the proxy network", name)
+					}
+				}
+			}
+			if c.db == DBExternal {
+				for name, svc := range project.Services {
+					_, on := svc.Networks["database"]
+					if want := ov.DBNetwork && slices.Contains([]string{"migrate", "serve", "admin"}, name); on != want {
+						t.Fatalf("%s on the database network: %v", name, on)
+					}
+				}
+				if project.Networks["backend"].Internal != ov.DBNetwork {
+					t.Fatalf("backend internal = %v with a database container %v", project.Networks["backend"].Internal, ov.DBNetwork)
+				}
+				if ov.DBNetwork && (!project.Networks["database"].External || project.Networks["database"].Name != "dbnet") {
+					t.Fatalf("database network %+v", project.Networks["database"])
 				}
 			}
 			if !c.placeholder {

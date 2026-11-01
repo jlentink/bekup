@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	"github.com/jlentink/bekup/internal/audit"
@@ -12,6 +13,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/deployguard"
+	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/instancekeys"
 )
 
@@ -190,6 +192,33 @@ func (a *App) recordUnpinnedImage(ctx context.Context) error {
 		return err
 	}
 	a.image.audited = true
+	return nil
+}
+
+// recordServeAliasConflict records security.serve_alias_conflict (the
+// audit observer raises the security alert): serve's network alias
+// bekup-serve also resolves to another container on the proxy network
+// (D-215). An error makes httpserver retry at the next resolution.
+func (a *App) recordServeAliasConflict(ctx context.Context, foreign []netip.Addr) error {
+	addrs := make([]string, 0, len(foreign))
+	for _, f := range foreign {
+		addrs = append(addrs, f.String())
+	}
+	cctx, cancel := context.WithTimeout(ctx, startupTimeout(a.opts.Config))
+	defer cancel()
+	_, err := a.auditor.Record(cctx, audit.Event{
+		Actor:      audit.SystemActor(),
+		Action:     audit.ActionSecurityServeAliasConflict,
+		TargetType: "server",
+		Details: audit.Details{
+			"alias":     httpserver.ServeAlias,
+			"addresses": addrs,
+			"process":   a.processName(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("record %s: %w", audit.ActionSecurityServeAliasConflict, err)
+	}
 	return nil
 }
 

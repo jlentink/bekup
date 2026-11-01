@@ -417,8 +417,8 @@ jobs:
           echo "latest=$latest" >>"$GITHUB_OUTPUT"
           echo "published $REPO:$VERSION@$DIGEST (latest: $latest)"
 
-  # The six compose files (D-205, D-208: three proxy variants, each with the
-  # bundled and an external database): rendered by running the published digest
+  # The four compose files (D-205, D-208, D-215: two proxy variants, each
+  # with the bundled and an external database): rendered by running the published digest
   # (`bekup setup compose`; no network, read-only, UID 65532, no
   # capabilities), checked, signed and attested. No write access to the
   # repository; the files reach the release job as a workflow artifact.
@@ -470,7 +470,7 @@ jobs:
           # The tag's committed deploy/compose/ files (D-205 amendment 3)
           # must be these files with the BEKUP_IMAGE placeholder line.
           scripts/release_ci.sh committed-compose "$out" deploy/compose
-          (cd "$out" && sha256sum compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml >SHA256SUMS)
+          (cd "$out" && sha256sum compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml >SHA256SUMS)
           cat "$out/SHA256SUMS"
 
       - name: Attest build provenance (GitHub)
@@ -478,17 +478,15 @@ jobs:
         with:
           subject-path: |
             ${{ runner.temp }}/compose/compose.yaml
-            ${{ runner.temp }}/compose/compose.traefik-external.yaml
-            ${{ runner.temp }}/compose/compose.npm.yaml
+            ${{ runner.temp }}/compose/compose.own-proxy.yaml
             ${{ runner.temp }}/compose/compose.external-db.yaml
-            ${{ runner.temp }}/compose/compose.traefik-external.external-db.yaml
-            ${{ runner.temp }}/compose/compose.npm.external-db.yaml
+            ${{ runner.temp }}/compose/compose.own-proxy.external-db.yaml
             ${{ runner.temp }}/compose/SHA256SUMS
 
       - name: Sign the files (cosign keyless bundles)
         run: |
           cd "$RUNNER_TEMP/compose"
-          for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml SHA256SUMS; do
+          for f in compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml SHA256SUMS; do
             cosign sign-blob --yes --bundle "$f.sigstore.json" "$f" >/dev/null
           done
           ls -l
@@ -554,7 +552,7 @@ jobs:
           scripts/release_ci.sh compose-assets "$REPO:$VERSION@$DIGEST" "$dir"
           (cd "$dir" && sha256sum -c SHA256SUMS)
           files=()
-          for f in compose.yaml compose.traefik-external.yaml compose.npm.yaml compose.external-db.yaml compose.traefik-external.external-db.yaml compose.npm.external-db.yaml SHA256SUMS; do
+          for f in compose.yaml compose.own-proxy.yaml compose.external-db.yaml compose.own-proxy.external-db.yaml SHA256SUMS; do
             test -s "$dir/$f.sigstore.json"
             files+=("$dir/$f" "$dir/$f.sigstore.json")
           done

@@ -170,7 +170,7 @@ func runBootstrap(c *cobra.Command, g *globalFlags, bf *bootstrapFlags) error {
 	if err != nil {
 		return err
 	}
-	logLoaded(c, logger, res.Path, res.Warnings)
+	logLoaded(c, logger, res.Path, withoutListenWarning(res.Config, res.Warnings))
 	// D-212: the migrate service runs bootstrap with the deployment facts;
 	// never prepare a database with an image setup has not prepared the
 	// deployment for (checked before anything connects).

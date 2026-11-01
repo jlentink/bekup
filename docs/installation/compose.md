@@ -20,25 +20,28 @@ the deployment directory (local changes go into `compose.override.yaml`).
 command asks a few questions and writes everything, `compose.yaml`
 included ([Install with the setup wizard](#install-with-the-setup-wizard)).
 
-Each release also publishes six variants of the compose file, pinned to the
-release image by digest and attested (D-205, D-208): three reverse-proxy
-variants, each with bekup's bundled database or with your own PostgreSQL
-([external database](#your-own-postgresql-external-database-files)):
+Each release also publishes four variants of the compose file, pinned to
+the release image by digest and attested (D-205, D-208, D-215): two
+reverse-proxy forms, each with bekup's bundled database or with your own
+PostgreSQL ([external database](#your-own-postgresql-external-database-files)):
 
 | Release asset | Variant | Reverse proxy | Database |
 |---|---|---|---|
 | `compose.yaml` | `traefik` | bekup's own Traefik (ports 80/443, Let's Encrypt or a static certificate) | bundled |
-| `compose.traefik-external.yaml` | `traefik-external` | your existing Traefik on the `bekup-proxy` link network | bundled |
-| `compose.npm.yaml` | `npm` | Nginx Proxy Manager on the `bekup-proxy` link network | bundled |
+| `compose.own-proxy.yaml` | `own-proxy` | your reverse proxy on this Docker host (Nginx Proxy Manager, Traefik, Caddy, nginx, ...): `serve` joins its Docker network | bundled |
 | `compose.external-db.yaml` | `traefik` | bekup's own Traefik | your PostgreSQL 15-17 |
-| `compose.traefik-external.external-db.yaml` | `traefik-external` | your existing Traefik | your PostgreSQL |
-| `compose.npm.external-db.yaml` | `npm` | Nginx Proxy Manager | your PostgreSQL |
+| `compose.own-proxy.external-db.yaml` | `own-proxy` | your reverse proxy on this Docker host | your PostgreSQL |
 
-All six are rendered from the repository's `docker-compose.yml` (overlays
+All four are rendered from the repository's `docker-compose.yml` (overlays
 in `internal/setup/variants`, never copies; `bekup setup compose --variant
 <v> [--database external]` prints one, `just compose-examples` writes them
-to `dist/compose/`).
-The same six files are **committed** in
+to `dist/compose/`). What only some deployments need (the Traefik labels on
+`serve`, the link network's fixed address, a database container's network)
+is never part of these files: setup writes it into `compose.override.yaml`
+([below](#the-override-file-and-the-hardening-lint)). The variants
+`traefik-external` and `npm` of earlier versions are retired
+([upgrades.md](upgrades.md#retired-variants-traefik-external-and-npm)).
+The same four files are **committed** in
 [`deploy/compose/`](../../deploy/compose/) (D-205 amendment 3), generated
 by `just gen` and never edited by hand. They differ from the release assets
 only in the `x-bekup-image` line: instead of the pinned literal it reads
@@ -51,8 +54,9 @@ Save one as `compose.yaml` and let `bekup setup` do the rest
 ([Install with a compose file](#install-with-bekup-setup-container-only)).
 The setup-first
 alternative lets `setup` write the file itself, including the `full`
-variant with nginx or your own proxy
-([Alternative: setup-first](#alternative-setup-first)).
+variant with nginx or your own proxy on `frontend` (the advanced flag-only
+path for a proxy that is not a container on this Docker host;
+[Alternative: setup-first](#alternative-setup-first)).
 
 The repository root holds the sources:
 
@@ -81,41 +85,38 @@ traefik | nginx ──frontend──> serve ──backend──> postgres
 | `egress` | no | `serve` | uploads to destinations, SMTP and webhooks, every dial checked by the SSRF guard |
 | `metrics` | yes | `serve` (fixed `10.213.252.10`), your Prometheus | `/metrics` only, never published |
 
-This is the `traefik` variant (and `full`). The `traefik-external` and
-`npm` variants have no bundled proxy, no `frontend` or `edge` network and
-publish no ports; `serve` joins the operator's link network instead:
+This is the `traefik` variant (and `full`). The `own-proxy` variant has no
+bundled proxy, no `frontend` or `edge` network and publishes no ports;
+`serve` joins your proxy's Docker network instead (D-215,
+[reverse-proxy.md](reverse-proxy.md#own-reverse-proxy)):
 
 | Network | Internal | Members | Why |
 |---|---|---|---|
-| `bekup-proxy` (external, created once by you) | yes | your Traefik / NPM (fixed `10.213.253.5`), `serve` (fixed `10.213.253.10`) | the only way to reach the UI; `trusted_proxies = ["10.213.253.5/32"]` |
+| `proxy` (external: your proxy's network, `BEKUP_PROXY_NETWORK`) | yours | your proxy, `serve` (alias `bekup-serve`, no fixed address), whatever else you run there | the only way to reach the UI: your proxy forwards to `http://bekup-serve:8080`; `trusted_proxy_hosts` names your proxy's container |
 | `backend` | yes | `serve`, `migrate`, `admin`, `postgres` | as above |
 | `runner-ctl` | yes | `serve` (`10.213.251.x`), `runner` (fixed `10.213.251.10`) | as above |
 | `targets` | no | `runner` | as above |
 | `egress` | no | `serve` | as above |
 | `metrics` | yes | `serve` (fixed `10.213.252.10`) | as above |
 
-```sh
-# once per host, before `docker compose up` (setup itself needs no network)
-docker network create --internal --subnet 10.213.253.0/28 \
-  --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
-```
+Only `serve` joins `proxy`; the lint refuses every other service of the
+project there. Other containers on your network can reach `serve:8080`
+directly but cannot forge client addresses
+([residual risk](reverse-proxy.md#trust-by-container-name)). The stricter
+alternative is link mode (`--proxy-network-mode link`): `proxy` is then a
+dedicated internal `/28`, `bekup-proxy`, that you create once, with fixed
+addresses for your proxy (`10.213.253.5`) and `serve` (`10.213.253.10`)
+([reverse-proxy.md](reverse-proxy.md#advanced-dedicated-link-network)).
 
-`--ip-range` keeps Docker's automatic addresses to `.12`–`.15`, so no other
-container that joins the network first can take the fixed addresses `.5`
-and `.10`. Your proxy attaches with `ipv4_address: 10.213.253.5` next to
-the networks it already has (and declares the network `external: true`);
-see [reverse-proxy.md](reverse-proxy.md#existing-traefik). Another name,
-subnet or addresses: `setup init --proxy-network --proxy-subnet --proxy-ip
---serve-ip` (a private IPv4 subnet between /8 and /29 that overlaps neither
-`runner-ctl` nor `metrics`; both addresses inside it, distinct, never the
-network, gateway `.1` or broadcast address). `.env` then carries
-`BEKUP_PROXY_NETWORK` and `SERVE_PROXY_IP`, and setup prints the matching
-`docker network create` command (with an `--ip-range` that excludes both
-addresses).
+With a [database container](external-database.md#database-container-on-this-docker-host)
+on this Docker host, `migrate`, `serve` and `admin` also join its network
+as the external network `database` (`BEKUP_DB_NETWORK`), and nothing else
+of the project may.
 
 `serve` can never reach a target database or Docker, and the runner can never
 reach the app database. `serve`'s port is **not published**: only the
-reverse proxy on `frontend` reaches it (D-017).
+reverse proxy on `frontend` (own-proxy: on your proxy's network) reaches it
+(D-017).
 
 The two fixed subnets (`frontend` 10.213.250.0/24, `runner-ctl`
 10.213.251.0/24) lie outside Docker's default address pools so that they
@@ -192,7 +193,8 @@ docker compose run --rm -v "$PWD/admin-pw:/run/admin-pw:ro" admin \
 ```
 
 `admin` connects as `bekup_app` like `serve` but gets only the `backend`
-network, the database URL and the DB CA (no master key, no mTLS
+network (and a database container's network, D-215), the database URL and
+the DB CA (no master key, no mTLS
 certificate, no ports). It exists because `docker compose run serve ...`
 cannot start while `serve` runs: the new container would claim `serve`'s
 fixed `frontend` address ("Address already in use").
@@ -244,6 +246,13 @@ Bind the runner's listener to its `runner-ctl` address
 (`[listen] address = "10.213.251.10:7443"`) and `serve` to its `frontend`
 address (`[server] listen = "10.213.250.10:8080"`), so neither port is
 reachable from the other networks, including the runner's per-run networks.
+The own-proxy variant is the exception: Docker assigns `serve`'s address on
+your proxy's network, so setup writes `listen = "0.0.0.0:8080"` with
+`allow_wildcard_listen = true` there; `serve` then accepts connections only
+on its own address on your proxy's network (and loopback for its
+healthcheck) and closes every other one, so its other networks still cannot
+reach port 8080 (D-215,
+[reverse-proxy.md](reverse-proxy.md#set-it-up)).
 Likewise bind the Prometheus endpoint to serve's address on the internal
 `metrics` network (`[metrics] listen = "10.213.252.10:9464"`); it is never
 published (see [Operations: metrics](../operations.md#metrics)).
@@ -285,15 +294,24 @@ written before the summary:
    digest (it then asks for `repo:tag@sha256:<digest>`); with a digest
    there is no question
    ([Following `:latest`](upgrades.md#following-latest));
-1. the reverse proxy: bekup's own Traefik, your existing Traefik (its HTTPS
-   entrypoint and certificate resolver are asked, defaults `websecure` and
-   `letsencrypt`), Nginx Proxy Manager, or none (your own proxy joins the
-   `frontend` network; its CIDR is asked);
+1. the reverse proxy: bekup's own Traefik, your own reverse proxy on this
+   Docker host (the Docker network it is on and its container name, then
+   whether to add Traefik Docker labels: default no; with yes its HTTPS
+   entrypoint and certificate resolver, defaults `websecure` and
+   `letsencrypt`). A proxy on another machine is not a wizard choice
+   (D-215): use the advanced flags of the
+   [setup-first install](#alternative-setup-first) (`--variant full
+   --proxy none --trusted-proxy <cidr>`: run a small proxy on this host,
+   or route to bekup's `frontend` network yourself);
 2. the public host name (and, for bekup's Traefik, the Let's Encrypt
    e-mail and whether to use the staging CA);
-3. the database: bundled, or your existing PostgreSQL with host, port,
-   database name, the CA bundle file (put it into the directory first), an
-   optional TLS server name and how the roles come to exist
+3. the database: bundled, or your existing PostgreSQL: a container on this
+   Docker host (its Docker network and container name) or another server
+   (host name), port, database name, the TLS mode (verify with a CA file,
+   the default: put the file into the directory first; verify with the
+   system CA bundle; or, after a warning and an explicit confirmation, the
+   weakened `require` or `disable`), an optional TLS server name and how the
+   roles come to exist
    ([below](#your-own-postgresql-external-database-files));
 4. the master encryption key: generate a new one, or import your existing
    key file (reinstall; put the file into the directory; an optional
@@ -352,7 +370,7 @@ With the committed file (works today, also for your own image):
 
 ```sh
 sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
-# compose.yaml (own Traefik), compose.traefik-external.yaml or compose.npm.yaml
+# compose.yaml (own Traefik) or compose.own-proxy.yaml (your own reverse proxy)
 sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.yaml
 BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest> \
   DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup
@@ -386,10 +404,12 @@ docker compose up -d
 docker compose run --rm admin create --email you@example.com --display-name "You"
 ```
 
-For the external variants create the link network first
-([above](#architecture-in-compose)); `setup` itself runs without it. For an
-`*.external-db.yaml` file put your PostgreSQL's CA bundle into the directory
-first; setup asks for the database
+For `compose.own-proxy.yaml` look up your proxy's Docker network and
+container name first (`docker inspect <proxy container> --format '{{json
+.NetworkSettings.Networks}}'`; [reverse-proxy.md](reverse-proxy.md#find-the-network-and-the-container-name));
+`setup` itself runs without a network. For an `*.external-db.yaml` file put
+your PostgreSQL's CA bundle into the directory first when you verify
+against a CA file (the default); setup asks for the database
 ([below](#your-own-postgresql-external-database-files)).
 
 **Verify the release file before running it.** `gh attestation verify` checks the
@@ -404,7 +424,7 @@ cosign verify-blob --bundle compose.yaml.sigstore.json \
   compose.yaml
 ```
 
-Every release also publishes `SHA256SUMS` over the six compose files
+Every release also publishes `SHA256SUMS` over the four compose files
 (with its own bundle and attestation). The release workflow renders the
 files by running the published, scanned and signed image
 (`setup compose --image <ref>`, no network, read-only, UID 65532) and checks
@@ -428,23 +448,30 @@ container that runs it (the check still reads and lints the override):
 | Variant | Prompts |
 |---|---|
 | `traefik` | public host name, ACME e-mail, CA key passphrase (twice, no echo) |
-| `traefik-external`, `npm` | public host name, CA key passphrase |
-| any `*.external-db.yaml` | additionally: database host, CA bundle file, roles (`bootstrap`, `existing-roles`, `dba-sql`, `single-account`), the account for single-account, role passwords for existing roles (twice, no echo) |
+| `own-proxy` | your proxy's Docker network and container name, Traefik labels (default no; then entrypoint and certificate resolver), public host name, CA key passphrase |
+| any `*.external-db.yaml` | additionally: a container on this Docker host (its network and name) or another server (host), port, database name, the TLS mode and, for the default, the CA bundle file, roles (`bootstrap`, `existing-roles`, `dba-sql`, `single-account`), the account for single-account, role passwords for existing roles (twice, no echo) |
 
 The Docker socket's group comes from `DOCKER_GID` (the compose file passes
 it into the container), otherwise setup asks. Everything else has defaults
 or flags: `--tls-mode static` (own certificate in `proxy-tls/`, see
-[reverse-proxy.md](reverse-proxy.md)), `--acme-staging`,
-`--traefik-entrypoint` / `--traefik-certresolver` (traefik-external,
-defaults `websecure` / `letsencrypt`), `--proxy-network`,
-`--proxy-subnet`, `--proxy-ip`, `--serve-ip`, `--target-cidr` /
+[reverse-proxy.md](reverse-proxy.md)), `--acme-staging`, the
+[own reverse proxy](reverse-proxy.md#own-reverse-proxy) flags
+`--proxy-network` (the Docker network your proxy is on),
+`--proxy-container` (its container name, trusted by name),
+`--proxy-labels` (Traefik Docker-provider labels on `serve`, default off)
+with `--traefik-entrypoint` / `--traefik-certresolver` (defaults
+`websecure` / `letsencrypt`), the advanced `--proxy-network-mode join|link`
+(default `join`) with, for `link` only, `--proxy-subnet`, `--proxy-ip` and
+`--serve-ip`, then `--target-cidr` /
 `--target-host` (the runner may reach no database until you allow one in
 `runner.toml` or here), `--keys-dir`, `--ownership`, the passphrase
 sources `--ca-passphrase-file`, `--ca-passphrase-stdin`,
 `--generate-ca-passphrase`, `--import-master-key <file>` (with
 `--master-key-check-value`), `--use-existing-ca`, and the
 [external database](#your-own-postgresql-external-database-files) flags
-`--database external`, `--db-host`, `--db-port`, `--db-name`,
+`--database external`, `--db-location docker|remote`, `--db-network`,
+`--db-host`, `--db-port`, `--db-name`,
+`--db-tls verify-ca-file|verify-system|require|disable`,
 `--db-ca-file`, `--db-tls-server-name`, `--db-auth`, `--db-user`,
 `--db-admin-user`, `--db-password-file`, `--db-owner-password-file`. With `--non-interactive` every answer must come
 from flags. All answers are validated against strict patterns, so nothing
@@ -474,6 +501,21 @@ can be injected into `.env` or the TOML files. Full reference:
   `compose.override.yaml` are *yours*: setup never writes `compose.yaml`,
   writes the others once and afterwards only validates them. The TOML files
   are minimal, so safer defaults of new releases keep applying.
+- **Setup-only blocks in `compose.override.yaml`** (D-215): the Traefik
+  labels on `serve` (`--proxy-labels`), `serve`'s fixed address on the link
+  network (`--proxy-network-mode link`) and the database container's
+  network (`--db-location docker`) are never part of a release file (nor
+  is the proxy's certificate mount of `--tls-mode static`). setup writes
+  them into a new `compose.override.yaml` (compose-first and setup-first),
+  so `compose.yaml` stays the byte-exact release file, and records them in
+  `bekup-setup.json`. setup never rewrites an existing override (not
+  `setup init`, also not with `--force`, and not `setup upgrade`): it must
+  already carry the blocks, otherwise `setup init` and `setup upgrade`
+  refuse and print them to add (`setup upgrade` writes a new override only
+  for a [retired variant](upgrades.md#retired-variants-traefik-external-and-npm)
+  without one). Merge your own changes into the existing `services:` and
+  `networks:` keys (a second `services:` or `networks:` key is invalid
+  YAML).
 - **Local changes** go into `compose.override.yaml` (docker compose merges
   it automatically), never into `compose.yaml`: then an upgrade is a plain
   file replacement.
@@ -512,7 +554,8 @@ A file with more than one YAML document (`---`) is refused outright.
 
 **The lint is a guardrail, not a proof** (D-205 amendment 2). A deployment
 is *verified* only when `compose.yaml` is the attested release file byte
-for byte (recognized as *exact*), there is **no** `compose.override.yaml`,
+for byte (recognized as *exact*), there is **no** `compose.override.yaml`
+(or one with only the blocks setup wrote, which the lint holds exactly),
 and setup recorded the file's `x-bekup-image`. The committed file from
 `deploy/compose/` is recognized as *exact* too, but it is not attested:
 compare it with the repository at the tag of your image (for example
@@ -540,8 +583,10 @@ Errors:
 - **bekup's services are pinned.** Every service the variant ships
   (`setup`, `certs-init`, `migrate`, `admin`, `serve`, `runner`,
   `postgres`, and `traefik`/`traefik-init` or `nginx`/`nginx-init`/
-  `certbot` where shipped) must equal the shipped definition, resolved
-  with the same `.env`, in every attribute: image, entrypoint, command,
+  `certbot` where shipped) must equal the shipped definition plus the
+  setup-only blocks the deployment records (above; a missing, changed or
+  extended block is an error, and `setup check` prints the expected
+  blocks), resolved with the same `.env`, in every attribute: image, entrypoint, command,
   environment, `env_file`, user, `group_add`, capabilities,
   `security_opt`, `read_only`, tmpfs, volumes (bind options, SELinux),
   networks (aliases, addresses), `network_mode`, namespaces, ports,
@@ -560,11 +605,13 @@ Errors:
 
   The `setup` service has no tunables (root with `CAP_CHOWN` only, no
   network, no logs). The shipped networks (`internal`, driver, subnets,
-  name, the external link network), volumes, secrets, configs and the
-  project name are pinned too (the name also as written: no variables in
-  `name:`).
+  name, the external `proxy` and `database` networks), volumes, secrets,
+  configs and the project name are pinned too (the name also as written:
+  no variables in `name:`). Only `serve` is on `proxy`, and only
+  `migrate`, `serve` and `admin` are on `database`.
 - **Compose variables:** only bekup's own (`ACME_CA_SERVER`, `ACME_EMAIL`,
-  `BEKUP_DOMAIN`, `BEKUP_KEYS_DIR`, `BEKUP_PROXY_NETWORK`, `DOCKER_GID`,
+  `BEKUP_DB_NETWORK`, `BEKUP_DOMAIN`, `BEKUP_IMAGE_MODE`, `BEKUP_KEYS_DIR`,
+  `BEKUP_PROXY_NETWORK`, `BEKUP_SETUP_VERSION`, `DOCKER_GID`,
   `FRONTEND_SUBNET`, `METRICS_SUBNET`, `PROXY_FRONTEND_IP`,
   `PROXY_TLS_MODE`, `RUNNER_CTL_IP`, `RUNNER_CTL_SUBNET`,
   `SERVE_FRONTEND_IP`, `SERVE_METRICS_IP`, `SERVE_PROXY_IP`,
@@ -598,7 +645,8 @@ Errors:
   `image`/`npipe`/`cluster` mounts; none of bekup's named volumes,
   secrets or configs; networks only their own, `metrics` (for a
   Prometheus) and, in the `full` variant, `frontend` (your own proxy with
-  `--proxy none`), without aliases, `container_name` or `mac_address` on
+  `--proxy none`), never bekup's `proxy` or `database` network, without
+  aliases, `container_name` or `mac_address` on
   bekup's networks and without fixed addresses (`ipv4_address`,
   `ipv6_address`, `mac_address`, `link_local_ips`) there, except on
   `frontend` in the `full` variant, where the address must differ from
@@ -648,20 +696,29 @@ bundled form:
   `deploy/postgres` and no `postgres` certificate;
 - `bekup.toml [database]` is in fields mode: `host`, `port`, `name`,
   `user = "bekup_app"`, `password_file`, `owner_user = "bekup_owner"`,
-  `owner_password_file`, `tls_mode = "verify-full"`, `tls_ca_file` and an
+  `owner_password_file`, `tls_mode` and `tls_ca_file` from the TLS choice
+  ([`--db-tls`](external-database.md#tls-modes): `verify-ca-file`, the
+  default, `verify-system`, or the weakened `require` / `disable`) and an
   optional `tls_server_name`;
 - the passwords live in `secrets/bekup_database_password` (serve, admin,
   migrate) and `secrets/bekup_database_owner_password` (migrate only),
   mounted as the Docker secrets of the same names;
-- setup copies the CA bundle you named (a PEM file inside the deployment
-  directory; only `CERTIFICATE` blocks are accepted) to
-  `secrets/bekup_database_ca.crt`, mounted as `bekup_db_ca_crt` at the
-  default `tls_ca_file` path; only that bundle is trusted;
-- the **`backend` network is not internal**: an internal network has no
-  route off the host. Docker cannot narrow it to the database's address, so
-  serve, migrate and admin can reach other hosts through it (serve already
-  can, through `egress`). **Allow only this host** in the database's
-  firewall (security group) and `pg_hba.conf`, and keep `verify-full`.
+- with `verify-ca-file` setup copies the CA bundle you named (a PEM file
+  inside the deployment directory; only `CERTIFICATE` blocks are accepted)
+  to `secrets/bekup_database_ca.crt`, mounted as `bekup_db_ca_crt` at the
+  default `tls_ca_file` path; only that bundle is trusted. The other
+  choices leave that file empty (it stays mounted);
+- for a database on another server the **`backend` network is not
+  internal**: an internal network has no route off the host. Docker cannot
+  narrow it to the database's address, so serve, migrate and admin can
+  reach other hosts through it (serve already can, through `egress`).
+  **Allow only this host** in the database's firewall (security group) and
+  `pg_hba.conf`, and keep `verify-full`;
+- for a database **container on this Docker host** (`--db-location docker
+  --db-network <net>`), `migrate`, `serve` and `admin` join its network
+  instead (the external network `database`, `BEKUP_DB_NETWORK`, a block in
+  `compose.override.yaml`) and `backend` stays internal
+  ([external-database.md](external-database.md#database-container-on-this-docker-host)).
 
 setup runs without a network, so it never connects to the database. How
 bekup's roles come to exist (`--db-auth`):
@@ -684,7 +741,9 @@ docker compose up -d
 ```
 
 `setup check` checks the files (presence, owners, modes), that `bekup.toml`
-names exactly the mounted paths, reports a weaker `tls_mode` as a warning,
+names exactly the mounted paths (or the system bundle), reports the
+recorded `require`/`disable` choice and any other weaker `tls_mode` as a
+warning, `BEKUP_DB_NETWORK` against the recorded database network,
 an expired CA bundle (an error only when no certificate in it is valid),
 and `PG*` or `BEKUP_DATABASE_*` variables in `.env` as errors. The database
 itself is checked from the migrate container (`migrate check`). Switching
@@ -694,11 +753,16 @@ new directory and move the data with a dump and restore
 
 ## Alternative: setup-first
 
-With `--write-compose --variant traefik|traefik-external|npm|full`, setup
+With `--write-compose --variant traefik|own-proxy|full` (or `--proxy
+traefik|own`, which implies the variant), setup
 also writes `compose.yaml` itself (generated-upgradable, with a "GENERATED"
 header). Use it for the `full` variant (every service of the repository
 file; `--proxy traefik`, `nginx`, or `none` for your own proxy on the
-`frontend` network with `--trusted-proxy <cidr>`), or when you cannot
+`frontend` network with `--trusted-proxy <cidr>`: the advanced path when
+your proxy is not a container on this Docker host, so run a small proxy
+on this host or route to bekup's `frontend` network yourself; serve's
+port is never published,
+[reverse-proxy.md](reverse-proxy.md#using-your-own-reverse-proxy)), or when you cannot
 download the release file. Run setup with `docker run` and the same
 hardening as the compose service:
 
@@ -788,9 +852,10 @@ is still the recorded variant (a switch is an error; an image newer than
 the one setup last ran with asks for `setup upgrade`, an older one is an
 error), the [hardening lint](#the-override-file-and-the-hardening-lint),
 that `bekup.toml`/`runner.toml` validate and agree with `.env`
-(`base_url` and `BEKUP_DOMAIN`, `trusted_proxies` exactly the proxy's /32,
-listen addresses, the link network of the external variants, both Docker
-GIDs), certificate expiry, variables that
+(`base_url` and `BEKUP_DOMAIN`, `trusted_proxies` exactly the proxy's /32
+or, own-proxy join mode, empty with `trusted_proxy_hosts` exactly the
+recorded container, listen addresses, `BEKUP_PROXY_NETWORK` and the link
+network, both Docker GIDs), certificate expiry, variables that
 would override `.env` from the environment, and whether the CA key is still
 on disk (an expiring certificate points to `bekup setup renew`), and for an
 external database the checks [above](#your-own-postgresql-external-database-files).
@@ -836,7 +901,7 @@ never become bekup's configuration.
 | `.env` | operator | 0:0 | 0644 |
 | `bekup.toml` | operator | 0:0 | 0644 |
 | `runner.toml` | operator | 0:0 | 0644 |
-| `compose.override.yaml` (static TLS only) | operator | 0:0 | 0644 |
+| `compose.override.yaml` (static TLS or setup-only overlays, D-215) | operator | 0:0 | 0644 |
 | `proxy-tls/` | operator | 0:0 | 0755 |
 | `reference/` | generated-upgradable | 0:0 | 0755 |
 | `reference/bekup.example.toml` | generated-upgradable | 0:0 | 0644 |
@@ -918,7 +983,7 @@ locally built `bekup:dev`. Production installs should use `bekup setup`.
 In the `traefik` variant Traefik starts with the stack (no profile). In the
 `full` variant (setup-first, or the repository file) TLS for the UI is
 terminated by one of two compose profiles; enable exactly one of them. The
-external variants use your own Traefik or Nginx Proxy Manager. Full details
+`own-proxy` variant uses your own reverse proxy. Full details
 are in [reverse-proxy.md](reverse-proxy.md).
 
 | Profile | Services | Notes |

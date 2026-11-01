@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/jlentink/bekup/internal/auth"
@@ -30,7 +31,7 @@ var errNotReady = errors.New("component not ready")
 var (
 	reloadKeysLog  = []string{"log.level"}
 	reloadKeysHTTP = []string{
-		"server.trusted_proxies", "server.max_body_bytes", "server.rate_limit_per_second",
+		"server.trusted_proxies", "server.trusted_proxy_hosts", "server.max_body_bytes", "server.rate_limit_per_second",
 		"server.rate_limit_burst", "server.user_rate_limit_per_second", "server.user_rate_limit_burst",
 	}
 	reloadKeysGraphQL  = []string{"graphql.max_complexity", "graphql.max_depth", "graphql.max_body_bytes"}
@@ -205,7 +206,7 @@ func (a *App) newReloader() error {
 	}
 	r, err := configreload.New(configreload.Options{
 		DB: a.pool, Auditor: a.auditor, Load: a.opts.LoadOptions, ConfigPath: a.opts.ConfigPath, Dev: a.opts.Dev,
-		Running: a.opts.Config, Warnings: a.opts.Warnings, Appliers: a.reloadAppliers(),
+		Running: a.opts.Config, Warnings: append(slices.Clone(a.opts.Warnings), a.opts.KnownWarnings...), Appliers: a.reloadAppliers(),
 		InstanceID: a.instanceID, Kind: kind, Hostname: host, Version: a.opts.Version, StartedAt: a.startedAt,
 		Metrics: a.metrics, Logger: a.opts.Logger,
 	})

@@ -33,6 +33,34 @@ the keys, and **every `PG*` environment variable is ignored** (`PGHOST`,
 needs an IP SAN in the server certificate, or `tls_server_name` with a DNS
 name the certificate carries. Unix sockets are not supported in fields mode.
 
+### Setup choices for an external database
+
+For your own PostgreSQL, `bekup setup` offers four TLS choices (`--db-tls`,
+D-215; [external-database.md](../installation/external-database.md#tls-modes)).
+They map to the modes above; nothing new is added, and the bundled
+database is unchanged (always `verify-full` against its own CA):
+
+| `--db-tls` | `tls_mode` | `tls_ca_file` |
+|---|---|---|
+| `verify-ca-file` (default) | `verify-full` | `/run/secrets/bekup_db_ca.crt` (the copied `--db-ca-file`) |
+| `verify-system` | `verify-full` | `/etc/ssl/certs/ca-certificates.crt` (the bekup image's system bundle) |
+| `require` | `require` | `""` (nothing verified) |
+| `disable` | `disable` | `""` |
+
+`require` and `disable` are the [weakened modes](#weakened-modes) below,
+with their full treatment; setup (wizard and terminal prompts) asks for an
+explicit confirmation after a warning and `setup check` reports them.
+SCRAM-SHA-256 applies in every mode, channel binding whenever TLS is on.
+
+A private Docker network does not make `disable` safe: containers get
+`CAP_NET_RAW` by default, so any container on the database's network can
+ARP-spoof the database's address. Without TLS there is no channel binding,
+so it can relay the SCRAM login and take over the session, including
+`bekup_owner`'s while `migrate` runs and the admin account's during
+`bekup db bootstrap`. With `require` channel binding still stops a relayed
+login. Prefer `require` over `disable` even on a private Docker network,
+and a verifying choice wherever the server presents a certificate.
+
 ### Weakened modes
 
 `require` and `disable` are accepted but weaken the deployment: bekup logs a

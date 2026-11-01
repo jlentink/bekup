@@ -1,12 +1,16 @@
 package db
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +39,79 @@ type TLSOptions struct {
 	// verified against (verify-full) and the SNI value, instead of the
 	// connection host (database.tls_server_name, D-207).
 	ServerName string
+	// SystemBundle is set when database.tls_ca_file is the image's system
+	// CA bundle (config.SystemCABundle, D-215): it was loaded leniently
+	// (LoadSystemCABundle) and these are its counts (LogSystemBundle).
+	SystemBundle *BundleStats
+}
+
+// BundleStats counts the certificates of a leniently loaded CA bundle.
+type BundleStats struct {
+	// Loaded certificates are trust anchors.
+	Loaded int
+	// Skipped certificates (or other PEM blocks) did not parse and are not
+	// trusted.
+	Skipped int
+}
+
+// systemCABundlePath is config.SystemCABundle (a variable for tests).
+var systemCABundlePath = config.SystemCABundle
+
+// LoadSystemCABundle reads the image's system CA bundle at path leniently
+// (D-215, "verify with the system CA bundle"): a distribution bundle can
+// carry certificates Go's parser refuses (for example a negative serial
+// number); they are skipped and counted instead of failing the whole
+// bundle, and at least one certificate must parse. Operator CA files
+// (database.tls_ca_file anywhere else) stay strict. The Dockerfile runs
+// this loader on the runtime image's bundle at build time.
+func LoadSystemCABundle(path string) (*x509.CertPool, BundleStats, error) {
+	data, err := config.ReadPublicFile(path)
+	if err != nil {
+		return nil, BundleStats{}, err
+	}
+	return ParseSystemCABundle(data)
+}
+
+// ParseSystemCABundle parses a system CA bundle leniently (see
+// LoadSystemCABundle).
+func ParseSystemCABundle(data []byte) (*x509.CertPool, BundleStats, error) {
+	var st BundleStats
+	pool := x509.NewCertPool()
+	rest := data
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type != "CERTIFICATE" {
+			st.Skipped++
+			continue
+		}
+		c, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			st.Skipped++
+			continue
+		}
+		pool.AddCert(c)
+		st.Loaded++
+	}
+	if st.Loaded == 0 {
+		return nil, st, fmt.Errorf("no usable certificate in the system CA bundle (%d skipped)", st.Skipped)
+	}
+	return pool, st, nil
+}
+
+// LogSystemBundle logs, once per caller, how many certificates of the
+// system CA bundle were loaded and skipped (nothing without one). Counts
+// only; certificate contents are public anyway but never logged.
+func (o TLSOptions) LogSystemBundle(ctx context.Context, logger *slog.Logger) {
+	if o.SystemBundle == nil || logger == nil {
+		return
+	}
+	logger.InfoContext(ctx, "database.tls_ca_file is the system CA bundle; certificates Go cannot parse are skipped",
+		slog.String("path", systemCABundlePath),
+		slog.Int("loaded", o.SystemBundle.Loaded), slog.Int("skipped", o.SystemBundle.Skipped))
 }
 
 // LoadTLSOptions reads the database.tls_* files of a validated config. The
@@ -46,7 +123,14 @@ func LoadTLSOptions(c *config.Bekup) (TLSOptions, error) {
 	if d.TLSMode == config.DBTLSDisable {
 		return o, nil
 	}
-	if d.TLSCAFile != "" {
+	switch {
+	case d.TLSCAFile != "" && filepath.Clean(d.TLSCAFile) == systemCABundlePath:
+		pool, st, err := LoadSystemCABundle(d.TLSCAFile)
+		if err != nil {
+			return TLSOptions{}, fmt.Errorf("database.tls_ca_file %s: %w", d.TLSCAFile, err)
+		}
+		o.RootCAs, o.SystemBundle = pool, &st
+	case d.TLSCAFile != "":
 		pemData, err := config.ReadPublicFile(d.TLSCAFile)
 		if err != nil {
 			return TLSOptions{}, fmt.Errorf("database.tls_ca_file: %w", err)

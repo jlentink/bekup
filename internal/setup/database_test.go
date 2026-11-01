@@ -198,6 +198,24 @@ func TestDatabaseAnswersValidate(t *testing.T) {
 		{"same files", func(d *Database) { d.PasswordFile, d.OwnerPasswordFile = "p", "p" }, "db-owner-password-file"},
 		{"admin user dba", func(d *Database) { d.Auth, d.AdminUser = DBAuthDBASQL, "postgres" }, "db-admin-user"},
 		{"admin user pg_", func(d *Database) { d.AdminUser = "pg_monitor" }, "db-admin-user"},
+		// D-215: location, Docker network and TLS choices.
+		{"docker", func(d *Database) { d.Location, d.Network, d.Host = DBDocker, "dbnet", "postgres" }, ""},
+		{"docker without network", func(d *Database) { d.Location, d.Host = DBDocker, "postgres" }, "db-network"},
+		{"docker bad network", func(d *Database) { d.Location, d.Network = DBDocker, "net work" }, "db-network"},
+		{"docker default bridge", func(d *Database) { d.Location, d.Network = DBDocker, "bridge" }, "db-network"},
+		{"docker underscore host", func(d *Database) { d.Location, d.Network, d.Host = DBDocker, "dbnet", "app_db_1" }, "compose service name"},
+		{"remote with network", func(d *Database) { d.Network = "dbnet" }, "db-network"},
+		{"bad location", func(d *Database) { d.Location = "cloud" }, "db-location"},
+		{"verify-system", func(d *Database) { d.TLS, d.CAFile = DBTLSVerifySystem, "" }, ""},
+		{"verify-system with sni", func(d *Database) { d.TLS, d.CAFile, d.TLSServerName = DBTLSVerifySystem, "", "db.example.com" }, ""},
+		{"verify-system with ca", func(d *Database) { d.TLS = DBTLSVerifySystem }, "db-ca-file"},
+		{"require", func(d *Database) { d.TLS, d.CAFile = DBTLSRequire, "" }, ""},
+		{"require with ca", func(d *Database) { d.TLS = DBTLSRequire }, "db-ca-file"},
+		{"require with sni", func(d *Database) { d.TLS, d.CAFile, d.TLSServerName = DBTLSRequire, "", "db.example.com" }, "db-tls-server-name"},
+		{"disable", func(d *Database) { d.TLS, d.CAFile = DBTLSDisable, "" }, ""},
+		{"disable with ca", func(d *Database) { d.TLS = DBTLSDisable }, "db-ca-file"},
+		{"bad tls", func(d *Database) { d.TLS, d.CAFile = "prefer", "" }, "db-tls"},
+		{"verify-ca-file explicit", func(d *Database) { d.TLS = DBTLSVerifyCAFile }, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -661,4 +679,148 @@ func checkFindings(t *testing.T, dir string) ([]Finding, string) {
 		t.Fatal(err)
 	}
 	return fs, out
+}
+
+// TestInitDatabaseTLSChoices: every TLS choice (D-215) writes its
+// [database] keys, an empty CA file where none is used, the weakening
+// warning, the bootstrap flag for the weak modes, and passes setup check
+// (weak modes with a warning).
+func TestInitDatabaseTLSChoices(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		tls      DBTLS
+		lines    []string
+		insecure bool
+		emptyCA  bool
+	}{
+		{DBTLSVerifyCAFile, []string{`tls_mode = "verify-full"`, `tls_ca_file = "/run/secrets/bekup_db_ca.crt"`}, false, false},
+		{DBTLSVerifySystem, []string{`tls_mode = "verify-full"`, `tls_ca_file = "` + config.SystemCABundle + `"`}, false, true},
+		{DBTLSRequire, []string{`tls_mode = "require"`, `tls_ca_file = ""`}, true, true},
+		{DBTLSDisable, []string{`tls_mode = "disable"`, `tls_ca_file = ""`}, true, true},
+	} {
+		t.Run(string(tc.tls), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			a := externalAnswers(t, dir, DBAuthBootstrap)
+			a.DB.TLS = tc.tls
+			if tc.tls != DBTLSVerifyCAFile {
+				a.DB.CAFile = ""
+			}
+			out := mustInit(t, dir, a).String()
+			bt := string(readFile(t, dir, BekupTOML))
+			for _, l := range tc.lines {
+				if !hasLine(bt, l) {
+					t.Errorf("bekup.toml lacks %s:\n%s", l, bt)
+				}
+			}
+			ca := readFile(t, dir, Layout{KeysDir: DefaultKeysDir}.keys(dbCAName))
+			if (len(ca) == 0) != tc.emptyCA {
+				t.Errorf("CA file: %d bytes", len(ca))
+			}
+			if got := strings.Contains(out, "--allow-insecure-admin-connection"); got != tc.insecure {
+				t.Errorf("bootstrap flag %v:\n%s", got, out)
+			}
+			if got := strings.Contains(out, "EXPLICIT WEAKENING"); got != tc.insecure {
+				t.Errorf("weakening warning %v:\n%s", got, out)
+			}
+			if st := mustState(t, dir); st.DatabaseTLS != tc.tls || st.DatabaseLocation != DBRemote {
+				t.Errorf("state %+v", st)
+			}
+			fs, report, err := runCheck(t, dir, nil)
+			if err != nil {
+				t.Fatalf("check: %v\n%s", err, report)
+			}
+			if got := hasFinding(fs, SeverityWarning, "weaker than verify-full"); got != tc.insecure {
+				t.Errorf("weak TLS warning %v:\n%s", got, report)
+			}
+		})
+	}
+	// An emptied CA file of verify-ca-file is a check error.
+	dir := t.TempDir()
+	mustInit(t, dir, externalAnswers(t, dir, DBAuthBootstrap))
+	if err := os.WriteFile(pathIn(dir, Layout{KeysDir: DefaultKeysDir}.keys(dbCAName)), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if fs, report, err := runCheck(t, dir, nil); !errors.Is(err, ErrCheckFailed) || !hasFinding(fs, SeverityError, "is empty, but setup configured --db-tls verify-ca-file") {
+		t.Fatalf("empty CA:\n%s", report)
+	}
+}
+
+// TestDBNextStepsPSQL: the DBA's psql line follows the TLS choice.
+func TestDBNextStepsPSQL(t *testing.T) {
+	t.Parallel()
+	for tls, want := range map[DBTLS]string{
+		"": "sslmode=verify-full sslrootcert=<ca.pem>", DBTLSVerifySystem: "sslmode=verify-full sslrootcert=system",
+		DBTLSRequire: "sslmode=require", DBTLSDisable: "sslmode=disable",
+	} {
+		d := Database{Mode: DBExternal, Host: "db", Port: 5432, Name: "bekup", Auth: DBAuthDBASQL, TLS: tls}
+		if got := strings.Join(dbNextSteps(&d, Layout{KeysDir: "secrets"}), "\n"); !strings.Contains(got, want) {
+			t.Errorf("%q: %s", tls, got)
+		}
+	}
+}
+
+// TestComposeFirstDatabaseContainer: own proxy plus a database container
+// on a Docker network (D-215): setup writes the overlay into a new
+// compose.override.yaml, BEKUP_DB_NETWORK to .env, and check passes; an
+// existing override without the blocks is refused with them.
+func TestComposeFirstDatabaseContainer(t *testing.T) {
+	t.Parallel()
+	for _, v := range ReleaseVariants {
+		t.Run(string(v), func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			writeReleaseDB(t, dir, v, DBExternal, variantImage)
+			db := Database{Location: DBDocker, Network: "dbnet", Host: "postgres", TLS: DBTLSDisable}
+			// An override of the operator's own without the blocks.
+			if err := os.WriteFile(pathIn(dir, OverrideFile), []byte("services: {}\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := composeFirstInit(t, dir, v, func(o *Options) { o.Answers.DB = db }); err == nil ||
+				!strings.Contains(err.Error(), "add these blocks") || !strings.Contains(err.Error(), "BEKUP_DB_NETWORK") {
+				t.Fatalf("existing override: %v", err)
+			}
+			if err := os.Remove(pathIn(dir, OverrideFile)); err != nil {
+				t.Fatal(err)
+			}
+			out, err := composeFirstInit(t, dir, v, func(o *Options) { o.Answers.DB = db })
+			if err != nil {
+				t.Fatalf("init: %v\n%s", err, out)
+			}
+			ov := Overlays{DBNetwork: true}
+			if got := string(readFile(t, dir, OverrideFile)); got != overlayHeader+overlayDoc(ov, "") {
+				t.Fatalf("override:\n%s", got)
+			}
+			if env := string(readFile(t, dir, EnvFile)); !hasLine(env, "BEKUP_DB_NETWORK=dbnet") {
+				t.Fatalf(".env:\n%s", env)
+			}
+			st := mustState(t, dir)
+			if st.DatabaseLocation != DBDocker || st.DBNetwork != "dbnet" || st.DatabaseTLS != DBTLSDisable || !st.overlays().DBNetwork {
+				t.Fatalf("state %+v", st)
+			}
+			fs, report, err := runCheck(t, dir, nil)
+			if err != nil || hasErrors(fs) {
+				t.Fatalf("check: %v\n%s", err, report)
+			}
+			// A foreign service on the database network, a renamed network.
+			if err := os.WriteFile(pathIn(dir, OverrideFile), []byte(overlayHeader+overlayDoc(ov, "")+"  # end\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			over := string(readFile(t, dir, OverrideFile))
+			over = strings.Replace(over, "services:\n", "services:\n"+evilService+"    networks: [database]\n", 1)
+			if err := os.WriteFile(pathIn(dir, OverrideFile), []byte(over), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if fs, report, err := runCheck(t, dir, nil); !errors.Is(err, ErrCheckFailed) || !hasFinding(fs, SeverityError, `may not join bekup's network "database"`) {
+				t.Fatalf("foreign service:\n%s", report)
+			}
+			if err := os.WriteFile(pathIn(dir, OverrideFile), []byte(overlayHeader+overlayDoc(ov, "")), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			replaceIn(EnvFile, "BEKUP_DB_NETWORK=dbnet", "BEKUP_DB_NETWORK=other")(t, dir)
+			if fs, report, err := runCheck(t, dir, nil); !errors.Is(err, ErrCheckFailed) || !hasFinding(fs, SeverityError, "BEKUP_DB_NETWORK") {
+				t.Fatalf("renamed network:\n%s", report)
+			}
+		})
+	}
 }

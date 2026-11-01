@@ -38,6 +38,7 @@ var alertRepeat = map[string]string{
 	KindInsecureDBTLS:              "once a day",
 	KindInsecureDBRoles:            "once a day",
 	KindUnpinnedImage:              "once a day",
+	KindServeAliasConflict:         "once per set of foreign addresses and day",
 	KindAuditHeadExportFailed:      "once a day",
 	KindTLSPinMismatch:             "once per connection and day",
 	KindSSHHostKeyMismatch:         "once per connection and day",

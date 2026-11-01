@@ -25,6 +25,9 @@ func TestFromEnv(t *testing.T) {
 		{name: "bad version", env: map[string]string{EnvSetupVersion: "latest"}, wantErr: true},
 		{name: "bad version chars", env: map[string]string{EnvSetupVersion: "1.2.3;rm"}, wantErr: true},
 		{name: "bad mode", env: map[string]string{EnvImageMode: "Following"}, wantErr: true},
+		{name: "own-proxy join", env: map[string]string{EnvListenShape: "own-proxy-join"}, want: Deployment{OwnProxyJoin: true}},
+		{name: "empty shape", env: map[string]string{EnvListenShape: ""}},
+		{name: "bad shape", env: map[string]string{EnvListenShape: "anything"}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,5 +110,18 @@ func TestCheck(t *testing.T) {
 				t.Fatalf("message lacks the remedy: %v", err)
 			}
 		})
+	}
+}
+
+func TestExpectedWildcardListen(t *testing.T) {
+	join := Deployment{OwnProxyJoin: true}
+	if !join.ExpectedWildcardListen("0.0.0.0:8080", "0.0.0.0:8080") {
+		t.Error("the join shape expects exactly its listen address")
+	}
+	if join.ExpectedWildcardListen(":8080", "0.0.0.0:8080") || join.ExpectedWildcardListen("[::]:8080", "0.0.0.0:8080") {
+		t.Error("another wildcard form is not the recorded shape")
+	}
+	if (Deployment{}).ExpectedWildcardListen("0.0.0.0:8080", "0.0.0.0:8080") {
+		t.Error("without the shape the warning stays")
 	}
 }

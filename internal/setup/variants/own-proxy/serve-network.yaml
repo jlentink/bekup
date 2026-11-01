@@ -1,0 +1,6 @@
+      proxy:
+        # YOUR reverse proxy's Docker network (BEKUP_PROXY_NETWORK). Your
+        # proxy forwards to http://bekup-serve:8080; bekup.toml [server]
+        # trusted_proxy_hosts names your proxy's container, so only it may
+        # forward client addresses (X-Forwarded-For).
+        aliases: [bekup-serve]

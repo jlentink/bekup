@@ -375,9 +375,9 @@ jobs:
   # --fix-ownership` on the chowned tree (both with CAP_CHOWN only, no
   # CAP_FOWNER). Compose-first, end to end as in the README: the bundled
   # Traefik variant with a static self-signed certificate (up, /healthz
-  # through Traefik, first admin, check, down -v) and the Nginx Proxy
-  # Manager variant on the bekup-proxy link network with a pinned curl
-  # container standing in for the proxy at 10.213.253.5. External database
+  # through Traefik, first admin, check, down -v) and the own-proxy variant
+  # (D-215) joining a network of a pinned curl container that stands in for
+  # Nginx Proxy Manager, trusted by its container name. External database
   # (D-208): a TLS PostgreSQL container published on the host's address,
   # setup with --database external (flags, the CA bundle in the directory,
   # --db-tls-server-name), the one-time bootstrap through the migrate
@@ -514,39 +514,49 @@ jobs:
           docker compose -f compose.yaml run --rm -T setup check
           docker compose down -v
 
-      # README flow, Nginx Proxy Manager: the link network once, then the
-      # same steps; a pinned curl container plays NPM at 10.213.253.5.
-      - name: compose-first, Nginx Proxy Manager (curl as the proxy)
+      # README flow, your own reverse proxy (D-215): a long-running curl
+      # container plays Nginx Proxy Manager on its own Docker network; serve
+      # joins that network as bekup-serve and trusts the proxy by its
+      # container name.
+      - name: compose-first, own reverse proxy (curl as the proxy)
         env:
           IMAGE: ${{ steps.reg.outputs.image }}
         run: |
-          D="$RUNNER_TEMP/npm"; sudo install -d -m 0755 "$D"; cd "$D"
-          docker network create --internal --subnet 10.213.253.0/28 \
-            --gateway 10.213.253.1 --ip-range 10.213.253.12/30 bekup-proxy
+          D="$RUNNER_TEMP/own-proxy"; sudo install -d -m 0755 "$D"; cd "$D"
+          docker network create npm-net
+          for c in npm-app other; do
+            docker run -d --name "$c" --network npm-net --read-only --cap-drop ALL \
+              --security-opt no-new-privileges --entrypoint sleep "$CURL_IMAGE" 900
+          done
           docker run --rm --log-driver none --network none --read-only --user 65532:65532 --cap-drop ALL \
-            --security-opt no-new-privileges "$IMAGE" setup compose --variant npm --image "$IMAGE" |
+            --security-opt no-new-privileges "$IMAGE" setup compose --variant own-proxy --image "$IMAGE" |
             sudo tee compose.yaml >/dev/null
           DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm -T setup init \
-            --non-interactive --domain bekup.test --ca-passphrase-stdin < "$RUNNER_TEMP/pass"
-          grep -qx 'trusted_proxies = \["10.213.253.5/32"\]' bekup.toml
+            --non-interactive --domain bekup.test --proxy-network npm-net --proxy-container npm-app \
+            --ca-passphrase-stdin < "$RUNNER_TEMP/pass"
+          grep -qx 'trusted_proxy_hosts = \["npm-app"\]' bekup.toml
+          grep -qx 'listen = "0.0.0.0:8080"' bekup.toml
           docker compose up -d --wait --wait-timeout 300 || { docker compose ps -a; docker compose logs --no-color | tail -n 200; exit 1; }
-          proxy() { docker run --rm --network bekup-proxy --ip 10.213.253.5 --read-only --cap-drop ALL \
-            --security-opt no-new-privileges "$CURL_IMAGE" "$@"; }
-          proxy -fsS -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 198.51.100.7' \
-            http://10.213.253.10:8080/healthz
-          proxy -fsS -o /dev/null -D - -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' \
-            http://10.213.253.10:8080/ | grep -qi '^content-security-policy:'
-          # A proxy at another address: its X-Forwarded-For is ignored and logged.
-          docker run --rm --network bekup-proxy --ip 10.213.253.6 --read-only --cap-drop ALL \
-            --security-opt no-new-privileges "$CURL_IMAGE" -sS -o /dev/null -H 'Host: bekup.test' \
-            -H 'X-Forwarded-For: 198.51.100.7' http://10.213.253.10:8080/ || true
+          docker exec npm-app curl -fsS -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' -H 'X-Forwarded-For: 198.51.100.7' \
+            http://bekup-serve:8080/healthz
+          docker exec npm-app curl -fsS -o /dev/null -D - -H 'Host: bekup.test' -H 'X-Forwarded-Proto: https' \
+            http://bekup-serve:8080/ | grep -qi '^content-security-policy:'
+          # Another container on the proxy network: its X-Forwarded-For is
+          # ignored and logged.
+          docker exec other curl -sS -o /dev/null -H 'Host: bekup.test' -H 'X-Forwarded-For: 198.51.100.7' \
+            http://bekup-serve:8080/ || true
+          docker compose logs serve | grep -q 'trusted proxy host resolved'
           docker compose logs serve | grep -q 'not in server.trusted_proxies'
+          if docker compose logs serve | grep -q 'listens on every interface'; then
+            echo "::error::the wildcard warning of the own-proxy shape was not suppressed"; exit 1
+          fi
           docker compose -f compose.yaml run --rm -T setup check
           # The compose-free check of the docs: the pinned image, read-only mount.
           docker run --rm --log-driver none --network none --read-only --tmpfs /tmp --user 0:0 --cap-drop ALL \
             --cap-add CHOWN --security-opt no-new-privileges -v "$D:/deploy:ro" "$IMAGE" setup check
           docker compose down -v
-          docker network rm bekup-proxy
+          docker rm -f npm-app other
+          docker network rm npm-net
 
       # External PostgreSQL (D-208): the database runs outside the stack,
       # with its own CA, reached over the (non-internal) backend network.

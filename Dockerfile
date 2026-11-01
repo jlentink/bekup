@@ -22,6 +22,10 @@ ARG NODE_IMAGE=node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a
 ARG GO_IMAGE=golang:1.27-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c
 ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 
+# The runtime base image, referenced by the build stage's CA bundle check
+# below and by the runtime stage.
+FROM ${RUNTIME_IMAGE} AS runtime-base
+
 # ---------------------------------------------------------------------------
 # Stage 1: web build
 # ---------------------------------------------------------------------------
@@ -105,6 +109,17 @@ RUN --mount=type=cache,id=bekup-gomod,target=/go/pkg/mod \
     go mod download && go mod verify
 
 COPY . .
+
+# The system CA bundle that `bekup setup` names as database.tls_ca_file for
+# "verify with the system CA bundle" (D-215, config.SystemCABundle): run
+# bekup's own loader (db.LoadSystemCABundle, internal/db/cabundlecheck) on
+# the runtime image's bundle and fail the build when it is missing or no
+# certificate parses (a test keeps the path equal). Built for and run on
+# the build platform; never shipped.
+RUN --mount=type=bind,from=runtime-base,source=/etc/ssl/certs/ca-certificates.crt,target=/etc/bekup-system-ca/ca-certificates.crt \
+    --mount=type=cache,id=bekup-gomod,target=/go/pkg/mod \
+    --mount=type=cache,id=bekup-gobuild,target=/root/.cache/go-build \
+    go run ./internal/db/cabundlecheck /etc/bekup-system-ca/ca-certificates.crt
 # The embedded UI (web/embed.go uses go:embed on web/dist).
 COPY --from=web /src/web/dist ./web/dist
 
@@ -160,7 +175,7 @@ ENTRYPOINT ["air", "-c", ".air.toml"]
 # Runtime stage (default): distroless static, nonroot, no shell, no package
 # manager. Includes CA certificates and tzdata.
 # ---------------------------------------------------------------------------
-FROM ${RUNTIME_IMAGE} AS runtime
+FROM runtime-base AS runtime
 
 ARG VERSION=""
 ARG VCS_REF=""

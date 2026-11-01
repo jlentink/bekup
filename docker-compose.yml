@@ -10,13 +10,13 @@
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
 #
 # Production installs do not use this file directly (D-205). They use a
-# variant rendered from it: compose.yaml (own Traefik),
-# compose.traefik-external.yaml (behind your Traefik) or compose.npm.yaml
-# (behind Nginx Proxy Manager), as a release asset (pinned by digest,
-# attested) or as the committed copy in deploy/compose/ (image from
-# BEKUP_IMAGE; written by `just gen`, never edited by hand), saved as
-# compose.yaml, then `docker compose run --rm setup` (docs/installation/
-# compose.md). The variants are overlays of this file
+# variant rendered from it: compose.yaml (own Traefik) or
+# compose.own-proxy.yaml (behind your own reverse proxy on this Docker host,
+# D-215), each also as *.external-db.yaml for your own PostgreSQL, as a
+# release asset (pinned by digest, attested) or as the committed copy in
+# deploy/compose/ (image from BEKUP_IMAGE; written by `just gen`, never
+# edited by hand), saved as compose.yaml, then `docker compose run --rm
+# setup` (docs/installation/compose.md). The variants are overlays of this file
 # (internal/setup/variants, `bekup setup compose`, `just compose-examples`);
 # `bekup setup init --write-compose --variant full` writes this file itself
 # (setup-first). Rules for this file (tests enforce them):

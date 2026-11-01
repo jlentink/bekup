@@ -20,6 +20,11 @@ var weakenRules = map[string]weakenRule{
 	"server.trusted_proxies": func(o, n *config.Bekup) bool {
 		return prefixesWidened(o.Server.TrustedProxies, n.Server.TrustedProxies)
 	},
+	// An added container name widens trust (D-215): whatever the name
+	// resolves to may then forge X-Forwarded-For.
+	"server.trusted_proxy_hosts": func(o, n *config.Bekup) bool {
+		return entryAdded(o.Server.TrustedProxyHosts, n.Server.TrustedProxyHosts, strings.ToLower)
+	},
 	"server.max_body_bytes":        func(o, n *config.Bekup) bool { return n.Server.MaxBodyBytes > o.Server.MaxBodyBytes },
 	"server.rate_limit_per_second": func(o, n *config.Bekup) bool { return n.Server.RateLimitPerSecond > o.Server.RateLimitPerSecond },
 	"server.rate_limit_burst":      func(o, n *config.Bekup) bool { return n.Server.RateLimitBurst > o.Server.RateLimitBurst },

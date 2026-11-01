@@ -1,40 +1,124 @@
-# Plan: get the first GHCR release out (CI + release workflow fixes)
+# Plan: simpler wizard for own proxy, database on a Docker network, and DB TLS choices (D-215, proposed)
 
 ## Context
 
-- **The symptom.** The user ran the README quick start, and `docker pull ghcr.io/jlentink/bekup:latest` returned `denied`. No bekup image exists on GHCR yet: the v0.0.1 and v0.0.2 release workflows failed, and v0.0.3 is still running (and will hit the same release bug). The later `no configuration file provided` errors only follow from setup never running.
-- **The causes, from the GitHub Actions logs:**
-  1. **Release `verify` job:** "v0.0.2 points at a commit that is not on main". `actions/checkout` (fetch-depth 0) on a tag push does not create `refs/remotes/origin/main`, so `git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main` fails although the tag *is* on main (checked locally for v0.0.3). This blocks every release.
-  2. **CI Go job:** `internal/setup` unit tests hit the default 10-minute `go test` timeout on the runner (about 6 minutes locally; most of it is the age scrypt sealing of the CA key, work factor 18, about 256 MiB per run, in many tests).
-  3. **CI integration job** (run 41198901570, before the latest fixes):
-     - the five tests fixed since (TestDBBootstrapCLI, TestServiceCRUD, TestLocationChangeRefused, TestDestinationsS3Minio, TestUnrecordedFilesGraphQL);
-     - Docker Hub `toomanyrequests` on image pulls (TestConnectionsGraphQLWithRunner, TestRestoreArtifactEndToEnd);
-     - `TestInnerRunnerRPCs/roundtrip/mysql84` failed: cause unknown, to investigate.
-- **Still running:** the v0.0.3 CI run (41215766054), which will show what remains after the latest fixes.
+The user tested the wizard and found three blocking problems:
 
-## Fixes
+1. **Existing database:** the wizard never asks whether the database is a container on this Docker host, or on which Docker network, so bekup can't reach a database container.
+2. **Reverse proxy:** the choices name "existing Traefik" and "Nginx Proxy Manager". The user wants one **"own reverse proxy"** choice (any proxy) plus the hostname. When the proxy runs on this Docker host, the wizard asks **which Docker network it's on** and bekup joins that network, so the two connect without adding a separate network to the proxy.
+3. **DB TLS:** the wizard requires a CA PEM file. The user wants to skip it and use plain username/password, with or without TLS.
 
-1. **Release workflow** (`.github/workflows/release.yml`, `verify` job):
-   - before the ancestry check, fetch main explicitly with the token, the same way as the existing tag-object fetch: `git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main`, through the `GIT_CONFIG_*` env, never argv;
-   - keep the check strict;
-   - add a `release_ci_test.sh` case if the logic moves into the script;
-   - actionlint plus zizmor.
-2. **Slow setup tests:**
-   - add a test-only hook so tests seal the CA key with a low scrypt work factor. `internal/certs`/`crypto` take the work factor from an internal variable, set lower only in `_test.go` via an `export_test.go`; production is unchanged, and a test asserts the production default;
-   - parallelize independent setup tests (`t.Parallel()` where safe);
-   - also set an explicit `-timeout 20m` for `go test` in the justfile (`just test`) and in the CI Go job, as a safety margin;
-   - target: `internal/setup` well under 2 minutes locally.
-3. **Docker Hub rate limits in CI:**
-   - in the CI integration job (and the setup-install job), configure the Docker daemon with the pull-through mirror `mirror.gcr.io` (`/etc/docker/daemon.json` `registry-mirrors`, restart docker). All test images are digest-pinned, so the mirror cannot substitute content;
-   - make the test image-pull helpers share one retry-with-backoff on rate-limit errors (`internal/testutil`). Today only one helper in `internal/graph` retries;
-   - document it in `docs/development.md`.
-4. **`roundtrip/mysql84`:** read the failure output of run 41198901570 and the v0.0.3 run. Fix the cause if it's real, or harden the test if it's timing or rate-limit related (with evidence).
-5. **Whatever else the v0.0.3 CI run shows** once it finishes: triage and fix in the same round.
-6. **Release v0.0.4:** release tags are immutable and the v0.0.3 workflow fails at `verify`. After these fixes are committed and pushed (by the user), the user runs `just bump patch` + `just release`. When the release workflow succeeds, make the GHCR package `bekup` public in its GitHub package settings (once), then the README quick start works.
-7. **Until then:** the user can test the quick start with an own image: `just publish` to a registry, then `IMAGE=<that repo>@sha256:…` or pinned digest mode.
+User decisions:
+- **Proxy:** bundled Traefik or own reverse proxy. Own proxy asks for the proxy's Docker network (if any), with an optional "add Traefik Docker labels" follow-up (default no).
+- **Database:** "container on this Docker host (which network, container name)" or "another server (hostname)".
+- **DB TLS:** four choices: verify with a CA file (default) / verify with the system CA bundle / encrypted but not verified / no TLS. The weak ones get a short warning in the wizard plus the existing D-100 treatment (startup WARN, audit `security.insecure_db_tls`, daily alert, admin badge). Username and password work in every mode.
 
-## Verification
+## Design
 
-- `just lint`, `just test` (with the new timeout; record the `internal/setup` duration), `just test-scripts`, actionlint/zizmor, the integration packages touched (`DOCKER_API_VERSION=1.47`, `-p 1`).
-- After the user's push: the CI run is green; after `just bump patch` + `just release`: the release workflow is green, and `docker pull ghcr.io/jlentink/bekup:latest` works once the package is public.
-- No commits or pushes by me.
+### 1. Own reverse proxy, joining the proxy's existing network
+
+The variants change from 3 to 2 proxy forms: `traefik` (bundled) and `own-proxy`, which replaces `traefik-external` and `npm`.
+
+The wizard asks:
+- **"Does your proxy run on this Docker host?"**
+  - Yes: "Which Docker network is it on?" (hint: `docker network ls` / `docker inspect <proxy> --format '{{json .NetworkSettings.Networks}}'` in a second terminal; the setup container has no Docker access) and "the proxy's container name".
+  - No (another machine): the proxy's IP or CIDR, the existing `--proxy none` style. serve gets a published port on a chosen host interface; keep today's full-variant behaviour.
+
+The compose side for a proxy on this host:
+- serve joins the operator's network as an external network (`name: ${BEKUP_PROXY_NETWORK}`), with no fixed IP, because user networks often have no subnet.
+- **Trust by container name** (new): bekup.toml `server.trusted_proxy_hosts = ["<proxy container name>"]`.
+  - serve resolves the names through Docker's embedded DNS and trusts exactly those IPs as /32.
+  - It re-resolves every 30 s and when an untrusted XFF arrives; changes are logged. If a name doesn't resolve, nothing is trusted.
+  - Validation: names only (no wildcards), at most 8.
+  - It feeds the existing `trusted_proxies` logic and is reloadable live like `trusted_proxies` (D-200 rule plus weakening rule: an added name widens trust).
+- **Listening address:** serve must accept connections on its address on that network, which is dynamic.
+  - Setup writes `server.listen = "0.0.0.0:8080"` with `allow_wildcard_listen = true`, only in this variant.
+  - Inside the container every network is controlled: backend, metrics and egress are bekup's own, and the proxy network is the intended one. serve publishes no ports, and the lint pins serve's network set.
+  - D-215 records why this satisfies D-098, whose concern is host-level exposure. The startup wildcard WARN is suppressed only when that exact compose shape is recorded in the state; otherwise it stays.
+  - Residual risk: other containers on the operator's proxy network can reach serve:8080 directly, bypassing the proxy. They can't spoof the client IP, because only the proxy's resolved IPs are trusted. This is documented.
+- **The bekup-proxy link network** (D-205) stays available as an advanced, setup-flag-only option (`--proxy-network-mode link`, fixed IPs, /32 trust) for operators who want the stricter isolation. The README and the wizard lead with "join your proxy's network".
+- **Optional Traefik labels** (default no): the existing label set on serve, generated by setup as an overlay, with `traefik.docker.network=${BEKUP_PROXY_NETWORK}`.
+- **The wizard's final screen** says what to point the proxy at: `http://bekup-serve:8080` (stable container name on that network; `container_name`/alias `bekup-serve` on that network only) plus the settings per proxy (NPM fields, Traefik, Caddy, nginx), linking `reverse-proxy.md`.
+
+### 2. Existing database on a Docker network
+
+The wizard asks:
+- **"Is your database a container on this Docker host?"**
+  - Yes: "Which Docker network is it on?" (same hint) and "its container name or alias".
+  - No: hostname or IP (today's behaviour).
+
+The compose side for a database container:
+- migrate, serve, worker and admin join `${BEKUP_DB_NETWORK}` as an external network. `backend` stays **internal** in this case: no general egress is needed, unlike the remote external-DB form, which keeps a non-internal `backend`.
+- `database.host` is the container name; the TLS choice follows below.
+- The state records `database_location: docker|remote` and `db_network`.
+- The lint pins it: only those four services may join the DB network, and the network must be external with the recorded name.
+
+### 3. DB TLS choices
+
+- **The four modes map to existing config:**
+  - `verify-full` + `tls_ca_file` (copied file);
+  - `verify-full` + system bundle (`tls_ca_file = /etc/ssl/certs/ca-certificates.crt` in the distroless image; check the path exists in the runtime image);
+  - `require` (no CA, chain not verified; D-103 semantics);
+  - `disable`.
+- **Wizard text:**
+  - for `require`: encrypted, but anyone in the network path can impersonate the database;
+  - for `disable`: everything, including the password exchange (SCRAM, not the plaintext password), goes unencrypted; only sensible on a private Docker network.
+  - Neither is the default. Choosing one needs an explicit confirm.
+- **Channel binding:** required with TLS (D-104), impossible without; `require_auth=scram-sha-256` stays in every mode. With `require`, binding still works (tls-server-end-point).
+- **`setup check`:** a WARNING for `require`/`disable` (exists).
+- **Bootstrap:** `db bootstrap` currently requires `--allow-insecure-admin-connection` below verify-full (E-6). The wizard's printed bootstrap command adds it for those modes, with the warning.
+- **No new weakening mechanics:** the D-100 posture covers it.
+
+### 4. Variants and generated files
+
+- **Proxy dimension:** `traefik | own-proxy`.
+- **DB dimension:** `bundled | external` (remote).
+- **Committed and released compose files:** 4 (`compose.yaml`, `compose.external-db.yaml`, `compose.own-proxy.yaml`, `compose.own-proxy.external-db.yaml`).
+- **Setup-only overlays** (added by the wizard or flags when writing compose; recognized and linted): Traefik labels, DB on a Docker network, link-network mode.
+- **Retire** `compose.traefik-external*.yaml` and `compose.npm*.yaml` (nothing released depends on them in a working state: no release has succeeded yet). Update `release_ci.sh` counts, `release.yml`, `gen_compose.sh`, `TestCommittedComposeFiles`, the docs.
+- **Upgrade from a recorded old variant:** setup maps `traefik-external`/`npm` to `own-proxy` (link-network mode) with a notice.
+
+### 5. Flags (non-interactive, parity with the wizard)
+
+- `--proxy traefik|own`, `--proxy-network <name>`, `--proxy-container <name>`, `--proxy-labels`, `--proxy-network-mode join|link`;
+- `--db-location docker|remote`, `--db-network <name>`;
+- `--db-tls verify-ca-file|verify-system|require|disable` (+ `--db-ca-file`).
+- Validation:
+  - Docker network names `^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`; container names Docker's rule;
+  - `--db-network` only with `--db-location docker`;
+  - refuse `--db-ca-file` with `require`/`disable`.
+
+### 6. Docs and governance
+
+- **D-215 (proposed):**
+  - the join-network model;
+  - trust by container name;
+  - wildcard listen in this shape and why it fits D-098;
+  - DB on a Docker network;
+  - the TLS choices;
+  - 4 compose files;
+  - retiring the named variants.
+
+  It supersedes parts of D-205 (variant names, link network as default) and amends D-207/D-208.
+- **Doc updates:**
+  - README quick start ("own reverse proxy" wording; where to point the proxy);
+  - `compose.md`, `reverse-proxy.md` (generic "own reverse proxy", with NPM/Traefik/Caddy/nginx sections: forward to `bekup-serve:8080` on the shared network; the old link-network setup as advanced);
+  - `external-database.md` (Docker-network database section; TLS modes);
+  - `app-db-tls.md`; SECURITY.md (B2b rewritten for join mode, residual risk); AGENTS.md.
+
+### 7. Tests
+
+- **Wizard golden tests** (wizard == flags) for:
+  - own proxy on this host (with and without labels) and remote;
+  - DB container on a network and remote;
+  - each TLS mode.
+- **Variant render/recognition/lint** for the 4 files plus the overlays; the lint refuses foreign services on the proxy and DB networks; the `docker compose config -q` integration for every combination.
+- **serve:**
+  - `trusted_proxy_hosts` resolution (fake resolver), re-resolve, unresolvable means no trust, live reload, the weakening rule;
+  - an integration test with a real Docker network: a proxy container resolving to a trusted IP, XFF accepted from it and refused from another container.
+- **TLS:** modes written correctly, the system bundle path present in the image (a Dockerfile/image test), the bootstrap command includes the allow flag for weak modes.
+- **By hand:** the wizard against NPM on its own network and a postgres container on another network (`docker compose up`, login through NPM, a backup run).
+
+## Order
+
+One agent, after the current CI and release round lands (the user commits that first). Then the full checks, both reviews, the fixes and the handover. No commits by me.

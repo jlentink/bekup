@@ -133,6 +133,13 @@ func Check(opts CheckOptions) ([]Finding, error) {
 		}
 		fmt.Fprintf(opts.Out, "Ownership re-applied: %s (%s)\n", mode, why)
 	}
+	if st.Legacy() != "" {
+		how := fmt.Sprintf("replace %s with %s of the new release and run `docker compose run --rm setup upgrade`", ComposeFile, VariantOwnProxy.AssetName(st.dbMode()))
+		if st.ComposeMode == ComposeGenerated {
+			how = "run `docker compose run --rm setup upgrade --write-compose --image <image>`"
+		}
+		c.add(SeverityError, StateFileName, "this deployment was set up with the retired %s variant (D-215): %s (it maps the deployment to the own-proxy variant in link mode and keeps your link network)", st.Legacy(), how)
+	}
 	env := c.dotenv()
 	c.env = env
 	c.manifest(entries, mode != OwnershipNone)
@@ -386,12 +393,13 @@ func (c *checker) upgradeHint() string {
 // one setup last ran with, or newer), and the resolved project
 // (compose.yaml + compose.override.yaml + .env) passes the hardening lint.
 func (c *checker) operatorCompose() {
-	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.st.dbMode(), c.env, c.opts.LookupEnv, c.st.following())
+	info, err := inspectCompose(c.root, c.opts.assets, c.st.Variant, c.st.dbMode(), c.st.overlays(), c.env, c.opts.LookupEnv, c.st.following())
 	if err != nil {
 		c.add(SeverityError, ComposeFile, "%v", err)
 		return
 	}
 	c.findings = append(c.findings, info.Findings...)
+	c.overlayHint(info.Findings)
 	if info.Level == RecognizedCustom {
 		c.add(SeverityWarning, ComposeFile, "customized (based on the %s variant): the hardening lint applies; prefer the unchanged release file plus %s", c.st.Variant, OverrideFile)
 	}
@@ -510,7 +518,35 @@ func (c *checker) composeFiles() {
 		}
 	}
 	env := projectEnv(in.dotenv, in.lookup, in.docs()...)
-	c.findings = append(c.findings, lintComposeFiles(&in, env, c.st.Variant, img.String(), expected, false)...)
+	findings := lintComposeFiles(&in, env, c.st.Variant, img.String(), expectedDocs(expected, c.st.overlays()), false)
+	c.findings = append(c.findings, findings...)
+	c.overlayHint(findings)
+}
+
+// overlayFinding reports a lint error about what the setup-only overlays
+// change: the shipped services serve, migrate, admin or a shipped network.
+func overlayFinding(findings []Finding) bool {
+	for _, f := range findings {
+		if f.Severity != SeverityError {
+			continue
+		}
+		for _, s := range []string{`service "serve"`, `service "migrate"`, `service "admin"`, `network "`} {
+			if strings.Contains(f.Msg, s) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// overlayHint names the blocks compose.override.yaml must carry when the
+// lint failed in a deployment with setup-only overlays (D-215).
+func (c *checker) overlayHint(findings []Finding) {
+	ov := c.st.overlays()
+	if !ov.Any() || !overlayFinding(findings) {
+		return
+	}
+	c.add(SeverityError, OverrideFile, "this deployment's %s must carry the blocks setup wrote (D-215; merged into its services: and networks: keys):\n%s", OverrideFile, overlayDoc(ov, ""))
 }
 
 // deploymentEnv checks the deployment lines of .env (D-212): the setup
@@ -624,14 +660,23 @@ func (c *checker) configs(env map[string]string) {
 	def := DefaultNetwork()
 	serveVar, serveIP := "SERVE_FRONTEND_IP", envOr(env, "SERVE_FRONTEND_IP", def.ServeFrontendIP)
 	proxyVar, proxyIP := "PROXY_FRONTEND_IP", envOr(env, "PROXY_FRONTEND_IP", def.ProxyFrontendIP)
-	if c.st.Proxy == ProxyExternal {
+	wantListen, wantTrusted := serveIP+":8080", []string{proxyIP + "/32"}
+	switch {
+	case c.st.ownProxyJoin():
+		c.joinNetwork(env)
+		serveVar, wantListen = "the own-proxy join shape, D-215", config.OwnProxyJoinListen
+		proxyVar, wantTrusted = "join mode trusts the proxy by its container name only", []string{}
+	case c.st.Proxy == ProxyExternal:
 		c.linkNetwork(env)
 		dl := DefaultLinkNetwork()
 		serveVar, serveIP = "SERVE_PROXY_IP", envOr(env, "SERVE_PROXY_IP", dl.ServeIP)
 		proxyVar, proxyIP = "the recorded proxy address of the link network", c.st.ProxyIP
+		wantListen, wantTrusted = serveIP+":8080", []string{proxyIP + "/32"}
 	}
+	c.traefikLabelsEnv(env)
+	c.dbNetworkEnv(env)
 	bundled := c.st.Proxy == ProxyTraefik || c.st.Proxy == ProxyNginx
-	needDomain := bundled || c.st.Variant == VariantTraefikExternal
+	needDomain := bundled || c.st.ProxyLabels
 	metricsIP := envOr(env, "SERVE_METRICS_IP", def.ServeMetricsIP)
 	runnerIP := envOr(env, "RUNNER_CTL_IP", def.RunnerCtlIP)
 	if bres != nil {
@@ -647,12 +692,13 @@ func (c *checker) configs(env map[string]string) {
 				c.add(SeverityWarning, BekupTOML, "server.base_url has port %s, but the bundled proxy publishes 443", u.Port())
 			}
 		}
-		if c.st.Proxy != ProxyNone && !slices.Equal(b.Server.TrustedProxies, []string{proxyIP + "/32"}) {
-			c.add(SeverityError, BekupTOML, "server.trusted_proxies = %q, want exactly [%q] (%s)", b.Server.TrustedProxies, proxyIP+"/32", proxyVar)
+		if c.st.Proxy != ProxyNone && !slices.Equal(b.Server.TrustedProxies, wantTrusted) {
+			c.add(SeverityError, BekupTOML, "server.trusted_proxies = %q, want exactly %q (%s)", b.Server.TrustedProxies, wantTrusted, proxyVar)
 		}
 		c.wideCIDRs(BekupTOML, "server.trusted_proxies", b.Server.TrustedProxies)
-		if want := serveIP + ":8080"; b.Server.Listen != want {
-			c.add(SeverityError, BekupTOML, "server.listen = %q, want %q (%s)", b.Server.Listen, want, serveVar)
+		c.trustedHosts(b)
+		if b.Server.Listen != wantListen {
+			c.add(SeverityError, BekupTOML, "server.listen = %q, want %q (%s)", b.Server.Listen, wantListen, serveVar)
 		}
 		if want := metricsIP + ":9464"; b.Metrics.Enabled && b.Metrics.Listen != want {
 			c.add(SeverityError, BekupTOML, "metrics.listen = %q, want %q (SERVE_METRICS_IP)", b.Metrics.Listen, want)
@@ -710,8 +756,11 @@ func (c *checker) database(d *config.Database) {
 	default:
 		c.add(SeverityWarning, BekupTOML, "database.tls_mode = %q is weaker than verify-full: traffic to your PostgreSQL is not protected (D-100); serve warns at every start", bounded(d.TLSMode))
 	}
-	if d.TLSMode != config.DBTLSDisable && d.TLSCAFile != "" && d.TLSCAFile != dbCATarget {
-		c.add(SeverityError, BekupTOML, "database.tls_ca_file = %q, want %q (compose mounts %s/%s there)", bounded(d.TLSCAFile), dbCATarget, c.st.KeysDir, dbCAName)
+	if want := c.st.dbTLS().configMode(); d.TLSMode != want && d.TLSMode == config.DBTLSVerifyFull {
+		c.add(SeverityWarning, BekupTOML, "database.tls_mode = %q, but setup configured %q (--db-tls %s): fine if you now verify the server; setup check keeps reporting the recorded choice", d.TLSMode, want, c.st.dbTLS())
+	}
+	if d.TLSMode != config.DBTLSDisable && d.TLSCAFile != "" && d.TLSCAFile != dbCATarget && d.TLSCAFile != config.SystemCABundle {
+		c.add(SeverityError, BekupTOML, "database.tls_ca_file = %q, want %q (compose mounts %s/%s there) or the system bundle %q", bounded(d.TLSCAFile), dbCATarget, c.st.KeysDir, dbCAName, config.SystemCABundle)
 	}
 }
 
@@ -734,8 +783,71 @@ func (c *checker) importedFiles() {
 	}
 }
 
-// linkNetwork checks the link network of the external variants: the
-// compose variables against the recorded network (subnet, proxy address).
+// joinNetwork checks the own-proxy join mode (D-215): .env names the
+// recorded proxy network.
+func (c *checker) joinNetwork(env map[string]string) {
+	switch name := env["BEKUP_PROXY_NETWORK"]; {
+	case name == "":
+		c.add(SeverityError, EnvFile, "BEKUP_PROXY_NETWORK is missing: serve would join %q instead of your proxy's network %q", DefaultLinkNetwork().Name, c.st.ProxyNetwork)
+	case name != c.st.ProxyNetwork:
+		c.add(SeverityError, EnvFile, "BEKUP_PROXY_NETWORK=%q, but setup configured your proxy's network %q (set it up again to switch networks)", bounded(name), c.st.ProxyNetwork)
+	}
+	if _, ok := env["SERVE_PROXY_IP"]; ok {
+		c.add(SeverityWarning, EnvFile, "SERVE_PROXY_IP has no effect in the join mode (Docker assigns serve's address on your proxy's network)")
+	}
+}
+
+// trustedHosts checks server.trusted_proxy_hosts (D-215): in the own-proxy
+// join mode exactly the recorded proxy container, behind a bundled proxy
+// or in link mode none (an added name widens the trust).
+func (c *checker) trustedHosts(b *config.Bekup) {
+	got := b.Server.TrustedProxyHosts
+	switch {
+	case c.st.ownProxyJoin():
+		if len(got) != 1 || !strings.EqualFold(got[0], c.st.ProxyContainer) {
+			c.add(SeverityError, BekupTOML, "server.trusted_proxy_hosts = %q, want exactly [%q] (your proxy's container)", got, c.st.ProxyContainer)
+		}
+		if !b.Server.AllowWildcardListen {
+			c.add(SeverityError, BekupTOML, "server.allow_wildcard_listen must be true in the own-proxy join shape (serve listens on %s, D-215)", config.OwnProxyJoinListen)
+		}
+	case c.st.Proxy == ProxyNone:
+		// Your own proxy on the frontend network may be named either way.
+	case len(got) > 0:
+		c.add(SeverityError, BekupTOML, "server.trusted_proxy_hosts = %q: this deployment trusts its proxy by address only; remove them", got)
+	}
+}
+
+// traefikLabelsEnv checks the Traefik label variables (D-215: only with
+// the labels overlay).
+func (c *checker) traefikLabelsEnv(env map[string]string) {
+	for _, k := range []string{"TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER"} {
+		v, ok := env[k]
+		switch {
+		case !ok:
+		case !c.st.ProxyLabels:
+			c.add(SeverityWarning, EnvFile, "%s has no effect: this deployment has no Traefik labels", k)
+		default:
+			if err := ValidateTraefikName(k, v); err != nil {
+				c.add(SeverityError, EnvFile, "%v", err)
+			}
+		}
+	}
+}
+
+// dbNetworkEnv checks BEKUP_DB_NETWORK against the recorded database
+// container network (D-215).
+func (c *checker) dbNetworkEnv(env map[string]string) {
+	got, ok := env["BEKUP_DB_NETWORK"]
+	switch {
+	case c.st.overlays().DBNetwork && got != c.st.DBNetwork:
+		c.add(SeverityError, EnvFile, "BEKUP_DB_NETWORK=%q, but setup configured your database container's network %q", bounded(got), c.st.DBNetwork)
+	case !c.st.overlays().DBNetwork && ok:
+		c.add(SeverityWarning, EnvFile, "BEKUP_DB_NETWORK has no effect: this deployment's database is not a container on a Docker network of this host")
+	}
+}
+
+// linkNetwork checks the own-proxy link mode: the compose variables
+// against the recorded link network (subnet, proxy address).
 func (c *checker) linkNetwork(env map[string]string) {
 	l := c.st.link()
 	if name := envOr(env, "BEKUP_PROXY_NETWORK", DefaultLinkNetwork().Name); name != l.Name {
@@ -745,16 +857,6 @@ func (c *checker) linkNetwork(env map[string]string) {
 	l.ServeIP = envOr(env, "SERVE_PROXY_IP", DefaultLinkNetwork().ServeIP)
 	if err := validateLink(l, Network{}); err != nil {
 		c.add(SeverityError, EnvFile, "link network: %v", err)
-	}
-	if v, ok := env["TRAEFIK_ENTRYPOINT"]; ok && c.st.Variant == VariantTraefikExternal {
-		if err := ValidateTraefikName("TRAEFIK_ENTRYPOINT", v); err != nil {
-			c.add(SeverityError, EnvFile, "%v", err)
-		}
-	}
-	if v, ok := env["TRAEFIK_CERTRESOLVER"]; ok && c.st.Variant == VariantTraefikExternal {
-		if err := ValidateTraefikName("TRAEFIK_CERTRESOLVER", v); err != nil {
-			c.add(SeverityError, EnvFile, "%v", err)
-		}
 	}
 }
 
@@ -780,8 +882,8 @@ func (c *checker) wideCIDRs(file, key string, cidrs []string) {
 func (c *checker) shellOverrides(env map[string]string) {
 	keys := sortedKeys(env)
 	netVars := (&Network{}).vars()
-	more := make([]string, 0, 7+len(netVars))
-	more = append(more, "BEKUP_PROXY_NETWORK", "SERVE_PROXY_IP", "TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER", "BEKUP_DOMAIN", "DOCKER_GID", "BEKUP_KEYS_DIR",
+	more := make([]string, 0, 12+len(netVars))
+	more = append(more, "BEKUP_PROXY_NETWORK", "SERVE_PROXY_IP", "BEKUP_DB_NETWORK", "TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER", "BEKUP_DOMAIN", "DOCKER_GID", "BEKUP_KEYS_DIR",
 		deployguard.EnvSetupVersion, deployguard.EnvImageMode)
 	for _, v := range netVars {
 		more = append(more, v.name)
@@ -821,7 +923,15 @@ func (c *checker) certificates(entries []Entry) {
 		if err != nil {
 			continue
 		}
-		if fi, err := checkNoSymlinks(c.root, e.Path); err != nil || fi == nil {
+		fi, err := checkNoSymlinks(c.root, e.Path)
+		if err != nil || fi == nil {
+			continue
+		}
+		if e.Path == c.layout.keys(dbCAName) && fi.Size() == 0 {
+			// Empty by design for a TLS choice without a CA file (D-215).
+			if c.st.dbTLS() == DBTLSVerifyCAFile {
+				c.add(SeverityError, e.Path, "is empty, but setup configured --db-tls verify-ca-file: restore your PostgreSQL's CA bundle")
+			}
 			continue
 		}
 		infos, err := certs.InspectFile(abs)

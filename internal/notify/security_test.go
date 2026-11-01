@@ -101,6 +101,8 @@ func TestSecurityAlertsFromAudit(t *testing.T) {
 			[]want{{SecuritySystem, KindInsecureDBRoles, SeverityError, Subject{}, true}}},
 		{"unpinned image startup", audit.Event{Actor: sys, Action: audit.ActionSecurityUnpinnedImage, TargetType: "server"},
 			[]want{{SecuritySystem, KindUnpinnedImage, SeverityWarning, Subject{}, true}}},
+		{"serve alias conflict", audit.Event{Actor: sys, Action: audit.ActionSecurityServeAliasConflict, TargetType: "server", Details: audit.Details{"alias": "bekup-serve", "addresses": []string{"172.20.0.66"}}},
+			[]want{{SecuritySystem, KindServeAliasConflict, SeverityCritical, Subject{}, true}}},
 		{"db bootstrap via cli", audit.CLIEvent(audit.ActionCLIDBBootstrap, "database", "bekup", nil),
 			[]want{{SecuritySystem, KindCLIAction, SeverityWarning, Subject{}, false}}},
 		{"head export failed", audit.Event{Actor: sys, Action: audit.ActionAuditHeadExportFailed},
@@ -293,6 +295,36 @@ func TestSecurityAlertTypes(t *testing.T) {
 	}
 	if !seen[KindSSRFAllowlistWidened] || !seen[KindLoginBurstGlobal] {
 		t.Fatal("missing kinds")
+	}
+}
+
+// TestServeAliasConflictAlert: the alert names the foreign addresses
+// (addresses only) and is deduplicated per address set and day (D-215).
+func TestServeAliasConflictAlert(t *testing.T) {
+	now := time.Now()
+	mk := func(addrs ...any) Event {
+		ev := audit.Event{Actor: audit.SystemActor(), Action: audit.ActionSecurityServeAliasConflict, TargetType: "server",
+			Details: audit.Details{"alias": "bekup-serve", "addresses": addrs}}
+		got := eventsFromAudit(ev, now)
+		if len(got) != 1 || got[0].Type != SecuritySystem {
+			t.Fatalf("events %+v", got)
+		}
+		return got[0]
+	}
+	a := mk("172.20.0.66", "fd00::66")
+	b := mk("fd00::66", "172.20.0.66")
+	c := mk("172.20.0.67")
+	if a.DedupKey == "" || a.DedupKey != b.DedupKey || a.DedupKey == c.DedupKey {
+		t.Fatalf("dedup keys %q %q %q", a.DedupKey, b.DedupKey, c.DedupKey)
+	}
+	if a.Detail["addresses"] != "172.20.0.66, fd00::66" || a.Severity != SeverityCritical {
+		t.Fatalf("event %+v", a)
+	}
+	if d := mk("172.20.0.66", "not an address", 42); d.Detail["addresses"] != "172.20.0.66" {
+		t.Fatalf("detail %+v", d.Detail)
+	}
+	if _, err := ValidateDetail(a.Detail); err != nil {
+		t.Fatal(err)
 	}
 }
 

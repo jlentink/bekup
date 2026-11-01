@@ -137,22 +137,39 @@ func renderBekupTOML(a *Answers) []byte {
 
 [server]
 `)
-	if a.Proxy == ProxyExternal {
+	switch {
+	case a.ownProxyJoin():
+		fmt.Fprintf(&b, "# serve joins your proxy's network %s, where Docker assigns its address, so it\n", a.ProxyNetwork)
+		b.WriteString("# binds every interface of its container (D-215; no port is published). In the\n")
+		b.WriteString("# own-proxy compose shape (BEKUP_LISTEN_SHAPE) it accepts connections only on\n")
+		b.WriteString("# its own address on your proxy's network (the alias bekup-serve) and on\n")
+		b.WriteString("# loopback, and keeps the wildcard warning quiet for exactly this address.\n")
+	case a.Proxy == ProxyExternal:
 		fmt.Fprintf(&b, "# serve binds only its fixed address on the %s link network (SERVE_PROXY_IP).\n", a.Link.Name)
-	} else {
+	default:
 		b.WriteString("# serve binds only its fixed address on the frontend network.\n")
 	}
-	fmt.Fprintf(&b, "listen = %s\n", quoteTOML(a.serveIP()+":8080"))
+	fmt.Fprintf(&b, "listen = %s\n", quoteTOML(a.serveListen()))
+	if a.ownProxyJoin() {
+		b.WriteString("allow_wildcard_listen = true\n")
+	}
 	fmt.Fprintf(&b, "base_url = %s\n", quoteTOML("https://"+a.Domain))
-	switch a.Proxy {
-	case ProxyNone:
+	switch {
+	case a.Proxy == ProxyNone:
 		b.WriteString("# Your own reverse proxy on the frontend network (no bundled proxy).\n")
-	case ProxyExternal:
+	case a.ownProxyJoin():
+		b.WriteString("# Your reverse proxy by its container name: serve resolves it through Docker's\n")
+		b.WriteString("# DNS (re-resolved regularly) and trusts exactly its address on that network\n")
+		b.WriteString("# (D-215). No CIDRs.\n")
+	case a.Proxy == ProxyExternal:
 		b.WriteString("# Exactly your reverse proxy's fixed address on the link network (/32, D-205).\n")
 	default:
 		fmt.Fprintf(&b, "# The bundled %s proxy (PROXY_FRONTEND_IP).\n", a.Proxy)
 	}
 	fmt.Fprintf(&b, "trusted_proxies = %s\n", quoteTOMLList(a.trustedProxies()))
+	if hosts := a.trustedProxyHosts(); len(hosts) > 0 {
+		fmt.Fprintf(&b, "trusted_proxy_hosts = %s\n", quoteTOMLList(hosts))
+	}
 	b.WriteString("\n[metrics]\n# Internal metrics network only (SERVE_METRICS_IP); never published.\n")
 	fmt.Fprintf(&b, "listen = %s\n", quoteTOML(a.Network.ServeMetricsIP+":9464"))
 	if a.DB.External() {
@@ -214,11 +231,17 @@ func envVars(a *Answers, version string) []EnvVar {
 			vs = append(vs, EnvVar{"ACME_EMAIL", a.ACMEEmail}, EnvVar{"ACME_CA_SERVER", a.acmeCA()})
 		}
 	}
-	if a.Variant == VariantTraefikExternal {
+	if a.ProxyLabels {
 		vs = append(vs, EnvVar{"TRAEFIK_ENTRYPOINT", a.TraefikEntrypoint}, EnvVar{"TRAEFIK_CERTRESOLVER", a.TraefikCertResolver})
 	}
-	if a.Proxy == ProxyExternal {
+	switch {
+	case a.ownProxyJoin():
+		vs = append(vs, EnvVar{"BEKUP_PROXY_NETWORK", a.ProxyNetwork})
+	case a.Proxy == ProxyExternal:
 		vs = append(vs, EnvVar{"BEKUP_PROXY_NETWORK", a.Link.Name}, EnvVar{"SERVE_PROXY_IP", a.Link.ServeIP})
+	}
+	if a.DB.External() && a.DB.Location == DBDocker {
+		vs = append(vs, EnvVar{"BEKUP_DB_NETWORK", a.DB.Network})
 	}
 	vs = append(vs, EnvVar{"DOCKER_GID", strconv.Itoa(a.DockerGID)}, EnvVar{"BEKUP_KEYS_DIR", "./" + a.KeysDir})
 	def := DefaultNetwork()
@@ -226,7 +249,7 @@ func envVars(a *Answers, version string) []EnvVar {
 	n := a.Network
 	for i, v := range n.vars() {
 		if a.Proxy == ProxyExternal && frontendVar(v.name) {
-			continue // no frontend network in the external variants
+			continue // no frontend network in the own-proxy variant
 		}
 		if *v.val != *dv[i].val {
 			vs = append(vs, EnvVar{v.name, *v.val})
@@ -359,33 +382,20 @@ func renderEnv(a *Answers, version string) []byte {
 	return b.Bytes()
 }
 
-// renderOverride writes compose.override.yaml for static proxy TLS: the
-// operator's certificate directory at /certs (and no certbot).
+// renderOverride writes compose.override.yaml: the setup-only overlays
+// (D-215: Traefik labels, link network, database container network) and,
+// for PROXY_TLS_MODE=static, the operator's certificate directory at
+// /certs (and no certbot).
 func renderOverride(a *Answers) []byte {
-	var b bytes.Buffer
-	b.WriteString(`# compose.override.yaml: written by ` + "`bekup setup init`" + ` for
-# PROXY_TLS_MODE=static (D-203). Operator file: ` + "`bekup setup upgrade`" + ` never
-# rewrites it. Put the certificate chain and key into ./proxy-tls/tls.crt and
-# ./proxy-tls/tls.key (readable by UID 65532; key mode 0600, owner 65532).
-# docs/installation/reverse-proxy.md
-services:
-`)
-	fmt.Fprintf(&b, "  %s:\n", a.Proxy)
-	b.WriteString(`    volumes:
-      - type: bind
-        source: ./` + ProxyTLSDir + `
-        target: /certs
-        read_only: true
-        bind:
-          create_host_path: false
-`)
-	if a.Proxy == ProxyNginx {
-		b.WriteString(`  # No ACME with a static certificate: certbot never starts.
-  certbot:
-    profiles: !override [static-tls-disabled]
-`)
+	static := Proxy("")
+	if a.bundledProxy() && a.TLSMode == TLSStatic {
+		static = a.Proxy
 	}
-	return b.Bytes()
+	doc := overlayDoc(a.overlays(), static)
+	if doc == "" {
+		return nil
+	}
+	return []byte(overlayHeader + doc)
 }
 
 // operatorFiles renders the operator-class files for the answers.
@@ -395,8 +405,8 @@ func operatorFiles(a *Answers, version string) map[string][]byte {
 		BekupTOML:  renderBekupTOML(a),
 		RunnerTOML: renderRunnerTOML(a),
 	}
-	if a.bundledProxy() && a.TLSMode == TLSStatic {
-		files[OverrideFile] = renderOverride(a)
+	if o := renderOverride(a); o != nil {
+		files[OverrideFile] = o
 	}
 	return files
 }

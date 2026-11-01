@@ -33,7 +33,8 @@ type Server struct {
 	AllowWildcardListen    bool     `toml:"allow_wildcard_listen" doc:"Allow a wildcard/unspecified server.listen address outside dev mode (logs a startup warning). Prefer binding the internal network address."`
 	BaseURL                string   `toml:"base_url" doc:"Public URL of the UI as served by the reverse proxy; all links are built from it. Must be https unless dev mode is on or allow_insecure_http is set."`
 	AllowInsecureHTTP      bool     `toml:"allow_insecure_http" doc:"Accept a plain http base_url outside dev mode (D-095). Traffic, sessions and credentials are then NOT encrypted; bekup logs a warning at every startup and shows a permanent UI banner."`
-	TrustedProxies         []string `toml:"trusted_proxies" reload:"live" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode, except with an http base_url and allow_insecure_http (no proxy)."`
+	TrustedProxies         []string `toml:"trusted_proxies" reload:"live" doc:"CIDRs of the reverse proxies whose X-Forwarded-* headers are trusted. Required outside dev mode (or trusted_proxy_hosts), except with an http base_url and allow_insecure_http (no proxy)."`
+	TrustedProxyHosts      []string `toml:"trusted_proxy_hosts" reload:"live" doc:"Container names of reverse proxies on a Docker network serve shares (D-215, own reverse proxy on this Docker host): serve resolves each name through Docker's embedded DNS and trusts the private addresses it returns inside the subnet of serve's own interface on that network (found through serve's alias bekup-serve), at most one per address family (/32, /128). Names are re-resolved in parallel every 20 seconds, at most every 5 seconds when X-Forwarded-For arrives from an untrusted peer and while a peer trusted through a name sends requests; a resolution older than 30 seconds trusts nothing. A name that does not resolve, or resolves to two addresses of one family (another container with the same name), trusts nothing. At most 8 names; no IP addresses (use trusted_proxies), no wildcards, no dots and none of bekup's own service names. Counts as the required trusted proxy outside dev mode."`
 	ReadHeaderTimeout      Duration `toml:"read_header_timeout" doc:"Maximum time to read request headers."`
 	ReadTimeout            Duration `toml:"read_timeout" doc:"Maximum time to read a whole request, body included (at least read_header_timeout)."`
 	WriteTimeout           Duration `toml:"write_timeout" doc:"Maximum time to write a response. Long-lived routes (event streams of GraphQL subscriptions, artifact downloads) lift it per request."`
@@ -423,8 +424,8 @@ func (c *Bekup) warnings(dev bool) []string {
 	if c.InsecureTransport() {
 		out = append(out, InsecureHTTPWarning)
 	}
-	if !dev && c.Server.AllowWildcardListen && isWildcardListen(c.Server.Listen) {
-		out = append(out, fmt.Sprintf("server.listen %q listens on every interface (server.allow_wildcard_listen = true); bind the internal network address instead", c.Server.Listen))
+	if w := c.wildcardListenWarning(dev); w != "" {
+		out = append(out, w)
 	}
 	if !dev && c.Metrics.Enabled && c.Metrics.AllowWildcardListen && isWildcardListen(c.Metrics.Listen) {
 		out = append(out, fmt.Sprintf("metrics.listen %q listens on every interface (metrics.allow_wildcard_listen = true); bind an internal address instead", c.Metrics.Listen))

@@ -62,6 +62,97 @@ func ParseDBAuth(s string) (DBAuth, error) {
 // generated reports whether setup generates the role passwords.
 func (a DBAuth) generated() bool { return a == DBAuthBootstrap || a == DBAuthDBASQL }
 
+// DBLocation is where an external PostgreSQL runs (D-215).
+type DBLocation string
+
+// Database locations.
+const (
+	// DBRemote: another server, reached by host name or IP address over
+	// the non-internal backend network (D-208).
+	DBRemote DBLocation = "remote"
+	// DBDocker: a container on this Docker host, reached over its Docker
+	// network (external, BEKUP_DB_NETWORK), which migrate, serve and admin
+	// join (an overlay in compose.override.yaml); backend stays internal.
+	DBDocker DBLocation = "docker"
+)
+
+// ParseDBLocation validates a --db-location value.
+func ParseDBLocation(s string) (DBLocation, error) {
+	switch DBLocation(s) {
+	case DBRemote, DBDocker:
+		return DBLocation(s), nil
+	}
+	return "", fmt.Errorf("--db-location must be docker or remote (got %q)", bounded(s))
+}
+
+// DBTLS is the TLS choice for an external PostgreSQL (D-215).
+type DBTLS string
+
+// Database TLS choices. Only the first two verify the server; require and
+// disable are explicit weakenings (D-100: startup warning, audit
+// security.insecure_db_tls, daily alert, admin badge).
+const (
+	// DBTLSVerifyCAFile: verify-full against the CA bundle the operator
+	// names (copied to <keys>/bekup_database_ca.crt; the default).
+	DBTLSVerifyCAFile DBTLS = "verify-ca-file"
+	// DBTLSVerifySystem: verify-full against the image's system CA bundle
+	// (a provider certificate from a public CA).
+	DBTLSVerifySystem DBTLS = "verify-system"
+	// DBTLSRequire: encrypted, the server's certificate not verified.
+	DBTLSRequire DBTLS = "require"
+	// DBTLSDisable: no TLS at all.
+	DBTLSDisable DBTLS = "disable"
+)
+
+// DBTLSChoices lists the choices in the order the wizard offers them.
+var DBTLSChoices = []DBTLS{DBTLSVerifyCAFile, DBTLSVerifySystem, DBTLSRequire, DBTLSDisable}
+
+// ParseDBTLS validates a --db-tls value.
+func ParseDBTLS(s string) (DBTLS, error) {
+	for _, c := range DBTLSChoices {
+		if string(c) == s {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("--db-tls must be verify-ca-file, verify-system, require or disable (got %q)", bounded(s))
+}
+
+// OrDefault maps the zero value to DBTLSVerifyCAFile.
+func (t DBTLS) OrDefault() DBTLS {
+	if t == "" {
+		return DBTLSVerifyCAFile
+	}
+	return t
+}
+
+// Weak reports a choice that does not verify the server (require,
+// disable).
+func (t DBTLS) Weak() bool { return t == DBTLSRequire || t == DBTLSDisable }
+
+// configMode is the database.tls_mode of the choice.
+func (t DBTLS) configMode() string {
+	switch t.OrDefault() {
+	case DBTLSRequire:
+		return config.DBTLSRequire
+	case DBTLSDisable:
+		return config.DBTLSDisable
+	default:
+		return config.DBTLSVerifyFull
+	}
+}
+
+// Weak-TLS warnings (wizard, plain prompt, report). A private Docker
+// network is no protection by itself: containers get CAP_NET_RAW by
+// default, so any container on the same network can ARP-spoof the
+// database's address. With require, SCRAM channel binding (D-104) still
+// stops a relayed login; with disable there is no channel binding, so such
+// a container can relay the SCRAM exchange and take over the session,
+// also bekup_owner's (migrate) and the admin account's (bootstrap).
+const (
+	DBTLSRequireWarning = "encrypted, but the server's certificate is not verified: the server's identity rests on the SCRAM exchange alone (channel binding still stops a relayed login). On a Docker network any container can put itself in the path by ARP spoofing (containers have CAP_NET_RAW by default)."
+	DBTLSDisableWarning = "no TLS: all data crosses the network unencrypted, and without TLS there is no channel binding, so anyone in the path can relay the SCRAM login and take over the session, including bekup_owner's while migrate runs and the admin account's during the bootstrap. A private Docker network does not prevent this: any container on it can ARP-spoof the database's address (containers have CAP_NET_RAW by default). Prefer require over disable even there."
+)
+
 // Database are the database answers. The zero value is the bundled
 // postgres service.
 type Database struct {
@@ -70,9 +161,16 @@ type Database struct {
 	Host string
 	Port int
 	Name string
+	// Location is where the database runs (default remote); Network is
+	// its Docker network (Location docker only, D-215).
+	Location DBLocation
+	Network  string
+	// TLS is the TLS choice (default verify-ca-file, D-215).
+	TLS DBTLS
 	// CAFile is the CA bundle (PEM) of the server certificate, a path
 	// relative to the deployment directory; setup copies it to
-	// <keys>/bekup_database_ca.crt (database.tls_ca_file).
+	// <keys>/bekup_database_ca.crt (database.tls_ca_file; TLS
+	// verify-ca-file only).
 	CAFile string
 	// TLSServerName is the optional name the certificate is verified
 	// against (database.tls_server_name).
@@ -160,13 +258,40 @@ func (d *Database) validate() error {
 	default:
 		return fieldErr("database", "must be bundled or external")
 	}
+	if d.Location == "" {
+		d.Location = DBRemote
+	}
+	switch d.Location {
+	case DBRemote:
+		if d.Network != "" {
+			return fieldErr("db-network", "applies to --db-location docker only")
+		}
+	case DBDocker:
+		if d.Network == "" {
+			return fieldErr("db-network", "is required with --db-location docker: the Docker network your database container is on (docker inspect <container> --format '{{json .NetworkSettings.Networks}}')")
+		}
+		if err := ValidateDockerNetwork("db-network", d.Network); err != nil {
+			return err
+		}
+	default:
+		return fieldErr("db-location", "must be docker or remote")
+	}
 	if d.Host == "" {
+		if d.Location == DBDocker {
+			return fieldErr("db-host", "is required with --database external: your database container's name or a network alias of it")
+		}
 		return fieldErr("db-host", "is required with --database external (your PostgreSQL's host name or IP address)")
 	}
 	if _, err := netip.ParseAddr(d.Host); err != nil && !hostRe.MatchString(d.Host) {
+		if d.Location == DBDocker {
+			return fieldErr("db-host", "%q is not a host name (a container name with _ is none: use its compose service name or a network alias)", bounded(d.Host))
+		}
 		return fieldErr("db-host", "%q is not a host name or an IPv4 or IPv6 address", bounded(d.Host))
 	}
 	if err := hostname.Validate(d.Host); err != nil {
+		if d.Location == DBDocker {
+			return fieldErr("db-host", "%q: %v (a container name with _ is no valid host name: use its compose service name or a network alias)", bounded(d.Host), err)
+		}
 		return fieldErr("db-host", "%q: %v", bounded(d.Host), err)
 	}
 	if d.Port == 0 {
@@ -181,11 +306,21 @@ func (d *Database) validate() error {
 	if !config.ValidDBName(d.Name) {
 		return fieldErr("db-name", "must be 1 to 63 letters, digits, _, - or $ starting with a letter or _, and not postgres or a template database")
 	}
-	if err := checkSourcePath("db-ca-file", d.CAFile); err != nil {
-		if d.CAFile == "" {
-			return fieldErr("db-ca-file", "is required: the CA bundle (PEM) of your PostgreSQL's server certificate, inside the deployment directory (bekup verifies it with tls_mode verify-full)")
+	if _, err := ParseDBTLS(string(d.TLS.OrDefault())); err != nil {
+		return fieldErr("db-tls", "must be verify-ca-file, verify-system, require or disable")
+	}
+	if d.TLS.OrDefault() == DBTLSVerifyCAFile {
+		if err := checkSourcePath("db-ca-file", d.CAFile); err != nil {
+			if d.CAFile == "" {
+				return fieldErr("db-ca-file", "is required with --db-tls verify-ca-file (the default): the CA bundle (PEM) of your PostgreSQL's server certificate, inside the deployment directory (or --db-tls verify-system for a certificate from a public CA)")
+			}
+			return err
 		}
-		return err
+	} else if d.CAFile != "" {
+		return fieldErr("db-ca-file", "applies to --db-tls verify-ca-file only (%s uses no CA file)", d.TLS)
+	}
+	if d.TLSServerName != "" && d.TLS.Weak() {
+		return fieldErr("db-tls-server-name", "applies to the verifying --db-tls choices only (%s verifies no host name)", d.TLS)
 	}
 	if d.TLSServerName != "" {
 		if !hostRe.MatchString(d.TLSServerName) {
@@ -418,13 +553,50 @@ func renderDatabaseTOML(d *Database) string {
 		fmt.Fprintf(&b, "owner_user = %s\n", quoteTOML(config.DBOwnerRole))
 		fmt.Fprintf(&b, "owner_password_file = %s\n", quoteTOML(dbOwnerPasswordTarget))
 	}
-	b.WriteString("# Only the CA bundle you named is trusted (never the system roots).\n")
-	fmt.Fprintf(&b, "tls_mode = %s\n", quoteTOML(config.DBTLSVerifyFull))
-	fmt.Fprintf(&b, "tls_ca_file = %s\n", quoteTOML(dbCATarget))
+	switch d.TLS.OrDefault() {
+	case DBTLSVerifyCAFile:
+		b.WriteString("# Only the CA bundle you named is trusted (never the system roots).\n")
+		fmt.Fprintf(&b, "tls_mode = %s\n", quoteTOML(config.DBTLSVerifyFull))
+		fmt.Fprintf(&b, "tls_ca_file = %s\n", quoteTOML(dbCATarget))
+	case DBTLSVerifySystem:
+		b.WriteString("# Verified against the system CA bundle of the bekup image (a certificate\n")
+		b.WriteString("# from a public CA): every public CA can vouch for the server (D-215).\n")
+		fmt.Fprintf(&b, "tls_mode = %s\n", quoteTOML(config.DBTLSVerifyFull))
+		fmt.Fprintf(&b, "tls_ca_file = %s\n", quoteTOML(config.SystemCABundle))
+	case DBTLSRequire:
+		b.WriteString("# EXPLICIT WEAKENING (D-100, D-215): encrypted, but the server certificate is\n")
+		b.WriteString("# NOT verified, so anyone in the network path can impersonate the database.\n")
+		b.WriteString("# Warned at every start, audited (security.insecure_db_tls) and alerted daily.\n")
+		fmt.Fprintf(&b, "tls_mode = %s\n", quoteTOML(config.DBTLSRequire))
+		// An explicit empty value: the default CA path would verify the
+		// chain against the (empty) mounted file.
+		b.WriteString("tls_ca_file = \"\"\n")
+	case DBTLSDisable:
+		b.WriteString("# EXPLICIT WEAKENING (D-100, D-215): NO TLS. Everything, including the SCRAM\n")
+		b.WriteString("# exchange, crosses the network unencrypted; only sensible on a private Docker\n")
+		b.WriteString("# network. Warned at every start, audited (security.insecure_db_tls) and\n")
+		b.WriteString("# alerted daily.\n")
+		fmt.Fprintf(&b, "tls_mode = %s\n", quoteTOML(config.DBTLSDisable))
+		b.WriteString("tls_ca_file = \"\"\n")
+	}
 	if d.TLSServerName != "" {
 		fmt.Fprintf(&b, "tls_server_name = %s\n", quoteTOML(d.TLSServerName))
 	}
 	return b.String()
+}
+
+// psqlSSL are the libpq TLS parameters of the choice (the DBA's psql).
+func (t DBTLS) psqlSSL() string {
+	switch t.OrDefault() {
+	case DBTLSVerifySystem:
+		return "sslmode=verify-full sslrootcert=system"
+	case DBTLSRequire:
+		return "sslmode=require"
+	case DBTLSDisable:
+		return "sslmode=disable"
+	default:
+		return "sslmode=verify-full sslrootcert=<ca.pem>"
+	}
 }
 
 // dbAddress is host:port for reports.
@@ -435,6 +607,17 @@ func (d *Database) dbAddress() string {
 // dbNextSteps returns the commands that prepare the external database,
 // in order (the compose project directory is the deployment directory).
 func dbNextSteps(d *Database, l Layout) []string {
+	// db bootstrap refuses a connection below verify-full without the
+	// explicit flag (D-207): the administrator's password and the DDL
+	// would cross an unverified or unencrypted connection.
+	insecure, insecureNote := "", ""
+	if d.TLS.Weak() {
+		insecure = " --allow-insecure-admin-connection"
+		insecureNote = fmt.Sprintf("\n     WARNING: --allow-insecure-admin-connection because of --db-tls %s: the admin login\n     and the DDL cross a connection that is encrypted but not verified", d.TLS)
+		if d.TLS == DBTLSDisable {
+			insecureNote = "\n     WARNING: --allow-insecure-admin-connection because of --db-tls disable: the admin login\n     and the DDL cross the network unencrypted and without channel binding, so a\n     container that ARP-spoofs the database on its Docker network can relay the\n     SCRAM login and hijack the admin session. Prefer --db-tls require."
+		}
+	}
 	switch d.Auth {
 	case DBAuthBootstrap:
 		admin := d.AdminUser
@@ -442,17 +625,17 @@ func dbNextSteps(d *Database, l Layout) []string {
 			admin = "<admin role>"
 		}
 		return []string{
-			fmt.Sprintf("docker compose run --rm migrate db bootstrap --admin-user %s\n     (creates bekup_owner, bekup_app and the database %s with the generated passwords;\n     the admin password is asked on the terminal, used once and never stored)", admin, d.Name),
+			fmt.Sprintf("docker compose run --rm migrate db bootstrap --admin-user %s%s\n     (creates bekup_owner, bekup_app and the database %s with the generated passwords;\n     the admin password is asked on the terminal, used once and never stored)%s", admin, insecure, d.Name, insecureNote),
 			"docker compose run --rm migrate migrate check",
 		}
 	case DBAuthSingleAccount:
 		return []string{
-			fmt.Sprintf("docker compose run --rm migrate db bootstrap\n     (as %s, which needs CREATEROLE and CREATEDB once: creates the NOLOGIN roles and the database %s)", d.User, d.Name),
+			fmt.Sprintf("docker compose run --rm migrate db bootstrap%s\n     (as %s, which needs CREATEROLE and CREATEDB once: creates the NOLOGIN roles and the database %s)%s", insecure, d.User, d.Name, insecureNote),
 			"docker compose run --rm migrate migrate check",
 		}
 	case DBAuthDBASQL:
 		return []string{
-			fmt.Sprintf("Hand %s to your DBA (it holds SCRAM verifiers, not the passwords;\n     keep it private) to run as a CREATEROLE + CREATEDB account:\n       psql -v ON_ERROR_STOP=1 --no-psqlrc -f %s \"host=%s port=%d dbname=postgres user=<admin> sslmode=verify-full sslrootcert=<ca.pem>\"\n     then delete it (setup check warns while it exists)", l.keys(dbRolesSQLName), dbRolesSQLName, d.Host, d.Port),
+			fmt.Sprintf("Hand %s to your DBA (it holds SCRAM verifiers, not the passwords;\n     keep it private) to run as a CREATEROLE + CREATEDB account:\n       psql -v ON_ERROR_STOP=1 --no-psqlrc -f %s \"host=%s port=%d dbname=postgres user=<admin> %s\"\n     then delete it (setup check warns while it exists)", l.keys(dbRolesSQLName), dbRolesSQLName, d.Host, d.Port, d.TLS.psqlSSL()),
 			"docker compose run --rm migrate migrate check",
 		}
 	default: // existing roles

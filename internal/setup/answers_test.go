@@ -66,38 +66,81 @@ func TestAnswersValidate(t *testing.T) {
 		{name: "variant traefik", proxy: ProxyTraefik, mut: func(a *Answers) { a.Variant, a.Proxy = VariantTraefik, "" }},
 		{name: "variant traefik with nginx", proxy: ProxyNginx, mut: func(a *Answers) { a.Variant = VariantTraefik }, field: "proxy"},
 		{name: "bad variant", proxy: ProxyTraefik, mut: func(a *Answers) { a.Variant = "caddy" }, field: "variant"},
-		{name: "npm", proxy: ProxyNone, mut: externalVariant(VariantNPM)},
-		{name: "traefik-external", proxy: ProxyNone, mut: externalVariant(VariantTraefikExternal)},
-		{name: "external with tls", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.TLSMode = TLSACME }, field: "tls-mode"},
-		{name: "external with trusted", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.TrustedProxies = []string{"10.0.0.1/32"} }, field: "trusted-proxy"},
-		{name: "external with --proxy none", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Proxy = ProxyNone }, field: "proxy"},
-		{name: "external proxy in full", proxy: ProxyNone, mut: func(a *Answers) { a.Proxy, a.TrustedProxies = ProxyExternal, nil }, field: "proxy"},
-		{name: "external frontend subnet", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Network.FrontendSubnet = "172.30.1.0/24" }, field: "frontend-subnet"},
+		// Own reverse proxy (D-215): join mode (default) and link mode.
+		{name: "own proxy join", proxy: ProxyNone, mut: ownProxyJoin},
+		{name: "own proxy join compose names", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyJoin(a)
+			a.ProxyNetwork, a.ProxyContainer = "npm_default", "nginx-proxy-manager-app-1"
+		}},
+		{name: "own proxy without network", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "" }, field: "proxy-network"},
+		{name: "own proxy bad network", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "-bad" }, field: "proxy-network"},
+		{name: "own proxy default bridge", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "bridge" }, field: "proxy-network"},
+		{name: "own proxy host network", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "host" }, field: "proxy-network"},
+		{name: "own proxy without container", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "" }, field: "proxy-container"},
+		{name: "own proxy container ip", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "10.0.0.5" }, field: "proxy-container"},
+		{name: "own proxy container space", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "npm x" }, field: "proxy-container"},
+		// D-215 review M3: no dots, never one of bekup's own names.
+		{name: "own proxy container dotted", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "proxy.v2" }, field: "proxy-container"},
+		{name: "own proxy container serve", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "serve" }, field: "proxy-container"},
+		{name: "own proxy container alias", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "BEKUP-SERVE" }, field: "proxy-container"},
+		{name: "own proxy container traefik", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "traefik" }, field: "proxy-container"},
+		// Docker network names are case-sensitive: "Bridge" is user-defined.
+		{name: "own proxy network Bridge", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "Bridge" }},
+		{name: "own proxy join with link flags", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.Link.Subnet = "10.9.9.0/28" }, field: "proxy-subnet"},
+		{name: "own proxy bad mode", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyMode = "bridge" }, field: "proxy-network-mode"},
+		{name: "own proxy with tls", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.TLSMode = TLSACME }, field: "tls-mode"},
+		{name: "own proxy with trusted", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.TrustedProxies = []string{"10.0.0.1/32"} }, field: "trusted-proxy"},
+		{name: "own proxy with --proxy none", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.Proxy = ProxyNone }, field: "proxy"},
+		{name: "own proxy in full", proxy: ProxyNone, mut: func(a *Answers) { a.Proxy, a.TrustedProxies = ProxyExternal, nil }, field: "proxy"},
+		{name: "own proxy frontend subnet", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.Network.FrontendSubnet = "172.30.1.0/24" }, field: "frontend-subnet"},
+		{name: "proxy network on a bundled variant", proxy: ProxyTraefik, mut: func(a *Answers) { a.ProxyNetwork = "web" }, field: "proxy-network"},
 		{name: "link on a bundled variant", proxy: ProxyTraefik, mut: func(a *Answers) { a.Link.Name = "x" }, field: "proxy-network"},
+		{name: "labels on a bundled variant", proxy: ProxyTraefik, mut: func(a *Answers) { a.ProxyLabels = true }, field: "proxy-labels"},
+		{name: "labels", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyLabels = true }},
+		{name: "entrypoint", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyLabels, a.TraefikEntrypoint = true, "web secure" }, field: "traefik-entrypoint"},
+		{name: "certresolver", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyLabels, a.TraefikCertResolver = true, "le`x" }, field: "traefik-certresolver"},
+		{name: "entrypoint without labels", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.TraefikEntrypoint = "web" }, field: "traefik-entrypoint"},
+		{name: "link", proxy: ProxyNone, mut: ownProxyLink},
+		{name: "link with container", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.ProxyContainer = "npm" }, field: "proxy-container"},
+		// D-215 review L8: the database network is never the link network.
+		{name: "link with a db container", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyLink(a)
+			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "dbnet", Host: "postgres", TLS: DBTLSDisable}
+		}},
+		{name: "link db network is the link network", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyLink(a)
+			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "bekup-proxy", Host: "postgres", TLS: DBTLSDisable}
+		}, field: "db-network"},
+		{name: "link db network is the custom link network", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyLink(a)
+			a.Link.Name = "edge"
+			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "Edge", Host: "postgres", TLS: DBTLSDisable}
+		}, field: "db-network"},
 		{name: "link custom", proxy: ProxyNone, mut: func(a *Answers) {
-			externalVariant(VariantNPM)(a)
+			ownProxyLink(a)
 			a.Link = LinkNetwork{Name: "my_proxy.net", Subnet: "192.168.77.0/29", ProxyIP: "192.168.77.2", ServeIP: "192.168.77.6"}
 		}},
 		{name: "link public subnet", proxy: ProxyNone, mut: func(a *Answers) {
-			externalVariant(VariantNPM)(a)
+			ownProxyLink(a)
 			a.Link = LinkNetwork{Subnet: "8.8.8.0/28", ProxyIP: "8.8.8.5", ServeIP: "8.8.8.10"}
 		}, field: "proxy-subnet"},
 		{name: "link /30", proxy: ProxyNone, mut: func(a *Answers) {
-			externalVariant(VariantNPM)(a)
+			ownProxyLink(a)
 			a.Link = LinkNetwork{Subnet: "10.9.9.0/30", ProxyIP: "10.9.9.2", ServeIP: "10.9.9.2"}
 		}, field: "proxy-subnet"},
 		{name: "link overlaps runner-ctl", proxy: ProxyNone, mut: func(a *Answers) {
-			externalVariant(VariantNPM)(a)
+			ownProxyLink(a)
 			a.Link = LinkNetwork{Subnet: "10.213.251.0/28", ProxyIP: "10.213.251.5", ServeIP: "10.213.251.11"}
 		}, field: "proxy-subnet"},
-		{name: "link gateway", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Link.ProxyIP = "10.213.253.1" }, field: "proxy-ip"},
-		{name: "link broadcast", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Link.ServeIP = "10.213.253.15" }, field: "serve-ip"},
-		{name: "link outside", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Link.ServeIP = "10.213.253.20" }, field: "serve-ip"},
-		{name: "link same", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Link.ServeIP = "10.213.253.5" }, field: "proxy-ip"},
-		{name: "link name", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.Link.Name = "-bad" }, field: "proxy-network"},
-		{name: "entrypoint", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantTraefikExternal)(a); a.TraefikEntrypoint = "web secure" }, field: "traefik-entrypoint"},
-		{name: "certresolver", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantTraefikExternal)(a); a.TraefikCertResolver = "le`x" }, field: "traefik-certresolver"},
-		{name: "entrypoint on npm", proxy: ProxyNone, mut: func(a *Answers) { externalVariant(VariantNPM)(a); a.TraefikEntrypoint = "web" }, field: "traefik-entrypoint"},
+		{name: "link gateway", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ProxyIP = "10.213.253.1" }, field: "proxy-ip"},
+		{name: "link broadcast", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ServeIP = "10.213.253.15" }, field: "serve-ip"},
+		{name: "link outside", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ServeIP = "10.213.253.20" }, field: "serve-ip"},
+		{name: "link same", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ServeIP = "10.213.253.5" }, field: "proxy-ip"},
+		{name: "link name", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.Name = "-bad" }, field: "proxy-network"},
+		{name: "database on the proxy network", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyJoin(a)
+			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "WEB", Host: "db", CAFile: "ca.pem"}
+		}, field: "db-network"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,9 +166,18 @@ func TestAnswersValidate(t *testing.T) {
 	}
 }
 
-// externalVariant turns proxy-none answers into an external variant.
-func externalVariant(v Variant) func(*Answers) {
-	return func(a *Answers) { a.Variant, a.Proxy, a.TrustedProxies = v, "", nil }
+// ownProxyJoin turns proxy-none answers into the own-proxy variant in join
+// mode (D-215).
+func ownProxyJoin(a *Answers) {
+	a.Variant, a.Proxy, a.TrustedProxies = VariantOwnProxy, "", nil
+	a.ProxyNetwork, a.ProxyContainer = "web", "npm"
+}
+
+// ownProxyLink turns proxy-none answers into the own-proxy variant in link
+// mode (D-205).
+func ownProxyLink(a *Answers) {
+	a.Variant, a.Proxy, a.TrustedProxies = VariantOwnProxy, "", nil
+	a.ProxyMode = ProxyLink
 }
 
 const forbidden = "\r\n\"'$#`\\ \t"

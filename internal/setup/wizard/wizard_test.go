@@ -120,16 +120,20 @@ func TestInitWizardBackNavigation(t *testing.T) {
 		{Title: "bekup setup"},
 		{Title: "Reverse proxy", Value: proxyOwnTraefik},
 		{Title: "Domain", Back: true}, // back to the proxy
-		{Title: "Reverse proxy", Value: proxyNPM},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "npm"},
+		{Title: "Traefik Docker labels?", Value: "no"},
 		{Title: "Domain", Value: "backup.example.com"},
-		{Title: "Database", Back: true}, // back to the domain (no ACME step for npm)
+		{Title: "Database", Back: true}, // back to the domain (no ACME step for an own proxy)
 		{Title: "Domain", Value: "bekup.example.org"},
 		{Title: "Database", Value: "bundled"},
 	}, tail()...)
 	s.Answers = append(s.Answers, finish(Answer{Title: "Bundled database secrets", Value: "yes"})...)
 	s.Answers = append(s.Answers, Answer{Title: "CA key passphrase (shown ONCE)"})
 	a := run(t, env).Options.Answers
-	if a.Variant != setup.VariantNPM || a.Proxy != setup.ProxyExternal || a.Domain != "bekup.example.org" || a.TLSMode != "" || a.ACMEEmail != "" {
+	if a.Variant != setup.VariantOwnProxy || a.Proxy != setup.ProxyExternal || a.Domain != "bekup.example.org" || a.TLSMode != "" || a.ACMEEmail != "" ||
+		a.ProxyNetwork != "web" || a.ProxyContainer != "npm" || a.ProxyLabels || a.ProxyMode != "" {
 		t.Fatalf("answers %+v", a)
 	}
 	// Back on the first screen stays there; Ctrl+C aborts.
@@ -146,13 +150,17 @@ func TestInitWizardExternalDatabase(t *testing.T) {
 	writeCA(t, env.Dir)
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
-		{Title: "Reverse proxy", Value: proxyNone},
-		{Title: "Your proxy's address", Value: "10.213.250.6/32"},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "caddy"},
+		{Title: "Traefik Docker labels?", Value: "no"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: dbRemote},
 		{Title: "PostgreSQL host", Value: "10.0.5.4"},
 		{Title: "PostgreSQL port", Value: "6543"},
 		{Title: "Database name", Value: "bekup_prod"},
+		{Title: "TLS to your PostgreSQL", Value: "verify-ca-file"},
 		{Title: "CA bundle", Value: "db-ca.pem"},
 		{Title: "TLS server name", Value: "db.example.com"},
 		{Title: "Roles and database", Value: "existing-roles"},
@@ -173,7 +181,7 @@ func TestInitWizardExternalDatabase(t *testing.T) {
 	p := run(t, env)
 	a := p.Options.Answers
 	want := setup.Database{Mode: setup.DBExternal, Host: "10.0.5.4", Port: 6543, Name: "bekup_prod", CAFile: "db-ca.pem", TLSServerName: "db.example.com", Auth: setup.DBAuthExistingRoles}
-	if a.DB != want || a.Variant != setup.VariantFull || a.Proxy != setup.ProxyNone || !slices.Equal(a.TrustedProxies, []string{"10.213.250.6/32"}) {
+	if a.DB != want || a.Variant != setup.VariantOwnProxy || a.Proxy != setup.ProxyExternal || a.ProxyContainer != "caddy" || len(a.TrustedProxies) != 0 {
 		t.Fatalf("answers %+v", a)
 	}
 	for role, pw := range map[string]string{"bekup_app": testAppPW, "bekup_owner": testOwnerPW} {
@@ -198,14 +206,19 @@ func TestInitWizardSingleAccount(t *testing.T) {
 	writeCA(t, env.Dir)
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
-		{Title: "Reverse proxy", Value: proxyExistingTraefik},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "traefik_web"},
+		{Title: "Your proxy's container name", Value: "edge-traefik"},
+		{Title: "Traefik Docker labels?", Value: "yes"},
 		{Title: "Traefik entrypoint", Value: "https"},
 		{Title: "Traefik certificate resolver"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: dbRemote},
 		{Title: "PostgreSQL host", Value: "db.example.com"},
 		{Title: "PostgreSQL port"},
 		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL"},
 		{Title: "CA bundle", Value: "db-ca.pem"},
 		{Title: "TLS server name"},
 		{Title: "Roles and database", Value: "single-account"},
@@ -231,7 +244,7 @@ func TestInitWizardSingleAccount(t *testing.T) {
 		t.Fatalf("traefik names %q %q", a.TraefikEntrypoint, a.TraefikCertResolver)
 	}
 	got := strings.Join(p.Flags, " ")
-	if !strings.Contains(got, "--traefik-entrypoint https --domain") || strings.Contains(got, "--traefik-certresolver") || !strings.Contains(got, "--db-password-file PASSWORD_FILE") || strings.Contains(got, "OWNER_PASSWORD_FILE") {
+	if !strings.Contains(got, "--proxy-network traefik_web --proxy-container edge-traefik --proxy-labels --traefik-entrypoint https --domain") || strings.Contains(got, "--traefik-certresolver") || !strings.Contains(got, "--db-password-file PASSWORD_FILE") || strings.Contains(got, "OWNER_PASSWORD_FILE") {
 		t.Fatalf("flags %s", got)
 	}
 	if !strings.Contains(p.FlagsNote, "PASSWORD_FILE: a file in the deployment directory") {
@@ -259,9 +272,11 @@ func TestInitWizardBootstrapAndComposeFirst(t *testing.T) {
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Let's Encrypt e-mail", Value: "ops@example.com"},
 		{Title: "Let's Encrypt staging?", Value: "yes"},
+		{Title: "Where does your PostgreSQL run?"},
 		{Title: "PostgreSQL host", Value: "db.example.com"},
 		{Title: "PostgreSQL port"},
 		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL"},
 		{Title: "CA bundle", Value: "db-ca.pem"},
 		{Title: "TLS server name"},
 		{Title: "Roles and database", Value: "bootstrap"},
@@ -313,7 +328,10 @@ func TestInitWizardConsentPaths(t *testing.T) {
 	}
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
-		{Title: "Reverse proxy", Value: proxyNPM},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "npm"},
+		{Title: "Traefik Docker labels?", Value: "no"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "bundled"},
 		{Title: "Master encryption key", Value: choiceImport},
@@ -455,12 +473,17 @@ func TestInitWizardSamePasswordsAskedAgain(t *testing.T) {
 	writeCA(t, env.Dir)
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
-		{Title: "Reverse proxy", Value: proxyNPM},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "npm"},
+		{Title: "Traefik Docker labels?", Value: "no"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?"},
 		{Title: "PostgreSQL host", Value: "db.example.com"},
 		{Title: "PostgreSQL port"},
 		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL"},
 		{Title: "CA bundle", Value: "db-ca.pem"},
 		{Title: "TLS server name"},
 		{Title: "Roles and database", Value: "existing-roles"},
@@ -496,7 +519,7 @@ func TestInitWizardComposeFirstVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := setup.RenderRelease(setup.VariantNPM, setup.DBBundled, &img)
+	data, err := setup.RenderRelease(setup.VariantOwnProxy, setup.DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,6 +534,9 @@ func TestInitWizardComposeFirstVersion(t *testing.T) {
 	env.AllowVersionMismatch = true
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "npm"},
+		{Title: "Traefik Docker labels?"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Master encryption key", Value: choiceGenerate},
 		{Title: "Internal CA", Value: choiceGenerate},
@@ -537,9 +563,13 @@ func TestInitWizardPortAndPlainLabel(t *testing.T) {
 	writeCA(t, env.Dir)
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
-		{Title: "Reverse proxy", Value: proxyNPM},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "npm"},
+		{Title: "Traefik Docker labels?"},
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?"},
 		{Title: "PostgreSQL host", Value: "db.example.com"},
 		{Title: "PostgreSQL port", Value: "0"},
 	}
@@ -641,4 +671,92 @@ func TestInitWizardFollowLatest(t *testing.T) {
 			}
 		}
 	})
+}
+
+// D-215: own reverse proxy on this host (network + container name), a
+// database container on its own Docker network, and a weak TLS choice that
+// needs an explicit confirmation (declined first: asked again).
+func TestInitWizardOwnProxyAndDatabaseContainer(t *testing.T) {
+	s := &Script{}
+	env := testEnv(t, s)
+	s.Answers = []Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "bridge"}, // refused: Docker's default bridge
+	}
+	if _, err := RunInit(env); err == nil || !strings.Contains(err.Error(), "predefined") {
+		t.Fatalf("default bridge: %v", err)
+	}
+	// D-215 review M3: bekup's own names and dotted names are refused.
+	for _, bad := range []string{"serve", "bekup-serve", "npm.app"} {
+		s.Answers = []Answer{
+			{Title: "bekup setup"},
+			{Title: "Reverse proxy", Value: proxyOwn},
+			{Title: "Your proxy's Docker network", Value: "web"},
+			{Title: "Your proxy's container name", Value: bad},
+		}
+		s.Screens, s.next = nil, 0
+		if _, err := RunInit(env); err == nil || !strings.Contains(err.Error(), "proxy-container") {
+			t.Fatalf("container %q: %v", bad, err)
+		}
+	}
+	s.Answers = []Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "caddy"},
+		{Title: "Traefik Docker labels?", Value: "no"},
+		{Title: "Domain", Value: "backup.example.com"},
+		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: dbHere},
+		{Title: "The database's Docker network", Value: "web"}, // the proxy's: refused
+	}
+	s.Screens, s.next = nil, 0
+	if _, err := RunInit(env); err == nil || !strings.Contains(err.Error(), "your proxy's network") {
+		t.Fatalf("same network: %v", err)
+	}
+	s.Answers = []Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "caddy"},
+		{Title: "Traefik Docker labels?", Value: "no"},
+		{Title: "Domain", Value: "backup.example.com"},
+		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: dbHere},
+		{Title: "The database's Docker network", Value: "dbnet"},
+		{Title: "The database's container name", Value: "postgres"},
+		{Title: "PostgreSQL port"},
+		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL", Value: "require"},
+		{Title: "An explicit weakening", Value: "no"},
+		{Title: "TLS to your PostgreSQL", Value: "disable"},
+		{Title: "An explicit weakening", Value: "yes"},
+		{Title: "Roles and database", Value: "bootstrap"},
+		{Title: "Admin role"},
+	}
+	s.Answers = append(s.Answers, tail()...)
+	s.Answers = append(s.Answers, finish()...)
+	s.Answers = append(s.Answers, Answer{Title: "CA key passphrase (shown ONCE)"})
+	s.Screens, s.next = nil, 0
+	p := run(t, env)
+	a := p.Options.Answers
+	if a.Variant != setup.VariantOwnProxy || a.ProxyNetwork != "web" || a.ProxyContainer != "caddy" || a.ProxyLabels {
+		t.Fatalf("proxy answers %+v", a)
+	}
+	want := setup.Database{Mode: setup.DBExternal, Location: setup.DBDocker, Network: "dbnet", Host: "postgres", TLS: setup.DBTLSDisable}
+	if a.DB != want {
+		t.Fatalf("database %+v", a.DB)
+	}
+	text := s.Text.String()
+	for _, w := range []string{"CAP_NET_RAW", "Prefer require over disable", "--allow-insecure-admin-connection", "point it at http://bekup-serve:8080", "DB TLS:     disable (WEAKENED)"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("screens lack %q", w)
+		}
+	}
+	got := strings.Join(p.Flags, " ")
+	if !strings.Contains(got, "--proxy-network web --proxy-container caddy") || !strings.Contains(got, "--db-location docker --db-network dbnet --db-host postgres") ||
+		!strings.Contains(got, "--db-tls disable") || strings.Contains(got, "--db-ca-file") {
+		t.Fatalf("flags %s", got)
+	}
 }

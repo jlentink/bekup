@@ -82,6 +82,9 @@ type UpgradeSummary struct {
 	Following bool
 	// Findings are the compose lint findings (warnings).
 	Findings []Finding
+	// Notices explain changes of the deployment's form (D-215: a retired
+	// variant mapped to own-proxy).
+	Notices []string
 }
 
 // CheckVersionTag refuses an image tag that names another version than the
@@ -155,13 +158,33 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	if err := refuseShadowFiles(root); err != nil {
 		return err
 	}
+	// A retired variant (D-215) maps to own-proxy in link mode: the link
+	// overlay (and the Traefik labels) go into a new compose.override.yaml;
+	// an existing one must carry them already.
+	ov := st.overlays()
+	hasOverride, err := checkNoSymlinks(root, OverrideFile)
+	if err != nil {
+		return err
+	}
+	needOverride := st.Legacy() != "" && ov.Any() && hasOverride == nil
+	inspectOv := ov
+	if needOverride {
+		inspectOv = Overlays{}
+	}
+	var notices []string
+	if st.Legacy() != "" {
+		notices = append(notices, legacyNotice(st, needOverride))
+	}
 	var compose *ComposeInfo
 	switch st.ComposeMode {
 	case ComposeOperator:
 		if opts.WriteCompose {
 			return fmt.Errorf("this deployment is compose-first: setup never writes %s. Replace it with the new release file (%s) and run `docker compose run --rm setup upgrade`", ComposeFile, ReleaseURL)
 		}
-		if compose, err = inspectCompose(root, opts.assets, st.Variant, "", nil, os.LookupEnv, true); err != nil {
+		if compose, err = inspectCompose(root, opts.assets, st.Variant, "", inspectOv, nil, os.LookupEnv, true); err != nil {
+			if st.Legacy() != "" {
+				return fmt.Errorf("%w\nThis deployment used the retired %s variant (D-215): replace %s with %s of the new release (%s), then run `docker compose run --rm setup upgrade` again; setup keeps your bekup-proxy link network in %s", err, st.Legacy(), ComposeFile, VariantOwnProxy.AssetName(st.dbMode()), ReleaseURL, OverrideFile)
+			}
 			return err
 		}
 		if compose.Variant != st.Variant {
@@ -177,6 +200,9 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 			return fmt.Errorf("the image %s does not match the x-bekup-image line of %s (%s): run setup from that file (`docker compose run --rm setup upgrade`)", opts.Image, ComposeFile, compose.Image)
 		}
 		if err := composeMatches(compose, &Answers{Image: compose.Image, Variant: st.Variant, ImageInEnv: compose.FromEnv, DB: Database{Mode: st.dbMode()}}); err != nil {
+			if ov.Any() && !needOverride {
+				return fmt.Errorf("%w\n%s must carry the blocks setup wrote (D-215; merged into its services: and networks: keys):\n%s", err, OverrideFile, overlayDoc(ov, ""))
+			}
 			return err
 		}
 		opts.Image = compose.Image
@@ -218,6 +244,21 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	gen, err := generatedFiles(opts.assets, opts.Image, st.Variant, st.dbMode(), st.ComposeMode == ComposeGenerated)
 	if err != nil {
 		return err
+	}
+	if st.ComposeMode == ComposeGenerated && hasOverride != nil && ov.Any() {
+		// Setup-first (D-215): setup never touches an existing override, so
+		// it must carry the overlays on top of the compose.yaml this upgrade
+		// writes (also for a retired variant mapped to link mode).
+		override, err := readManaged(root, OverrideFile)
+		if err != nil {
+			return err
+		}
+		if err := checkSetupFirstOverride(root, gen[ComposeFile], override, st.Variant, opts.Image, ov, os.LookupEnv); err != nil {
+			if st.Legacy() != "" {
+				return fmt.Errorf("%w\n(this deployment used the retired %s variant, D-215: it is now the own-proxy variant in link mode)", err, st.Legacy())
+			}
+			return err
+		}
 	}
 	assets, err := assetFiles(opts.assets, st.Variant.assetDirs(st.dbMode()))
 	if err != nil {
@@ -301,6 +342,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		sum := &UpgradeSummary{
 			Root: root, OldImage: st.Image, NewImage: opts.Image.String(), OldVersion: st.BekupVersion, NewVersion: opts.Version,
 			ComposeMode: st.ComposeMode, Variant: st.Variant, DB: st.dbMode(), BackedUp: backups, NewSecretGroups: newGroups,
+			Notices: notices,
 		}
 		for _, p := range sortedKeys(gen) {
 			cur, err := readManaged(root, p)
@@ -386,6 +428,13 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		}
 		changed++
 	}
+	if needOverride {
+		data := []byte(overlayHeader + overlayDoc(ov, ""))
+		if err := w.create(OverrideFile, data, 0o644); err != nil {
+			return err
+		}
+		changed++
+	}
 	// Stale assets: recorded before, not shipped any more.
 	var stale []string
 	for _, p := range st.assetPaths() {
@@ -453,7 +502,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(newState, oldState) {
+	if !bytes.Equal(newState, oldState) || st.Legacy() != "" {
 		if err := w.replace(StateFileName, newState, 0o644); err != nil {
 			return err
 		}
@@ -466,6 +515,9 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "\nbekup setup upgrade: %s\n  image:     %s -> %s\n  ownership: %s (%s)\n", root, st.Image, opts.Image, mode, why)
+	for _, n := range notices {
+		fmt.Fprintf(&b, "  NOTICE: %s\n", n)
+	}
 	for _, msg := range warnings {
 		fmt.Fprintf(&b, "  WARNING: %s\n", msg)
 	}
@@ -516,6 +568,19 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	}
 	_, err = io.WriteString(opts.Out, b.String())
 	return err
+}
+
+// legacyNotice explains the mapping of a retired variant (D-215).
+func legacyNotice(st *State, newOverride bool) string {
+	what := "the bekup-proxy link network"
+	if st.ProxyLabels {
+		what += " and the Traefik labels on serve"
+	}
+	where := OverrideFile + " already carries them"
+	if newOverride {
+		where = "setup writes them into a new " + OverrideFile
+	}
+	return fmt.Sprintf("the %s variant was retired (D-215): this deployment is now the own-proxy variant in link mode, which keeps %s (%s). Nothing changes for your proxy. To join your proxy's own network instead (simpler, trust by container name), set up a new deployment directory.", st.Legacy(), what, where)
 }
 
 // generateGroup creates the secrets of one group (upgrade: groups new in

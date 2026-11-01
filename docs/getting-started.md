@@ -18,9 +18,10 @@ There are two ways to run bekup with Docker Compose:
   wizard of the image, which asks for the proxy, the domain and the
   database (bundled or your own PostgreSQL) and writes everything,
   `compose.yaml` included; then `docker compose up -d`. Advanced: start
-  from one of the six compose files (`compose.yaml`,
-  `compose.traefik-external.yaml`, `compose.npm.yaml` and their
-  `*.external-db.yaml` forms), committed in `deploy/compose/` and attached
+  from one of the four compose files (`compose.yaml` with bekup's own
+  Traefik, `compose.own-proxy.yaml` behind your own reverse proxy on this
+  Docker host, and their `*.external-db.yaml` forms), committed in
+  `deploy/compose/` and attached
   to every release, and let `docker compose run --rm setup` write the rest
   ([installation](installation/compose.md)).
 
@@ -119,27 +120,30 @@ The server needs only Docker and the bekup image, no source checkout
 
    `IMAGE` is the image pinned by digest
    (`<registry>/bekup:<version>@sha256:<digest>`). The wizard asks for the
-   proxy, the domain, the database, the master key and the CA, then writes
+   proxy (bekup's own Traefik, or your own reverse proxy on this Docker
+   host), the domain, the database, the master key and the CA, then writes
    `compose.yaml`, `.env`, `bekup.toml`, `runner.toml`, the secrets and
    certificates ([details](installation/compose.md#install-with-the-setup-wizard)).
    With your own PostgreSQL, run the printed bootstrap command next
    (`docker compose run --rm migrate db bootstrap --admin-user <admin>`;
    [external database](installation/external-database.md)).
 2. **Or, advanced, instead of step 1:** download the compose file for your proxy (`compose.yaml` with bekup's
-   own Traefik, `compose.traefik-external.yaml` behind your Traefik,
-   `compose.npm.yaml` behind Nginx Proxy Manager) into an empty directory
-   and save it as `compose.yaml`: the committed copy from
+   own Traefik, `compose.own-proxy.yaml` behind your own reverse proxy on
+   this Docker host: Nginx Proxy Manager, Traefik, Caddy, nginx, ...) into
+   an empty directory and save it as `compose.yaml`: the committed copy from
    `https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/<file>`,
    or, once releases exist, the release asset, verified with
    `gh attestation verify compose.yaml --repo jlentink/bekup`. Behind your
-   own proxy, create the `bekup-proxy` link network once
-   ([reverse proxy](installation/reverse-proxy.md#existing-traefik)).
+   own proxy, look up the Docker network it is on and its container name
+   first; afterwards point the proxy at `http://bekup-serve:8080`
+   ([reverse proxy](installation/reverse-proxy.md#own-reverse-proxy)).
    Then `DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose run --rm setup`
    (with the committed copy prefixed by
    `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`; setup writes
    it to `.env`) runs `bekup setup init` from the pinned image (root with only
    `CAP_CHOWN`, no network, no logs). It asks for the host name, the ACME
-   e-mail (own Traefik only) and the CA key passphrase, and writes `.env`,
+   e-mail (own Traefik only), your proxy's network and container name (own
+   reverse proxy only) and the CA key passphrase, and writes `.env`,
    minimal `bekup.toml`/`runner.toml`, the database passwords, the master
    key and the mTLS certificates with the right owners; never
    `compose.yaml`. Mount your offline media at `/deploy/secrets/certs/ca`
@@ -166,7 +170,11 @@ The server needs only Docker and the bekup image, no source checkout
    --rm setup upgrade`; [upgrades](installation/upgrades.md)).
 
 nginx, your own proxy or every service: the setup-first install
-([compose.md](installation/compose.md#alternative-setup-first)).
+([compose.md](installation/compose.md#alternative-setup-first)). A proxy
+on another machine is not a wizard choice: its advanced flag path
+(`--variant full --proxy none --trusted-proxy <cidr>`) is described there
+(run a small proxy on this host, or route to bekup's `frontend` network
+yourself).
 
 Running production without a proxy over plain HTTP requires an explicit
 `server.allow_insecure_http = true` and raises a startup warning, a UI

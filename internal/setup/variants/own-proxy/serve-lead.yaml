@@ -1,0 +1,6 @@
+  # -------------------------------------------------------------------------
+  # serve: GraphQL API, UI, scheduler and River workers.
+  # Plain HTTP; YOUR reverse proxy terminates TLS (D-017) and reaches serve
+  # on the proxy's own Docker network as http://bekup-serve:8080. Its port
+  # is deliberately NOT published.
+  # -------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -199,7 +200,7 @@ func TestSetupComposeFirstCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := setup.RenderRelease(setup.VariantNPM, setup.DBBundled, &img)
+	data, err := setup.RenderRelease(setup.VariantOwnProxy, setup.DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,8 +211,17 @@ func TestSetupComposeFirstCLI(t *testing.T) {
 	}
 	t.Setenv("DOCKER_GID", "998")
 	t.Setenv("BEKUP_IMAGE", "registry.example.com/team/bekup:1.0.0@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
-	base := []string{"setup", "init", "--dir", dir, "--non-interactive", "--allow-version-mismatch",
-		"--domain", "backup.example.com", "--ownership", "none", "--ca-passphrase-stdin"}
+	base := append(make([]string, 0, 17), "setup", "init", "--dir", dir, "--non-interactive", "--allow-version-mismatch",
+		"--domain", "backup.example.com", "--ownership", "none", "--ca-passphrase-stdin")
+	if _, _, err := runIn(t, "correct horse battery staple x\n", base...); err == nil || !strings.Contains(err.Error(), "does not match the x-bekup-image") {
+		t.Fatalf("BEKUP_IMAGE mismatch: %v", err)
+	}
+	t.Setenv("BEKUP_IMAGE", setupTestImage) // what the setup service passes
+	if _, _, err := runIn(t, "correct horse battery staple x\n", base...); err == nil || !strings.Contains(err.Error(), "missing --proxy-network, --proxy-container") {
+		t.Fatalf("own proxy without its network: %v", err)
+	}
+	base = append(base, "--proxy", "own", "--proxy-network", "npm_default", "--proxy-container", "npm-app-1")
+	t.Setenv("BEKUP_IMAGE", "registry.example.com/team/bekup:1.0.0@sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210")
 	if _, _, err := runIn(t, "correct horse battery staple x\n", base...); err == nil || !strings.Contains(err.Error(), "does not match the x-bekup-image") {
 		t.Fatalf("BEKUP_IMAGE mismatch: %v", err)
 	}
@@ -220,14 +230,14 @@ func TestSetupComposeFirstCLI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("init: %v\n%s", err, stderr)
 	}
-	if !strings.Contains(stdout, "compose.yaml: the npm variant (exact)") || !strings.Contains(stdout, "Nginx Proxy Manager") {
+	if !strings.Contains(stdout, "compose.yaml: the own-proxy variant (exact)") || !strings.Contains(stdout, "Nginx Proxy Manager") || !strings.Contains(stdout, "http://bekup-serve:8080") {
 		t.Fatalf("stdout:\n%s", stdout)
 	}
 	if got, err := os.ReadFile(filepath.Clean(compose)); err != nil || !bytes.Equal(got, data) {
 		t.Fatalf("compose.yaml changed: %v", err)
 	}
 	env, err := os.ReadFile(filepath.Clean(filepath.Join(dir, ".env")))
-	if err != nil || !strings.Contains(string(env), "DOCKER_GID=998\n") || !strings.Contains(string(env), "SERVE_PROXY_IP=10.213.253.10\n") {
+	if err != nil || !strings.Contains(string(env), "DOCKER_GID=998\n") || !strings.Contains(string(env), "BEKUP_PROXY_NETWORK=npm_default\n") {
 		t.Fatalf(".env: %v\n%s", err, env)
 	}
 	if out, _, err := run(t, "setup", "check", "--dir", dir, "--ownership", "none"); err != nil {
@@ -247,9 +257,14 @@ func TestSetupComposeFirstCLI(t *testing.T) {
 }
 
 func TestSetupComposeCmd(t *testing.T) {
-	out, _, err := run(t, "setup", "compose", "--variant", "traefik-external", "--image", setupTestImage)
-	if err != nil || !strings.Contains(out, "x-bekup-image: &bekup-image "+setupTestImage+"\n") || !strings.Contains(out, "traefik.enable") {
+	out, _, err := run(t, "setup", "compose", "--variant", "own-proxy", "--image", setupTestImage)
+	if err != nil || !strings.Contains(out, "x-bekup-image: &bekup-image "+setupTestImage+"\n") || !strings.Contains(out, "aliases: [bekup-serve]") {
 		t.Fatalf("compose: %v\n%.300s", err, out)
+	}
+	for _, retired := range []string{"traefik-external", "npm"} {
+		if _, _, err := run(t, "setup", "compose", "--variant", retired); err == nil || !strings.Contains(err.Error(), "retired") {
+			t.Fatalf("retired %s: %v", retired, err)
+		}
 	}
 	out, _, err = run(t, "setup", "compose", "--variant", "full")
 	if err != nil || !strings.Contains(out, setup.ComposePlaceholderLine+"\n") {
@@ -258,7 +273,7 @@ func TestSetupComposeCmd(t *testing.T) {
 	if _, _, err := run(t, "setup", "compose", "--variant", "caddy"); err == nil {
 		t.Fatal("bad variant accepted")
 	}
-	if _, _, err := run(t, "setup", "compose", "--variant", "npm", "--image", "bekup:1.0.0"); err == nil || !strings.Contains(err.Error(), "RepoDigests") {
+	if _, _, err := run(t, "setup", "compose", "--variant", "own-proxy", "--image", "bekup:1.0.0"); err == nil || !strings.Contains(err.Error(), "RepoDigests") {
 		t.Fatalf("unpinned image: %v", err)
 	}
 }
@@ -319,5 +334,53 @@ func TestSetupPlaceholderCLI(t *testing.T) {
 	}
 	if out, _, err := run(t, "setup", "check", "--dir", dir, "--ownership", "none"); err != nil {
 		t.Fatalf("check after upgrade: %v\n%s", err, out)
+	}
+}
+
+// D-215: the own-proxy and database flags map onto the answers: --proxy own
+// names the variant setup-first, --proxy-network is the proxy's network in
+// join mode and the link network's name in link mode, and the database
+// location, network and TLS choice pass through (validation: internal/setup).
+func TestSetupInitOwnProxyFlags(t *testing.T) {
+	t.Setenv("BEKUP_IMAGE", "")
+	t.Setenv("DOCKER_GID", "")
+	old := setupInit
+	t.Cleanup(func() { setupInit = old })
+	var got setup.Options
+	setupInit = func(o setup.Options) error { got = o; return nil }
+	base := []string{"setup", "init", "--dir", t.TempDir(), "--non-interactive", "--image", setupTestImage,
+		"--write-compose", "--allow-version-mismatch", "--domain", "backup.example.com", "--docker-gid", "999",
+		"--ownership", "none", "--ca-passphrase-stdin", "--proxy", "own"}
+	const pass = "correct horse battery staple x\n"
+	if _, stderr, err := runIn(t, pass, append(base, "--proxy-network", "npm_default", "--proxy-container", "npm", "--proxy-labels",
+		"--database", "external", "--db-location", "docker", "--db-network", "dbnet", "--db-host", "postgres", "--db-tls", "disable")...); err != nil {
+		t.Fatalf("join: %v\n%s", err, stderr)
+	}
+	a := got.Answers
+	if a.Variant != setup.VariantOwnProxy || a.Proxy != setup.ProxyExternal || a.ProxyMode != "" || a.ProxyNetwork != "npm_default" ||
+		a.ProxyContainer != "npm" || !a.ProxyLabels || a.Link != (setup.LinkNetwork{}) {
+		t.Fatalf("join answers %+v", a)
+	}
+	if d := a.DB; d.Location != setup.DBDocker || d.Network != "dbnet" || d.Host != "postgres" || d.TLS != setup.DBTLSDisable || d.CAFile != "" {
+		t.Fatalf("database %+v", d)
+	}
+	if _, stderr, err := runIn(t, pass, append(base, "--proxy-network-mode", "link", "--proxy-network", "edge", "--proxy-subnet", "10.9.9.0/28",
+		"--proxy-ip", "10.9.9.5", "--serve-ip", "10.9.9.10")...); err != nil {
+		t.Fatalf("link: %v\n%s", err, stderr)
+	}
+	a = got.Answers
+	if a.ProxyMode != setup.ProxyLink || a.ProxyNetwork != "" || a.Link != (setup.LinkNetwork{Name: "edge", Subnet: "10.9.9.0/28", ProxyIP: "10.9.9.5", ServeIP: "10.9.9.10"}) {
+		t.Fatalf("link answers %+v", a)
+	}
+	for _, bad := range [][]string{
+		{"--proxy-network-mode", "bridge"},
+		{"--db-tls", "prefer"},
+		{"--db-location", "cloud"},
+		{"--proxy", "caddy"},
+		{"--proxy", "external"},
+	} {
+		if _, _, err := runIn(t, pass, append(slices.Clone(base), bad...)...); err == nil || !strings.Contains(err.Error(), bad[0]) {
+			t.Errorf("%v: %v", bad, err)
+		}
 	}
 }

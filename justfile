@@ -385,7 +385,7 @@ compose-examples image="":
     fi
     go build -o "$out/.bekup" ./cmd/bekup
     trap 'rm -f "$out/.bekup"' EXIT
-    for v in traefik traefik-external npm full; do
+    for v in traefik own-proxy full; do
         for db in bundled external; do
             case $v in
             traefik) name=compose ;;

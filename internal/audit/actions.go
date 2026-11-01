@@ -92,6 +92,12 @@ const (
 	// mode with the bekup image following a tag instead of a digest
 	// (BEKUP_IMAGE_MODE=following, D-212).
 	ActionSecurityUnpinnedImage Action = "security.unpinned_image"
+	// ActionSecurityServeAliasConflict: serve's network alias bekup-serve
+	// on the own reverse proxy's network also resolves to another
+	// container's address (D-215: requests the proxy sends to
+	// http://bekup-serve:8080 may reach it). Details: the alias and the
+	// foreign addresses.
+	ActionSecurityServeAliasConflict Action = "security.serve_alias_conflict"
 
 	// bekup itself (startup posture, D-095).
 	ActionSystemInsecureTransportStarted Action = "system.insecure_transport_started"
@@ -370,7 +376,7 @@ var catalog = []Action{
 	ActionSessionRevoked, ActionSessionsRevoked,
 	ActionSecretChanged, ActionSettingChanged,
 	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS, ActionSecurityInsecureDBRoles,
-	ActionSecurityUnpinnedImage,
+	ActionSecurityUnpinnedImage, ActionSecurityServeAliasConflict,
 	ActionSystemInsecureTransportStarted,
 	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
 	ActionCLIAdminDisabled, ActionCLIRunImported, ActionCLIDBBootstrap,

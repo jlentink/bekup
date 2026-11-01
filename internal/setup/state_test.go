@@ -57,13 +57,40 @@ func TestParseState(t *testing.T) {
 			s.Variant, s.ComposeMode, s.ComposeSHA256 = VariantTraefik, ComposeOperator, strings.Repeat("c", 64)
 		},
 		"generated with hash":   func(s *State) { s.ComposeSHA256 = strings.Repeat("c", 64) },
-		"proxy for variant":     func(s *State) { s.Variant = VariantNPM },
-		"external without link": func(s *State) { s.Variant, s.Proxy, s.TLSMode = VariantNPM, ProxyExternal, "" },
+		"proxy for variant":     func(s *State) { s.Variant = VariantOwnProxy },
+		"external without link": func(s *State) { s.Variant, s.Proxy, s.TLSMode = VariantOwnProxy, ProxyExternal, "" },
 		"external bad link": func(s *State) {
-			s.Variant, s.Proxy, s.TLSMode = VariantNPM, ProxyExternal, ""
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyLink
 			s.ProxyNetwork, s.ProxySubnet, s.ProxyIP, s.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.99"
 		},
-		"link on full": func(s *State) { s.ProxyNetwork = "bekup-proxy" },
+		"join without container": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode, s.ProxyNetwork = VariantOwnProxy, ProxyExternal, "", ProxyJoin, "web"
+		},
+		"join on the default bridge": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+			s.ProxyNetwork, s.ProxyContainer = "bridge", "npm"
+		},
+		"join with a dotted container": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+			s.ProxyNetwork, s.ProxyContainer = "web", "npm.app"
+		},
+		"join trusting bekup's serve": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+			s.ProxyNetwork, s.ProxyContainer = "web", "serve"
+		},
+		"db network is the link network": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyLink
+			s.ProxyNetwork, s.ProxySubnet, s.ProxyIP, s.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.10"
+			s.DatabaseMode, s.DatabaseAuth, s.DatabaseLocation, s.DBNetwork = DBExternal, DBAuthBootstrap, DBDocker, "bekup-proxy"
+		},
+		"join with link fields": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+			s.ProxyNetwork, s.ProxyContainer, s.ProxyIP = "web", "npm", "10.213.253.5"
+		},
+		"labels on traefik":   func(s *State) { s.ProxyLabels = true },
+		"db network bundled":  func(s *State) { s.DBNetwork = "db" },
+		"db location bundled": func(s *State) { s.DatabaseLocation = DBDocker },
+		"link on full":        func(s *State) { s.ProxyNetwork = "bekup-proxy" },
 	} {
 		s := validState()
 		mut(s)
@@ -76,7 +103,8 @@ func TestParseState(t *testing.T) {
 		}
 	}
 	ext := validState()
-	ext.Variant, ext.Proxy, ext.TLSMode, ext.ComposeMode, ext.ComposeSHA256 = VariantNPM, ProxyExternal, "", ComposeOperator, strings.Repeat("c", 64)
+	ext.Variant, ext.Proxy, ext.TLSMode, ext.ComposeMode, ext.ComposeSHA256 = VariantOwnProxy, ProxyExternal, "", ComposeOperator, strings.Repeat("c", 64)
+	ext.ProxyNetworkMode = ProxyLink
 	ext.ProxyNetwork, ext.ProxySubnet, ext.ProxyIP, ext.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.10"
 	delete(ext.Assets, ComposeFile)
 	if data, err = ext.Marshal(); err != nil {
@@ -161,5 +189,68 @@ func TestLineDiff(t *testing.T) {
 	}
 	if !strings.Contains(LineDiff(strings.Repeat("a\n", 50), strings.Repeat("b\n", 50), 5), "more changed line") {
 		t.Fatal("no truncation")
+	}
+}
+
+// D-215: a state of the retired traefik-external / npm variants maps to
+// own-proxy in link mode (with the labels for traefik-external).
+func TestParseStateLegacyVariant(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		old    Variant
+		labels bool
+	}{{legacyVariantTraefikExternal, true}, {legacyVariantNPM, false}} {
+		s := validState()
+		s.Variant, s.Proxy, s.TLSMode, s.ComposeMode, s.ComposeSHA256 = tc.old, ProxyExternal, "", ComposeOperator, strings.Repeat("c", 64)
+		s.ProxyNetwork, s.ProxySubnet, s.ProxyIP, s.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.10"
+		delete(s.Assets, ComposeFile)
+		data, err := s.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := ParseState(data)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.old, err)
+		}
+		if got.Variant != VariantOwnProxy || got.ProxyNetworkMode != ProxyLink || got.ProxyLabels != tc.labels || got.Legacy() != tc.old {
+			t.Fatalf("%s mapped to %+v", tc.old, got)
+		}
+		if ov := got.overlays(); !ov.ProxyLink || ov.ProxyLabels != tc.labels || ov.DBNetwork {
+			t.Fatalf("%s overlays %+v", tc.old, ov)
+		}
+		out, err := got.Marshal()
+		if err != nil || strings.Contains(string(out), string(tc.old)) || !strings.Contains(string(out), `"proxy_network_mode": "link"`) {
+			t.Fatalf("%s re-marshaled: %s %v", tc.old, out, err)
+		}
+	}
+}
+
+// TestParseStateDBNetworkLink (D-215 review L8): a database container next
+// to the link mode parses; on the link network itself it does not.
+func TestParseStateDBNetworkLink(t *testing.T) {
+	for net, ok := range map[string]bool{"dbnet": true, "bekup-proxy": false, "Bekup-Proxy": false} {
+		s := validState()
+		s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyLink
+		s.ProxyNetwork, s.ProxySubnet, s.ProxyIP, s.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.10"
+		s.DatabaseMode, s.DatabaseAuth, s.DatabaseLocation, s.DBNetwork = DBExternal, DBAuthBootstrap, DBDocker, net
+		data, err := s.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ParseState(data); (err == nil) != ok {
+			t.Errorf("%s: %v", net, err)
+		}
+	}
+	for name, ok := range map[string]bool{"caddy": true, "npm.app": false, "serve": false, "Traefik": false} {
+		s := validState()
+		s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+		s.ProxyNetwork, s.ProxyContainer = "web", name
+		data, err := s.Marshal()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ParseState(data); (err == nil) != ok {
+			t.Errorf("container %s: %v", name, err)
+		}
 	}
 }

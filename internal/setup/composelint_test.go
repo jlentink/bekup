@@ -30,7 +30,7 @@ func lintWithDB(t testing.TB, compose, override []byte, v Variant, db DBMode, do
 		compose = expected
 	}
 	in := composeInput{root: "/deploy", compose: compose, override: override, dotenv: dotenv}
-	return lintComposeFiles(&in, projectEnv(dotenv, nil, in.docs()...), v, variantImage, expected, false)
+	return lintComposeFiles(&in, projectEnv(dotenv, nil, in.docs()...), v, variantImage, expectedDocs(expected, Overlays{}), false)
 }
 
 // evilService is a new service with the full hardening baseline; the
@@ -279,19 +279,19 @@ func TestLintResolvedModel(t *testing.T) {
 func TestComposeEnvInterpolation(t *testing.T) {
 	t.Parallel()
 	img := mustRef(t, variantImage)
-	src, err := RenderRelease(VariantNPM, DBBundled, &img)
+	src, err := RenderRelease(VariantOwnProxy, DBBundled, &img)
 	if err != nil {
 		t.Fatal(err)
 	}
 	fsys := bekup.Assets()
-	env := map[string]string{"SERVE_PROXY_IP": "10.213.253.11"}
+	env := map[string]string{"SERVE_METRICS_IP": "10.213.252.11"}
 	info, err := inspectComposeData(fsys, composeInput{compose: src, dotenv: env}, "", "")
 	if err != nil || info.Level != RecognizedExact || len(info.Findings) > 0 {
 		t.Fatalf("%+v %v", info, err)
 	}
 	// A literal instead of the variable is the same model only while .env
 	// agrees; with another value it is customized.
-	lit := strings.Replace(string(src), "${SERVE_PROXY_IP:-10.213.253.10}", "10.213.253.10", 1)
+	lit := strings.Replace(string(src), "${SERVE_METRICS_IP:-10.213.252.10}", "10.213.252.10", 1)
 	if lit == string(src) {
 		t.Fatal("edit did not apply")
 	}

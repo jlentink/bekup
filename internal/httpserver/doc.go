@@ -10,7 +10,10 @@
 //  1. requestID: a fresh 128-bit crypto/rand ID per request (X-Request-ID
 //     response header, RequestID(ctx)). Client-supplied IDs are ignored.
 //  2. clientIP: the client address is the TCP peer, unless the peer is in
-//     server.trusted_proxies; only then are X-Forwarded-For (walked right to
+//     server.trusted_proxies or is a fresh resolved address of
+//     server.trusted_proxy_hosts (D-215, proxyhosts.go: inside serve's
+//     proxy-network subnet, one per address family, at most
+//     ProxyHostMaxAge old); only then are X-Forwarded-For (walked right to
 //     left, skipping trusted hops) and X-Forwarded-Proto used. All
 //     forwarding headers (X-Forwarded-*, Forwarded, X-Real-IP) are then
 //     removed from the request so nothing downstream can read spoofed values
@@ -62,9 +65,18 @@
 // # Routes
 //
 // GET /healthz (liveness, no I/O), GET /readyz (Options.Ready: DB ping and
-// schema version), /graphql (exactly; the internal/graph handler, sub-paths
+// schema version; in the own-proxy shapes also the bekup-serve alias check,
+// D-215), /graphql (exactly; the internal/graph handler, sub-paths
 // 404), /api (mount point: 404 until a later task provides a handler), and
 // everything else is the SPA: embedded files (hashed files under /assets/ cached immutable, the rest no-cache) with an
 // index.html fallback for GET/HEAD navigations that accept text/html and are
 // not under a reserved prefix.
+//
+// # Own-proxy join shape (D-215)
+//
+// With Options.JoinMode the wildcard listener must be wrapped with
+// Server.WrapListener: only connections on serve's own address on the proxy
+// network (its alias ServeAlias matched with the interface addresses) and
+// on loopback are served, everything else is closed before a byte is read,
+// fail closed while that address is unknown. ProxyHosts must run.
 package httpserver

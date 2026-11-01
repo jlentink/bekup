@@ -1,1 +1,1 @@
-#   serve, migrate ──backend (NOT internal; TLS, verify-full)──> YOUR PostgreSQL  (bekup.toml [database]; role bekup_app; migrations as bekup_owner)
+#   serve, migrate ──backend (NOT internal; TLS verify-full by default)──> YOUR PostgreSQL  (bekup.toml [database]; role bekup_app; migrations as bekup_owner)

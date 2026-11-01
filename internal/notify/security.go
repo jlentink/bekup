@@ -50,7 +50,10 @@ const (
 	KindInsecureDBRoles         = "insecure_db_roles"
 	// KindUnpinnedImage: serve or worker runs a bekup image that follows
 	// a tag instead of a digest (BEKUP_IMAGE_MODE=following, D-212).
-	KindUnpinnedImage         = "unpinned_image"
+	KindUnpinnedImage = "unpinned_image"
+	// KindServeAliasConflict: serve's network alias bekup-serve also
+	// resolves to another container on the own proxy's network (D-215).
+	KindServeAliasConflict    = "serve_alias_conflict"
 	KindAuditHeadExportFailed = "audit_head_export_failed"
 	KindCLIAction             = "cli_action"
 	KindLoginBurstAddress     = "login_burst_address"
@@ -101,6 +104,7 @@ var securitySystemKinds = map[audit.Action]string{
 	audit.ActionSecurityInsecureDBTLS:          KindInsecureDBTLS,
 	audit.ActionSecurityInsecureDBRoles:        KindInsecureDBRoles,
 	audit.ActionSecurityUnpinnedImage:          KindUnpinnedImage,
+	audit.ActionSecurityServeAliasConflict:     KindServeAliasConflict,
 	audit.ActionAuditHeadExportFailed:          KindAuditHeadExportFailed,
 }
 
@@ -142,6 +146,7 @@ var systemSeverity = map[string]Severity{
 	KindInsecureDBTLS:               SeverityError,
 	KindInsecureDBRoles:             SeverityError,
 	KindUnpinnedImage:               SeverityWarning,
+	KindServeAliasConflict:          SeverityCritical,
 	KindAuditHeadExportFailed:       SeverityError,
 	KindCLIAction:                   SeverityWarning,
 	KindLoginBurstAddress:           SeverityError,
@@ -280,6 +285,9 @@ func securityFromAudit(ev audit.Event) []Event {
 			if t := detailString(ev.Details, "trigger"); t != "" {
 				s.Detail["trigger"] = t
 			}
+		case KindServeAliasConflict:
+			// Container addresses only (bounded).
+			s.Detail["addresses"] = joinBounded(detailAddrs(ev.Details, "addresses"), MaxDetailString)
 		case KindSSRFAllowlistWidened:
 			s.Detail["setting"] = ssrfAllowlistSetting
 			if detailTrue(ev.Details, "personal_webhooks_widened") {
@@ -344,6 +352,10 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 		}
 	case KindArtifactDeletedExternally:
 		return p + dedupPart(ev.TargetID)
+	case KindServeAliasConflict:
+		// serve reports each new set of foreign addresses once; a set
+		// that persists or comes back alerts again the next day.
+		return p + keysHash(detailAddrs(ev.Details, "addresses")) + ":" + day(now)
 	case KindConfigReloadWeakened:
 		// Replicas that apply the same change for one request raise one
 		// alert; a different set of keys raises another.
@@ -485,6 +497,34 @@ func detailStrings(d audit.Details, k string) []string {
 	for _, x := range raw {
 		if s, ok := x.(string); ok && keyNameRE.MatchString(s) {
 			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// detailAddrs returns the IP addresses in a list detail (canonical,
+// sorted, at most 16); anything that is not an address is dropped.
+func detailAddrs(d audit.Details, k string) []string {
+	var raw []any
+	switch v := d[k].(type) {
+	case []string:
+		for _, s := range v {
+			raw = append(raw, s)
+		}
+	case []any:
+		raw = v
+	default:
+		return nil
+	}
+	out := make([]string, 0, min(len(raw), 16))
+	for _, x := range raw {
+		s, ok := x.(string)
+		if !ok {
+			continue
+		}
+		if a, err := netip.ParseAddr(s); err == nil && len(out) < 16 {
+			out = append(out, a.WithZone("").Unmap().String())
 		}
 	}
 	sort.Strings(out)

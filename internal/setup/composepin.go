@@ -32,7 +32,7 @@ import (
 // (TestComposeVarAllowlist derives them from the shipped files). Any other
 // ${VAR} in compose.yaml or compose.override.yaml is an error.
 var composeVarAllowlist = []string{
-	"ACME_CA_SERVER", "ACME_EMAIL", "BEKUP_DOMAIN", "BEKUP_IMAGE_MODE", "BEKUP_KEYS_DIR",
+	"ACME_CA_SERVER", "ACME_EMAIL", "BEKUP_DB_NETWORK", "BEKUP_DOMAIN", "BEKUP_IMAGE_MODE", "BEKUP_KEYS_DIR",
 	"BEKUP_PROXY_NETWORK", "BEKUP_SETUP_VERSION", "DOCKER_GID", "FRONTEND_SUBNET", "METRICS_SUBNET",
 	"PROXY_FRONTEND_IP", "PROXY_TLS_MODE", "RUNNER_CTL_IP", "RUNNER_CTL_SUBNET",
 	"SERVE_FRONTEND_IP", "SERVE_METRICS_IP", "SERVE_PROXY_IP",

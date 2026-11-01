@@ -1,5 +1,6 @@
   # CA bundle (PEM) of your PostgreSQL's server certificate ([database]
   # tls_ca_file), copied by setup from the file you named; public, not a
-  # secret (serve, admin, migrate).
+  # secret (serve, admin, migrate). Empty when you chose the system CA
+  # bundle, require or disable (D-215): compose still mounts it.
   bekup_db_ca_crt:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_ca.crt

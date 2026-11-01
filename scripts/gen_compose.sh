@@ -2,8 +2,9 @@
 # gen_compose.sh: write the committed compose files (D-205 amendment 3)
 # from docker-compose.yml with `bekup setup compose --variant <v>
 # --database <bundled|external>` (no --image: the x-bekup-image line takes
-# the image from BEKUP_IMAGE). Six files: three proxy variants, each with
-# the bundled database and with your own PostgreSQL (D-208).
+# the image from BEKUP_IMAGE). Four files: bekup's own Traefik and your own
+# reverse proxy (D-215), each with the bundled database and with your own
+# PostgreSQL (D-208).
 #
 # Usage: scripts/gen_compose.sh <dir>     (`just gen`: deploy/compose)
 #
@@ -25,11 +26,9 @@ trap 'rm -rf "$tmp"' EXIT
 go build -o "$tmp/bekup" ./cmd/bekup
 for spec in \
 	traefik:bundled:compose.yaml \
-	traefik-external:bundled:compose.traefik-external.yaml \
-	npm:bundled:compose.npm.yaml \
+	own-proxy:bundled:compose.own-proxy.yaml \
 	traefik:external:compose.external-db.yaml \
-	traefik-external:external:compose.traefik-external.external-db.yaml \
-	npm:external:compose.npm.external-db.yaml; do
+	own-proxy:external:compose.own-proxy.external-db.yaml; do
 	variant=${spec%%:*} rest=${spec#*:}
 	database=${rest%%:*} name=${rest#*:}
 	"$tmp/bekup" setup compose --variant "$variant" --database "$database" >"$tmp/$name"

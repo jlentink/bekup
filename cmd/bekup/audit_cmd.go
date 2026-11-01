@@ -161,7 +161,7 @@ func openAppDB(c *cobra.Command, g *globalFlags, appName string) (*pgxpool.Pool,
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	logLoaded(c, logger, res.Path, res.Warnings)
+	logLoaded(c, logger, res.Path, withoutListenWarning(res.Config, res.Warnings))
 	opts, err := db.PoolOptionsFromConfig(res.Config, appName)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("database TLS: %w", err)

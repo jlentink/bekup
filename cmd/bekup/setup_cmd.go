@@ -372,6 +372,9 @@ var setupInit = setup.Init
 type initFlags struct {
 	dir, imageRaw, proxy, domain, tlsMode, acmeEmail, keysDir, ownership string
 	variant, serveIP, proxyIP, database                                  string
+	proxyNetwork, proxyContainer, proxyMode                              string
+	dbLocation, dbTLS                                                    string
+	proxyLabels                                                          bool
 	acmeStaging, nonInteractive, keepExisting, force, regenerate         bool
 	allowVersionMismatch, writeCompose, useExistingCA                    bool
 	dockerGID                                                            int
@@ -401,18 +404,38 @@ Compose-first (default, D-205): compose.yaml must exist (a release file, or
 the committed file from deploy/compose/). setup takes the pinned image from
 its x-bekup-image line (the committed file: from BEKUP_IMAGE, which must be
 digest-pinned and is written to .env), recognizes the variant (traefik,
-traefik-external, npm) and the database mode (the *.external-db.yaml files:
-your own PostgreSQL; a customized file needs --variant and passes the
-hardening lint) and never writes compose.yaml. It asks only for the domain,
-the ACME e-mail (own Traefik), your PostgreSQL (external database), the CA
-key passphrase and, unless DOCKER_GID is set, the Docker socket's group.
+own-proxy) and the database mode (the *.external-db.yaml files: your own
+PostgreSQL; a customized file needs --variant and passes the hardening
+lint) and never writes compose.yaml. It asks only for the domain, the ACME
+e-mail (own Traefik), your proxy's network and container (own proxy), your
+PostgreSQL (external database), the CA key passphrase and, unless
+DOCKER_GID is set, the Docker socket's group.
 
-Setup-first (--write-compose --variant traefik|traefik-external|npm|full
-[--database external]): setup also writes compose.yaml (full: every
-service, --proxy traefik, nginx or none).
+Setup-first (--write-compose --variant traefik|own-proxy|full, or --proxy
+traefik|own, [--database external]): setup also writes compose.yaml (full:
+every service, --proxy traefik, nginx or none).
 
-Your own PostgreSQL (--database external, D-207, D-208): --db-host,
---db-ca-file (its CA bundle, inside the deployment directory; copied) and
+The wizard offers bekup's own Traefik or your own reverse proxy on this
+Docker host. A proxy on another machine is not a wizard choice (D-215): the
+advanced path is --write-compose --variant full --proxy none --trusted-proxy
+<CIDR> (no bundled proxy; run a small proxy on this host, or route to
+bekup's frontend network yourself). serve's port is never published.
+
+Your own reverse proxy on this Docker host (--proxy own, D-215): serve
+joins the Docker network your proxy is on (--proxy-network) under the
+alias bekup-serve and trusts the proxy by its container name
+(--proxy-container); point the proxy at http://bekup-serve:8080.
+--proxy-labels adds the Traefik Docker-provider labels; --proxy-network-mode
+link keeps the dedicated bekup-proxy link network with fixed addresses
+(--proxy-subnet, --proxy-ip, --serve-ip). Setup writes these extras and a
+database container's network into compose.override.yaml; compose.yaml stays
+the release file.
+
+Your own PostgreSQL (--database external, D-207, D-208, D-215): --db-host,
+--db-location docker --db-network <net> for a container on this Docker host
+(--db-host is then its container name or alias), --db-tls verify-ca-file
+(default, with --db-ca-file: its CA bundle inside the deployment directory;
+copied), verify-system, or the explicit weakenings require and disable, and
 --db-auth: bootstrap (default: setup generates the two role passwords and
 prints the one ` + "`docker compose run --rm migrate db bootstrap`" + ` command), existing-roles
 (the roles exist: their passwords from --db-password-file /
@@ -423,7 +446,9 @@ network: it never connects to the database.
 
 On a terminal, missing answers are prompted; --non-interactive requires the
 flags instead. Existing files are never overwritten without --force (non-secret
-files only) or --regenerate-secrets (terminal + typed confirmation).`,
+files only) or --regenerate-secrets (terminal + typed confirmation). An
+existing compose.override.yaml is never rewritten, also not with --force: it
+must carry the blocks setup would write (setup names them).`,
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			opts, err := fl.options(c)
@@ -441,11 +466,11 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f := cmd.Flags()
 	f.StringVar(&fl.dir, "dir", setupDefaultDir, "deployment directory (must exist)")
 	f.BoolVar(&fl.writeCompose, "write-compose", false, "setup-first: also write compose.yaml (needs --variant); default is compose-first (compose.yaml exists, never written)")
-	f.StringVar(&fl.variant, "variant", "", "traefik, traefik-external, npm or full (--write-compose; compose-first only to name the base of a customized compose.yaml)")
+	f.StringVar(&fl.variant, "variant", "", "traefik, own-proxy or full (--write-compose; implied by --proxy traefik|own; compose-first only to name the base of a customized compose.yaml)")
 	f.StringVar(&fl.database, "database", "", "bundled (the postgres service, default) or external (your own PostgreSQL, D-208; compose-first: must match compose.yaml)")
 	f.StringVar(&fl.imageRaw, "image", "", "bekup image pinned by digest, repo[:tag]@sha256:<digest>, or ghcr.io/jlentink/bekup:latest to follow the releases (D-212, an explicit weakening) (default: $BEKUP_IMAGE; compose-first: must equal the x-bekup-image line, or BEKUP_IMAGE for the committed file)")
 	f.BoolVar(&fl.nonInteractive, "non-interactive", false, "never prompt; every answer must come from flags")
-	f.StringVar(&fl.proxy, "proxy", "", "variant full: reverse proxy traefik, nginx or none (your own proxy on the frontend network)")
+	f.StringVar(&fl.proxy, "proxy", "", "reverse proxy: traefik (bekup's own; variant traefik) or own (your reverse proxy on this Docker host; variant own-proxy); advanced, variant full: traefik, nginx or none (no bundled proxy: run a small proxy on this host, or route to bekup's frontend network yourself; --trusted-proxy)")
 	f.StringVar(&fl.domain, "domain", "", "public host name of the UI (base_url https://<domain>)")
 	f.StringVar(&fl.tlsMode, "tls-mode", "", "bundled proxy TLS: acme (Let's Encrypt, default) or static (your certificate in proxy-tls/)")
 	f.StringVar(&fl.acmeEmail, "acme-email", "", "ACME account e-mail (--tls-mode acme)")
@@ -460,13 +485,16 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f.BoolVar(&fl.force, "force", false, "rewrite existing NON-SECRET files (deploy, reference, .env, TOMLs; compose.yaml only with --write-compose)")
 	f.BoolVar(&fl.regenerate, "regenerate-secrets", false, "delete and regenerate EVERY secret and certificate (terminal + typed confirmation)")
 	f.BoolVar(&fl.allowVersionMismatch, "allow-version-mismatch", false, "accept an image tag that differs from this bekup version")
-	f.StringVar(&fl.traefikEntrypoint, "traefik-entrypoint", "", "traefik-external: your Traefik's HTTPS entrypoint (default websecure)")
-	f.StringVar(&fl.traefikCertResolver, "traefik-certresolver", "", "traefik-external: your Traefik's certificate resolver (default letsencrypt)")
-	f.StringVar(&fl.link.Name, "proxy-network", "", "traefik-external/npm: name of the external link network (default bekup-proxy)")
-	f.StringVar(&fl.link.Subnet, "proxy-subnet", "", "traefik-external/npm: subnet of the link network (default 10.213.253.0/28)")
-	f.StringVar(&fl.serveIP, "serve-ip", "", "advanced: serve's fixed address towards the proxy: SERVE_FRONTEND_IP (default 10.213.250.10) or, traefik-external/npm, SERVE_PROXY_IP (default 10.213.253.10)")
-	f.StringVar(&fl.proxyIP, "proxy-ip", "", "advanced: the proxy's fixed address: PROXY_FRONTEND_IP (default 10.213.250.5) or, traefik-external/npm, your proxy's address on the link network (default 10.213.253.5)")
-	f.StringVar(&fl.net.FrontendSubnet, "frontend-subnet", "", "advanced: FRONTEND_SUBNET (default 10.213.250.0/24; not traefik-external/npm)")
+	f.StringVar(&fl.proxyNetwork, "proxy-network", "", "own proxy: the Docker network your proxy is on (serve joins it); link mode: the link network's name (default bekup-proxy)")
+	f.StringVar(&fl.proxyContainer, "proxy-container", "", "own proxy (join mode): your proxy's container name, trusted by name (server.trusted_proxy_hosts)")
+	f.BoolVar(&fl.proxyLabels, "proxy-labels", false, "own proxy: add the Traefik Docker-provider labels on serve (compose.override.yaml)")
+	f.StringVar(&fl.proxyMode, "proxy-network-mode", "", "own proxy, advanced: join (default: serve joins your proxy's network) or link (the bekup-proxy link network with fixed addresses, D-205)")
+	f.StringVar(&fl.traefikEntrypoint, "traefik-entrypoint", "", "--proxy-labels: your Traefik's HTTPS entrypoint (default websecure)")
+	f.StringVar(&fl.traefikCertResolver, "traefik-certresolver", "", "--proxy-labels: your Traefik's certificate resolver (default letsencrypt)")
+	f.StringVar(&fl.link.Subnet, "proxy-subnet", "", "link mode: subnet of the link network (default 10.213.253.0/28)")
+	f.StringVar(&fl.serveIP, "serve-ip", "", "advanced: serve's fixed address towards the proxy: SERVE_FRONTEND_IP (default 10.213.250.10) or, link mode, SERVE_PROXY_IP (default 10.213.253.10)")
+	f.StringVar(&fl.proxyIP, "proxy-ip", "", "advanced: the proxy's fixed address: PROXY_FRONTEND_IP (default 10.213.250.5) or, link mode, your proxy's address on the link network (default 10.213.253.5)")
+	f.StringVar(&fl.net.FrontendSubnet, "frontend-subnet", "", "advanced: FRONTEND_SUBNET (default 10.213.250.0/24; not own-proxy)")
 	f.StringVar(&fl.net.RunnerCtlSubnet, "runner-ctl-subnet", "", "advanced: RUNNER_CTL_SUBNET (default 10.213.251.0/24)")
 	f.StringVar(&fl.net.RunnerCtlIP, "runner-ip", "", "advanced: RUNNER_CTL_IP (default 10.213.251.10)")
 	f.StringVar(&fl.net.MetricsSubnet, "metrics-subnet", "", "advanced: METRICS_SUBNET (default 10.213.252.0/24)")
@@ -474,8 +502,11 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f.StringVar(&fl.db.Host, "db-host", "", "external database: host name or IP address of your PostgreSQL (15-17)")
 	f.IntVar(&fl.db.Port, "db-port", 0, "external database: port (default 5432)")
 	f.StringVar(&fl.db.Name, "db-name", "", "external database: name of bekup's database (default bekup)")
-	f.StringVar(&fl.db.CAFile, "db-ca-file", "", "external database: CA bundle (PEM) of the server certificate, a path inside --dir (copied to <keys>/bekup_database_ca.crt; verified with tls_mode verify-full)")
-	f.StringVar(&fl.db.TLSServerName, "db-tls-server-name", "", "external database: host name the server certificate names, when --db-host is an IP address")
+	f.StringVar(&fl.dbLocation, "db-location", "", "external database: remote (another server, default) or docker (a container on this Docker host: --db-network)")
+	f.StringVar(&fl.db.Network, "db-network", "", "external database, --db-location docker: the Docker network the database container is on (migrate, serve and admin join it)")
+	f.StringVar(&fl.dbTLS, "db-tls", "", "external database: verify-ca-file (default: --db-ca-file), verify-system (the image's system CA bundle), require (WEAKENED: encrypted, not verified) or disable (WEAKENED: no TLS)")
+	f.StringVar(&fl.db.CAFile, "db-ca-file", "", "external database, --db-tls verify-ca-file: CA bundle (PEM) of the server certificate, a path inside --dir (copied to <keys>/bekup_database_ca.crt)")
+	f.StringVar(&fl.db.TLSServerName, "db-tls-server-name", "", "external database, verifying --db-tls: host name the server certificate names, when --db-host is an IP address")
 	f.StringVar(&fl.dbAuth, "db-auth", "", "external database: bootstrap (default), existing-roles, dba-sql or single-account (an explicit weakening)")
 	f.StringVar(&fl.db.User, "db-user", "", "external database, single-account: the account's role name")
 	f.StringVar(&fl.db.AdminUser, "db-admin-user", "", "external database, bootstrap: the administrator role named in the printed bootstrap command")
@@ -505,6 +536,28 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 			return setup.Options{}, err
 		}
 	}
+	var proxy setup.Proxy
+	if fl.proxy != "" {
+		if proxy, err = setup.ParseProxy(fl.proxy); err != nil {
+			return setup.Options{}, err
+		}
+	}
+	if v == "" && fl.writeCompose {
+		// --proxy traefik|own names the variant (setup-first).
+		switch proxy {
+		case setup.ProxyExternal:
+			v = setup.VariantOwnProxy
+		case setup.ProxyTraefik:
+			v = setup.VariantTraefik
+		case setup.ProxyNginx, setup.ProxyNone, "":
+		}
+	}
+	var proxyMode setup.ProxyNetworkMode
+	if fl.proxyMode != "" {
+		if proxyMode, err = setup.ParseProxyNetworkMode(fl.proxyMode); err != nil {
+			return setup.Options{}, err
+		}
+	}
 	db := fl.db
 	if fl.database != "" {
 		if db.Mode, err = setup.ParseDBMode(fl.database); err != nil {
@@ -516,16 +569,34 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 			return setup.Options{}, err
 		}
 	}
+	if fl.dbLocation != "" {
+		if db.Location, err = setup.ParseDBLocation(fl.dbLocation); err != nil {
+			return setup.Options{}, err
+		}
+	}
+	if fl.dbTLS != "" {
+		if db.TLS, err = setup.ParseDBTLS(fl.dbTLS); err != nil {
+			return setup.Options{}, err
+		}
+		if db.TLS == setup.DBTLSVerifyCAFile {
+			db.TLS = "" // the default
+		}
+	}
 	if f.Changed("db-port") && (db.Port < 1 || db.Port > 65535) {
 		return setup.Options{}, fmt.Errorf("--db-port must be between 1 and 65535 (got %d; omit it for 5432)", db.Port)
 	}
 	a := setup.Answers{
-		Variant: v, Proxy: setup.Proxy(fl.proxy), Domain: fl.domain, TLSMode: setup.TLSMode(fl.tlsMode),
+		Variant: v, Proxy: proxy, Domain: fl.domain, TLSMode: setup.TLSMode(fl.tlsMode),
 		ACMEEmail: fl.acmeEmail, ACMEStaging: fl.acmeStaging, DockerGID: fl.dockerGID,
 		TargetCIDRs: fl.targetCIDRs, TargetHosts: fl.targetHosts, TrustedProxies: fl.trusted,
 		KeysDir: fl.keysDir, Network: fl.net, Link: fl.link,
 		TraefikEntrypoint: fl.traefikEntrypoint, TraefikCertResolver: fl.traefikCertResolver,
-		DB: db,
+		DB: db, ProxyMode: proxyMode, ProxyContainer: fl.proxyContainer, ProxyLabels: fl.proxyLabels,
+	}
+	if proxyMode == setup.ProxyLink {
+		a.Link.Name = fl.proxyNetwork
+	} else {
+		a.ProxyNetwork = fl.proxyNetwork
 	}
 	given := setup.Given{
 		Image: imageRaw != "", Proxy: f.Changed("proxy"), Domain: f.Changed("domain"),
@@ -536,6 +607,8 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 		ComposeFirst: !fl.writeCompose,
 		Database:     f.Changed("database"),
 		DBHost:       f.Changed("db-host"), DBCAFile: f.Changed("db-ca-file"), DBAuth: f.Changed("db-auth"),
+		DBLocation: f.Changed("db-location"), DBNetwork: f.Changed("db-network"), DBTLS: f.Changed("db-tls"),
+		ProxyNetwork: f.Changed("proxy-network"), ProxyContainer: f.Changed("proxy-container"),
 	}
 	if !given.DockerGID {
 		if raw := strings.TrimSpace(os.Getenv(envDockerGID)); raw != "" {
@@ -549,7 +622,7 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 	out := c.OutOrStdout()
 	if fl.writeCompose {
 		if v == "" {
-			return setup.Options{}, errors.New("--write-compose needs --variant traefik, traefik-external, npm or full")
+			return setup.Options{}, errors.New("--write-compose needs --variant traefik, own-proxy or full (or --proxy traefik|own)")
 		}
 	} else {
 		info, err := setup.InspectCompose(fl.dir, v, db.Mode)
@@ -616,7 +689,7 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 // variant's proxy shares with serve: the link network behind an external
 // proxy, the frontend network otherwise.
 func applyAddressFlags(a *setup.Answers, serveIP, proxyIP string) {
-	if a.Variant.External() {
+	if a.Variant.OwnProxy() {
 		a.Link.ServeIP, a.Link.ProxyIP = serveIP, proxyIP
 		return
 	}
@@ -830,16 +903,17 @@ the renewal is not audited: it prints the new fingerprints as evidence.`,
 func newSetupComposeCmd() *cobra.Command {
 	var variant, imageRaw, database string
 	cmd := &cobra.Command{
-		Use:   "compose --variant traefik|traefik-external|npm|full [--database bundled|external] [--image <pinned>]",
+		Use:   "compose --variant traefik|own-proxy|full [--database bundled|external] [--image <pinned>]",
 		Short: "Print a compose file variant (the release assets; local examples)",
 		Long: `Print one compose file variant rendered from the compose file embedded in this
-binary (D-205): traefik (bekup with its own Traefik; release asset
-compose.yaml), traefik-external (behind your Traefik;
-compose.traefik-external.yaml), npm (behind Nginx Proxy Manager;
-compose.npm.yaml) or full (every service; setup-first). --database external
-(D-208) renders the form for your own PostgreSQL (no postgres service; release
-assets compose.external-db.yaml, compose.traefik-external.external-db.yaml,
-compose.npm.external-db.yaml).
+binary (D-205, D-215): traefik (bekup with its own Traefik; release asset
+compose.yaml), own-proxy (behind your own reverse proxy on this Docker host;
+compose.own-proxy.yaml) or full (every service; setup-first). --database
+external (D-208) renders the form for your own PostgreSQL (no postgres
+service; release assets compose.external-db.yaml and
+compose.own-proxy.external-db.yaml). The setup-only extras (Traefik labels,
+the link network, a database container's network) are never part of these
+files: setup writes them into compose.override.yaml.
 
 With --image the x-bekup-image line names that digest-pinned reference (the
 release workflow renders its assets this way); without it the line takes the
@@ -874,7 +948,7 @@ variants to dist/compose/.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&variant, "variant", "", "traefik, traefik-external, npm or full (required)")
+	f.StringVar(&variant, "variant", "", "traefik, own-proxy or full (required)")
 	f.StringVar(&imageRaw, "image", "", "pin the x-bekup-image line to this repo[:tag]@sha256:<digest>")
 	f.StringVar(&database, "database", string(setup.DBBundled), "bundled (the postgres service) or external (your own PostgreSQL, D-208)")
 	return cmd

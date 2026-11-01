@@ -7,6 +7,6 @@
 # Docker allocates automatically. If they clash with your LAN, override the
 # compose variables (in .env) AND update bekup.toml / runner.toml to match:
 #   RUNNER_CTL_SUBNET, RUNNER_CTL_IP, METRICS_SUBNET, SERVE_METRICS_IP,
-#   BEKUP_PROXY_NETWORK, SERVE_PROXY_IP
+#   BEKUP_PROXY_NETWORK
 # (compose interpolation only; these are not bekup configuration keys).
 # ---------------------------------------------------------------------------

@@ -59,8 +59,8 @@ let the new image's setup service do the rest:
 
 ```sh
 cd /opt/bekup
-# the same asset you installed: compose.yaml, compose.traefik-external.yaml, compose.npm.yaml
-# or their *.external-db.yaml forms
+# the same asset you installed: compose.yaml or compose.own-proxy.yaml, or their
+# *.external-db.yaml forms (retired traefik-external/npm: see below)
 sudo curl -fsSLo compose.yaml.new https://github.com/jlentink/bekup/releases/download/vX.Y.Z/compose.yaml
 gh attestation verify compose.yaml.new --repo jlentink/bekup
 diff -u compose.yaml compose.yaml.new     # review: the image line and any service changes
@@ -81,8 +81,9 @@ checks it); better move it into the override.
 - takes the new image from `compose.yaml` (the setup service's
   `BEKUP_IMAGE` must match) and **never writes `compose.yaml`**;
   `--write-compose` is refused;
-- refuses a variant switch (for example from `npm` to `traefik`): set up a
-  new directory instead and move the data;
+- refuses a variant switch (for example from `own-proxy` to `traefik`): set
+  up a new directory instead and move the data (the one exception is the
+  [retired variants](#retired-variants-traefik-external-and-npm));
 - refuses a switch between the bundled database and your own PostgreSQL
   (a release file with or without `.external-db`, D-208): that moves bekup's
   database, which is a dump and restore into a new deployment directory,
@@ -271,6 +272,31 @@ the change into `compose.override.yaml`).
 Adopting an install that was set up from a source checkout (without
 `bekup-setup.json`) is not supported yet; keep following the steps below
 for those.
+
+### Retired variants: `traefik-external` and `npm`
+
+The variants `traefik-external` (`compose.traefik-external*.yaml`) and
+`npm` (`compose.npm*.yaml`) are retired (D-215); their files are no longer
+published. Both ran `serve` on the `bekup-proxy` link network, which is now
+the [link mode](reverse-proxy.md#advanced-dedicated-link-network) of the
+`own-proxy` variant. `setup check` reports such a deployment as an error
+until it is upgraded:
+
+1. Compose-first: replace `compose.yaml` with `compose.own-proxy.yaml` of
+   the new release (`compose.own-proxy.external-db.yaml` with your own
+   PostgreSQL), then run `docker compose run --rm setup upgrade` as above.
+   Setup-first: `setup upgrade --write-compose --image <new image>`.
+2. `setup upgrade` reads the deployment as `own-proxy` in link mode (with
+   the Traefik labels on `serve` for `traefik-external`), writes
+   `serve`'s fixed link address (and the labels) into a new
+   `compose.override.yaml` (an existing one must already carry them;
+   `setup check` prints the blocks), rewrites `bekup-setup.json` and prints
+   a notice.
+
+Nothing changes for your proxy, `.env` or `bekup.toml`: the link network,
+the addresses and `trusted_proxies` stay. To join your proxy's own network
+instead (trust by container name, [own reverse proxy](reverse-proxy.md#own-reverse-proxy)),
+set up a new deployment directory.
 
 ### Source-checkout installs
 

@@ -114,6 +114,11 @@ type Options struct {
 	// Warnings are the startup config warnings (a reload logs only new
 	// ones).
 	Warnings []string
+	// KnownWarnings are config warnings the command suppressed on purpose
+	// at startup (D-215: the own-proxy join shape's wildcard listener, or
+	// the listener warning in `bekup worker`); a reload treats them as
+	// known and never logs them.
+	KnownWarnings []string
 	// LogLevel is the logger's level; a reload of log.level sets it (nil:
 	// log.level is not reloadable in this process).
 	LogLevel *slog.LevelVar
@@ -342,7 +347,10 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err != nil {
 		return nil, err
 	}
-	a.components = append(a.components, h, signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger},
+	// server.trusted_proxy_hosts (D-215): resolved at start, every 30 s and
+	// on untrusted X-Forwarded-For; idle without names (a reload may add
+	// some).
+	a.components = append(a.components, h, a.httpServer.ProxyHosts(), signer, &sessionCleanupComponent{sessions: a.auth.Sessions(), logger: a.opts.Logger},
 		downloadCleanupComponent{a.downloads}, restoreHousekeepingComponent{a.restore})
 	if err := a.newScheduler(); err != nil {
 		return nil, err
@@ -425,6 +433,9 @@ func (a *App) openDB(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// verify-system (D-215): how many certificates of the image's bundle
+	// were loaded and skipped (once per process).
+	poolOpts.TLS.LogSystemBundle(ctx, a.opts.Logger)
 	creds, err := cfg.AppDBCredentials()
 	if err != nil {
 		return fmt.Errorf("read database credentials: %w", err)
@@ -609,6 +620,13 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 	hopts.Download = a.downloads
 	// Every principal passes the 2FA policy's enrollment check (task 1.9).
 	hopts.Sessions.Resolver = httpserver.SessionsResolver{Sessions: a.auth.Sessions(), Enrollment: a.twoFactorPolicy}
+	// The own-proxy compose shapes (D-215): serve checks that its alias
+	// bekup-serve resolves only to its own addresses (an audited alert
+	// otherwise); in the join shape it serves only connections on its
+	// address on the proxy network (and loopback).
+	hopts.OwnProxy = a.opts.Deployment.OwnProxyJoin
+	hopts.JoinMode = a.opts.Deployment.ExpectedWildcardListen(cfg.Server.Listen, config.OwnProxyJoinListen)
+	hopts.SelfConflict = a.recordServeAliasConflict
 	// Mount point: /api (later tasks) stays 404 until its handler is set here.
 	s, err := httpserver.New(hopts)
 	if err != nil {
@@ -624,6 +642,10 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 		}
 	}
 	a.addr = ln.Addr()
+	if hopts.JoinMode {
+		a.opts.Logger.InfoContext(ctx, "own-proxy join shape: serve accepts connections only on its address on the proxy network (alias bekup-serve) and on loopback; every other connection is closed (D-215)")
+	}
+	ln = s.WrapListener(ln)
 	return &httpComponent{
 		srv:             s.NewHTTPServer(cfg.Server.Listen),
 		ln:              ln,

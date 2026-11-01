@@ -67,7 +67,9 @@ section 6: STRIDE per component). This page summarizes it. Decisions are in
 
 `serve` can never reach a target database or Docker; the runner can never
 reach the app database. `serve`'s port is not published in production
-(D-077). Details: [installation/compose.md](installation/compose.md).
+(D-077). The `own-proxy` variant has no `edge` or `frontend`: `serve`
+joins the Docker network of your own reverse proxy instead (D-215).
+Details: [installation/compose.md](installation/compose.md).
 
 **Dev stack.** By default `docker-compose.dev.yml` starts only the app
 Postgres (TLS-only, published on `127.0.0.1` for dev), mailpit and adminer;
@@ -84,7 +86,7 @@ Summarized from [SECURITY.md §5](../SECURITY.md#5-trust-boundaries-and-data-flo
 | Boundary | Between | Main controls |
 |---|---|---|
 | B1 | browser ↔ reverse proxy | TLS 1.2/1.3, ECDHE+AEAD only, HSTS, redirect, size/rate limits (D-048, D-093) |
-| B2 | proxy ↔ `serve` | `serve` only on internal `frontend`; forwarded headers only from `trusted_proxies`; CSP, Origin checks and headers set by `serve` too (D-050, D-082) |
+| B2 | proxy ↔ `serve` | `serve` only on internal `frontend` (own-proxy variant: your proxy's Docker network, where the wildcard listener serves only serve's own address on that network and alerts when another container takes its alias `bekup-serve`, D-215); forwarded headers only from `trusted_proxies` or the containers named in `trusted_proxy_hosts`; CSP, Origin checks and headers set by `serve` too (D-050, D-082) |
 | B3 | `serve` ↔ app DB | `bekup_app` DML only, migrations as `bekup_owner` in a separate container, envelope-encrypted secrets, append-only hash-chained audit log (D-046, D-054, D-078) |
 | B4 | `serve` ↔ destinations, SMTP, webhooks | dial-time SSRF guard (`internal/netguard`: socket-address check after DNS, allowlist that never re-allows hard ranges), no proxy, no redirects, TLS ≥ 1.2, SFTP host-key pins, disk confined via `os.Root` (D-049, D-055, D-120) |
 | B5 | `serve` ↔ runner | mTLS (TLS 1.3, private name-constrained CA, SPIFFE URI SAN check), typed RPCs (D-030, D-089) |
@@ -209,7 +211,7 @@ are added as further components.
 | # | Middleware | Behavior |
 |---|---|---|
 | 1 | request ID | fresh 128-bit `crypto/rand` ID, `X-Request-ID` response header; client IDs ignored |
-| 2 | client IP | peer address; `X-Forwarded-For`/`-Proto` only when the peer is in `server.trusted_proxies` (walked right to left, trusted hops skipped); all forwarding headers then removed from the request |
+| 2 | client IP | peer address; `X-Forwarded-For`/`-Proto` only when the peer is in `server.trusted_proxies` or resolved from `server.trusted_proxy_hosts` (D-215; walked right to left, trusted hops skipped); all forwarding headers then removed from the request |
 | 3 | access log | one slog line per request; no query strings; ticket/link paths cut to their prefix |
 | 4 | recovery | panic → generic 500, stack only in the log |
 | 5 | security headers | exact D-082 CSP, `nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, `Permissions-Policy`, COOP/CORP `same-origin`, HSTS only when `base_url` is https (D-095), `Cache-Control: no-store` by default |

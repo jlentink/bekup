@@ -12,7 +12,7 @@ import (
 
 func TestLiveKeys(t *testing.T) {
 	want := []string{
-		"server.trusted_proxies", "server.max_body_bytes",
+		"server.trusted_proxies", "server.trusted_proxy_hosts", "server.max_body_bytes",
 		"server.rate_limit_per_second", "server.rate_limit_burst",
 		"server.user_rate_limit_per_second", "server.user_rate_limit_burst",
 		"graphql.max_complexity", "graphql.max_depth", "graphql.max_body_bytes",

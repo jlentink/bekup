@@ -140,6 +140,9 @@ func secretFile(p string, uid int, group string) Entry {
 type ManifestOptions struct {
 	// StaticTLS adds the static-TLS override file and proxy-tls/.
 	StaticTLS bool
+	// Overlays: the override file carries setup-only overlays (D-215) and
+	// is required.
+	Overlays bool
 	// ComposeOperator makes compose.yaml an operator file (compose-first:
 	// setup never writes it, D-205); otherwise it is generated
 	// (setup-first, --write-compose).
@@ -171,7 +174,7 @@ func Manifest(l Layout, assets []string, o ManifestOptions) []Entry {
 		rootFile(BekupTOML, 0o644, ClassOperator),
 		rootFile(RunnerTOML, 0o644, ClassOperator))
 	ov := rootFile(OverrideFile, 0o644, ClassOperator)
-	ov.Optional = !staticTLS
+	ov.Optional = !staticTLS && !o.Overlays
 	add(ov)
 	if staticTLS {
 		// The operator's own proxy certificate goes here (tls.crt, tls.key).
@@ -311,7 +314,7 @@ func ManifestTable(l Layout) string {
 		case e.Offline:
 			cell += " (offline)"
 		case e.Path == OverrideFile:
-			cell += " (static TLS only)"
+			cell += " (static TLS or setup-only overlays, D-215)"
 		case e.Path == ComposeFile:
 			cell += " (yours; generated-upgradable with `--write-compose`)"
 		}
