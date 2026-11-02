@@ -537,16 +537,14 @@ func (st *initState) dbLocation() error {
 		return nil
 	}
 	net, err := st.ui.Input("The database's Docker network", `migrate, serve and admin join it (setup adds it in compose.override.yaml;
-bekup's own backend network stays internal). In a second terminal on the
-host:
+bekup's own backend network stays internal). With your own proxy in join
+mode it may be the proxy's network too (then only migrate and admin join
+it). In a second terminal on the host:
   docker inspect <database container> --format '{{json .NetworkSettings.Networks}}'`, d.Network, func(s string) error {
 		if err := setup.ValidateDockerNetwork("db-network", s); err != nil {
 			return err
 		}
-		if st.a.Variant.OwnProxy() && strings.EqualFold(s, st.a.ProxyNetwork) {
-			return errors.New("that is your proxy's network: put the database on a network of its own (a proxy network should not reach databases)")
-		}
-		return nil
+		return st.a.CheckDBNetwork(s)
 	})
 	if err != nil {
 		return err
@@ -638,10 +636,7 @@ func (st *initState) dbTLS() error {
 		}
 		choice := setup.DBTLS(v)
 		if choice.Weak() {
-			warn := setup.DBTLSRequireWarning
-			if choice == setup.DBTLSDisable {
-				warn = setup.DBTLSDisableWarning
-			}
+			warn := setup.DBTLSWarning(choice, st.a.DBOnProxyNetwork())
 			ok, err := st.ui.Confirm("An explicit weakening", strings.TrimSpace(warn)+`
 bekup warns at every start, audits it and alerts every admin daily; the
 admin pages show it. The printed bootstrap command needs

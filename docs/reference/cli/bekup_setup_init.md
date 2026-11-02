@@ -44,7 +44,8 @@ the release file.
 
 Your own PostgreSQL (--database external, D-207, D-208, D-215): --db-host,
 --db-location docker --db-network <net> for a container on this Docker host
-(--db-host is then its container name or alias), --db-tls verify-ca-file
+(--db-host is then its container name or alias; the network may be your
+proxy's own network in join mode, D-216), --db-tls verify-ca-file
 (default, with --db-ca-file: its CA bundle inside the deployment directory;
 copied), verify-system, or the explicit weakenings require and disable, and
 --db-auth: bootstrap (default: setup generates the two role passwords and
@@ -80,7 +81,7 @@ bekup setup init [flags]
       --db-host string                  external database: host name or IP address of your PostgreSQL (15-17)
       --db-location string              external database: remote (another server, default) or docker (a container on this Docker host: --db-network)
       --db-name string                  external database: name of bekup's database (default bekup)
-      --db-network string               external database, --db-location docker: the Docker network the database container is on (migrate, serve and admin join it)
+      --db-network string               external database, --db-location docker: the Docker network the database container is on (migrate, serve and admin join it; with --proxy own in join mode it may be --proxy-network, D-216: then only migrate and admin join it)
       --db-owner-password-file string   external database: file (inside --dir) with the bekup_owner password instead of a generated or prompted one; copied
       --db-password-file string         external database: file (inside --dir) with the bekup_app (single-account: the account's) password instead of a generated or prompted one; copied
       --db-port int                     external database: port (default 5432)

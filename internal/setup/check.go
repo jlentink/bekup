@@ -838,10 +838,14 @@ func (c *checker) traefikLabelsEnv(env map[string]string) {
 // container network (D-215).
 func (c *checker) dbNetworkEnv(env map[string]string) {
 	got, ok := env["BEKUP_DB_NETWORK"]
+	ov := c.st.overlays()
 	switch {
-	case c.st.overlays().DBNetwork && got != c.st.DBNetwork:
+	case ov.DBOnProxy && ok:
+		c.add(SeverityWarning, EnvFile, "BEKUP_DB_NETWORK has no effect: your database container is on your proxy's network (BEKUP_PROXY_NETWORK, D-216)")
+	case ov.DBOnProxy:
+	case ov.DBNetwork && got != c.st.DBNetwork:
 		c.add(SeverityError, EnvFile, "BEKUP_DB_NETWORK=%q, but setup configured your database container's network %q", bounded(got), c.st.DBNetwork)
-	case !c.st.overlays().DBNetwork && ok:
+	case !ov.DBNetwork && ok:
 		c.add(SeverityWarning, EnvFile, "BEKUP_DB_NETWORK has no effect: this deployment's database is not a container on a Docker network of this host")
 	}
 }

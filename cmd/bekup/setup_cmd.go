@@ -433,7 +433,8 @@ the release file.
 
 Your own PostgreSQL (--database external, D-207, D-208, D-215): --db-host,
 --db-location docker --db-network <net> for a container on this Docker host
-(--db-host is then its container name or alias), --db-tls verify-ca-file
+(--db-host is then its container name or alias; the network may be your
+proxy's own network in join mode, D-216), --db-tls verify-ca-file
 (default, with --db-ca-file: its CA bundle inside the deployment directory;
 copied), verify-system, or the explicit weakenings require and disable, and
 --db-auth: bootstrap (default: setup generates the two role passwords and
@@ -503,7 +504,7 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f.IntVar(&fl.db.Port, "db-port", 0, "external database: port (default 5432)")
 	f.StringVar(&fl.db.Name, "db-name", "", "external database: name of bekup's database (default bekup)")
 	f.StringVar(&fl.dbLocation, "db-location", "", "external database: remote (another server, default) or docker (a container on this Docker host: --db-network)")
-	f.StringVar(&fl.db.Network, "db-network", "", "external database, --db-location docker: the Docker network the database container is on (migrate, serve and admin join it)")
+	f.StringVar(&fl.db.Network, "db-network", "", "external database, --db-location docker: the Docker network the database container is on (migrate, serve and admin join it; with --proxy own in join mode it may be --proxy-network, D-216: then only migrate and admin join it)")
 	f.StringVar(&fl.dbTLS, "db-tls", "", "external database: verify-ca-file (default: --db-ca-file), verify-system (the image's system CA bundle), require (WEAKENED: encrypted, not verified) or disable (WEAKENED: no TLS)")
 	f.StringVar(&fl.db.CAFile, "db-ca-file", "", "external database, --db-tls verify-ca-file: CA bundle (PEM) of the server certificate, a path inside --dir (copied to <keys>/bekup_database_ca.crt)")
 	f.StringVar(&fl.db.TLSServerName, "db-tls-server-name", "", "external database, verifying --db-tls: host name the server certificate names, when --db-host is an IP address")

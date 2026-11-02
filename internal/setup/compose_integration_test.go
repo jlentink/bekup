@@ -64,6 +64,9 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		// network (D-215), with tls as the TLS choice.
 		dbDocker bool
 		tls      DBTLS
+		// dbOnProxy: the database container is on the proxy's own network
+		// "web" (join mode, D-216).
+		dbOnProxy bool
 	}
 	cases := map[string]tc{}
 	for name, mk := range variants {
@@ -108,6 +111,8 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		a.ProxyNetwork, a.ProxyContainer = "web", "npm"
 		return a
 	}, db: DBExternal, dbDocker: true, tls: DBTLSVerifySystem}
+	cases["compose-first-own-proxy-db-on-proxy-network"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy,
+		mut: labels, db: DBExternal, dbDocker: true, tls: DBTLSRequire, dbOnProxy: true}
 	cases["setup-first-full-db-container"] = tc{answers: func() Answers { return testAnswers(t, ProxyTraefik) }, db: DBExternal, dbDocker: true}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -128,6 +133,9 @@ func TestIntegrationComposeConfig(t *testing.T) {
 					dbAnswers.Location, dbAnswers.Network, dbAnswers.Host, dbAnswers.TLS = DBDocker, "dbnet", "postgres", c.tls
 					if c.tls.OrDefault() != DBTLSVerifyCAFile {
 						dbAnswers.CAFile = ""
+					}
+					if c.dbOnProxy {
+						dbAnswers.Network = "web"
 					}
 				}
 				if strings.HasSuffix(name, "single-account") {
@@ -253,22 +261,31 @@ func TestIntegrationComposeConfig(t *testing.T) {
 					t.Fatalf("labels %v, overlay %v", project.Services["serve"].Labels, ov.ProxyLabels)
 				}
 				for name, svc := range project.Services {
-					if _, on := svc.Networks["proxy"]; on && name != "serve" {
-						t.Fatalf("%s on the proxy network", name)
+					// D-216: migrate and admin reach a database container
+					// on the proxy's network there.
+					shared := ov.DBOnProxy && (name == "migrate" || name == "admin")
+					if _, on := svc.Networks["proxy"]; on != (name == "serve" || shared) {
+						t.Fatalf("%s on the proxy network: %v", name, on)
 					}
+				}
+				if ov.DBOnProxy != c.dbOnProxy {
+					t.Fatalf("shared network overlay %v", ov.DBOnProxy)
 				}
 			}
 			if c.db == DBExternal {
 				for name, svc := range project.Services {
 					_, on := svc.Networks["database"]
-					if want := ov.DBNetwork && slices.Contains([]string{"migrate", "serve", "admin"}, name); on != want {
+					if want := ov.DBNetwork && !ov.DBOnProxy && slices.Contains([]string{"migrate", "serve", "admin"}, name); on != want {
 						t.Fatalf("%s on the database network: %v", name, on)
 					}
 				}
 				if project.Networks["backend"].Internal != ov.DBNetwork {
 					t.Fatalf("backend internal = %v with a database container %v", project.Networks["backend"].Internal, ov.DBNetwork)
 				}
-				if ov.DBNetwork && (!project.Networks["database"].External || project.Networks["database"].Name != "dbnet") {
+				if _, ok := project.Networks["database"]; ok && ov.DBOnProxy {
+					t.Fatal("a database network with the database on the proxy network")
+				}
+				if ov.DBNetwork && !ov.DBOnProxy && (!project.Networks["database"].External || project.Networks["database"].Name != "dbnet") {
 					t.Fatalf("database network %+v", project.Networks["database"])
 				}
 			}

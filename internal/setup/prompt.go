@@ -433,7 +433,10 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 	if a.DB.Location == DBDocker && !g.DBNetwork && a.DB.Network == "" {
 		if ask {
 			s, err := t.Ask("Docker network of the database container", "", func(s string) error {
-				return ValidateDockerNetwork("db-network", s)
+				if err := ValidateDockerNetwork("db-network", s); err != nil {
+					return err
+				}
+				return a.CheckDBNetwork(s)
 			})
 			if err != nil {
 				return err
@@ -462,7 +465,7 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 		}
 	}
 	if !g.DBTLS && a.DB.TLS == "" && ask {
-		choice, err := askDBTLS(t)
+		choice, err := askDBTLS(t, a.dbOnProxy())
 		if err != nil {
 			return err
 		}
@@ -511,7 +514,7 @@ func completeDB(a *Answers, g Given, t *Terminal, ask bool, need func(string)) e
 // askDBTLS asks for the database TLS choice; a weak one (require,
 // disable) is taken only after the warning and an explicit "yes", like
 // the wizard (D-215), otherwise the choice is asked again.
-func askDBTLS(t *Terminal) (DBTLS, error) {
+func askDBTLS(t *Terminal, onProxyNetwork bool) (DBTLS, error) {
 	for range 5 {
 		s, err := t.Ask("TLS: verify-ca-file (verify against your CA bundle; default), verify-system (a public CA), require (WEAKENED: not verified) or disable (WEAKENED: no TLS; prefer require, even on a private Docker network)", string(DBTLSVerifyCAFile), func(s string) error {
 			_, err := ParseDBTLS(s)
@@ -527,10 +530,7 @@ func askDBTLS(t *Terminal) (DBTLS, error) {
 			}
 			return choice, nil
 		}
-		warn := DBTLSRequireWarning
-		if choice == DBTLSDisable {
-			warn = DBTLSDisableWarning
-		}
+		warn := DBTLSWarning(choice, onProxyNetwork)
 		fmt.Fprintf(t.Out, "\nWARNING: --db-tls %s is an EXPLICIT WEAKENING (D-100): %s\n  bekup warns at every start, audits it and alerts every admin daily; the admin\n  pages show it. The printed bootstrap command needs --allow-insecure-admin-connection.\n", choice, warn)
 		ok, err := t.Ask("Use it anyway? (yes/no)", "no", func(s string) error {
 			if s == "yes" || s == "no" {

@@ -175,6 +175,15 @@ func wizardCases(t *testing.T) []wizardCase {
 		}
 		return append(out, wizard.Answer{Title: "Roles and database", Value: "bootstrap"}, wizard.Answer{Title: "Admin role"})
 	}
+	// onProxyNet puts the database container on ownProxy's network (D-216).
+	onProxyNet := func(a []wizard.Answer) []wizard.Answer {
+		for i := range a {
+			if a[i].Title == "The database's Docker network" {
+				a[i].Value = "npm_default"
+			}
+		}
+		return a
+	}
 	ownProxy := func(labels string) []wizard.Answer {
 		return []wizard.Answer{
 			{Title: "Your proxy's Docker network", Value: "npm_default"},
@@ -240,6 +249,20 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "Domain", Value: "backup.example.com"},
 				{Title: "Database", Value: "external"},
 			}, dockerDB("require", true), commonTail("generate"), commonEnd(false, true)),
+			real: true,
+		},
+		{
+			// D-216: the database container on the proxy's own network.
+			name: "own-proxy-db-on-proxy-network-require",
+			answers: cat([]wizard.Answer{
+				{Title: "bekup setup"},
+				{Title: "Reverse proxy", Value: "own"},
+			}, ownProxy("yes"), []wizard.Answer{
+				{Title: "Traefik entrypoint"},
+				{Title: "Traefik certificate resolver"},
+				{Title: "Domain", Value: "backup.example.com"},
+				{Title: "Database", Value: "external"},
+			}, onProxyNet(dockerDB("require", true)), commonTail("generate"), commonEnd(false, true)),
 			real: true,
 		},
 		{

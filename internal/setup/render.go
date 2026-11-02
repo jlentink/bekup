@@ -240,7 +240,7 @@ func envVars(a *Answers, version string) []EnvVar {
 	case a.Proxy == ProxyExternal:
 		vs = append(vs, EnvVar{"BEKUP_PROXY_NETWORK", a.Link.Name}, EnvVar{"SERVE_PROXY_IP", a.Link.ServeIP})
 	}
-	if a.DB.External() && a.DB.Location == DBDocker {
+	if a.DB.External() && a.DB.Location == DBDocker && !a.dbOnProxy() {
 		vs = append(vs, EnvVar{"BEKUP_DB_NETWORK", a.DB.Network})
 	}
 	vs = append(vs, EnvVar{"DOCKER_GID", strconv.Itoa(a.DockerGID)}, EnvVar{"BEKUP_KEYS_DIR", "./" + a.KeysDir})

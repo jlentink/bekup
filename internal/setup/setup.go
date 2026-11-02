@@ -771,6 +771,9 @@ func report(out io.Writer, r *reportData) error {
 		where := ""
 		if a.DB.Location == DBDocker {
 			where = " on the Docker network " + a.DB.Network
+			if a.dbOnProxy() {
+				where += " (your proxy's network, D-216)"
+			}
 		}
 		fmt.Fprintf(&b, "  database:   your PostgreSQL at %s%s, database %s (%s; %s)\n", a.DB.dbAddress(), where, a.DB.Name, a.DB.Auth, dbTLSSummary(a.DB.TLS, l))
 	} else {
@@ -787,12 +790,8 @@ func report(out io.Writer, r *reportData) error {
 	if a.Image.IsMutable() {
 		b.WriteString(followingWarning)
 	}
-	switch a.DB.TLS {
-	case DBTLSRequire:
-		b.WriteString("\nWARNING: --db-tls require is an EXPLICIT WEAKENING (D-100): " + DBTLSRequireWarning + "\n  serve warns at every start, audits it and alerts every admin daily.\n")
-	case DBTLSDisable:
-		b.WriteString("\nWARNING: --db-tls disable is an EXPLICIT WEAKENING (D-100): " + DBTLSDisableWarning + "\n  serve warns at every start, audits it and alerts every admin daily.\n")
-	case DBTLSVerifyCAFile, DBTLSVerifySystem, "":
+	if warn := DBTLSWarning(a.DB.TLS, a.dbOnProxy()); warn != "" {
+		b.WriteString("\nWARNING: --db-tls " + string(a.DB.TLS) + " is an EXPLICIT WEAKENING (D-100): " + warn + "\n  serve warns at every start, audits it and alerts every admin daily.\n")
 	}
 	if a.DB.External() && a.DB.Auth == DBAuthSingleAccount {
 		fmt.Fprintf(&b, "\nWARNING: single-account mode (D-207) is an EXPLICIT WEAKENING: %s runs migrations\n  and the app, so a compromised serve can alter the schema and the audit log. bekup\n  warns at every start, audits it and alerts every admin daily. Prefer bootstrap.\n", a.DB.User)

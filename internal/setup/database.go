@@ -151,7 +151,31 @@ func (t DBTLS) configMode() string {
 const (
 	DBTLSRequireWarning = "encrypted, but the server's certificate is not verified: the server's identity rests on the SCRAM exchange alone (channel binding still stops a relayed login). On a Docker network any container can put itself in the path by ARP spoofing (containers have CAP_NET_RAW by default)."
 	DBTLSDisableWarning = "no TLS: all data crosses the network unencrypted, and without TLS there is no channel binding, so anyone in the path can relay the SCRAM login and take over the session, including bekup_owner's while migrate runs and the admin account's during the bootstrap. A private Docker network does not prevent this: any container on it can ARP-spoof the database's address (containers have CAP_NET_RAW by default). Prefer require over disable even there."
+	// DBSharedProxyNetworkNote follows the weak-TLS warnings when the
+	// database container is on the own proxy's network (D-216).
+	DBSharedProxyNetworkNote = "Your database container is on your reverse proxy's network: the proxy, which faces the internet, and every other container there can reach the database and put itself in the path."
 )
+
+// DBTLSWarning is the warning of a weak TLS choice ("" for a verified
+// one), with the shared-network note when the database container is on
+// the own proxy's network (D-216).
+func DBTLSWarning(choice DBTLS, onProxyNetwork bool) string {
+	var w string
+	switch choice {
+	case DBTLSRequire:
+		w = DBTLSRequireWarning
+	case DBTLSDisable:
+		w = DBTLSDisableWarning
+	case DBTLSVerifyCAFile, DBTLSVerifySystem:
+		return ""
+	default:
+		return ""
+	}
+	if onProxyNetwork {
+		w += " " + DBSharedProxyNetworkNote
+	}
+	return w
+}
 
 // Database are the database answers. The zero value is the bundled
 // postgres service.

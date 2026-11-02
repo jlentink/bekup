@@ -237,7 +237,8 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-212](#d-212-follow-ghcriojlentinkbekuplatest-an-opt-in-mutable-tag-for-the-bekup-image-with-a-setup-version-guard) | Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard | proposed |
 | [D-213](#d-213-setup-compose-lint-yaml-alias-limits-before-compose-go-and-a-load-deadline) | setup compose lint: YAML alias limits before compose-go and a load deadline | proposed |
 | [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
-| [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name) |
+| [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name; amended by D-216) |
+| [D-216](#d-216-a-database-container-may-share-the-own-proxys-network-join-mode) | A database container may share the own proxy's network (join mode) | proposed |
 
 ---
 
@@ -12878,7 +12879,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-215: Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays
 
 - **Date:** 2026-11-01
-- **Status:** proposed
+- **Status:** proposed (amended by D-216)
 - **Decided by:** agent (implementing the user's decisions of
   `plans/robust-giggling-tide.md`: one "own reverse proxy" choice instead of
   "existing Traefik" and "Nginx Proxy Manager"; bekup joins the Docker
@@ -13165,3 +13166,58 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `scripts/{gen_compose,release_ci}.sh`, `.github/workflows/{ci,release}.yml`,
   `README.md`, `docs/installation/{compose,reverse-proxy,external-database}.md`,
   `docs/security/app-db-tls.md`, `SECURITY.md`, `AGENTS.md`.
+
+## D-216: A database container may share the own proxy's network (join mode)
+
+- **Date:** 2026-11-02
+- **Status:** proposed
+- **Decided by:** user (allow the proxy and the database on a single
+  network, no strong view on the isolation; every TLS choice stays
+  allowed there, warned) and agent (overlay shape, join mode only)
+- **Context:** D-215 refused a database container network equal to the
+  own proxy's network, for two reasons: `serve` would join the same Docker
+  network twice (once as `proxy`, once as `database`), which compose
+  refuses, and a proxy network should not reach databases. Operators
+  often run the database and the proxy on one shared network, so they had
+  to create a second network only for bekup.
+- **Decision:**
+  1. In own-proxy **join** mode, `--db-network` (state `db_network`) may
+     equal `--proxy-network` (`proxy_network`), by its exact name; a name
+     that differs only in case is refused as a typo (Docker network names
+     are case-sensitive). The **link** network (D-205) stays refused: it
+     is the dedicated /28 for serve and the proxy.
+  2. The shape is derived, not stored (`Overlays.DBOnProxy`, from the two
+     recorded names): the setup-only overlay joins `migrate` and `admin`
+     to `proxy`, gives `serve` no second endpoint (it is on `proxy`
+     already), keeps `backend` internal and has no `database` network;
+     setup writes no `BEKUP_DB_NETWORK` and `setup check` warns about a
+     stray one. The lint holds the override to exactly that block as for
+     every overlay and still refuses foreign services on `proxy`.
+  3. The weak TLS choices (`require`, `disable`) stay allowed with the
+     D-100 treatment; in this shape their warning (wizard, line prompt,
+     init report) adds `DBSharedProxyNetworkNote`, and the summary names
+     the network as the proxy's.
+- **Alternatives considered:** keep the refusal (status quo; more
+  isolation, but a second network the operator must create and attach);
+  refuse `disable` (or both weak choices) on the shared network (the user
+  chose warnings only); join `serve` to the network a second time under
+  another key (compose and Docker refuse a second endpoint on the same
+  network).
+- **Consequences:** the operator's internet-facing proxy and every other
+  container on its network can reach the database port and, with
+  `CAP_NET_RAW`, ARP-spoof the database's address, and whoever may start
+  containers there can give one a network alias equal to the database's
+  host name; `verify-full` and SCRAM
+  channel binding keep the connection safe, `require` relies on channel
+  binding alone and `disable` can be relayed (warned, audited, alerted,
+  D-100). The database container reaches `serve:8080` like any container
+  on the proxy network (B2b). `migrate` and `admin` gain an endpoint on the
+  proxy network (neither listens) and with it, as a proxy network is
+  usually not internal, an outbound route (as with a non-internal D-215
+  database network). No change for any other shape; older
+  state files parse unchanged. SECURITY.md B2b and B3 describe it.
+- **Related:** D-100, D-104, D-205, D-208, D-215 (amended);
+  `internal/setup/{overlay,answers,state,render,check,database,setup,prompt}.go`,
+  `internal/setup/wizard/init.go`,
+  `docs/installation/{external-database,compose}.md`, `SECURITY.md`,
+  `AGENTS.md`.

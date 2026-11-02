@@ -2,6 +2,7 @@ package setup
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"path"
@@ -725,14 +726,45 @@ func (a *Answers) Validate() error {
 			return err
 		}
 	}
-	if a.DB.Location == DBDocker && a.Variant.OwnProxy() {
-		proxyNet := a.ProxyNetwork
-		if a.ProxyMode == ProxyLink {
-			proxyNet = a.Link.Name // the bekup-proxy link network (D-205)
+	if a.DB.Location == DBDocker {
+		if err := a.CheckDBNetwork(a.DB.Network); err != nil {
+			return fieldErr("db-network", "%v", err)
 		}
-		if strings.EqualFold(a.DB.Network, proxyNet) {
-			return fieldErr("db-network", "is your proxy's network too: serve can join it only once. Put the database on a network of its own (a proxy network should not reach databases), e.g. docker network create bekup-db && docker network connect bekup-db <database container>")
+	}
+	return nil
+}
+
+// CheckDBNetwork checks a database container network against the own
+// proxy's network (D-216; the wizard asks with it).
+func (a *Answers) CheckDBNetwork(dbNet string) error {
+	if !a.Variant.OwnProxy() {
+		return nil
+	}
+	link := a.Link.Name
+	if link == "" {
+		link = DefaultLinkNetwork().Name
+	}
+	return dbProxyNetwork(dbNet, a.ProxyNetwork, link, a.ProxyMode)
+}
+
+// DBOnProxyNetwork reports a database container on the own proxy's
+// network (join mode, D-216).
+func (a *Answers) DBOnProxyNetwork() bool { return a.dbOnProxy() }
+
+// dbProxyNetwork checks the database container's network against the
+// own proxy's (D-216): in join mode it may be the proxy's network itself
+// (serve reaches the database there); a name differing only in case is a
+// typo (Docker network names are case-sensitive); the link network
+// (D-205) is only for serve and the proxy.
+func dbProxyNetwork(dbNet, proxyNet, linkNet string, mode ProxyNetworkMode) error {
+	if mode == ProxyLink {
+		if strings.EqualFold(dbNet, linkNet) {
+			return errors.New("is the link network, which is only for serve and your proxy: put the database on a network of its own, e.g. docker network create bekup-db && docker network connect bekup-db <database container>")
 		}
+		return nil
+	}
+	if dbNet != proxyNet && strings.EqualFold(dbNet, proxyNet) {
+		return fmt.Errorf("differs from your proxy's network %q only in case (Docker network names are case-sensitive): use the exact name", bounded(proxyNet))
 	}
 	return nil
 }
@@ -810,7 +842,14 @@ func (a *Answers) overlays() Overlays {
 		ProxyLabels: a.Variant.OwnProxy() && a.ProxyLabels,
 		ProxyLink:   a.Variant.OwnProxy() && a.ProxyMode == ProxyLink,
 		DBNetwork:   a.DB.External() && a.DB.Location == DBDocker,
+		DBOnProxy:   a.dbOnProxy(),
 	}
+}
+
+// dbOnProxy reports a database container on the own proxy's network
+// (join mode, D-216).
+func (a *Answers) dbOnProxy() bool {
+	return a.DB.External() && a.DB.Location == DBDocker && a.ownProxyJoin() && a.DB.Network == a.ProxyNetwork
 }
 
 // ownProxyJoin reports the own-proxy variant in join mode.

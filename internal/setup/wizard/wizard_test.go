@@ -709,11 +709,11 @@ func TestInitWizardOwnProxyAndDatabaseContainer(t *testing.T) {
 		{Title: "Domain", Value: "backup.example.com"},
 		{Title: "Database", Value: "external"},
 		{Title: "Where does your PostgreSQL run?", Value: dbHere},
-		{Title: "The database's Docker network", Value: "web"}, // the proxy's: refused
+		{Title: "The database's Docker network", Value: "Web"}, // the proxy's in another case: refused (D-216)
 	}
 	s.Screens, s.next = nil, 0
-	if _, err := RunInit(env); err == nil || !strings.Contains(err.Error(), "your proxy's network") {
-		t.Fatalf("same network: %v", err)
+	if _, err := RunInit(env); err == nil || !strings.Contains(err.Error(), "only in case") {
+		t.Fatalf("case-only network: %v", err)
 	}
 	s.Answers = []Answer{
 		{Title: "bekup setup"},
@@ -757,6 +757,40 @@ func TestInitWizardOwnProxyAndDatabaseContainer(t *testing.T) {
 	got := strings.Join(p.Flags, " ")
 	if !strings.Contains(got, "--proxy-network web --proxy-container caddy") || !strings.Contains(got, "--db-location docker --db-network dbnet --db-host postgres") ||
 		!strings.Contains(got, "--db-tls disable") || strings.Contains(got, "--db-ca-file") {
+		t.Fatalf("flags %s", got)
+	}
+	// D-216: the database container on the proxy's own network; a weak TLS
+	// choice names the shared network.
+	s.Answers = []Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: proxyOwn},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "caddy"},
+		{Title: "Traefik Docker labels?", Value: "no"},
+		{Title: "Domain", Value: "backup.example.com"},
+		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: dbHere},
+		{Title: "The database's Docker network", Value: "web"},
+		{Title: "The database's container name", Value: "postgres"},
+		{Title: "PostgreSQL port"},
+		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL", Value: "require"},
+		{Title: "An explicit weakening", Value: "yes"},
+		{Title: "Roles and database", Value: "bootstrap"},
+		{Title: "Admin role"},
+	}
+	s.Answers = append(s.Answers, tail()...)
+	s.Answers = append(s.Answers, finish()...)
+	s.Answers = append(s.Answers, Answer{Title: "CA key passphrase (shown ONCE)"})
+	s.Screens, s.next, s.Text = nil, 0, strings.Builder{}
+	p = run(t, env)
+	if a := p.Options.Answers; a.DB.Network != "web" || !a.DBOnProxyNetwork() {
+		t.Fatalf("shared network %+v", a.DB)
+	}
+	if !strings.Contains(s.Text.String(), setup.DBSharedProxyNetworkNote) {
+		t.Error("the weak-TLS warning lacks the shared-network note")
+	}
+	if got := strings.Join(p.Flags, " "); !strings.Contains(got, "--proxy-network web") || !strings.Contains(got, "--db-network web") {
 		t.Fatalf("flags %s", got)
 	}
 }

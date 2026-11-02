@@ -18,17 +18,19 @@ func TestAskDBTLSConfirmsWeakChoices(t *testing.T) {
 		name, in string
 		want     DBTLS
 		warn     string
+		shared   bool // the database container is on the proxy's network (D-216)
 	}{
-		{"default", "\n", "", ""},
-		{"system", "verify-system\n", DBTLSVerifySystem, ""},
-		{"require confirmed", "require\nyes\n", DBTLSRequire, "ARP"},
-		{"disable declined then verify-system", "disable\n\nverify-system\n", DBTLSVerifySystem, "Prefer require over disable"},
-		{"disable confirmed", "disable\nyes\n", DBTLSDisable, "CAP_NET_RAW"},
+		{"default", "\n", "", "", false},
+		{"system", "verify-system\n", DBTLSVerifySystem, "", false},
+		{"require confirmed", "require\nyes\n", DBTLSRequire, "ARP", false},
+		{"disable declined then verify-system", "disable\n\nverify-system\n", DBTLSVerifySystem, "Prefer require over disable", false},
+		{"disable confirmed", "disable\nyes\n", DBTLSDisable, "CAP_NET_RAW", false},
+		{"require on the proxy network", "require\nyes\n", DBTLSRequire, "your reverse proxy's network", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			term, out := promptTerminal(tc.in)
-			got, err := askDBTLS(term)
+			got, err := askDBTLS(term, tc.shared)
 			if err != nil || got != tc.want {
 				t.Fatalf("got %q, %v; want %q\n%s", got, err, tc.want, out)
 			}
@@ -49,6 +51,25 @@ func TestAskDBTLSConfirmsWeakChoices(t *testing.T) {
 	}
 	if a.DB.TLS != DBTLSRequire || strings.Count(out.String(), "EXPLICIT WEAKENING") != 2 {
 		t.Fatalf("TLS %q\n%s", a.DB.TLS, out)
+	}
+}
+
+// TestCompleteDBNetworkOnProxy: the line prompt applies the D-216 rule to
+// the database network: the proxy's network in another case is refused,
+// its exact name is taken, and the weak-TLS warning names the shared
+// network.
+func TestCompleteDBNetworkOnProxy(t *testing.T) {
+	term, out := promptTerminal("WEB\nweb\npostgres\nrequire\nyes\n" + strings.Repeat("\n", 10))
+	a := Answers{Variant: VariantOwnProxy, Domain: "backup.example.com", DockerGID: 1, ProxyNetwork: "web", ProxyContainer: "npm",
+		DB: Database{Mode: DBExternal, Location: DBDocker}}
+	g := Given{Image: true, Domain: true, DockerGID: true, Targets: true, TrustedProxy: true, Database: true, DBLocation: true,
+		ProxyNetwork: true, ProxyContainer: true}
+	if err := Complete(&a, g, "ghcr.io/jlentink/bekup:1.0.0@sha256:"+strings.Repeat("a", 64), term, false); err != nil {
+		t.Fatalf("Complete: %v\n%s", err, out)
+	}
+	if a.DB.Network != "web" || !a.DBOnProxyNetwork() || !strings.Contains(out.String(), "only in case") ||
+		!strings.Contains(out.String(), DBSharedProxyNetworkNote) {
+		t.Fatalf("network %q\n%s", a.DB.Network, out)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 
 	"github.com/jlentink/bekup/internal/imageref"
 )
@@ -285,11 +284,12 @@ func (s *State) validate() error {
 			if err := ValidateDockerNetwork("db_network", s.DBNetwork); err != nil {
 				return err
 			}
-			// The proxy's network (join) or the link network (link mode):
-			// serve joins a network only once, and a proxy network should not
-			// reach databases (D-215).
-			if s.ProxyNetwork != "" && strings.EqualFold(s.DBNetwork, s.ProxyNetwork) {
-				return errors.New("db_network must not be the proxy network")
+			// The proxy's own network only in join mode, by its exact name
+			// (D-216); never the link network.
+			if s.ProxyNetwork != "" {
+				if err := dbProxyNetwork(s.DBNetwork, s.ProxyNetwork, s.ProxyNetwork, s.ProxyNetworkMode); err != nil {
+					return fmt.Errorf("db_network %w", err)
+				}
 			}
 		default:
 			return fmt.Errorf("invalid database_location %q", bounded(string(s.DatabaseLocation)))
@@ -375,6 +375,7 @@ func (s *State) overlays() Overlays {
 		ProxyLabels: s.Variant.OwnProxy() && s.ProxyLabels,
 		ProxyLink:   s.Variant.OwnProxy() && s.ProxyNetworkMode == ProxyLink,
 		DBNetwork:   s.DatabaseMode == DBExternal && s.DatabaseLocation == DBDocker,
+		DBOnProxy:   s.DatabaseMode == DBExternal && s.DatabaseLocation == DBDocker && s.ownProxyJoin() && s.DBNetwork == s.ProxyNetwork,
 	}
 }
 

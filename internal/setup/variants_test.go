@@ -202,8 +202,11 @@ func TestOverlayDocs(t *testing.T) {
 				if err := yaml.Unmarshal([]byte(doc), &d); err != nil {
 					t.Fatalf("%+v: %v", ov, err)
 				}
+				if _, ok := d.Services["serve"]; ok != (ov.ProxyLabels || ov.ProxyLink || ov.DBNetwork && !ov.DBOnProxy) {
+					t.Errorf("%+v: serve block %v", ov, ok)
+				}
 				serveNets, _ := d.Services["serve"]["networks"].(map[string]any) //nolint:errcheck // checked below
-				if _, ok := serveNets["database"]; ok != ov.DBNetwork {
+				if _, ok := serveNets["database"]; ok != (ov.DBNetwork && !ov.DBOnProxy) {
 					t.Errorf("%+v: serve on database %v", ov, ok)
 				}
 				if _, ok := serveNets["proxy"]; ok != ov.ProxyLink {
@@ -213,8 +216,18 @@ func TestOverlayDocs(t *testing.T) {
 					if _, ok := d.Services[svc]; ok != ov.DBNetwork {
 						t.Errorf("%+v: %s %v", ov, svc, ok)
 					}
+					nets, _ := d.Services[svc]["networks"].(map[string]any) //nolint:errcheck // checked below
+					_, onProxy := nets["proxy"]
+					_, onDB := nets["database"]
+					if onProxy != ov.DBOnProxy || onDB != (ov.DBNetwork && !ov.DBOnProxy) {
+						t.Errorf("%+v: %s networks %v", ov, svc, nets)
+					}
 				}
-				if ov.DBNetwork && (d.Networks["database"]["external"] != true || d.Networks["database"]["name"] != "${BEKUP_DB_NETWORK:-bekup-db}" || d.Networks["backend"]["internal"] != true) {
+				if ov.DBNetwork && d.Networks["backend"]["internal"] != true {
+					t.Errorf("%+v: networks %v", ov, d.Networks)
+				}
+				_, dbNet := d.Networks["database"]
+				if dbNet != (ov.DBNetwork && !ov.DBOnProxy) || dbNet && (d.Networks["database"]["external"] != true || d.Networks["database"]["name"] != "${BEKUP_DB_NETWORK:-bekup-db}") {
 					t.Errorf("%+v: networks %v", ov, d.Networks)
 				}
 				compose := []byte(renderedVariantDB(t, v, db))
@@ -244,6 +257,9 @@ func overlayCombos(v Variant, db DBMode) []Overlays {
 					continue
 				}
 				out = append(out, Overlays{ProxyLabels: labels, ProxyLink: link, DBNetwork: dbn})
+				if dbn && v.OwnProxy() && !link { // D-216: the proxy's network in join mode
+					out = append(out, Overlays{ProxyLabels: labels, DBNetwork: true, DBOnProxy: true})
+				}
 			}
 		}
 	}

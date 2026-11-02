@@ -24,6 +24,10 @@ type Overlays struct {
 	// DBNetwork: migrate, serve and admin join the database container's
 	// Docker network (external, BEKUP_DB_NETWORK); backend stays internal.
 	DBNetwork bool
+	// DBOnProxy (with DBNetwork, own-proxy join mode): that network is the
+	// proxy's own network (D-216). serve is on it already, so only migrate
+	// and admin join the proxy network; there is no database network.
+	DBOnProxy bool
 }
 
 // Any reports whether at least one overlay applies.
@@ -61,12 +65,23 @@ const overlayDBJoin = `      # YOUR database container's network (BEKUP_DB_NETWO
       database: {}
 `
 
-// overlayDBNetworks are the top-level networks of the DB-network overlay.
-const overlayDBNetworks = `  # The app database is a container on YOUR Docker network: backend needs no
+// overlayDBOnProxy joins a service to the proxy's network, where the
+// database container is too (D-216).
+const overlayDBOnProxy = `      # YOUR proxy's network (BEKUP_PROXY_NETWORK), where your database
+      # container is too (D-216).
+      proxy: {}
+`
+
+// overlayBackendInternal keeps backend internal: the app database is a
+// container on the operator's Docker network.
+const overlayBackendInternal = `  # The app database is a container on YOUR Docker network: backend needs no
   # route off this host and stays internal.
   backend:
     internal: true
-  # YOUR database container's network (external; setup writes its name to
+`
+
+// overlayDBNetworks are the top-level networks of the DB-network overlay.
+const overlayDBNetworks = overlayBackendInternal + `  # YOUR database container's network (external; setup writes its name to
   # .env as BEKUP_DB_NETWORK). Only migrate, serve and admin join it.
   database:
     external: true
@@ -93,22 +108,29 @@ func overlayDoc(o Overlays, staticTLSProxy Proxy) string {
 	}
 	var b strings.Builder
 	b.WriteString("services:\n")
+	join := overlayDBJoin
+	if o.DBOnProxy {
+		join = overlayDBOnProxy
+	}
 	if o.DBNetwork {
 		for _, svc := range []string{"migrate", "admin"} {
-			b.WriteString("  " + svc + ":\n    networks:\n" + overlayDBJoin)
+			b.WriteString("  " + svc + ":\n    networks:\n" + join)
 		}
 	}
-	if o.Any() {
+	// serve is on the proxy's network already when the database shares it
+	// (D-216): a second endpoint would fail.
+	serveDB := o.DBNetwork && !o.DBOnProxy
+	if o.ProxyLabels || o.ProxyLink || serveDB {
 		b.WriteString("  serve:\n")
 		if o.ProxyLabels {
 			b.WriteString(overlayServeLabels)
 		}
-		if o.ProxyLink || o.DBNetwork {
+		if o.ProxyLink || serveDB {
 			b.WriteString("    networks:\n")
 			if o.ProxyLink {
 				b.WriteString(overlayServeLink)
 			}
-			if o.DBNetwork {
+			if serveDB {
 				b.WriteString(overlayDBJoin)
 			}
 		}
@@ -116,7 +138,10 @@ func overlayDoc(o Overlays, staticTLSProxy Proxy) string {
 	if staticTLSProxy != "" {
 		b.WriteString(staticTLSBlock(staticTLSProxy))
 	}
-	if o.DBNetwork {
+	switch {
+	case o.DBOnProxy:
+		b.WriteString("networks:\n" + overlayBackendInternal)
+	case o.DBNetwork:
 		b.WriteString("networks:\n" + overlayDBNetworks)
 	}
 	return b.String()

@@ -83,6 +83,11 @@ func TestParseState(t *testing.T) {
 			s.ProxyNetwork, s.ProxySubnet, s.ProxyIP, s.ServeIP = "bekup-proxy", "10.213.253.0/28", "10.213.253.5", "10.213.253.10"
 			s.DatabaseMode, s.DatabaseAuth, s.DatabaseLocation, s.DBNetwork = DBExternal, DBAuthBootstrap, DBDocker, "bekup-proxy"
 		},
+		"db network is the proxy network in another case": func(s *State) {
+			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+			s.ProxyNetwork, s.ProxyContainer = "web", "npm"
+			s.DatabaseMode, s.DatabaseAuth, s.DatabaseLocation, s.DBNetwork = DBExternal, DBAuthBootstrap, DBDocker, "Web"
+		},
 		"join with link fields": func(s *State) {
 			s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
 			s.ProxyNetwork, s.ProxyContainer, s.ProxyIP = "web", "npm", "10.213.253.5"
@@ -112,6 +117,17 @@ func TestParseState(t *testing.T) {
 	}
 	if _, err := ParseState(data); err != nil {
 		t.Fatalf("external operator state: %v", err)
+	}
+	// D-216: the database container on the proxy's own network (join).
+	shared := validState()
+	shared.Variant, shared.Proxy, shared.TLSMode, shared.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
+	shared.ProxyNetwork, shared.ProxyContainer = "web", "npm"
+	shared.DatabaseMode, shared.DatabaseAuth, shared.DatabaseLocation, shared.DBNetwork = DBExternal, DBAuthBootstrap, DBDocker, "web"
+	if data, err = shared.Marshal(); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := ParseState(data); err != nil || !st.overlays().DBOnProxy {
+		t.Fatalf("shared network state: %v", err)
 	}
 	if _, err := ParseState([]byte(`{"schema":1,"extra":1}`)); err == nil {
 		t.Error("unknown field accepted")

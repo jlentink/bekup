@@ -137,7 +137,12 @@ func TestAnswersValidate(t *testing.T) {
 		{name: "link outside", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ServeIP = "10.213.253.20" }, field: "serve-ip"},
 		{name: "link same", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.ServeIP = "10.213.253.5" }, field: "proxy-ip"},
 		{name: "link name", proxy: ProxyNone, mut: func(a *Answers) { ownProxyLink(a); a.Link.Name = "-bad" }, field: "proxy-network"},
+		// D-216: the proxy's own network (join mode), by its exact name.
 		{name: "database on the proxy network", proxy: ProxyNone, mut: func(a *Answers) {
+			ownProxyJoin(a)
+			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "web", Host: "db", CAFile: "ca.pem"}
+		}},
+		{name: "database on the proxy network in another case", proxy: ProxyNone, mut: func(a *Answers) {
 			ownProxyJoin(a)
 			a.DB = Database{Mode: DBExternal, Location: DBDocker, Network: "WEB", Host: "db", CAFile: "ca.pem"}
 		}, field: "db-network"},

@@ -824,3 +824,55 @@ func TestComposeFirstDatabaseContainer(t *testing.T) {
 		})
 	}
 }
+
+// TestComposeFirstDatabaseOnProxyNetwork: the database container on the
+// own proxy's network (join mode, D-216): migrate and admin join the
+// proxy network, serve keeps its one endpoint there, .env carries no
+// BEKUP_DB_NETWORK (a stray one only warns), and check passes.
+func TestComposeFirstDatabaseOnProxyNetwork(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeReleaseDB(t, dir, VariantOwnProxy, DBExternal, variantImage)
+	db := Database{Location: DBDocker, Network: "web", Host: "postgres", TLS: DBTLSRequire}
+	out, err := composeFirstInit(t, dir, VariantOwnProxy, func(o *Options) { o.Answers.DB = db })
+	if err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	if !strings.Contains(out.String(), DBSharedProxyNetworkNote) || !strings.Contains(out.String(), "your proxy's network, D-216") {
+		t.Fatalf("the report lacks the shared-network note:\n%s", out)
+	}
+	ov := Overlays{DBNetwork: true, DBOnProxy: true}
+	got := string(readFile(t, dir, OverrideFile))
+	if got != overlayHeader+overlayDoc(ov, "") || strings.Contains(got, "BEKUP_DB_NETWORK") || strings.Contains(got, "  serve:") {
+		t.Fatalf("override:\n%s", got)
+	}
+	env := string(readFile(t, dir, EnvFile))
+	if strings.Contains(env, "BEKUP_DB_NETWORK") || !hasLine(env, "BEKUP_PROXY_NETWORK=web") {
+		t.Fatalf(".env:\n%s", env)
+	}
+	st := mustState(t, dir)
+	if st.DBNetwork != "web" || st.ProxyNetwork != "web" || !st.overlays().DBOnProxy {
+		t.Fatalf("state %+v", st)
+	}
+	fs, report, err := runCheck(t, dir, nil)
+	if err != nil || hasErrors(fs) {
+		t.Fatalf("check: %v\n%s", err, report)
+	}
+	// A foreign service on the proxy network is still refused.
+	over := strings.Replace(got, "services:\n", "services:\n"+evilService+"    networks: [proxy]\n", 1)
+	if err := os.WriteFile(pathIn(dir, OverrideFile), []byte(over), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if fs, report, err := runCheck(t, dir, nil); !errors.Is(err, ErrCheckFailed) || !hasFinding(fs, SeverityError, `may not join bekup's network "proxy"`) {
+		t.Fatalf("foreign service:\n%s", report)
+	}
+	if err := os.WriteFile(pathIn(dir, OverrideFile), []byte(got), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pathIn(dir, EnvFile), []byte(env+"BEKUP_DB_NETWORK=web\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if fs, report, err := runCheck(t, dir, nil); err != nil || hasErrors(fs) || !hasFinding(fs, SeverityWarning, "BEKUP_DB_NETWORK has no effect") {
+		t.Fatalf("stray BEKUP_DB_NETWORK:\n%s", report)
+	}
+}

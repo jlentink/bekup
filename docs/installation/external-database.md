@@ -110,10 +110,12 @@ name. With flags:
   network. It must be a valid host name, so a name with `_` (for example
   `pg_db_1`) does not work: use its compose service name or an alias.
 - With the [own reverse proxy](reverse-proxy.md#own-reverse-proxy) in join
-  mode, the database network must not be your proxy's network (`serve`
-  would join it twice, and a proxy network should not reach databases).
-  Give the database a network of its own, for example `docker network
-  create bekup-db` and that network in the database's compose file.
+  mode, the database may be on your proxy's network itself (D-216; see
+  [below](#database-on-your-proxys-network)). Give the exact name: a name
+  that differs from the proxy's network only in case is refused (Docker
+  network names are case-sensitive). In link mode the database network
+  must not be the `bekup-proxy` link network, which is only for `serve` and
+  your proxy.
 
 setup writes the network's name to `.env` (`BEKUP_DB_NETWORK`) and this
 block into a new `compose.override.yaml` (never into `compose.yaml`; an
@@ -149,6 +151,39 @@ recorded network. The other containers on that network share it with
 `frontend` or link address), except in the own-proxy join mode, which
 listens on every interface
 ([reverse-proxy.md](reverse-proxy.md#trust-by-container-name)).
+
+### Database on your proxy's network
+
+With the own reverse proxy in join mode, the database container may share
+your proxy's network (`--db-network` equal to `--proxy-network`, D-216).
+`serve` is on that network already, so it reaches the database there, and
+only `migrate` and `admin` join it in addition. setup writes no
+`BEKUP_DB_NETWORK` (`setup check` warns if one is set) and this block:
+
+```yaml
+services:
+  migrate:
+    networks:
+      proxy: {}
+  admin:
+    networks:
+      proxy: {}
+networks:
+  backend:
+    internal: true
+```
+
+This is simpler, but your reverse proxy, which faces the internet, and
+every other container on that network can now reach the database's port
+and, with `CAP_NET_RAW`, put itself in the path by ARP spoofing; whoever
+may start containers there can also give one a network alias equal to the
+database's host name. `migrate` and `admin` also gain the proxy network's
+outbound route (a proxy network is usually not internal). Keep a
+verifying TLS choice (`verify-ca-file` or `verify-system`): with
+`require` or `disable` setup shows the weakening warning together with a
+note about the shared network. The database container in turn reaches
+`serve:8080` like every container on your proxy's network. A network of its own for the database
+(`docker network create bekup-db`) keeps the proxy away from it.
 
 ## TLS modes
 

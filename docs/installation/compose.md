@@ -111,7 +111,9 @@ addresses for your proxy (`10.213.253.5`) and `serve` (`10.213.253.10`)
 With a [database container](external-database.md#database-container-on-this-docker-host)
 on this Docker host, `migrate`, `serve` and `admin` also join its network
 as the external network `database` (`BEKUP_DB_NETWORK`), and nothing else
-of the project may.
+of the project may. When that is your proxy's own network (own-proxy join
+mode, D-216), only `migrate` and `admin` join `proxy` in addition and there
+is no `database` network.
 
 `serve` can never reach a target database or Docker, and the runner can never
 reach the app database. `serve`'s port is **not published**: only the
@@ -718,7 +720,10 @@ bundled form:
   --db-network <net>`), `migrate`, `serve` and `admin` join its network
   instead (the external network `database`, `BEKUP_DB_NETWORK`, a block in
   `compose.override.yaml`) and `backend` stays internal
-  ([external-database.md](external-database.md#database-container-on-this-docker-host)).
+  ([external-database.md](external-database.md#database-container-on-this-docker-host));
+  on your proxy's own network (join mode, D-216) `migrate` and `admin` join
+  `proxy` instead
+  ([external-database.md](external-database.md#database-on-your-proxys-network)).
 
 setup runs without a network, so it never connects to the database. How
 bekup's roles come to exist (`--db-auth`):
