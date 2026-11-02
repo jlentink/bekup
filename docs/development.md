@@ -273,17 +273,20 @@ the current one, or `git-cliff` is missing. Otherwise it:
 
 1. writes the new version to `VERSION` and `web/package.json`;
 2. regenerates `CHANGELOG.md` with git-cliff ([`cliff.toml`](../cliff.toml):
-   Conventional Commits → Keep a Changelog sections; `chore(release)`,
-   `chore(deps)`, `build`, `ci`, `test`, `style` and `chore` commits are left
-   out);
+   Conventional Commits → Keep a Changelog sections; plain subjects starting
+   with "Add"/"Fix"/"Remove" go to Added/Fixed/Removed, any other to Changed;
+   `chore(release)`, `chore(deps)`, `build`, `ci`, `test`, `style` and
+   `chore` commits are left out). A release without entries is fine: its
+   GitHub release notes then say so (D-219);
 3. creates a **signed** commit `chore(release): vX.Y.Z` (`git commit -S`) and a
    **signed annotated** tag `vX.Y.Z`.
 
 If anything fails before the commit, the working tree is restored. Nothing is
 pushed. Commit and tag signing must be configured in git (GPG or SSH; for SSH
 also set `gpg.ssh.allowedSignersFile` so signatures can be verified locally).
-Write commit messages as [Conventional Commits](https://www.conventionalcommits.org/)
-so they show up in the changelog.
+[Conventional Commits](https://www.conventionalcommits.org/) give the
+cleanest changelog; a plain imperative subject ("Add ...", "Fix ...") works
+too.
 
 `just release` (`scripts/release.sh`) checks that `HEAD` of a clean `main` is
 the annotated tag `v$(cat VERSION)` and that its signature verifies, then runs

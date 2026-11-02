@@ -97,7 +97,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-069](#d-069-audit-and-alert-on-break-glass-cli-actions) | Audit and alert on break-glass CLI actions | accepted |
 | [D-070](#d-070-per-job-maximum-artifact-size) | Per-job maximum artifact size | accepted |
 | [D-071](#d-071-justfile-conventions) | justfile conventions | accepted |
-| [D-072](#d-072-version-bump-and-release-policy) | Version bump and release policy | accepted |
+| [D-072](#d-072-version-bump-and-release-policy) | Version bump and release policy | accepted (changelog rules amended by D-219) |
 | [D-073](#d-073-configuration-keys-defaults-and-guardrails-task-03) | Configuration keys, defaults and guardrails (task 0.3) | accepted |
 | [D-074](#d-074-config-print-is-always-redacted) | config print is always redacted | accepted |
 | [D-075](#d-075-internallogging-redaction-rules) | internal/logging redaction rules | accepted |
@@ -226,7 +226,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-201](#d-201-dev-only-runner-for-a-native-serve-loopback-published-on-a-dedicated-network) | Dev-only runner for a native serve, loopback-published on a dedicated network | proposed (dev subnet moved by D-205) |
 | [D-202](#d-202-manual-multi-arch-image-publishing-to-the-operators-own-registry-just-publish) | Manual multi-arch image publishing to the operator's own registry (`just publish`) | proposed |
 | [D-203](#d-203-container-only-compose-install-bekup-setup-with-embedded-assets-an-ownership-manifest-and-a-root--cap_chown-setup-container) | Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container | proposed (partly superseded by D-205; amended by D-217) |
-| [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205) |
+| [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205; changelog section optional by D-219) |
 | [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder; variant names and the link network as the default superseded by D-215; amended by D-217) |
 | [D-206](#d-206-mobile-apps-and-the-push-channel-dropped-from-the-roadmap) | Mobile apps and the push channel dropped from the roadmap | proposed |
 | [D-207](#d-207-external-postgresql-for-the-app-database-fields-mode-one-connection-builder-db-bootstrap--roles-sql-migrate-preflight-and-an-opt-in-single-account-mode) | External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode | proposed (amended by D-215) |
@@ -241,6 +241,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-216](#d-216-a-database-container-may-share-the-own-proxys-network-join-mode) | A database container may share the own proxy's network (join mode) | proposed |
 | [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed |
 | [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
+| [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
 
 ---
 
@@ -13450,3 +13451,38 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   trigger back, or the queue stalls on required checks.
 - **Related:** D-091, D-204; `.github/workflows/ci.yml`,
   `.github/workflows/release.yml`, `docs/development.md`, `AGENTS.md`.
+
+## D-219: Changelog from every commit; a changelog section is optional for a release
+
+- **Date:** 2026-11-02
+- **Status:** proposed
+- **Decided by:** user (a changelog section is not mandatory) and agent
+  (the git-cliff rules)
+- **Context:** `cliff.toml` kept only Conventional Commits
+  (`filter_unconventional = true`), but the commits are written as plain
+  subjects ("Add ...", "Fix ..."). `just bump` therefore wrote no section
+  for the new version, and the release workflow's last job
+  (`GitHub release`) failed on `CHANGELOG has no section for X.Y.Z` after
+  the image had already been pushed, signed and tagged and the compose
+  files signed. v0.0.6 and v0.0.8 ended that way: published images, no
+  GitHub release.
+- **Decision:**
+  1. A changelog section is not required. `release_ci.sh release-notes`
+     uses the section when there is one and otherwise writes "No changelog
+     entries for this release."; a missing `CHANGELOG.md` is still an
+     error. `just bump` doesn't check for a section either.
+  2. git-cliff keeps unconventional commits: subjects starting with
+     "Add"/"Fix"/"Remove" (any case) go to Added/Fixed/Removed, any other
+     to Changed. Conventional prefixes and the skipped types (release,
+     deps, build, ci, test, style, chore) are unchanged (D-072).
+- **Alternatives considered:** requiring a section and checking it before
+  publishing (rejected by the user); requiring Conventional Commits with a
+  hook or a PR title check (rejected: not wanted, and the plain subjects
+  already make a useful changelog with rule 2).
+- **Consequences:** a release never fails on the changelog any more. The
+  regenerated `CHANGELOG.md` gets sections for every earlier release too.
+  The images `0.0.6` and `0.0.8` stay published without a GitHub release:
+  their tags are immutable (D-204), so the fix ships with the next version.
+- **Related:** D-072, D-204; `cliff.toml`, `scripts/release_ci.sh`,
+  `scripts/release_ci_test.sh`, `scripts/bump_test.sh`,
+  `docs/development.md`.

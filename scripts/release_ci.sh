@@ -18,7 +18,8 @@
 #   release_ci.sh image-repo <owner/repo>
 #       Prints the GHCR repository ghcr.io/<owner/repo, lowercased>.
 #   release_ci.sh release-notes <x.y.z> <image-repo> <digest> <repo-url> [changelog]
-#       Prints the GitHub release notes: the changelog section, the pinned
+#       Prints the GitHub release notes: the changelog section (optional:
+#       a short note when there is none), the pinned
 #       image, pull/verify commands and the compose-first install (verify
 #       the compose file under its release name, save it as compose.yaml,
 #       the three steps, the own reverse proxy's network, the
@@ -198,7 +199,11 @@ release_notes() {
 	matches "$digest" '^sha256:[a-f0-9]{64}$' || die "invalid digest '$digest'"
 	matches "$url" '^https://[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' ||
 		die "invalid repository URL '$url'"
-	section=$(changelog_section "$version" "$file")
+	# The changelog section is optional (D-219): without one (or with an
+	# empty one) the notes say so, and the release goes ahead.
+	[ -f "$file" ] || die "changelog '$file' not found"
+	section=$(changelog_section "$version" "$file" 2>/dev/null) ||
+		section='No changelog entries for this release.'
 	gh_repo=${url#https://*/}
 	identity="$url/.github/workflows/release.yml@refs/tags/v$version"
 	cat <<EOF

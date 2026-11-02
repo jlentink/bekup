@@ -253,7 +253,19 @@ refuse "$rc" release-notes 1.2.3 'ghcr.io/jlentink/bekup:1.2.3' "$digest" https:
 # shellcheck disable=SC2016 # a literal command substitution must be refused
 refuse "$rc" release-notes 1.2.3 ghcr.io/jlentink/bekup "$digest" 'https://github.com/jlentink/bekup$(id)' "$tmp/CHANGELOG.md"
 refuse "$rc" release-notes 1.2.3 ghcr.io/jlentink/bekup "$digest" http://github.com/jlentink/bekup "$tmp/CHANGELOG.md"
-refuse "$rc" release-notes 1.2.4 ghcr.io/jlentink/bekup "$digest" https://github.com/jlentink/bekup "$tmp/CHANGELOG.md"
+refuse "$rc" release-notes 1.2.3 ghcr.io/jlentink/bekup "$digest" https://github.com/jlentink/bekup "$tmp/nope.md"
+# Missing or empty section: the notes say so and the release goes ahead (D-219).
+for v in 1.2.4 1.0.0; do
+	count=$((count + 1))
+	notes=$("$rc" release-notes "$v" ghcr.io/jlentink/bekup "$digest" https://github.com/jlentink/bekup "$tmp/CHANGELOG.md" 2>/dev/null) || notes='<error>'
+	case $notes in
+	'No changelog entries for this release.'*"ghcr.io/jlentink/bekup:$v@$digest"*) ;;
+	*)
+		printf 'FAIL: release-notes %s without a changelog section: %s\n' "$v" "$(printf '%s' "$notes" | head -3)" >&2
+		fail=1
+		;;
+	esac
+done
 
 # --- compose-assets / render-compose -------------------------------------------
 cref=ghcr.io/jlentink/bekup:1.2.3@$digest

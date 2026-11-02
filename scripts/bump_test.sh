@@ -26,12 +26,17 @@ mkdir -p "$tmp/bin"
 cat >"$tmp/bin/git-cliff" <<'STUB'
 #!/bin/sh
 [ -n "${CLIFF_FAIL:-}" ] && { echo "stub git-cliff: forced failure" >&2; exit 1; }
+# CLIFF_EMPTY: a changelog without a section for the tag (only skipped commits).
 tag='' out=''
 while [ $# -gt 0 ]; do
 	case $1 in --tag) tag=$2; shift ;; --output) out=$2; shift ;; esac
 	shift
 done
-printf '# Changelog\n\n## [%s]\n' "$tag" >"$out"
+if [ -n "${CLIFF_EMPTY:-}" ]; then
+	printf '# Changelog\n' >"$out"
+else
+	printf '# Changelog\n\n## [%s] - 2026-01-01\n\n### Added\n\n- stub entry\n' "${tag#v}" >"$out"
+fi
 STUB
 chmod +x "$tmp/bin/git-cliff"
 stub_path="$tmp/bin:$PATH"
@@ -124,6 +129,15 @@ check "rollback leaves a clean tree" test -z "$(git -C "$tmp/args" status --porc
 check "rollback keeps VERSION" grep -qx 0.0.0 "$tmp/args/VERSION"
 check "rollback creates no tag" test -z "$(git -C "$tmp/args" tag -l)"
 
+# --- a changelog without a section for the new version is fine (D-219) --------
+new_repo nosection
+count=$((count + 1))
+if ! (cd "$tmp/nosection" && CLIFF_EMPTY=1 PATH="$stub_path" "$bump" patch >/dev/null 2>&1); then
+	echo "FAIL: no changelog section: bump refused" >&2
+	fail=1
+fi
+check "no changelog section: tag v0.0.1 created" git -C "$tmp/nosection" rev-parse -q --verify refs/tags/v0.0.1
+
 # --- happy path --------------------------------------------------------------
 new_repo happy
 count=$((count + 1))
@@ -134,7 +148,7 @@ if ! (cd "$tmp/happy" && PATH="$stub_path" "$bump" minor >/dev/null 2>&1); then
 fi
 h="$tmp/happy"
 check "VERSION is 0.1.0" grep -qx 0.1.0 "$h/VERSION"
-check "CHANGELOG regenerated" grep -qF '## [v0.1.0]' "$h/CHANGELOG.md"
+check "CHANGELOG regenerated" grep -qF '## [0.1.0]' "$h/CHANGELOG.md"
 check "tag v0.1.0 is annotated" test "$(git -C "$h" cat-file -t v0.1.0 2>/dev/null)" = tag
 check "tag v0.1.0 points at HEAD" test "$(git -C "$h" rev-parse 'v0.1.0^{commit}')" = "$(git -C "$h" rev-parse HEAD)"
 check "tag signature verifies" git -C "$h" verify-tag v0.1.0
