@@ -81,6 +81,7 @@ Read the threat model in [SECURITY.md](SECURITY.md).
 - Prometheus metrics on a separate internal listener.
 
 **Operations**
+- Guided setup in the terminal or in the **browser**: HTTPS with a one-time code and a certificate fingerprint you compare.
 - Live config reload: **Admin → Settings → Configuration**, or `SIGHUP` for a single process.
 - Offline recovery without the bekup database: `bekup verify`, `bekup decrypt` and `bekup reindex`.
 - Multi-arch images for your own registry (`just publish`).
@@ -169,6 +170,36 @@ before `up -d`, usually
 ([docs/installation/external-database.md](docs/installation/external-database.md)).
 Details: [docs/installation/compose.md](docs/installation/compose.md#install-with-the-setup-wizard).
 
+**Or in your browser.** The same wizard also runs in a browser (D-217).
+Save the compose file for your setup first (here bekup's own Traefik with
+the bundled database; the other variants are under
+[Advanced](#advanced-start-from-a-compose-file)), then run setup in two
+steps: the first writes the deployment, the second prepares the database.
+
+```sh
+IMAGE=ghcr.io/jlentink/bekup:latest
+sudo install -d -m 0755 /opt/bekup && cd /opt/bekup
+sudo curl -fsSLo compose.yaml https://raw.githubusercontent.com/jlentink/bekup/main/deploy/compose/compose.yaml
+export BEKUP_IMAGE="$IMAGE" DOCKER_GID="$(stat -c %g /var/run/docker.sock)"
+export BEKUP_SETUP_WEB_HOST=backup-host.example.com   # the name you open setup with
+sudo -E docker compose run --rm --service-ports setup-web      # questions, files, zip
+sudo docker compose up -d postgres                             # bundled database only
+sudo -E docker compose run --rm --service-ports setup-web-db   # roles and migrations
+sudo docker compose up -d
+sudo docker compose run --rm admin create --email you@example.com --display-name "Your Name"
+```
+
+Each run prints an `https://<host>:8443/#code=...` address, a one-time
+code and the fingerprint of its self-signed certificate: continue in the
+browser only if the certificate's SHA-256 fingerprint matches the
+terminal. The code opens a single session; ten wrong codes stop setup.
+Port 8443 is open on every host address while a run is active, and setup
+stops when you press Finish, after 30 idle minutes or after 2 hours. You
+can download the written configuration as a zip, which holds only the
+non-secret files; keys, passwords and the CA stay on the server. The first
+admin is still created on the host with `admin create`. Details:
+[docs/installation/compose.md](docs/installation/compose.md#browser-setup).
+
 **Following `:latest` or pinning a digest.** With `:latest` the wizard
 explains the choice and defaults to *following* the tag: `compose.yaml`
 names `ghcr.io/jlentink/bekup:latest`, so `docker compose pull` fetches new
@@ -201,6 +232,11 @@ Each variant is one compose file, committed in
 [`deploy/compose/`](deploy/compose/) (generated, never edited by hand; the
 image comes from `BEKUP_IMAGE`) and, once releases exist, also published
 with every release with the bekup image pinned by digest and attested.
+
+**In the browser instead.** Every variant also works with the
+[browser setup](#quick-start) in place of step 2: run `setup-web`, then
+`setup-web-db`, which also creates your own PostgreSQL's roles
+([docs/installation/external-database.md](docs/installation/external-database.md#browser-setup)).
 
 **The image.** With the committed file, step 2 names the bekup image pinned
 by digest, `BEKUP_IMAGE=<registry>/bekup:<version>@sha256:<digest>`, or

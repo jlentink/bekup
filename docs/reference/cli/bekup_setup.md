@@ -71,4 +71,5 @@ bekup setup [flags]
 * [bekup setup init](bekup_setup_init.md)	 - Set up a deployment directory (config, secrets, certificates, deploy assets)
 * [bekup setup renew](bekup_setup_renew.md)	 - List and renew the internal certificates (runner, serve, postgres; CA rotation)
 * [bekup setup upgrade](bekup_setup_upgrade.md)	 - Rewrite the generated files (deploy/**, reference/*) for a new image
+* [bekup setup web](bekup_setup_web.md)	 - Browser setup: the setup wizard over HTTPS with a one-time code (D-217)
 

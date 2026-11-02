@@ -383,6 +383,10 @@ const PermissionsPolicy = "accelerometer=(), camera=(), display-capture=(), geol
 // HSTSValue is sent only when base_url is https (D-095).
 const HSTSValue = "max-age=63072000; includeSubDomains"
 
+// SecurityHeaders sets the D-082 CSP and bekup's security headers on
+// every response (the browser setup reuses them, D-217).
+func SecurityHeaders(https bool) func(http.Handler) http.Handler { return securityHeaders(https) }
+
 func securityHeaders(https bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

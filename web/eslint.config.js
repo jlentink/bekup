@@ -9,7 +9,15 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig(
   {
-    ignores: ["dist", "coverage", ".csp-check-dist", "src/graphql/gen", "public/theme-init.js"],
+    ignores: [
+      "dist",
+      "dist-setup",
+      "coverage",
+      ".csp-check-dist",
+      ".csp-check-setup-dist",
+      "src/graphql/gen",
+      "public/theme-init.js",
+    ],
   },
   {
     files: ["**/*.{ts,tsx}"],

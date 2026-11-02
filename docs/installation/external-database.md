@@ -67,15 +67,40 @@ Compose-first, save one of the `*.external-db.yaml` release files as
 external form and asks for the database. In every case setup runs without a
 network and never connects to the database; the bootstrap and the checks
 run in the `migrate` container, which has the configuration and the
-password files.
+password files (or, in the [browser setup](#browser-setup), in its
+`setup-web-db` twin).
+
+### Browser setup
+
+The [browser setup](compose.md#browser-setup) (D-217) asks the same
+questions in your browser and then does the bootstrap for you: put the CA
+bundle into the directory as above, run `docker compose run --rm
+--service-ports setup-web` with an `*.external-db.yaml` release file as
+`compose.yaml`, answer "existing: my PostgreSQL", then run `docker compose
+run --rm --service-ports setup-web-db`. That second run is the `migrate`
+container's twin (UID 65532, its configuration and password files, the
+`backend` network, your database container's network through the
+override; it publishes the setup port too). For the role choices
+bootstrap and single account it runs [`db bootstrap`](#with-an-admin-account-bekup-db-bootstrap-recommended)
+with the administrator role and password you enter there (the password
+travels once over the setup's TLS 1.3 connection, is used for this one
+connection and zeroed, never stored or logged), offers to adopt existing
+bekup roles, and asks for an explicit confirmation when `tls_mode` is
+below verify-full (the browser's form of
+`--allow-insecure-admin-connection`). With existing roles or your DBA's
+SQL it skips the bootstrap. Then it runs `migrate up` and the final check
+(the migrate preflight, both roles' logins and role checks, the schema
+version) and shows each report. It is the same code as `bekup db
+bootstrap` and `bekup migrate up`, with the same checks and the same
+`cli.db.bootstrap` audit entry.
 
 What the compose files mount ([compose.md](compose.md#your-own-postgresql-external-database-files)):
 
 | File below `secrets/` | Docker secret (target) | Services | `[database]` key |
 |---|---|---|---|
-| `bekup_database_password` | `bekup_database_password` | serve, admin, migrate | `password_file` |
-| `bekup_database_owner_password` | `bekup_database_owner_password` | migrate | `owner_password_file` (empty file in single-account mode) |
-| `bekup_database_ca.crt` | `bekup_db_ca_crt` (`bekup_db_ca.crt`) | serve, admin, migrate | `tls_ca_file` (`verify-ca-file`; an empty file for the other TLS choices) |
+| `bekup_database_password` | `bekup_database_password` | serve, admin, migrate, setup-web-db | `password_file` |
+| `bekup_database_owner_password` | `bekup_database_owner_password` | migrate, setup-web-db | `owner_password_file` (empty file in single-account mode) |
+| `bekup_database_ca.crt` | `bekup_db_ca_crt` (`bekup_db_ca.crt`) | serve, admin, migrate, setup-web-db | `tls_ca_file` (`verify-ca-file`; an empty file for the other TLS choices) |
 
 For a database on another server the compose `backend` network is not
 internal in this form (it must reach your server), so restrict your

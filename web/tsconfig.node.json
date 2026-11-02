@@ -18,5 +18,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "codegen.ts", "vite-plugins/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "vite.setup.config.ts",
+    "vitest.config.ts",
+    "codegen.ts",
+    "vite-plugins/**/*.ts"
+  ]
 }

@@ -124,6 +124,11 @@ func TestLintBypasses(t *testing.T) {
 		{name: "root group", svc: "    user: \"1000:0\"\n", want: `user "1000:0"`},
 		{name: "build", svc: "    build: .\n", want: "`build`"},
 		{name: "unpinned", svc: "    image: alpine:3\n", want: `image "alpine:3" is not digest-pinned`},
+		// D-217: only the browser setup's services publish (8443 only) and
+		// only setup-web runs as root with a port; TestLintBrowserSetupServices
+		// holds the shipped services themselves.
+		{name: "ports like setup-web", svc: "    ports: [\"8443:8443\"]\n", want: `service "evil" publishes ports`},
+		{name: "root with ports like setup-web", svc: "    user: \"0:0\"\n    cap_add: [CHOWN]\n    ports: [\"8443:8443\"]\n", want: `user "0:0" is not a numeric non-root`},
 		// ${VAR} from .env: the resolved value is linted.
 		{name: "env network_mode", svc: "    network_mode: ${EVIL_NET:-none}\n", env: map[string]string{"EVIL_NET": "host"}, want: "`network_mode: host`"},
 		{name: "env cap_add", svc: "    cap_add: [\"${EVIL_CAP:-NET_BIND_SERVICE}\"]\n", env: map[string]string{"EVIL_CAP": "SYS_ADMIN"}, want: "capability SYS_ADMIN"},
@@ -168,6 +173,50 @@ func TestLintBypasses(t *testing.T) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
 			}
 		})
+	}
+}
+
+// TestLintBrowserSetupServices: the browser setup's services (D-217) are
+// pinned exactly as shipped; only setup-web runs as root, both publish only
+// the setup port 8443, and setup-web-db reads the deployment directory
+// only. Nothing else may publish a port or run as root with one.
+func TestLintBrowserSetupServices(t *testing.T) {
+	t.Parallel()
+	if fs := lintWith(t, nil, []byte("services: {}\n"), VariantOwnProxy, nil); hasErrors(fs) {
+		t.Fatalf("shipped services: %v", fs)
+	}
+	for _, tc := range []struct{ name, override, want string }{
+		{"setup-web other port", "services:\n  setup-web:\n    ports: !override [\"8080:8080\"]\n", "may publish only TCP port 8443"},
+		{"setup-web udp", "services:\n  setup-web:\n    ports: !override [\"8443:8443/udp\"]\n", "may publish only TCP port 8443"},
+		{"setup-web second port", "services:\n  setup-web:\n    ports: [\"2222:22\"]\n", "may publish only TCP port 8443"},
+		{"setup-web restart", "services:\n  setup-web:\n    restart: always\n", `the override changes bekup's service "setup-web"`},
+		{"setup-web backend", "services:\n  setup-web:\n    networks: [backend]\n", `the override changes bekup's service "setup-web"`},
+		{"setup-web logs", "services:\n  setup-web:\n    logging: !override {driver: json-file}\n", `the override changes bekup's service "setup-web"`},
+		{"setup-web host bind", "services:\n  setup-web:\n    volumes: [\"/etc:/etc2\"]\n", `bind-mounts "/etc" from outside`},
+		{"setup-web-db root", "services:\n  setup-web-db:\n    user: \"0:0\"\n", `user "0:0" is not a numeric non-root`},
+		{"setup-web-db chown", "services:\n  setup-web-db:\n    cap_add: [CHOWN]\n", "capability CHOWN"},
+		{"setup-web-db other port", "services:\n  setup-web-db:\n    ports: !override [\"5432:5432\"]\n", "may publish only TCP port 8443"},
+		{"setup-web-db writable deployment", "services:\n  setup-web-db:\n    volumes: !override\n      - type: bind\n        source: .\n        target: /deploy\n        bind:\n          create_host_path: false\n", "mount the deployment directory read-only"},
+		{"setup-web-db pinned", "services:\n  setup-web-db:\n    deploy: !override {resources: {limits: {memory: 1G}}}\n", `the override changes bekup's service "setup-web-db"`},
+		{"setup-web-db restart", "services:\n  setup-web-db:\n    restart: always\n", `the override changes bekup's service "setup-web-db"`},
+		{"migrate publishes", "services:\n  migrate:\n    ports: [\"8443:8443\"]\n", `service "migrate" publishes ports`},
+		{"root init publishes", "services:\n  certs-init:\n    ports: [\"8443:8443\"]\n", "publishes ports"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if fs := lintWith(t, nil, []byte(tc.override), VariantOwnProxy, nil); !hasFinding(fs, SeverityError, tc.want) {
+				t.Fatalf("no error %q in %v", tc.want, fs)
+			}
+		})
+	}
+	// A new service may not copy setup-web's exemptions.
+	evil := evilService + "    ports: [\"8443:8443\"]\n"
+	if fs := lintWith(t, nil, []byte("services:\n"+evil), VariantOwnProxy, nil); !hasFinding(fs, SeverityError, `service "evil" publishes ports`) {
+		t.Fatalf("evil ports: %v", fs)
+	}
+	rootEvil := strings.Replace(evilService, `user: "1000:1000"`, `user: "0:0"`, 1) + "    cap_add: [CHOWN]\n"
+	if fs := lintWith(t, nil, []byte("services:\n"+rootEvil), VariantOwnProxy, nil); !hasFinding(fs, SeverityError, `user "0:0"`) || !hasFinding(fs, SeverityError, "capability CHOWN") {
+		t.Fatalf("evil root: %v", fs)
 	}
 }
 

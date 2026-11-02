@@ -1,0 +1,7 @@
+    environment:
+      # migrate's (D-212): the setup version guard runs before anything
+      # connects.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
+      BEKUP_SETUP_WEB_HOST: ${BEKUP_SETUP_WEB_HOST:-}
+      BEKUP_SETUP_WEB_PORT: ${BEKUP_SETUP_WEB_PORT:-8443}

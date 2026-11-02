@@ -109,11 +109,16 @@ addresses for your proxy (`10.213.253.5`) and `serve` (`10.213.253.10`)
 ([reverse-proxy.md](reverse-proxy.md#advanced-dedicated-link-network)).
 
 With a [database container](external-database.md#database-container-on-this-docker-host)
-on this Docker host, `migrate`, `serve` and `admin` also join its network
-as the external network `database` (`BEKUP_DB_NETWORK`), and nothing else
-of the project may. When that is your proxy's own network (own-proxy join
-mode, D-216), only `migrate` and `admin` join `proxy` in addition and there
-is no `database` network.
+on this Docker host, `migrate`, `serve`, `admin` and the browser setup's
+`setup-web-db` also join its network as the external network `database`
+(`BEKUP_DB_NETWORK`), and nothing else of the project may. When that is
+your proxy's own network (own-proxy join mode, D-216), only `migrate`,
+`admin` and `setup-web-db` join `proxy` in addition and there is no
+`database` network.
+
+The [browser setup](#browser-setup) (profile `setup-web`, only while you
+run it) adds the non-internal network `setup-web` for its published port:
+`setup-web` is on it alone, `setup-web-db` together with `backend`.
 
 `serve` can never reach a target database or Docker, and the runner can never
 reach the app database. `serve`'s port is **not published**: only the
@@ -281,6 +286,9 @@ sudo docker compose up -d
 sudo docker compose run --rm admin create --email you@example.com --display-name "You"
 ```
 
+Prefer a browser? The [browser setup](#browser-setup) asks the same
+questions over HTTPS with a one-time code.
+
 The flags give the wizard the same hardening as the compose `setup`
 service: root with only `CAP_CHOWN`, no network, a read-only root, and
 `--log-driver none`, so a generated passphrase never reaches Docker's log
@@ -354,6 +362,85 @@ put into the directory) and an entered or existing CA passphrase as
   file, the wizard refuses (a generated passphrase is never written into
   one); use `bekup setup init --non-interactive` with flags (the line the
   wizard prints after writing is the equivalent).
+
+## Browser setup
+
+The same wizard in your browser (D-217), in two runs of the compose file:
+the first writes the deployment, the second prepares the database. Both
+are one-off services of the profile `setup-web` that publish HTTPS on port
+`8443` of **every host address** only while they run; neither ever runs
+with `docker compose up`.
+
+```sh
+# in the deployment directory with the release compose.yaml (compose-first)
+export BEKUP_SETUP_WEB_HOST=backup-host.example.com   # the name or address you open; optional
+sudo -E docker compose run --rm --service-ports setup-web
+#   open the printed https://<host>:8443/#code=... address, compare the
+#   fingerprint, answer the questions, download the zip, press Finish
+sudo docker compose up -d postgres          # only with the bundled database
+sudo -E docker compose run --rm --service-ports setup-web-db
+#   roles (your own PostgreSQL), migrations and the final check; Finish
+sudo docker compose up -d
+sudo docker compose run --rm admin create --email you@example.com --display-name "You"
+```
+
+- **Access.** The terminal shows the address with a one-time access code in
+  the fragment (`#code=...`, never sent in a request line), the code
+  itself and the SHA-256 fingerprint of the server's self-signed
+  certificate (generated in memory at start, never written). Your browser
+  warns about the certificate: open its details and **continue only if
+  the SHA-256 fingerprint is exactly the one on the terminal**. The code
+  works once and opens the only session; a wrong code is delayed and the
+  10th stops setup. Keep the terminal private: whoever sees the code
+  first gets the session. The services log nothing (`logging: none`).
+- **Lifetime.** Setup stops when you press Finish, after 30 minutes
+  without activity, after 2 hours, or with Ctrl+C. The browser session
+  ends with it.
+- **Run 1, `setup-web`.** The `setup` service's hardening (root with only
+  `CAP_CHOWN` for the files' owners, read-only root, no-new-privileges)
+  plus its own network for the published port; no database, no secrets.
+  It asks exactly the [wizard's questions](#install-with-the-setup-wizard)
+  (Back goes back; the equivalent flags are in the report), writes the
+  deployment like `bekup setup init`, runs `setup check` and offers the
+  zip. A generated CA passphrase is shown once on its own screen: reveal
+  it, store it offline, confirm. In a directory that already holds a
+  deployment it writes nothing and only checks it.
+- **Run 2, `setup-web-db`.** migrate's user (65532), configuration and
+  database secrets, the `backend` network (and your database container's
+  network through the override), the directory mounted read-only (it
+  does not repeat `setup check`, which needs root to see every file). With
+  your own PostgreSQL whose roles come from `db bootstrap` (or
+  single-account mode) it asks the administrator role and password (used
+  for this connection only, never stored) and runs bootstrap
+  ([external-database.md](external-database.md#browser-setup)); a TLS mode
+  below verify-full needs an explicit confirmation, like
+  `--allow-insecure-admin-connection`. Then `migrate up` (with the bundled
+  database it waits up to 3 minutes for postgres) and the final check:
+  the migrate preflight, both roles' logins and role checks, the schema
+  version. Every failure can be retried after you fixed its cause.
+- **The zip** (`Download configuration`) holds only `compose.yaml`,
+  `compose.override.yaml`, `.env`, `bekup.toml`, `runner.toml` and
+  `bekup-setup.json`: no keys, passwords, certificates or the CA. Those
+  stay on the server; the zip is a reviewable copy, not a backup (escrow
+  the master key and the CA separately,
+  [key-management.md](../security/key-management.md)).
+- **Not in the browser:** the first admin (`bekup admin create` on the
+  host, D-113), `setup upgrade` and `setup renew` (terminal wizard).
+- **Variables** (compose, in your shell or `.env`; not bekup keys):
+
+  | Variable | Default | Meaning |
+  |---|---|---|
+  | `BEKUP_SETUP_WEB_HOST` | none | the host name or IP address you open setup with: added to the certificate and used in the printed address (without it the address shows a placeholder; `localhost` and the loopback addresses are always in the certificate) |
+  | `BEKUP_SETUP_WEB_PORT` | `8443` | the published host port (all host addresses; the container port stays 8443) |
+
+  The services are pinned exactly (no overrides); to keep the port off a
+  network, firewall it or run setup on a host only you can reach, and
+  use the terminal wizard otherwise.
+- **Deployments from earlier releases** with a database container: the
+  `compose.override.yaml` setup wrote before this release lacks the
+  `setup-web-db` block on the database network. `setup check` and
+  `setup upgrade` then warn and print the block; add it to use the
+  browser's database run (setup never rewrites the override).
 
 ## Install with `bekup setup` (container only)
 
@@ -599,21 +686,26 @@ Errors:
 
   | Service | Tunable |
   |---|---|
-  | every service but `setup` | `deploy.resources` cpus/memory/pids (limits and reservations; nothing else under `deploy`, no unlimited pids; the shipped limits may change but not be removed or set to 0, so `deploy: !reset null` is an error), `cpus`, `mem_limit`, `mem_reservation`, `pids_limit` (> 0; `pids_limit: 0` is an error), `restart`, `stop_grace_period` |
+  | every service but `setup`, `setup-web` and `setup-web-db` | `deploy.resources` cpus/memory/pids (limits and reservations; nothing else under `deploy`, no unlimited pids; the shipped limits may change but not be removed or set to 0, so `deploy: !reset null` is an error), `cpus`, `mem_limit`, `mem_reservation`, `pids_limit` (> 0; `pids_limit: 0` is an error), `restart`, `stop_grace_period` |
   | `traefik`, `traefik-init`, `nginx`, `nginx-init`, `certbot` | `profiles` (e.g. certbot off in static TLS mode) |
   | `traefik`, `nginx` | `PROXY_TLS_MODE` (`acme`/`static`) and `PROXY_HTTPS_PUBLIC_PORT` in `environment`; a read-only `./proxy-tls` bind at `/certs`; the published address/port of `ports` (same container ports, tcp) |
   | `runner` | the Docker socket source (`/var/run/docker.sock`, `/run/docker.sock`, `/run/user/<uid>/docker.sock`; read-only at `/var/run/docker.sock`, no bind options or SELinux relabeling); `userns_mode: host` (a warning, for userns-remap daemons) |
   | `serve` | the source of its backups/scratch mounts and extra mounts below `/var/lib/bekup/backups/` (disk destinations): named volumes other than bekup's other volumes, or binds inside the deployment directory outside bekup's files |
 
   The `setup` service has no tunables (root with `CAP_CHOWN` only, no
-  network, no logs). The shipped networks (`internal`, driver, subnets,
+  network, no logs), and neither have the [browser setup](#browser-setup)'s
+  `setup-web` and `setup-web-db` (the only services that may publish a
+  port besides the bundled proxy: TCP 8443 in the container; only
+  `setup-web` runs as root; `setup-web-db` mounts the directory
+  read-only). The shipped networks (`internal`, driver, subnets,
   name, the external `proxy` and `database` networks), volumes, secrets,
   configs and the project name are pinned too (the name also as written:
   no variables in `name:`). Only `serve` is on `proxy`, and only
-  `migrate`, `serve` and `admin` are on `database`.
+  `migrate`, `serve`, `admin` and `setup-web-db` are on `database`.
 - **Compose variables:** only bekup's own (`ACME_CA_SERVER`, `ACME_EMAIL`,
   `BEKUP_DB_NETWORK`, `BEKUP_DOMAIN`, `BEKUP_IMAGE_MODE`, `BEKUP_KEYS_DIR`,
-  `BEKUP_PROXY_NETWORK`, `BEKUP_SETUP_VERSION`, `DOCKER_GID`,
+  `BEKUP_PROXY_NETWORK`, `BEKUP_SETUP_VERSION`, `BEKUP_SETUP_WEB_HOST`,
+  `BEKUP_SETUP_WEB_PORT`, `DOCKER_GID`,
   `FRONTEND_SUBNET`, `METRICS_SUBNET`, `PROXY_FRONTEND_IP`,
   `PROXY_TLS_MODE`, `RUNNER_CTL_IP`, `RUNNER_CTL_SUBNET`,
   `SERVE_FRONTEND_IP`, `SERVE_METRICS_IP`, `SERVE_PROXY_IP`,
@@ -955,8 +1047,8 @@ receives what it needs:
 | Secret file | Used by | Content |
 |---|---|---|
 | `secrets/bekup_master_key` | serve | master keyring (`bekup keys generate`, task 0.5) |
-| `secrets/bekup_database_url` | serve, admin | `postgres://bekup_app:…@postgres:5432/bekup` |
-| `secrets/bekup_database_owner_url` | migrate | `postgres://bekup_owner:…@postgres:5432/bekup` |
+| `secrets/bekup_database_url` | serve, admin, setup-web-db | `postgres://bekup_app:…@postgres:5432/bekup` |
+| `secrets/bekup_database_owner_url` | migrate, setup-web-db | `postgres://bekup_owner:…@postgres:5432/bekup` |
 | `secrets/postgres_password` | postgres | bootstrap superuser password |
 | `secrets/bekup_owner_password`, `secrets/bekup_app_password` | postgres (init only) | role passwords (must match the URLs) |
 | `secrets/certs/serve/{serve.crt,serve.key,ca.crt}` | serve | client certificate + CA bundle (as `bekup_client.{crt,key}`, `bekup_ca.crt`) |

@@ -9,13 +9,13 @@
 # - step-security/harden-runner (egress audit) is the first step of every job.
 # - Tools installed with `go install`/`go run` are pinned to an exact version
 #   and verified against the Go checksum database.
+# - Runs only on pull requests, and on version tags as the gate of
+#   release.yml (D-218). It never publishes anything: images are built,
+#   signed and pushed only by release.yml.
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
-  merge_group:
   # The release workflow (release.yml, D-204) runs the full CI on the tag
   # and publishes nothing unless it passes. It disables every cache, so no
   # state written by other workflows enters a release.
@@ -33,8 +33,9 @@ concurrency:
   # Explicit prefix: distinct from the release workflow's groups even when
   # called from it (github.workflow is the caller's name there).
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  # Superseded PR runs are cancelled; every commit on main is checked.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  # Superseded PR runs are cancelled; the release gate (a tag push calling
+  # this workflow) never is.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # `just lint` reads this pin and refuses another local golangci-lint.

@@ -253,7 +253,9 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		if err != nil {
 			return err
 		}
-		if err := checkSetupFirstOverride(root, gen[ComposeFile], override, st.Variant, opts.Image, ov, os.LookupEnv); err != nil {
+		warnings, err := checkSetupFirstOverride(root, gen[ComposeFile], override, st.Variant, opts.Image, ov, os.LookupEnv)
+		notices = append(notices, warnings...)
+		if err != nil {
 			if st.Legacy() != "" {
 				return fmt.Errorf("%w\n(this deployment used the retired %s variant, D-215: it is now the own-proxy variant in link mode)", err, st.Legacy())
 			}

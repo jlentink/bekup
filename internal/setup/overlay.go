@@ -82,7 +82,8 @@ const overlayBackendInternal = `  # The app database is a container on YOUR Dock
 
 // overlayDBNetworks are the top-level networks of the DB-network overlay.
 const overlayDBNetworks = overlayBackendInternal + `  # YOUR database container's network (external; setup writes its name to
-  # .env as BEKUP_DB_NETWORK). Only migrate, serve and admin join it.
+  # .env as BEKUP_DB_NETWORK). Only migrate, serve, admin and the browser
+  # setup's database run (setup-web-db) join it.
   database:
     external: true
     name: ${BEKUP_DB_NETWORK:-bekup-db}
@@ -98,11 +99,24 @@ const overlayHeader = `# compose.override.yaml: written once by ` + "`bekup setu
 # second services: or networks: key is invalid YAML).
 `
 
+// dbNetworkServices join the database container's network next to serve
+// (setup-web-db: the browser setup's database run, D-217).
+var dbNetworkServices = []string{"migrate", "admin", browserDBService}
+
+// browserDBService is the browser setup's database run (D-217).
+const browserDBService = "setup-web-db"
+
 // overlayDoc renders the overlay blocks as a compose document (services
 // and networks only; "" without overlays). staticTLS adds the bundled
 // proxy's certificate mount (proxy names traefik or nginx): an
 // operator-tunable change that is not part of the lint's expected project.
 func overlayDoc(o Overlays, staticTLSProxy Proxy) string {
+	return renderOverlay(o, staticTLSProxy, dbNetworkServices)
+}
+
+// renderOverlay is overlayDoc with the services that join the database
+// network (dbServices).
+func renderOverlay(o Overlays, staticTLSProxy Proxy, dbServices []string) string {
 	if !o.Any() && staticTLSProxy == "" {
 		return ""
 	}
@@ -113,7 +127,7 @@ func overlayDoc(o Overlays, staticTLSProxy Proxy) string {
 		join = overlayDBOnProxy
 	}
 	if o.DBNetwork {
-		for _, svc := range []string{"migrate", "admin"} {
+		for _, svc := range dbServices {
 			b.WriteString("  " + svc + ":\n    networks:\n" + join)
 		}
 	}
@@ -183,37 +197,95 @@ func expectedOverlay(o Overlays) []composeSrc {
 	return []composeSrc{{name: OverrideFile, data: []byte(doc)}}
 }
 
+// preWebOverlay is the overlay part of the expected project as releases
+// before D-217 wrote it: the DB-network overlay without setup-web-db.
+func preWebOverlay(o Overlays) []composeSrc {
+	var svcs []string
+	for _, s := range dbNetworkServices {
+		if s != browserDBService {
+			svcs = append(svcs, s)
+		}
+	}
+	doc := renderOverlay(o, "", svcs)
+	if doc == "" {
+		return nil
+	}
+	return []composeSrc{{name: OverrideFile, data: []byte(doc)}}
+}
+
+// lintWithOverlays is the hardening lint against the release file compose
+// plus the setup-only overlays ov (expectedDocs). A compose.override.yaml
+// written before D-217 carries the DB-network overlay without the
+// setup-web-db block: the lint then fails on setup-web-db alone. When the
+// project matches the pre-D-217 overlay exactly in that service, the
+// missing block is a warning (only the browser setup's database step
+// cannot reach the database container; setup never rewrites an existing
+// override, D-215), with the block to add.
+func lintWithOverlays(in *composeInput, env map[string]string, v Variant, image string, compose []byte, ov Overlays, placeholder bool) []Finding {
+	findings := lintComposeFiles(in, env, v, image, expectedDocs(compose, ov), placeholder)
+	if !ov.DBNetwork || !blamesService(findings, browserDBService) {
+		return findings
+	}
+	old := lintComposeFiles(in, env, v, image, append([]composeSrc{{name: ComposeFile, data: compose}}, preWebOverlay(ov)...), placeholder)
+	if blamesService(old, browserDBService) {
+		return findings
+	}
+	join := overlayDBJoin
+	if ov.DBOnProxy {
+		join = overlayDBOnProxy
+	}
+	return append(old, Finding{Severity: SeverityWarning, Path: OverrideFile, Msg: fmt.Sprintf(
+		"the browser setup's database run (%s, D-217) is not on your database container's network, so it cannot reach the database (migrate, serve and admin are); "+
+			"to use it, add this block to the services: key of %s (setup never rewrites it):\n  %s:\n    networks:\n%s",
+		browserDBService, OverrideFile, browserDBService, join)})
+}
+
+// blamesService reports a lint error naming the service.
+func blamesService(findings []Finding, name string) bool {
+	q := fmt.Sprintf("%q", name)
+	for _, f := range findings {
+		if f.Severity == SeverityError && strings.Contains(f.Msg, q) {
+			return true
+		}
+	}
+	return false
+}
+
 // checkSetupFirstOverride requires an existing compose.override.yaml of
 // a setup-first deployment to carry the setup-only overlays ov on top of
 // the generated compose (D-215): setup never rewrites an existing
 // override (init, also with --force, and upgrade), so the blocks must be
 // in it already. It runs the lint setup check runs; an error names the
 // blocks to add.
-func checkSetupFirstOverride(root string, compose, override []byte, v Variant, img imageref.Ref, ov Overlays, lookup func(string) (string, bool)) error {
+func checkSetupFirstOverride(root string, compose, override []byte, v Variant, img imageref.Ref, ov Overlays, lookup func(string) (string, bool)) ([]string, error) {
 	if !ov.Any() {
-		return nil
+		return nil, nil
 	}
 	if override == nil {
 		override = []byte{}
 	}
 	if err := singleDocument(OverrideFile, override); err != nil {
-		return err
+		return nil, err
 	}
 	dotenv, err := readDotEnv(root)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	in := composeInput{root: root, compose: compose, override: override, dotenv: dotenv, lookup: lookup, following: img.IsMutable()}
 	env := projectEnv(in.dotenv, in.lookup, in.docs()...)
 	var b strings.Builder
-	for _, f := range lintComposeFiles(&in, env, v, img.String(), expectedDocs(compose, ov), false) {
-		if f.Severity == SeverityError {
+	var warnings []string
+	for _, f := range lintWithOverlays(&in, env, v, img.String(), compose, ov, false) {
+		switch f.Severity {
+		case SeverityError:
 			b.WriteString("\n  " + f.String())
+		case SeverityWarning:
+			warnings = append(warnings, f.String())
 		}
 	}
 	if b.Len() == 0 {
-		return nil
+		return warnings, nil
 	}
-	return fmt.Errorf("%s with the existing %s fails the hardening lint:%s\n%s exists already, so setup does not rewrite it: add these blocks to it (merged into its own services: and networks: keys), then run setup again:\n%s",
+	return nil, fmt.Errorf("%s with the existing %s fails the hardening lint:%s\n%s exists already, so setup does not rewrite it: add these blocks to it (merged into its own services: and networks: keys), then run setup again:\n%s",
 		ComposeFile, OverrideFile, b.String(), OverrideFile, overlayDoc(ov, ""))
 }

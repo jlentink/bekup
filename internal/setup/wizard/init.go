@@ -31,7 +31,10 @@ type Env struct {
 	DockerGID            string
 	AllowVersionMismatch bool
 	Ownership            setup.OwnershipMode
-	UI                   UI
+	// Browser is the browser setup (setup-web, D-217): the texts name the
+	// browser's controls and its listener instead of the terminal's.
+	Browser bool
+	UI      UI
 	// GeneratePassphrase generates the CA key passphrase (default: a
 	// crypto.GeneratePassphrase diceware phrase).
 	GeneratePassphrase func() ([]byte, error)
@@ -229,11 +232,17 @@ func (st *initState) auth() setup.DBAuth {
 }
 
 func (st *initState) welcome() error {
+	controls := `Esc (plain interface: <) goes back,
+Ctrl+C quits.
+The setup container has no network: it never connects anywhere.`
+	if st.env.Browser {
+		controls = `Back goes to the
+previous question.
+This setup only serves this page: it never connects to a database or anywhere else.`
+	}
 	body := fmt.Sprintf(`This wizard writes a complete bekup deployment to %s: compose.yaml (unless
 it exists), .env, bekup.toml, runner.toml, the secrets and certificates.
-Nothing is written before the summary. Esc (plain interface: <) goes back,
-Ctrl+C quits.
-The setup container has no network: it never connects anywhere.`, st.env.Dir)
+Nothing is written before the summary. %s`, st.env.Dir, controls)
 	if c := st.compose; c != nil {
 		db := "the bundled database"
 		if c.DB == setup.DBExternal {
@@ -337,7 +346,7 @@ the pinned image (docs/installation/upgrades.md).`, ref)
 		cur = st.a.Image.String()
 	}
 	s, err := st.ui.Input("Pinned bekup image", "The image pinned by digest: repo:tag@sha256:<digest>.\n"+
-		"This setup container has no Docker or network access: in a second terminal\n"+
+		"This setup container has no Docker access: in a second terminal\n"+
 		"on the host, run\n"+
 		"  docker image inspect --format '{{index .RepoDigests 0}}' "+ref.String()+"\n"+
 		"(after docker pull "+ref.String()+" if the image is not there yet). It prints\n"+

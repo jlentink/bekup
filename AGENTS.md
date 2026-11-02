@@ -49,6 +49,17 @@ Components (one Go binary, several subcommands; D-025):
 - **`bekup runner`**: the **only** component with Docker access (D-003). Small,
   typed mTLS gRPC API; image allowlist and target allowlist from its own
   `runner.toml`; builds hardened container specs itself (D-029–D-033).
+- **Browser setup** (`bekup setup web`, D-217): two one-off compose
+  services of the profile `setup-web`, run only on request. `setup-web`
+  (root with only `CAP_CHOWN`, like `setup`, on its own `setup-web`
+  network with the published port 8443) serves the setup wizard over
+  HTTPS to one browser session (one-time code, fingerprinted in-memory
+  certificate), writes the deployment and offers the non-secret files as
+  a zip; it never reaches a database. `setup-web-db` (`--database`;
+  migrate's UID, config and secrets, `backend` + `setup-web`, read-only
+  deployment directory) runs db bootstrap, `migrate up` and the final
+  check through `internal/dbsetup`, the code `bekup db bootstrap` and
+  `bekup migrate up` share.
 - **Dump containers**: short-lived, alone on a per-run `internal` network,
   reaching exactly one target via the runner's proxy/SSH tunnel; secrets via a
   stdin preamble only.
@@ -73,6 +84,7 @@ Trust boundaries:
 | Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
 | Own reverse proxy (variant `own-proxy`) → `serve` | join mode (default): `serve` the only bekup member of the proxy's own Docker network (alias `bekup-serve`, no published port, listen `0.0.0.0:8080` only in this shape), the wildcard listener serves only serve's own address on the proxy network (alias `bekup-serve` matched with its interfaces) and loopback, fail closed while unknown; an alias held by another container is alerted (`serve_alias_conflict`) and fails `/readyz`; forwarding headers only from the proxy's container name resolved through Docker DNS (`trusted_proxy_hosts`: private addresses inside serve's proxy-network subnet, one per family, /32 per address, re-resolved in parallel every 20 s / on untrusted XFF / while active, untrusted when older than 30 s, unresolvable or colliding = no trust; D-215); link mode: the internal `bekup-proxy` /28 with fixed addresses and the proxy's /32 (D-205); untrusted `X-Forwarded-For` ignored and logged; `setup check` errors on anything else |
 | Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image (or, opt-in, the official `:latest` tag with the setup version guard, D-212); writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
+| Operator browser → `setup-web` / `setup-web-db` (browser setup, D-217) | only while run on request; published `${BEKUP_SETUP_WEB_PORT:-8443}` on every host address; TLS 1.3 with an in-memory self-signed certificate whose SHA-256 fingerprint the terminal shows; 128-bit one-time code (terminal only, URL fragment, `logging: none`) exchanged once for the only `__Host-` session, delay per failure, exit after 10; POST + JSON/octet-stream + `X-Bekup-Setup` + `Sec-Fetch-Site` + own `Origin`; 64 KiB bodies; bekup's CSP/headers; exit on Finish, 30 min idle, 2 h; `setup-web`: setup's hardening, own network only, no database or secrets; `setup-web-db`: UID 65532, migrate's config/secrets, read-only deployment dir; secrets as raw bodies, zeroed; CA passphrase revealed once; zip without key material; both pinned exactly by the lint |
 
 `serve` can **never** reach target DBs or Docker.
 
@@ -235,6 +247,12 @@ internal/
                   resolved project; entryfd_*.go descriptor chmod/chown;
                   D-208: database.go external DB, renew.go `setup renew`)
                 setup/wizard (Bubble Tea/huh wizard, Plain UI, renew + upgrade screens: D-208)
+                setup/web (browser setup `bekup setup web`, D-217: web.UI implements
+                  wizard.UI over HTTPS, Gate one-time code -> one session, in-memory
+                  certificate, server.go API + lifetime, dbstep.go database step;
+                  setup/configzip.go the non-secret config zip)
+                dbsetup (db bootstrap, migrate up, Verify and the setup version
+                  guard, shared by the CLI and the browser setup: D-217)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
   src/app/              providers, route table (router.tsx), RootLayout (step-up host)
   src/features/<area>/  routes.tsx, pages, operations.ts, model.ts, own strings + tests:
@@ -243,6 +261,8 @@ web/                    # Vite + React + TS UI, embedded via go:embed (web/embed
                         security-alerts audit network recovery two-factor)
   src/components/       shell/ (sidebar, top bar, nav.ts, banners), ui/, status/, ssh/
   src/routes/           login, login/verify, profile, 404, /design (dev)
+  src/setup/            the browser setup's own small SPA (D-217; entry setup/index.html,
+                        vite.setup.config.ts -> dist-setup/, embedded as web.SetupFS)
   src/lib/ src/test/    apollo, api-error, route-access, messages, ... / renderApp fake API
   scripts/csp-check.mjs # headless-Chrome walk of the pages under the production CSP
 deploy/                 # postgres init, traefik/nginx proxy configs, dev/ keys + seeds,
@@ -1578,6 +1598,34 @@ loader (`internal/db/cabundlecheck`) on the runtime image's bundle. Retired vari
   not audited (setup has no network or database access): it prints the
   new fingerprints as evidence, and `bekup certs rotate` where the app
   database is reachable stays the audited path.
+- Browser setup (`internal/setup/web`, `internal/dbsetup`, D-217,
+  proposed): the browser is only another `wizard.UI` (`web.UI`): never add
+  a question, validation or default to the web layer or the SPA; add it
+  to the wizard (parity: `TestBrowserFlowMatchesWizard`, a new step kind
+  needs a `Step` kind, its handler and the SPA view). Access only through
+  `Gate` (code and session kept as SHA-256 only, constant-time, single
+  use, delay, `MaxFailures`); every route goes through `post`/`get`
+  (marker header, own `Origin` + `Sec-Fetch-Site`, session) behind
+  `httpserver.SecurityHeaders` and `MaxBody`; never log or serve the code
+  or the session (`TestBrowserCodeNeverServed`), never put a secret into a
+  `Step` or the report: secret answers only as raw octet-stream bodies
+  into one fixed buffer, zeroed; `UI.Sensitive` only through the one-time
+  `Reveal`. The zip lists files only in `setup.configFiles` (never a
+  secret group or the keys directory, `TestConfigFilesHoldNoSecrets`).
+  The certificate stays in memory. Database work runs only in the
+  `setup-web-db` service (never give `setup-web` a database network,
+  secrets or a database step) and only through `internal/dbsetup`
+  (`CheckDeployment` before anything connects, `Bootstrap`, `MigrateUp`,
+  `Verify`), which `bekup db bootstrap` / `bekup migrate up` call too:
+  change the shared code there, never a copy. A weak `tls_mode` is a
+  Confirm screen setting `AllowInsecure` (never implicit). Both compose
+  services stay pinned exactly (no `operatorTunable`), only they publish
+  (TCP 8443) and only `setup-web` runs as root; a new member of the
+  DB-network overlay goes into `dbNetworkServices`, and an older override
+  without it must stay a warning (`lintWithOverlays`). `pnpm build`
+  builds both SPAs; the Dockerfile copies `web/dist-setup` (only `.gitkeep`
+  with `WEB_BUILD=skip`, never a placeholder page) and `setup web`
+  refuses to start without `index.html`; `pnpm csp-check` walks the setup page too.
 - Runner mTLS: clients are identified only by the URI SAN
   `spiffe://bekup/<component>`; the runner cert uses DNS `runner`; the CA is
   name-constrained, its key age-encrypted and kept offline; CA rotation is
@@ -1610,6 +1658,8 @@ Recipe arguments are passed as positional parameters, never interpolated
 (D-071); recipes for tooling from later tasks fail with "not available yet
 (task X.Y)". `just bump` / `just release` follow D-072 (strict x.y.z, clean
 `main` only, signed commit + tag, git-cliff changelog); agents never run them.
+GitHub Actions run only on pull requests (`ci.yml`, tests only, read-only
+token, never publishes) and on version tags (D-218, proposed).
 The pushed tag starts `.github/workflows/release.yml` (D-204, proposed):
 tag = `v$(cat VERSION)`, annotated, on `main`, OpenPGP-signed by the key in
 `.github/release-signers.asc` with the primary fingerprint pinned in the

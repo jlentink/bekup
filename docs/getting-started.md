@@ -148,6 +148,11 @@ The server needs only Docker and the bekup image, no source checkout
    key and the mTLS certificates with the right owners; never
    `compose.yaml`. Mount your offline media at `/deploy/secrets/certs/ca`
    for the run ([details](installation/compose.md#install-with-bekup-setup-container-only)).
+   Or answer the same questions in your browser: `docker compose run --rm
+   --service-ports setup-web`, then `docker compose run --rm
+   --service-ports setup-web-db` for the roles and migrations (one-time
+   code and certificate fingerprint on the terminal;
+   [browser setup](installation/compose.md#browser-setup)).
 3. Escrow the master key offline ([key management](security/key-management.md))
    and record the printed certificate fingerprints. Keep the CA directory
    offline ([mTLS certificates](security/mtls-certs.md)).

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
-	"github.com/jlentink/bekup/internal/deployguard"
+	"github.com/jlentink/bekup/internal/dbsetup"
 )
 
 // errDownOneNeedsDev is returned by `migrate down-one` outside dev mode:
@@ -71,7 +70,11 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	}
 
 	ctx := c.Context()
-	m, err := openMigrator(ctx, res.Config)
+	if action == "up" {
+		_, err := dbsetup.MigrateUp(ctx, res.Config, logger, c.ErrOrStderr())
+		return err
+	}
+	m, err := dbsetup.OpenMigrator(ctx, res.Config)
 	if err != nil {
 		return err
 	}
@@ -85,7 +88,7 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 	switch action {
 	case "check":
 		rep, err := m.Check(ctx)
-		if werr := writePreflight(out, rep, err); werr != nil {
+		if werr := dbsetup.WritePreflight(out, rep, err); werr != nil {
 			return werr
 		}
 		if err != nil {
@@ -98,35 +101,10 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 			return err
 		}
 		return writeStatus(out, st)
-	case "down-one":
+	default: // down-one
 		rs, err := m.DownOne(ctx)
 		for _, r := range rs {
-			logger.InfoContext(ctx, "migration rolled back", resultAttrs(r)...)
-		}
-		return err
-	default:
-		rep, err := m.Check(ctx)
-		f := rep.TLS
-		logger.InfoContext(ctx, "app database connected",
-			slog.String("config_mode", res.Config.Database.DatabaseMode()),
-			slog.String("tls_mode", f.Mode), slog.Bool("encrypted", f.Encrypted), slog.String("tls_version", f.Version),
-			slog.Bool("chain_verified", f.ChainVerified), slog.Bool("host_verified", f.HostVerified),
-			slog.Bool("channel_binding", f.ChannelBinding))
-		for _, w := range rep.Warnings {
-			logger.WarnContext(ctx, "migrate preflight warning", slog.String("warning", w))
-		}
-		if err != nil {
-			if werr := writePreflight(c.ErrOrStderr(), rep, err); werr != nil {
-				return werr
-			}
-			return errors.New("preflight failed; nothing was migrated (details above; `bekup migrate check` repeats them)")
-		}
-		rs, err := m.Up(ctx)
-		for _, r := range rs {
-			logger.InfoContext(ctx, "migration applied", resultAttrs(r)...)
-		}
-		if err == nil && len(rs) == 0 {
-			logger.InfoContext(ctx, "database schema is up to date")
+			logger.InfoContext(ctx, "migration rolled back", dbsetup.ResultAttrs(r)...)
 		}
 		return err
 	}
@@ -139,108 +117,7 @@ func runMigrate(c *cobra.Command, g *globalFlags, action string) error {
 // BEKUP_SETUP_VERSION only warns (outside dev mode). command names the
 // command in the log and the error ("migrate", "db bootstrap", "runner").
 func checkDeployment(c *cobra.Command, logger *slog.Logger, dev bool, command string) error {
-	d, err := deployguard.FromEnv(lookupEnv)
-	if err != nil {
-		return fmt.Errorf("refusing to run %s: %w", command, err)
-	}
-	warn, err := d.Check(version, dev)
-	if err != nil {
-		logger.ErrorContext(c.Context(), "refusing to run: the deployment guard failed (D-212)",
-			slog.String("command", command), slog.String("version", version), slog.String("setup_version", d.SetupVersion),
-			slog.Bool("image_following", d.ImageFollowing))
-		return fmt.Errorf("refusing to run %s: %w", command, err)
-	}
-	if warn != "" {
-		logger.WarnContext(c.Context(), "setup version unknown", slog.String("command", command), slog.String("warning", warn))
-	}
-	if d.ImageFollowing && !dev {
-		logger.WarnContext(c.Context(), "the bekup image follows a tag instead of a digest (BEKUP_IMAGE_MODE=following, D-212): whoever moves the tag decides what runs",
-			slog.String("command", command))
-	}
-	return nil
-}
-
-// openMigrator connects as bekup_owner (or the single account acting as
-// bekup_owner, D-207) with the configured TLS policy and runs the role
-// checks.
-func openMigrator(ctx context.Context, cfg *config.Bekup) (*db.Migrator, error) {
-	creds, err := cfg.OwnerDBCredentials()
-	if err != nil {
-		return nil, fmt.Errorf("read database owner credentials: %w", err)
-	}
-	tlsOpts, err := db.LoadTLSOptions(cfg)
-	if err != nil {
-		creds.Zero()
-		return nil, fmt.Errorf("database TLS: %w", err)
-	}
-	connectCtx, cancel := context.WithTimeout(ctx, cfg.Database.ConnectTimeout.D())
-	m, err := db.NewMigrator(connectCtx, creds, tlsOpts, nil)
-	cancel()
-	creds.Zero()
-	return m, err
-}
-
-// writePreflight prints the preflight report and the failed checks (facts
-// only: no host names, no credentials).
-func writePreflight(w io.Writer, r *db.PreflightReport, checkErr error) error {
-	var b strings.Builder
-	if r != nil {
-		fmt.Fprintf(&b, "server:          PostgreSQL %s\n", r.ServerVersion)
-		fmt.Fprintf(&b, "database:        %s\n", r.Database)
-		fmt.Fprintf(&b, "citext:          %s\n", r.Citext)
-		fmt.Fprintf(&b, "tls:             %s\n", tlsFactsLine(r.TLS))
-		if r.SingleAccount {
-			b.WriteString("roles:           SINGLE-ACCOUNT MODE (weakened: one account runs migrations and the app, D-207)\n")
-			for _, f := range r.LoginFindings {
-				fmt.Fprintf(&b, "  login role:    %s\n", f)
-			}
-		} else {
-			b.WriteString("roles:           bekup_owner and bekup_app checked (no dangerous attributes or memberships)\n")
-		}
-		for _, wn := range r.Warnings {
-			fmt.Fprintf(&b, "WARNING: %s\n", wn)
-		}
-	}
-	if checkErr != nil {
-		for _, e := range splitErrors(checkErr) {
-			fmt.Fprintf(&b, "FAILED: %s\n", e)
-		}
-	} else {
-		b.WriteString("preflight OK\n")
-	}
-	_, err := io.WriteString(w, b.String())
-	return err
-}
-
-// tlsFactsLine renders db.TLSFacts in one line.
-func tlsFactsLine(f db.TLSFacts) string {
-	if !f.Encrypted {
-		return fmt.Sprintf("NOT ENCRYPTED (tls_mode %s)", f.Mode)
-	}
-	s := fmt.Sprintf("%s, tls_mode %s, chain verified: %t, host verified: %t", f.Version, f.Mode, f.ChainVerified, f.HostVerified)
-	if f.ServerNameOverride {
-		s += " (against tls_server_name)"
-	}
-	if f.ChannelBinding {
-		s += ", SCRAM channel binding required"
-	}
-	return s
-}
-
-// splitErrors flattens errors.Join trees into their messages.
-func splitErrors(err error) []string {
-	if j, ok := err.(interface{ Unwrap() []error }); ok {
-		out := make([]string, 0, len(j.Unwrap()))
-		for _, e := range j.Unwrap() {
-			out = append(out, splitErrors(e)...)
-		}
-		return out
-	}
-	return []string{err.Error()}
-}
-
-func resultAttrs(r db.MigrationResult) []any {
-	return []any{slog.Int64("version", r.Version), slog.String("migration", r.Name), slog.Duration("duration", r.Duration)}
+	return dbsetup.CheckDeployment(c.Context(), dbsetup.Guard{Version: version, Dev: dev, LookupEnv: lookupEnv, Logger: logger}, command)
 }
 
 func writeStatus(w io.Writer, st []db.MigrationStatus) error {

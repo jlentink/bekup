@@ -10,6 +10,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
+	"github.com/jlentink/bekup/internal/dbsetup"
 	"github.com/jlentink/bekup/internal/logging"
 )
 
@@ -176,7 +177,7 @@ func TestDBBootstrapRefusals(t *testing.T) {
 }
 
 func TestBootstrapAuditDetailsNotRedacted(t *testing.T) {
-	d := bootstrapAuditDetails(&config.Bekup{}, &db.BootstrapResult{}, &bootstrapFlags{})
+	d := dbsetup.BootstrapAuditDetails(&config.Bekup{}, &db.BootstrapResult{}, false, false)
 	for k := range d {
 		if logging.IsSecretKey(k) {
 			t.Errorf("audit detail %q would be redacted", k)

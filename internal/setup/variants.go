@@ -243,7 +243,7 @@ const (
 
 // externalDBEdits turn a variant into its external-database form (D-208):
 // no postgres service (or its volume, init assets and secrets), serve,
-// admin and migrate get the password files of database.password_file /
+// admin, migrate and setup-web-db get the password files of database.password_file /
 // owner_password_file and the operator's CA bundle, the certs-init service
 // issues no postgres certificate, and the backend network is not internal
 // (it must reach the operator's PostgreSQL).
@@ -266,6 +266,9 @@ func externalDBEdits(v Variant) []edit {
 		replace("services/migrate/environment", "external-db/migrate-environment.yaml"),
 		replace("services/migrate/secrets", "external-db/migrate-mounts.yaml"),
 		remove("services/migrate/depends_on"),
+		replace("services/setup-web-db/environment", "external-db/setup-web-db-environment.yaml"),
+		replace("services/setup-web-db/secrets", "external-db/migrate-mounts.yaml"),
+		remove("services/setup-web-db/depends_on"),
 		replace("services/admin/secrets", "external-db/admin-mounts.yaml"),
 		replace("services/serve/secrets", "external-db/serve-mounts.yaml"),
 		remove("services/serve/depends_on/postgres"),

@@ -563,8 +563,11 @@ visual direction.
 ## Continuous integration (GitHub Actions)
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull
-request, on pushes to `main` and in the merge queue (D-027, D-091). Superseded
-runs of the same branch are cancelled. Runs on `main` are never cancelled. Jobs
+request and, as the release gate, on version tags (D-027, D-091, D-218);
+nothing else starts a workflow. Superseded runs of the same pull request are
+cancelled; the release gate never is. CI only tests: it never publishes an
+image. Images are built, signed and pushed only by `release.yml`, on a signed
+`vX.Y.Z` tag. Jobs
 call the same `just` recipes you run locally where possible, so a green
 `just lint test sec` locally should mean a green CI run.
 

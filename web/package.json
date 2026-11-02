@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && vite build -c vite.setup.config.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

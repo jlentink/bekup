@@ -116,7 +116,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-088](#d-088-passphrase-generator-and-age-work-factor-bounds) | Passphrase generator and age work-factor bounds | accepted |
 | [D-089](#d-089-runner-mtls-identity-scheme-and-pki-profile) | Runner mTLS identity scheme and PKI profile | accepted |
 | [D-090](#d-090-ca-key-protection-and-ca-rotation-procedure) | CA key protection and CA rotation procedure | accepted |
-| [D-091](#d-091-ci-workflow-hardening-and-job-layout) | CI workflow hardening and job layout | accepted |
+| [D-091](#d-091-ci-workflow-hardening-and-job-layout) | CI workflow hardening and job layout | accepted (triggers amended by D-218) |
 | [D-092](#d-092-app-db-framework-details-roles-checks-audit-chain-format-owner-url-task-04) | App DB framework details: roles checks, audit chain format, owner URL (task 0.4) | accepted |
 | [D-093](#d-093-reverse-proxy-profiles-socket-free-traefik-fixed-proxy-address-local-dev-tls) | Reverse-proxy profiles: socket-free Traefik, fixed proxy address, local dev TLS | accepted |
 | [D-094](#d-094-nginx-profile-unprivileged-nginx--certbot-instead-of-nginx-proxy) | nginx profile: unprivileged nginx + certbot instead of nginx-proxy | accepted |
@@ -225,12 +225,12 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-200](#d-200-runtime-config-reload-of-a-conservative-set-of-live-keys-admin-ui-broadcast-and-sighup) | Runtime config reload of a conservative set of live keys (admin UI broadcast and SIGHUP) | proposed |
 | [D-201](#d-201-dev-only-runner-for-a-native-serve-loopback-published-on-a-dedicated-network) | Dev-only runner for a native serve, loopback-published on a dedicated network | proposed (dev subnet moved by D-205) |
 | [D-202](#d-202-manual-multi-arch-image-publishing-to-the-operators-own-registry-just-publish) | Manual multi-arch image publishing to the operator's own registry (`just publish`) | proposed |
-| [D-203](#d-203-container-only-compose-install-bekup-setup-with-embedded-assets-an-ownership-manifest-and-a-root--cap_chown-setup-container) | Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container | proposed (partly superseded by D-205) |
+| [D-203](#d-203-container-only-compose-install-bekup-setup-with-embedded-assets-an-ownership-manifest-and-a-root--cap_chown-setup-container) | Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container | proposed (partly superseded by D-205; amended by D-217) |
 | [D-204](#d-204-release-workflow-signed-tag-only-ghcr-images-pushed-by-digest-scanned-signed-and-attested-before-tagging) | Release workflow: signed-tag-only GHCR images, pushed by digest, scanned, signed and attested before tagging | proposed (extended by D-205) |
-| [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder; variant names and the link network as the default superseded by D-215) |
+| [D-205](#d-205-compose-first-onboarding-release-compose-files-as-overlays-of-one-source-the-bekup-proxy-link-network-and-attested-assets) | Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets | proposed (amendment 1: resolved-model lint, link network `--ip-range`; amendment 2: shipped services pinned, interpolation allowlist, lint is a guardrail; amendment 3: committed `deploy/compose/` files with the `BEKUP_IMAGE` placeholder; variant names and the link network as the default superseded by D-215; amended by D-217) |
 | [D-206](#d-206-mobile-apps-and-the-push-channel-dropped-from-the-roadmap) | Mobile apps and the push channel dropped from the roadmap | proposed |
 | [D-207](#d-207-external-postgresql-for-the-app-database-fields-mode-one-connection-builder-db-bootstrap--roles-sql-migrate-preflight-and-an-opt-in-single-account-mode) | External PostgreSQL for the app database: fields mode, one connection builder, `db bootstrap` / `roles-sql`, migrate preflight and an opt-in single-account mode | proposed (amended by D-215) |
-| [D-208](#d-208-setup-for-an-external-database-the-bubble-tea-setup-wizard-setup-renew-and-the-guided-upgrade) | Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade | proposed (amended by D-215) |
+| [D-208](#d-208-setup-for-an-external-database-the-bubble-tea-setup-wizard-setup-renew-and-the-guided-upgrade) | Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade | proposed (amended by D-215; amended by D-217) |
 | [D-209](#d-209-retention-visibility-and-disk-cleanup-live-keep-estimate-retention-holds-and-retentionblocked-interrupted-runs-empty-folder-pruning-unrecorded-files-and-fixed-destination-locations) | Retention visibility and disk cleanup: live keep estimate, retention holds and `retention.blocked`, interrupted runs, empty-folder pruning, unrecorded files and fixed destination locations | proposed |
 | [D-210](#d-210-schema-version-per-database-framework-presets-and-a-bounded-custom-query-read-on-the-dumps-snapshot) | Schema version per database: framework presets and a bounded custom query, read on the dump's snapshot | proposed |
 | [D-211](#d-211-web-dev-tooling-minimatch-forced-to-the-fixed-11x-line-with-a-pnpm-patch-for-eslint-plugin-jsx-a11y) | Web dev tooling: minimatch forced to the fixed 11.x line with a pnpm patch for eslint-plugin-jsx-a11y | proposed |
@@ -239,6 +239,8 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
 | [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name; amended by D-216) |
 | [D-216](#d-216-a-database-container-may-share-the-own-proxys-network-join-mode) | A database container may share the own proxy's network (join mode) | proposed |
+| [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed |
+| [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
 
 ---
 
@@ -2048,7 +2050,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-091: CI workflow hardening and job layout
 
 - **Date:** 2026-10-26
-- **Status:** accepted (2026-10-26, user accepted all M0 proposals)
+- **Status:** accepted (2026-10-26, user accepted all M0 proposals; triggers amended by D-218: pull requests and the release gate only)
 - **Decided by:** agent with user approval (task 0.9)
 - **Context:** D-027 and D-061 require GitHub Actions CI with SHA-pinned
   actions, but leave the job layout, token permissions, runner hardening and
@@ -11038,7 +11040,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-203: Container-only compose install (`bekup setup`) with embedded assets, an ownership manifest and a root + `CAP_CHOWN` setup container
 
 - **Date:** 2026-10-29
-- **Status:** proposed (partly superseded by D-205: setup no longer always writes the compose file; items 2, 4 and 9 for the compose file, and the file names)
+- **Status:** proposed (partly superseded by D-205: setup no longer always writes the compose file; items 2, 4 and 9 for the compose file, and the file names; amended by D-217: the `setup-web` service)
 - **Decided by:** agent (requested by the user: the deployment server should need only images, no source checkout; the user decided that the image carries the deploy assets, that a new `bekup setup` writes a ready deployment directory, that the image comes from a prompt or `BEKUP_IMAGE` and must be pinned by digest, that the directory holds only generated files, and that ownership is set by a root setup container with only `CAP_CHOWN`)
 - **Context:** A compose install needed the repository for
   `deploy/postgres/*`, `deploy/traefik|nginx/*`, the compose file and
@@ -11334,7 +11336,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-205: Compose-first onboarding: release compose files as overlays of one source, the bekup-proxy link network and attested assets
 
 - **Date:** 2026-10-29
-- **Status:** proposed (variant names traefik-external/npm and the link network as the default superseded by D-215)
+- **Status:** proposed (variant names traefik-external/npm and the link network as the default superseded by D-215; amended by D-217: the `setup-web` service)
 - **Decided by:** agent (recording the user's decisions: the README leads with three steps (download a copyable `compose.yaml`, `docker compose run --rm setup`, `docker compose up -d`) in three variants (own Traefik as the default, behind an existing Traefik, behind Nginx Proxy Manager); full hardening in the copyable file; a dedicated `bekup-proxy` link network for external proxies; the files only as release downloads, pinned by digest and attested; the deployment file name `compose.yaml`; nothing committed under `examples/`)
 - **Context:** D-203 made `bekup setup init` write the whole deployment
   directory, compose file included, from a `docker run` with a long list of
@@ -12115,7 +12117,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-208: Setup for an external database, the Bubble Tea setup wizard, `setup renew` and the guided upgrade
 
 - **Date:** 2026-10-30
-- **Status:** proposed (amended by D-215)
+- **Status:** proposed (amended by D-215; amended by D-217: the `setup-web` service)
 - **Decided by:** agent (Part S of `plans/robust-giggling-tide.md`; user
   requests: an interactive setup inside the bekup image built on Bubble
   Tea that asks for the proxy and an existing database and writes
@@ -13221,3 +13223,230 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/setup/wizard/init.go`,
   `docs/installation/{external-database,compose}.md`, `SECURITY.md`,
   `AGENTS.md`.
+
+## D-217: Browser setup mode (`setup web`)
+
+- **Date:** 2026-11-02
+- **Status:** proposed
+- **Decided by:** user (a browser setup mode next to the flags and the
+  wizard; the UI listens on all interfaces behind a one-time code; setup
+  writes every file on the server and the browser only downloads the
+  non-secret files as a zip; setup connects to the app database itself to
+  bootstrap the roles and run the migrations) and agent (the mechanism
+  below)
+- **Context:** installing takes the setup wizard on a terminal, a
+  separate `migrate db bootstrap` run for an external database and
+  `docker compose up`. Operators asked for one guided path in the browser
+  that ends with a validated deployment and a migrated database. D-203
+  keeps the `setup` container without a network and shows the generated
+  CA passphrase on a terminal only; D-113 keeps the first admin on the
+  CLI.
+- **Decision:**
+  1. **The wizard behind a browser front end.** `bekup setup web` runs
+     `wizard.RunInit` with `internal/setup/web.UI`, an implementation
+     of `wizard.UI` that publishes one pending step at a time and returns
+     the browser's answer. Every step, validation, default and Back stay
+     the wizard's; the result is the same `setup.Options` as the flags
+     (`TestBrowserFlowMatchesWizard`), and the report shows the
+     equivalent flags. The answers go to `setup.Init` on the deployment
+     directory (its `os.Root` writer, ownership, rollback), then
+     `setup.Check`. A directory that already holds a deployment
+     (`bekup-setup.json`) is never written in the browser: the first run
+     only checks it. `wizard.Env.Browser` changes only the wording of
+     the intro (Back instead of Esc / Ctrl+C, a listener instead of "no
+     network"), never a question. In the database run, Back on its first
+     screen stays there (as the wizard's first step does) instead of
+     ending the run.
+  2. **Access.** HTTPS on `:8443` inside the container (all its
+     interfaces; TLS 1.3 only; a self-signed ECDSA P-256 certificate
+     generated in memory at start, never written, valid 24 h, SANs
+     `localhost`, the loopback addresses and the `--host` names or
+     addresses, default `BEKUP_SETUP_WEB_HOST`). The terminal shows the
+     URL `https://<host>:<port>/#code=<code>` (port: `--public-port`,
+     default `BEKUP_SETUP_WEB_PORT` or 8443), the 128-bit one-time code
+     (base32 from `crypto/rand`) and the certificate's SHA-256
+     fingerprint; the services run with `logging: none`, so neither
+     reaches Docker's logs, and the code travels in the fragment, never in
+     a request line. The code is posted once to `/api/setup/session`,
+     compared in constant time (only its SHA-256 is kept) and exchanged
+     for a 256-bit session in the cookie `__Host-bekup-setup` (Secure,
+     HttpOnly, SameSite=Strict, path `/`); it is then burned: one session
+     only, a second login is refused. Each wrong code is delayed (0.5 s
+     per failure so far, at most 5 s); the 10th ends the server.
+     State-changing requests need POST, a JSON (or, for secrets,
+     octet-stream) body, `X-Bekup-Setup: 1`, exactly one `Sec-Fetch-Site`
+     header and an `Origin` equal to the request's own `https://` origin
+     (`httpserver.OriginAllowed`), and the session; reads need the
+     session. Every response carries bekup's CSP and security headers
+     (`httpserver.SecurityHeaders`, D-082, `Cache-Control: no-store`), the
+     body limit is 64 KiB, and the server serves only the setup API and
+     the setup SPA. It exits on Finish, after 30 minutes without session
+     activity, after 2 hours, after the 10th wrong code or on SIGINT /
+     SIGTERM. A build without the setup UI (`web/dist-setup` empty;
+     the Dockerfile's `WEB_BUILD=skip` writes only `.gitkeep` there, no
+     placeholder page) refuses to start instead of printing a code for a
+     missing page.
+  3. **Secrets.** Secret answers (an imported keyring's passphrase, the
+     database administrator password, ...) travel only as raw
+     `application/octet-stream` bodies (never inside JSON), are read into
+     one fixed buffer, handed to the waiting `UI.Secret` call as `[]byte`,
+     registered with the log redaction while validated, and zeroed on
+     every path (a refused or misplaced secret too). The generated CA
+     passphrase (`UI.Sensitive`) is never part of a step: the browser
+     fetches it once from `/api/setup/reveal` (`no-store`, written as
+     bytes) and acknowledges it; a second fetch is refused, and the bytes
+     stay the caller's (setup zeroes them). This is the browser
+     counterpart of the TUI's alternate screen and amends D-203's
+     "terminal only" for web mode. The config zip (`/api/setup/config.zip`,
+     only after the files exist) holds only `compose.yaml`,
+     `compose.override.yaml`, `.env`, `bekup.toml`, `runner.toml` and
+     `bekup-setup.json`, read through an `os.Root` with `O_NOFOLLOW` per
+     component (`setup.WriteConfigZip`); `TestConfigFilesHoldNoSecrets`
+     refuses any file of a secret group or below the keys directory.
+  4. **Database.** `db bootstrap` and `migrate up` moved into
+     `internal/dbsetup`, which the CLI commands and the browser setup call
+     alike: the same deployment guard (`CheckDeployment`, D-212, before
+     anything connects), TLS policy and connection builder, admin-TLS
+     refusal (`--allow-insecure-admin-connection` becomes an explicit
+     confirmation screen), preflight, role checks and audit records
+     (`cli.db.bootstrap`, alerted like every CLI entry). The browser's
+     database step (`setupweb.DatabaseStep`) runs, for an external
+     database whose roles come from bootstrap or single-account mode,
+     `dbsetup.Bootstrap` with the administrator login asked in the browser
+     (role name, adopt existing roles, the password as a secret answer,
+     used for this connection only and zeroed); existing roles and the
+     DBA's roles SQL skip it. Then `dbsetup.MigrateUp` (with the bundled
+     database it retries with backoff for 3 minutes while postgres
+     starts), then `dbsetup.Verify`: the migrate preflight as
+     `bekup_owner`, the login and role checks of `bekup_app` and the
+     schema version. Each failure can be retried after fixing its cause.
+     The UI ends with `bekup admin create` (D-113 unchanged).
+  5. **Compose: two shipped services, both in profile `setup-web`, both
+     publishing `${BEKUP_SETUP_WEB_PORT:-8443}` on the host (all host
+     addresses) to container port 8443, so only one runs at a time.**
+     - `setup-web` (run 1: `docker compose run --rm --service-ports
+       setup-web`): exactly the `setup` service's hardening (`user: 0:0`,
+       `cap_drop: [ALL]` + `cap_add: [CHOWN]` for the files' owners,
+       `read_only`, tmpfs `/tmp`, `no-new-privileges`, `logging: none`,
+       the read-write `/deploy` bind of the deployment directory, 1 CPU /
+       512 MiB / 64 pids) plus its own non-internal network `setup-web`
+       for the published port and nothing else: no `backend`, no
+       database or proxy network, no secrets. It asks the questions,
+       writes the files, runs `setup check` and offers the zip; it never
+       touches a database.
+     - `setup-web-db` (run 2: `docker compose run --rm --service-ports
+       setup-web-db`, command `setup web --database`): migrate's identity
+       and hardening (`x-bekup-hardening`: UID 65532, no capabilities),
+       migrate's `bekup.toml` config and database secrets (the owner URL,
+       the app URL for the final check's `bekup_app` login, which the
+       owner's login outranks anyway, and the bundled CA; with an external
+       database the password files and the operator's CA,
+       `variants/external-db/`), the networks
+       `backend` and `setup-web`, the deployment directory mounted
+       **read-only** (it reads the state and offers the zip; it never
+       writes, and it does not run `setup check`: as UID 65532 it cannot
+       see the root-only key directories, so the check would report them
+       as errors; the first run checked them as root), `depends_on` the
+       bundled postgres, `logging: none`,
+       0.5 CPU / 256 MiB / 64 pids. The setup-only DB-network overlay
+       (D-215, D-216) puts it next to migrate and admin on the database
+       container's network (`dbNetworkServices`).
+     - `BEKUP_SETUP_WEB_HOST` (the address the browser opens: certificate
+       SAN and printed URL) and `BEKUP_SETUP_WEB_PORT` are in
+       `composeVarAllowlist` and `config.NonKeyEnvVars`; both services
+       get `BEKUP_SETUP_VERSION` / `BEKUP_IMAGE_MODE` where the guard
+       needs them (`setup-web-db`).
+     - The lint pins both services exactly as shipped (no operator
+       tunables, like `setup`); only `setup` and `setup-web` may run as
+       root (with `CHOWN` only), only the two browser-setup services may
+       publish a port and only TCP 8443 in the container, and
+       `setup-web-db` must mount the deployment directory read-only
+       (`TestLintBrowserSetupServices`, `TestLintBypasses`). The `setup`
+       service stays without a network.
+  6. **Deployments from earlier releases.** An existing
+     `compose.override.yaml` with the DB-network overlay lacks the
+     `setup-web-db` block, and setup never rewrites an existing override
+     (D-215). When the lint fails only because of that missing block
+     (the project equals the release file plus the pre-D-217 overlay in
+     that service), `setup check`, `setup init` and `setup upgrade`
+     report a **warning** with the block to add instead of an error
+     (`lintWithOverlays`): only the browser database run cannot reach the
+     database container. Any other change of `setup-web-db` stays an
+     error.
+  7. **No running-container warning in `setup check`.** The plan asked
+     `setup check` to warn while a `setup-web` container runs or its port
+     mapping was changed. `setup check` has no Docker access (D-203), so
+     it cannot see containers; a changed port mapping is already an
+     error of the lint (both services are pinned exactly), which is
+     stronger than a warning, and a forgotten server stops by itself
+     (Finish, 30 minutes idle, 2 hours).
+- **Alternatives considered:** loopback only behind an SSH tunnel (the
+  user chose all interfaces); a zip with every secret, plain or encrypted
+  (secrets would leave the server); a separate one-shot migrate step
+  instead of setup connecting (the user chose one guided path); a new
+  web form instead of the wizard (two sets of questions to keep in sync);
+  **one** `setup-web` service with `backend` and the database networks
+  as in the first plan (a network-facing root process with `CAP_CHOWN`
+  and a writable deployment directory would also reach the database:
+  two services keep root away from the database and the database run
+  away from root and write access); a host-address variable for the
+  published port (`BEKUP_SETUP_WEB_BIND` in the plan; not built: the
+  user chose all interfaces, and the services are pinned exactly).
+- **Consequences:** while `setup-web` runs, a root process with only
+  `CAP_CHOWN` and a writable deployment directory listens on every host
+  address; while `setup-web-db` runs, an unprivileged process with the
+  owner's database credentials does, and it bridges `backend` (internal
+  with the bundled database) and the non-internal `setup-web` network,
+  so it has egress while it runs. Only the holder of the printed code
+  gets a session (128 bits, single use, 10 tries, then the server
+  stops); whoever sees the terminal output (the code and the URL) can
+  take the session first; whoever reaches the port before the operator
+  can only guess codes; the self-signed certificate is trusted only by
+  comparing the printed fingerprint (a machine in the middle that the
+  operator does not detect there sees every answer, the administrator
+  password and the CA passphrase included). No account exists and no
+  secret is ever served except the one-time passphrase to the session.
+  An external database's administrator password crosses the browser
+  connection (TLS 1.3) instead of a file. Bootstrap and migrate keep
+  their audit records; writing the files stays unaudited (no database
+  yet). Operators cannot restrict the published address (the services
+  are pinned); they choose whether and when to start the services.
+- **Related:** D-055, D-082, D-100, D-113, D-203 (amended: network,
+  listener and the show-once passphrase in web mode), D-205 and D-208
+  (amended: two shipped services, the DB-network overlay member, the
+  lint), D-207, D-212, D-215, D-216; `internal/setup/web`,
+  `internal/dbsetup`, `internal/setup/{configzip,overlay,composelint,
+  composepin,variants}.go`, `internal/setup/variants/external-db/`,
+  `cmd/bekup/setup_web_cmd.go`, `web/src/setup/`,
+  `web/vite.setup.config.ts`, `web/embed.go`, `Dockerfile`,
+  `docker-compose.yml`, `SECURITY.md`, `AGENTS.md`,
+  `docs/installation/{compose,external-database}.md`.
+
+## D-218: CI only on pull requests and version tags
+
+- **Date:** 2026-11-02
+- **Status:** proposed
+- **Decided by:** user
+- **Context:** `ci.yml` ran on `pull_request`, on `push` to `main` and on
+  `merge_group` (D-091), and as the gate of the release workflow
+  (`workflow_call`, D-204). The user wants GitHub Actions to run only for
+  pull requests and version tags, with pull requests only testing.
+- **Decision:** `ci.yml` keeps two triggers: `pull_request` and
+  `workflow_call` (called by `release.yml` on a `vX.Y.Z` tag). The
+  `push: main` and `merge_group` triggers are removed. `release.yml` keeps
+  its tag-only trigger and stays the only workflow that builds, signs and
+  pushes images. `ci.yml` keeps its read-only token and never publishes
+  (the `setup-install` job pushes only to a throwaway loopback registry on
+  the runner to get a digest-pinned reference). Superseded pull request
+  runs are cancelled; the release gate never is
+  (`cancel-in-progress` keys on `github.event_name == 'pull_request'`).
+- **Alternatives considered:** keeping `push: main` as a post-merge check
+  (rejected by the user: Actions only for pull requests and tags);
+  keeping `merge_group` (rejected for the same reason).
+- **Consequences:** a direct push to `main` runs no CI, so every change
+  should land through a pull request (branch protection with required
+  checks enforces that). The release gate still runs the full CI on the
+  tagged commit. Enabling a merge queue later needs the `merge_group`
+  trigger back, or the queue stalls on required checks.
+- **Related:** D-091, D-204; `.github/workflows/ci.yml`,
+  `.github/workflows/release.yml`, `docs/development.md`, `AGENTS.md`.

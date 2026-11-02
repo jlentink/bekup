@@ -14,6 +14,12 @@ import (
 //go:embed all:dist
 var dist embed.FS
 
+// The browser setup's own small UI (D-217; vite.setup.config.ts), separate
+// from the main UI: it is served only by `bekup setup web`.
+//
+//go:embed all:dist-setup
+var distSetup embed.FS
+
 // DistFS returns the built UI rooted at the dist directory (index.html at the
 // root). It contains only static, public assets: never embed secrets here.
 func DistFS() fs.FS {
@@ -30,4 +36,14 @@ func DistFS() fs.FS {
 func HasIndex() bool {
 	_, err := fs.Stat(DistFS(), "index.html")
 	return err == nil
+}
+
+// SetupFS returns the built browser-setup UI (index.html at the root;
+// only .gitkeep before the first web build).
+func SetupFS() fs.FS {
+	sub, err := fs.Sub(distSetup, "dist-setup")
+	if err != nil {
+		panic("web: invalid embedded dist-setup path: " + err.Error())
+	}
+	return sub
 }

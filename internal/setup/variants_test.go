@@ -50,9 +50,9 @@ func keys[V any](m map[string]V) []string {
 func TestVariantServiceSets(t *testing.T) {
 	t.Parallel()
 	want := map[Variant][]string{
-		VariantTraefik:  {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
-		VariantOwnProxy: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup"},
-		VariantFull:     {"admin", "certbot", "certs-init", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "traefik", "traefik-init"},
+		VariantTraefik:  {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
+		VariantOwnProxy: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db"},
+		VariantFull:     {"admin", "certbot", "certs-init", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
 	}
 	for _, v := range AllVariants {
 		t.Run(string(v), func(t *testing.T) {
@@ -109,7 +109,8 @@ func TestVariantExternalNetworks(t *testing.T) {
 				t.Fatalf("proxy network %v", p)
 			}
 			for name, svc := range doc.Services {
-				if _, ok := svc["ports"]; ok {
+				// Only the browser setup publishes its own port (D-217).
+				if _, ok := svc["ports"]; ok && !slices.Contains(setupWebServices, name) {
 					t.Errorf("%s publishes ports", name)
 				}
 				nets, _ := svc["networks"].(map[string]any) //nolint:errcheck // list form has no proxy
@@ -212,7 +213,7 @@ func TestOverlayDocs(t *testing.T) {
 				if _, ok := serveNets["proxy"]; ok != ov.ProxyLink {
 					t.Errorf("%+v: serve link %v", ov, ok)
 				}
-				for _, svc := range []string{"migrate", "admin"} {
+				for _, svc := range dbNetworkServices {
 					if _, ok := d.Services[svc]; ok != ov.DBNetwork {
 						t.Errorf("%+v: %s %v", ov, svc, ok)
 					}

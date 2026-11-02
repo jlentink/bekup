@@ -323,7 +323,7 @@ recognize:
 	if err != nil {
 		return nil, err
 	}
-	info.Findings = lintComposeFiles(&in, env, info.Variant, img.String(), expectedDocs(expected, in.overlays), placeholder)
+	info.Findings = lintWithOverlays(&in, env, info.Variant, img.String(), expected, in.overlays, placeholder)
 	return info, nil
 }
 

@@ -1,5 +1,7 @@
 dist
+dist-setup
 .csp-check-dist
+.csp-check-setup-dist
 coverage
 node_modules
 pnpm-lock.yaml

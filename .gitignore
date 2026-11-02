@@ -28,6 +28,8 @@ air-build-errors.log
 node_modules/
 web/dist/*
 !web/dist/.gitkeep
+web/dist-setup/*
+!web/dist-setup/.gitkeep
 web/.vite/
 web/coverage/
 web/playwright-report/

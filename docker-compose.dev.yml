@@ -132,6 +132,7 @@ services:
       - ./proto:/src/proto:ro
       - ./web/embed.go:/src/web/embed.go:ro
       - ./web/dist:/src/web/dist:ro
+      - ./web/dist-setup:/src/web/dist-setup:ro
       - go-mod:/go/pkg/mod
       # GOCACHE and GOTMPDIR (go build needs more room than the /tmp tmpfs).
       - go-build:/home/nonroot/.cache

@@ -18,6 +18,12 @@
 //    login → second factor → shell, the step-up dialog, TOTP enrollment
 //    with the inline QR code and the one-time recovery codes.
 //
+// 6. Builds the browser setup's own UI (`bekup setup web`, D-217;
+//    vite.setup.config.ts) into .csp-check-setup-dist/ and walks it under
+//    the same CSP against a fake setup API: code from the fragment, a
+//    select, a refused input, Back, a confirm, a secret, the show-once
+//    passphrase and the results screen.
+//
 // Usage: pnpm csp-check            (uses the installed Google Chrome)
 //        CHROME_PATH=/path/to/chrome pnpm csp-check
 import { spawnSync } from "node:child_process";
@@ -60,8 +66,19 @@ function build() {
   if (res.status !== 0) throw new Error("vite build failed");
 }
 
-function assertNoInlineCode() {
-  const html = readFileSync(join(outDir, "index.html"), "utf8");
+const setupOutDir = join(root, ".csp-check-setup-dist");
+
+function buildSetup() {
+  const res = spawnSync(
+    "pnpm",
+    ["exec", "vite", "build", "-c", "vite.setup.config.ts", "--logLevel", "warn"],
+    { cwd: root, stdio: "inherit", env: { ...process.env, BEKUP_WEB_OUT_DIR: setupOutDir } },
+  );
+  if (res.status !== 0) throw new Error("vite build of the setup UI failed");
+}
+
+function assertNoInlineCode(dir = outDir) {
+  const html = readFileSync(join(dir, "index.html"), "utf8");
   const problems = [];
   if (/<script(?![^>]*\bsrc=)[^>]*>/i.test(html)) problems.push("inline <script> in index.html");
   if (/<style[\s>]/i.test(html)) problems.push("inline <style> in index.html");
@@ -2572,6 +2589,258 @@ async function exercise(page, base, colorScheme) {
   await page.waitForTimeout(300);
 }
 
+/* ------------------------------------------------------------------------
+ * Browser setup (D-217): a fake of internal/setup/web's API with a fixed
+ * flow of screens, long polling on ?after= like the real server.
+ * --------------------------------------------------------------------- */
+
+const SETUP_CODE = "MFRGGZDFMZTWQ2LKNNWG23TPOA";
+
+const SETUP_SCREENS = [
+  { kind: "note", title: "bekup setup", body: "This wizard prepares a bekup deployment." },
+  {
+    kind: "select",
+    title: "Reverse proxy",
+    body: "Who terminates TLS for the UI?",
+    options: [
+      { value: "own-traefik", label: "bekup's own Traefik (Let's Encrypt)" },
+      { value: "own-proxy", label: "your own reverse proxy on this Docker host" },
+    ],
+    default: "own-traefik",
+  },
+  {
+    kind: "input",
+    title: "Domain",
+    body: "The public host name of the UI.",
+    validate: (v) => (v.includes(".") ? "" : "not a fully qualified host name"),
+  },
+  { kind: "confirm", title: "Let's Encrypt staging?", default: "no" },
+  { kind: "secret", title: "Administrator password", body: "Used once, never stored." },
+  {
+    kind: "sensitive",
+    title: "CA key passphrase (shown ONCE)",
+    body: "Store it offline with the CA.",
+  },
+];
+
+const setupApi = { signedIn: false, index: 0, id: 1, error: "", revealed: false, waiters: [] };
+
+function resetSetupApi() {
+  Object.assign(setupApi, {
+    signedIn: false,
+    index: 0,
+    id: 1,
+    error: "",
+    revealed: false,
+    waiters: [],
+  });
+}
+
+function setupStatus() {
+  if (setupApi.index >= SETUP_SCREENS.length) {
+    return {
+      phase: "done",
+      report:
+        "== setup check ==\nOK: compose.yaml is the own-proxy release file\n\nNext: docker compose run --rm --service-ports setup-web-db\n",
+      zip: true,
+    };
+  }
+  const s = SETUP_SCREENS[setupApi.index];
+  const step = { id: setupApi.id, kind: s.kind, title: s.title, body: s.body ?? "" };
+  if (s.options) step.options = s.options;
+  if (s.default) step.default = s.default;
+  if (setupApi.error) step.error = setupApi.error;
+  return { phase: "questions", step, report: "", zip: false };
+}
+
+function setupMove(index, error = "") {
+  Object.assign(setupApi, { index, error, id: setupApi.id + 1, revealed: false });
+  const waiting = setupApi.waiters;
+  setupApi.waiters = [];
+  for (const w of waiting) w();
+}
+
+function serveSetupApi(req, res, url, allowedOrigin) {
+  const json = (status, body) => {
+    res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(body === undefined ? "" : JSON.stringify(body));
+  };
+  if (
+    req.method === "POST" &&
+    (req.headers["x-bekup-setup"] !== "1" || req.headers.origin !== allowedOrigin)
+  ) {
+    json(403, { error: "request refused" });
+    return;
+  }
+  const chunks = [];
+  req.on("data", (c) => chunks.push(c));
+  req.on("end", () => {
+    const body = Buffer.concat(chunks).toString("utf8");
+    if (url.pathname === "/api/setup/session") {
+      const { code } = JSON.parse(body || "{}");
+      if (code !== SETUP_CODE || setupApi.signedIn) return json(401, { error: "wrong code" });
+      setupApi.signedIn = true;
+      return json(204);
+    }
+    if (!setupApi.signedIn) return json(401, { error: "sign in with the access code" });
+    const cur = SETUP_SCREENS[setupApi.index];
+    switch (url.pathname) {
+      case "/api/setup/status": {
+        const after = url.searchParams.get("after");
+        const st = setupStatus();
+        if (after !== null && st.phase === "questions" && Number(after) === st.step.id) {
+          const timer = setTimeout(() => json(200, setupStatus()), 5000);
+          setupApi.waiters.push(() => {
+            clearTimeout(timer);
+            json(200, setupStatus());
+          });
+          return undefined;
+        }
+        return json(200, st);
+      }
+      case "/api/setup/answer": {
+        const a = JSON.parse(body);
+        if (!cur || a.step !== setupApi.id) return json(409, { error: "stale" });
+        if (a.back) {
+          setupMove(Math.max(setupApi.index - 1, 0));
+          return json(204);
+        }
+        const refusal = cur.validate?.(a.value ?? "") ?? "";
+        setupMove(refusal ? setupApi.index : setupApi.index + 1, refusal);
+        return json(204);
+      }
+      case "/api/setup/secret":
+        if (cur?.kind !== "secret") return json(409, { error: "wrong kind" });
+        setupMove(body === "" ? Math.max(setupApi.index - 1, 0) : setupApi.index + 1);
+        return json(204);
+      case "/api/setup/reveal":
+        if (cur?.kind !== "sensitive" || setupApi.revealed) return json(409, { error: "shown" });
+        setupApi.revealed = true;
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        return res.end("violet anchor quarry ribbon tundra");
+      case "/api/setup/finish":
+        return json(204);
+      default:
+        return json(404, { error: "not found" });
+    }
+  });
+}
+
+function serveSetup() {
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if (url.pathname.startsWith("/api/")) {
+      serveSetupApi(req, res, url, `http://127.0.0.1:${server.address().port}`);
+      return;
+    }
+    let file = normalize(join(setupOutDir, decodeURIComponent(url.pathname)));
+    if (!file.startsWith(setupOutDir)) {
+      res.writeHead(400).end();
+      return;
+    }
+    if (!existsSync(file) || statSync(file).isDirectory()) file = join(setupOutDir, "index.html");
+    res.writeHead(200, {
+      "Content-Type": TYPES[extname(file)] ?? "application/octet-stream",
+      "Content-Security-Policy": CSP,
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+    });
+    res.end(readFileSync(file));
+  });
+  return new Promise((ok) => {
+    server.listen(0, "127.0.0.1", () => {
+      ok(server);
+    });
+  });
+}
+
+async function exerciseSetup(page, base, colorScheme) {
+  await page.emulateMedia({ colorScheme });
+  resetSetupApi();
+  await page.goto(`${base}/#code=${SETUP_CODE}`);
+  await page.getByRole("heading", { name: "Open the setup" }).waitFor();
+  if ((await page.evaluate(() => location.hash)) !== "") throw new Error("code left in the URL");
+  await page.getByRole("button", { name: "Open setup" }).click();
+  await page.getByRole("heading", { name: "bekup setup" }).waitFor();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("heading", { name: "Reverse proxy" }).waitFor();
+  await page.getByRole("radio", { name: /your own reverse proxy/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("heading", { name: "Domain" }).waitFor();
+  await page.getByRole("textbox", { name: "Domain" }).fill("backup");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByText("not a fully qualified host name").waitFor();
+  await page.getByRole("textbox", { name: "Domain" }).fill("backup.example.com");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("heading", { name: "Let's Encrypt staging?" }).waitFor();
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("heading", { name: "Domain" }).waitFor();
+  await page.getByRole("textbox", { name: "Domain" }).fill("backup.example.com");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "No", exact: true }).click();
+  await page.getByRole("heading", { name: "Administrator password" }).waitFor();
+  await page.locator('input[type="password"]').fill("s3cret-admin-pass");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("heading", { name: "CA key passphrase (shown ONCE)" }).waitFor();
+  await page.getByRole("button", { name: "Reveal passphrase" }).click();
+  await page.getByText("violet anchor quarry ribbon tundra").waitFor();
+  await page.getByRole("button", { name: "I have stored it offline" }).click();
+  await page.getByRole("heading", { name: "Setup finished" }).waitFor();
+  await page.getByRole("link", { name: "Download configuration (zip)" }).waitFor();
+  await page.getByRole("button", { name: "Finish and stop setup" }).click();
+  await page.getByText("Setup has stopped. You can close this tab.").waitFor();
+  await page.waitForTimeout(300);
+}
+
+/** newCheckedPage opens a page that records CSP and Trusted Types violations. */
+async function newCheckedPage(browser, scheme, violations, label) {
+  const page = await browser.newPage();
+  page.setDefaultTimeout(STEP_TIMEOUT_MS);
+  await page.addInitScript(() => {
+    window.__csp = [];
+    document.addEventListener("securitypolicyviolation", (e) => {
+      window.__csp.push(
+        `${e.effectiveDirective} blocked ${e.blockedURI || "inline"} at ${e.sourceFile}:${e.lineNumber} ${e.sample}`,
+      );
+    });
+  });
+  page.on("console", (msg) => {
+    if (/Content.Security.Policy|Trusted.Type/i.test(msg.text())) {
+      violations.push(`[${label} ${scheme}] console: ${msg.text()}`);
+    }
+  });
+  page.on("pageerror", (err) => violations.push(`[${label} ${scheme}] page error: ${err.message}`));
+  return page;
+}
+
+/** checkSetupPages walks the browser setup's UI in light and dark mode. */
+async function checkSetupPages(browser, problems, violations) {
+  buildSetup();
+  problems.push(...assertNoInlineCode(setupOutDir).map((p) => `setup: ${p}`));
+  const server = await serveSetup();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    for (const scheme of ["light", "dark"]) {
+      const page = await newCheckedPage(browser, scheme, violations, "setup");
+      try {
+        await exerciseSetup(page, base, scheme);
+      } catch (err) {
+        problems.push(
+          `[setup ${scheme}] walk-through failed at ${page.url()}: ${err.message.split("\n")[0]}`,
+        );
+      }
+      const seen = await page.evaluate(() => window.__csp);
+      violations.push(...seen.map((v) => `[setup ${scheme}] ${v}`));
+      await page.close();
+    }
+  } finally {
+    server.close();
+  }
+}
+
 /**
  * Opens an event stream from the page like graphql-sse (fetch, POST, JSON
  * body, Accept: text/event-stream, credentials same-origin) and reads it
@@ -2701,6 +2970,7 @@ async function main() {
     });
     if (foreign.status !== 403)
       problems.push(`cross-origin stream POST was not refused (status ${foreign.status})`);
+    await checkSetupPages(browser, problems, violations);
   } finally {
     await browser.close();
     server.close();
@@ -2714,7 +2984,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    "csp-check passed: no CSP or Trusted Types violations in light and dark mode; same-origin event stream allowed, cross-origin blocked.",
+    "csp-check passed: no CSP or Trusted Types violations in light and dark mode (UI and browser setup); same-origin event stream allowed, cross-origin blocked.",
   );
 }
 

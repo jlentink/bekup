@@ -1,0 +1,47 @@
+/* Browser setup (D-217): the main design system plus two moments. */
+@import "../styles/index.css";
+
+/* Each screen settles in like a page turned in the ledger. */
+@keyframes setup-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.setup-rise {
+  animation: setup-rise 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.setup-rise > * {
+  animation: setup-rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.setup-rise > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.setup-rise > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.setup-rise > *:nth-child(4) {
+  animation-delay: 120ms;
+}
+
+/* The show-once slip: a perforated top edge, like a sealed PIN mailer. */
+.setup-slip::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  background-image: radial-gradient(circle at 5px 0, var(--background) 3px, transparent 3.5px);
+  background-size: 12px 6px;
+  background-repeat: repeat-x;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setup-rise,
+  .setup-rise > * {
+    animation: none;
+  }
+}

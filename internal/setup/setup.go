@@ -243,6 +243,7 @@ func Init(opts Options) (retErr error) {
 	// setup-first: it must carry the overlays on top of the compose.yaml
 	// this run writes.
 	existingOverride, err := readManaged(root, OverrideFile)
+	var overrideWarnings []string
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		existingOverride = nil
@@ -254,7 +255,7 @@ func Init(opts Options) (retErr error) {
 	switch {
 	case existingOverride == nil:
 	case opts.WriteCompose:
-		if err := checkSetupFirstOverride(root, p.generated[ComposeFile], existingOverride, a.Variant, a.Image, a.overlays(), os.LookupEnv); err != nil {
+		if overrideWarnings, err = checkSetupFirstOverride(root, p.generated[ComposeFile], existingOverride, a.Variant, a.Image, a.overlays(), os.LookupEnv); err != nil {
 			return err
 		}
 	}
@@ -357,6 +358,7 @@ func Init(opts Options) (retErr error) {
 	}
 	mode, why := resolveOwnership(opts.Ownership, root, *opts.sys)
 	warnings := rootWarnings(w, mode, *opts.sys)
+	warnings = append(warnings, overrideWarnings...)
 	if keptOverride != "" {
 		warnings = append(warnings, keptOverride)
 	}

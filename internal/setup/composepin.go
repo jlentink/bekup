@@ -33,7 +33,8 @@ import (
 // ${VAR} in compose.yaml or compose.override.yaml is an error.
 var composeVarAllowlist = []string{
 	"ACME_CA_SERVER", "ACME_EMAIL", "BEKUP_DB_NETWORK", "BEKUP_DOMAIN", "BEKUP_IMAGE_MODE", "BEKUP_KEYS_DIR",
-	"BEKUP_PROXY_NETWORK", "BEKUP_SETUP_VERSION", "DOCKER_GID", "FRONTEND_SUBNET", "METRICS_SUBNET",
+	"BEKUP_PROXY_NETWORK", "BEKUP_SETUP_VERSION", "BEKUP_SETUP_WEB_HOST", "BEKUP_SETUP_WEB_PORT",
+	"DOCKER_GID", "FRONTEND_SUBNET", "METRICS_SUBNET",
 	"PROXY_FRONTEND_IP", "PROXY_TLS_MODE", "RUNNER_CTL_IP", "RUNNER_CTL_SUBNET",
 	"SERVE_FRONTEND_IP", "SERVE_METRICS_IP", "SERVE_PROXY_IP",
 	"TRAEFIK_CERTRESOLVER", "TRAEFIK_ENTRYPOINT",
@@ -374,8 +375,8 @@ type tunableCheck func(act, exp *types.ServiceConfig, o *lintOptions) string
 //     volumes that are not bekup's other volumes or binds inside the
 //     deployment directory outside bekup's files.
 func operatorTunable(name string) map[string]tunableCheck {
-	if name == "setup" {
-		return nil
+	if name == "setup" || slices.Contains(setupWebServices, name) {
+		return nil // exactly as shipped (D-203, D-217)
 	}
 	t := map[string]tunableCheck{
 		"deploy": checkDeploy, "cpus": anyValue, "mem_limit": anyValue,

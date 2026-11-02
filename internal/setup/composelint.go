@@ -14,7 +14,19 @@ import (
 )
 
 // bekupServices are the services that run the bekup image.
-var bekupServices = []string{"setup", "certs-init", "migrate", "admin", "serve", "runner"}
+var bekupServices = []string{"setup", "setup-web", "setup-web-db", "certs-init", "migrate", "admin", "serve", "runner"}
+
+// setupServices run as root with only CAP_CHOWN and bind-mount the
+// deployment directory: the setup container and the browser setup's
+// first run (D-217).
+var setupServices = []string{"setup", "setup-web"}
+
+// setupWebServices are the browser setup's services (D-217): the only
+// bekup services that publish a port, the setup server's container port.
+var setupWebServices = []string{"setup-web", "setup-web-db"}
+
+// setupWebPort is the container port of the browser setup.
+const setupWebPort = 8443
 
 // rootInitServices are the shipped one-shot services that run as root to
 // chown a named volume for the bundled proxy (no binds, no network).
@@ -38,7 +50,7 @@ func proxyServices(v Variant) []string {
 // a low port.
 func allowedCaps(name string) []string {
 	switch {
-	case name == "setup":
+	case slices.Contains(setupServices, name):
 		return []string{"CHOWN"}
 	case slices.Contains(rootInitServices, name):
 		return []string{"CHOWN", "FOWNER"}
@@ -253,7 +265,8 @@ func lintService(svc *types.ServiceConfig, o lintOptions, haveImage bool, bekupI
 	if !slices.Contains([]string{"", "private"}, svc.Cgroup) {
 		add(SeverityError, "service %q: `cgroup: %s` shares the host's cgroup namespace; not allowed", shown, bounded(svc.Cgroup))
 	}
-	rootAllowed := name == "setup" || slices.Contains(rootInitServices, name)
+	isSetup := slices.Contains(setupServices, name)
+	rootAllowed := isSetup || slices.Contains(rootInitServices, name)
 	switch {
 	case svc.UserNSMode == "":
 	case svc.UserNSMode == "host" && name == "runner":
@@ -289,7 +302,7 @@ func lintService(svc *types.ServiceConfig, o lintOptions, haveImage bool, bekupI
 	if !rootAllowed && !nonRootUser(svc.User) {
 		add(SeverityError, "service %q: user %q is not a numeric non-root UID[:GID] (the image default may be root)", shown, bounded(svc.User))
 	}
-	if rootAllowed && name != "setup" && svc.NetworkMode != "none" {
+	if rootAllowed && !isSetup && svc.NetworkMode != "none" {
 		add(SeverityError, "service %q runs as root: it must keep `network_mode: none`", shown)
 	}
 	for _, h := range append(slices.Clone(svc.PostStart), svc.PreStop...) {
@@ -314,10 +327,18 @@ func lintService(svc *types.ServiceConfig, o lintOptions, haveImage bool, bekupI
 			add(SeverityError, "service %q: label_file %q is outside the deployment directory", shown, bounded(f))
 		}
 	}
-	if len(svc.Ports) > 0 && !slices.Contains(proxyServices(o.variant), name) {
+	switch {
+	case slices.Contains(setupWebServices, name):
+		// The browser setup's own port only (D-217).
+		for _, pt := range svc.Ports {
+			if pt.Target != setupWebPort || pt.Protocol != "" && pt.Protocol != "tcp" {
+				add(SeverityError, "service %q may publish only TCP port %d (the browser setup)", shown, setupWebPort)
+			}
+		}
+	case len(svc.Ports) > 0 && !slices.Contains(proxyServices(o.variant), name):
 		add(SeverityError, "service %q publishes ports; in the %s variant only the bundled proxy may (serve, runner and postgres stay unreachable from outside)", shown, o.variant)
 	}
-	if rootAllowed && name != "setup" && len(svc.Ports) > 0 {
+	if rootAllowed && !isSetup && len(svc.Ports) > 0 {
 		add(SeverityError, "service %q runs as root and may not publish ports", shown)
 	}
 }
@@ -337,8 +358,13 @@ func lintVolume(svc *types.ServiceConfig, v types.ServiceVolumeConfig, o lintOpt
 			}
 		case strings.Contains(src, "docker.sock") || strings.Contains(src, "podman.sock"):
 			add(SeverityError, "service %q mounts the container engine socket %q (root on the host); only the runner may, at %s", shown, bounded(src), runnerSocketTarget)
-		case svc.Name == "setup" && src == filepath.Clean(o.root):
-		case rootAllowed && svc.Name != "setup":
+		case slices.Contains(setupServices, svc.Name) && src == filepath.Clean(o.root):
+		case svc.Name == "setup-web-db" && src == filepath.Clean(o.root):
+			// The database run reads the deployment (D-217).
+			if !v.ReadOnly {
+				add(SeverityError, "service %q: mount the deployment directory read-only", shown)
+			}
+		case rootAllowed && !slices.Contains(setupServices, svc.Name):
 			add(SeverityError, "service %q runs as root and may only mount named volumes (bind %q)", shown, bounded(src))
 		case !insideDir(o.root, src):
 			add(SeverityError, "service %q bind-mounts %q from outside the deployment directory (host paths are not allowed)", shown, bounded(src))

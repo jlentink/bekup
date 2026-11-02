@@ -229,7 +229,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			for name, svc := range project.Services {
 				ver, mode := svc.Environment["BEKUP_SETUP_VERSION"], svc.Environment["BEKUP_IMAGE_MODE"]
 				switch name {
-				case "migrate", "serve", "runner":
+				case "migrate", "serve", "runner", "setup-web-db":
 					if ver == nil || *ver != "1.2.3" || mode == nil || *mode != wantMode {
 						t.Fatalf("%s: BEKUP_SETUP_VERSION %v, BEKUP_IMAGE_MODE %v (want 1.2.3, %q)", name, ver, mode, wantMode)
 					}
@@ -242,6 +242,31 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			for _, name := range []string{"migrate", "serve", "runner"} {
 				if _, ok := project.Services[name]; !ok {
 					t.Fatalf("no %s service", name)
+				}
+			}
+			// D-217: the browser setup publishes only its own port, from
+			// both services, which run only on request (profile).
+			cmd = exec.CommandContext(ctx, "docker", "compose", "--profile", "setup-web", "config", "--format", "json")
+			cmd.Dir = dir
+			cmd.Env = append(cmd.Env[:0:0], "PATH="+os.Getenv("PATH"), "HOME="+os.Getenv("HOME"))
+			if out, err = cmd.Output(); err != nil {
+				t.Fatalf("docker compose --profile setup-web config: %v\n%s", err, out)
+			}
+			var web struct {
+				Services map[string]struct {
+					Ports []struct {
+						Target    int    `json:"target"`
+						Published string `json:"published"`
+					} `json:"ports"`
+				} `json:"services"`
+			}
+			if err := json.Unmarshal(out, &web); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"setup-web", "setup-web-db"} {
+				ports := web.Services[name].Ports
+				if len(ports) != 1 || ports[0].Target != 8443 || ports[0].Published != "8443" {
+					t.Fatalf("%s ports %+v", name, ports)
 				}
 			}
 			// D-215: the own-proxy shapes and the database container's
@@ -263,7 +288,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 				for name, svc := range project.Services {
 					// D-216: migrate and admin reach a database container
 					// on the proxy's network there.
-					shared := ov.DBOnProxy && (name == "migrate" || name == "admin")
+					shared := ov.DBOnProxy && slices.Contains(dbNetworkServices, name)
 					if _, on := svc.Networks["proxy"]; on != (name == "serve" || shared) {
 						t.Fatalf("%s on the proxy network: %v", name, on)
 					}
@@ -275,7 +300,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			if c.db == DBExternal {
 				for name, svc := range project.Services {
 					_, on := svc.Networks["database"]
-					if want := ov.DBNetwork && !ov.DBOnProxy && slices.Contains([]string{"migrate", "serve", "admin"}, name); on != want {
+					if want := ov.DBNetwork && !ov.DBOnProxy && (name == "serve" || slices.Contains(dbNetworkServices, name)); on != want {
 						t.Fatalf("%s on the database network: %v", name, on)
 					}
 				}

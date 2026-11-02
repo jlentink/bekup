@@ -5,7 +5,8 @@
 #   docker run ... bekup runner    # the only component with Docker access (D-003)
 #
 # Stages:
-#   web      Vite build of web/ (placeholder page when web/ is absent or skipped)
+#   web      Vite build of web/: the UI and the browser setup's UI (placeholder
+#            pages when web/ is absent or skipped)
 #   build    static Go binary with the web build embedded
 #   runtime  distroless static, nonroot, no shell (default target)
 #   dev      Go toolchain + air hot reload, used only by docker-compose.dev.yml
@@ -67,18 +68,24 @@ RUN --mount=type=cache,id=bekup-pnpm-store,target=/pnpm/store \
 
 COPY --from=websrc /websrc/ ./
 
+# The placeholder has no browser setup (dist-setup without index.html):
+# `setup web` then refuses to start (D-217) instead of listening, as root,
+# for a page that cannot set anything up.
 RUN set -eu; \
     if [ "${WEB_BUILD}" != "skip" ] && [ -f package.json ]; then \
         pnpm build; \
+        test -f dist-setup/index.html; \
     else \
-        echo "web/ not present or WEB_BUILD=skip: emitting placeholder UI"; \
-        rm -rf dist; mkdir -p dist; \
+        echo "web/ not present or WEB_BUILD=skip: placeholder UI, no browser setup"; \
+        rm -rf dist dist-setup; mkdir -p dist dist-setup; \
         printf '%s\n' '<!doctype html>' \
           '<html lang="en"><head><meta charset="utf-8"><title>bekup</title></head>' \
           '<body><p>bekup: the web UI was not included in this build.</p></body></html>' \
           > dist/index.html; \
+        : > dist-setup/.gitkeep; \
     fi; \
-    test -f dist/index.html
+    test -f dist/index.html; \
+    test -d dist-setup
 
 # ---------------------------------------------------------------------------
 # Stage 2: Go build
@@ -120,8 +127,10 @@ RUN --mount=type=bind,from=runtime-base,source=/etc/ssl/certs/ca-certificates.cr
     --mount=type=cache,id=bekup-gomod,target=/go/pkg/mod \
     --mount=type=cache,id=bekup-gobuild,target=/root/.cache/go-build \
     go run ./internal/db/cabundlecheck /etc/bekup-system-ca/ca-certificates.crt
-# The embedded UI (web/embed.go uses go:embed on web/dist).
+# The embedded UIs (web/embed.go uses go:embed on web/dist and, for the
+# browser setup of `bekup setup web`, web/dist-setup; D-217).
 COPY --from=web /src/web/dist ./web/dist
+COPY --from=web /src/web/dist-setup ./web/dist-setup
 
 # The version comes from --build-arg VERSION or the VERSION file and is
 # checked against strict SemVer before it reaches -ldflags. The empty

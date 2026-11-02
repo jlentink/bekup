@@ -1,18 +1,15 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
-	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
+	"github.com/jlentink/bekup/internal/dbsetup"
 	"github.com/jlentink/bekup/internal/logging"
 )
 
@@ -177,112 +174,13 @@ func runBootstrap(c *cobra.Command, g *globalFlags, bf *bootstrapFlags) error {
 	if err := checkDeployment(c, logger, res.Dev, "db bootstrap"); err != nil {
 		return err
 	}
-	cfg := res.Config
-	d := &cfg.Database
-	if !d.FieldsMode() {
-		return errors.New("bekup db bootstrap needs fields mode: set database.host, database.password_file and database.owner_password_file (docs/installation/external-database.md)")
-	}
-	if err := checkAdminTLS(c.ErrOrStderr(), d.TLSMode, bf.allowInsecure); err != nil {
-		return err
-	}
-	admin := config.DBCredentials{Host: d.Host, Port: uint16(d.Port), Database: bf.adminDatabase} //nolint:gosec // G115: validated port
-	if bf.adminHost != "" {
-		admin.Host = bf.adminHost
-	}
-	if bf.adminPort != 0 {
-		if bf.adminPort < 1 || bf.adminPort > 65535 {
-			return errors.New("--admin-port must be between 1 and 65535")
-		}
-		admin.Port = uint16(bf.adminPort)
-	}
-	if bf.adminDatabase != "postgres" && !config.ValidDBName(bf.adminDatabase) {
-		return fmt.Errorf("--admin-database: invalid name %q", bf.adminDatabase)
-	}
-	if bf.adminDatabase == d.Name {
-		return errors.New("--admin-database must be a maintenance database (e.g. postgres), not bekup's own database")
-	}
-	bopts := db.BootstrapOptions{
-		Database: d.Name, SingleAccount: d.SingleAccount, AdoptExistingRoles: bf.adoptExisting,
-		ResetPasswords: bf.resetPasswords, DryRun: bf.dryRun, ConnectTimeout: d.ConnectTimeout.D(),
-	}
-	if d.SingleAccount {
-		if bf.adminUser != "" && bf.adminUser != d.User {
-			return fmt.Errorf("single-account mode: --admin-user must be database.user (%q) or omitted", d.User)
-		}
-		if bf.adminPasswordFile != "" || bf.resetPasswords {
-			return errors.New("single-account mode uses database.user with database.password_file; --admin-password-file and --reset-passwords do not apply")
-		}
-		admin.User = d.User
-		if admin.Password, err = config.ReadSecretFile(d.PasswordFile); err != nil {
-			return fmt.Errorf("database.password_file: %w", err)
-		}
-	} else {
-		if bf.adminUser == "" {
-			return errors.New("--admin-user is required (the administrator account that may create roles and databases)")
-		}
-		if bf.resetPasswords && !bf.adoptExisting {
-			return errors.New("--reset-passwords changes existing roles: add --adopt-existing-roles after reviewing them")
-		}
-		if !config.ValidDBRoleName(bf.adminUser) {
-			return fmt.Errorf("--admin-user: invalid role name %q (not a bekup_* or pg_* name)", bf.adminUser)
-		}
-		admin.User = bf.adminUser
-		if admin.Password, err = readAdminPassword(c, bf.adminPasswordFile); err != nil {
-			return err
-		}
-	}
-	defer admin.Zero()
-	logging.DefaultRegistry.Register(admin.Password)
-	bopts.Admin = admin
-	if bopts.TLS, err = db.LoadTLSOptions(cfg); err != nil {
-		return fmt.Errorf("database TLS: %w", err)
-	}
-	if !d.SingleAccount {
-		if bopts.OwnerPassword, err = readRolePassword("database.owner_password_file", d.OwnerPasswordFile); err != nil {
-			return err
-		}
-		defer config.Zero(bopts.OwnerPassword)
-		if bopts.AppPassword, err = readRolePassword("database.password_file", d.PasswordFile); err != nil {
-			return err
-		}
-		defer config.Zero(bopts.AppPassword)
-	}
-
-	ctx := c.Context()
-	out := c.OutOrStdout()
-	br, err := db.Bootstrap(ctx, bopts)
-	if werr := writeBootstrap(out, br, bf.dryRun); werr != nil {
-		return werr
-	}
-	if err != nil {
-		return fmt.Errorf("bootstrap failed: %w", err)
-	}
-	if bf.dryRun {
-		return nil
-	}
-	return verifyAfterBootstrap(c, cfg, logger, br, bf)
-}
-
-// checkAdminTLS refuses an admin connection weaker than verify-full unless
-// the operator explicitly allows it (D-207): the administrator password
-// would cross an unverified (require) or unencrypted (disable) connection.
-// SCRAM channel binding still protects the password itself with require,
-// but not the session's DDL against a machine in the middle.
-func checkAdminTLS(stderr io.Writer, mode string, allow bool) error {
-	if mode == config.DBTLSVerifyFull {
-		return nil
-	}
-	what := "without verifying the server certificate"
-	if mode == config.DBTLSDisable {
-		what = "WITHOUT ENCRYPTION"
-	}
-	if !allow {
-		return fmt.Errorf("database.tls_mode = %q: the administrator account would connect %s; use tls_mode verify-full (--tls-mode verify-full --tls-ca-file <ca.pem>), "+
-			"or pass --allow-insecure-admin-connection to accept the risk", mode, what)
-	}
-	_, err := fmt.Fprintf(stderr, "\n!!! WARNING: INSECURE ADMIN CONNECTION (tls_mode %s): the administrator account connects %s.\n"+
-		"!!! A machine in the middle could impersonate the server or alter what bootstrap sends. Use verify-full whenever possible.\n\n", mode, what)
-	return err
+	return dbsetup.Bootstrap(c.Context(), dbsetup.BootstrapRequest{
+		Config: res.Config, AdminUser: bf.adminUser, AdminPasswordFileSet: bf.adminPasswordFile != "",
+		AdminPassword: func() ([]byte, error) { return readAdminPassword(c, bf.adminPasswordFile) },
+		AdminDatabase: bf.adminDatabase, AdminHost: bf.adminHost, AdminPort: bf.adminPort,
+		AdoptExisting: bf.adoptExisting, ResetPasswords: bf.resetPasswords, DryRun: bf.dryRun, AllowInsecure: bf.allowInsecure,
+		Out: c.OutOrStdout(), Warn: c.ErrOrStderr(), Logger: logger,
+	})
 }
 
 // readAdminPassword reads the administrator password from the file (secret
@@ -305,127 +203,4 @@ func readAdminPassword(c *cobra.Command, file string) ([]byte, error) {
 		return nil, errors.New("empty administrator password")
 	}
 	return pw, nil
-}
-
-func readRolePassword(key, path string) ([]byte, error) {
-	if path == "" {
-		return nil, fmt.Errorf("%s is not set: bootstrap sets the role passwords from the configured files", key)
-	}
-	pw, err := config.ReadSecretFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", key, err)
-	}
-	logging.DefaultRegistry.Register(pw)
-	return pw, nil
-}
-
-func writeBootstrap(w io.Writer, r *db.BootstrapResult, dryRun bool) error {
-	if r == nil {
-		return nil
-	}
-	var b strings.Builder
-	if r.ServerVersion != "" {
-		fmt.Fprintf(&b, "server:  PostgreSQL %s (admin role %s)\n", r.ServerVersion, r.AdminRole)
-		fmt.Fprintf(&b, "tls:     %s\n", tlsFactsLine(r.TLS))
-	}
-	verb := "done"
-	if dryRun {
-		verb = "would do"
-	}
-	if r.ManualRevoke != "" {
-		fmt.Fprintf(&b, "\n!!! ACTION REQUIRED: manual REVOKE needed. The admin account still holds %s; run as an administrator:\n!!!   %s\n\n", db.OwnerRole, r.ManualRevoke)
-	}
-	for _, a := range r.Actions {
-		fmt.Fprintf(&b, "%s: %s\n", verb, a)
-	}
-	if r.Citext != "" {
-		fmt.Fprintf(&b, "citext:  %s\n", r.Citext)
-	}
-	for _, wn := range r.Warnings {
-		fmt.Fprintf(&b, "WARNING: %s\n", wn)
-	}
-	_, err := io.WriteString(w, b.String())
-	return err
-}
-
-// verifyAfterBootstrap logs in as the configured roles, runs the D-099 role
-// checks and the migrate preflight, and records cli.db.bootstrap when the
-// installation already has its audit log (D-207: before the first
-// migration there is no audit log; the printed report is the evidence).
-func verifyAfterBootstrap(c *cobra.Command, cfg *config.Bekup, logger *slog.Logger, br *db.BootstrapResult, bf *bootstrapFlags) error {
-	ctx := c.Context()
-	out := c.OutOrStdout()
-	hint := "if the role's stored password differs from the configured file or is an MD5 hash, run bootstrap again with --adopt-existing-roles --reset-passwords"
-	m, err := openMigrator(ctx, cfg)
-	if err != nil {
-		return fmt.Errorf("check as %s failed (%s): %w", db.OwnerRole, hint, err)
-	}
-	defer func() {
-		if cerr := m.Close(context.WithoutCancel(ctx)); cerr != nil {
-			logger.WarnContext(ctx, "closing database connection failed", slog.Any("error", cerr))
-		}
-	}()
-	rep, checkErr := m.Check(ctx)
-	if werr := writePreflight(out, rep, checkErr); werr != nil {
-		return werr
-	}
-	if checkErr != nil {
-		return errors.New("bootstrap finished, but the migrate preflight failed (see above)")
-	}
-
-	poolOpts, err := db.PoolOptionsFromConfig(cfg, "bekup-bootstrap")
-	if err != nil {
-		return fmt.Errorf("database TLS: %w", err)
-	}
-	poolOpts.MaxConns = 2
-	creds, err := cfg.AppDBCredentials()
-	if err != nil {
-		return fmt.Errorf("read database credentials: %w", err)
-	}
-	login := ""
-	if creds.SetRole != "" {
-		login = creds.User
-	}
-	cctx, cancel := context.WithTimeout(ctx, cfg.Database.ConnectTimeout.D())
-	pool, err := db.NewPool(cctx, creds, poolOpts)
-	cancel()
-	creds.Zero()
-	if err != nil {
-		return fmt.Errorf("log in as %s failed (%s): %w", db.AppRole, hint, err)
-	}
-	defer pool.Close()
-	if err := db.CheckAppRole(ctx, pool, login); err != nil {
-		return fmt.Errorf("role check of %s failed: %w", db.AppRole, err)
-	}
-	if err := printf(c, "roles:   %s and %s log in and pass the role checks\n", db.OwnerRole, db.AppRole); err != nil {
-		return err
-	}
-	schemaErr := db.CheckSchemaVersion(ctx, pool)
-	if schemaErr != nil {
-		if !errors.Is(schemaErr, db.ErrSchemaBehind) {
-			return schemaErr
-		}
-		return printf(c, "next:    bekup migrate up (the audit log starts with the migrated schema; this report is the bootstrap's record)\n")
-	}
-	if !br.Changed {
-		return printf(c, "nothing changed; the schema is current\n")
-	}
-	_, err = newCLIAuditor(pool).Record(ctx, audit.CLIEvent(audit.ActionCLIDBBootstrap, "database", cfg.Database.Name, bootstrapAuditDetails(cfg, br, bf)))
-	if err != nil {
-		return fmt.Errorf("the changes were applied, but the audit entry could not be recorded: %w", err)
-	}
-	return printf(c, "recorded in the audit log (cli.db.bootstrap)\n")
-}
-
-// bootstrapAuditDetails are the details of cli.db.bootstrap. The keys must
-// not look like secrets to the redaction (logging.IsSecretKey), or the
-// audit entry would lose them.
-func bootstrapAuditDetails(cfg *config.Bekup, br *db.BootstrapResult, bf *bootstrapFlags) audit.Details {
-	return audit.Details{
-		"actions":        br.Actions,
-		"admin_role":     br.AdminRole,
-		"single_account": cfg.Database.SingleAccount,
-		"rotated_logins": bf.resetPasswords,
-		"adopted_roles":  bf.adoptExisting,
-	}
 }

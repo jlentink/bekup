@@ -121,7 +121,7 @@ See docs/installation/compose.md.`,
 	f.StringVar(&ownership, "ownership", string(setup.OwnershipAuto), "auto, chown, print or none")
 	f.BoolVar(&plain, "plain", false, "plain-text interface: numbered choices, no escape sequences (a generated passphrase stays in the scrollback)")
 	f.BoolVar(&allowVersionMismatch, "allow-version-mismatch", false, "accept an image tag that differs from this bekup version")
-	cmd.AddCommand(newSetupInitCmd(), newSetupUpgradeCmd(), newSetupCheckCmd(), newSetupComposeCmd(), newSetupRenewCmd())
+	cmd.AddCommand(newSetupInitCmd(), newSetupUpgradeCmd(), newSetupCheckCmd(), newSetupComposeCmd(), newSetupRenewCmd(), newSetupWebCmd())
 	return cmd
 }
 

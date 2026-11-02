@@ -518,7 +518,7 @@ func (c *checker) composeFiles() {
 		}
 	}
 	env := projectEnv(in.dotenv, in.lookup, in.docs()...)
-	findings := lintComposeFiles(&in, env, c.st.Variant, img.String(), expectedDocs(expected, c.st.overlays()), false)
+	findings := lintWithOverlays(&in, env, c.st.Variant, img.String(), expected, c.st.overlays(), false)
 	c.findings = append(c.findings, findings...)
 	c.overlayHint(findings)
 }
@@ -530,7 +530,7 @@ func overlayFinding(findings []Finding) bool {
 		if f.Severity != SeverityError {
 			continue
 		}
-		for _, s := range []string{`service "serve"`, `service "migrate"`, `service "admin"`, `network "`} {
+		for _, s := range []string{`service "serve"`, `service "migrate"`, `service "admin"`, `service "setup-web-db"`, `network "`} {
 			if strings.Contains(f.Msg, s) {
 				return true
 			}

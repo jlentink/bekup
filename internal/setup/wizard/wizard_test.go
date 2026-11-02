@@ -794,3 +794,23 @@ func TestInitWizardOwnProxyAndDatabaseContainer(t *testing.T) {
 		t.Fatalf("flags %s", got)
 	}
 }
+
+// The intro names the interface's controls: the browser setup (D-217)
+// has neither Esc nor Ctrl+C, and its container listens on a network.
+func TestWelcomeNamesTheInterface(t *testing.T) {
+	t.Parallel()
+	for _, browser := range []bool{false, true} {
+		s := &Script{}
+		env := testEnv(t, s)
+		env.Browser = browser
+		if _, err := RunInit(env); !errors.Is(err, ErrAborted) {
+			t.Fatalf("browser %v: %v", browser, err)
+		}
+		text := s.Text.String()
+		terminal := strings.Contains(text, "Ctrl+C quits") && strings.Contains(text, "has no network")
+		web := strings.Contains(text, "Back goes to the") && strings.Contains(text, "never connects to a database")
+		if browser == terminal || browser != web {
+			t.Fatalf("browser %v: intro\n%s", browser, text)
+		}
+	}
+}

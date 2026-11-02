@@ -142,6 +142,56 @@ services:
         limits: { cpus: "1.00", memory: 512M, pids: 64 }
 
   # -------------------------------------------------------------------------
+  # setup-web: the browser setup (D-217), run 1 of 2. The setup service's
+  # hardening (root with only CAP_CHOWN for the files' owners, read-only,
+  # no-new-privileges, no logs: the terminal shows a one-time access code)
+  # plus HTTPS on the published port; no other network. Run it with
+  #   docker compose run --rm --service-ports setup-web
+  # and open the printed address. It stops when it is finished, idle for
+  # 30 minutes, after 2 hours or after 10 wrong codes.
+  # -------------------------------------------------------------------------
+  setup-web:
+    image: *bekup-image
+    profiles: [setup-web]
+    user: "0:0"
+    entrypoint: ["/usr/local/bin/bekup", "setup"]
+    command: ["web"]
+    environment:
+      BEKUP_IMAGE: *bekup-image
+      DOCKER_GID: ${DOCKER_GID:-}
+      # The address you open setup with (certificate and printed URL) and
+      # the published port.
+      BEKUP_SETUP_WEB_HOST: ${BEKUP_SETUP_WEB_HOST:-}
+      BEKUP_SETUP_WEB_PORT: ${BEKUP_SETUP_WEB_PORT:-8443}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt:
+      - no-new-privileges:true
+    networks: [setup-web]
+    ports:
+      - target: 8443
+        published: "${BEKUP_SETUP_WEB_PORT:-8443}"
+        protocol: tcp
+    logging:
+      driver: none
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: .
+        target: /deploy
+        bind:
+          create_host_path: false
+    restart: "no"
+    deploy:
+      resources:
+        # scrypt sealing of the CA key needs about 256 MiB.
+        limits: { cpus: "1.00", memory: 512M, pids: 64 }
+
+  # -------------------------------------------------------------------------
   # certs-init: one-shot generation of the private CA and per-component mTLS
   # certificates (task 0.6, `bekup certs init`). Run it explicitly:
   #   docker compose --profile setup run --rm certs-init
@@ -215,6 +265,59 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 256M, pids: 64 }
+
+  # -------------------------------------------------------------------------
+  # setup-web-db: the browser setup (D-217), run 2 of 2: db bootstrap (your
+  # own PostgreSQL) and migrate up, asked in the browser. migrate's user,
+  # configuration, secrets and networks plus the published port; reads
+  # the deployment directory only. Run it after setup-web with
+  #   docker compose run --rm --service-ports setup-web-db
+  # -------------------------------------------------------------------------
+  setup-web-db:
+    <<: *bekup-hardening
+    profiles: [setup-web]
+    entrypoint: ["/usr/local/bin/bekup", "setup"]
+    command: ["web", "--database"]
+    environment:
+      BEKUP_DATABASE_OWNER_URL_FILE: /run/secrets/bekup_database_owner_url
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
+      BEKUP_SETUP_WEB_HOST: ${BEKUP_SETUP_WEB_HOST:-}
+      BEKUP_SETUP_WEB_PORT: ${BEKUP_SETUP_WEB_PORT:-8443}
+    configs:
+      - source: bekup_toml
+        target: /etc/bekup/bekup.toml
+    secrets:
+      - bekup_database_owner_url
+      # The final check logs in as bekup_app too (the role checks serve
+      # runs at startup); it holds the owner's login anyway.
+      - bekup_database_url
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
+    networks: [backend, setup-web]
+    ports:
+      - target: 8443
+        published: "${BEKUP_SETUP_WEB_PORT:-8443}"
+        protocol: tcp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # The terminal shows a one-time access code: no logs.
+    logging:
+      driver: none
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: .
+        target: /deploy
+        read_only: true
+        bind:
+          create_host_path: false
     restart: "no"
     deploy:
       resources:
@@ -753,6 +856,10 @@ networks:
   # profiles (traefik | nginx, certbot) attach here. Published ports need a
   # non-internal network, so the proxy cannot publish them on `frontend`.
   edge: {}
+  # Browser setup (D-217) <-> your browser: the published port of the
+  # setup-web services, which exist only while they run. Not internal (a
+  # published port needs that).
+  setup-web: {}
 
 volumes:
   postgres-data: {}
