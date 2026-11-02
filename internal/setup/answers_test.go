@@ -83,7 +83,7 @@ func TestAnswersValidate(t *testing.T) {
 		{name: "own proxy container dotted", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "proxy.v2" }, field: "proxy-container"},
 		{name: "own proxy container serve", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "serve" }, field: "proxy-container"},
 		{name: "own proxy container alias", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "BEKUP-SERVE" }, field: "proxy-container"},
-		{name: "own proxy container traefik", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "traefik" }, field: "proxy-container"},
+		{name: "own proxy container traefik-init", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyContainer = "traefik-init" }, field: "proxy-container"},
 		// Docker network names are case-sensitive: "Bridge" is user-defined.
 		{name: "own proxy network Bridge", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.ProxyNetwork = "Bridge" }},
 		{name: "own proxy join with link flags", proxy: ProxyNone, mut: func(a *Answers) { ownProxyJoin(a); a.Link.Subnet = "10.9.9.0/28" }, field: "proxy-subnet"},

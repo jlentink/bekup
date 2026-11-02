@@ -241,7 +241,7 @@ func TestParseStateDBNetworkLink(t *testing.T) {
 			t.Errorf("%s: %v", net, err)
 		}
 	}
-	for name, ok := range map[string]bool{"caddy": true, "npm.app": false, "serve": false, "Traefik": false} {
+	for name, ok := range map[string]bool{"caddy": true, "npm.app": false, "serve": false, "Traefik": true, "Traefik-Init": false} {
 		s := validState()
 		s.Variant, s.Proxy, s.TLSMode, s.ProxyNetworkMode = VariantOwnProxy, ProxyExternal, "", ProxyJoin
 		s.ProxyNetwork, s.ProxyContainer = "web", name

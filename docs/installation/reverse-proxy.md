@@ -353,8 +353,8 @@ Network names: letters, digits, `_ . -`, at most 63 characters. Container
 names: letters, digits, `_ -`, at most 63 characters, **no dots** (so never
 an IP address or a DNS name) and none of bekup's own service names
 (`serve`, `runner`, `migrate`, `admin`, `setup`, `certs-init`, `postgres`,
-`bekup-serve`, `worker`, `traefik`, `traefik-init`); a network alias of the
-proxy works too.
+`bekup-serve`, `worker`, `traefik-init`; your own Traefik may be named
+`traefik`); a network alias of the proxy works too.
 
 ### Set it up
 

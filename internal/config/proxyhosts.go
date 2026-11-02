@@ -36,10 +36,12 @@ var containerNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$`)
 // bekup's own compose files (D-215): a trusted proxy container named like
 // one of them would resolve to (or collide with) a bekup container on a
 // shared network, so they are refused (case-insensitive, like Docker's
-// DNS).
+// DNS). "traefik" is allowed: bekup's own Traefik exists only in the
+// traefik variant, which does not use trusted_proxy_hosts, and an
+// operator's own Traefik is commonly named so (D-215 amendment 2).
 var ReservedContainerNames = []string{
 	"serve", "runner", "migrate", "admin", "setup", "certs-init", "postgres",
-	"bekup-serve", "worker", "traefik", "traefik-init",
+	"bekup-serve", "worker", "traefik-init",
 }
 
 // IsReservedContainerName reports whether s is one of

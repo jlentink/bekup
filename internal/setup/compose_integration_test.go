@@ -24,9 +24,9 @@ func TestIntegrationComposeConfig(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		dockertest.Skipf(t, "docker CLI not found: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	if out, err := exec.CommandContext(ctx, "docker", "compose", "version").CombinedOutput(); err != nil {
+	vctx, vcancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer vcancel()
+	if out, err := exec.CommandContext(vctx, "docker", "compose", "version").CombinedOutput(); err != nil {
 		dockertest.Skipf(t, "docker compose not available: %v: %s", err, out)
 	}
 	variants := map[string]func() Answers{
@@ -111,6 +111,10 @@ func TestIntegrationComposeConfig(t *testing.T) {
 	cases["setup-first-full-db-container"] = tc{answers: func() Answers { return testAnswers(t, ProxyTraefik) }, db: DBExternal, dbDocker: true}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			// A deadline per case: one for the whole table runs out under
+			// load as cases are added.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
 			dir := t.TempDir()
 			image := c.image
 			if image == "" {
@@ -143,18 +147,18 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			case c.variant == "":
 				o := testOptions(t, dir, c.answers())
 				withDB(&o)
-				if err := Init(o); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+				if err := Init(o); err != nil {
 					t.Fatalf("init: %v", err)
 				}
 			case c.placeholder:
 				writePlaceholderDB(t, dir, c.variant, c.db)
 				t.Setenv(ImageEnvVar, image)
-				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil {
 					t.Fatalf("init: %v\n%s", err, out)
 				}
 			default:
 				writeReleaseDB(t, dir, c.variant, c.db, "ghcr.io/jlentink/bekup:1.2.3@"+testDigest)
-				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil { //nolint:contextcheck // Init has no context (synchronous CLI)
+				if out, err := composeFirstInit(t, dir, c.variant, withDB); err != nil {
 					t.Fatalf("init: %v\n%s", err, out)
 				}
 			}

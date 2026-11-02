@@ -237,7 +237,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-212](#d-212-follow-ghcriojlentinkbekuplatest-an-opt-in-mutable-tag-for-the-bekup-image-with-a-setup-version-guard) | Follow `ghcr.io/jlentink/bekup:latest`: an opt-in mutable tag for the bekup image with a setup version guard | proposed |
 | [D-213](#d-213-setup-compose-lint-yaml-alias-limits-before-compose-go-and-a-load-deadline) | setup compose lint: YAML alias limits before compose-go and a load deadline | proposed |
 | [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
-| [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle) |
+| [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name) |
 
 ---
 
@@ -13111,6 +13111,16 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      database networks; Docker address pools outside the private ranges
      (CGNAT, global IPv6) are never trusted (fail closed; troubleshooting
      in reverse-proxy.md).
+- **Amendment 2 (2026-11-02, user decision; proposed):** `traefik` is no
+  longer a reserved container name (Amendment 1 item 3 and setup's
+  checks): in the own-proxy shapes no bekup container carries that name,
+  so it can only be the operator's proxy, and where bekup's own Traefik
+  runs (the `traefik` variant, the `full` profile) it is the proxy that
+  forwards to serve, so trusting it is right; an operator's own Traefik
+  is commonly named `traefik`. `traefik-init` and the other names stay
+  reserved. Name trust keeps every other rule
+  (inside serve's proxy-network subnet, one address per family, fresh
+  resolution).
 - **Alternatives considered:** keeping fixed addresses on the operator's
   network (impossible without a subnet there); trusting the whole proxy
   network (any container on it could forge client addresses); resolving

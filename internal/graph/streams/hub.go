@@ -61,16 +61,16 @@ const (
 	maxResyncSpread             = 5 * time.Second
 	sessionNoticeBuffer         = 8
 	minRevalidateInterval       = time.Second
-	followUpAfterEventFirst     = 200 * time.Millisecond
-	followUpAfterEventSecond    = time.Second //nolint:revive // "Second" is the ordinal (first, second, third follow-up), not a unit
-	followUpAfterEventThird     = 3 * time.Second
+	followUpEarly               = 200 * time.Millisecond
+	followUpMiddle              = time.Second
+	followUpLate                = 3 * time.Second
 	sessionEventSubscriberQueue = 256
 )
 
 // followUps are the extra re-checks after a session event that did not
 // (yet) invalidate the session: a local event can arrive before the
 // revoking transaction commits.
-var followUps = []time.Duration{followUpAfterEventFirst, followUpAfterEventSecond, followUpAfterEventThird}
+var followUps = []time.Duration{followUpEarly, followUpMiddle, followUpLate}
 
 // Errors of Acquire.
 var (
