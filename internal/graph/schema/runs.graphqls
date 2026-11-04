@@ -30,6 +30,8 @@ enum RunTrigger {
   MANUAL
   "startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward."
   EARLY
+  "A run request of an external API token (CI)."
+  API
 }
 
 "What a run item backs up."
@@ -105,11 +107,22 @@ type RunJobRef {
   deleted: Boolean!
 }
 
-"The user who started a manual run."
+"""
+Who started a manual, early or API run: the user, or for an API run the
+creator of the API token (apiToken names the token).
+"""
 type RunActor {
   userId: UUID!
   displayName: String!
   email: String!
+  "API runs: the token that requested the run (null once its request was pruned after 30 days, and for other runs)."
+  apiToken: RunApiToken
+}
+
+"The API token of an API run (never any part of the token itself)."
+type RunApiToken {
+  id: UUID!
+  name: String!
 }
 
 "A warning recorded by a run or item (fixed texts)."
@@ -306,7 +319,7 @@ type Run {
   job: RunJobRef!
   status: RunStatus!
   trigger: RunTrigger!
-  "The user of a manual run; admins and maintainers only (null for backup owners)."
+  "The user of a manual or early run, or the API token (and its creator) of an API run; admins and maintainers only (null for backup owners)."
   triggeredBy: RunActor
   scheduledFor: Time
   attempt: Int!

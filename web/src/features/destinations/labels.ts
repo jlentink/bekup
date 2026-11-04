@@ -9,15 +9,18 @@ export const TYPE_LABEL: Record<DestinationType, string> = {
   DISK: "Disk",
   S3: "S3",
   SFTP: "SFTP",
+  WEBDAV: "WebDAV",
 };
 
 export const TYPE_DESCRIPTION: Record<DestinationType, string> = {
   DISK: "A directory below the server's storage.disk_root.",
   S3: "AWS S3 or an S3-compatible object store, optionally with Object Lock.",
   SFTP: "A directory on an SSH server, with a pinned host key.",
+  WEBDAV:
+    "A WebDAV folder: Nextcloud or ownCloud (TransIP STACK too), a NAS (Synology, QNAP), Apache, nginx, rclone or Caddy, or hosted WebDAV such as a Hetzner Storage Box.",
 };
 
-export const TYPES: readonly DestinationType[] = ["S3", "SFTP", "DISK"];
+export const TYPES: readonly DestinationType[] = ["S3", "SFTP", "WEBDAV", "DISK"];
 
 export const ENCRYPTION_LABEL: Record<S3Encryption, string> = {
   NONE: "None (bucket default)",
@@ -42,6 +45,7 @@ export const LOCK_DESCRIPTION: Record<ObjectLockMode, string> = {
 
 const STEP_LABEL: Record<string, string> = {
   connect: "Connect",
+  overwrite: "Overwrite protection",
   write: "Write probe",
   read: "Read back",
   delete: "Delete probe",

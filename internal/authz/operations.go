@@ -66,6 +66,9 @@ const (
 	OpSMTPTest            Operation = "smtp.test"
 	OpSSRFAllowlistView   Operation = "ssrf_allowlist.view"
 	OpSSRFAllowlistUpdate Operation = "ssrf_allowlist.update"
+	// OpRunnerTargetPolicyView reads the runner's target allowlist
+	// (runner.toml [targets], read-only; D-223).
+	OpRunnerTargetPolicyView Operation = "runner.target_policy_view"
 
 	// Runtime config reload (task 6.13, D-200): key names and per-process
 	// outcomes (admin); reloading every process needs a step-up.
@@ -112,7 +115,13 @@ const (
 	OpDestinationHostKeyFetch   Operation = "destination.host_key_fetch" // TOFU fetch, never trusted automatically
 	OpDestinationHostKeyConfirm Operation = "destination.host_key_confirm"
 	OpDestinationSSHKeyGenerate Operation = "destination.ssh_key_generate"
-	OpStorageUsageView          Operation = "destination.usage_view"
+	// WebDAV certificate pins (D-222): pinning captures the server's
+	// certificate again (a network operation) and pins it only if its key
+	// is the one the admin confirmed; clearing returns the destination to
+	// the system roots or its CA bundle (alerted).
+	OpDestinationTLSPin      Operation = "destination.tls_pin"
+	OpDestinationTLSPinClear Operation = "destination.tls_pin_clear"
+	OpStorageUsageView       Operation = "destination.usage_view"
 	// Unrecorded files (D-209): files in bekup's layout without a backup
 	// record, found by the daily scan. Admins only; a delete needs
 	// step-up (it removes data from the destination).
@@ -160,6 +169,19 @@ const (
 	// OpRunActorView shows who started a manual run (Run.triggeredBy):
 	// staff only, backup owners see null (task 3.7).
 	OpRunActorView Operation = "run.actor_view"
+
+	// External API tokens (D-220, Phase 2): per-job machine credentials of
+	// the CI API. Admins for any jobs; backup owners (role user) only for
+	// jobs they own: every job of a new token (OwnerJob over all of them),
+	// and revoking or changing the addresses of a token whose scope holds
+	// at least one job they own (the service passes that job). Maintainers
+	// never (D-220 item 4). Listing is filtered by JobScope: owners see
+	// the tokens covering their jobs and only those jobs of the scope.
+	// Every change needs a fresh step-up.
+	OpAPITokenCreate Operation = "api_token.create"
+	OpAPITokenList   Operation = "api_token.list"
+	OpAPITokenRevoke Operation = "api_token.revoke"
+	OpAPITokenUpdate Operation = "api_token.update" // updateApiTokenAddresses
 
 	// OpCalendarView is the job calendar (task 3.14, D-156): every role;
 	// the jobs are filtered by JobScope like a listing.
@@ -317,15 +339,16 @@ var policy = map[Operation]Rule{
 	OpMFAPolicyView:   {Roles: adminOnly},
 	OpMFAPolicyUpdate: {Roles: adminOnly, Fresh: FreshStepUp},
 
-	OpSettingsView:        {Roles: adminOnly},
-	OpSettingsUpdate:      {Roles: adminOnly, Fresh: FreshStepUp},
-	OpSMTPView:            {Roles: adminOnly},
-	OpSMTPUpdate:          {Roles: adminOnly, Fresh: FreshStepUp},
-	OpSMTPTest:            {Roles: adminOnly},
-	OpSSRFAllowlistView:   {Roles: adminOnly},
-	OpSSRFAllowlistUpdate: {Roles: adminOnly, Fresh: FreshStepUp},
-	OpConfigStatusView:    {Roles: adminOnly},
-	OpConfigReload:        {Roles: adminOnly, Fresh: FreshStepUp},
+	OpSettingsView:           {Roles: adminOnly},
+	OpSettingsUpdate:         {Roles: adminOnly, Fresh: FreshStepUp},
+	OpSMTPView:               {Roles: adminOnly},
+	OpSMTPUpdate:             {Roles: adminOnly, Fresh: FreshStepUp},
+	OpSMTPTest:               {Roles: adminOnly},
+	OpSSRFAllowlistView:      {Roles: adminOnly},
+	OpSSRFAllowlistUpdate:    {Roles: adminOnly, Fresh: FreshStepUp},
+	OpRunnerTargetPolicyView: {Roles: adminOnly},
+	OpConfigStatusView:       {Roles: adminOnly},
+	OpConfigReload:           {Roles: adminOnly, Fresh: FreshStepUp},
 
 	OpConnectionList:            {Roles: staff},
 	OpConnectionView:            {Roles: staff},
@@ -357,6 +380,8 @@ var policy = map[Operation]Rule{
 	OpDestinationHostKeyFetch:     {Roles: adminOnly},
 	OpDestinationHostKeyConfirm:   {Roles: adminOnly, Fresh: FreshStepUp},
 	OpDestinationSSHKeyGenerate:   {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationTLSPin:           {Roles: adminOnly, Fresh: FreshStepUp},
+	OpDestinationTLSPinClear:      {Roles: adminOnly, Fresh: FreshStepUp},
 	OpStorageUsageView:            {Roles: staff},
 	OpDestinationUnrecordedView:   {Roles: adminOnly},
 	OpDestinationUnrecordedDelete: {Roles: adminOnly, Fresh: FreshStepUp},
@@ -391,6 +416,13 @@ var policy = map[Operation]Rule{
 	OpRunStartEarly: {Roles: staff, Owner: OwnerJob},
 	OpRunCancel:     {Roles: staff},
 	OpRunActorView:  {Roles: staff},
+
+	// D-220: admins and backup owners; never maintainers, not even when
+	// they are listed as owners.
+	OpAPITokenCreate: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
+	OpAPITokenList:   {Roles: adminOnly, Owner: OwnerList},
+	OpAPITokenRevoke: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
+	OpAPITokenUpdate: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
 
 	OpCalendarView: {Roles: staff, Owner: OwnerList},
 

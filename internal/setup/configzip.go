@@ -12,7 +12,7 @@ import (
 // configFiles are the deployment files without key material (D-217): the
 // browser setup offers them as a zip. Never add a file of a secret group
 // or below the keys directory (TestConfigFilesHoldNoSecrets).
-var configFiles = []string{ComposeFile, OverrideFile, EnvFile, BekupTOML, RunnerTOML, StateFileName}
+var configFiles = []string{ComposeFile, OverrideFile, EnvFile, BekupTOML, RunnerTOML, ExternalAPITOML, StateFileName}
 
 // maxConfigFile bounds each file read into the zip.
 const maxConfigFile = 4 << 20

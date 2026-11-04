@@ -95,6 +95,7 @@ func TestBootstrapRefusals(t *testing.T) {
 		"single other user": {mut: single, req: BootstrapRequest{AdminUser: "admin", AllowInsecure: true}, want: "--admin-user must be database.user"},
 		"single reset":      {mut: single, req: BootstrapRequest{ResetPasswords: true, AllowInsecure: true}, want: "do not apply"},
 		"single file":       {mut: single, req: BootstrapRequest{AdminPasswordFileSet: true, AllowInsecure: true}, want: "do not apply"},
+		"single external":   {mut: single, req: BootstrapRequest{ExternalPasswordFile: "/nonexistent", AllowInsecure: true}, want: "does not support the external API"},
 		"no password func":  {req: BootstrapRequest{AdminUser: "admin", AllowInsecure: true}, want: "no administrator password"},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -79,4 +79,14 @@
 // network (its alias ServeAlias matched with the interface addresses) and
 // on loopback are served, everything else is closed before a byte is read,
 // fail closed while that address is unknown. ProxyHosts must run.
+//
+// # External API (D-220)
+//
+// NewAPIServer (api_server.go) builds the router of `bekup external-api`
+// from the same middleware: request ID, the trusted-proxy client address
+// (its proxy hosts located through ExternalAPIAlias), access log (paths
+// carrying a token redacted), recoverer, security headers with
+// APIContentSecurityPolicy and HSTS, per-IP rate limit and body limit, with
+// JSON errors (WriteAPIError). No Origin check, sessions, CORS or UI;
+// /healthz, /readyz and the handler at APIBasePath.
 package httpserver

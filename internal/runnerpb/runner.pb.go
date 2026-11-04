@@ -594,6 +594,198 @@ func (TempDatabaseRole) EnumDescriptor() ([]byte, []int) {
 	return file_runner_v1_runner_proto_rawDescGZIP(), []int{9}
 }
 
+// TargetPolicyWarning is a startup warning of the target allowlist.
+type TargetPolicyWarning int32
+
+const (
+	TargetPolicyWarning_TARGET_POLICY_WARNING_UNSPECIFIED TargetPolicyWarning = 0
+	// allow_cidrs and allow_hosts are empty: every target is denied.
+	TargetPolicyWarning_TARGET_POLICY_WARNING_EMPTY_ALLOWLIST TargetPolicyWarning = 1
+	// bastion_targets is empty: an allowed SSH bastion may forward to any
+	// host it reaches (only deny_cidrs and deny_hosts apply behind it).
+	TargetPolicyWarning_TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED TargetPolicyWarning = 2
+)
+
+// Enum value maps for TargetPolicyWarning.
+var (
+	TargetPolicyWarning_name = map[int32]string{
+		0: "TARGET_POLICY_WARNING_UNSPECIFIED",
+		1: "TARGET_POLICY_WARNING_EMPTY_ALLOWLIST",
+		2: "TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED",
+	}
+	TargetPolicyWarning_value = map[string]int32{
+		"TARGET_POLICY_WARNING_UNSPECIFIED":           0,
+		"TARGET_POLICY_WARNING_EMPTY_ALLOWLIST":       1,
+		"TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED": 2,
+	}
+)
+
+func (x TargetPolicyWarning) Enum() *TargetPolicyWarning {
+	p := new(TargetPolicyWarning)
+	*p = x
+	return p
+}
+
+func (x TargetPolicyWarning) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TargetPolicyWarning) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[10].Descriptor()
+}
+
+func (TargetPolicyWarning) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[10]
+}
+
+func (x TargetPolicyWarning) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TargetPolicyWarning.Descriptor instead.
+func (TargetPolicyWarning) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{10}
+}
+
+// DeniedCategory is a class of addresses no runner.toml entry can allow
+// (internal/runner/targets AlwaysDenied).
+type DeniedCategory int32
+
+const (
+	DeniedCategory_DENIED_CATEGORY_UNSPECIFIED DeniedCategory = 0
+	DeniedCategory_DENIED_CATEGORY_LOOPBACK    DeniedCategory = 1
+	// "This network" (0.0.0.0/8) and the unspecified IPv6 address.
+	DeniedCategory_DENIED_CATEGORY_UNSPECIFIED_ADDRESS DeniedCategory = 2
+	DeniedCategory_DENIED_CATEGORY_LINK_LOCAL          DeniedCategory = 3
+	DeniedCategory_DENIED_CATEGORY_CLOUD_METADATA      DeniedCategory = 4
+	DeniedCategory_DENIED_CATEGORY_MULTICAST_BROADCAST DeniedCategory = 5
+	DeniedCategory_DENIED_CATEGORY_RESERVED            DeniedCategory = 6
+	// IPv4-compatible and IPv4-translated IPv6 forms.
+	DeniedCategory_DENIED_CATEGORY_IPV4_IN_IPV6 DeniedCategory = 7
+	DeniedCategory_DENIED_CATEGORY_TEREDO       DeniedCategory = 8
+	// NAT64 and 6to4 addresses embedding an always-denied IPv4 address (the
+	// ranges are listed for orientation, not denied as a whole).
+	DeniedCategory_DENIED_CATEGORY_EMBEDDED_DENIED_IPV4 DeniedCategory = 9
+	// Other IPv6 outside global unicast 2000::/3 (no fixed ranges).
+	DeniedCategory_DENIED_CATEGORY_NON_GLOBAL_IPV6 DeniedCategory = 10
+)
+
+// Enum value maps for DeniedCategory.
+var (
+	DeniedCategory_name = map[int32]string{
+		0:  "DENIED_CATEGORY_UNSPECIFIED",
+		1:  "DENIED_CATEGORY_LOOPBACK",
+		2:  "DENIED_CATEGORY_UNSPECIFIED_ADDRESS",
+		3:  "DENIED_CATEGORY_LINK_LOCAL",
+		4:  "DENIED_CATEGORY_CLOUD_METADATA",
+		5:  "DENIED_CATEGORY_MULTICAST_BROADCAST",
+		6:  "DENIED_CATEGORY_RESERVED",
+		7:  "DENIED_CATEGORY_IPV4_IN_IPV6",
+		8:  "DENIED_CATEGORY_TEREDO",
+		9:  "DENIED_CATEGORY_EMBEDDED_DENIED_IPV4",
+		10: "DENIED_CATEGORY_NON_GLOBAL_IPV6",
+	}
+	DeniedCategory_value = map[string]int32{
+		"DENIED_CATEGORY_UNSPECIFIED":          0,
+		"DENIED_CATEGORY_LOOPBACK":             1,
+		"DENIED_CATEGORY_UNSPECIFIED_ADDRESS":  2,
+		"DENIED_CATEGORY_LINK_LOCAL":           3,
+		"DENIED_CATEGORY_CLOUD_METADATA":       4,
+		"DENIED_CATEGORY_MULTICAST_BROADCAST":  5,
+		"DENIED_CATEGORY_RESERVED":             6,
+		"DENIED_CATEGORY_IPV4_IN_IPV6":         7,
+		"DENIED_CATEGORY_TEREDO":               8,
+		"DENIED_CATEGORY_EMBEDDED_DENIED_IPV4": 9,
+		"DENIED_CATEGORY_NON_GLOBAL_IPV6":      10,
+	}
+)
+
+func (x DeniedCategory) Enum() *DeniedCategory {
+	p := new(DeniedCategory)
+	*p = x
+	return p
+}
+
+func (x DeniedCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DeniedCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[11].Descriptor()
+}
+
+func (DeniedCategory) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[11]
+}
+
+func (x DeniedCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DeniedCategory.Descriptor instead.
+func (DeniedCategory) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{11}
+}
+
+// TargetsKey is a key of runner.toml [targets].
+type TargetsKey int32
+
+const (
+	TargetsKey_TARGETS_KEY_UNSPECIFIED     TargetsKey = 0
+	TargetsKey_TARGETS_KEY_ALLOW_CIDRS     TargetsKey = 1
+	TargetsKey_TARGETS_KEY_ALLOW_HOSTS     TargetsKey = 2
+	TargetsKey_TARGETS_KEY_DENY_CIDRS      TargetsKey = 3
+	TargetsKey_TARGETS_KEY_DENY_HOSTS      TargetsKey = 4
+	TargetsKey_TARGETS_KEY_BASTION_TARGETS TargetsKey = 5
+)
+
+// Enum value maps for TargetsKey.
+var (
+	TargetsKey_name = map[int32]string{
+		0: "TARGETS_KEY_UNSPECIFIED",
+		1: "TARGETS_KEY_ALLOW_CIDRS",
+		2: "TARGETS_KEY_ALLOW_HOSTS",
+		3: "TARGETS_KEY_DENY_CIDRS",
+		4: "TARGETS_KEY_DENY_HOSTS",
+		5: "TARGETS_KEY_BASTION_TARGETS",
+	}
+	TargetsKey_value = map[string]int32{
+		"TARGETS_KEY_UNSPECIFIED":     0,
+		"TARGETS_KEY_ALLOW_CIDRS":     1,
+		"TARGETS_KEY_ALLOW_HOSTS":     2,
+		"TARGETS_KEY_DENY_CIDRS":      3,
+		"TARGETS_KEY_DENY_HOSTS":      4,
+		"TARGETS_KEY_BASTION_TARGETS": 5,
+	}
+)
+
+func (x TargetsKey) Enum() *TargetsKey {
+	p := new(TargetsKey)
+	*p = x
+	return p
+}
+
+func (x TargetsKey) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TargetsKey) Descriptor() protoreflect.EnumDescriptor {
+	return file_runner_v1_runner_proto_enumTypes[12].Descriptor()
+}
+
+func (TargetsKey) Type() protoreflect.EnumType {
+	return &file_runner_v1_runner_proto_enumTypes[12]
+}
+
+func (x TargetsKey) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TargetsKey.Descriptor instead.
+func (TargetsKey) EnumDescriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{12}
+}
+
 // NeutralizeKind selects the database NeutralizeRestoredDatabase works on.
 type NeutralizeKind int32
 
@@ -634,11 +826,11 @@ func (x NeutralizeKind) String() string {
 }
 
 func (NeutralizeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_runner_v1_runner_proto_enumTypes[10].Descriptor()
+	return file_runner_v1_runner_proto_enumTypes[13].Descriptor()
 }
 
 func (NeutralizeKind) Type() protoreflect.EnumType {
-	return &file_runner_v1_runner_proto_enumTypes[10]
+	return &file_runner_v1_runner_proto_enumTypes[13]
 }
 
 func (x NeutralizeKind) Number() protoreflect.EnumNumber {
@@ -647,7 +839,7 @@ func (x NeutralizeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use NeutralizeKind.Descriptor instead.
 func (NeutralizeKind) EnumDescriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{10}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{13}
 }
 
 // RunContext correlates a call with a bekup run.
@@ -4253,6 +4445,296 @@ func (x *AllowlistedImage) GetExtra() bool {
 	return false
 }
 
+type GetTargetPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTargetPolicyRequest) Reset() {
+	*x = GetTargetPolicyRequest{}
+	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTargetPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTargetPolicyRequest) ProtoMessage() {}
+
+func (x *GetTargetPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTargetPolicyRequest.ProtoReflect.Descriptor instead.
+func (*GetTargetPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{48}
+}
+
+type GetTargetPolicyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The lists as the runner applies them: CIDRs masked and in the
+	// configured order, host names normalized and sorted. At most 256
+	// entries each (truncated is set when more are configured).
+	AllowCidrs []string `protobuf:"bytes,1,rep,name=allow_cidrs,json=allowCidrs,proto3" json:"allow_cidrs,omitempty"`
+	AllowHosts []string `protobuf:"bytes,2,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
+	DenyCidrs  []string `protobuf:"bytes,3,rep,name=deny_cidrs,json=denyCidrs,proto3" json:"deny_cidrs,omitempty"`
+	DenyHosts  []string `protobuf:"bytes,4,rep,name=deny_hosts,json=denyHosts,proto3" json:"deny_hosts,omitempty"`
+	// bastion_targets grouped by bastion (sorted by bastion; at most 256
+	// targets in all).
+	BastionTargets []*BastionTargetList `protobuf:"bytes,5,rep,name=bastion_targets,json=bastionTargets,proto3" json:"bastion_targets,omitempty"`
+	// docker.run_subnet_pool (always denied; per-run networks lie inside it).
+	RunSubnetPool string `protobuf:"bytes,6,opt,name=run_subnet_pool,json=runSubnetPool,proto3" json:"run_subnet_pool,omitempty"`
+	// The runner's other own networks (always denied): the control network
+	// that holds listen.address and the runner container's addresses.
+	ControlNetworks []string `protobuf:"bytes,7,rep,name=control_networks,json=controlNetworks,proto3" json:"control_networks,omitempty"`
+	// False until the runner knows its container's networks (Docker not
+	// initialized yet): control_networks is then incomplete.
+	ControlNetworksKnown bool `protobuf:"varint,8,opt,name=control_networks_known,json=controlNetworksKnown,proto3" json:"control_networks_known,omitempty"`
+	// The always-denied categories in a fixed order.
+	AlwaysDenied []*AlwaysDeniedRange  `protobuf:"bytes,9,rep,name=always_denied,json=alwaysDenied,proto3" json:"always_denied,omitempty"`
+	Warnings     []TargetPolicyWarning `protobuf:"varint,10,rep,packed,name=warnings,proto3,enum=runner.v1.TargetPolicyWarning" json:"warnings,omitempty"`
+	// The [targets] keys whose value came from an environment variable
+	// (BEKUP_TARGETS_*) instead of runner.toml.
+	EnvOverrides []TargetsKey `protobuf:"varint,11,rep,packed,name=env_overrides,json=envOverrides,proto3,enum=runner.v1.TargetsKey" json:"env_overrides,omitempty"`
+	// True when a list was cut to 256 entries.
+	Truncated     bool `protobuf:"varint,12,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTargetPolicyResponse) Reset() {
+	*x = GetTargetPolicyResponse{}
+	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTargetPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTargetPolicyResponse) ProtoMessage() {}
+
+func (x *GetTargetPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTargetPolicyResponse.ProtoReflect.Descriptor instead.
+func (*GetTargetPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *GetTargetPolicyResponse) GetAllowCidrs() []string {
+	if x != nil {
+		return x.AllowCidrs
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetAllowHosts() []string {
+	if x != nil {
+		return x.AllowHosts
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetDenyCidrs() []string {
+	if x != nil {
+		return x.DenyCidrs
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetDenyHosts() []string {
+	if x != nil {
+		return x.DenyHosts
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetBastionTargets() []*BastionTargetList {
+	if x != nil {
+		return x.BastionTargets
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetRunSubnetPool() string {
+	if x != nil {
+		return x.RunSubnetPool
+	}
+	return ""
+}
+
+func (x *GetTargetPolicyResponse) GetControlNetworks() []string {
+	if x != nil {
+		return x.ControlNetworks
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetControlNetworksKnown() bool {
+	if x != nil {
+		return x.ControlNetworksKnown
+	}
+	return false
+}
+
+func (x *GetTargetPolicyResponse) GetAlwaysDenied() []*AlwaysDeniedRange {
+	if x != nil {
+		return x.AlwaysDenied
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetWarnings() []TargetPolicyWarning {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetEnvOverrides() []TargetsKey {
+	if x != nil {
+		return x.EnvOverrides
+	}
+	return nil
+}
+
+func (x *GetTargetPolicyResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+// BastionTargetList is the bastion_targets list of one bastion.
+type BastionTargetList struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bastion's normalized host name or IP address.
+	Bastion string `protobuf:"bytes,1,opt,name=bastion,proto3" json:"bastion,omitempty"`
+	// CIDRs, then host names.
+	Targets       []string `protobuf:"bytes,2,rep,name=targets,proto3" json:"targets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BastionTargetList) Reset() {
+	*x = BastionTargetList{}
+	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BastionTargetList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BastionTargetList) ProtoMessage() {}
+
+func (x *BastionTargetList) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BastionTargetList.ProtoReflect.Descriptor instead.
+func (*BastionTargetList) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *BastionTargetList) GetBastion() string {
+	if x != nil {
+		return x.Bastion
+	}
+	return ""
+}
+
+func (x *BastionTargetList) GetTargets() []string {
+	if x != nil {
+		return x.Targets
+	}
+	return nil
+}
+
+// AlwaysDeniedRange is one always-denied category with its ranges.
+type AlwaysDeniedRange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Category      DeniedCategory         `protobuf:"varint,1,opt,name=category,proto3,enum=runner.v1.DeniedCategory" json:"category,omitempty"`
+	Cidrs         []string               `protobuf:"bytes,2,rep,name=cidrs,proto3" json:"cidrs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AlwaysDeniedRange) Reset() {
+	*x = AlwaysDeniedRange{}
+	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AlwaysDeniedRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AlwaysDeniedRange) ProtoMessage() {}
+
+func (x *AlwaysDeniedRange) ProtoReflect() protoreflect.Message {
+	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AlwaysDeniedRange.ProtoReflect.Descriptor instead.
+func (*AlwaysDeniedRange) Descriptor() ([]byte, []int) {
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *AlwaysDeniedRange) GetCategory() DeniedCategory {
+	if x != nil {
+		return x.Category
+	}
+	return DeniedCategory_DENIED_CATEGORY_UNSPECIFIED
+}
+
+func (x *AlwaysDeniedRange) GetCidrs() []string {
+	if x != nil {
+		return x.Cidrs
+	}
+	return nil
+}
+
 type ScratchStatsRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Ctx    *RunContext            `protobuf:"bytes,1,opt,name=ctx,proto3" json:"ctx,omitempty"`
@@ -4269,7 +4751,7 @@ type ScratchStatsRequest struct {
 
 func (x *ScratchStatsRequest) Reset() {
 	*x = ScratchStatsRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	mi := &file_runner_v1_runner_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4281,7 +4763,7 @@ func (x *ScratchStatsRequest) String() string {
 func (*ScratchStatsRequest) ProtoMessage() {}
 
 func (x *ScratchStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[48]
+	mi := &file_runner_v1_runner_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4294,7 +4776,7 @@ func (x *ScratchStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScratchStatsRequest.ProtoReflect.Descriptor instead.
 func (*ScratchStatsRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{48}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ScratchStatsRequest) GetCtx() *RunContext {
@@ -4336,7 +4818,7 @@ type ScratchStatsResponse struct {
 
 func (x *ScratchStatsResponse) Reset() {
 	*x = ScratchStatsResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	mi := &file_runner_v1_runner_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4348,7 +4830,7 @@ func (x *ScratchStatsResponse) String() string {
 func (*ScratchStatsResponse) ProtoMessage() {}
 
 func (x *ScratchStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[49]
+	mi := &file_runner_v1_runner_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4361,7 +4843,7 @@ func (x *ScratchStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScratchStatsResponse.ProtoReflect.Descriptor instead.
 func (*ScratchStatsResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{49}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *ScratchStatsResponse) GetStats() *DumpStats {
@@ -4390,7 +4872,7 @@ type DropScratchDatabaseRequest struct {
 
 func (x *DropScratchDatabaseRequest) Reset() {
 	*x = DropScratchDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	mi := &file_runner_v1_runner_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4402,7 +4884,7 @@ func (x *DropScratchDatabaseRequest) String() string {
 func (*DropScratchDatabaseRequest) ProtoMessage() {}
 
 func (x *DropScratchDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[50]
+	mi := &file_runner_v1_runner_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4415,7 +4897,7 @@ func (x *DropScratchDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropScratchDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*DropScratchDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{50}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DropScratchDatabaseRequest) GetCtx() *RunContext {
@@ -4449,7 +4931,7 @@ type DropScratchDatabaseResponse struct {
 
 func (x *DropScratchDatabaseResponse) Reset() {
 	*x = DropScratchDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	mi := &file_runner_v1_runner_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4461,7 +4943,7 @@ func (x *DropScratchDatabaseResponse) String() string {
 func (*DropScratchDatabaseResponse) ProtoMessage() {}
 
 func (x *DropScratchDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[51]
+	mi := &file_runner_v1_runner_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4474,7 +4956,7 @@ func (x *DropScratchDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DropScratchDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*DropScratchDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{51}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *DropScratchDatabaseResponse) GetExisted() bool {
@@ -4500,7 +4982,7 @@ type NeutralizeRestoredDatabaseRequest struct {
 
 func (x *NeutralizeRestoredDatabaseRequest) Reset() {
 	*x = NeutralizeRestoredDatabaseRequest{}
-	mi := &file_runner_v1_runner_proto_msgTypes[52]
+	mi := &file_runner_v1_runner_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4512,7 +4994,7 @@ func (x *NeutralizeRestoredDatabaseRequest) String() string {
 func (*NeutralizeRestoredDatabaseRequest) ProtoMessage() {}
 
 func (x *NeutralizeRestoredDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[52]
+	mi := &file_runner_v1_runner_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4525,7 +5007,7 @@ func (x *NeutralizeRestoredDatabaseRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use NeutralizeRestoredDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*NeutralizeRestoredDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{52}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *NeutralizeRestoredDatabaseRequest) GetCtx() *RunContext {
@@ -4578,7 +5060,7 @@ type NeutralizeRestoredDatabaseResponse struct {
 
 func (x *NeutralizeRestoredDatabaseResponse) Reset() {
 	*x = NeutralizeRestoredDatabaseResponse{}
-	mi := &file_runner_v1_runner_proto_msgTypes[53]
+	mi := &file_runner_v1_runner_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4590,7 +5072,7 @@ func (x *NeutralizeRestoredDatabaseResponse) String() string {
 func (*NeutralizeRestoredDatabaseResponse) ProtoMessage() {}
 
 func (x *NeutralizeRestoredDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runner_v1_runner_proto_msgTypes[53]
+	mi := &file_runner_v1_runner_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4603,7 +5085,7 @@ func (x *NeutralizeRestoredDatabaseResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use NeutralizeRestoredDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*NeutralizeRestoredDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_runner_v1_runner_proto_rawDescGZIP(), []int{53}
+	return file_runner_v1_runner_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *NeutralizeRestoredDatabaseResponse) GetDatabase() string {
@@ -4928,7 +5410,32 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\timage_ref\x18\x03 \x01(\tR\bimageRef\x12%\n" +
 	"\x0eclient_version\x18\x04 \x01(\tR\rclientVersion\x12\x16\n" +
 	"\x06legacy\x18\x05 \x01(\bR\x06legacy\x12\x14\n" +
-	"\x05extra\x18\x06 \x01(\bR\x05extra\"\xb1\x01\n" +
+	"\x05extra\x18\x06 \x01(\bR\x05extra\"\x18\n" +
+	"\x16GetTargetPolicyRequest\"\xc2\x04\n" +
+	"\x17GetTargetPolicyResponse\x12\x1f\n" +
+	"\vallow_cidrs\x18\x01 \x03(\tR\n" +
+	"allowCidrs\x12\x1f\n" +
+	"\vallow_hosts\x18\x02 \x03(\tR\n" +
+	"allowHosts\x12\x1d\n" +
+	"\n" +
+	"deny_cidrs\x18\x03 \x03(\tR\tdenyCidrs\x12\x1d\n" +
+	"\n" +
+	"deny_hosts\x18\x04 \x03(\tR\tdenyHosts\x12E\n" +
+	"\x0fbastion_targets\x18\x05 \x03(\v2\x1c.runner.v1.BastionTargetListR\x0ebastionTargets\x12&\n" +
+	"\x0frun_subnet_pool\x18\x06 \x01(\tR\rrunSubnetPool\x12)\n" +
+	"\x10control_networks\x18\a \x03(\tR\x0fcontrolNetworks\x124\n" +
+	"\x16control_networks_known\x18\b \x01(\bR\x14controlNetworksKnown\x12A\n" +
+	"\ralways_denied\x18\t \x03(\v2\x1c.runner.v1.AlwaysDeniedRangeR\falwaysDenied\x12:\n" +
+	"\bwarnings\x18\n" +
+	" \x03(\x0e2\x1e.runner.v1.TargetPolicyWarningR\bwarnings\x12:\n" +
+	"\renv_overrides\x18\v \x03(\x0e2\x15.runner.v1.TargetsKeyR\fenvOverrides\x12\x1c\n" +
+	"\ttruncated\x18\f \x01(\bR\ttruncated\"G\n" +
+	"\x11BastionTargetList\x12\x18\n" +
+	"\abastion\x18\x01 \x01(\tR\abastion\x12\x18\n" +
+	"\atargets\x18\x02 \x03(\tR\atargets\"`\n" +
+	"\x11AlwaysDeniedRange\x125\n" +
+	"\bcategory\x18\x01 \x01(\x0e2\x19.runner.v1.DeniedCategoryR\bcategory\x12\x14\n" +
+	"\x05cidrs\x18\x02 \x03(\tR\x05cidrs\"\xb1\x01\n" +
 	"\x13ScratchStatsRequest\x12'\n" +
 	"\x03ctx\x18\x01 \x01(\v2\x15.runner.v1.RunContextR\x03ctx\x12)\n" +
 	"\x06target\x18\x02 \x01(\v2\x11.runner.v1.TargetR\x06target\x12\x17\n" +
@@ -5001,13 +5508,37 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x10TempDatabaseRole\x12\"\n" +
 	"\x1eTEMP_DATABASE_ROLE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aTEMP_DATABASE_ROLE_RESTORE\x10\x01\x12\x1a\n" +
-	"\x16TEMP_DATABASE_ROLE_OLD\x10\x02*\x95\x01\n" +
+	"\x16TEMP_DATABASE_ROLE_OLD\x10\x02*\x98\x01\n" +
+	"\x13TargetPolicyWarning\x12%\n" +
+	"!TARGET_POLICY_WARNING_UNSPECIFIED\x10\x00\x12)\n" +
+	"%TARGET_POLICY_WARNING_EMPTY_ALLOWLIST\x10\x01\x12/\n" +
+	"+TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED\x10\x02*\x90\x03\n" +
+	"\x0eDeniedCategory\x12\x1f\n" +
+	"\x1bDENIED_CATEGORY_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18DENIED_CATEGORY_LOOPBACK\x10\x01\x12'\n" +
+	"#DENIED_CATEGORY_UNSPECIFIED_ADDRESS\x10\x02\x12\x1e\n" +
+	"\x1aDENIED_CATEGORY_LINK_LOCAL\x10\x03\x12\"\n" +
+	"\x1eDENIED_CATEGORY_CLOUD_METADATA\x10\x04\x12'\n" +
+	"#DENIED_CATEGORY_MULTICAST_BROADCAST\x10\x05\x12\x1c\n" +
+	"\x18DENIED_CATEGORY_RESERVED\x10\x06\x12 \n" +
+	"\x1cDENIED_CATEGORY_IPV4_IN_IPV6\x10\a\x12\x1a\n" +
+	"\x16DENIED_CATEGORY_TEREDO\x10\b\x12(\n" +
+	"$DENIED_CATEGORY_EMBEDDED_DENIED_IPV4\x10\t\x12#\n" +
+	"\x1fDENIED_CATEGORY_NON_GLOBAL_IPV6\x10\n" +
+	"*\xbc\x01\n" +
+	"\n" +
+	"TargetsKey\x12\x1b\n" +
+	"\x17TARGETS_KEY_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17TARGETS_KEY_ALLOW_CIDRS\x10\x01\x12\x1b\n" +
+	"\x17TARGETS_KEY_ALLOW_HOSTS\x10\x02\x12\x1a\n" +
+	"\x16TARGETS_KEY_DENY_CIDRS\x10\x03\x12\x1a\n" +
+	"\x16TARGETS_KEY_DENY_HOSTS\x10\x04\x12\x1f\n" +
+	"\x1bTARGETS_KEY_BASTION_TARGETS\x10\x05*\x95\x01\n" +
 	"\x0eNeutralizeKind\x12\x1f\n" +
 	"\x1bNEUTRALIZE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNEUTRALIZE_KIND_RESTORE_STAGING\x10\x01\x12 \n" +
 	"\x1cNEUTRALIZE_KIND_NEW_DATABASE\x10\x02\x12\x1b\n" +
-	"\x17NEUTRALIZE_KIND_SCRATCH\x10\x032\xbe\n" +
-	"\n" +
+	"\x17NEUTRALIZE_KIND_SCRATCH\x10\x032\x98\v\n" +
 	"\rRunnerService\x12=\n" +
 	"\x06Health\x12\x18.runner.v1.HealthRequest\x1a\x19.runner.v1.HealthResponse\x12:\n" +
 	"\x05Probe\x12\x17.runner.v1.ProbeRequest\x1a\x18.runner.v1.ProbeResponse\x12m\n" +
@@ -5023,7 +5554,8 @@ const file_runner_v1_runner_proto_rawDesc = "" +
 	"\x10DropTempDatabase\x12\".runner.v1.DropTempDatabaseRequest\x1a#.runner.v1.DropTempDatabaseResponse\x12@\n" +
 	"\aPrePull\x12\x19.runner.v1.PrePullRequest\x1a\x1a.runner.v1.PrePullResponse\x12I\n" +
 	"\n" +
-	"ListImages\x12\x1c.runner.v1.ListImagesRequest\x1a\x1d.runner.v1.ListImagesResponse\x12O\n" +
+	"ListImages\x12\x1c.runner.v1.ListImagesRequest\x1a\x1d.runner.v1.ListImagesResponse\x12X\n" +
+	"\x0fGetTargetPolicy\x12!.runner.v1.GetTargetPolicyRequest\x1a\".runner.v1.GetTargetPolicyResponse\x12O\n" +
 	"\fScratchStats\x12\x1e.runner.v1.ScratchStatsRequest\x1a\x1f.runner.v1.ScratchStatsResponse\x12d\n" +
 	"\x13DropScratchDatabase\x12%.runner.v1.DropScratchDatabaseRequest\x1a&.runner.v1.DropScratchDatabaseResponse\x12y\n" +
 	"\x1aNeutralizeRestoredDatabase\x12,.runner.v1.NeutralizeRestoredDatabaseRequest\x1a-.runner.v1.NeutralizeRestoredDatabaseResponse:7\n" +
@@ -5041,8 +5573,8 @@ func file_runner_v1_runner_proto_rawDescGZIP() []byte {
 	return file_runner_v1_runner_proto_rawDescData
 }
 
-var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
-var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 14)
+var file_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_runner_v1_runner_proto_goTypes = []any{
 	(Engine)(0),                                // 0: runner.v1.Engine
 	(TlsMode)(0),                               // 1: runner.v1.TlsMode
@@ -5054,179 +5586,193 @@ var file_runner_v1_runner_proto_goTypes = []any{
 	(StatsLevel)(0),                            // 7: runner.v1.StatsLevel
 	(RowCount)(0),                              // 8: runner.v1.RowCount
 	(TempDatabaseRole)(0),                      // 9: runner.v1.TempDatabaseRole
-	(NeutralizeKind)(0),                        // 10: runner.v1.NeutralizeKind
-	(*RunContext)(nil),                         // 11: runner.v1.RunContext
-	(*CertificatePin)(nil),                     // 12: runner.v1.CertificatePin
-	(*ClientCertificate)(nil),                  // 13: runner.v1.ClientCertificate
-	(*HostKeyPin)(nil),                         // 14: runner.v1.HostKeyPin
-	(*SshTunnel)(nil),                          // 15: runner.v1.SshTunnel
-	(*Target)(nil),                             // 16: runner.v1.Target
-	(*DataChunk)(nil),                          // 17: runner.v1.DataChunk
-	(*LogLine)(nil),                            // 18: runner.v1.LogLine
-	(*PeerCertificate)(nil),                    // 19: runner.v1.PeerCertificate
-	(*HealthRequest)(nil),                      // 20: runner.v1.HealthRequest
-	(*HealthResponse)(nil),                     // 21: runner.v1.HealthResponse
-	(*ProbeRequest)(nil),                       // 22: runner.v1.ProbeRequest
-	(*ProbeResponse)(nil),                      // 23: runner.v1.ProbeResponse
-	(*TargetPrivileges)(nil),                   // 24: runner.v1.TargetPrivileges
-	(*FetchServerCertificateRequest)(nil),      // 25: runner.v1.FetchServerCertificateRequest
-	(*FetchServerCertificateResponse)(nil),     // 26: runner.v1.FetchServerCertificateResponse
-	(*FetchHostKeyRequest)(nil),                // 27: runner.v1.FetchHostKeyRequest
-	(*FetchHostKeyResponse)(nil),               // 28: runner.v1.FetchHostKeyResponse
-	(*DumpRequest)(nil),                        // 29: runner.v1.DumpRequest
-	(*VersionQuery)(nil),                       // 30: runner.v1.VersionQuery
-	(*StatsOptions)(nil),                       // 31: runner.v1.StatsOptions
-	(*TableStats)(nil),                         // 32: runner.v1.TableStats
-	(*ObjectCounts)(nil),                       // 33: runner.v1.ObjectCounts
-	(*StatsWarning)(nil),                       // 34: runner.v1.StatsWarning
-	(*DumpStats)(nil),                          // 35: runner.v1.DumpStats
-	(*DumpResult)(nil),                         // 36: runner.v1.DumpResult
-	(*DumpResponse)(nil),                       // 37: runner.v1.DumpResponse
-	(*DumpGlobalsRequest)(nil),                 // 38: runner.v1.DumpGlobalsRequest
-	(*DumpGlobalsResponse)(nil),                // 39: runner.v1.DumpGlobalsResponse
-	(*VerifyDumpHeader)(nil),                   // 40: runner.v1.VerifyDumpHeader
-	(*VerifyDumpTrailer)(nil),                  // 41: runner.v1.VerifyDumpTrailer
-	(*VerifyDumpRequest)(nil),                  // 42: runner.v1.VerifyDumpRequest
-	(*VerifyDumpResponse)(nil),                 // 43: runner.v1.VerifyDumpResponse
-	(*RestoreHeader)(nil),                      // 44: runner.v1.RestoreHeader
-	(*RestoreRequest)(nil),                     // 45: runner.v1.RestoreRequest
-	(*RestoreResult)(nil),                      // 46: runner.v1.RestoreResult
-	(*RestoreResponse)(nil),                    // 47: runner.v1.RestoreResponse
-	(*CreateDatabaseRequest)(nil),              // 48: runner.v1.CreateDatabaseRequest
-	(*CreateDatabaseResponse)(nil),             // 49: runner.v1.CreateDatabaseResponse
-	(*RenameSwapDatabaseRequest)(nil),          // 50: runner.v1.RenameSwapDatabaseRequest
-	(*RenameSwapDatabaseResponse)(nil),         // 51: runner.v1.RenameSwapDatabaseResponse
-	(*DropTempDatabaseRequest)(nil),            // 52: runner.v1.DropTempDatabaseRequest
-	(*DropTempDatabaseResponse)(nil),           // 53: runner.v1.DropTempDatabaseResponse
-	(*PrePullRequest)(nil),                     // 54: runner.v1.PrePullRequest
-	(*PrePullResponse)(nil),                    // 55: runner.v1.PrePullResponse
-	(*ListImagesRequest)(nil),                  // 56: runner.v1.ListImagesRequest
-	(*ListImagesResponse)(nil),                 // 57: runner.v1.ListImagesResponse
-	(*AllowlistedImage)(nil),                   // 58: runner.v1.AllowlistedImage
-	(*ScratchStatsRequest)(nil),                // 59: runner.v1.ScratchStatsRequest
-	(*ScratchStatsResponse)(nil),               // 60: runner.v1.ScratchStatsResponse
-	(*DropScratchDatabaseRequest)(nil),         // 61: runner.v1.DropScratchDatabaseRequest
-	(*DropScratchDatabaseResponse)(nil),        // 62: runner.v1.DropScratchDatabaseResponse
-	(*NeutralizeRestoredDatabaseRequest)(nil),  // 63: runner.v1.NeutralizeRestoredDatabaseRequest
-	(*NeutralizeRestoredDatabaseResponse)(nil), // 64: runner.v1.NeutralizeRestoredDatabaseResponse
-	(*timestamppb.Timestamp)(nil),              // 65: google.protobuf.Timestamp
-	(*descriptorpb.FieldOptions)(nil),          // 66: google.protobuf.FieldOptions
+	(TargetPolicyWarning)(0),                   // 10: runner.v1.TargetPolicyWarning
+	(DeniedCategory)(0),                        // 11: runner.v1.DeniedCategory
+	(TargetsKey)(0),                            // 12: runner.v1.TargetsKey
+	(NeutralizeKind)(0),                        // 13: runner.v1.NeutralizeKind
+	(*RunContext)(nil),                         // 14: runner.v1.RunContext
+	(*CertificatePin)(nil),                     // 15: runner.v1.CertificatePin
+	(*ClientCertificate)(nil),                  // 16: runner.v1.ClientCertificate
+	(*HostKeyPin)(nil),                         // 17: runner.v1.HostKeyPin
+	(*SshTunnel)(nil),                          // 18: runner.v1.SshTunnel
+	(*Target)(nil),                             // 19: runner.v1.Target
+	(*DataChunk)(nil),                          // 20: runner.v1.DataChunk
+	(*LogLine)(nil),                            // 21: runner.v1.LogLine
+	(*PeerCertificate)(nil),                    // 22: runner.v1.PeerCertificate
+	(*HealthRequest)(nil),                      // 23: runner.v1.HealthRequest
+	(*HealthResponse)(nil),                     // 24: runner.v1.HealthResponse
+	(*ProbeRequest)(nil),                       // 25: runner.v1.ProbeRequest
+	(*ProbeResponse)(nil),                      // 26: runner.v1.ProbeResponse
+	(*TargetPrivileges)(nil),                   // 27: runner.v1.TargetPrivileges
+	(*FetchServerCertificateRequest)(nil),      // 28: runner.v1.FetchServerCertificateRequest
+	(*FetchServerCertificateResponse)(nil),     // 29: runner.v1.FetchServerCertificateResponse
+	(*FetchHostKeyRequest)(nil),                // 30: runner.v1.FetchHostKeyRequest
+	(*FetchHostKeyResponse)(nil),               // 31: runner.v1.FetchHostKeyResponse
+	(*DumpRequest)(nil),                        // 32: runner.v1.DumpRequest
+	(*VersionQuery)(nil),                       // 33: runner.v1.VersionQuery
+	(*StatsOptions)(nil),                       // 34: runner.v1.StatsOptions
+	(*TableStats)(nil),                         // 35: runner.v1.TableStats
+	(*ObjectCounts)(nil),                       // 36: runner.v1.ObjectCounts
+	(*StatsWarning)(nil),                       // 37: runner.v1.StatsWarning
+	(*DumpStats)(nil),                          // 38: runner.v1.DumpStats
+	(*DumpResult)(nil),                         // 39: runner.v1.DumpResult
+	(*DumpResponse)(nil),                       // 40: runner.v1.DumpResponse
+	(*DumpGlobalsRequest)(nil),                 // 41: runner.v1.DumpGlobalsRequest
+	(*DumpGlobalsResponse)(nil),                // 42: runner.v1.DumpGlobalsResponse
+	(*VerifyDumpHeader)(nil),                   // 43: runner.v1.VerifyDumpHeader
+	(*VerifyDumpTrailer)(nil),                  // 44: runner.v1.VerifyDumpTrailer
+	(*VerifyDumpRequest)(nil),                  // 45: runner.v1.VerifyDumpRequest
+	(*VerifyDumpResponse)(nil),                 // 46: runner.v1.VerifyDumpResponse
+	(*RestoreHeader)(nil),                      // 47: runner.v1.RestoreHeader
+	(*RestoreRequest)(nil),                     // 48: runner.v1.RestoreRequest
+	(*RestoreResult)(nil),                      // 49: runner.v1.RestoreResult
+	(*RestoreResponse)(nil),                    // 50: runner.v1.RestoreResponse
+	(*CreateDatabaseRequest)(nil),              // 51: runner.v1.CreateDatabaseRequest
+	(*CreateDatabaseResponse)(nil),             // 52: runner.v1.CreateDatabaseResponse
+	(*RenameSwapDatabaseRequest)(nil),          // 53: runner.v1.RenameSwapDatabaseRequest
+	(*RenameSwapDatabaseResponse)(nil),         // 54: runner.v1.RenameSwapDatabaseResponse
+	(*DropTempDatabaseRequest)(nil),            // 55: runner.v1.DropTempDatabaseRequest
+	(*DropTempDatabaseResponse)(nil),           // 56: runner.v1.DropTempDatabaseResponse
+	(*PrePullRequest)(nil),                     // 57: runner.v1.PrePullRequest
+	(*PrePullResponse)(nil),                    // 58: runner.v1.PrePullResponse
+	(*ListImagesRequest)(nil),                  // 59: runner.v1.ListImagesRequest
+	(*ListImagesResponse)(nil),                 // 60: runner.v1.ListImagesResponse
+	(*AllowlistedImage)(nil),                   // 61: runner.v1.AllowlistedImage
+	(*GetTargetPolicyRequest)(nil),             // 62: runner.v1.GetTargetPolicyRequest
+	(*GetTargetPolicyResponse)(nil),            // 63: runner.v1.GetTargetPolicyResponse
+	(*BastionTargetList)(nil),                  // 64: runner.v1.BastionTargetList
+	(*AlwaysDeniedRange)(nil),                  // 65: runner.v1.AlwaysDeniedRange
+	(*ScratchStatsRequest)(nil),                // 66: runner.v1.ScratchStatsRequest
+	(*ScratchStatsResponse)(nil),               // 67: runner.v1.ScratchStatsResponse
+	(*DropScratchDatabaseRequest)(nil),         // 68: runner.v1.DropScratchDatabaseRequest
+	(*DropScratchDatabaseResponse)(nil),        // 69: runner.v1.DropScratchDatabaseResponse
+	(*NeutralizeRestoredDatabaseRequest)(nil),  // 70: runner.v1.NeutralizeRestoredDatabaseRequest
+	(*NeutralizeRestoredDatabaseResponse)(nil), // 71: runner.v1.NeutralizeRestoredDatabaseResponse
+	(*timestamppb.Timestamp)(nil),              // 72: google.protobuf.Timestamp
+	(*descriptorpb.FieldOptions)(nil),          // 73: google.protobuf.FieldOptions
 }
 var file_runner_v1_runner_proto_depIdxs = []int32{
-	14, // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
+	17, // 0: runner.v1.SshTunnel.host_key_pin:type_name -> runner.v1.HostKeyPin
 	0,  // 1: runner.v1.Target.engine:type_name -> runner.v1.Engine
 	1,  // 2: runner.v1.Target.tls_mode:type_name -> runner.v1.TlsMode
-	12, // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
-	13, // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
-	15, // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	65, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
+	15, // 3: runner.v1.Target.pins:type_name -> runner.v1.CertificatePin
+	16, // 4: runner.v1.Target.client_certificate:type_name -> runner.v1.ClientCertificate
+	18, // 5: runner.v1.Target.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	72, // 6: runner.v1.LogLine.time:type_name -> google.protobuf.Timestamp
 	4,  // 7: runner.v1.LogLine.stream:type_name -> runner.v1.LogStream
-	65, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
-	65, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
+	72, // 8: runner.v1.PeerCertificate.not_before:type_name -> google.protobuf.Timestamp
+	72, // 9: runner.v1.PeerCertificate.not_after:type_name -> google.protobuf.Timestamp
 	3,  // 10: runner.v1.HealthResponse.docker_status:type_name -> runner.v1.DockerStatus
-	65, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
-	11, // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
-	24, // 14: runner.v1.ProbeResponse.privileges:type_name -> runner.v1.TargetPrivileges
+	72, // 11: runner.v1.HealthResponse.certificate_not_after:type_name -> google.protobuf.Timestamp
+	14, // 12: runner.v1.ProbeRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 13: runner.v1.ProbeRequest.target:type_name -> runner.v1.Target
+	27, // 14: runner.v1.ProbeResponse.privileges:type_name -> runner.v1.TargetPrivileges
 	5,  // 15: runner.v1.TargetPrivileges.status:type_name -> runner.v1.PrivilegeStatus
-	11, // 16: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
+	14, // 16: runner.v1.FetchServerCertificateRequest.ctx:type_name -> runner.v1.RunContext
 	0,  // 17: runner.v1.FetchServerCertificateRequest.engine:type_name -> runner.v1.Engine
-	15, // 18: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
-	19, // 19: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
-	11, // 20: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
-	11, // 21: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 22: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
-	31, // 23: runner.v1.DumpRequest.stats:type_name -> runner.v1.StatsOptions
-	30, // 24: runner.v1.DumpRequest.version_query:type_name -> runner.v1.VersionQuery
+	18, // 18: runner.v1.FetchServerCertificateRequest.ssh_tunnel:type_name -> runner.v1.SshTunnel
+	22, // 19: runner.v1.FetchServerCertificateResponse.chain:type_name -> runner.v1.PeerCertificate
+	14, // 20: runner.v1.FetchHostKeyRequest.ctx:type_name -> runner.v1.RunContext
+	14, // 21: runner.v1.DumpRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 22: runner.v1.DumpRequest.target:type_name -> runner.v1.Target
+	34, // 23: runner.v1.DumpRequest.stats:type_name -> runner.v1.StatsOptions
+	33, // 24: runner.v1.DumpRequest.version_query:type_name -> runner.v1.VersionQuery
 	7,  // 25: runner.v1.StatsOptions.level:type_name -> runner.v1.StatsLevel
 	8,  // 26: runner.v1.TableStats.count:type_name -> runner.v1.RowCount
 	7,  // 27: runner.v1.DumpStats.level:type_name -> runner.v1.StatsLevel
-	33, // 28: runner.v1.DumpStats.objects:type_name -> runner.v1.ObjectCounts
-	32, // 29: runner.v1.DumpStats.tables:type_name -> runner.v1.TableStats
-	34, // 30: runner.v1.DumpStats.warnings:type_name -> runner.v1.StatsWarning
+	36, // 28: runner.v1.DumpStats.objects:type_name -> runner.v1.ObjectCounts
+	35, // 29: runner.v1.DumpStats.tables:type_name -> runner.v1.TableStats
+	37, // 30: runner.v1.DumpStats.warnings:type_name -> runner.v1.StatsWarning
 	6,  // 31: runner.v1.DumpStats.version_status:type_name -> runner.v1.VersionStatus
-	17, // 32: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
-	18, // 33: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
-	36, // 34: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
-	35, // 35: runner.v1.DumpResponse.stats:type_name -> runner.v1.DumpStats
-	11, // 36: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 37: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
-	31, // 38: runner.v1.DumpGlobalsRequest.stats:type_name -> runner.v1.StatsOptions
-	17, // 39: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
-	18, // 40: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
-	36, // 41: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
-	35, // 42: runner.v1.DumpGlobalsResponse.stats:type_name -> runner.v1.DumpStats
-	11, // 43: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
+	20, // 32: runner.v1.DumpResponse.chunk:type_name -> runner.v1.DataChunk
+	21, // 33: runner.v1.DumpResponse.log:type_name -> runner.v1.LogLine
+	39, // 34: runner.v1.DumpResponse.result:type_name -> runner.v1.DumpResult
+	38, // 35: runner.v1.DumpResponse.stats:type_name -> runner.v1.DumpStats
+	14, // 36: runner.v1.DumpGlobalsRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 37: runner.v1.DumpGlobalsRequest.target:type_name -> runner.v1.Target
+	34, // 38: runner.v1.DumpGlobalsRequest.stats:type_name -> runner.v1.StatsOptions
+	20, // 39: runner.v1.DumpGlobalsResponse.chunk:type_name -> runner.v1.DataChunk
+	21, // 40: runner.v1.DumpGlobalsResponse.log:type_name -> runner.v1.LogLine
+	39, // 41: runner.v1.DumpGlobalsResponse.result:type_name -> runner.v1.DumpResult
+	38, // 42: runner.v1.DumpGlobalsResponse.stats:type_name -> runner.v1.DumpStats
+	14, // 43: runner.v1.VerifyDumpHeader.ctx:type_name -> runner.v1.RunContext
 	0,  // 44: runner.v1.VerifyDumpHeader.engine:type_name -> runner.v1.Engine
 	2,  // 45: runner.v1.VerifyDumpHeader.kind:type_name -> runner.v1.DumpKind
-	40, // 46: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
-	17, // 47: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
-	41, // 48: runner.v1.VerifyDumpRequest.trailer:type_name -> runner.v1.VerifyDumpTrailer
-	18, // 49: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
-	11, // 50: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
-	16, // 51: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
+	43, // 46: runner.v1.VerifyDumpRequest.header:type_name -> runner.v1.VerifyDumpHeader
+	20, // 47: runner.v1.VerifyDumpRequest.chunk:type_name -> runner.v1.DataChunk
+	44, // 48: runner.v1.VerifyDumpRequest.trailer:type_name -> runner.v1.VerifyDumpTrailer
+	21, // 49: runner.v1.VerifyDumpResponse.logs:type_name -> runner.v1.LogLine
+	14, // 50: runner.v1.RestoreHeader.ctx:type_name -> runner.v1.RunContext
+	19, // 51: runner.v1.RestoreHeader.target:type_name -> runner.v1.Target
 	2,  // 52: runner.v1.RestoreHeader.kind:type_name -> runner.v1.DumpKind
-	44, // 53: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
-	17, // 54: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
-	18, // 55: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
-	46, // 56: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
-	11, // 57: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 58: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
-	11, // 59: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 60: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
-	11, // 61: runner.v1.DropTempDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 62: runner.v1.DropTempDatabaseRequest.target:type_name -> runner.v1.Target
+	47, // 53: runner.v1.RestoreRequest.header:type_name -> runner.v1.RestoreHeader
+	20, // 54: runner.v1.RestoreRequest.chunk:type_name -> runner.v1.DataChunk
+	21, // 55: runner.v1.RestoreResponse.log:type_name -> runner.v1.LogLine
+	49, // 56: runner.v1.RestoreResponse.result:type_name -> runner.v1.RestoreResult
+	14, // 57: runner.v1.CreateDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 58: runner.v1.CreateDatabaseRequest.target:type_name -> runner.v1.Target
+	14, // 59: runner.v1.RenameSwapDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 60: runner.v1.RenameSwapDatabaseRequest.target:type_name -> runner.v1.Target
+	14, // 61: runner.v1.DropTempDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 62: runner.v1.DropTempDatabaseRequest.target:type_name -> runner.v1.Target
 	9,  // 63: runner.v1.DropTempDatabaseRequest.role:type_name -> runner.v1.TempDatabaseRole
 	0,  // 64: runner.v1.PrePullRequest.engine:type_name -> runner.v1.Engine
-	58, // 65: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
+	61, // 65: runner.v1.ListImagesResponse.images:type_name -> runner.v1.AllowlistedImage
 	0,  // 66: runner.v1.AllowlistedImage.engine:type_name -> runner.v1.Engine
-	11, // 67: runner.v1.ScratchStatsRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 68: runner.v1.ScratchStatsRequest.target:type_name -> runner.v1.Target
-	31, // 69: runner.v1.ScratchStatsRequest.stats:type_name -> runner.v1.StatsOptions
-	35, // 70: runner.v1.ScratchStatsResponse.stats:type_name -> runner.v1.DumpStats
-	11, // 71: runner.v1.DropScratchDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 72: runner.v1.DropScratchDatabaseRequest.target:type_name -> runner.v1.Target
-	11, // 73: runner.v1.NeutralizeRestoredDatabaseRequest.ctx:type_name -> runner.v1.RunContext
-	16, // 74: runner.v1.NeutralizeRestoredDatabaseRequest.target:type_name -> runner.v1.Target
-	10, // 75: runner.v1.NeutralizeRestoredDatabaseRequest.kind:type_name -> runner.v1.NeutralizeKind
-	66, // 76: runner.v1.secret:extendee -> google.protobuf.FieldOptions
-	20, // 77: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
-	22, // 78: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
-	25, // 79: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
-	27, // 80: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
-	29, // 81: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
-	38, // 82: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
-	42, // 83: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
-	45, // 84: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
-	48, // 85: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
-	50, // 86: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
-	52, // 87: runner.v1.RunnerService.DropTempDatabase:input_type -> runner.v1.DropTempDatabaseRequest
-	54, // 88: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
-	56, // 89: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
-	59, // 90: runner.v1.RunnerService.ScratchStats:input_type -> runner.v1.ScratchStatsRequest
-	61, // 91: runner.v1.RunnerService.DropScratchDatabase:input_type -> runner.v1.DropScratchDatabaseRequest
-	63, // 92: runner.v1.RunnerService.NeutralizeRestoredDatabase:input_type -> runner.v1.NeutralizeRestoredDatabaseRequest
-	21, // 93: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
-	23, // 94: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
-	26, // 95: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
-	28, // 96: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
-	37, // 97: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
-	39, // 98: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
-	43, // 99: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
-	47, // 100: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
-	49, // 101: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
-	51, // 102: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
-	53, // 103: runner.v1.RunnerService.DropTempDatabase:output_type -> runner.v1.DropTempDatabaseResponse
-	55, // 104: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
-	57, // 105: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
-	60, // 106: runner.v1.RunnerService.ScratchStats:output_type -> runner.v1.ScratchStatsResponse
-	62, // 107: runner.v1.RunnerService.DropScratchDatabase:output_type -> runner.v1.DropScratchDatabaseResponse
-	64, // 108: runner.v1.RunnerService.NeutralizeRestoredDatabase:output_type -> runner.v1.NeutralizeRestoredDatabaseResponse
-	93, // [93:109] is the sub-list for method output_type
-	77, // [77:93] is the sub-list for method input_type
-	77, // [77:77] is the sub-list for extension type_name
-	76, // [76:77] is the sub-list for extension extendee
-	0,  // [0:76] is the sub-list for field type_name
+	64, // 67: runner.v1.GetTargetPolicyResponse.bastion_targets:type_name -> runner.v1.BastionTargetList
+	65, // 68: runner.v1.GetTargetPolicyResponse.always_denied:type_name -> runner.v1.AlwaysDeniedRange
+	10, // 69: runner.v1.GetTargetPolicyResponse.warnings:type_name -> runner.v1.TargetPolicyWarning
+	12, // 70: runner.v1.GetTargetPolicyResponse.env_overrides:type_name -> runner.v1.TargetsKey
+	11, // 71: runner.v1.AlwaysDeniedRange.category:type_name -> runner.v1.DeniedCategory
+	14, // 72: runner.v1.ScratchStatsRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 73: runner.v1.ScratchStatsRequest.target:type_name -> runner.v1.Target
+	34, // 74: runner.v1.ScratchStatsRequest.stats:type_name -> runner.v1.StatsOptions
+	38, // 75: runner.v1.ScratchStatsResponse.stats:type_name -> runner.v1.DumpStats
+	14, // 76: runner.v1.DropScratchDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 77: runner.v1.DropScratchDatabaseRequest.target:type_name -> runner.v1.Target
+	14, // 78: runner.v1.NeutralizeRestoredDatabaseRequest.ctx:type_name -> runner.v1.RunContext
+	19, // 79: runner.v1.NeutralizeRestoredDatabaseRequest.target:type_name -> runner.v1.Target
+	13, // 80: runner.v1.NeutralizeRestoredDatabaseRequest.kind:type_name -> runner.v1.NeutralizeKind
+	73, // 81: runner.v1.secret:extendee -> google.protobuf.FieldOptions
+	23, // 82: runner.v1.RunnerService.Health:input_type -> runner.v1.HealthRequest
+	25, // 83: runner.v1.RunnerService.Probe:input_type -> runner.v1.ProbeRequest
+	28, // 84: runner.v1.RunnerService.FetchServerCertificate:input_type -> runner.v1.FetchServerCertificateRequest
+	30, // 85: runner.v1.RunnerService.FetchHostKey:input_type -> runner.v1.FetchHostKeyRequest
+	32, // 86: runner.v1.RunnerService.Dump:input_type -> runner.v1.DumpRequest
+	41, // 87: runner.v1.RunnerService.DumpGlobals:input_type -> runner.v1.DumpGlobalsRequest
+	45, // 88: runner.v1.RunnerService.VerifyDump:input_type -> runner.v1.VerifyDumpRequest
+	48, // 89: runner.v1.RunnerService.Restore:input_type -> runner.v1.RestoreRequest
+	51, // 90: runner.v1.RunnerService.CreateDatabase:input_type -> runner.v1.CreateDatabaseRequest
+	53, // 91: runner.v1.RunnerService.RenameSwapDatabase:input_type -> runner.v1.RenameSwapDatabaseRequest
+	55, // 92: runner.v1.RunnerService.DropTempDatabase:input_type -> runner.v1.DropTempDatabaseRequest
+	57, // 93: runner.v1.RunnerService.PrePull:input_type -> runner.v1.PrePullRequest
+	59, // 94: runner.v1.RunnerService.ListImages:input_type -> runner.v1.ListImagesRequest
+	62, // 95: runner.v1.RunnerService.GetTargetPolicy:input_type -> runner.v1.GetTargetPolicyRequest
+	66, // 96: runner.v1.RunnerService.ScratchStats:input_type -> runner.v1.ScratchStatsRequest
+	68, // 97: runner.v1.RunnerService.DropScratchDatabase:input_type -> runner.v1.DropScratchDatabaseRequest
+	70, // 98: runner.v1.RunnerService.NeutralizeRestoredDatabase:input_type -> runner.v1.NeutralizeRestoredDatabaseRequest
+	24, // 99: runner.v1.RunnerService.Health:output_type -> runner.v1.HealthResponse
+	26, // 100: runner.v1.RunnerService.Probe:output_type -> runner.v1.ProbeResponse
+	29, // 101: runner.v1.RunnerService.FetchServerCertificate:output_type -> runner.v1.FetchServerCertificateResponse
+	31, // 102: runner.v1.RunnerService.FetchHostKey:output_type -> runner.v1.FetchHostKeyResponse
+	40, // 103: runner.v1.RunnerService.Dump:output_type -> runner.v1.DumpResponse
+	42, // 104: runner.v1.RunnerService.DumpGlobals:output_type -> runner.v1.DumpGlobalsResponse
+	46, // 105: runner.v1.RunnerService.VerifyDump:output_type -> runner.v1.VerifyDumpResponse
+	50, // 106: runner.v1.RunnerService.Restore:output_type -> runner.v1.RestoreResponse
+	52, // 107: runner.v1.RunnerService.CreateDatabase:output_type -> runner.v1.CreateDatabaseResponse
+	54, // 108: runner.v1.RunnerService.RenameSwapDatabase:output_type -> runner.v1.RenameSwapDatabaseResponse
+	56, // 109: runner.v1.RunnerService.DropTempDatabase:output_type -> runner.v1.DropTempDatabaseResponse
+	58, // 110: runner.v1.RunnerService.PrePull:output_type -> runner.v1.PrePullResponse
+	60, // 111: runner.v1.RunnerService.ListImages:output_type -> runner.v1.ListImagesResponse
+	63, // 112: runner.v1.RunnerService.GetTargetPolicy:output_type -> runner.v1.GetTargetPolicyResponse
+	67, // 113: runner.v1.RunnerService.ScratchStats:output_type -> runner.v1.ScratchStatsResponse
+	69, // 114: runner.v1.RunnerService.DropScratchDatabase:output_type -> runner.v1.DropScratchDatabaseResponse
+	71, // 115: runner.v1.RunnerService.NeutralizeRestoredDatabase:output_type -> runner.v1.NeutralizeRestoredDatabaseResponse
+	99, // [99:116] is the sub-list for method output_type
+	82, // [82:99] is the sub-list for method input_type
+	82, // [82:82] is the sub-list for extension type_name
+	81, // [81:82] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_runner_v1_runner_proto_init() }
@@ -5269,8 +5815,8 @@ func file_runner_v1_runner_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runner_v1_runner_proto_rawDesc), len(file_runner_v1_runner_proto_rawDesc)),
-			NumEnums:      11,
-			NumMessages:   54,
+			NumEnums:      14,
+			NumMessages:   58,
 			NumExtensions: 1,
 			NumServices:   1,
 		},

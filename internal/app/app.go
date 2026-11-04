@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
@@ -171,6 +172,8 @@ type App struct {
 	jobs    *jobs.Service
 	// downloads serves download tickets (task 3.9, serve only).
 	downloads *downloads.Service
+	// apiTokens manages the external API tokens (D-220, serve only).
+	apiTokens *apiaccess.Service
 	// restore stages and verifies restores (task 4.1).
 	restore *restore.Service
 	// restoreAPI backs the restore GraphQL fields (task 4.5).
@@ -323,7 +326,15 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	if err := a.newJobs(); err != nil {
 		return nil, err
 	}
+	if !opts.NoWorker {
+		if err := a.newAPIConsumer(a.subs.bus); err != nil {
+			return nil, err
+		}
+	}
 	if err := a.newDownloads(); err != nil {
+		return nil, err
+	}
+	if err := a.newAPITokens(); err != nil {
 		return nil, err
 	}
 	if err := a.newRestoreAPI(); err != nil {
@@ -409,6 +420,13 @@ func (a *App) newWorkerMode(ctx context.Context) error {
 	}
 	a.components = append(a.components, restoreHousekeepingComponent{a.restore})
 	if err := a.newQueue(true); err != nil {
+		return err
+	}
+	// The job service only for the external API's consumer (D-220).
+	if err := a.newJobs(); err != nil {
+		return err
+	}
+	if err := a.newAPIConsumer(bus); err != nil {
 		return err
 	}
 	// Event counters only; the snapshot gauges come from serve.
@@ -627,6 +645,11 @@ func (a *App) newHTTP(ctx context.Context) (*httpComponent, error) {
 	hopts.OwnProxy = a.opts.Deployment.OwnProxyJoin
 	hopts.JoinMode = a.opts.Deployment.ExpectedWildcardListen(cfg.Server.Listen, config.OwnProxyJoinListen)
 	hopts.SelfConflict = a.recordServeAliasConflict
+	// With the external API enabled, serve also checks its alias
+	// bekup-external-api on the proxy network (the external API cannot
+	// audit; L2 of the D-220 review).
+	hopts.ExternalAPIAlias = a.opts.Deployment.ExternalAPI
+	hopts.ExternalAPIAliasConflict = a.recordExternalAPIAliasConflict
 	// Mount point: /api (later tasks) stays 404 until its handler is set here.
 	s, err := httpserver.New(hopts)
 	if err != nil {
@@ -686,6 +709,9 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 			Version:           a.opts.Version,
 			InsecureTransport: cfg.InsecureTransport(),
 			DevMode:           a.opts.Dev,
+			// BEKUP_EXTERNAL_API=enabled (D-220): the UI shows the curl
+			// examples only when the external API runs.
+			ExternalAPIEnabled: a.opts.Deployment.ExternalAPI,
 		},
 		MaxComplexity: cfg.GraphQL.MaxComplexity,
 		MaxDepth:      cfg.GraphQL.MaxDepth,
@@ -703,7 +729,20 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		ConfigReload:  a.reloadAPI,
 		// Retention holds of the sweep (D-209).
 		RetentionHolds: retention.HoldReader{DB: a.pool},
+		// External API tokens (D-220).
+		APITokens: a.apiTokens,
+		// The runner's target allowlist, read-only (D-223).
+		RunnerTargets: a.runnerTargets(),
 	})
+}
+
+// runnerTargets is the runner client as the source of the target
+// allowlist view (nil without a runner client: the field then fails).
+func (a *App) runnerTargets() resolvers.RunnerTargetPolicySource {
+	if a.runner == nil {
+		return nil
+	}
+	return a.runner
 }
 
 func (h *httpComponent) Name() string { return "http server" }

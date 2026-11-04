@@ -62,19 +62,27 @@ const (
 	// successful backup within their expected window (internal/notify/missed,
 	// task 5.4; periodic, maintenance queue).
 	KindMissedBackupCheck = "missed_backup_check"
+	// KindRunRequestPrune deletes decided external API run requests older
+	// than 30 days (internal/apiaccess, D-220; periodic, maintenance
+	// queue).
+	KindRunRequestPrune = "run_request_prune"
 )
 
 // Trigger says why a backup run was enqueued.
 type Trigger string
 
 // Triggers: the scheduler's (schedule, catch_up), runJobNow's (manual,
-// task 3.5) and startNextRunEarly's (early, task 3.12, D-156: the next
-// planned occurrence pulled forward; ScheduledFor is that occurrence).
+// task 3.5), startNextRunEarly's (early, task 3.12, D-156: the next
+// planned occurrence pulled forward; ScheduledFor is that occurrence) and
+// the external API's (api, D-220: a run request of an API token, started
+// by the worker's consumer; TriggeredBy is nil, the request row names the
+// token).
 const (
 	TriggerSchedule Trigger = "schedule"
 	TriggerCatchUp  Trigger = "catch_up"
 	TriggerManual   Trigger = "manual"
 	TriggerEarly    Trigger = "early"
+	TriggerAPI      Trigger = "api"
 )
 
 // BackupRunArgs are the args of KindBackupRun. Unique by JobID: a job has at
@@ -210,6 +218,12 @@ type MissedBackupCheckArgs struct{}
 // Kind implements river.JobArgs.
 func (MissedBackupCheckArgs) Kind() string { return KindMissedBackupCheck }
 
+// RunRequestPruneArgs are the (empty) args of KindRunRequestPrune.
+type RunRequestPruneArgs struct{}
+
+// Kind implements river.JobArgs.
+func (RunRequestPruneArgs) Kind() string { return KindRunRequestPrune }
+
 // KindSpec declares how a kind is inserted and worked.
 type KindSpec struct {
 	// Queue the kind runs in; its timeout bounds every attempt.
@@ -250,6 +264,7 @@ var catalog = map[string]KindSpec{
 	KindMissedBackupCheck: {
 		Queue: QueueMaintenance, Unique: true, Args: MissedBackupCheckArgs{},
 	},
+	KindRunRequestPrune: {Queue: QueueMaintenance, Unique: true, Args: RunRequestPruneArgs{}},
 }
 
 // Kinds returns the catalog's kinds in sorted order.

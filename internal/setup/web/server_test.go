@@ -284,6 +284,8 @@ func traefikAnswers() []wizard.Answer {
 		{Title: "Docker socket group", Value: "998"},
 		{Title: "Target database networks", Value: "10.20.0.0/16"},
 		{Title: "Target database host names"},
+		// The external API (D-220): the browser asks the wizard's question.
+		{Title: "External API for CI pipelines", Value: "yes"},
 		{Title: "Summary"},
 		{Title: "Write the deployment now?", Value: "yes"},
 	}

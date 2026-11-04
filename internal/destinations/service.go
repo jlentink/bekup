@@ -24,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/sftp"
+	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
 // Errors of the service. Presentable messages live in the API layer.
@@ -138,10 +139,11 @@ func (s *Service) now() time.Time { return s.o.Now() }
 
 // record is a decoded row.
 type record struct {
-	row  sqlc.Destination
-	disk *DiskConfig
-	s3   *S3Config
-	sftp *SFTPConfig
+	row    sqlc.Destination
+	disk   *DiskConfig
+	s3     *S3Config
+	sftp   *SFTPConfig
+	webdav *WebDAVConfig
 }
 
 func decode(row sqlc.Destination) (*record, error) {
@@ -157,6 +159,9 @@ func decode(row sqlc.Destination) (*record, error) {
 	case TypeSFTP:
 		r.sftp = &SFTPConfig{}
 		target = r.sftp
+	case TypeWebDAV:
+		r.webdav = &WebDAVConfig{}
+		target = r.webdav
 	default:
 		return nil, fmt.Errorf("destinations: unknown type %q", row.Type)
 	}
@@ -196,9 +201,12 @@ func (r *record) view() Destination {
 		d.HasPassword = c.AuthMethod == AuthPassword && len(row.SecretEnc) > 0
 		d.HasPrivateKey = c.AuthMethod == AuthPrivateKey && len(row.SecretEnc) > 0
 		d.HasPassphrase = d.HasPrivateKey && c.HasPassphrase
+	case r.webdav != nil:
+		c := *r.webdav
+		d.WebDAV = &c
+		d.HasPassword = len(row.SecretEnc) > 0
+		d.TLSPin = tlsPinOf(&row)
 	}
-	d.NotReadyReason = notReadyReason(&d)
-	d.Ready = d.NotReadyReason == ""
 	if row.LastTestedAt != nil && row.LastTestOk != nil && row.LastTestSettingsAt != nil {
 		d.LastTest = &LastTest{
 			At: *row.LastTestedAt, OK: *row.LastTestOk, Stale: !row.LastTestSettingsAt.Equal(row.UpdatedAt),
@@ -207,12 +215,47 @@ func (r *record) view() Destination {
 			d.LastTest.Code = *row.LastTestCode
 		}
 	}
+	d.NotReadyReason = notReadyReason(&d)
+	d.Ready = d.NotReadyReason == ""
 	return d
+}
+
+// tlsPinOf returns the stored WebDAV certificate pin (nil when none; the
+// DB constraints keep the columns complete).
+func tlsPinOf(row *sqlc.Destination) *TLSPin {
+	if row.TlsPinSha256 == nil || row.TlsPinCertificate == nil || row.TlsPinSetAt == nil {
+		return nil
+	}
+	p := &TLSPin{SPKISHA256: *row.TlsPinSha256, CertificatePEM: *row.TlsPinCertificate, SetAt: *row.TlsPinSetAt}
+	if cert, err := webdav.ParseCertificatePEM([]byte(p.CertificatePEM)); err == nil {
+		p.Certificate = webdav.CertificateOf(cert)
+	}
+	return p
+}
+
+// overwriteIgnoredReason is the not-ready reason of a WebDAV destination
+// whose newest (not stale) test showed that the server ignores
+// "Overwrite: F" (D-222).
+const overwriteIgnoredReason = "the last test showed that the server ignores 'Overwrite: F' and replaces existing files; " +
+	"fix the server (or a proxy in front of it), then test again"
+
+// overwriteIgnoredByTest reports a WebDAV destination whose newest test,
+// run against the current settings, failed with overwrite_ignored.
+func overwriteIgnoredByTest(d *Destination) bool {
+	return d.Type == TypeWebDAV && d.LastTest != nil && !d.LastTest.Stale && !d.LastTest.OK &&
+		d.LastTest.Code == string(storage.CodeOverwriteIgnored)
 }
 
 // notReadyReason says what is missing before d can be opened.
 func notReadyReason(d *Destination) string {
 	switch d.Type {
+	case TypeWebDAV:
+		if !d.HasPassword {
+			return "set the password"
+		}
+		if overwriteIgnoredByTest(d) {
+			return overwriteIgnoredReason
+		}
 	case TypeS3:
 		if !d.HasSecretAccessKey {
 			return "the secret access key is missing"
@@ -288,10 +331,13 @@ type state struct {
 	disk     *DiskConfig
 	s3       *S3Config
 	sftp     *SFTPConfig
+	webdav   *WebDAVConfig
 	creds    *Credentials
 	// credsChanged names the credential fields that were set or removed.
 	credsChanged []string
 	clearHostKey bool
+	// clearTLSPin: the WebDAV URL changed, the certificate pin goes.
+	clearTLSPin bool
 	// reentered names the passwords entered again because the endpoint
 	// changed (D-140).
 	reentered []string
@@ -306,6 +352,8 @@ func (st *state) config() (json.RawMessage, error) {
 		v = st.s3
 	case TypeSFTP:
 		v = st.sftp
+	case TypeWebDAV:
+		v = st.webdav
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -342,7 +390,8 @@ func registerSecrets(c *Credentials) func() {
 // Create validates and stores a new destination. The secret fields of in
 // are zeroed before Create returns.
 func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Destination, error) {
-	defer zeroInputs(in.S3, in.SFTP)
+	ins := inputs{disk: in.Disk, s3: in.S3, sftp: in.SFTP, webdav: in.WebDAV}
+	defer ins.zero()
 	name, err := normalizeName(in.Name)
 	if err != nil {
 		return Destination{}, err
@@ -350,15 +399,16 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Dest
 	if !in.Type.Valid() {
 		return Destination{}, fieldErr("type", "unknown destination type")
 	}
-	if err := onlyInputFor(in.Type, in.Disk != nil, in.S3 != nil, in.SFTP != nil, true); err != nil {
+	if err := onlyInputFor(in.Type, ins, true); err != nil {
 		return Destination{}, err
 	}
 	st := &state{typ: in.Type, name: name, noDelete: in.NoDelete, creds: &Credentials{}}
 	defer st.creds.Zero()
-	if err := s.apply(ctx, st, nil, in.Disk, in.S3, in.SFTP); err != nil {
+	if err := s.apply(ctx, st, nil, ins); err != nil {
 		return Destination{}, err
 	}
 	defer registerSecrets(st.creds)()
+	s.resolveWebDAVUser(ctx, st, nil)
 
 	id := uuid.New()
 	sealed, err := sealCredentials(s.o.Keyring, id, st.creds)
@@ -409,20 +459,24 @@ func (s *Service) Create(ctx context.Context, actor Actor, in CreateInput) (Dest
 // the row is locked; the update fails with ErrConflict when the row changed
 // in between.
 func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in UpdateInput) (Destination, error) {
-	defer zeroInputs(in.S3, in.SFTP)
+	ins := inputs{disk: in.Disk, s3: in.S3, sftp: in.SFTP, webdav: in.WebDAV}
+	defer ins.zero()
 	cur, err := s.load(ctx, sqlc.New(s.o.DB), id, false)
 	if err != nil {
 		return Destination{}, err
 	}
 	typ := Type(cur.row.Type)
-	if err := onlyInputFor(typ, in.Disk != nil, in.S3 != nil, in.SFTP != nil, false); err != nil {
+	if err := onlyInputFor(typ, ins, false); err != nil {
 		return Destination{}, err
 	}
 	creds, err := openCredentials(s.o.Keyring, id, cur.row.SecretEnc)
 	if err != nil {
 		return Destination{}, err
 	}
-	st := &state{typ: typ, name: cur.row.Name, noDelete: cur.row.NoDelete, creds: creds, disk: cur.disk, s3: cur.s3, sftp: cur.sftp}
+	st := &state{
+		typ: typ, name: cur.row.Name, noDelete: cur.row.NoDelete, creds: creds,
+		disk: cur.disk, s3: cur.s3, sftp: cur.sftp, webdav: cur.webdav,
+	}
 	defer st.creds.Zero()
 	if cur.row.ObjectLockMode != nil && cur.row.ObjectLockRetentionDays != nil {
 		st.lockMode, st.lockDays = storage.LockMode(*cur.row.ObjectLockMode), int(*cur.row.ObjectLockRetentionDays)
@@ -435,11 +489,22 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 	if in.NoDelete != nil {
 		st.noDelete = *in.NoDelete
 	}
-	if err := s.apply(ctx, st, cur, in.Disk, in.S3, in.SFTP); err != nil {
+	if err := s.apply(ctx, st, cur, ins); err != nil {
 		return Destination{}, err
 	}
 	defer registerSecrets(st.creds)()
 
+	if st.webdav != nil && (locationChange(cur, st) != "" || st.webdav.UserID == "") {
+		// Also on a save without changes: the way to record the user id
+		// once the server answers (for example after pinning).
+		var pin *webdav.Pin
+		if !st.clearTLSPin {
+			if pin, err = storedPin(&cur.row); err != nil {
+				return Destination{}, err
+			}
+		}
+		s.resolveWebDAVUser(ctx, st, pin)
+	}
 	changed, values := diff(cur, st)
 	if len(changed) == 0 {
 		return cur.view(), nil
@@ -497,10 +562,18 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 			if err := q.ClearUnrecordedFiles(ctx, id); err != nil {
 				return fmt.Errorf("destinations: clear unrecorded files: %w", err)
 			}
+		} else if webdavUserChanged(cur, st) {
+			// The same files, but a newly resolved user id may reveal
+			// that another destination already uses them (D-222
+			// amendment).
+			if err := checkLocation(ctx, q, id, st); err != nil {
+				return err
+			}
 		}
 		row, err := q.UpdateDestination(ctx, sqlc.UpdateDestinationParams{
 			ID: id, Name: st.name, Config: cfg, SecretEnc: sealed, NoDelete: st.noDelete,
 			ObjectLockMode: mode, ObjectLockRetentionDays: days, ClearHostKey: st.clearHostKey,
+			ClearTlsPin: st.clearTLSPin,
 		})
 		if serviceutil.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -515,6 +588,9 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		if st.clearHostKey && cur.row.HostKeyFingerprint != nil {
 			details["host_key_cleared"] = true
 		}
+		if st.clearTLSPin && cur.row.TlsPinSha256 != nil {
+			details["tls_pin_cleared"] = true
+		}
 		if len(st.reentered) > 0 {
 			// Sec M3: the endpoint changed, so the stored password was
 			// not reused; the admin entered it again (or set a key).
@@ -526,6 +602,12 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 		return Destination{}, err
 	}
 	return out.view(), nil
+}
+
+// webdavUserChanged reports whether st records another (non-empty)
+// Nextcloud user id than the stored destination.
+func webdavUserChanged(cur *record, st *state) bool {
+	return cur.webdav != nil && st.webdav != nil && st.webdav.UserID != "" && st.webdav.UserID != cur.webdav.UserID
 }
 
 // checkName reports ErrNameTaken when another destination that is not
@@ -548,7 +630,7 @@ func checkName(ctx context.Context, q *sqlc.Queries, id uuid.UUID, name string) 
 // retention of each would take the other's files for their own. The
 // advisory lock serializes concurrent creates and moves.
 func checkLocation(ctx context.Context, q *sqlc.Queries, id uuid.UUID, st *state) error {
-	mine, ok := locationOf(st.disk, st.s3, st.sftp)
+	mine, ok := locationOf(st.disk, st.s3, st.sftp, st.webdav)
 	if !ok {
 		return nil
 	}
@@ -564,7 +646,7 @@ func checkLocation(ctx context.Context, q *sqlc.Queries, id uuid.UUID, st *state
 		if err != nil {
 			return err
 		}
-		loc, ok := locationOf(r.disk, r.s3, r.sftp)
+		loc, ok := locationOf(r.disk, r.s3, r.sftp, r.webdav)
 		if ok && loc.overlaps(mine) {
 			return fieldErr(locationField(st.typ), "this location is, contains or lies inside the location of the destination %q; "+
 				"two destinations must not share files (each would take the other's backups for its own); choose another location. "+
@@ -576,8 +658,8 @@ func checkLocation(ctx context.Context, q *sqlc.Queries, id uuid.UUID, st *state
 
 // onlyInputFor checks that only the input of typ is set (and, when
 // required, that it is set).
-func onlyInputFor(typ Type, disk, s3, sftpSet, required bool) error {
-	set := map[Type]bool{TypeDisk: disk, TypeS3: s3, TypeSFTP: sftpSet}
+func onlyInputFor(typ Type, in inputs, required bool) error {
+	set := in.set()
 	for t, ok := range set {
 		if ok && t != typ {
 			return fieldErr(string(t), "settings for %s do not match the destination type %s", t, typ)
@@ -591,24 +673,32 @@ func onlyInputFor(typ Type, disk, s3, sftpSet, required bool) error {
 
 // apply validates the type-specific input (if any) into st. cur is the
 // stored destination for updates (nil when creating).
-func (s *Service) apply(ctx context.Context, st *state, cur *record, disk *DiskInput, s3in *S3Input, sftpIn *SFTPInput) error {
+func (s *Service) apply(ctx context.Context, st *state, cur *record, in inputs) error {
 	switch {
-	case disk != nil:
-		c, err := validateDisk(disk)
+	case in.disk != nil:
+		c, err := validateDisk(in.disk)
 		if err != nil {
 			return err
 		}
 		st.disk = &c
-	case s3in != nil:
-		if err := s.applyS3(ctx, st, s3in); err != nil {
+	case in.s3 != nil:
+		if err := s.applyS3(ctx, st, in.s3); err != nil {
 			return err
 		}
-	case sftpIn != nil:
+	case in.sftp != nil:
 		var prev *SFTPConfig
 		if cur != nil {
 			prev = cur.sftp
 		}
-		if err := s.applySFTP(ctx, st, prev, sftpIn); err != nil {
+		if err := s.applySFTP(ctx, st, prev, in.sftp); err != nil {
+			return err
+		}
+	case in.webdav != nil:
+		var prev *WebDAVConfig
+		if cur != nil {
+			prev = cur.webdav
+		}
+		if err := s.applyWebDAV(ctx, st, prev, in.webdav); err != nil {
 			return err
 		}
 	}
@@ -745,6 +835,102 @@ func sftpMessage(err error) string {
 	return "invalid settings"
 }
 
+func (s *Service) applyWebDAV(ctx context.Context, st *state, prev *WebDAVConfig, in *WebDAVInput) error {
+	c, err := webdavConfigOf(in)
+	if err != nil {
+		return err
+	}
+	if err := webdav.ValidateTarget(c.URL, webdav.Flavor(c.Flavor), c.Username, c.Path, s.o.AllowHTTP); err != nil {
+		return fieldErr("webdav", "%s", webdav.Message(err))
+	}
+	// D-140: a stored password is never sent to a new endpoint. When the
+	// URL, the flavor (it changes the addressed resources) or the username
+	// changes, a stored password must be entered again in the same update.
+	if prev != nil && len(st.creds.Password) > 0 &&
+		(prev.URL != c.URL || prev.Flavor != c.Flavor || prev.Username != c.Username) {
+		if in.Password == nil {
+			return fieldErr("webdav.password", "the URL, flavor or username changed: enter the password again; a stored password is never sent to a new endpoint")
+		}
+		st.reentered = append(st.reentered, "password")
+	}
+	if in.Password != nil {
+		if len(in.Password) == 0 {
+			return fieldErr("webdav.password", "the password must not be empty")
+		}
+		st.creds.Zero()
+		st.creds.Password = append([]byte(nil), in.Password...)
+		st.credsChanged = append(st.credsChanged, "password")
+	}
+	u, err := webdav.ParseURL(c.URL, s.o.AllowHTTP)
+	if err != nil {
+		return fieldErr("webdav.url", "%s", webdav.Message(err))
+	}
+	if err := s.checkHost(ctx, u.Host()); err != nil {
+		return fieldErr("webdav.url", "%s", err.Error())
+	}
+	// The certificate pin belongs to the server the URL named (D-222).
+	if prev != nil && prev.URL != c.URL {
+		st.clearTLSPin = true
+	}
+	// The resolved user id belongs to the server, flavor and login it was
+	// resolved for.
+	if prev != nil && prev.URL == c.URL && prev.Flavor == c.Flavor && prev.Username == c.Username {
+		c.UserID = prev.UserID
+	}
+	st.webdav = &c
+	return nil
+}
+
+// webdavUserTimeout bounds the user id lookup while saving.
+const webdavUserTimeout = 15 * time.Second
+
+// resolveWebDAVUser asks a Nextcloud/ownCloud server for the user id of
+// the destination's login (current-user-principal) and records it in
+// st.webdav.UserID for the location overlap check (D-222 amendment):
+// two logins (an e-mail address and the user name) may address the same
+// user's files. Best effort and bounded: when the server cannot be asked
+// (offline, a certificate that still needs a pin, a wrong password) the
+// check falls back to the login name and the stored id stays as it was.
+// Only the configuration being saved is used (D-140: the password goes
+// only to the endpoint it is saved for).
+func (s *Service) resolveWebDAVUser(ctx context.Context, st *state, pin *webdav.Pin) {
+	c := st.webdav
+	if c == nil || c.Flavor != string(webdav.FlavorNextcloud) || len(st.creds.Password) == 0 {
+		return
+	}
+	cfg := webdav.Config{
+		URL: c.URL, Flavor: webdav.Flavor(c.Flavor), Username: c.Username, Path: c.Path,
+		Password:       crypto.NewSecret(append([]byte(nil), st.creds.Password...)),
+		RequestTimeout: time.Duration(c.TimeoutSeconds) * time.Second,
+		AllowHTTP:      s.o.AllowHTTP, Guard: s.o.Guard, Logger: s.o.Logger, Pin: pin,
+	}
+	if c.CABundlePEM != "" {
+		cfg.CABundlePEM = []byte(c.CABundlePEM)
+	}
+	d, err := webdav.Open(cfg)
+	if err != nil {
+		cfg.Password.Destroy()
+		return
+	}
+	defer func() {
+		if err := d.Close(); err != nil {
+			s.o.Logger.WarnContext(ctx, "closing the WebDAV client after the user id lookup failed", slog.Any("error", err))
+		}
+	}()
+	ctx, cancel := context.WithTimeout(ctx, min(webdavUserTimeout, s.o.OperationTimeout))
+	defer cancel()
+	uid, err := d.UserID(ctx)
+	if err != nil || uid == "" {
+		s.o.Logger.InfoContext(ctx, "the Nextcloud/ownCloud user id could not be resolved while saving; the location check uses the login name",
+			slog.String("code", string(storage.Classify(err))))
+		return
+	}
+	// A copy: without a WebDAV input st.webdav is the stored config.
+	next := *c
+	next.UserID = uid
+	st.webdav = &next
+}
+
 // checkHost resolves host and checks every address against the SSRF
 // guard (the dial-time check still applies later). The messages are for
 // admins (D-120: the blocked address and reason are admin information).
@@ -837,7 +1023,7 @@ func (s *Service) record(ctx context.Context, q *sqlc.Queries, actor Actor, acti
 // auditSettings returns the non-secret settings of st for the audit log
 // (the CA bundle and public key only as a flag).
 func auditSettings(st *state) map[string]any {
-	m := configMap(st.disk, st.s3, st.sftp)
+	m := configMap(st.disk, st.s3, st.sftp, st.webdav)
 	for _, k := range []string{"ca_bundle_pem", "public_key"} {
 		if v, ok := m[k]; ok {
 			m[k] = v != ""
@@ -846,7 +1032,7 @@ func auditSettings(st *state) map[string]any {
 	return m
 }
 
-func configMap(disk *DiskConfig, s3c *S3Config, sftpc *SFTPConfig) map[string]any {
+func configMap(disk *DiskConfig, s3c *S3Config, sftpc *SFTPConfig, wd *WebDAVConfig) map[string]any {
 	var v any
 	switch {
 	case disk != nil:
@@ -855,6 +1041,8 @@ func configMap(disk *DiskConfig, s3c *S3Config, sftpc *SFTPConfig) map[string]an
 		v = s3c
 	case sftpc != nil:
 		v = sftpc
+	case wd != nil:
+		v = wd
 	default:
 		return map[string]any{}
 	}
@@ -898,8 +1086,8 @@ func diff(cur *record, st *state) ([]string, map[string]any) {
 	if curDays != st.lockDays {
 		add("object_lock_retention_days", curDays, st.lockDays, true)
 	}
-	oldM := configMap(cur.disk, cur.s3, cur.sftp)
-	newM := configMap(st.disk, st.s3, st.sftp)
+	oldM := configMap(cur.disk, cur.s3, cur.sftp, cur.webdav)
+	newM := configMap(st.disk, st.s3, st.sftp, st.webdav)
 	keys := make([]string, 0, len(oldM)+len(newM))
 	for k := range oldM {
 		keys = append(keys, k)
@@ -920,6 +1108,9 @@ func diff(cur *record, st *state) ([]string, map[string]any) {
 	changed = append(changed, st.credsChanged...)
 	if st.clearHostKey && cur.row.HostKeyFingerprint != nil {
 		changed = append(changed, "host_key")
+	}
+	if st.clearTLSPin && cur.row.TlsPinSha256 != nil {
+		changed = append(changed, "tls_pin")
 	}
 	return changed, values
 }

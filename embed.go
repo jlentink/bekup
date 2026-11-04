@@ -5,7 +5,8 @@
 //
 // Embedded (exactly what a compose deployment needs):
 //
-//   - docker-compose.yml, bekup.example.toml, runner.example.toml;
+//   - docker-compose.yml, bekup.example.toml, runner.example.toml,
+//     external-api.example.toml;
 //   - deploy/postgres, deploy/traefik, deploy/nginx.
 //
 // Never embed anything secret, and never deploy/dev (dev keys, seeds).
@@ -19,7 +20,7 @@ import (
 	"io/fs"
 )
 
-//go:embed docker-compose.yml bekup.example.toml runner.example.toml deploy/postgres deploy/traefik deploy/nginx
+//go:embed docker-compose.yml bekup.example.toml runner.example.toml external-api.example.toml deploy/postgres deploy/traefik deploy/nginx
 var assets embed.FS
 
 // Assets returns the embedded deployment assets rooted at the repository

@@ -44,12 +44,16 @@ func tail() []Answer {
 	}
 }
 
+// externalAPITitle is the external API's question (D-220).
+const externalAPITitle = "External API for CI pipelines"
+
 func finish(extra ...Answer) []Answer {
 	out := append([]Answer{}, extra...)
 	return append(out,
 		Answer{Title: "Docker socket group", Value: "998"},
 		Answer{Title: "Target database networks", Value: "10.20.0.0/16"},
 		Answer{Title: "Target database host names"},
+		Answer{Title: externalAPITitle, Value: "no"},
 		Answer{Title: "Summary"},
 		Answer{Title: "Write the deployment now?", Value: "yes"},
 	)
@@ -110,6 +114,40 @@ func TestInitWizardOwnTraefik(t *testing.T) {
 	p.Destroy()
 	if pass, err := o.CAPassphrase(); err == nil && string(pass) == genPass {
 		t.Fatal("Destroy did not zero the passphrase")
+	}
+}
+
+// TestInitWizardExternalAPI (D-220 amendment 4): the question enables the
+// external API (--external-api), the summary names its address, and a
+// later answer of single-account mode clears it.
+func TestInitWizardExternalAPI(t *testing.T) {
+	s := &Script{}
+	env := testEnv(t, s)
+	s.Answers = append([]Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: proxyOwnTraefik},
+		{Title: "Domain", Value: "backup.example.com"},
+		{Title: "Let's Encrypt e-mail", Value: "ops@example.com"},
+		{Title: "Let's Encrypt staging?", Value: "no"},
+		{Title: "Database", Value: "bundled"},
+	}, tail()...)
+	for _, a := range finish(Answer{Title: "Bundled database secrets", Value: "yes"}) {
+		if a.Title == externalAPITitle {
+			a.Value = "yes"
+		}
+		s.Answers = append(s.Answers, a)
+	}
+	s.Answers = append(s.Answers, Answer{Title: "CA key passphrase (shown ONCE)"})
+	p := run(t, env)
+	if !p.Options.Answers.ExternalAPI || !slices.Contains(p.Flags, "--external-api") {
+		t.Fatalf("external API not enabled: %+v %v", p.Options.Answers, p.Flags)
+	}
+	if !strings.Contains(s.Text.String(), "External API: enabled, https://backup.example.com/api/v1/") {
+		t.Fatalf("summary lacks the external API:\n%s", s.Text.String())
+	}
+	st := &initState{a: setup.Answers{ExternalAPI: true, DB: setup.Database{Mode: setup.DBExternal, Auth: setup.DBAuthSingleAccount}}}
+	if !st.noExternalAPI() || st.a.ExternalAPI {
+		t.Fatal("single-account mode keeps the external API")
 	}
 }
 
@@ -230,10 +268,18 @@ func TestInitWizardSingleAccount(t *testing.T) {
 		{Title: "Repeat the password of acct_bekup", Value: testAppPW},
 	}
 	s.Answers = append(s.Answers, tail()...)
-	s.Answers = append(s.Answers, finish()...)
+	// No external API question: single-account mode does not support it.
+	for _, a := range finish() {
+		if a.Title != externalAPITitle {
+			s.Answers = append(s.Answers, a)
+		}
+	}
 	s.Answers = append(s.Answers, Answer{Title: "CA key passphrase (shown ONCE)"})
 	p := run(t, env)
 	d := p.Options.Answers.DB
+	if p.Options.Answers.ExternalAPI || slices.Contains(s.Screens, "confirm: "+externalAPITitle) {
+		t.Fatal("external API offered in single-account mode")
+	}
 	if d.Auth != setup.DBAuthSingleAccount || d.User != "acct_bekup" || d.Port != 0 || d.Name != "" || !strings.Contains(s.Text.String(), "rewrite the\naudit history") {
 		t.Fatalf("db %+v", d)
 	}

@@ -50,9 +50,9 @@ func keys[V any](m map[string]V) []string {
 func TestVariantServiceSets(t *testing.T) {
 	t.Parallel()
 	want := map[Variant][]string{
-		VariantTraefik:  {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
-		VariantOwnProxy: {"admin", "certs-init", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db"},
-		VariantFull:     {"admin", "certbot", "certs-init", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
+		VariantTraefik:  {"admin", "certs-init", "external-api", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
+		VariantOwnProxy: {"admin", "certs-init", "external-api", "migrate", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db"},
+		VariantFull:     {"admin", "certbot", "certs-init", "external-api", "migrate", "nginx", "nginx-init", "postgres", "runner", "serve", "setup", "setup-web", "setup-web-db", "traefik", "traefik-init"},
 	}
 	for _, v := range AllVariants {
 		t.Run(string(v), func(t *testing.T) {
@@ -77,6 +77,15 @@ func TestVariantServiceSets(t *testing.T) {
 			}
 			if imageVarRefRe.MatchString(string(out)) {
 				t.Error("a ${BEKUP_IMAGE reference remains")
+			}
+			// The external API is opt-in (D-220): its profile in every
+			// variant, never a published port.
+			ext := doc.Services["external-api"]
+			if !equalYAML(ext["profiles"], []any{"external-api"}) {
+				t.Errorf("external-api profiles %v", ext["profiles"])
+			}
+			if _, ok := ext["ports"]; ok {
+				t.Error("external-api publishes ports")
 			}
 			// The proxy services of the bundled variant start with the stack.
 			if v == VariantTraefik {
@@ -115,7 +124,7 @@ func TestVariantExternalNetworks(t *testing.T) {
 				}
 				nets, _ := svc["networks"].(map[string]any) //nolint:errcheck // list form has no proxy
 				_, onProxy := nets["proxy"]
-				if onProxy != (name == "serve") {
+				if onProxy != (name == "serve" || name == "external-api") {
 					t.Errorf("%s on the proxy network: %v", name, onProxy)
 				}
 			}
@@ -129,6 +138,17 @@ func TestVariantExternalNetworks(t *testing.T) {
 			envm, _ := doc.Services["serve"]["environment"].(map[string]any) //nolint:errcheck // checked below
 			if envm["BEKUP_LISTEN_SHAPE"] != "own-proxy-join" {
 				t.Fatalf("serve environment %v", envm)
+			}
+			// The external API likewise (D-220 amendment 4): the alias
+			// bekup-external-api and the join shape, no frontend network.
+			extNets, _ := doc.Services["external-api"]["networks"].(map[string]any) //nolint:errcheck // checked below
+			extProxy, _ := extNets["proxy"].(map[string]any)                        //nolint:errcheck // checked below
+			if _, fixed := extProxy["ipv4_address"]; fixed || !equalYAML(extProxy["aliases"], []any{"bekup-external-api"}) || len(extNets) != 2 {
+				t.Fatalf("external-api networks %v", extNets)
+			}
+			extEnv, _ := doc.Services["external-api"]["environment"].(map[string]any) //nolint:errcheck // checked below
+			if extEnv["BEKUP_LISTEN_SHAPE"] != "own-proxy-join" {
+				t.Fatalf("external-api environment %v", extEnv)
 			}
 			for _, vol := range []string{"traefik-acme", "nginx-certs", "nginx-acme-webroot"} {
 				if _, ok := doc.Volumes[vol]; ok {
@@ -224,6 +244,20 @@ func TestOverlayDocs(t *testing.T) {
 						t.Errorf("%+v: %s networks %v", ov, svc, nets)
 					}
 				}
+				// The external API (D-220 amendment 4): on the database
+				// container's network like serve, its own Traefik route.
+				ext, extOK := d.Services["external-api"]
+				if extOK != (ov.ExternalAPI && (ov.ProxyLabels || ov.DBNetwork && !ov.DBOnProxy)) {
+					t.Errorf("%+v: external-api block %v", ov, extOK)
+				}
+				extNets, _ := ext["networks"].(map[string]any) //nolint:errcheck // checked below
+				if _, ok := extNets["database"]; ok != (ov.ExternalAPI && ov.DBNetwork && !ov.DBOnProxy) {
+					t.Errorf("%+v: external-api on database %v", ov, ok)
+				}
+				extLabels, _ := ext["labels"].(map[string]any) //nolint:errcheck // checked below
+				if (extLabels["traefik.http.routers.bekup-api.rule"] == "Host(`${BEKUP_DOMAIN:-bekup.invalid}`) && PathPrefix(`/api/v1/`)") != (ov.ExternalAPI && ov.ProxyLabels) {
+					t.Errorf("%+v: external-api labels %v", ov, extLabels)
+				}
 				if ov.DBNetwork && d.Networks["backend"]["internal"] != true {
 					t.Errorf("%+v: networks %v", ov, d.Networks)
 				}
@@ -257,9 +291,11 @@ func overlayCombos(v Variant, db DBMode) []Overlays {
 				if (labels || link) && !v.OwnProxy() || dbn && db != DBExternal {
 					continue
 				}
-				out = append(out, Overlays{ProxyLabels: labels, ProxyLink: link, DBNetwork: dbn})
-				if dbn && v.OwnProxy() && !link { // D-216: the proxy's network in join mode
-					out = append(out, Overlays{ProxyLabels: labels, DBNetwork: true, DBOnProxy: true})
+				for _, ext := range []bool{false, true} { // D-220: the external API
+					out = append(out, Overlays{ProxyLabels: labels, ProxyLink: link, DBNetwork: dbn, ExternalAPI: ext})
+					if dbn && v.OwnProxy() && !link { // D-216: the proxy's network in join mode
+						out = append(out, Overlays{ProxyLabels: labels, DBNetwork: true, DBOnProxy: true, ExternalAPI: ext})
+					}
 				}
 			}
 		}
@@ -327,7 +363,7 @@ func TestVariantUntouchedBlocksByteEqual(t *testing.T) {
 	}
 	edited := map[Variant][]string{
 		VariantTraefik:  {"services/traefik-init", "services/traefik"},
-		VariantOwnProxy: {"services/serve"},
+		VariantOwnProxy: {"services/serve", "services/external-api"},
 	}
 	var doc variantDoc
 	if err := yaml.Unmarshal(src, &doc); err != nil {

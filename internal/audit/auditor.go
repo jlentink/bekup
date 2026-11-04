@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/logging"
 )
@@ -87,6 +89,10 @@ func (a *Auditor) params(ev Event) (sqlc.InsertAuditLogParams, error) {
 	if !ev.Action.Valid() {
 		return sqlc.InsertAuditLogParams{}, fmt.Errorf("%w: unknown action %q", ErrInvalidEvent, ev.Action)
 	}
+	if ev.Actor.API != nil && ev.Actor.Kind != ActorAPI {
+		return sqlc.InsertAuditLogParams{}, fmt.Errorf("%w: %s actor with an API token", ErrInvalidEvent, ev.Actor.Kind)
+	}
+	details := ev.Details
 	switch ev.Actor.Kind {
 	case ActorUser:
 		if ev.Actor.UserID == nil {
@@ -97,6 +103,11 @@ func (a *Auditor) params(ev Event) (sqlc.InsertAuditLogParams, error) {
 			return sqlc.InsertAuditLogParams{}, fmt.Errorf("%w: system actor with a user id", ErrInvalidEvent)
 		}
 	case ActorCLI:
+	case ActorAPI:
+		var err error
+		if details, err = apiDetails(ev.Action, ev.Actor, ev.Details); err != nil {
+			return sqlc.InsertAuditLogParams{}, err
+		}
 	default:
 		return sqlc.InsertAuditLogParams{}, fmt.Errorf("%w: unknown actor kind %q", ErrInvalidEvent, ev.Actor.Kind)
 	}
@@ -116,11 +127,50 @@ func (a *Auditor) params(ev Event) (sqlc.InsertAuditLogParams, error) {
 		ip := ev.IP.WithZone("").Unmap()
 		p.Ip = &ip
 	}
-	if p.Details, err = Redact(ev.Details, a.reg); err != nil {
+	if p.Details, err = Redact(details, a.reg); err != nil {
 		return p, err
 	}
 	return p, nil
 }
+
+// apiDetails validates an ActorAPI actor (no user id; the token id, a
+// name of 1-100 characters and the request id, which only the actions in
+// apiActionsWithoutRequest may leave out) and returns d with the token id,
+// name and request id added. A caller's detail of the same name is
+// refused rather than overwritten.
+func apiDetails(action Action, actor Actor, d Details) (Details, error) {
+	r := actor.API
+	if actor.UserID != nil {
+		return nil, fmt.Errorf("%w: API actor with a user id", ErrInvalidEvent)
+	}
+	if r == nil || r.TokenID == uuid.Nil || (r.RequestID == uuid.Nil && !apiActionsWithoutRequest[action]) {
+		return nil, fmt.Errorf("%w: API actor without token or request id", ErrInvalidEvent)
+	}
+	if !utf8.ValidString(r.TokenName) || r.TokenName == "" || utf8.RuneCountInString(r.TokenName) > maxAPITokenName {
+		return nil, fmt.Errorf("%w: API token name must be valid UTF-8 of 1 to %d characters", ErrInvalidEvent, maxAPITokenName)
+	}
+	out := make(Details, len(d)+3)
+	for k, v := range d {
+		out[k] = v
+	}
+	add := map[string]string{DetailAPITokenID: r.TokenID.String(), DetailAPITokenName: r.TokenName, DetailRequestID: ""}
+	if r.RequestID != uuid.Nil {
+		add[DetailRequestID] = r.RequestID.String()
+	}
+	for k, v := range add {
+		if _, taken := out[k]; taken {
+			return nil, fmt.Errorf("%w: detail %q is reserved for API actors", ErrInvalidEvent, k)
+		}
+		if v != "" {
+			out[k] = v
+		}
+	}
+	return out, nil
+}
+
+// apiActionsWithoutRequest are the ActorAPI actions that concern the
+// token, not a run request: an access denial (D-220 amendment 1).
+var apiActionsWithoutRequest = map[Action]bool{ActionAPIAddressDenied: true}
 
 // optText validates an optional text column and scrubs registered secrets.
 func optText(name, s string, maxChars int, a *Auditor) (*string, error) {

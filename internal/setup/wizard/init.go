@@ -215,6 +215,7 @@ func initSteps() []step[*initState] {
 		{name: "bundled-db", skip: func(st *initState) bool { return st.a.DB.External() }, run: (*initState).bundledDB},
 		{name: "docker-gid", run: (*initState).dockerGID},
 		{name: "targets", run: (*initState).askTargets},
+		{name: "external-api", skip: (*initState).noExternalAPI, run: (*initState).externalAPI},
 		{name: "summary", run: (*initState).summary},
 		{name: "passphrase", skip: func(st *initState) bool { return st.passMode != choiceGenerate }, run: (*initState).showPassphrase},
 	}
@@ -1047,6 +1048,36 @@ func (st *initState) askTargets() error {
 	return nil
 }
 
+// noExternalAPI skips the external API question in single-account mode,
+// which does not support it (D-220), and then clears an earlier yes.
+func (st *initState) noExternalAPI() bool {
+	if st.a.DB.External() && st.auth() == setup.DBAuthSingleAccount {
+		st.a.ExternalAPI = false
+		return true
+	}
+	return false
+}
+
+// externalAPI asks whether to enable the opt-in external API (D-220).
+func (st *initState) externalAPI() error {
+	route := "through the bundled proxy"
+	if st.a.Variant.OwnProxy() {
+		route = "through your proxy (setup prints its /api/v1/ route)"
+	}
+	body := fmt.Sprintf(`Enable the external API? CI pipelines can then start a backup job and poll its
+result over https://%s/api/v1/ %s, with a per-job
+API token an admin or the job's owner creates in the UI (D-220). It runs as its
+own container (compose profile %s) with its own minimal database role and
+never sees the master key. Off by default; enable it later with
+`+"`setup upgrade --external-api`"+`.`, st.a.Domain, route, setup.ExternalAPIProfile)
+	ok, err := st.ui.Confirm("External API for CI pipelines", body, st.a.ExternalAPI)
+	if err != nil {
+		return err
+	}
+	st.a.ExternalAPI = ok
+	return nil
+}
+
 func (st *initState) summary() error {
 	a := st.a
 	if err := (&a).Validate(); err != nil {
@@ -1107,6 +1138,9 @@ func (st *initState) summary() error {
 	fmt.Fprintf(&b, "Docker GID: %d\n", a.DockerGID)
 	if len(a.TargetCIDRs)+len(a.TargetHosts) > 0 {
 		fmt.Fprintf(&b, "Targets:    %s\n", strings.Join(append(append([]string{}, a.TargetCIDRs...), a.TargetHosts...), ", "))
+	}
+	if a.ExternalAPI {
+		fmt.Fprintf(&b, "External API: enabled, https://%s/api/v1/ (profile %s)\n", a.Domain, setup.ExternalAPIProfile)
 	}
 	if err := st.ui.Note("Summary", strings.TrimRight(b.String(), "\n")); err != nil {
 		return err
@@ -1234,6 +1268,9 @@ func (st *initState) flags() []string {
 	}
 	for _, h := range a.TargetHosts {
 		f = append(f, "--target-host", h)
+	}
+	if a.ExternalAPI {
+		f = append(f, "--external-api")
 	}
 	return f
 }

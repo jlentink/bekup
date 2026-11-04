@@ -12,6 +12,13 @@ import (
 )
 
 type Querier interface {
+	// APITokenJobAllowed is the scope rule (public.api_token_job_allowed),
+	// re-checked by the consumer for every request.
+	APITokenJobAllowed(ctx context.Context, arg APITokenJobAllowedParams) (bool, error)
+	// APITokenValid: unrevoked, unexpired and the creator may still hold it.
+	APITokenValid(ctx context.Context, tokenID uuid.UUID) (bool, error)
+	// AcceptRunRequest records the River job and the queued run of a request.
+	AcceptRunRequest(ctx context.Context, arg AcceptRunRequestParams) (int64, error)
 	// AcceptTOTPStep records a verified time step (replay protection): it
 	// succeeds only for a step after the last accepted one and only while the
 	// secret is still the one the code was checked against. A success also
@@ -66,9 +73,21 @@ type Querier interface {
 	// caller can rebuild the full principal (role, AAL, step-up and
 	// second-factor times, restrictions; M1 review L2).
 	CheckActiveSession(ctx context.Context, id uuid.UUID) (CheckActiveSessionRow, error)
+	// ClaimAPIAccessDenials locks the oldest unprocessed access denials that
+	// no other consumer holds (process them in the same transaction),
+	// skipping @exclude, with the token's name and creator.
+	ClaimAPIAccessDenials(ctx context.Context, arg ClaimAPIAccessDenialsParams) ([]ClaimAPIAccessDenialsRow, error)
+	// ClaimPendingRunRequests locks the oldest undecided requests that no other
+	// consumer holds (one consumer per request; decide them in the same
+	// transaction), skipping @exclude (requests this consumer failed to decide
+	// in its current pass). expired: older than @max_age_seconds by the
+	// database clock.
+	ClaimPendingRunRequests(ctx context.Context, arg ClaimPendingRunRequestsParams) ([]ClaimPendingRunRequestsRow, error)
 	// ClaimUndispatchedEvents locks events whose fan-out job is not enqueued
 	// yet (the dispatcher enqueues it in the same transaction).
 	ClaimUndispatchedEvents(ctx context.Context, maxEvents int32) ([]uuid.UUID, error)
+	// ClearDestinationTLSPin removes a WebDAV destination's certificate pin.
+	ClearDestinationTLSPin(ctx context.Context, id uuid.UUID) (Destination, error)
 	// ClearJobMissedState deletes the state of checked jobs whose outage
 	// ended (or that have none).
 	ClearJobMissedState(ctx context.Context, jobIds []uuid.UUID) error
@@ -86,7 +105,8 @@ type Querier interface {
 	// that can receive a reload broadcast: the LISTEN connections of serve and
 	// worker in this database (all run as bekup_app, so their rows are
 	// visible), "<prefix>:<instance id>". Display and progress only: any
-	// client can claim such a name (D-200).
+	// client of the same role can claim such a name (D-200); sessions of other
+	// roles (bekup_external, D-220) never count.
 	ConfigReloadListeners(ctx context.Context) ([]string, error)
 	// ConfigReloadResultsByRequest returns the answers to one request (with
 	// the request's trigger).
@@ -202,6 +222,42 @@ type Querier interface {
 	// EnsureJobEncryption creates the encryption row of a job that has none
 	// (mode passphrase until a key or an opt-out says otherwise).
 	EnsureJobEncryption(ctx context.Context, arg EnsureJobEncryptionParams) error
+	// Queries of `bekup external-api` (D-220), connected as bekup_external.
+	// The role may only call the SECURITY DEFINER functions of schema api
+	// (migration 00037); each authenticates the token itself with the token
+	// id and the SHA-256 secret hash computed by the caller. The result
+	// columns come from the api.*_result views, so every field is nullable.
+	// Every call passes the client address (as the external API determined
+	// it through its trusted proxies): a token with an address allowlist is
+	// refused from any other address (or without one) exactly like a wrong
+	// secret, and the refusal may record a denial (D-220 amendment 1). Run
+	// them outside an explicit transaction or in a READ COMMITTED one.
+	// ExternalAuthenticate: no row means unknown, wrong secret, revoked,
+	// expired, a creator who may no longer hold a token or a client address
+	// outside the token's allowlist (401).
+	ExternalAuthenticate(ctx context.Context, arg ExternalAuthenticateParams) (ApiAuthenticateResult, error)
+	// ExternalRequestRun files a run request; refusal is NULL on success (see
+	// api.request_run for the codes).
+	ExternalRequestRun(ctx context.Context, arg ExternalRequestRunParams) (ApiRequestRunResult, error)
+	// ExternalRequestStatus returns the raw facts of one of the token's
+	// requests; no row: not found (404). The Go side aggregates the state.
+	ExternalRequestStatus(ctx context.Context, arg ExternalRequestStatusParams) (ApiRequestStatusResult, error)
+	// ExternalRoleExists reports whether the optional role bekup_external
+	// exists (D-220).
+	ExternalRoleExists(ctx context.Context, roleName string) (bool, error)
+	// ExternalRoleFindings is the privilege audit of bekup_external (D-220):
+	// everything the role may do in this database beyond CONNECT, USAGE on
+	// schema api and EXECUTE on the allowlisted api functions (signatures as
+	// "name(type, ...)"), and every role it is a member of (a NOINHERIT role
+	// could still SET ROLE to it). Privileges through PUBLIC count; functions
+	// that belong to an extension are left out (the role has no USAGE on
+	// their schema). Names only, ordered.
+	ExternalRoleFindings(ctx context.Context, arg ExternalRoleFindingsParams) ([]string, error)
+	// ExternalSchemaVersion is bekup_schema_version() through the api schema
+	// (startup and /readyz of the external API).
+	ExternalSchemaVersion(ctx context.Context) (int64, error)
+	// ExternalTokenJobs lists the jobs currently in the token's scope.
+	ExternalTokenJobs(ctx context.Context, arg ExternalTokenJobsParams) ([]ApiTokenJobsResult, error)
 	// FailRunningTestRestoreItems ends the unfinished items of an abandoned
 	// test restore.
 	FailRunningTestRestoreItems(ctx context.Context, arg FailRunningTestRestoreItemsParams) error
@@ -218,6 +274,9 @@ type Querier interface {
 	FinishTestRestore(ctx context.Context, arg FinishTestRestoreParams) (int64, error)
 	// FinishTestRestoreItem records an item's verdict (once).
 	FinishTestRestoreItem(ctx context.Context, arg FinishTestRestoreItemParams) (int64, error)
+	GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow, error)
+	// GetAPITokenForUpdate locks a token (revocation).
+	GetAPITokenForUpdate(ctx context.Context, id uuid.UUID) (GetAPITokenForUpdateRow, error)
 	// Instance signing keys (D-087; internal/audit instance key loader).
 	GetActiveInstanceKey(ctx context.Context) (InstanceKey, error)
 	GetActiveJobPassphrase(ctx context.Context, jobID uuid.UUID) (JobPassphrase, error)
@@ -385,6 +444,16 @@ type Querier interface {
 	ImportRun(ctx context.Context, arg ImportRunParams) (Run, error)
 	ImportRunItem(ctx context.Context, arg ImportRunItemParams) (RunItem, error)
 	IncrementEventCollapsed(ctx context.Context, id uuid.UUID) error
+	// External API access as bekup_app (D-220): API tokens (internal/apiaccess)
+	// and the run-request and access-denial consumer of the workers. The secret hash is written
+	// once and never read back; "last used" is the newest request of a token.
+	// InsertAPIToken: allowed_cidrs (1-32 distinct networks, no /0, no
+	// IPv4-mapped networks; nil = none) or allow_any_address, exactly one of
+	// them (CHECKs api_tokens_allowed_cidrs and api_tokens_addresses; D-220
+	// amendment 1).
+	InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) (InsertAPITokenRow, error)
+	// InsertAPITokenJobs sets the (immutable) scope of a new token.
+	InsertAPITokenJobs(ctx context.Context, arg InsertAPITokenJobsParams) (int64, error)
 	InsertArtifact(ctx context.Context, arg InsertArtifactParams) (Artifact, error)
 	InsertAuditChainHead(ctx context.Context, arg InsertAuditChainHeadParams) (AuditChainHead, error)
 	// InsertAuditLog appends an audit row. id, ts, prev_hash and hash are always
@@ -500,6 +569,23 @@ type Querier interface {
 	LatestRunForRiverJob(ctx context.Context, riverJobID int64) (Run, error)
 	// LatestTestRestore is a job's newest finished test restore.
 	LatestTestRestore(ctx context.Context, jobID uuid.UUID) (TestRestore, error)
+	// ListAPITokenCreators returns the display facts of token creators.
+	ListAPITokenCreators(ctx context.Context, ids []uuid.UUID) ([]ListAPITokenCreatorsRow, error)
+	// ListAPITokenJobs returns the scope of the given tokens with the job
+	// names (deleted jobs included and flagged).
+	ListAPITokenJobs(ctx context.Context, tokenIds []uuid.UUID) ([]ListAPITokenJobsRow, error)
+	// ListAPITokenLastSeen: per token the client address it was last seen
+	// from, the later of its newest run request (accepted address) and its
+	// newest access denial (refused address; denied = true). Tokens never
+	// seen have no row; client_ip is NULL when the external API passed none.
+	ListAPITokenLastSeen(ctx context.Context, tokenIds []uuid.UUID) ([]ListAPITokenLastSeenRow, error)
+	// ListAPITokens lists every token, newest first (the admin page).
+	ListAPITokens(ctx context.Context, maxRows int32) ([]ListAPITokensRow, error)
+	// ListAPITokensForJob lists the tokens whose scope includes the job.
+	ListAPITokensForJob(ctx context.Context, arg ListAPITokensForJobParams) ([]ListAPITokensForJobRow, error)
+	// ListAPITokensForOwner lists the tokens whose scope includes a job the
+	// user owns (a backup owner's view without a job filter), newest first.
+	ListAPITokensForOwner(ctx context.Context, arg ListAPITokensForOwnerParams) ([]ListAPITokensForOwnerRow, error)
 	// ListAbandonedRuns finds queued or running runs that no worker will finish
 	// (D-209): unchanged since @idle_before while their River job is gone or
 	// already finalized (the last attempt crashed or was discarded). A retry
@@ -566,15 +652,16 @@ type Querier interface {
 	// SSH-key updates with allow_temporary (the service decides).
 	ListConnections(ctx context.Context) ([]Connection, error)
 	// ListDailyMaintenanceDestinations returns the destinations the daily sweep
-	// maintains: every non-deleted one (unrecorded-file scan; disk and SFTP also
-	// leftover temporary files and empty directories) and deleted disk and SFTP
-	// ones that still hold present artifacts (temporary files only).
+	// maintains: every non-deleted one (unrecorded-file scan; disk, SFTP and
+	// WebDAV also leftover temporary files and empty directories) and deleted
+	// disk, SFTP and WebDAV ones that still hold present artifacts (temporary
+	// files only).
 	ListDailyMaintenanceDestinations(ctx context.Context) ([]ListDailyMaintenanceDestinationsRow, error)
 	// ListDestinationLocations returns the other destinations whose location a
 	// new or moved destination must not overlap: every non-deleted one and the
 	// soft-deleted ones that still hold present backups (D-209).
 	ListDestinationLocations(ctx context.Context, id uuid.UUID) ([]ListDestinationLocationsRow, error)
-	// Backup destinations (task 2.12, D-131). Only internal/destinations uses
+	// Backup destinations (task 2.12, D-131; WebDAV D-222). Only internal/destinations uses
 	// these queries; secret_enc is sealed under AAD destinations:<id>:secret.
 	ListDestinations(ctx context.Context) ([]Destination, error)
 	// ListDownloadManifestEntries returns the artifacts a run's manifest on one
@@ -626,6 +713,9 @@ type Querier interface {
 	// ListNotificationPrefs returns the preferences of users for one event:
 	// the per-event rows and the per-job overrides of one job.
 	ListNotificationPrefs(ctx context.Context, arg ListNotificationPrefsParams) ([]ListNotificationPrefsRow, error)
+	// ListOwnedJobIDs returns the jobs among @job_ids the user (not deleted)
+	// owns: the part of a token's scope a backup owner may see and act for.
+	ListOwnedJobIDs(ctx context.Context, arg ListOwnedJobIDsParams) ([]uuid.UUID, error)
 	// ListRecentRunsForJobs returns the newest @per_job runs of each job
 	// (Job.lastRun / Job.recentRuns, one query per page of jobs).
 	ListRecentRunsForJobs(ctx context.Context, arg ListRecentRunsForJobsParams) ([]ListRecentRunsForJobsRow, error)
@@ -671,7 +761,10 @@ type Querier interface {
 	// Run history reads for the GraphQL API (task 3.7). Read only; the run
 	// tables are written by internal/runstate (runs.sql). Listings take
 	// scope_all = false to limit rows to the jobs @user_id owns (authz.JobScope,
-	// the same rule as IsJobOwner: deleted users own nothing).
+	// the same rule as IsJobOwner: deleted users own nothing). The actor of a
+	// run is the user of a manual or early run, or for an API run (D-220) the
+	// token that requested it (its accepted run request, until the request is
+	// pruned after 30 days) and the token's creator.
 	// ListRunsPage returns one page of runs, newest first ((queued_at, id)
 	// descending), after the cursor.
 	ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]ListRunsPageRow, error)
@@ -739,6 +832,9 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	// WebAuthn passkeys (task 1.8): registered passkeys and pending ceremonies.
 	ListWebAuthnCredentials(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
+	// ListenAPIRequests: new external API run requests (D-220; a wake-up for
+	// the workers' consumer, the payload is never trusted).
+	ListenAPIRequests(ctx context.Context) error
 	ListenNotificationEvents(ctx context.Context) error
 	ListenRestoreEvents(ctx context.Context) error
 	ListenRunEvents(ctx context.Context) error
@@ -775,6 +871,9 @@ type Querier interface {
 	LockDueJobs(ctx context.Context, arg LockDueJobsParams) ([]LockDueJobsRow, error)
 	// LockDueTestRestores locks the jobs whose next test restore is due.
 	LockDueTestRestores(ctx context.Context, arg LockDueTestRestoresParams) ([]LockDueTestRestoresRow, error)
+	// LockJobsForAPIToken share-locks the non-deleted jobs among @job_ids for
+	// a new token's scope (a concurrent delete waits for the insert).
+	LockJobsForAPIToken(ctx context.Context, jobIds []uuid.UUID) ([]LockJobsForAPITokenRow, error)
 	// LockRestore locks a restore row (cancelRestore, the stuck sweep).
 	LockRestore(ctx context.Context, id uuid.UUID) (Restore, error)
 	// LockRestoreTargetName serializes restore requests for one target
@@ -792,6 +891,8 @@ type Querier interface {
 	// LockUserForFactorChange serializes second-factor changes of one user
 	// (enrollment limits, last-factor protection).
 	LockUserForFactorChange(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	// MarkAPIAccessDenialProcessed: the denial was audited and alerted.
+	MarkAPIAccessDenialProcessed(ctx context.Context, id uuid.UUID) (int64, error)
 	MarkAllUserNotificationsRead(ctx context.Context, arg MarkAllUserNotificationsReadParams) (int64, error)
 	// MarkArtifactDeleted records a retention deletion (only from present).
 	MarkArtifactDeleted(ctx context.Context, arg MarkArtifactDeletedParams) (MarkArtifactDeletedRow, error)
@@ -892,6 +993,9 @@ type Querier interface {
 	PreflightRoleSettings(ctx context.Context, roleNames []string) ([]PreflightRoleSettingsRow, error)
 	// Preflight of `bekup migrate check` (D-207).
 	PreflightServerVersion(ctx context.Context) (PreflightServerVersionRow, error)
+	// PruneAPIAccessDenials deletes processed denials from before @before, at
+	// most @max_rows per call (unprocessed ones are left to the consumer).
+	PruneAPIAccessDenials(ctx context.Context, arg PruneAPIAccessDenialsParams) (int64, error)
 	// PruneConfigReloadRequests deletes requests (with their results) older
 	// than 30 days, except a request whose answer is the newest row of a
 	// process listening now (@listening): a long-running process stays listed.
@@ -902,6 +1006,9 @@ type Querier interface {
 	// PruneJobMissedState deletes the state of jobs the detector no longer
 	// watches (disabled, deleted or manual).
 	PruneJobMissedState(ctx context.Context) (int64, error)
+	// PruneRunRequests deletes decided requests created before @before, at
+	// most @max_rows per call.
+	PruneRunRequests(ctx context.Context, arg PruneRunRequestsParams) (int64, error)
 	PutSetting(ctx context.Context, arg PutSettingParams) (Setting, error)
 	// PutWebAuthnCeremony stores the pending ceremony of a session, replacing
 	// an earlier one of the same kind (only the newest challenge is valid).
@@ -943,6 +1050,9 @@ type Querier interface {
 	// RehashUserPassword replaces the hash only if it is still the one that was
 	// verified (a concurrent password change wins).
 	RehashUserPassword(ctx context.Context, arg RehashUserPasswordParams) (int64, error)
+	// RejectRunRequest records why a request did not start a run (run_active,
+	// job_disabled, job_gone, token_invalid, expired).
+	RejectRunRequest(ctx context.Context, arg RejectRunRequestParams) (int64, error)
 	ReleaseArtifactHold(ctx context.Context, id uuid.UUID) (int64, error)
 	// ReleaseArtifactHoldsOfHolder removes the holds of one holder (the stuck
 	// restore sweep, task 4.5).
@@ -988,6 +1098,8 @@ type Querier interface {
 	// may have started before the version it retires was created.
 	RetireJobPassphrases(ctx context.Context, jobID uuid.UUID) (int64, error)
 	RetireJobRecipients(ctx context.Context, jobID uuid.UUID) (int64, error)
+	// RevokeAPIToken revokes a token once; no row: unknown or already revoked.
+	RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) (RevokeAPITokenRow, error)
 	RevokeOtherUserSessions(ctx context.Context, arg RevokeOtherUserSessionsParams) (int64, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) (int64, error)
 	// RevokeUserSession revokes one session of a user (a session of another
@@ -1040,6 +1152,9 @@ type Querier interface {
 	SetConnectionTLSMode(ctx context.Context, arg SetConnectionTLSModeParams) (Connection, error)
 	SetDestinationAuth(ctx context.Context, arg SetDestinationAuthParams) (Destination, error)
 	SetDestinationHostKey(ctx context.Context, arg SetDestinationHostKeyParams) (Destination, error)
+	// SetDestinationTLSPin pins a WebDAV destination's server certificate
+	// (D-222; only after the service captured it again and compared it).
+	SetDestinationTLSPin(ctx context.Context, arg SetDestinationTLSPinParams) (Destination, error)
 	SetJobEnabled(ctx context.Context, arg SetJobEnabledParams) (Job, error)
 	// SetJobEncryptionMode switches between the key modes and clears an
 	// opt-out.
@@ -1086,6 +1201,10 @@ type Querier interface {
 	StartRun(ctx context.Context, arg StartRunParams) (Run, error)
 	// StartTestRestore moves a queued test restore to running.
 	StartTestRestore(ctx context.Context, id uuid.UUID) (int64, error)
+	// SyncExternalGrants re-applies the privileges of the external API role
+	// bekup_external after the migrations (D-220): see migration 00037. false:
+	// the role does not exist (nothing to do).
+	SyncExternalGrants(ctx context.Context) (bool, error)
 	// TakeRestoreIdentityHandoff deletes the handoff of a restore and returns
 	// it: an identity is read at most once. valid is false when it had
 	// expired.
@@ -1111,13 +1230,19 @@ type Querier interface {
 	UnansweredConfigReloadRequests(ctx context.Context, arg UnansweredConfigReloadRequestsParams) ([]ConfigReloadRequest, error)
 	UnlockUser(ctx context.Context, id uuid.UUID) (int64, error)
 	UnrecordedFileTotals(ctx context.Context, destinationID uuid.UUID) (UnrecordedFileTotalsRow, error)
+	// UpdateAPITokenAddresses replaces the client addresses of an unrevoked
+	// token (the same CHECKs as InsertAPIToken); no row: unknown or revoked.
+	// The caller locks the token first (GetAPITokenForUpdate) for the old
+	// values of its audit entry (api_token.addresses_changed).
+	UpdateAPITokenAddresses(ctx context.Context, arg UpdateAPITokenAddressesParams) (UpdateAPITokenAddressesRow, error)
 	// UpdateConnection replaces the mutable fields (not the TLS mode, which
 	// only SetConnectionTLSMode changes). clear_pins removes both certificate
 	// pins (engine, host or port changed); clear_host_key removes the SSH
 	// host-key pin (bastion host or port changed, or the tunnel was removed).
 	UpdateConnection(ctx context.Context, arg UpdateConnectionParams) (Connection, error)
-	// UpdateDestination replaces the mutable fields. The host-key pin is
-	// cleared when clear_host_key is true (host or port changed).
+	// UpdateDestination replaces the mutable fields. The SFTP host-key pin is
+	// cleared when clear_host_key is true (host or port changed), the WebDAV
+	// certificate pin when clear_tls_pin is true (the URL changed, D-222).
 	UpdateDestination(ctx context.Context, arg UpdateDestinationParams) (Destination, error)
 	UpdateJob(ctx context.Context, arg UpdateJobParams) (Job, error)
 	UpdateNotificationDelivery(ctx context.Context, arg UpdateNotificationDeliveryParams) error

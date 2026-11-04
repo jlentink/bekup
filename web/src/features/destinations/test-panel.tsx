@@ -13,14 +13,19 @@ import { TestDestinationMutation } from "./operations";
 import { StoredTestPanel, type StoredTest } from "@/features/connections/last-test";
 
 import type { DestinationTestResult } from "./results";
+import { WebdavTestDetailsView, type WebdavViewer } from "./webdav-test-details";
 
 /** The normalized testDestination result as a step ledger. */
 export function DestinationTestResultView({
+  id,
   result,
   at,
+  viewer = { isAdmin: false },
 }: {
+  id: string;
   result: DestinationTestResult;
   at: number;
+  viewer?: WebdavViewer;
 }) {
   return (
     <div
@@ -42,7 +47,7 @@ export function DestinationTestResultView({
           return (
             <li
               key={`${step.name}-${i}`}
-              className="grid grid-cols-[1.25rem_7rem_minmax(0,1fr)] items-baseline gap-3 border-b border-rule py-2 last:border-b-0"
+              className="grid grid-cols-[1.25rem_minmax(7rem,auto)_minmax(0,1fr)] items-baseline gap-3 border-b border-rule py-2 last:border-b-0"
             >
               <Icon
                 aria-hidden="true"
@@ -77,6 +82,9 @@ export function DestinationTestResultView({
         </p>
       ) : null}
       {result.note ? <p className="text-sm">{result.note}</p> : null}
+      {result.webdav ? (
+        <WebdavTestDetailsView id={id} details={result.webdav} viewer={viewer} />
+      ) : null}
     </div>
   );
 }
@@ -85,10 +93,13 @@ export function DestinationTestResultView({
 export function DestinationTest({
   id,
   lastTest,
+  viewer,
 }: {
   id: string;
   /** The stored last test (D-187), shown until a test runs on this page. */
   lastTest?: StoredTest | null;
+  /** Who views it (WebDAV: certificate pinning is admin-only). */
+  viewer?: WebdavViewer;
 }) {
   const [test] = useMutation(TestDestinationMutation);
   const [busy, setBusy] = useState(false);
@@ -132,7 +143,12 @@ export function DestinationTest({
         </Alert>
       ) : null}
       {last ? (
-        <DestinationTestResultView result={last.value} at={last.at} />
+        <DestinationTestResultView
+          id={id}
+          result={last.value}
+          at={last.at}
+          {...(viewer ? { viewer } : {})}
+        />
       ) : (
         <StoredTestPanel
           test={lastTest}

@@ -28,7 +28,7 @@ Database backups hold your most sensitive data, yet backup tools often get
 broad network access, a Docker socket and plaintext credentials. bekup runs
 each database's **native dump tools in the official, digest-pinned Docker
 images**, so every server version gets a matching client. It encrypts and
-signs every backup, writes it to **disk, S3 and SFTP**, applies retention
+signs every backup, writes it to **disk, S3, SFTP and WebDAV**, applies retention
 and restores on demand. You manage it in a React web UI backed by a Go
 GraphQL API. When convenience and security conflict, security wins.
 
@@ -42,7 +42,7 @@ GraphQL API. When convenience and security conflict, security wins.
 | **Write-only credentials** | Credentials are envelope-encrypted, write-only in the API and never logged. Secrets are read from files only, never inline or from env. |
 | **Strong sign-in** | Passkeys, TOTP and step-up for sensitive actions. Every restore needs a fresh second factor. |
 | **Tamper-evident audit** | The audit log is append-only and hash-chained, and you can verify it with `bekup audit verify`. |
-| **SSRF guard** | All outbound traffic to S3, SFTP, SMTP and webhooks is checked at dial time: private and internal addresses are blocked unless an admin allowlists them per scope (public addresses are allowed). |
+| **SSRF guard** | All outbound traffic to S3, SFTP, WebDAV, SMTP and webhooks is checked at dial time: private and internal addresses are blocked unless an admin allowlists them per scope (public addresses are allowed). |
 | **No silent weakening** | Security-relevant changes in the UI need an admin with step-up and are audited; posture downgrades (encryption opt-out, unpinned or unencrypted database TLS) also alert and show a permanent badge. A config reload that weakens a live limit (from the UI or with SIGHUP on the host) is audited and alerts every admin, without a badge (D-200). |
 
 Read the threat model in [SECURITY.md](SECURITY.md).
@@ -55,8 +55,8 @@ Read the threat model in [SECURITY.md](SECURITY.md).
 - Completeness evidence: object and row counts are captured with each dump.
 
 **Destinations**
-- Reusable disk, S3 (incl. Object Lock) and SFTP destinations, with fan-out to several per job.
-- Dial-time SSRF guard and pinned SFTP host keys.
+- Reusable disk, S3 (incl. Object Lock), SFTP and WebDAV (Nextcloud/ownCloud incl. TransIP STACK with chunked uploads, NAS boxes, Hetzner Storage Box, any RFC 4918 server) destinations, with fan-out to several per job.
+- Dial-time SSRF guard, pinned SFTP host keys and optional pinned WebDAV certificates; WebDAV servers must prove they refuse overwrites before bekup writes to them.
 
 **Scheduling and retention**
 - Interval or cron schedules with time zones and DST handling; **Run now** or **start the next run early**.
@@ -73,6 +73,7 @@ Read the threat model in [SECURITY.md](SECURITY.md).
 **Access**
 - Roles: Admin, Maintainer and User (backup owner), enforced by a deny-by-default authorization matrix.
 - Passkeys, TOTP, recovery codes, an admin-set 2FA policy and step-up confirmation.
+- Opt-in **external API for CI pipelines**: start a backup job and wait for its result over `https://<domain>/api/v1/` with per-job API tokens (expiring, revocable, shown once, optionally limited to client networks); its own container and a database role that can only call a few checked functions ([guide](docs/guides/external-api.md)).
 
 **Notifications and monitoring**
 - In-app inbox, e-mail and HMAC-signed webhooks, with shared channels and personal ones.
@@ -111,7 +112,7 @@ flowchart LR
   targets[("Target databases<br/>PostgreSQL, MySQL, MariaDB")]
 
   subgraph outbound["Outbound endpoints"]
-    storage["Disk, S3, SFTP"]
+    storage["Disk, S3, SFTP, WebDAV"]
     notify["SMTP, webhooks"]
   end
 

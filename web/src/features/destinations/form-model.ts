@@ -10,11 +10,15 @@ import type {
   S3Encryption,
   SftpDestinationInput,
   UpdateDestinationInput,
+  WebdavDestinationInput,
+  WebdavFlavor,
 } from "@/graphql/gen/graphql";
+
+import { WT } from "./webdav-text";
 
 /**
  * The destination form model: values, validation (incl. D-140: a stored
- * SFTP password is never sent to a new endpoint) and the mapping to the
+ * SFTP or WebDAV password is never sent to a new endpoint) and the mapping to the
  * create/update inputs. An update sends the whole settings input of the
  * type (it replaces the non-secret configuration); credentials only when
  * entered.
@@ -59,6 +63,16 @@ export interface DestinationFormValues {
     privateKey: string;
     privateKeyPassphrase: string;
   };
+  webdav: {
+    url: string;
+    flavor: WebdavFlavor;
+    username: string;
+    passwordAction: "keep" | "set";
+    password: string;
+    path: string;
+    caBundlePem: string;
+    timeoutSeconds: string;
+  };
 }
 
 /** Server field names (VALIDATION extensions.field) → form fields. */
@@ -88,6 +102,14 @@ export const SERVER_FIELDS = {
   "sftp.password": "sftp.password",
   "sftp.privateKey": "sftp.privateKey",
   "sftp.privateKeyPassphrase": "sftp.privateKeyPassphrase",
+  webdav: "webdav.url",
+  "webdav.url": "webdav.url",
+  "webdav.flavor": "webdav.flavor",
+  "webdav.username": "webdav.username",
+  "webdav.password": "webdav.password",
+  "webdav.path": "webdav.path",
+  "webdav.caBundlePem": "webdav.caBundlePem",
+  "webdav.timeoutSeconds": "webdav.timeoutSeconds",
 } as const;
 
 export type FormField = (typeof SERVER_FIELDS)[keyof typeof SERVER_FIELDS];
@@ -128,6 +150,16 @@ export function emptyValues(type: DestinationType = "S3"): DestinationFormValues
       password: "",
       privateKey: "",
       privateKeyPassphrase: "",
+    },
+    webdav: {
+      url: "",
+      flavor: "GENERIC",
+      username: "",
+      passwordAction: "set",
+      password: "",
+      path: "",
+      caBundlePem: "",
+      timeoutSeconds: "",
     },
   };
 }
@@ -173,7 +205,44 @@ export function valuesFrom(d: Original): DestinationFormValues {
       auth: x.authMethod === "NONE" ? "later" : "keep",
     };
   }
+  if (s?.webdav) {
+    const x = s.webdav;
+    v.webdav = {
+      ...v.webdav,
+      url: x.url,
+      flavor: x.flavor,
+      username: x.username,
+      passwordAction: x.hasPassword ? "keep" : "set",
+      path: x.path,
+      caBundlePem: x.caBundlePem ?? "",
+      timeoutSeconds: x.timeoutSeconds == null ? "" : String(x.timeoutSeconds),
+    };
+  }
   return v;
+}
+
+/** The URL as the server stores it (trimmed, no trailing slash). */
+function normalizedUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
+/** True when a stored WebDAV password must be entered again (D-140). */
+export function webdavNeedsPassword(v: DestinationFormValues, orig: Original | undefined): boolean {
+  const x = orig?.settings?.webdav;
+  if (!x?.hasPassword) return false;
+  return (
+    normalizedUrl(v.webdav.url) !== normalizedUrl(x.url) ||
+    v.webdav.flavor !== x.flavor ||
+    v.webdav.username.trim() !== x.username
+  );
+}
+
+/** Whether the update sends a new WebDAV password. */
+export function effectiveWebdavPasswordAction(
+  v: DestinationFormValues,
+  orig: Original | undefined,
+): "keep" | "set" {
+  return webdavNeedsPassword(v, orig) ? "set" : v.webdav.passwordAction;
 }
 
 /** True when a stored SFTP password must be entered again (D-140). */
@@ -203,7 +272,7 @@ export function buildSchema(orig: Original | undefined) {
   return z
     .object({
       name: str.trim().min(1, "Enter a name.").max(100, "At most 100 characters."),
-      type: z.enum(["DISK", "S3", "SFTP"]),
+      type: z.enum(["DISK", "S3", "SFTP", "WEBDAV"]),
       noDelete: z.boolean(),
       disk: z.object({ path: str.trim() }),
       s3: z.object({
@@ -235,6 +304,16 @@ export function buildSchema(orig: Original | undefined) {
         password: str,
         privateKey: str,
         privateKeyPassphrase: str,
+      }),
+      webdav: z.object({
+        url: str.trim(),
+        flavor: z.enum(["GENERIC", "NEXTCLOUD"]),
+        username: str.trim(),
+        passwordAction: z.enum(["keep", "set"]),
+        password: str,
+        path: str.trim(),
+        caBundlePem: str,
+        timeoutSeconds: str.trim(),
       }),
     })
     .superRefine((v, ctx) => {
@@ -286,6 +365,25 @@ export function buildSchema(orig: Original | undefined) {
             issue(["sftp", "privateKey"], "Paste the private key (PEM or OpenSSH format).");
           break;
         }
+        case "WEBDAV": {
+          const w = v.webdav;
+          if (w.url === "") issue(["webdav", "url"], WT.errors.url);
+          else if (!/^https?:\/\/[^/\s]/i.test(w.url))
+            issue(["webdav", "url"], WT.errors.urlScheme);
+          if (w.username === "") issue(["webdav", "username"], WT.errors.username);
+          else if (w.username.includes(":")) issue(["webdav", "username"], WT.errors.usernameColon);
+          if (webdavNeedsPassword(values, orig) && w.password === "")
+            issue(["webdav", "password"], WT.errors.reentry);
+          if (w.path.split("/").includes("..")) issue(["webdav", "path"], WT.errors.path);
+          if (w.caBundlePem.trim() !== "" && !w.caBundlePem.includes("BEGIN CERTIFICATE"))
+            issue(["webdav", "caBundlePem"], WT.errors.caBundle);
+          if (w.timeoutSeconds !== "") {
+            const n = Number(w.timeoutSeconds);
+            if (!/^\d+$/.test(w.timeoutSeconds) || n < 5 || n > 600)
+              issue(["webdav", "timeoutSeconds"], WT.errors.timeout);
+          }
+          break;
+        }
       }
     });
 }
@@ -335,6 +433,21 @@ function sftpInput(v: DestinationFormValues, orig: Original | undefined): SftpDe
   };
 }
 
+function webdavInput(v: DestinationFormValues, orig: Original | undefined): WebdavDestinationInput {
+  const x = v.webdav;
+  const action = effectiveWebdavPasswordAction(v, orig);
+  return {
+    url: x.url,
+    flavor: x.flavor,
+    username: x.username,
+    // An empty field never replaces a stored password; on create it means "none".
+    ...(action === "set" && x.password !== "" ? { password: x.password } : {}),
+    path: x.path,
+    ...opt("caBundlePem", x.caBundlePem.trim()),
+    ...(x.timeoutSeconds !== "" ? { timeoutSeconds: Number(x.timeoutSeconds) } : {}),
+  };
+}
+
 function settingsInput(v: DestinationFormValues, orig: Original | undefined) {
   switch (v.type) {
     case "DISK":
@@ -343,6 +456,8 @@ function settingsInput(v: DestinationFormValues, orig: Original | undefined) {
       return { s3: s3Input(v) };
     case "SFTP":
       return { sftp: sftpInput(v, orig) };
+    case "WEBDAV":
+      return { webdav: webdavInput(v, orig) };
   }
 }
 

@@ -518,6 +518,8 @@ func TestDestinationConfig(t *testing.T) {
 			"secret_access_key_file = \"/run/s3key\"\n[netguard]\nallow_cidrs = [\"10.0.0.0/8\"]\n",
 		"sftp": "type = \"sftp\"\n[sftp]\nhost = \"backup.example.com\"\nuser = \"bekup\"\nbase_path = \"/upload\"\n" +
 			"host_key_fingerprint = \"SHA256:abc\"\nprivate_key_file = \"/run/sshkey\"\n",
+		"webdav": "type = \"webdav\"\n[webdav]\nurl = \"https://user.stackstorage.com\"\nflavor = \"nextcloud\"\n" +
+			"username = \"user\"\npassword_file = \"/run/davpass\"\npath = \"bekup\"\npinned_certificate_file = \"/run/dav.pem\"\n",
 	}
 	for name, in := range good {
 		c, err := offline.ParseDestinationConfig([]byte(in))
@@ -534,6 +536,9 @@ func TestDestinationConfig(t *testing.T) {
 		"type = \"sftp\"\n[sftp]\nhost = \"h\"\nprivate_key_file = \"/a\"\npassword_file = \"/b\"\n",
 		"type = \"sftp\"\n[sftp]\nhost = \"h\"\npassword_file = \"/b\"\nprivate_key_passphrase_file = \"/c\"\n",
 		"type = \"disk\"\n[disk]\npath = \"/x\"\n[s3]\nbucket = \"b\"\n",
+		"type = \"webdav\"\n[webdav]\nurl = \"https://h\"\nusername = \"u\"\n",
+		"type = \"webdav\"\n[webdav]\nurl = \"https://h\"\npassword = \"inline\"\n",
+		"type = \"webdav\"\n[webdav]\nurl = \"https://h\"\npassword_file = \"/p\"\nca_bundle_file = \"/a\"\npinned_certificate_file = \"/b\"\n",
 	}
 	for _, in := range bad {
 		if _, err := offline.ParseDestinationConfig([]byte(in)); err == nil {
@@ -553,5 +558,23 @@ func TestDestinationConfig(t *testing.T) {
 	defer offline.CloseQuietly(d)
 	if !d.Capabilities().NoDeleteMode {
 		t.Fatal("not opened in no-delete mode")
+	}
+	// A WebDAV description opens read-only too (Open does not connect).
+	pw := filepath.Join(t.TempDir(), "davpass")
+	if err := os.WriteFile(pw, []byte("app-password\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err = offline.ParseDestinationConfig([]byte("type = \"webdav\"\n[webdav]\nurl = \"https://dav.example.com/b\"\n" +
+		"username = \"u\"\npassword_file = \"" + pw + "\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd, err := c.Open(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer offline.CloseQuietly(wd)
+	if caps := wd.Capabilities(); !caps.NoDeleteMode || caps.Type != "webdav" {
+		t.Fatalf("webdav capabilities %+v", caps)
 	}
 }

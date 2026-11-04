@@ -89,6 +89,8 @@ type operations struct {
 	// (bounded by maxWarnedBastions).
 	warnedMu sync.Mutex
 	warned   map[string]bool
+	// policy backs GetTargetPolicy (D-223); New fills it.
+	policy targetPolicyInfo
 }
 
 // chainFetcher is implemented by *pinning.Checker.

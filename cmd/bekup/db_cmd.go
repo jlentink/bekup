@@ -32,8 +32,8 @@ func newDBCmd(g *globalFlags) *cobra.Command {
 }
 
 func newDBRolesSQLCmd() *cobra.Command {
-	var database, appFile, ownerFile, passwords string
-	var createExt bool
+	var database, appFile, ownerFile, externalFile, passwords string
+	var createExt, externalRole bool
 	cmd := &cobra.Command{
 		Use:   "roles-sql",
 		Short: "Print the SQL that creates bekup_owner, bekup_app and the database (for a DBA, run with psql)",
@@ -41,17 +41,22 @@ func newDBRolesSQLCmd() *cobra.Command {
 			"PostgreSQL 15+ server (D-207). With --passwords verifier (default) the roles get SCRAM-SHA-256\n" +
 			"verifiers of the passwords in --owner-password-file and --app-password-file: the passwords\n" +
 			"themselves are never printed, but the verifiers are sensitive (keep the output private). With\n" +
-			"--passwords prompt the script asks for them with psql's \\password instead. Output: stdout only.",
+			"--passwords prompt the script asks for them with psql's \\password instead. --external-password-file\n" +
+			"(or --external-role with prompts) also creates bekup_external, the login role of the optional\n" +
+			"external API (D-220; not with single-account mode). Output: stdout only.",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
 			if !config.ValidDBName(database) {
 				return fmt.Errorf("--database: invalid database name %q (letters, digits, _, - and $; not postgres or a template)", database)
 			}
-			var ownerV, appV string
+			var ownerV, appV, externalV string
 			switch passwords {
 			case "verifier":
 				if ownerFile == "" || appFile == "" {
 					return errors.New("--passwords verifier needs --owner-password-file and --app-password-file")
+				}
+				if externalRole {
+					return errors.New("--external-role is for --passwords prompt; with verifiers pass --external-password-file")
 				}
 				var err error
 				if ownerV, err = verifierFromFile("--owner-password-file", ownerFile); err != nil {
@@ -60,14 +65,24 @@ func newDBRolesSQLCmd() *cobra.Command {
 				if appV, err = verifierFromFile("--app-password-file", appFile); err != nil {
 					return err
 				}
+				if externalFile != "" {
+					if externalV, err = verifierFromFile("--external-password-file", externalFile); err != nil {
+						return err
+					}
+					externalRole = true
+				}
 			case "prompt":
-				if ownerFile != "" || appFile != "" {
+				if ownerFile != "" || appFile != "" || externalFile != "" {
 					return errors.New("--passwords prompt reads no password files")
 				}
 			default:
 				return fmt.Errorf("--passwords must be verifier or prompt (got %q)", passwords)
 			}
-			script, err := db.RolesSQLScript(db.NewRolesSQLPlan(database, ownerV, appV, passwords == "prompt", createExt))
+			plan := db.NewRolesSQLPlan(database, ownerV, appV, passwords == "prompt", createExt)
+			if externalRole {
+				plan = plan.WithExternal(externalV)
+			}
+			script, err := db.RolesSQLScript(plan)
 			if err != nil {
 				return err
 			}
@@ -79,6 +94,8 @@ func newDBRolesSQLCmd() *cobra.Command {
 	f.StringVar(&database, "database", config.DefaultDBName, "name of bekup's database (database.name)")
 	f.StringVar(&ownerFile, "owner-password-file", "", "file with the bekup_owner password (database.owner_password_file)")
 	f.StringVar(&appFile, "app-password-file", "", "file with the bekup_app password (database.password_file)")
+	f.StringVar(&externalFile, "external-password-file", "", "also create bekup_external (external API, D-220) with the password in this file")
+	f.BoolVar(&externalRole, "external-role", false, "with --passwords prompt: also create bekup_external (external API, D-220)")
 	f.StringVar(&passwords, "passwords", "verifier", "verifier: embed SCRAM verifiers of the password files; prompt: psql asks for the passwords")
 	f.BoolVar(&createExt, "create-extensions", false, "also create the citext extension as the admin (servers where it is not trusted)")
 	return cmd
@@ -103,6 +120,7 @@ func verifierFromFile(flag, path string) (string, error) {
 
 type bootstrapFlags struct {
 	adminUser, adminPasswordFile, adminDatabase, adminHost string
+	externalPasswordFile                                   string
 	adminPort                                              int
 	tlsMode, tlsCAFile, tlsServerName                      string
 	resetPasswords, dryRun, adoptExisting, allowInsecure   bool
@@ -124,8 +142,10 @@ func newDBBootstrapCmd(g *globalFlags) *cobra.Command {
 			"--adopt-existing-roles, and other members or ADMIN OPTION holders of them are refused. Then it\n" +
 			"runs the role checks and the migrate preflight. With database.single_account = true it uses the\n" +
 			"single account itself (weakened). The admin connection needs tls_mode verify-full unless\n" +
-			"--allow-insecure-admin-connection is given. Like migrate up it refuses to run on another\n" +
-			"version than BEKUP_SETUP_VERSION (D-212).",
+			"--allow-insecure-admin-connection is given. With --external-password-file it also creates\n" +
+			"bekup_external, the login role of the optional external API (D-220; two roles only), logs in as it\n" +
+			"and audits its privileges. Like migrate up it refuses to run on another version than\n" +
+			"BEKUP_SETUP_VERSION (D-212).",
 		Args: cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error { return runBootstrap(c, g, &bf) },
 	}
@@ -135,6 +155,7 @@ func newDBBootstrapCmd(g *globalFlags) *cobra.Command {
 	f.StringVar(&bf.adminDatabase, "admin-database", "postgres", "maintenance database the administrator connects to")
 	f.StringVar(&bf.adminHost, "admin-host", "", "host of the administrator connection (default: database.host)")
 	f.IntVar(&bf.adminPort, "admin-port", 0, "port of the administrator connection (default: database.port)")
+	f.StringVar(&bf.externalPasswordFile, "external-password-file", "", "also create bekup_external (external API, D-220) with the password in this file")
 	f.StringVar(&bf.tlsMode, "tls-mode", "", "override database.tls_mode for this command (and the checks after it)")
 	f.StringVar(&bf.tlsCAFile, "tls-ca-file", "", "override database.tls_ca_file")
 	f.StringVar(&bf.tlsServerName, "tls-server-name", "", "override database.tls_server_name")
@@ -178,7 +199,8 @@ func runBootstrap(c *cobra.Command, g *globalFlags, bf *bootstrapFlags) error {
 		Config: res.Config, AdminUser: bf.adminUser, AdminPasswordFileSet: bf.adminPasswordFile != "",
 		AdminPassword: func() ([]byte, error) { return readAdminPassword(c, bf.adminPasswordFile) },
 		AdminDatabase: bf.adminDatabase, AdminHost: bf.adminHost, AdminPort: bf.adminPort,
-		AdoptExisting: bf.adoptExisting, ResetPasswords: bf.resetPasswords, DryRun: bf.dryRun, AllowInsecure: bf.allowInsecure,
+		ExternalPasswordFile: bf.externalPasswordFile, AdoptExisting: bf.adoptExisting,
+		ResetPasswords: bf.resetPasswords, DryRun: bf.dryRun, AllowInsecure: bf.allowInsecure,
 		Out: c.OutOrStdout(), Warn: c.ErrOrStderr(), Logger: logger,
 	})
 }

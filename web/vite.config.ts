@@ -11,16 +11,32 @@ import { cspStrictStyles } from "./vite-plugins/csp-strict-styles.ts";
 import { graphqlDocuments } from "./vite-plugins/graphql-documents.ts";
 
 const src = fileURLToPath(new URL("./src", import.meta.url));
+const webRoot = fileURLToPath(new URL(".", import.meta.url));
+const guides = fileURLToPath(new URL("../docs/guides", import.meta.url));
 const styleSingletonShim = fileURLToPath(
   new URL("./src/lib/csp/style-singleton.ts", import.meta.url),
 );
 
-function readVersion(): string {
+/**
+ * The release version from the repository's VERSION file (`../VERSION`; the
+ * Dockerfile's web stage copies it to /src/VERSION for this). A production
+ * build refuses to run without a valid x.y.z version, so a missing file can
+ * never ship a UI that says "v0.0.0-dev"; the dev server and vitest fall
+ * back to it.
+ */
+function readVersion(strict: boolean): string {
+  let version: string;
   try {
-    return readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
-  } catch {
+    version = readFileSync(new URL("../VERSION", import.meta.url), "utf8").trim();
+  } catch (err) {
+    if (strict) throw new Error("vite build: cannot read ../VERSION", { cause: err });
     return "0.0.0-dev";
   }
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    if (strict) throw new Error(`vite build: ../VERSION is not x.y.z: ${JSON.stringify(version)}`);
+    return "0.0.0-dev";
+  }
+  return version;
 }
 
 /**
@@ -44,7 +60,7 @@ function keepGitkeep(): Plugin {
 // The Go server (`bekup serve`) listens on :8080 in development.
 const backend = process.env.BEKUP_DEV_BACKEND ?? "http://localhost:8080";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [cspStrictStyles(), graphqlDocuments(), react(), tailwindcss(), keepGitkeep()],
   resolve: {
     alias: [
@@ -54,11 +70,15 @@ export default defineConfig({
     ],
   },
   define: {
-    __BEKUP_VERSION__: JSON.stringify(readVersion()),
+    __BEKUP_VERSION__: JSON.stringify(readVersion(command === "build")),
   },
   server: {
     port: 5173,
     strictPort: true,
+    // Tests only: the API access snippets are compared with the external
+    // API guide (src/features/api-access/snippets.test.ts imports it with
+    // ?raw). The dev server keeps Vite's default file access.
+    ...(process.env.VITEST ? { fs: { allow: [webRoot, guides] } } : {}),
     proxy: {
       "/graphql": { target: backend, changeOrigin: false },
       "/api": { target: backend, changeOrigin: false },
@@ -120,4 +140,4 @@ export default defineConfig({
     hookTimeout: 30_000,
     maxWorkers: "50%",
   },
-});
+}));

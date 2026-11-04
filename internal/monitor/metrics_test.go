@@ -49,7 +49,7 @@ func TestRegistration(t *testing.T) {
 		"bekup_backup_bytes_stored_total", "bekup_backup_bytes_raw_total", "bekup_restores_total",
 		"bekup_test_restores_total", "bekup_retention_deleted_total", "bekup_retention_missing_total",
 		"bekup_scheduler_ticks_total", "bekup_scheduler_skips_total", "bekup_scheduler_enqueued_total",
-		"bekup_scheduler_last_tick_timestamp_seconds", "bekup_config_reloads_total", "go_goroutines",
+		"bekup_scheduler_last_tick_timestamp_seconds", "bekup_config_reloads_total", "bekup_api_run_requests_total", "go_goroutines",
 	} {
 		if mfs[name] == nil {
 			t.Errorf("metric %s not registered", name)
@@ -92,6 +92,7 @@ func TestLabelCardinalityBounded(t *testing.T) {
 		m.Skipped(scheduler.SkipReason(v))
 		m.Enqueued(queue.Trigger(v))
 		m.ConfigReloadFinished(v)
+		m.RunRequestDecided(v)
 	}
 	if after := testutil.CollectAndCount(m.runs); after != before {
 		t.Errorf("runs series grew from %d to %d", before, after)
@@ -104,16 +105,24 @@ func TestLabelCardinalityBounded(t *testing.T) {
 	}
 	for name, c := range map[string]prometheus.Collector{
 		"restores": m.restores, "test_restores": m.testRestores, "skips": m.skips, "enqueued": m.enqueued,
-		"config_reloads": m.reloads,
+		"config_reloads": m.reloads, "api_run_requests": m.apiRequests,
 	} {
 		n := testutil.CollectAndCount(c)
 		if n > 32 {
 			t.Errorf("%s has %d series", name, n)
 		}
 	}
-	// 6 statuses x 5 triggers x 4 engines.
-	if before != 6*5*4 {
-		t.Errorf("runs pre-initialized series = %d, want %d", before, 6*5*4)
+	// 6 statuses x 6 triggers x 4 engines.
+	if before != 6*6*4 {
+		t.Errorf("runs pre-initialized series = %d, want %d", before, 6*6*4)
+	}
+	if got := testutil.ToFloat64(m.apiRequests.WithLabelValues(OtherLabel)); got != 50 {
+		t.Errorf("api requests other = %v, want 50", got)
+	}
+	m.RunRequestDecided("accepted")
+	m.RunRequestDecided("expired")
+	if testutil.ToFloat64(m.apiRequests.WithLabelValues("accepted")) != 1 || testutil.ToFloat64(m.apiRequests.WithLabelValues("expired")) != 1 {
+		t.Error("api request outcomes not counted")
 	}
 }
 

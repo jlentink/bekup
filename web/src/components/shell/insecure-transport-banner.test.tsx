@@ -18,6 +18,7 @@ function serverInfo(insecureTransport: boolean): MockLink.MockedResponse {
           version: "1.0.0",
           insecureTransport,
           devMode: false,
+          externalApiEnabled: false,
         },
       },
     },

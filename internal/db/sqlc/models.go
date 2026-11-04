@@ -15,6 +15,67 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiRequestOutcome string
+
+const (
+	ApiRequestOutcomePending  ApiRequestOutcome = "pending"
+	ApiRequestOutcomeAccepted ApiRequestOutcome = "accepted"
+	ApiRequestOutcomeRejected ApiRequestOutcome = "rejected"
+)
+
+func (e *ApiRequestOutcome) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ApiRequestOutcome(s)
+	case string:
+		*e = ApiRequestOutcome(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ApiRequestOutcome: %T", src)
+	}
+	return nil
+}
+
+type NullApiRequestOutcome struct {
+	ApiRequestOutcome ApiRequestOutcome `json:"apiRequestOutcome"`
+	Valid             bool              `json:"valid"` // Valid is true if ApiRequestOutcome is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullApiRequestOutcome) Scan(value interface{}) error {
+	if value == nil {
+		ns.ApiRequestOutcome, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ApiRequestOutcome.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullApiRequestOutcome) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ApiRequestOutcome), nil
+}
+
+func (e ApiRequestOutcome) Valid() bool {
+	switch e {
+	case ApiRequestOutcomePending,
+		ApiRequestOutcomeAccepted,
+		ApiRequestOutcomeRejected:
+		return true
+	}
+	return false
+}
+
+func AllApiRequestOutcomeValues() []ApiRequestOutcome {
+	return []ApiRequestOutcome{
+		ApiRequestOutcomePending,
+		ApiRequestOutcomeAccepted,
+		ApiRequestOutcomeRejected,
+	}
+}
+
 type ArtifactKind string
 
 const (
@@ -323,9 +384,10 @@ func AllConnectionTlsModeValues() []ConnectionTlsMode {
 type DestinationType string
 
 const (
-	DestinationTypeDisk DestinationType = "disk"
-	DestinationTypeS3   DestinationType = "s3"
-	DestinationTypeSftp DestinationType = "sftp"
+	DestinationTypeDisk   DestinationType = "disk"
+	DestinationTypeS3     DestinationType = "s3"
+	DestinationTypeSftp   DestinationType = "sftp"
+	DestinationTypeWebdav DestinationType = "webdav"
 )
 
 func (e *DestinationType) Scan(src interface{}) error {
@@ -367,7 +429,8 @@ func (e DestinationType) Valid() bool {
 	switch e {
 	case DestinationTypeDisk,
 		DestinationTypeS3,
-		DestinationTypeSftp:
+		DestinationTypeSftp,
+		DestinationTypeWebdav:
 		return true
 	}
 	return false
@@ -378,6 +441,7 @@ func AllDestinationTypeValues() []DestinationType {
 		DestinationTypeDisk,
 		DestinationTypeS3,
 		DestinationTypeSftp,
+		DestinationTypeWebdav,
 	}
 }
 
@@ -1339,6 +1403,7 @@ const (
 	RunTriggerCatchUp  RunTrigger = "catch_up"
 	RunTriggerManual   RunTrigger = "manual"
 	RunTriggerEarly    RunTrigger = "early"
+	RunTriggerApi      RunTrigger = "api"
 )
 
 func (e *RunTrigger) Scan(src interface{}) error {
@@ -1381,7 +1446,8 @@ func (e RunTrigger) Valid() bool {
 	case RunTriggerSchedule,
 		RunTriggerCatchUp,
 		RunTriggerManual,
-		RunTriggerEarly:
+		RunTriggerEarly,
+		RunTriggerApi:
 		return true
 	}
 	return false
@@ -1393,6 +1459,7 @@ func AllRunTriggerValues() []RunTrigger {
 		RunTriggerCatchUp,
 		RunTriggerManual,
 		RunTriggerEarly,
+		RunTriggerApi,
 	}
 }
 
@@ -1701,6 +1768,68 @@ func AllUserRoleValues() []UserRole {
 	}
 }
 
+type ApiAccessDenial struct {
+	ID          uuid.UUID   `json:"id"`
+	TokenID     uuid.UUID   `json:"tokenId"`
+	ClientIp    *netip.Addr `json:"clientIp"`
+	DeniedAt    time.Time   `json:"deniedAt"`
+	ProcessedAt *time.Time  `json:"processedAt"`
+}
+
+type ApiAuthenticateResult struct {
+	TokenID   *uuid.UUID `json:"tokenId"`
+	Name      *string    `json:"name"`
+	ExpiresAt *time.Time `json:"expiresAt"`
+}
+
+type ApiRequestRunResult struct {
+	RequestID *uuid.UUID `json:"requestId"`
+	CreatedAt *time.Time `json:"createdAt"`
+	Refusal   *string    `json:"refusal"`
+	Replayed  *bool      `json:"replayed"`
+	RetryAt   *time.Time `json:"retryAt"`
+}
+
+type ApiRequestStatusResult struct {
+	RequestID     *uuid.UUID `json:"requestId"`
+	JobID         *uuid.UUID `json:"jobId"`
+	Outcome       *string    `json:"outcome"`
+	Reason        *string    `json:"reason"`
+	CreatedAt     *time.Time `json:"createdAt"`
+	DecidedAt     *time.Time `json:"decidedAt"`
+	RiverJobID    *int64     `json:"riverJobId"`
+	RiverState    *string    `json:"riverState"`
+	RunID         *uuid.UUID `json:"runId"`
+	RunStatus     *string    `json:"runStatus"`
+	RunAttempt    *int32     `json:"runAttempt"`
+	RunQueuedAt   *time.Time `json:"runQueuedAt"`
+	RunStartedAt  *time.Time `json:"runStartedAt"`
+	RunFinishedAt *time.Time `json:"runFinishedAt"`
+}
+
+type ApiToken struct {
+	ID              uuid.UUID      `json:"id"`
+	Name            string         `json:"name"`
+	SecretHash      []byte         `json:"secretHash"`
+	CreatedBy       uuid.UUID      `json:"createdBy"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	ExpiresAt       time.Time      `json:"expiresAt"`
+	RevokedAt       *time.Time     `json:"revokedAt"`
+	RevokedBy       *uuid.UUID     `json:"revokedBy"`
+	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
+	AllowAnyAddress bool           `json:"allowAnyAddress"`
+}
+
+type ApiTokenJob struct {
+	TokenID uuid.UUID `json:"tokenId"`
+	JobID   uuid.UUID `json:"jobId"`
+}
+
+type ApiTokenJobsResult struct {
+	JobID   *uuid.UUID `json:"jobId"`
+	JobName *string    `json:"jobName"`
+}
+
 type Artifact struct {
 	ID                uuid.UUID     `json:"id"`
 	RunID             uuid.UUID     `json:"runId"`
@@ -1866,6 +1995,10 @@ type Destination struct {
 	LastTestOk              *bool           `json:"lastTestOk"`
 	LastTestCode            *string         `json:"lastTestCode"`
 	LastTestSettingsAt      *time.Time      `json:"lastTestSettingsAt"`
+	TlsPinSha256            *string         `json:"tlsPinSha256"`
+	TlsPinCertificate       *string         `json:"tlsPinCertificate"`
+	TlsPinSetAt             *time.Time      `json:"tlsPinSetAt"`
+	TlsPinSetBy             *uuid.UUID      `json:"tlsPinSetBy"`
 }
 
 type DownloadTicket struct {
@@ -2214,6 +2347,20 @@ type RunLog struct {
 	Level  RunLogLevel  `json:"level"`
 	Stream RunLogStream `json:"stream"`
 	Line   string       `json:"line"`
+}
+
+type RunRequest struct {
+	ID             uuid.UUID         `json:"id"`
+	TokenID        uuid.UUID         `json:"tokenId"`
+	JobID          uuid.UUID         `json:"jobId"`
+	Ip             *netip.Addr       `json:"ip"`
+	IdempotencyKey *string           `json:"idempotencyKey"`
+	Outcome        ApiRequestOutcome `json:"outcome"`
+	Reason         *string           `json:"reason"`
+	RiverJobID     *int64            `json:"riverJobId"`
+	RunID          *uuid.UUID        `json:"runId"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	DecidedAt      *time.Time        `json:"decidedAt"`
 }
 
 type RunSlot struct {

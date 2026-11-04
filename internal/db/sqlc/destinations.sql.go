@@ -13,6 +13,50 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearDestinationTLSPin = `-- name: ClearDestinationTLSPin :one
+UPDATE destinations
+SET tls_pin_sha256 = NULL,
+    tls_pin_certificate = NULL,
+    tls_pin_set_at = NULL,
+    tls_pin_set_by = NULL
+WHERE id = $1 AND deleted_at IS NULL AND type = 'webdav'
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+`
+
+// ClearDestinationTLSPin removes a WebDAV destination's certificate pin.
+func (q *Queries) ClearDestinationTLSPin(ctx context.Context, id uuid.UUID) (Destination, error) {
+	row := q.db.QueryRow(ctx, clearDestinationTLSPin, id)
+	var i Destination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.Config,
+		&i.SecretEnc,
+		&i.NoDelete,
+		&i.ObjectLockMode,
+		&i.ObjectLockRetentionDays,
+		&i.HostKeyType,
+		&i.HostKeyFingerprint,
+		&i.HostKeyAuthorizedKey,
+		&i.HostKeyConfirmedAt,
+		&i.HostKeyConfirmedBy,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
+	)
+	return i, err
+}
+
 const destinationHasActiveRuns = `-- name: DestinationHasActiveRuns :one
 SELECT EXISTS (
     SELECT 1 FROM runs r
@@ -120,7 +164,7 @@ func (q *Queries) DestinationUsage(ctx context.Context) ([]DestinationUsageRow, 
 }
 
 const getDestination = `-- name: GetDestination :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1 AND deleted_at IS NULL
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination, error) {
@@ -148,12 +192,16 @@ func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
 
 const getDestinationForUpdate = `-- name: GetDestinationForUpdate :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetDestinationForUpdate locks a destination that is not deleted.
@@ -182,12 +230,16 @@ func (q *Queries) GetDestinationForUpdate(ctx context.Context, id uuid.UUID) (De
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
 
 const getDestinationIncludingDeleted = `-- name: GetDestinationIncludingDeleted :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations WHERE id = $1
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1
 `
 
 // GetDestinationIncludingDeleted is for the workers only (backup,
@@ -219,6 +271,10 @@ func (q *Queries) GetDestinationIncludingDeleted(ctx context.Context, id uuid.UU
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
@@ -228,7 +284,7 @@ INSERT INTO destinations (id, name, type, config, secret_enc, no_delete,
                           object_lock_mode, object_lock_retention_days, created_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9)
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
 `
 
 type InsertDestinationParams struct {
@@ -280,6 +336,10 @@ func (q *Queries) InsertDestination(ctx context.Context, arg InsertDestinationPa
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
@@ -329,12 +389,12 @@ func (q *Queries) ListDestinationLocations(ctx context.Context, id uuid.UUID) ([
 
 const listDestinations = `-- name: ListDestinations :many
 
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at FROM destinations
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations
 WHERE deleted_at IS NULL
 ORDER BY lower(name), id
 `
 
-// Backup destinations (task 2.12, D-131). Only internal/destinations uses
+// Backup destinations (task 2.12, D-131; WebDAV D-222). Only internal/destinations uses
 // these queries; secret_enc is sealed under AAD destinations:<id>:secret.
 func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 	rows, err := q.db.Query(ctx, listDestinations)
@@ -367,6 +427,10 @@ func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 			&i.LastTestOk,
 			&i.LastTestCode,
 			&i.LastTestSettingsAt,
+			&i.TlsPinSha256,
+			&i.TlsPinCertificate,
+			&i.TlsPinSetAt,
+			&i.TlsPinSetBy,
 		); err != nil {
 			return nil, err
 		}
@@ -427,7 +491,7 @@ UPDATE destinations
 SET config = $1,
     secret_enc = $2
 WHERE id = $3 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
 `
 
 type SetDestinationAuthParams struct {
@@ -461,6 +525,10 @@ func (q *Queries) SetDestinationAuth(ctx context.Context, arg SetDestinationAuth
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
@@ -473,7 +541,7 @@ SET host_key_type = $1,
     host_key_confirmed_at = now(),
     host_key_confirmed_by = $4
 WHERE id = $5 AND deleted_at IS NULL AND type = 'sftp'
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
 `
 
 type SetDestinationHostKeyParams struct {
@@ -515,6 +583,67 @@ func (q *Queries) SetDestinationHostKey(ctx context.Context, arg SetDestinationH
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
+	)
+	return i, err
+}
+
+const setDestinationTLSPin = `-- name: SetDestinationTLSPin :one
+UPDATE destinations
+SET tls_pin_sha256 = $1,
+    tls_pin_certificate = $2,
+    tls_pin_set_at = now(),
+    tls_pin_set_by = $3
+WHERE id = $4 AND deleted_at IS NULL AND type = 'webdav'
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+`
+
+type SetDestinationTLSPinParams struct {
+	TlsPinSha256      *string    `json:"tlsPinSha256"`
+	TlsPinCertificate *string    `json:"tlsPinCertificate"`
+	SetBy             *uuid.UUID `json:"setBy"`
+	ID                uuid.UUID  `json:"id"`
+}
+
+// SetDestinationTLSPin pins a WebDAV destination's server certificate
+// (D-222; only after the service captured it again and compared it).
+func (q *Queries) SetDestinationTLSPin(ctx context.Context, arg SetDestinationTLSPinParams) (Destination, error) {
+	row := q.db.QueryRow(ctx, setDestinationTLSPin,
+		arg.TlsPinSha256,
+		arg.TlsPinCertificate,
+		arg.SetBy,
+		arg.ID,
+	)
+	var i Destination
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.Config,
+		&i.SecretEnc,
+		&i.NoDelete,
+		&i.ObjectLockMode,
+		&i.ObjectLockRetentionDays,
+		&i.HostKeyType,
+		&i.HostKeyFingerprint,
+		&i.HostKeyAuthorizedKey,
+		&i.HostKeyConfirmedAt,
+		&i.HostKeyConfirmedBy,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.LastTestedAt,
+		&i.LastTestOk,
+		&i.LastTestCode,
+		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }
@@ -543,9 +672,13 @@ SET name = $1,
     host_key_fingerprint = CASE WHEN $7::boolean THEN NULL ELSE host_key_fingerprint END,
     host_key_authorized_key = CASE WHEN $7::boolean THEN NULL ELSE host_key_authorized_key END,
     host_key_confirmed_at = CASE WHEN $7::boolean THEN NULL ELSE host_key_confirmed_at END,
-    host_key_confirmed_by = CASE WHEN $7::boolean THEN NULL ELSE host_key_confirmed_by END
-WHERE id = $8 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at
+    host_key_confirmed_by = CASE WHEN $7::boolean THEN NULL ELSE host_key_confirmed_by END,
+    tls_pin_sha256 = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_sha256 END,
+    tls_pin_certificate = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_certificate END,
+    tls_pin_set_at = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_set_at END,
+    tls_pin_set_by = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_set_by END
+WHERE id = $9 AND deleted_at IS NULL
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
 `
 
 type UpdateDestinationParams struct {
@@ -556,11 +689,13 @@ type UpdateDestinationParams struct {
 	ObjectLockMode          *string         `json:"objectLockMode"`
 	ObjectLockRetentionDays *int32          `json:"objectLockRetentionDays"`
 	ClearHostKey            bool            `json:"clearHostKey"`
+	ClearTlsPin             bool            `json:"clearTlsPin"`
 	ID                      uuid.UUID       `json:"id"`
 }
 
-// UpdateDestination replaces the mutable fields. The host-key pin is
-// cleared when clear_host_key is true (host or port changed).
+// UpdateDestination replaces the mutable fields. The SFTP host-key pin is
+// cleared when clear_host_key is true (host or port changed), the WebDAV
+// certificate pin when clear_tls_pin is true (the URL changed, D-222).
 func (q *Queries) UpdateDestination(ctx context.Context, arg UpdateDestinationParams) (Destination, error) {
 	row := q.db.QueryRow(ctx, updateDestination,
 		arg.Name,
@@ -570,6 +705,7 @@ func (q *Queries) UpdateDestination(ctx context.Context, arg UpdateDestinationPa
 		arg.ObjectLockMode,
 		arg.ObjectLockRetentionDays,
 		arg.ClearHostKey,
+		arg.ClearTlsPin,
 		arg.ID,
 	)
 	var i Destination
@@ -595,6 +731,10 @@ func (q *Queries) UpdateDestination(ctx context.Context, arg UpdateDestinationPa
 		&i.LastTestOk,
 		&i.LastTestCode,
 		&i.LastTestSettingsAt,
+		&i.TlsPinSha256,
+		&i.TlsPinCertificate,
+		&i.TlsPinSetAt,
+		&i.TlsPinSetBy,
 	)
 	return i, err
 }

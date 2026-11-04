@@ -167,3 +167,10 @@ func (c *Client) ListImages(ctx context.Context) ([]*runnerpb.AllowlistedImage, 
 	}
 	return resp.GetImages(), nil
 }
+
+// GetTargetPolicy returns the runner's target allowlist (runner.toml
+// [targets]) as the runner applies it, for the read-only view in the
+// admin UI (D-223).
+func (c *Client) GetTargetPolicy(ctx context.Context) (*runnerpb.GetTargetPolicyResponse, error) {
+	return c.rpc.GetTargetPolicy(ctx, &runnerpb.GetTargetPolicyRequest{})
+}

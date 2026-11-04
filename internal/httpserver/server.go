@@ -74,6 +74,16 @@ type Options struct {
 	// ServeAlias (internal/app: audited security alert); an error is
 	// retried at the next resolution.
 	SelfConflict func(ctx context.Context, foreign []netip.Addr) error
+	// ExternalAPIAlias (with OwnProxy): the opt-in external API runs and
+	// carries ExternalAPIAlias on the proxy network (D-220). Every answer
+	// for it must belong to one container other than serve (at most one
+	// address per family), else ExternalAPIAliasConflict is reported with
+	// all answers; serve's /readyz is not affected.
+	ExternalAPIAlias bool
+	// ExternalAPIAliasConflict reports the answers of a conflicting
+	// ExternalAPIAlias (internal/app: audited security alert); an error is
+	// retried at the next resolution.
+	ExternalAPIAliasConflict func(ctx context.Context, addrs []netip.Addr) error
 	// MaxBodyBytes caps request bodies.
 	MaxBodyBytes int64
 	// RateLimit configures the per-client-IP limiter.
@@ -201,6 +211,7 @@ func New(opts Options) (*Server, error) {
 	live := newLive(opts.TrustedProxies, liveOptions{hosts: opts.TrustedProxyHosts, ph: proxyHostsOptions{
 		resolve: opts.ProxyHostResolver, ifaces: opts.InterfaceAddrs, logger: opts.Logger,
 		checkSelf: opts.OwnProxy, strict: opts.JoinMode, onConflict: opts.SelfConflict,
+		peerAlias: externalAPIPeer(opts), onPeerConflict: opts.ExternalAPIAliasConflict,
 	}}, opts.MaxBodyBytes, limiter, users)
 	spa, err := newSPA(opts.UI)
 	if err != nil {
@@ -211,12 +222,12 @@ func New(opts Options) (*Server, error) {
 	r.Use(
 		requestID,
 		clientIP(live.trustedProxies, &xffWarner{logger: opts.Logger, now: time.Now, untrusted: live.hosts.kick, peer: live.seenPeer}),
-		accessLog(opts.Logger, opts.RedactedPathPrefixes),
-		recoverer(opts.Logger),
-		securityHeaders(strings.EqualFold(base.Scheme, "https")),
-		rateLimit(limiter),
+		accessLog(opts.Logger, func(p string) string { return logPath(p, opts.RedactedPathPrefixes) }),
+		recoverer(opts.Logger, writeError),
+		securityHeaders(strings.EqualFold(base.Scheme, "https"), ContentSecurityPolicy),
+		rateLimit(limiter, writeError),
 		originCheck(origins),
-		bodyLimit(live.bodyLimit.Load),
+		bodyLimit(live.bodyLimit.Load, writeError),
 	)
 	r.Get("/healthz", healthz)
 	r.Head("/healthz", healthz)
@@ -323,4 +334,13 @@ func writeText(w http.ResponseWriter, status int, body string) {
 	if _, err := io.WriteString(w, body); err != nil {
 		return
 	}
+}
+
+// externalAPIPeer is the peer alias serve checks: ExternalAPIAlias in an
+// own-proxy shape with the external API enabled, else none.
+func externalAPIPeer(o Options) string {
+	if (o.OwnProxy || o.JoinMode) && o.ExternalAPIAlias {
+		return ExternalAPIAlias
+	}
+	return ""
 }

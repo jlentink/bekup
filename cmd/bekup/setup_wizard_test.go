@@ -55,7 +55,9 @@ func commonTail(passMode string) []wizard.Answer {
 	return out
 }
 
-func commonEnd(bundled, generated bool) []wizard.Answer {
+// commonEnd ends a script; api answers the external API question (D-220):
+// "no" by default, "yes", or "skip" (single-account mode: not asked).
+func commonEnd(bundled, generated bool, api ...string) []wizard.Answer {
 	var out []wizard.Answer
 	if bundled {
 		out = append(out, wizard.Answer{Title: "Bundled database secrets", Value: "yes"})
@@ -64,6 +66,14 @@ func commonEnd(bundled, generated bool) []wizard.Answer {
 		wizard.Answer{Title: "Docker socket group", Value: "999"},
 		wizard.Answer{Title: "Target database networks", Value: "10.20.0.0/16, 10.30.0.0/16"},
 		wizard.Answer{Title: "Target database host names", Value: "db.internal.example.com"},
+	)
+	switch {
+	case len(api) == 0:
+		out = append(out, wizard.Answer{Title: "External API for CI pipelines", Value: "no"})
+	case api[0] != "skip":
+		out = append(out, wizard.Answer{Title: "External API for CI pipelines", Value: api[0]})
+	}
+	out = append(out,
 		wizard.Answer{Title: "Summary"},
 		wizard.Answer{Title: "Write the deployment now?", Value: "yes"},
 	)
@@ -226,7 +236,7 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "Traefik entrypoint"},
 				{Title: "Traefik certificate resolver", Value: "myresolver"},
 				{Title: "Domain", Value: "backup.example.com"},
-			}, commonTail("generate"), commonEnd(true, true)),
+			}, commonTail("generate"), commonEnd(true, true, "yes")),
 			files: map[string]string{setup.ComposeFile: composeFile(t, setup.VariantOwnProxy, setup.DBBundled)},
 			real:  true,
 		},
@@ -248,7 +258,7 @@ func wizardCases(t *testing.T) []wizardCase {
 			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
 				{Title: "Database", Value: "external"},
-			}, dockerDB("require", true), commonTail("generate"), commonEnd(false, true)),
+			}, dockerDB("require", true), commonTail("generate"), commonEnd(false, true, "yes")),
 			real: true,
 		},
 		{
@@ -274,7 +284,7 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "Let's Encrypt e-mail", Value: "ops@example.com"},
 				{Title: "Let's Encrypt staging?", Value: "no"},
 				{Title: "Database", Value: "external"},
-			}, dockerDB("verify-system", false), commonTail("generate"), commonEnd(false, true)),
+			}, dockerDB("verify-system", false), commonTail("generate"), commonEnd(false, true, "yes")),
 			real: true,
 		},
 		{
@@ -303,7 +313,7 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "Reverse proxy", Value: "own"},
 			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
-			}, extDB("bootstrap"), []wizard.Answer{{Title: "Admin role", Value: "postgres"}}, commonTail("enter"), commonEnd(false, false)),
+			}, extDB("bootstrap"), []wizard.Answer{{Title: "Admin role", Value: "postgres"}}, commonTail("enter"), commonEnd(false, false, "yes")),
 			files: map[string]string{"db-ca.pem": ca},
 			stdin: wizPass + "\n",
 			real:  true,
@@ -342,7 +352,7 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "The single account", Value: "acct_bekup"},
 				{Title: "Password of acct_bekup", Value: wizAppPW},
 				{Title: "Repeat the password of acct_bekup", Value: wizAppPW},
-			}, commonTail("generate"), commonEnd(false, true)),
+			}, commonTail("generate"), commonEnd(false, true, "skip")),
 			files:     map[string]string{"db-ca.pem": ca, "app.pw": wizAppPW},
 			flagExtra: []string{"--db-password-file", "app.pw"},
 		},
@@ -353,7 +363,7 @@ func wizardCases(t *testing.T) []wizardCase {
 				{Title: "Reverse proxy", Value: "own"},
 			}, ownProxy("no"), []wizard.Answer{
 				{Title: "Domain", Value: "backup.example.com"},
-			}, extDB("dba-sql"), commonTail("generate"), commonEnd(false, true)),
+			}, extDB("dba-sql"), commonTail("generate"), commonEnd(false, true, "yes")),
 			files: map[string]string{"db-ca.pem": ca},
 		},
 	}

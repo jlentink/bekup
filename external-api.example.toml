@@ -1,0 +1,91 @@
+# external-api.toml: configuration of `bekup external-api`, the
+# token-authenticated REST API for CI pipelines (D-220; opt-in compose
+# profile external-api). It is a separate file: the external API never
+# reads bekup.toml, the master key or the runner certificates, and it
+# connects to the app database only as bekup_external, which may do nothing
+# but call the api.* functions.
+#
+# Copy to ./external-api.toml or /etc/bekup/external-api.toml (or pass
+# --config <path> / BEKUP_CONFIG). The first file found wins; files are
+# never merged. The file must be a regular file owned by the service user or
+# root and must not be group- or world-writable. Unknown keys are errors.
+#
+# Precedence: built-in defaults < this file < BEKUP_<SECTION>_<KEY> env vars
+# < command-line flags. Example: [limits] max_body_bytes ->
+# BEKUP_LIMITS_MAX_BODY_BYTES.
+#
+# Every value below is the built-in default unless marked "example".
+# Full reference: docs/configuration.md; usage: docs/guides/external-api.md
+
+[listen]
+# Plain-HTTP listener behind the TLS reverse proxy. Never publish this port.
+# Example; match your network. The built-in default ":8081" binds every
+# interface and is refused outside dev mode unless allow_wildcard = true.
+address = "10.213.250.11:8081"
+allow_wildcard = false
+# The reverse proxies whose X-Forwarded-For is trusted. Every token's client
+# address allowlist is checked against the address the proxy forwards;
+# X-Forwarded-For from any other peer is ignored. Required outside dev mode
+# (this list or trusted_proxy_hosts). Example: the bundled proxy's address.
+trusted_proxies = ["10.213.250.5/32"]
+# Your own reverse proxy by container name (on a Docker network shared with
+# the external API, which carries the alias bekup-external-api there).
+trusted_proxy_hosts = []
+read_header_timeout = "5s"
+read_timeout = "10s"
+write_timeout = "15s"
+idle_timeout = "1m0s"
+shutdown_timeout = "15s"
+
+[database]
+# File with the Postgres URL of the bekup_external role
+# (postgres://bekup_external:...). The role is checked at startup.
+url_file = "/run/secrets/bekup_external_database_url"
+# Dev mode only, rejected otherwise:
+# url = "postgres://bekup_external:bekup@localhost:5432/bekup"
+#
+# Fields mode (D-207), for an external Postgres: instead of url_file
+# (remove it), name the server directly.
+# host = "db.example.internal"
+# port = 5432
+# name = "bekup"
+# user = "bekup_external"                                       # fixed name
+# password_file = "/run/secrets/bekup_external_password"
+#
+# Not used by the external API (it never migrates; single-account mode does
+# not support it). They must stay unset:
+# owner_url_file = ""
+# owner_url = ""
+# owner_user = ""
+# owner_password_file = ""
+# single_account = false
+max_conns = 10         # at most 20, the role's connection limit
+min_conns = 0
+conn_max_lifetime = "1h0m0s"
+conn_max_idle_time = "10m0s"
+connect_timeout = "10s"
+statement_timeout = "10s"
+# TLS to the app DB (D-100), as in bekup.toml.
+tls_mode = "verify-full"
+tls_ca_file = "/run/secrets/bekup_db_ca.crt"
+tls_client_cert_file = ""
+tls_client_key_file = ""
+# tls_server_name = "db.example.internal"
+
+[limits]
+# Per client IP, for every request.
+rate_limit_per_second = 5.0
+rate_limit_burst = 20
+# Per API token, on top of the per-IP limit.
+token_rate_limit_per_second = 1.0
+token_rate_limit_burst = 10
+rate_limit_max_clients = 10000
+# Failed authentications per client IP and window (then 429).
+failed_auth_limit = 10
+failed_auth_window = "5m0s"
+# Request bodies: the API accepts only an empty body or {}.
+max_body_bytes = 16384
+
+[logging]
+level = "info"
+format = "json"

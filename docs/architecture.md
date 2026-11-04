@@ -918,7 +918,7 @@ D-126): one service `RunnerService` with `Health`, `Probe`,
 streams: data chunks ≤ 1 MiB interleaved with log lines, ending in one
 result), `VerifyDump` (client stream: header, then chunks), `Restore`
 (bidirectional: header + chunks in, log lines + result out),
-`CreateDatabase`, `RenameSwapDatabase`, `DropTempDatabase`, `ScratchStats`, `DropScratchDatabase`, `PrePull` and `ListImages`. There is no field for
+`CreateDatabase`, `RenameSwapDatabase`, `DropTempDatabase`, `ScratchStats`, `DropScratchDatabase`, `PrePull`, `ListImages` and `GetTargetPolicy`. There is no field for
 a command, argument, environment variable, image or path; images are chosen
 by engine + allowlisted version key and container specs are built by the
 runner. The one field carrying SQL text is `VersionQuery.custom_sql` of a
@@ -1100,6 +1100,7 @@ payloads, server messages or secrets).
 | `DropScratchDatabase` | Drops the scratch database `bekup_test_<temp_id>` (derived by the runner) with `DROP DATABASE IF EXISTS` (`WITH (FORCE)` on PostgreSQL 13+); reports `existed`. No other name can be dropped. |
 | `PrePull` | Pulls the allowlisted image by digest only, reports `already_present`. |
 | `ListImages` | The merged image allowlist (embedded catalog + `images.extra_file`): engine, version key, digest reference, client version, legacy, extra. |
+| `GetTargetPolicy` | The target allowlist as the guard applies it (D-223): allow/deny CIDRs and hosts, `bastion_targets` per bastion, the run subnet pool and the control networks, the always-denied categories (fixed enum + ranges), the startup warnings (enum) and the `[targets]` keys set by environment variables; at most 256 entries per list. Read-only, control class, audited; shown read-only on Admin → Settings → Network. |
 | `FetchServerCertificate` | Captures the chain (no credentials sent) through the same validation, upstream and error normalization as the other target RPCs; audited. |
 
 Target errors are normalized (`runnerpb.Reason` in an `ErrorInfo`, domain

@@ -128,6 +128,37 @@ describe("run detail", () => {
     expect(within(items[1]!).getByTestId("schema-version")).toHaveTextContent("Unavailable");
   });
 
+  it("shows the API token's name for API runs and the user for manual runs", async () => {
+    const api = runDetail({
+      trigger: "API",
+      triggeredBy: {
+        __typename: "RunActor",
+        userId: "u-1",
+        displayName: "Ada Admin",
+        email: "ada@example.com",
+        apiToken: { __typename: "RunApiToken", id: "t-1", name: "deploy pipeline" },
+      },
+    });
+    const { unmount } = renderApp(`/runs/${RUN_ID}`, { ...baseHandlers(), ...runHandlers(api) });
+    const token = await screen.findByText("deploy pipeline");
+    expect(token).toHaveAttribute("title", "API token created by Ada Admin");
+    expect(screen.getByText("API")).toBeInTheDocument();
+    unmount();
+
+    const manual = runDetail({
+      trigger: "MANUAL",
+      triggeredBy: {
+        __typename: "RunActor",
+        userId: "u-1",
+        displayName: "Ada Admin",
+        email: "ada@example.com",
+        apiToken: null,
+      },
+    });
+    renderApp(`/runs/${RUN_ID}`, { ...baseHandlers(), ...runHandlers(manual) });
+    expect(await screen.findByText("Ada Admin")).toHaveAttribute("title", "ada@example.com");
+  });
+
   it("styles warnings and notices apart and shows the evidence", async () => {
     renderApp(`/runs/${RUN_ID}`, { ...baseHandlers(), ...runHandlers() });
     const warnings = await screen.findByRole("region", { name: /^Warnings/ });

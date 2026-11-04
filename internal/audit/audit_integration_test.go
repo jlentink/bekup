@@ -80,12 +80,18 @@ func TestRecordVerifyList(t *testing.T) {
 	if _, err := e.a.Record(ctx, audit.CLIEvent(audit.ActionCLIAdminCreated, "user", "admin@example.com", nil)); err != nil {
 		t.Fatal(err)
 	}
+	// D-220: the api actor kind passes the CHECK and the chain.
+	tok, req := uuid.New(), uuid.New()
+	if _, err := e.a.Record(ctx, audit.Event{Actor: audit.APIActor(tok, "ci", req), Action: audit.ActionJobRunRequested,
+		TargetType: "job", TargetID: uuid.NewString(), Details: audit.Details{"name": "nightly"}}); err != nil {
+		t.Fatal(err)
+	}
 	rep := verify(ctx, t, e, audit.VerifyOptions{BatchSize: 3})
-	if !rep.OK || rep.Rows != 8 || rep.FirstID != 1 || rep.LastID != 8 || !rep.NoSignedHead {
+	if !rep.OK || rep.Rows != 9 || rep.FirstID != 1 || rep.LastID != 9 || !rep.NoSignedHead {
 		t.Fatalf("report: %+v", rep)
 	}
 	part := verify(ctx, t, e, audit.VerifyOptions{FromID: 5})
-	if !part.OK || !part.Partial || part.Rows != 4 {
+	if !part.OK || !part.Partial || part.Rows != 5 {
 		t.Fatalf("partial: %+v", part)
 	}
 
@@ -113,6 +119,12 @@ func TestRecordVerifyList(t *testing.T) {
 		From: time.Now().Add(-time.Hour), To: time.Now().Add(time.Hour)}, 0, 0)
 	if err != nil || len(cli.Entries) != 1 || !strings.Contains(string(cli.Entries[0].Details), "hostname") {
 		t.Fatalf("cli filter: %+v %v", cli, err)
+	}
+	api, err := e.a.List(ctx, audit.Filter{ActorKind: audit.ActorAPI}, 0, 0)
+	if err != nil || len(api.Entries) != 1 || api.Entries[0].ActorUserID != nil ||
+		!strings.Contains(string(api.Entries[0].Details), `"api_token_id": "`+tok.String()+`"`) ||
+		!strings.Contains(string(api.Entries[0].Details), `"request_id": "`+req.String()+`"`) {
+		t.Fatalf("api filter: %+v %v", api, err)
 	}
 	none, err := e.a.List(ctx, audit.Filter{TargetType: "nothing"}, 0, 0)
 	if err != nil || len(none.Entries) != 0 {

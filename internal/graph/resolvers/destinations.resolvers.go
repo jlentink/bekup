@@ -44,6 +44,14 @@ func (r *mutationResolver) GenerateDestinationSSHKeypair(ctx context.Context, id
 	return r.generateDestinationSSHKeypair(ctx, id)
 }
 
+func (r *mutationResolver) PinWebdavCertificate(ctx context.Context, id uuid.UUID, fingerprint string) (*model.Destination, error) {
+	return r.pinWebdavCertificate(ctx, id, fingerprint)
+}
+
+func (r *mutationResolver) ClearWebdavCertificatePin(ctx context.Context, id uuid.UUID) (*model.Destination, error) {
+	return r.clearWebdavCertificatePin(ctx, id)
+}
+
 func (r *queryResolver) Destinations(ctx context.Context) ([]model.Destination, error) {
 	return r.destinations(ctx)
 }

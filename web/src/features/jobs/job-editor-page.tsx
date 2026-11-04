@@ -110,7 +110,9 @@ const T = {
   connection: "Connection",
   chooseConnection: "Choose a connection",
   dbMode: "Databases",
-  dbModeAll: "Exclude",
+  dbModeAll: "All",
+  dbModeAllHint: "Every database on the server is backed up, including ones created later.",
+  dbModeExclude: "Exclude",
   dbModeSelected: "Select only",
   includeGlobals: "Include cluster globals",
   includeGlobalsHint: "Roles and tablespaces (pg_dumpall --globals-only). PostgreSQL only.",
@@ -160,6 +162,7 @@ const T = {
   notFound: "This job does not exist or was deleted.",
   destinationsRequired: "Choose at least one destination.",
   databasesRequired: "Select at least one database.",
+  excludeRequired: "Choose at least one database to exclude, or pick All.",
 } as const;
 
 const positiveOrEmpty = z
@@ -176,7 +179,8 @@ const schema = z
       .refine((v) => v === "" || (SLUG_RE.test(v) && v.length <= 63), T.slugHint),
     description: z.string().max(2000),
     connectionId: z.string().min(1, "Choose a connection."),
-    dbMode: z.enum(["ALL", "SELECTED"]),
+    // ALL and EXCLUDE are both the server's mode ALL (EXCLUDE with names).
+    dbMode: z.enum(["ALL", "EXCLUDE", "SELECTED"]),
     databases: z.array(z.string()),
     exclude: z.array(z.string()),
     includeGlobals: z.boolean(),
@@ -197,6 +201,9 @@ const schema = z
     }
     if (v.dbMode === "SELECTED" && v.databases.length === 0) {
       ctx.addIssue({ code: "custom", path: ["databases"], message: T.databasesRequired });
+    }
+    if (v.dbMode === "EXCLUDE" && v.exclude.length === 0) {
+      ctx.addIssue({ code: "custom", path: ["exclude"], message: T.excludeRequired });
     }
     if (v.keyChoice === "passphrase" && Array.from(v.passphrase).length < MIN_JOB_PASSPHRASE) {
       ctx.addIssue({ code: "custom", path: ["passphrase"], message: T.passphraseTooShort });
@@ -236,7 +243,13 @@ function defaults(job?: Job): Values {
     slug: job?.slug ?? "",
     description: job?.description ?? "",
     connectionId: job?.connection.id ?? "",
-    dbMode: job?.dbMode ?? "SELECTED",
+    dbMode: !job
+      ? "SELECTED"
+      : job.dbMode === "SELECTED"
+        ? "SELECTED"
+        : job.exclude.length
+          ? "EXCLUDE"
+          : "ALL",
     databases: job ? [...job.databases] : [],
     exclude: job ? [...job.exclude] : [],
     includeGlobals: job?.includeGlobals ?? true,
@@ -383,8 +396,12 @@ function JobEditor({ job }: { job?: Job }) {
           name: v.name.trim(),
           description: v.description,
           connectionId: v.connectionId,
-          dbMode: v.dbMode,
-          ...(v.dbMode === "SELECTED" ? { databases: v.databases } : { exclude: v.exclude }),
+          dbMode: v.dbMode === "SELECTED" ? "SELECTED" : "ALL",
+          ...(v.dbMode === "SELECTED"
+            ? { databases: v.databases }
+            : v.dbMode === "EXCLUDE"
+              ? { exclude: v.exclude }
+              : {}),
           includeGlobals: engine === "POSTGRES" ? v.includeGlobals : false,
           schedule,
           enabled: v.enabled,
@@ -416,9 +433,9 @@ function JobEditor({ job }: { job?: Job }) {
         name: v.name.trim(),
         description: v.description,
         connectionId: v.connectionId,
-        dbMode: v.dbMode,
+        dbMode: v.dbMode === "SELECTED" ? "SELECTED" : "ALL",
         databases: v.dbMode === "SELECTED" ? v.databases : [],
-        exclude: v.dbMode === "ALL" ? v.exclude : [],
+        exclude: v.dbMode === "EXCLUDE" ? v.exclude : [],
         includeGlobals: engine === "POSTGRES" ? v.includeGlobals : false,
         retention,
         verification: v.verification,
@@ -566,7 +583,7 @@ function JobEditor({ job }: { job?: Job }) {
                     aria-label={T.dbMode}
                     className="flex flex-col gap-1.5 sm:flex-row sm:gap-6"
                   >
-                    {(["SELECTED", "ALL"] as const).map((m) => (
+                    {(["ALL", "SELECTED", "EXCLUDE"] as const).map((m) => (
                       <label key={m} className="flex items-center gap-2 text-sm">
                         <input
                           type="radio"
@@ -578,28 +595,36 @@ function JobEditor({ job }: { job?: Job }) {
                           }}
                           className="size-4 accent-primary"
                         />
-                        {m === "ALL" ? T.dbModeAll : T.dbModeSelected}
+                        {m === "ALL"
+                          ? T.dbModeAll
+                          : m === "EXCLUDE"
+                            ? T.dbModeExclude
+                            : T.dbModeSelected}
                       </label>
                     ))}
                   </div>
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name={dbMode === "ALL" ? "exclude" : "databases"}
-              render={({ field }) => (
-                <FormItem>
-                  <DatabasePicker
-                    connectionId={connectionId}
-                    mode={dbMode}
-                    value={field.value}
-                    onChange={field.onChange}
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {dbMode === "ALL" ? (
+              <p className="-mt-2 text-xs text-muted-foreground">{T.dbModeAllHint}</p>
+            ) : (
+              <FormField
+                control={form.control}
+                name={dbMode === "EXCLUDE" ? "exclude" : "databases"}
+                render={({ field }) => (
+                  <FormItem>
+                    <DatabasePicker
+                      connectionId={connectionId}
+                      mode={dbMode === "EXCLUDE" ? "ALL" : "SELECTED"}
+                      value={field.value}
+                      onChange={field.onChange}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             {engine === "POSTGRES" || engine === undefined ? (
               <FormField
                 control={form.control}

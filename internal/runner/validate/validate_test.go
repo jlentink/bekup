@@ -458,6 +458,19 @@ func TestPrePull(t *testing.T) {
 	}
 }
 
+// TestGetTargetPolicy: the request has no fields; unknown ones are refused.
+func TestGetTargetPolicy(t *testing.T) {
+	v := newTestValidator(t)
+	if err := v.GetTargetPolicy(&runnerpb.GetTargetPolicyRequest{}); err != nil {
+		t.Fatalf("empty request: %v", err)
+	}
+	req := &runnerpb.GetTargetPolicyRequest{}
+	req.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 1, protowire.VarintType), 1))
+	if err := v.GetTargetPolicy(req); code(err) != codes.InvalidArgument || !strings.Contains(err.Error(), "unknown fields") {
+		t.Fatalf("unknown field: %v", err)
+	}
+}
+
 func verifyHeader(total uint64) *runnerpb.VerifyDumpRequest {
 	return &runnerpb.VerifyDumpRequest{Msg: &runnerpb.VerifyDumpRequest_Header{Header: &runnerpb.VerifyDumpHeader{
 		Ctx: runCtx(), Engine: runnerpb.Engine_ENGINE_POSTGRES, VersionKey: "18",

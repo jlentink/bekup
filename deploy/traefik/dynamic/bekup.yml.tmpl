@@ -9,7 +9,9 @@ http:
     # Everything for the bekup host: UI, GraphQL and the streamed
     # downloads. Nothing is buffered here, so responses stream. bekup
     # serves no WebSocket (live events are Server-Sent Events, task 2.13).
-    # Priorities are explicit: stream > body > everything else.
+    # Priorities are explicit: stream > body > everything else; the opt-in
+    # external API's /api/v1/ router (external-api.yml, only with
+    # BEKUP_EXTERNAL_API=enabled, D-220) is above them all (400).
     bekup:
       entryPoints: [websecure]
       rule: "Host(`__BEKUP_DOMAIN__`)"

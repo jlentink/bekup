@@ -123,7 +123,7 @@ func newPlan(fsys fs.FS, a *Answers, writeCompose bool, dbCA []byte, version str
 		op[layout.keys(dbCAName)] = dbCA
 	}
 	return &plan{
-		entries:   Manifest(layout, assets, ManifestOptions{StaticTLS: static, Overlays: a.overlays().Any(), ComposeOperator: !writeCompose, ExternalDB: a.DB.External()}),
+		entries:   Manifest(layout, assets, ManifestOptions{StaticTLS: static, Overlays: a.overlays().Any(), ComposeOperator: !writeCompose, ExternalDB: a.DB.External(), ExternalAPI: a.ExternalAPI}),
 		generated: gen,
 		operator:  op,
 		assets:    assets,
@@ -447,9 +447,23 @@ func Init(opts Options) (retErr error) {
 			return err
 		}
 	}
+	// The external API's login (D-220): always generated (compose mounts
+	// it); with dba-sql its role goes into the roles SQL when the API is
+	// enabled.
+	var extPw []byte
+	defer func() { crypto.Zero(extPw) }()
+	if groups[groupExternalAPI].empty() {
+		var keep func([]byte)
+		if a.ExternalAPI && dbPw != nil && a.DB.Auth == DBAuthDBASQL {
+			keep = func(b []byte) { extPw = b }
+		}
+		if err := generateExternalAPI(w, layout, a.DB.Mode.OrBundled(), keep); err != nil {
+			return err
+		}
+	}
 	switch {
 	case dbPw != nil:
-		if err := generateExternalDatabase(w, layout, &a.DB, dbPw); err != nil {
+		if err := generateExternalDatabase(w, layout, &a.DB, dbPw, extPw); err != nil {
 			return err
 		}
 	case !a.DB.External() && groups[groupDatabase].empty():
@@ -478,7 +492,7 @@ func Init(opts Options) (retErr error) {
 		Image: a.Image.String(), ImageMode: imageModeOf(a.Image), ComposeMode: ComposeGenerated, Variant: a.Variant,
 		Proxy: a.Proxy, TLSMode: a.TLSMode, KeysDir: a.KeysDir,
 		Ownership: mode, Assets: map[string]string{}, SecretGroups: secretGroups(p.entries),
-		DatabaseMode: stateDBMode(a.DB.Mode),
+		DatabaseMode: stateDBMode(a.DB.Mode), ExternalAPI: a.ExternalAPI,
 	}
 	if a.DB.External() {
 		st.DatabaseAuth = a.DB.Auth
@@ -525,7 +539,7 @@ func Init(opts Options) (retErr error) {
 		root: root, a: a, l: layout, entries: p.entries, w: w, mode: mode, why: why,
 		chownCmds: chownCmds.String(), keyID: keyID, newCerts: needCerts, env: *opts.sys,
 		created: countCreatedFiles(w), importedKey: importKey != nil, existingCA: opts.UseExistingCA,
-		newDBPasswords: dbPw != nil,
+		newDBPasswords: dbPw != nil, externalRoleSQL: extPw != nil,
 	}
 	for _, f := range []string{a.DB.PasswordFile, a.DB.OwnerPasswordFile} {
 		if f != "" && dbPw != nil {
@@ -706,6 +720,15 @@ func validateConfigs(root string) error {
 	if _, err := config.LoadRunner(opts); err != nil {
 		return fmt.Errorf("%s: %w", RunnerTOML, err)
 	}
+	// external-api.toml exists only with the external API (D-220).
+	if fi, err := checkNoSymlinks(root, ExternalAPITOML); err != nil {
+		return err
+	} else if fi != nil {
+		opts.ConfigPath = filepath.Join(root, ExternalAPITOML)
+		if _, err := config.LoadExternalAPI(opts); err != nil {
+			return fmt.Errorf("%s: %w", ExternalAPITOML, err)
+		}
+	}
 	return nil
 }
 
@@ -736,8 +759,9 @@ type reportData struct {
 	warnings  []string
 	// importedKey: the master key was imported; existingCA: the leaves
 	// were issued from an existing CA; newDBPasswords: the external
-	// database passwords were written by this run.
-	importedKey, existingCA, newDBPasswords bool
+	// database passwords were written by this run; externalRoleSQL: the
+	// roles SQL (dba-sql) creates bekup_external too.
+	importedKey, existingCA, newDBPasswords, externalRoleSQL bool
 }
 
 func report(out io.Writer, r *reportData) error {
@@ -769,6 +793,9 @@ func report(out io.Writer, r *reportData) error {
 	}
 	fmt.Fprintf(&b, "  proxy:      %s\n", proxy)
 	fmt.Fprintf(&b, "  domain:     https://%s\n", a.Domain)
+	if a.ExternalAPI {
+		fmt.Fprintf(&b, "  external API: enabled, https://%s/api/v1/ (compose profile %s, D-220)\n", a.Domain, ExternalAPIProfile)
+	}
 	if a.DB.External() {
 		where := ""
 		if a.DB.Location == DBDocker {
@@ -860,7 +887,7 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 		step++
 	}
 	if a.DB.External() {
-		for _, cmd := range dbNextSteps(&a.DB, l) {
+		for _, cmd := range dbNextSteps(&a.DB, l, a.ExternalAPI, r.externalRoleSQL) {
 			fmt.Fprintf(&b, "  %d. %s\n", step, cmd)
 			step++
 		}
@@ -869,6 +896,10 @@ WARNING: the CA private key %s/%s is on this host's disk. Whoever holds it
 	fmt.Fprintf(&b, "  %d. docker compose run --rm admin create --email you@example.com --display-name \"You\"\n", step+1)
 	if a.Proxy == ProxyExternal {
 		fmt.Fprintf(&b, "  %d. Point your reverse proxy at %s for https://%s:\n%s", step+2, a.proxyTarget(), a.Domain, ProxyHints(a.proxyTarget(), a.ProxyLabels))
+		step++
+	}
+	if t := a.externalAPITarget(); a.ExternalAPI && t != "" {
+		fmt.Fprintf(&b, "  %d. Route https://%s/api/v1/ to the external API at %s:\n%s", step+2, a.Domain, t, externalAPIProxyHints(t, a.ProxyLabels))
 		step++
 	}
 	fmt.Fprintf(&b, "  %d. docker compose -f compose.yaml run --rm setup check   (re-run after every change;\n     -f compose.yaml keeps compose.override.yaml away from the checking container, check still lints it)\n", step+2)

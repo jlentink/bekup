@@ -54,6 +54,7 @@ func newRunnerCmd(g *globalFlags) *cobra.Command {
 				Logger:       logger,
 				Version:      version,
 				DockerClient: docker,
+				Sources:      res.Sources,
 			})
 			if err != nil {
 				return err

@@ -23,7 +23,7 @@ func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "bekup",
 		Short:         "bekup: secure, self-hosted database backup manager",
-		Long:          "bekup schedules and runs PostgreSQL, MySQL and MariaDB backups with native dump tools,\nencrypts them and writes them to disk, S3 and SFTP.",
+		Long:          "bekup schedules and runs PostgreSQL, MySQL and MariaDB backups with native dump tools,\nencrypts them and writes them to disk, S3, SFTP and WebDAV.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -32,7 +32,7 @@ func newRootCmd() *cobra.Command {
 	pf.BoolVar(&g.dev, "dev", false, "dev mode (or BEKUP_DEV=1): relaxed guardrails, never use in production")
 	pf.StringVar(&g.logLevel, "log-level", "", "log level: debug, info, warn or error (overrides log.level)")
 
-	root.AddCommand(newVersionCmd(), newConfigCmd(g), newCertsCmd(g), newKeysCmd(g), newMigrateCmd(g), newDBCmd(g), newAuditCmd(g), newAdminCmd(g), newServeCmd(g), newWorkerCmd(g), newRunnerCmd(g), newHealthcheckCmd(g), newDocsCmd(), newSetupCmd(),
+	root.AddCommand(newVersionCmd(), newConfigCmd(g), newCertsCmd(g), newKeysCmd(g), newMigrateCmd(g), newDBCmd(g), newAuditCmd(g), newAdminCmd(g), newServeCmd(g), newWorkerCmd(g), newRunnerCmd(g), newExternalAPICmd(g), newHealthcheckCmd(g), newDocsCmd(), newSetupCmd(),
 		newVerifyCmd(), newDecryptCmd(), newReindexCmd(g))
 	for _, s := range stubs {
 		root.AddCommand(newStubCmd(s))

@@ -1,0 +1,7 @@
+      # The own-proxy shape (D-215, D-220): Docker assigns the address on
+      # your proxy's network, so external-api.toml [listen] address =
+      # "0.0.0.0:8081" with allow_wildcard. With this literal the external
+      # API accepts connections only on its own address on your proxy's
+      # network (the alias bekup-external-api; plus loopback for the
+      # healthcheck) and closes every other one. No port is published.
+      BEKUP_LISTEN_SHAPE: own-proxy-join

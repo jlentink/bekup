@@ -21,3 +21,8 @@ LISTEN bekup_notification_events;
 
 -- name: ListenSettingsEvents :exec
 LISTEN bekup_settings_events;
+
+-- ListenAPIRequests: new external API run requests (D-220; a wake-up for
+-- the workers' consumer, the payload is never trusted).
+-- name: ListenAPIRequests :exec
+LISTEN bekup_api_requests;

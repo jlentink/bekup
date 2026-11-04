@@ -43,7 +43,7 @@ Recipes whose tooling arrives in a later task fail with
 | dev | `just dev-migrate` | Applies the migrations natively as `bekup_owner` |
 | dev | `just admin-create <email> <name>` | Creates an admin account on the dev DB (`bekup admin create`; password prompted on the terminal) |
 | dev | `just web-dev` | Vite dev server with hot reload on `http://localhost:5173`, proxying the API to `:8080` |
-| dev | `just dev-full` | The full containerised stack (profile `full`: air serve, runner, sample DBs, MinIO, SFTP, bastion) |
+| dev | `just dev-full` | The full containerised stack (profile `full`: air serve, runner, sample DBs, MinIO, SFTP, WebDAV, bastion) |
 | dev | `just dev-down` | Stops every dev container of every profile; volumes are kept |
 | dev | `just gen` | Runs sqlc, `buf generate` (runner API: `proto/` → `internal/runnerpb`), gqlgen, graphql-codegen (`web` script `gen`), the config key reference generator (`go run ./internal/config/gendocs`) and `scripts/gen_compose.sh`, which renders the committed compose files `deploy/compose/*` from `docker-compose.yml` (`bekup setup compose --variant <v>`, D-205 amendment 3; never edit them by hand) |
 | quality | `just lint` | `golangci-lint` (incl. gosec) for `GOOS=linux` with and without the `integration` tag, plus a native pass on non-Linux hosts (OS-specific files differ); shellcheck (`scripts/shellcheck.sh`: the local shellcheck if it is the pinned version, else the digest-pinned `koalaman/shellcheck` image via Docker); `sqlc vet` + `sqlc diff`, `buf lint` + `buf format --diff` (+ `buf breaking` against `main` once `proto/` exists there); with `web/`: eslint + `tsc --noEmit` |
@@ -91,7 +91,12 @@ just dev-down                                # stop the containers (data is kept
 | adminer | <http://127.0.0.1:8081> | System **PostgreSQL**, server `postgres`, database **`bekup`**, user `bekup_app` (password in `secrets/bekup_app_password`) or `bekup_owner` (`secrets/bekup_owner_password`) |
 
 - **Dev keys.** `just dev` runs `deploy/dev/gen-dev-keys.sh` when something
-  is missing (it never overwrites existing files without `--force`). Besides
+  is missing (it never overwrites existing files without `--force`; an
+  existing directory only gains the files added since, for example the
+  external API's `bekup_external_password` and
+  `bekup_external_database_url`, which compose always mounts; the postgres
+  init script creates the role `bekup_external` only with
+  `BEKUP_EXTERNAL_API=enabled` on a new volume, D-220). Besides
   the container files in `secrets/` it writes `secrets/local/` for native
   processes: both role URLs pointing at `127.0.0.1:<port>`, and copies of
   the master keyring, the DB CA bundle and serve's runner client
@@ -145,7 +150,8 @@ just dev-down                                # stop the containers (data is kept
   containers can read their files; `secrets/local/` stays owned by you.
 - **Full stack.** `just dev-full` (compose profile `full`) starts the
   containerised `serve` with air hot reload after `migrate`, the runner,
-  the sample targets, MinIO, SFTP and the SSH bastion (D-081); on Docker
+  the sample targets, MinIO, SFTP, WebDAV (`rclone serve webdav` with a
+  self-signed certificate to pin, D-222) and the SSH bastion (D-081); on Docker
   Desktop run it as `DOCKER_GID=0 just dev-full`. The reverse-proxy and
   `web` profiles need `--profile full` as well. See
   [installation/compose.md](installation/compose.md#development-stack).
@@ -228,6 +234,11 @@ image is amd64 only, so it is requested as `linux/amd64` (emulated on
 arm64 hosts), 22/tcp is published on 127.0.0.1 only, readiness waits for
 a real SSH banner, and a failed container start is retried with a fresh
 container (up to three times, with the container log in the error).
+WebDAV tests start their servers through `internal/storage/webdav/webdavtest`
+(`StartApache`: httpd mod_dav with a self-signed certificate; `StartRclone`:
+the dev compose image; `StartOwnCloud`: ownCloud 10, the base of TransIP
+STACK, for chunked uploads), all digest-pinned, pulled with `Ensure`
+(imagepull) and published on 127.0.0.1 only.
 
 Tests that pull images through the Docker API use
 `imagepull.Ensure` / `imagepull.Pull` (`internal/testutil/imagepull`),

@@ -84,6 +84,25 @@ export const DestinationDetailQuery = graphql(`
             confirmedAt
           }
         }
+        webdav {
+          url
+          flavor
+          username
+          path
+          caBundlePem
+          timeoutSeconds
+          hasPassword
+          trust
+          pinnedCertificate {
+            spkiSha256
+            spkiSha256Base64
+            fingerprintSha256
+            notBefore
+            notAfter
+            selfSigned
+            pinnedAt
+          }
+        }
       }
     }
   }
@@ -125,6 +144,23 @@ export const TestDestinationMutation = graphql(`
         ok
         code
         message
+      }
+      webdav {
+        trust
+        trusted
+        certificate {
+          spkiSha256
+          spkiSha256Base64
+          fingerprintSha256
+          notBefore
+          notAfter
+          selfSigned
+        }
+        pinMatches
+        server
+        suggestedFlavor
+        uploadMode
+        overwriteProtection
       }
     }
   }
@@ -170,6 +206,30 @@ export const GenerateDestinationSshKeypairMutation = graphql(`
       destination {
         id
       }
+    }
+  }
+`);
+
+/**
+ * Pins the certificate a WebDAV server presents (admin + step-up, D-222):
+ * the server captures it again and pins it only if its SPKI SHA-256 equals
+ * the fingerprint the admin compared. Must be the only root field.
+ */
+export const PinWebdavCertificateMutation = graphql(`
+  mutation PinWebdavCertificate($id: UUID!, $fingerprint: String!) {
+    pinWebdavCertificate(id: $id, fingerprint: $fingerprint) {
+      id
+      ready
+    }
+  }
+`);
+
+/** Removes the certificate pin of a WebDAV destination (admin + step-up; audited, alerted). */
+export const ClearWebdavCertificatePinMutation = graphql(`
+  mutation ClearWebdavCertificatePin($id: UUID!) {
+    clearWebdavCertificatePin(id: $id) {
+      id
+      ready
     }
   }
 `);

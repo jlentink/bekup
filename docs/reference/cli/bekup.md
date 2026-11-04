@@ -5,7 +5,7 @@ bekup: secure, self-hosted database backup manager
 ### Synopsis
 
 bekup schedules and runs PostgreSQL, MySQL and MariaDB backups with native dump tools,
-encrypts them and writes them to disk, S3 and SFTP.
+encrypts them and writes them to disk, S3, SFTP and WebDAV.
 
 ### Options
 
@@ -25,6 +25,7 @@ encrypts them and writes them to disk, S3 and SFTP.
 * [bekup config](bekup_config.md)	 - Validate or print the effective configuration
 * [bekup db](bekup_db.md)	 - Set up bekup's roles and database on an external PostgreSQL (bootstrap, roles-sql)
 * [bekup decrypt](bekup_decrypt.md)	 - Decrypt and decompress a backup artifact offline into a ready-to-use .dump/.sql
+* [bekup external-api](bekup_external-api.md)	 - Run the token-authenticated REST API for CI pipelines (reads external-api.toml)
 * [bekup healthcheck](bekup_healthcheck.md)	 - Probe a local bekup component (container healthchecks; exit 0 healthy, 1 unhealthy)
 * [bekup keys](bekup_keys.md)	 - Generate and rotate the master keyring; export the instance public keys
 * [bekup migrate](bekup_migrate.md)	 - Apply database migrations (as bekup_owner); default action: up

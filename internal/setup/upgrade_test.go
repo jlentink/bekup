@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -194,15 +195,27 @@ func TestUpgradeGeneratesNewSecretGroups(t *testing.T) {
 	st := mustState(t, dir)
 	st.SecretGroups = []string{groupCerts, groupDatabase}
 	saveState(t, dir, st)
-	if err := os.Remove(pathIn(dir, "secrets/bekup_master_key")); err != nil {
-		t.Fatal(err)
+	// The external API's group is new with manifest version 3 (D-220):
+	// generated for every deployment, enabled or not.
+	for _, f := range []string{"secrets/bekup_master_key", "secrets/bekup_external_password", "secrets/bekup_external_database_url"} {
+		if err := os.Remove(pathIn(dir, f)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	db := readFile(t, dir, "secrets/bekup_database_url")
 	if err := Upgrade(upgradeOptions(t, dir, a.Image.String())); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(pathIn(dir, "secrets/bekup_master_key")); err != nil {
-		t.Fatal("new group not generated")
+	for _, f := range []string{"secrets/bekup_master_key", "secrets/bekup_external_password", "secrets/bekup_external_database_url"} {
+		if _, err := os.Stat(pathIn(dir, f)); err != nil {
+			t.Fatalf("new group not generated: %s", f)
+		}
+	}
+	if u := string(readFile(t, dir, "secrets/bekup_external_database_url")); !strings.HasPrefix(u, "postgres://bekup_external:") || !strings.HasSuffix(u, "@postgres:5432/bekup") {
+		t.Fatal("external API URL malformed")
+	}
+	if st := mustState(t, dir); st.ExternalAPI || !slices.Contains(st.SecretGroups, groupExternalAPI) {
+		t.Fatalf("state %+v", st)
 	}
 	if !bytes.Equal(db, readFile(t, dir, "secrets/bekup_database_url")) {
 		t.Fatal("existing secret changed")
@@ -214,11 +227,20 @@ func TestUpgradeGeneratesNewSecretGroups(t *testing.T) {
 // operator replaced compose.yaml with compose.own-proxy.yaml, upgrade
 // writes the link (and label) overlay into a new compose.override.yaml and
 // rewrites the state; check then passes. Before the upgrade check names
-// the retired variant.
+// the retired variant. With --external-api the new override carries the
+// external API's blocks (the override is created in that run).
 func TestUpgradeLegacyVariant(t *testing.T) {
 	t.Parallel()
-	for _, legacy := range []Variant{legacyVariantNPM, legacyVariantTraefikExternal} {
-		t.Run(string(legacy), func(t *testing.T) {
+	for _, c := range []struct {
+		legacy Variant
+		api    bool
+	}{{legacyVariantNPM, false}, {legacyVariantTraefikExternal, false}, {legacyVariantTraefikExternal, true}} {
+		legacy := c.legacy
+		name := string(legacy)
+		if c.api {
+			name += "/external-api"
+		}
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			writeRelease(t, dir, VariantOwnProxy, variantImage)
@@ -247,19 +269,23 @@ func TestUpgradeLegacyVariant(t *testing.T) {
 				t.Fatalf("check before the upgrade:\n%s", report)
 			}
 			o := upgradeOptions(t, dir, variantImage)
-			o.WriteCompose, o.Image = false, imageref.Ref{}
+			o.WriteCompose, o.Image, o.ExternalAPI = false, imageref.Ref{}, c.api
 			if err := Upgrade(o); err != nil {
 				t.Fatalf("upgrade: %v", err)
 			}
 			if out := bufOf(t, o.Out).String(); !strings.Contains(out, "NOTICE: the "+string(legacy)+" variant was retired") {
 				t.Fatalf("no notice:\n%s", out)
 			}
-			ov := Overlays{ProxyLink: true, ProxyLabels: labels}
-			if got := string(readFile(t, dir, OverrideFile)); got != overlayHeader+overlayDoc(ov, "") {
+			ov := Overlays{ProxyLink: true, ProxyLabels: labels, ExternalAPI: c.api}
+			got := string(readFile(t, dir, OverrideFile))
+			if got != overlayHeader+overlayDoc(ov, "") {
 				t.Fatalf("override:\n%s", got)
 			}
+			if c.api != strings.Contains(got, overlayExternalAPILabels) {
+				t.Fatalf("external API labels (api=%v):\n%s", c.api, got)
+			}
 			st := mustState(t, dir)
-			if st.Variant != VariantOwnProxy || st.ProxyNetworkMode != ProxyLink || st.ProxyLabels != labels || st.Legacy() != "" {
+			if st.Variant != VariantOwnProxy || st.ProxyNetworkMode != ProxyLink || st.ProxyLabels != labels || st.Legacy() != "" || st.ExternalAPI != c.api {
 				t.Fatalf("state %+v", st)
 			}
 			if findings, report, err := runCheck(t, dir, nil); err != nil || hasErrors(findings) {

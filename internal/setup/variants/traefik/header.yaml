@@ -37,3 +37,4 @@
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
+#   CI client ──traefik /api/v1/──frontend──> external-api ──backend──> app database  (opt-in profile external-api; role bekup_external)

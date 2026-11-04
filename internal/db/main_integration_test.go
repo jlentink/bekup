@@ -34,6 +34,9 @@ const pgImage = "postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1
 const (
 	ownerPassword = "owner-test-password"
 	appPassword   = "app-test-password"
+	// The external API role (deploy/postgres/init/20-bekup-external.sh,
+	// D-220) exists in this cluster (and in internal/db/dbtest's).
+	externalPassword = "external-test-password"
 	// The init script's pg_hba rules reject the bootstrap superuser
 	// ("postgres") on TCP, so the tests create their own superuser over the
 	// container's Unix socket for TCP access.
@@ -83,6 +86,7 @@ func runMain(m *testing.M) int {
 	files = append(files,
 		secretFile("/run/secrets/bekup_owner_password", ownerPassword),
 		secretFile("/run/secrets/bekup_app_password", appPassword),
+		secretFile("/run/secrets/bekup_external_password", externalPassword),
 		testcontainers.ContainerFile{HostFilePath: entrypoint, ContainerFilePath: "/usr/local/bin/bekup-entrypoint.sh", FileMode: 0o555},
 	)
 	c, err := postgres.Run(ctx, pgImage,
@@ -92,8 +96,12 @@ func runMain(m *testing.M) int {
 		postgres.WithInitScripts(scripts...),
 		testcontainers.WithFiles(files...),
 		testcontainers.WithEnv(map[string]string{
-			"POSTGRES_BEKUP_OWNER_PASSWORD_FILE": "/run/secrets/bekup_owner_password",
-			"POSTGRES_BEKUP_APP_PASSWORD_FILE":   "/run/secrets/bekup_app_password",
+			"POSTGRES_BEKUP_OWNER_PASSWORD_FILE":    "/run/secrets/bekup_owner_password",
+			"POSTGRES_BEKUP_APP_PASSWORD_FILE":      "/run/secrets/bekup_app_password",
+			"POSTGRES_BEKUP_EXTERNAL_PASSWORD_FILE": "/run/secrets/bekup_external_password",
+			// The external API is enabled (20-bekup-external.sh creates the role
+			// only then, D-220 amendment 4).
+			"POSTGRES_BEKUP_EXTERNAL_API": "enabled",
 			// As in docker-compose.yml for TCP (loopback included); the
 			// local socket stays trust for the test's own psql calls.
 			"POSTGRES_INITDB_ARGS": "--auth-host=scram-sha-256",
@@ -129,8 +137,9 @@ func runMain(m *testing.M) int {
 	if err := superExec(ctx, "postgres", `DO $$ BEGIN
 		IF NOT EXISTS (SELECT 1 FROM pg_database d JOIN pg_roles r ON r.oid = d.datdba
 		               WHERE d.datname = 'bekup' AND r.rolname = 'bekup_owner')
-		   OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bekup_app') THEN
-			RAISE EXCEPTION 'init scripts did not create bekup_owner, bekup_app and the bekup database';
+		   OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bekup_app')
+		   OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'bekup_external' AND rolcanlogin AND NOT rolinherit AND rolconnlimit = 20) THEN
+			RAISE EXCEPTION 'init scripts did not create bekup_owner, bekup_app, bekup_external and the bekup database';
 		END IF;
 	END $$`); err != nil {
 		fmt.Fprintf(os.Stderr, "check init script result: %v\n", err)
@@ -212,9 +221,10 @@ func superExec(ctx context.Context, dbname string, stmts ...string) (err error) 
 // testDB is a fresh database in the state the deploy init script leaves the
 // bekup database in.
 type testDB struct {
-	name     string
-	ownerURL string
-	appURL   string
+	name        string
+	ownerURL    string
+	appURL      string
+	externalURL string
 }
 
 // newTestDB clones the init script's bekup database: TEMPLATE copies the
@@ -233,9 +243,10 @@ func newTestDB(t *testing.T) testDB {
 		t.Fatal(err)
 	}
 	return testDB{
-		name:     name,
-		ownerURL: urlFor("bekup_owner", ownerPassword, name),
-		appURL:   urlFor("bekup_app", appPassword, name),
+		name:        name,
+		ownerURL:    urlFor("bekup_owner", ownerPassword, name),
+		appURL:      urlFor("bekup_app", appPassword, name),
+		externalURL: urlFor("bekup_external", externalPassword, name),
 	}
 }
 

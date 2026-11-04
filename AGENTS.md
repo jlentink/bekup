@@ -14,7 +14,7 @@ conventions below.
 
 bekup is an open-source, self-hosted backup manager for PostgreSQL, MySQL and
 MariaDB. It runs each database's native dump tools in the official,
-digest-pinned Docker images, writes encrypted backups to disk, S3 and SFTP,
+digest-pinned Docker images, writes encrypted backups to disk, S3, SFTP and WebDAV,
 applies retention, restores on demand, and is managed through a React web UI
 talking GraphQL to a Go backend. Module: `github.com/jlentink/bekup`, MIT
 license.
@@ -144,12 +144,14 @@ internal/
                 graph/streams (SSE subscription streams: 2.13)
                 authz (1.4)  auth (passwords, sessions, lockout: 1.5; factors 1.7-1.9)
                 pubsub (LISTEN/NOTIFY bridge + in-process bus: 1.10)
-                destinations (destination CRUD, Open/Test, host keys: 2.12;
+                destinations (destination CRUD, Open/Test, host keys: 2.12; WebDAV
+                  certificate pins tlspin.go: D-222;
                   unrecorded-file scan/list/delete unrecorded.go: D-209)
                 connections (connection CRUD, pins, host keys, runner request builder: 2.11)
                 netguard (dial-time SSRF guard: 2.3)
                 egress (admin SSRF allowlist in settings with scopes + per-process sync: D-196, D-198)
-                storage (Destination interface + Disk: 2.8; S3 storage/s3store: 2.9; SFTP: 2.10)
+                storage (Destination interface + Disk: 2.8; S3 storage/s3store: 2.9; SFTP: 2.10;
+                  WebDAV storage/webdav: D-222)
                 tunnel (SSH client, host-key pin, TOFU fetch: 2.2)
                 sshpolicy (the one SSH client policy: pins, algorithms, keys,
                   handshake, keepalive; 2.14)  hostname (the one host rule: 2.14)
@@ -211,6 +213,7 @@ internal/
                   runnertest.WaitDockerOK for real-runner harnesses,
                   imagepull (image pulls with the rate-limit retry, D-214));
                   storage/sftp/sftptest (atmoz/sftp test server);
+                  storage/webdav/webdavtest (Apache mod_dav, rclone, ownCloud);
                   db/externaltest (plain PostgreSQL 15-17 with a test CA
                   for the external-database tests, D-207)
                 notify/email (5.1: SMTP settings, sender, message
@@ -253,12 +256,19 @@ internal/
                   setup/configzip.go the non-secret config zip)
                 dbsetup (db bootstrap, migrate up, Verify and the setup version
                   guard, shared by the CLI and the browser setup: D-217)
+                apiaccess (the workers' side of the external API: run request
+                  consumer, denials, prune: D-220; token management Service
+                  for GraphQL, ParseAddresses: D-220 amendment 3)
+                apikey (the one API token format + hash: Generate/Parse/HashOf,
+                  D-220 amendment 2)
+                externalapi (`bekup external-api`: handlers, Store over the
+                  api.* functions, state aggregation, throttles, Run: D-220)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
   src/app/              providers, route table (router.tsx), RootLayout (step-up host)
   src/features/<area>/  routes.tsx, pages, operations.ts, model.ts, own strings + tests:
                         auth account dashboard calendar jobs runs restore connections
-                        destinations users notifications admin (smtp channels
-                        security-alerts audit network recovery two-factor)
+                        destinations users notifications api-access admin (smtp
+                        channels security-alerts audit network recovery two-factor)
   src/components/       shell/ (sidebar, top bar, nav.ts, banners), ui/, status/, ssh/
   src/routes/           login, login/verify, profile, 404, /design (dev)
   src/setup/            the browser setup's own small SPA (D-217; entry setup/index.html,
@@ -394,6 +404,66 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   every run; `serve` must call `db.CheckAppRole` at startup (D-099; it also
   checks that the session logged in as the role itself, on PostgreSQL 16+
   also by `SYSTEM_USER`, D-207).
+- External API database layer (D-220, proposed): `bekup_external` only
+  calls the SECURITY DEFINER `api.*` functions; every token function
+  takes the token id, the secret hash and the client address and starts
+  with `public.api_token_admit` (amendment 1: per-token `allowed_cidrs`
+  or the explicit `allow_any_address`, exactly one; a refused address
+  answers like a wrong secret and records an `api_access_denials` row at
+  most once per token and 10 minutes). New api functions or signatures go
+  into `bekup_sync_external_grants()` and `db.externalFunctions`. The
+  workers' `apiaccess.Consumer` decides requests and audits denials
+  (`api_token.ip_denied` → `api_token_ip_denied` alert).
+- External API process (D-220 amendment 2, proposed): `bekup external-api`
+  reads only `external-api.toml` (`config.LoadExternalAPI`; never
+  bekup.toml, the master key or runner certificates) and refuses to start
+  unless `db.CheckExternalRole` and `db.CheckExternalSchemaVersion` pass.
+  Tokens are parsed, hashed and generated only with `internal/apikey`.
+  The HTTP server is `httpserver.NewAPIServer` (serve's client address
+  rule, JSON errors via `httpserver.WriteAPIError*`, CSP `default-src
+  'none'`, no Origin check, cookies or CORS; paths containing `bkp_` are
+  logged `[redacted]`); the database is reached only through
+  `externalapi.Store` (the api.* functions). Every authentication failure
+  is the same 401; out-of-scope jobs and requests are 404, never 403; any
+  query string is a 400; failed authentications are throttled per IP by
+  reserve-and-refund (`RateLimiter.Refund`), requests per token by the
+  secret hash.
+- External API token management (D-220 amendment 3, proposed): only
+  `apiaccess.Service` creates, lists, revokes and re-addresses tokens; it
+  authorizes `api_token.create|list|revoke|update` itself (admins; backup
+  owners for jobs they own: every job of a new token, one job of the scope
+  for revoke/update; never maintainers) and audits
+  `api_token.created|revoked|addresses_changed` fail closed (alerts
+  `api_token_created`, `api_token_any_address`; a widening address change
+  `api_token_addresses_widened` to admins and the token's creator, naming
+  the actor; amendment 5). Generate tokens only with
+  `apikey.Generate`; the plaintext is returned once
+  (`CreatedApiToken.plaintext`, `fetchPolicy: "no-cache"`, component state
+  until the show-once dialog closes), never stored, logged or put into a
+  snippet. Validate addresses only with `apiaccess.ParseAddresses` (the
+  database CHECKs: no IPv4 network wider than /8, no IPv6 network wider
+  than /32; keep `public.api_cidrs_valid` identical). The UI's curl snippets
+  (`web/src/features/api-access/snippets.ts`) are the text of
+  `docs/guides/external-api.md` (a vitest compares them): change both
+  together, and the token is always `$BEKUP_TOKEN`.
+- External API in compose and setup (D-220 amendment 4, proposed): the
+  service `external-api` is opt-in (profile `external-api`); the one
+  switch is `BEKUP_EXTERNAL_API=enabled` in `.env` (setup writes it with
+  the profile; it gates the postgres init script's role, the bundled
+  proxies' `/api/v1/` route and serve's `ServerInfo.externalApiEnabled`
+  via `deployguard.Deployment.ExternalAPI`). The secret group
+  `external-api` is always generated (compose mounts it); `external-api.toml`
+  only while enabled, trusting exactly the proxy serve trusts
+  (`stateExternalAPIShape` / `Answers.externalAPIShape`, compared by `setup
+  check`). Own proxy: alias `bekup-external-api`, listen
+  `config.ExternalAPIJoinListen` with the join-mode filter
+  (`APIOptions.JoinMode`); serve checks that alias too
+  (`Options.ExternalAPIAlias`: audited `external_api_alias_conflict`).
+  The bundled nginx logs `/api/v1/` paths only in the known route shapes. Overlays add `external-api` to the DB-network
+  and labels blocks only while enabled; setup prints, never writes, them
+  into an existing override. `setup upgrade --external-api` only prints the
+  database steps (always `docker compose run --rm migrate`, never `run
+  --rm migrate up`). Not with single-account mode.
 - HTTP layer (`internal/httpserver`, D-102): every response carries the
   exact D-082 CSP and the security headers; forwarded headers are used only
   from `trusted_proxies` or the resolved addresses of `trusted_proxy_hosts`
@@ -503,7 +573,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   through `internal/pubsub` (`Publisher.PublishTx`, `Listener`) with
   **IDs only** (`pubsub.Validate`); new channels get a fixed LISTEN
   query in `internal/db/queries/pubsub.sql` and an entry in
-  `pubsub` channels. A stream the server ends gets a final GraphQL error
+  `pubsub` channels. Any database role (bekup_external too) can NOTIFY
+  on any channel, so a receiver only re-reads the database with its own
+  rights and never acts on a payload alone (D-220 item 13). A stream the server ends gets a final GraphQL error
   event, then `complete`: UNAUTHENTICATED session ended, FORBIDDEN access
   changed, SESSION_ROTATED (reopen with the new cookie), UNAVAILABLE
   (shutdown or failed check; retry later). The web client is the
@@ -590,7 +662,7 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   (`secret_enc`, AAD `destinations:<id>:secret`, TLV-encoded bytes, never
   JSON/strings) and are write-only in the API (`has*` flags); omitted
   credential inputs keep the stored value. Validate at save time (s3store
-  `Config.Validate`, `sftp.ValidateTarget`, `storage.ParsePrefix` for disk
+  `Config.Validate`, `sftp.ValidateTarget`, `webdav.ValidateTarget`, `storage.ParsePrefix` for disk
   paths, `netguard.ResolveAndCheck` for every endpoint/host). Workers get
   backends only via `Service.Open(ctx, id)` (guard + keyring; refuses a
   destination that is not ready). Every change is admin + step-up and
@@ -598,9 +670,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `secret.changed`); `testDestination`/`fetchDestinationHostKey` are
   single-root, rate limited and return normalized results only. SFTP host
   keys are pinned only by `ConfirmHostKey`; a host/port change clears the
-  pin. Jobs (3.5) must fill the `checkUnused` delete hook. The location
+  pin. WebDAV certificate pins (D-222) only through `PinCertificate` /
+  `ClearCertificatePin`; a URL change clears the pin, and a URL, flavor or
+  username change needs the password again (D-140). Jobs (3.5) must fill the `checkUnused` delete hook. The location
   (disk path; S3 endpoint/region/bucket/prefix; SFTP host/port/user/base
-  path/dir) never changes while artifacts are `present` there or a run of
+  path/dir; WebDAV URL/flavor/username/path) never changes while artifacts are `present` there or a run of
   a job using it is queued or running (`locationChange`, VALIDATION), and
   no two destinations share or nest a location (`checkLocation` with
   `location.overlaps`, also against soft-deleted ones with present
@@ -988,7 +1062,7 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   it (`ConfigStatus.database`). A new kind of app DB connection must use
   the builder and pass both role checks.
 - Outbound connections from `serve` to admin- or user-supplied endpoints
-  (S3, SFTP, SMTP, webhooks) go only through `internal/netguard` (D-055,
+  (S3, SFTP, WebDAV, SMTP, webhooks) go only through `internal/netguard` (D-055,
   D-120): `Guard.DialContext` (or `Guard.Dialer()` for libraries that need
   a `*net.Dialer`), HTTP via `Guard.NewHTTPClient` (no proxy, no
   redirects, TLS ≥ 1.2) with bodies read through `ReadAllLimited` /
@@ -1058,6 +1132,36 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `internal/tunnel` (duplicated locally; keep both in sync). Finalize only
   via `hardlink@openssh.com` (never `posix-rename`), every directory below
   the base is Lstat-checked (no symlinks), partials are `.<hex>.partial`.
+  The stored size is checked with a path stat after closing the handle,
+  retried briefly (cloud-backed gateways misreport open handles, D-221);
+  Get accepts a disagreeing FSTAT only if a re-Lstat shows the same entry
+  and its reader enforces the Lstat length.
+- WebDAV destinations (`internal/storage/webdav`, D-222, proposed):
+  `webdav.Open` with a mandatory `*netguard.Guard` (the package's own
+  client on `Guard.NewHTTPClient`; never a WebDAV library); https only
+  (`AllowHTTP` dev mode only), HTTP Basic only, never to another host
+  (no redirects) or to `status.php`; PROPFIND answers bounded (16 MiB,
+  100 000 entries, nesting) and only direct members of the listed
+  collection used. Trust: system roots, else only the CA bundle, else
+  only the pinned certificate (`Pin`: the certificate is the sole root
+  and the leaf SPKI must match; host name and validity still checked).
+  Never skip verification to show a certificate: `webdav.Inspect` reads
+  it from `tls.CertificateVerificationError`. Pins are set only by
+  `destinations.Service.PinCertificate` (admin + step-up, fresh capture
+  compared with the confirmed SPKI, `CheckPinnable`) and cleared by
+  `ClearCertificatePin` (alerted) or a URL change; a mismatch is
+  `storage.CodeTLSPinMismatch` (audited `destination.tls_pin_mismatch`,
+  alerted). Put = hidden `.<hex>.partial` (one chunked-TE PUT, or the
+  Nextcloud/ownCloud chunked-upload API with 64 MiB chunks) + stored-size
+  PROPFIND + `MOVE` with `Overwrite: F`; the overwrite probe runs before
+  the first Put of every opened destination and in Test (step
+  `overwrite`), and a server that ignores the header is never written to
+  (`storage.CodeOverwriteIgnored`; a current failed test makes the
+  destination not ready). Delete never touches collections (a WebDAV
+  DELETE is recursive); `PruneEmptyDirs` prunes run collections only.
+- User-facing storage errors (D-221): show `storage.Describe(code, err)`
+  (fixed message + a `storage.WithDetail` detail built only from fixed
+  text and numbers), never `err.Error()`.
 - SSH tunnels (`internal/tunnel`, D-122): only through `tunnel.Dial` with
   a mandatory `HostKeyPin` and a mandatory `Dialer` (the runner's
   allowlist dialer; never a bare `net.Dialer` in production). `Dial`
@@ -1143,6 +1247,14 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `targets.bastion_targets` restricts what a bastion may forward to
   (`Guard.CheckBehindBastion`); unlisted bastions are logged once
   (`runner_bastion_unrestricted`).
+- Runner target allowlist view (D-223, proposed): `GetTargetPolicy`
+  (control class) reports `targets.Guard.Policy()`, `targets.AlwaysDenied()`
+  and `Guard.WarningCodes()` as enums (never free text), the own networks
+  and the `[targets]` keys set by env (`runner.Options.Sources`), each list
+  capped at 256. serve shows it read-only (`Query.runnerTargetPolicy`,
+  admin, `runner.target_policy_view`); a runner error answers
+  `available: false` with a fixed reason per gRPC code, never the error
+  text. The UI never edits `[targets]`.
 - SSH (D-140): every SSH client and every service that stores SSH
   settings uses `internal/sshpolicy` only: `Pin`/`Normalize` and
   `NewPinCallback`/`PinCheck.Violation` (or `ClientConfig`) for host keys,
@@ -1204,7 +1316,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
 - Job queue (`internal/queue`, D-043, D-145, proposed): insert River jobs
   only with `queue.Client.InsertTx(ctx, tx, args, opts)` inside the
   caller's transaction (`db.TxWith` gives the `pgx.Tx`); never through
-  `Client.River()` directly. **To add a worker:** (1) add the kind constant,
+  `Client.River()` directly. Every River client runs with `PollOnly`
+  (D-220 item 13): never let River LISTEN, since any database role can
+  NOTIFY and River trusts its control payloads. **To add a worker:** (1) add the kind constant,
   its args type and a catalog entry (queue, optional MaxAttempts override,
   `Unique` with `river:"unique"` fields) in `internal/queue/kinds.go`;
   (2) implement `river.Worker[T]`; (3) register it in
@@ -1313,7 +1427,7 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   success/partial, under a savepoint) and by the daily periodic fan-out
   (no job id; first fails abandoned runs via `runstate.Store.FailAbandonedRuns`
   (code `interrupted`), then per destination removes old `*.partial`
-  files on disk/SFTP and calls the `UnrecordedScanner`), and by
+  files on disk/SFTP/WebDAV and calls the `UnrecordedScanner`), and by
   `jobs.Service.Update` when the retention changed (reason
   `policy_changed`, in the update's transaction; D-209).
   `retention.Plan` is the pure policy: per destination, a run is complete

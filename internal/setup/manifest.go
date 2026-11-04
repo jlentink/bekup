@@ -13,7 +13,9 @@ import (
 // secrets and re-applies ownership.
 //
 // Version 2 (D-208): the external-database entries (ManifestOptions.ExternalDB).
-const ManifestVersion = 2
+// Version 3 (D-220 amendment 4): the external API's secret group (always,
+// so compose can mount it) and external-api.toml (ManifestOptions.ExternalAPI).
+const ManifestVersion = 3
 
 // Container UIDs/GIDs the files are handed to.
 const (
@@ -78,6 +80,12 @@ const (
 	groupMasterKey = "master-key"
 	groupDatabase  = "database"
 	groupCerts     = "certs"
+	// groupExternalAPI: the opt-in external API's database login (D-220).
+	// Always generated, enabled or not: the bundled postgres service mounts
+	// the role password (the init script creates the role only with
+	// BEKUP_EXTERNAL_API=enabled), an external database's migrate service
+	// the password file.
+	groupExternalAPI = "external-api"
 )
 
 // Layout resolves the paths of a deployment directory.
@@ -99,6 +107,7 @@ const (
 	EnvFile          = ".env"
 	BekupTOML        = "bekup.toml"
 	RunnerTOML       = "runner.toml"
+	ExternalAPITOML  = "external-api.toml"
 	StateFileName    = "bekup-setup.json"
 	ReferenceDir     = "reference"
 	DeployDir        = "deploy"
@@ -112,6 +121,11 @@ const (
 	postgresPassName = "postgres_password"
 	ownerPassName    = "bekup_owner_password"
 	appPassName      = "bekup_app_password"
+	// The external API's login (D-220): the bundled role password (UID 70)
+	// and its URL (UID 65532), or the external database's password file.
+	extPassName       = "bekup_external_password"
+	extURLName        = "bekup_external_database_url"
+	extDBPasswordName = "bekup_external_database_password"
 )
 
 // Embedded asset roots (relative to the repository root and to the
@@ -120,8 +134,9 @@ var assetDirs = []string{"deploy/postgres", "deploy/traefik", "deploy/nginx"}
 
 // referenceFiles maps reference/<name> to the embedded example file.
 var referenceFiles = map[string]string{
-	"reference/bekup.example.toml":  "bekup.example.toml",
-	"reference/runner.example.toml": "runner.example.toml",
+	"reference/bekup.example.toml":        "bekup.example.toml",
+	"reference/runner.example.toml":       "runner.example.toml",
+	"reference/external-api.example.toml": "external-api.example.toml",
 }
 
 func rootFile(p string, mode fs.FileMode, class Class) Entry {
@@ -151,6 +166,9 @@ type ManifestOptions struct {
 	// UID 70 passwords, certs/postgres/) with the external database's
 	// password files and the copied CA bundle (D-208).
 	ExternalDB bool
+	// ExternalAPI requires external-api.toml (the opt-in external API is
+	// enabled, D-220); otherwise it is optional.
+	ExternalAPI bool
 }
 
 // Manifest returns every entry of a deployment directory: the fixed files
@@ -173,6 +191,9 @@ func Manifest(l Layout, assets []string, o ManifestOptions) []Entry {
 		rootFile(EnvFile, 0o644, ClassOperator),
 		rootFile(BekupTOML, 0o644, ClassOperator),
 		rootFile(RunnerTOML, 0o644, ClassOperator))
+	ext := rootFile(ExternalAPITOML, 0o644, ClassOperator)
+	ext.Optional = !o.ExternalAPI
+	add(ext)
 	ov := rootFile(OverrideFile, 0o644, ClassOperator)
 	ov.Optional = !staticTLS && !o.Overlays
 	add(ov)
@@ -234,13 +255,20 @@ func Manifest(l Layout, assets []string, o ManifestOptions) []Entry {
 			rootFile(l.keys(dbCAName), 0o644, ClassOperator),
 			// The roles SQL for a DBA (dba-sql): root only, deleted by the
 			// operator once it ran (setup check warns while it exists).
-			Entry{Path: l.keys(dbRolesSQLName), Kind: KindFile, Mode: 0o600, Class: ClassSecret, Secret: true, Optional: true})
+			Entry{Path: l.keys(dbRolesSQLName), Kind: KindFile, Mode: 0o600, Class: ClassSecret, Secret: true, Optional: true},
+			// The external API's role password (migrate creates the role,
+			// the external API logs in; D-220).
+			secretFile(l.keys(extDBPasswordName), UIDBekup, groupExternalAPI))
 	} else {
 		add(secretFile(l.keys(appURLName), UIDBekup, groupDatabase),
 			secretFile(l.keys(ownerURLName), UIDBekup, groupDatabase),
 			secretFile(l.keys(postgresPassName), UIDPostgres, groupDatabase),
 			secretFile(l.keys(ownerPassName), UIDPostgres, groupDatabase),
-			secretFile(l.keys(appPassName), UIDPostgres, groupDatabase))
+			secretFile(l.keys(appPassName), UIDPostgres, groupDatabase),
+			// The external API's role password (postgres) and URL
+			// (external-api; D-220).
+			secretFile(l.keys(extPassName), UIDPostgres, groupExternalAPI),
+			secretFile(l.keys(extURLName), UIDBekup, groupExternalAPI))
 		components = append(components, struct {
 			name string
 			uid  int
@@ -317,6 +345,8 @@ func ManifestTable(l Layout) string {
 			cell += " (static TLS or setup-only overlays, D-215)"
 		case e.Path == ComposeFile:
 			cell += " (yours; generated-upgradable with `--write-compose`)"
+		case e.Path == ExternalAPITOML:
+			cell += " (with the external API enabled, D-220)"
 		}
 		fmt.Fprintf(&b, "| %s | %s | %d:%d | %s |\n", cell, e.Class, e.UID, e.GID, mode)
 	}

@@ -53,22 +53,51 @@ const (
 	KindUnpinnedImage = "unpinned_image"
 	// KindServeAliasConflict: serve's network alias bekup-serve also
 	// resolves to another container on the own proxy's network (D-215).
-	KindServeAliasConflict    = "serve_alias_conflict"
-	KindAuditHeadExportFailed = "audit_head_export_failed"
-	KindCLIAction             = "cli_action"
-	KindLoginBurstAddress     = "login_burst_address"
-	KindLoginBurstAccount     = "login_burst_account"
-	KindLoginBurstGlobal      = "login_burst_global"
-	KindCertExpiring          = "cert_expiring"
-	KindCertExpired           = "cert_expired"
-	KindPinExpiring           = "pin_expiring"
-	KindPinExpired            = "pin_expired"
+	KindServeAliasConflict = "serve_alias_conflict"
+	// KindExternalAPIAliasConflict: the external API's network alias
+	// bekup-external-api resolves to more than one container (or to
+	// serve) on the own proxy's network (L2 of the D-220 review).
+	KindExternalAPIAliasConflict = "external_api_alias_conflict"
+	KindAuditHeadExportFailed    = "audit_head_export_failed"
+	KindCLIAction                = "cli_action"
+	KindLoginBurstAddress        = "login_burst_address"
+	KindLoginBurstAccount        = "login_burst_account"
+	KindLoginBurstGlobal         = "login_burst_global"
+	KindCertExpiring             = "cert_expiring"
+	KindCertExpired              = "cert_expired"
+	KindPinExpiring              = "pin_expiring"
+	KindPinExpired               = "pin_expired"
 	// KindSSRFAllowlistWidened: an admin added entries to the runtime
 	// SSRF allowlist (D-196).
 	KindSSRFAllowlistWidened = "ssrf_allowlist_widened"
 	// KindConfigReloadWeakened: a runtime config reload applied a change
 	// that weakens security (D-200; config.reloaded with weakened keys).
 	KindConfigReloadWeakened = "config_reload_weakened"
+	// KindAPIAddressDenied: a valid external API token was presented from
+	// a client address outside its allowlist, possibly stolen (D-220
+	// amendment 1; api_token.ip_denied). Also a security.account alert to
+	// the token's creator.
+	KindAPIAddressDenied = "api_token_ip_denied"
+	// KindAPITokenCreated: an external API token was created (D-220;
+	// api_token.created): a new machine credential that can start
+	// backups.
+	KindAPITokenCreated = "api_token_created"
+	// KindAPITokenAnyAddress: an external API token may be used from any
+	// address, chosen at creation or by an address change (D-220
+	// amendment 1: a weakened setting, permanently flagged in the UI).
+	KindAPITokenAnyAddress = "api_token_any_address" //nolint:gosec // G101: an alert kind, not a credential
+	// KindAPITokenAddressesWidened: an address change lets an external
+	// API token be used from addresses it could not be used from before
+	// (a network not covered by the old list, or "any address"; M1 of the
+	// D-220 review). A security.system alert unless "any address" was
+	// newly chosen (that is api_token_any_address), and always a
+	// security.account alert to the token's creator; both name who
+	// changed it.
+	KindAPITokenAddressesWidened = "api_token_addresses_widened" //nolint:gosec // G101: an alert kind, not a credential
+	// KindDestinationTLSPinCleared: an admin removed the certificate pin
+	// of a WebDAV destination; it is verified against the system roots or
+	// its CA bundle again (D-222; destination.tls_pin_cleared).
+	KindDestinationTLSPinCleared = "destination_tls_pin_cleared"
 )
 
 // ssrfAllowlistSetting is the settings key of the runtime SSRF allowlist
@@ -90,22 +119,26 @@ const (
 // securitySystemKinds are the plain action → security.system mappings of
 // task 5.5 (systemKinds holds the D-183 base set).
 var securitySystemKinds = map[audit.Action]string{
-	audit.ActionJobOwnerAdded:                  KindJobOwnerAdded,
-	audit.ActionJobOwnerRemoved:                KindJobOwnerRemoved,
-	audit.ActionJobPassphrasesExported:         KindPassphrasesExported,
-	audit.ActionRetentionArtifactMissing:       KindArtifactDeletedExternally,
-	audit.ActionRetentionAborted:               KindRetentionAborted,
-	audit.ActionRestorePrivilegedTarget:        KindRestorePrivilegedRefused,
-	audit.ActionRestoreSecdefNeutralized:       KindSecdefNeutralized,
-	audit.ActionAuthPasskeySignCountAnomaly:    KindPasskeyCloneSuspected,
-	audit.ActionDownloadTicketRejected:         KindDownloadRejected,
-	audit.ActionSystemInsecureTransportStarted: KindInsecureTransport,
-	audit.ActionSecurityInsecureHTTP:           KindInsecureTransport,
-	audit.ActionSecurityInsecureDBTLS:          KindInsecureDBTLS,
-	audit.ActionSecurityInsecureDBRoles:        KindInsecureDBRoles,
-	audit.ActionSecurityUnpinnedImage:          KindUnpinnedImage,
-	audit.ActionSecurityServeAliasConflict:     KindServeAliasConflict,
-	audit.ActionAuditHeadExportFailed:          KindAuditHeadExportFailed,
+	audit.ActionJobOwnerAdded:                    KindJobOwnerAdded,
+	audit.ActionJobOwnerRemoved:                  KindJobOwnerRemoved,
+	audit.ActionJobPassphrasesExported:           KindPassphrasesExported,
+	audit.ActionRetentionArtifactMissing:         KindArtifactDeletedExternally,
+	audit.ActionRetentionAborted:                 KindRetentionAborted,
+	audit.ActionRestorePrivilegedTarget:          KindRestorePrivilegedRefused,
+	audit.ActionRestoreSecdefNeutralized:         KindSecdefNeutralized,
+	audit.ActionAuthPasskeySignCountAnomaly:      KindPasskeyCloneSuspected,
+	audit.ActionDownloadTicketRejected:           KindDownloadRejected,
+	audit.ActionSystemInsecureTransportStarted:   KindInsecureTransport,
+	audit.ActionSecurityInsecureHTTP:             KindInsecureTransport,
+	audit.ActionSecurityInsecureDBTLS:            KindInsecureDBTLS,
+	audit.ActionSecurityInsecureDBRoles:          KindInsecureDBRoles,
+	audit.ActionSecurityUnpinnedImage:            KindUnpinnedImage,
+	audit.ActionSecurityServeAliasConflict:       KindServeAliasConflict,
+	audit.ActionSecurityExternalAPIAliasConflict: KindExternalAPIAliasConflict,
+	audit.ActionAuditHeadExportFailed:            KindAuditHeadExportFailed,
+	audit.ActionAPIAddressDenied:                 KindAPIAddressDenied,
+	audit.ActionAPITokenCreated:                  KindAPITokenCreated,
+	audit.ActionDestinationTLSPinCleared:         KindDestinationTLSPinCleared,
 }
 
 // cliAccountKinds are break-glass CLI actions that also concern the
@@ -128,6 +161,8 @@ var systemSeverity = map[string]Severity{
 	KindTLSPinMismatch:              SeverityCritical,
 	KindSSHHostKeyMismatch:          SeverityCritical,
 	KindDestinationHostKeyMismatch:  SeverityCritical,
+	KindDestinationTLSPinMismatch:   SeverityCritical,
+	KindDestinationTLSPinCleared:    SeverityWarning,
 	KindRestoreVerificationFailed:   SeverityCritical,
 	KindJobOwnerAdded:               SeverityWarning,
 	KindJobOwnerRemoved:             SeverityInfo,
@@ -147,6 +182,7 @@ var systemSeverity = map[string]Severity{
 	KindInsecureDBRoles:             SeverityError,
 	KindUnpinnedImage:               SeverityWarning,
 	KindServeAliasConflict:          SeverityCritical,
+	KindExternalAPIAliasConflict:    SeverityCritical,
 	KindAuditHeadExportFailed:       SeverityError,
 	KindCLIAction:                   SeverityWarning,
 	KindLoginBurstAddress:           SeverityError,
@@ -158,6 +194,10 @@ var systemSeverity = map[string]Severity{
 	KindPinExpired:                  SeverityError,
 	KindSSRFAllowlistWidened:        SeverityError,
 	KindConfigReloadWeakened:        SeverityError,
+	KindAPIAddressDenied:            SeverityError,
+	KindAPITokenCreated:             SeverityWarning,
+	KindAPITokenAnyAddress:          SeverityError,
+	KindAPITokenAddressesWidened:    SeverityWarning,
 }
 
 // SystemSeverity returns the severity of a security.system kind.
@@ -262,6 +302,35 @@ func securityFromAudit(ev audit.Event) []Event {
 		if u := subjectUser(ev); u != uuid.Nil {
 			out = append(out, accountEvent(ev, u, KindPasskeyCloneSuspected))
 		}
+	case audit.ActionAPITokenCreated, audit.ActionAPITokenAddressesChanged:
+		// "Any address" newly chosen: a separate, more severe alert.
+		anyAddr := detailTrue(ev.Details, "allow_any_address") && !detailTrue(ev.Details, "previous_allow_any_address")
+		if anyAddr {
+			a := system(ev, KindAPITokenAnyAddress)
+			apiTokenDetail(ev, a.Detail)
+			out = append(out, a)
+		}
+		if ev.Action == audit.ActionAPITokenAddressesChanged && detailTrue(ev.Details, "widened") {
+			if !anyAddr {
+				a := system(ev, KindAPITokenAddressesWidened)
+				apiTokenDetail(ev, a.Detail)
+				out = append(out, a)
+			}
+			// The token's creator is told too, whoever changed it.
+			if u, err := uuid.Parse(detailString(ev.Details, "creator_id")); err == nil && u != uuid.Nil {
+				a := accountEvent(ev, u, KindAPITokenAddressesWidened)
+				apiTokenDetail(ev, a.Detail)
+				out = append(out, a)
+			}
+		}
+	case audit.ActionAPIAddressDenied:
+		// The token's creator is told too (their token may be stolen).
+		if u, err := uuid.Parse(detailString(ev.Details, "creator_id")); err == nil && u != uuid.Nil {
+			a := accountEvent(ev, u, KindAPIAddressDenied)
+			apiDenialDetail(ev, a.Detail)
+			a.DedupKey = apiDenialDedupKey(SecurityAccount, ev)
+			out = append(out, a)
+		}
 	default:
 	}
 	if k, ok := cliAccountKinds[ev.Action]; ok {
@@ -285,7 +354,11 @@ func securityFromAudit(ev audit.Event) []Event {
 			if t := detailString(ev.Details, "trigger"); t != "" {
 				s.Detail["trigger"] = t
 			}
-		case KindServeAliasConflict:
+		case KindAPIAddressDenied:
+			apiDenialDetail(ev, s.Detail)
+		case KindAPITokenCreated:
+			apiTokenDetail(ev, s.Detail)
+		case KindServeAliasConflict, KindExternalAPIAliasConflict:
 			// Container addresses only (bounded).
 			s.Detail["addresses"] = joinBounded(detailAddrs(ev.Details, "addresses"), MaxDetailString)
 		case KindSSRFAllowlistWidened:
@@ -299,6 +372,78 @@ func securityFromAudit(ev audit.Event) []Event {
 		out = append(out, s)
 	}
 	return out
+}
+
+// apiDenialDetail adds the facts of an api_token.ip_denied entry to an
+// alert's detail: the token's id and display name (from the API actor)
+// and the refused client address ("unknown" when the external API passed
+// none). The detail key names avoid "token" (ValidateDetail refuses
+// secret-looking keys).
+func apiDenialDetail(ev audit.Event, d Detail) {
+	d["ip"] = "unknown"
+	if ev.IP.IsValid() {
+		d["ip"] = clientIP(ev.IP)
+	}
+	if r := ev.Actor.API; r != nil {
+		d["api_id"] = r.TokenID.String()
+		d["api_name"] = displayName(r.TokenName)
+	}
+}
+
+// apiTokenDetail adds the facts of an api_token.created or
+// api_token.addresses_changed entry to an alert's detail: the token's id
+// and display name, the number of jobs and networks, whether any address
+// is allowed and the expiry date (creation only). Never the token.
+func apiTokenDetail(ev audit.Event, d Detail) {
+	if id, err := uuid.Parse(detailString(ev.Details, "api_token_id")); err == nil {
+		d["api_id"] = id.String()
+	}
+	// Names may be longer than detailString allows; displayName bounds
+	// and cleans them.
+	name := ""
+	if n, ok := ev.Details["api_token_name"].(string); ok {
+		name = n
+	}
+	d["api_name"] = displayName(name)
+	d["jobs"] = detailLen(ev.Details, "job_ids")
+	d["networks"] = detailLen(ev.Details, "allowed_cidrs")
+	d["any_address"] = detailTrue(ev.Details, "allow_any_address")
+	if ev.Action == audit.ActionAPITokenAddressesChanged {
+		// Who changed it (display name only, never the e-mail address)
+		// and whether that was the token's creator.
+		actor := ""
+		if n, ok := ev.Details["actor_name"].(string); ok {
+			actor = n
+		}
+		d["changed_by"] = displayName(actor)
+		d["by_creator"] = detailTrue(ev.Details, "changed_by_creator")
+	}
+	if t, err := time.Parse(time.RFC3339, detailString(ev.Details, "expires_at")); err == nil {
+		d["expires"] = t.UTC().Format("2006-01-02")
+	}
+}
+
+// detailLen is the length of a list detail (a []string as recorded, or
+// []any after a JSON round trip); 0 for anything else.
+func detailLen(d audit.Details, k string) int {
+	switch v := d[k].(type) {
+	case []string:
+		return len(v)
+	case []any:
+		return len(v)
+	default:
+		return 0
+	}
+}
+
+// apiDenialDedupKey: one alert per recorded denial (the database records
+// at most one per token and 10 minutes), so a retried consumer
+// transaction cannot alert twice.
+func apiDenialDedupKey(t EventType, ev audit.Event) string {
+	if id, err := uuid.Parse(detailString(ev.Details, "denial_id")); err == nil {
+		return string(t) + ":" + KindAPIAddressDenied + ":" + id.String()
+	}
+	return ""
 }
 
 // accountEvent is a security.account event for user u.
@@ -342,7 +487,7 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 	switch kind {
 	case KindInsecureTransport, KindInsecureDBTLS, KindInsecureDBRoles, KindUnpinnedImage, KindAuditHeadExportFailed:
 		return p + day(now)
-	case KindTLSPinMismatch, KindSSHHostKeyMismatch, KindDestinationHostKeyMismatch:
+	case KindTLSPinMismatch, KindSSHHostKeyMismatch, KindDestinationHostKeyMismatch, KindDestinationTLSPinMismatch:
 		return p + dedupPart(ev.TargetID) + ":" + day(now)
 	case KindRetentionAborted:
 		return p + dedupPart(ev.TargetID) + ":" + dedupPart(detailString(ev.Details, "destination_id")) + ":" + day(now)
@@ -352,7 +497,7 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 		}
 	case KindArtifactDeletedExternally:
 		return p + dedupPart(ev.TargetID)
-	case KindServeAliasConflict:
+	case KindServeAliasConflict, KindExternalAPIAliasConflict:
 		// serve reports each new set of foreign addresses once; a set
 		// that persists or comes back alerts again the next day.
 		return p + keysHash(detailAddrs(ev.Details, "addresses")) + ":" + day(now)
@@ -366,6 +511,8 @@ func systemDedupKey(ev audit.Event, kind string, now time.Time) string {
 		if f := detailString(ev.Details, "finding"); f != "" {
 			return p + dedupPart(f)
 		}
+	case KindAPIAddressDenied:
+		return apiDenialDedupKey(SecuritySystem, ev)
 	default:
 	}
 	return ""
@@ -467,12 +614,83 @@ func systemBody(d Detail) string {
 		if a := str(d, "action"); a != "" {
 			return "A break-glass command was run on the bekup host (" + a + ")."
 		}
+	case KindAPIAddressDenied:
+		return apiDenialBody(d)
+	case KindAPITokenCreated:
+		return apiTokenCreatedBody(d)
+	case KindAPITokenAnyAddress:
+		return fmt.Sprintf("The external API token %q may now be used from any address%s: no client address allowlist protects it. "+
+			"Restrict it to your CI runners' networks if you can.", apiName(d), apiChangedBy(d))
+	case KindAPITokenAddressesWidened:
+		return apiWidenedBody(d)
 	default:
 	}
 	if m, ok := systemMessages[kind]; ok {
 		return m
 	}
 	return ""
+}
+
+// apiName is the display name of the token of an API token alert.
+func apiName(d Detail) string {
+	if n := str(d, "api_name"); n != "" {
+		return n
+	}
+	return "(unnamed)"
+}
+
+// apiChangedBy names who changed a token's addresses (" (changed by
+// ...)"), stressing a change by someone other than the token's creator;
+// "" for alerts of a token's creation.
+func apiChangedBy(d Detail) string {
+	who := str(d, "changed_by")
+	if who == "" {
+		return ""
+	}
+	if b, ok := d["by_creator"].(bool); ok && b {
+		return fmt.Sprintf(" (changed by %s, its creator)", who)
+	}
+	return fmt.Sprintf(" (changed by %s, not its creator)", who)
+}
+
+// apiWidenedBody is the sentence of the api_token_addresses_widened
+// alerts (admins and the token's creator).
+func apiWidenedBody(d Detail) string {
+	where := fmt.Sprintf("from more addresses (now %d allowed network(s))", num(d, "networks"))
+	if b, ok := d["any_address"].(bool); ok && b {
+		where = "from any address"
+	}
+	return fmt.Sprintf("The client addresses of the external API token %q were widened%s: it may now be used %s. "+
+		"If you did not expect this change, review the token's addresses or revoke it.", apiName(d), apiChangedBy(d), where)
+}
+
+// apiTokenCreatedBody is the sentence of the api_token_created alert.
+func apiTokenCreatedBody(d Detail) string {
+	where := fmt.Sprintf("from %d allowed network(s)", num(d, "networks"))
+	if b, ok := d["any_address"].(bool); ok && b {
+		where = "from any address"
+	}
+	until := ""
+	if e := str(d, "expires"); e != "" {
+		until = ", valid until " + e
+	}
+	return fmt.Sprintf("An external API token %q was created; it can start backups of %d job(s) %s%s.",
+		apiName(d), num(d, "jobs"), where, until)
+}
+
+// apiDenialBody is the sentence of the api_token_ip_denied alerts (admins
+// and the token's creator).
+func apiDenialBody(d Detail) string {
+	name := str(d, "api_name")
+	if name == "" {
+		name = "(unnamed)"
+	}
+	ip := str(d, "ip")
+	if ip == "" {
+		ip = "unknown"
+	}
+	return fmt.Sprintf("The external API token %q was presented from the address %s, which its address allowlist does not include; "+
+		"the request was refused. If you do not recognize the address, the token may be stolen: revoke it.", name, ip)
 }
 
 // keyNameRE is the shape of a config key name in a reload entry.

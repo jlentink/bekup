@@ -27,7 +27,7 @@ func TestProxyHostsOnlyInsideProxySubnet(t *testing.T) {
 	if got := env.clientOf("172.30.0.9:1"); got != "172.30.0.9" {
 		t.Fatalf("an address outside the proxy subnet must not be trusted, got %s", got)
 	}
-	if !strings.Contains(env.logText(), "outside serve's subnet") {
+	if !strings.Contains(env.logText(), "outside the own subnet") {
 		t.Fatalf("missing warning: %s", env.logText())
 	}
 	// serve's own address is never a proxy.
@@ -299,6 +299,94 @@ func TestServeAliasConflictReported(t *testing.T) {
 	defer mu.Unlock()
 	if len(reports) != 3 {
 		t.Fatalf("a new conflict must be reported: %d", len(reports))
+	}
+}
+
+// TestExternalAPIAliasConflictReported: serve checks the external API's
+// alias on the proxy network (L2 of the D-220 review): one container
+// (one address per family) is fine, a second holder or serve itself is
+// reported once per set of addresses (retried after a failed report),
+// an unresolvable alias is fine, and serve's readiness is unaffected.
+func TestExternalAPIAliasConflictReported(t *testing.T) {
+	var mu sync.Mutex
+	var reports [][]netip.Addr
+	fail := true
+	env, f := newHostEnvWith(t, func(o *Options) {
+		o.JoinMode = true
+		o.ExternalAPIAlias = true
+		o.ExternalAPIAliasConflict = func(_ context.Context, addrs []netip.Addr) error {
+			mu.Lock()
+			defer mu.Unlock()
+			reports = append(reports, addrs)
+			if fail {
+				fail = false
+				return errors.New("db down")
+			}
+			return nil
+		}
+	})
+	count := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(reports)
+	}
+	h := env.srv.live.hosts
+	h.refresh(context.Background()) // not running: no answers
+	f.set(ExternalAPIAlias, "172.20.0.3", "fd00::3")
+	h.refresh(context.Background())
+	if n := count(); n != 0 {
+		t.Fatalf("one container reported: %d", n)
+	}
+	f.set(ExternalAPIAlias, "172.20.0.3", "fd00::3", "172.20.0.66")
+	h.refresh(context.Background()) // reported, fails
+	h.refresh(context.Background()) // retried, succeeds
+	h.refresh(context.Background()) // unchanged: not again
+	mu.Lock()
+	n, got := len(reports), reports[len(reports)-1]
+	mu.Unlock()
+	want := []netip.Addr{netip.MustParseAddr("172.20.0.3"), netip.MustParseAddr("172.20.0.66"), netip.MustParseAddr("fd00::3")}
+	if n != 2 || !slices.Equal(got, want) {
+		t.Fatalf("reports: %d, last %v", n, got)
+	}
+	if w := env.do(req(http.MethodGet, "/readyz")); w.Code != http.StatusOK {
+		t.Fatalf("serve's readiness changed: %d", w.Code)
+	}
+	if !strings.Contains(env.logText(), "alias takeover") || !strings.Contains(env.logText(), ExternalAPIAlias) {
+		t.Fatalf("missing warning: %s", env.logText())
+	}
+	// serve itself holding the alias is a conflict too.
+	f.set(ExternalAPIAlias, "172.20.0.2")
+	h.refresh(context.Background())
+	if n := count(); n != 3 {
+		t.Fatalf("serve's own address not reported: %d", n)
+	}
+	f.set(ExternalAPIAlias, "172.20.0.3")
+	h.refresh(context.Background())
+	f.set(ExternalAPIAlias, "172.20.0.3", "172.20.0.66")
+	h.refresh(context.Background())
+	if n := count(); n != 4 {
+		t.Fatalf("a returning conflict must be reported: %d", n)
+	}
+}
+
+// TestExternalAPIAliasNotCheckedWithoutAPI: without the external API (or
+// outside the own-proxy shapes) the alias is never looked up.
+func TestExternalAPIAliasNotCheckedWithoutAPI(t *testing.T) {
+	for _, mutate := range []func(*Options){
+		func(o *Options) { o.JoinMode = true },
+		func(o *Options) { o.ExternalAPIAlias = true },
+	} {
+		env, _ := newHostEnvWith(t, func(o *Options) {
+			mutate(o)
+			prev := o.ProxyHostResolver
+			o.ProxyHostResolver = func(ctx context.Context, host string) ([]netip.Addr, error) {
+				if host == ExternalAPIAlias {
+					t.Errorf("%s looked up", host)
+				}
+				return prev(ctx, host)
+			}
+		}, "npm")
+		env.srv.live.hosts.refresh(context.Background())
 	}
 }
 

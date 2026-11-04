@@ -40,14 +40,15 @@ WHERE r.job_id = $1
 ORDER BY ri.run_id, ri.id;
 
 -- ListDailyMaintenanceDestinations returns the destinations the daily sweep
--- maintains: every non-deleted one (unrecorded-file scan; disk and SFTP also
--- leftover temporary files and empty directories) and deleted disk and SFTP
--- ones that still hold present artifacts (temporary files only).
+-- maintains: every non-deleted one (unrecorded-file scan; disk, SFTP and
+-- WebDAV also leftover temporary files and empty directories) and deleted
+-- disk, SFTP and WebDAV ones that still hold present artifacts (temporary
+-- files only).
 -- name: ListDailyMaintenanceDestinations :many
 SELECT d.id, d.type, (d.deleted_at IS NOT NULL)::boolean AS deleted
 FROM destinations d
 WHERE d.deleted_at IS NULL
-   OR (d.type IN ('disk', 'sftp')
+   OR (d.type IN ('disk', 'sftp', 'webdav')
        AND EXISTS (SELECT 1 FROM artifacts a WHERE a.destination_id = d.id AND a.state = 'present'))
 ORDER BY d.id;
 

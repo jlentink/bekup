@@ -347,6 +347,10 @@ func TestRunFailingDestinationDropped(t *testing.T) {
 	if r.Outcome != pipeline.OutcomeDropped || r.Reason != pipeline.ReasonError || !errors.Is(r.Err, errBoom) {
 		t.Fatalf("bad outcome: %+v", r)
 	}
+	// The raw error text is never part of the user message.
+	if r.Message() != r.Code.Message() || strings.Contains(r.Message(), "boom") {
+		t.Fatalf("bad message: %q", r.Message())
+	}
 	if bad.count() != 0 {
 		t.Fatal("failed destination holds an object")
 	}
@@ -374,6 +378,9 @@ func TestRunSlowDestinationDroppedAfterLag(t *testing.T) {
 	r := outcome(t, res, "slow")
 	if r.Outcome != pipeline.OutcomeDropped || r.Reason != pipeline.ReasonLag || r.Code != storage.CodeTimeout {
 		t.Fatalf("slow outcome: %+v", r)
+	}
+	if want := "the operation timed out: the destination fell behind the backup stream for longer than the lag timeout"; r.Message() != want {
+		t.Fatalf("slow message = %q, want %q", r.Message(), want)
 	}
 	if !slow.canceled.Load() || slow.count() != 0 {
 		t.Fatal("slow Put not canceled or object finalized")

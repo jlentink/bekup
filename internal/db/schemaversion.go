@@ -118,3 +118,24 @@ func compareSchemaVersion(applied, expected int64) error {
 		return nil
 	}
 }
+
+// CheckExternalSchemaVersion is CheckSchemaVersion for `bekup external-api`
+// (D-220): bekup_external has no access to schema public, so it reads the
+// version through api.schema_version(). The external API refuses to start
+// (and /readyz fails) unless it equals the newest embedded migration.
+func CheckExternalSchemaVersion(ctx context.Context, db sqlc.DBTX) error {
+	want, err := LatestMigrationVersion()
+	if err != nil {
+		return err
+	}
+	got, err := sqlc.New(db).ExternalSchemaVersion(ctx)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == "42883" || pgErr.Code == "3F000") { // undefined_function, invalid_schema_name
+			got = 0
+		} else {
+			return fmt.Errorf("read schema version: %w", err)
+		}
+	}
+	return compareSchemaVersion(got, want)
+}

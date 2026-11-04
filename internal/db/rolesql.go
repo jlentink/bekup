@@ -32,6 +32,16 @@ type RolePlan struct {
 	// OwnerVerifier / AppVerifier are the SCRAM verifiers of the login
 	// roles (two roles; empty with PromptPasswords).
 	OwnerVerifier, AppVerifier string
+	// External: the deployment has the optional external API role
+	// bekup_external (D-220; two roles only). The plan grants it CONNECT
+	// on the database; the migrations grant the rest
+	// (public.bekup_sync_external_grants()).
+	External bool
+	// CreateExternal creates bekup_external, SetExternalPassword sets the
+	// password of an existing one; ExternalVerifier is its SCRAM verifier
+	// (empty with PromptPasswords). Both need External.
+	CreateExternal, SetExternalPassword bool
+	ExternalVerifier                    string
 	// PromptPasswords (roles-sql only) leaves the passwords out and adds
 	// psql \password prompts instead.
 	PromptPasswords bool
@@ -102,7 +112,23 @@ const (
 	ownerNologinAttrs = "NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS INHERIT"
 	appNologinAttrs   = "NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT"
 	appConnLimit      = " CONNECTION LIMIT 100"
+	// bekup_external (D-220) is a login role only: single-account mode
+	// does not support the external API.
+	externalLoginAttrs = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT"
+	externalConnLimit  = " CONNECTION LIMIT 20"
 )
+
+// ErrExternalSingleAccount refuses the external API role in single-account
+// mode (D-220): one account would hold every role, so the external API
+// would not be isolated from the app.
+var ErrExternalSingleAccount = errors.New("single-account mode does not support the external API (role " + ExternalRole + "); use the two least-privilege roles (D-220)")
+
+// WithExternal adds the creation of bekup_external with the given SCRAM
+// verifier (empty with PromptPasswords) to the plan.
+func (p RolePlan) WithExternal(verifier string) RolePlan {
+	p.External, p.CreateExternal, p.ExternalVerifier = true, true, verifier
+	return p
+}
 
 // Statements returns the plan's statements in execution order.
 func (p RolePlan) Statements() ([]Statement, error) {
@@ -114,6 +140,12 @@ func (p RolePlan) Statements() ([]Statement, error) {
 	}
 	if p.GrantApp && !p.SingleAccount {
 		return nil, errors.New("only single-account mode grants bekup_app to the executing account")
+	}
+	if p.SingleAccount && (p.External || p.CreateExternal || p.SetExternalPassword) {
+		return nil, ErrExternalSingleAccount
+	}
+	if (p.CreateExternal || p.SetExternalPassword) && !p.External {
+		return nil, errors.New("creating or resetting " + ExternalRole + " needs RolePlan.External")
 	}
 	pw := func(v string) (string, error) {
 		if p.PromptPasswords || p.SingleAccount {
@@ -136,6 +168,7 @@ func (p RolePlan) Statements() ([]Statement, error) {
 	}{
 		{OwnerRole, p.OwnerVerifier, p.CreateOwner, p.SetOwnerPassword, ownerLoginAttrs, ownerNologinAttrs, ""},
 		{AppRole, p.AppVerifier, p.CreateApp, p.SetAppPassword, appLoginAttrs, appNologinAttrs, appConnLimit},
+		{ExternalRole, p.ExternalVerifier, p.CreateExternal, p.SetExternalPassword, externalLoginAttrs, "", externalConnLimit},
 	} {
 		if r.create {
 			clause, err := pw(r.verifier)
@@ -184,6 +217,9 @@ func (p RolePlan) Statements() ([]Statement, error) {
 	}
 	add(Statement{SQL: "REVOKE ALL ON DATABASE " + dbName + " FROM PUBLIC;", Action: "revoke the PUBLIC privileges on database " + p.Database})
 	add(Statement{SQL: "GRANT CONNECT ON DATABASE " + dbName + " TO " + AppRole + ";", Action: "grant CONNECT on database " + p.Database + " to " + AppRole})
+	if p.External {
+		add(Statement{SQL: "GRANT CONNECT ON DATABASE " + dbName + " TO " + ExternalRole + ";", Action: "grant CONNECT on database " + p.Database + " to " + ExternalRole})
+	}
 	if p.SingleAccount {
 		add(Statement{SQL: "GRANT CONNECT ON DATABASE " + dbName + " TO CURRENT_USER;", Action: "grant CONNECT on database " + p.Database + " to the executing account"})
 	}
@@ -257,5 +293,9 @@ func RolesSQLScript(p RolePlan) (string, error) {
 	}
 	b.WriteString("\n-- Next: put the role passwords into database.password_file and\n" +
 		"-- database.owner_password_file, then run: bekup migrate check && bekup migrate up\n")
+	if p.External {
+		b.WriteString("-- The bekup_external password goes into the external API's database\n" +
+			"-- password file; bekup migrate up grants the role its api functions.\n")
+	}
 	return b.String(), nil
 }

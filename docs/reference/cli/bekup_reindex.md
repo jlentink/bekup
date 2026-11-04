@@ -4,7 +4,7 @@ List and verify the runs on a destination; with --import, record them for a job 
 
 ### Synopsis
 
-Lists a destination (disk, S3 or SFTP, described by an offline TOML file with *_file credentials,
+Lists a destination (disk, S3, SFTP or WebDAV, described by an offline TOML file with *_file credentials,
 see docs/recovery.md), groups its objects into runs, verifies each run's signed manifest (location,
 signature) and streams every artifact to check its size and SHA-256. The destination is opened
 read-only (no-delete mode) and never written.

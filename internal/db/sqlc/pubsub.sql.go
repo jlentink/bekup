@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const listenAPIRequests = `-- name: ListenAPIRequests :exec
+LISTEN bekup_api_requests
+`
+
+// ListenAPIRequests: new external API run requests (D-220; a wake-up for
+// the workers' consumer, the payload is never trusted).
+func (q *Queries) ListenAPIRequests(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, listenAPIRequests)
+	return err
+}
+
 const listenNotificationEvents = `-- name: ListenNotificationEvents :exec
 LISTEN bekup_notification_events
 `

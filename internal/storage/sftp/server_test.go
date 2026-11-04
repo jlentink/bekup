@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -38,6 +39,28 @@ type testServer struct {
 
 func startServer(t *testing.T) *testServer {
 	t.Helper()
+	return startServerWith(t, nil)
+}
+
+// subsystemFunc serves the sftp subsystem on one channel until it ends.
+type subsystemFunc func(ch io.ReadWriteCloser) error
+
+// localFS serves the local file system (pkg/sftp's classic server).
+func localFS(ch io.ReadWriteCloser) error {
+	s, err := pkgsftp.NewServer(ch)
+	if err != nil {
+		return err
+	}
+	return s.Serve()
+}
+
+// startServerWith starts a test server whose sftp subsystem is served by
+// serve (nil: localFS).
+func startServerWith(t *testing.T, serve subsystemFunc) *testServer {
+	t.Helper()
+	if serve == nil {
+		serve = localFS
+	}
 	_, hostPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +125,7 @@ func startServer(t *testing.T) *testServer {
 			srv.mu.Lock()
 			srv.conns = append(srv.conns, c)
 			srv.mu.Unlock()
-			wg.Go(func() { serveConn(c, cfg, &wg) })
+			wg.Go(func() { serveConn(c, cfg, &wg, serve) })
 		}
 	})
 	return srv
@@ -118,7 +141,7 @@ func (s *testServer) dropAll() {
 	s.conns = nil
 }
 
-func serveConn(c net.Conn, cfg *ssh.ServerConfig, wg *sync.WaitGroup) {
+func serveConn(c net.Conn, cfg *ssh.ServerConfig, wg *sync.WaitGroup, serve subsystemFunc) {
 	defer func() { discard(c.Close()) }()
 	sc, chans, reqs, err := ssh.NewServerConn(c, cfg)
 	if err != nil {
@@ -144,11 +167,7 @@ func serveConn(c net.Conn, cfg *ssh.ServerConfig, wg *sync.WaitGroup) {
 				}
 				wg.Go(func() {
 					defer func() { discard(ch.Close()) }()
-					s, err := pkgsftp.NewServer(ch)
-					if err != nil {
-						return
-					}
-					discard(s.Serve())
+					discard(serve(ch))
 				})
 			}
 		})

@@ -1,16 +1,22 @@
 -- Run history reads for the GraphQL API (task 3.7). Read only; the run
 -- tables are written by internal/runstate (runs.sql). Listings take
 -- scope_all = false to limit rows to the jobs @user_id owns (authz.JobScope,
--- the same rule as IsJobOwner: deleted users own nothing).
+-- the same rule as IsJobOwner: deleted users own nothing). The actor of a
+-- run is the user of a manual or early run, or for an API run (D-220) the
+-- token that requested it (its accepted run request, until the request is
+-- pruned after 30 days) and the token's creator.
 
 -- ListRunsPage returns one page of runs, newest first ((queued_at, id)
 -- descending), after the cursor.
 -- name: ListRunsPage :many
 SELECT sqlc.embed(runs), j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE (@scope_all::boolean OR EXISTS (
         SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
         WHERE o.job_id = runs.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
@@ -26,20 +32,26 @@ LIMIT @max_rows::int;
 
 -- name: GetRunView :one
 SELECT sqlc.embed(runs), j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE runs.id = $1;
 
 -- ListRecentRunsForJobs returns the newest @per_job runs of each job
 -- (Job.lastRun / Job.recentRuns, one query per page of jobs).
 -- name: ListRecentRunsForJobs :many
 SELECT sqlc.embed(runs), j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE runs.id IN (
     SELECT x.id FROM jobs jj
     CROSS JOIN LATERAL (

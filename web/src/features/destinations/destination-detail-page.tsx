@@ -37,6 +37,8 @@ import {
 } from "./operations";
 import { DestinationTest } from "./test-panel";
 import { UnrecordedFilesBanner, UnrecordedFilesSection } from "./unrecorded-files";
+import { WebdavTlsSection } from "./webdav-certificate";
+import { FLAVOR_LABEL, WT } from "./webdav-text";
 
 type Destination = NonNullable<DetailResult["destination"]>;
 type Settings = NonNullable<Destination["settings"]>;
@@ -88,6 +90,33 @@ function S3Facts({ s3 }: { s3: NonNullable<Settings["s3"]> }) {
         <div className="flex flex-col gap-1.5">
           <p className="eyebrow">Custom CA bundle</p>
           <CopyValue value={s3.caBundlePem} label="Copy the CA bundle" multiline />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function WebdavFacts({ webdav }: { webdav: NonNullable<Settings["webdav"]> }) {
+  return (
+    <>
+      <Facts>
+        <Fact term={WT.facts.url} mono>
+          {webdav.url}
+        </Fact>
+        <Fact term={WT.facts.flavor}>{FLAVOR_LABEL[webdav.flavor]}</Fact>
+        <Fact term={WT.facts.path} mono>
+          {webdav.path || (webdav.flavor === "NEXTCLOUD" ? WT.facts.pathFiles : WT.facts.pathBase)}
+        </Fact>
+        <Fact term={WT.facts.username} mono>
+          {webdav.username}
+        </Fact>
+        <Fact term={WT.facts.password}>{stored(webdav.hasPassword)}</Fact>
+        <Fact term={WT.facts.timeout}>{WT.facts.timeoutValue(webdav.timeoutSeconds)}</Fact>
+      </Facts>
+      {webdav.caBundlePem ? (
+        <div className="flex flex-col gap-1.5">
+          <p className="eyebrow">{WT.facts.caBundle}</p>
+          <CopyValue value={webdav.caBundlePem} label={WT.facts.copyCaBundle} multiline />
         </div>
       ) : null}
     </>
@@ -299,7 +328,11 @@ export function DestinationDetailPage() {
           title="Test"
           lead="Writes, reads back and deletes a small probe object below the destination's prefix."
         >
-          <DestinationTest id={d.id} lastTest={d.lastTest} />
+          <DestinationTest
+            id={d.id}
+            lastTest={d.lastTest}
+            viewer={{ isAdmin, flavor: s?.webdav?.flavor }}
+          />
         </LedgerSection>
 
         <LedgerSection
@@ -332,6 +365,7 @@ export function DestinationDetailPage() {
               </Facts>
             ) : null}
             {s.s3 ? <S3Facts s3={s.s3} /> : null}
+            {s.webdav ? <WebdavFacts webdav={s.webdav} /> : null}
             {s.sftp ? (
               <Facts>
                 <Fact term="Server" mono>
@@ -358,6 +392,14 @@ export function DestinationDetailPage() {
         )}
 
         {d.type === "SFTP" ? <SftpSection d={d} isAdmin={isAdmin} /> : null}
+        {s?.webdav ? (
+          <WebdavTlsSection
+            id={d.id}
+            trust={s.webdav.trust}
+            pinned={s.webdav.pinnedCertificate}
+            isAdmin={isAdmin}
+          />
+        ) : null}
 
         {isAdmin ? <UnrecordedFilesSection destinationId={d.id} noDelete={d.noDelete} /> : null}
 

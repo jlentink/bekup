@@ -5,8 +5,9 @@ Validate or print the effective configuration
 ### Options
 
 ```
-  -h, --help     help for config
-      --runner   use runner.toml instead of bekup.toml
+      --external-api   use external-api.toml instead of bekup.toml
+  -h, --help           help for config
+      --runner         use runner.toml instead of bekup.toml
 ```
 
 ### Options inherited from parent commands

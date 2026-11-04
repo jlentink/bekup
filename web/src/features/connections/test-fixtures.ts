@@ -144,7 +144,7 @@ export function chainFixture() {
 }
 
 export function destinationFixture(
-  type: "S3" | "SFTP" | "DISK" = "S3",
+  type: "S3" | "SFTP" | "DISK" | "WEBDAV" = "S3",
   overrides: Record<string, unknown> = {},
   admin = true,
 ) {
@@ -187,11 +187,26 @@ export function destinationFixture(
             hostKey: null,
           }
         : null,
+    webdav:
+      type === "WEBDAV"
+        ? {
+            __typename: "WebdavDestinationSettings",
+            url: "https://cloud.example.com",
+            flavor: "NEXTCLOUD",
+            username: "bekup",
+            path: "Backups",
+            caBundlePem: null,
+            timeoutSeconds: null,
+            hasPassword: true,
+            trust: "SYSTEM",
+            pinnedCertificate: null,
+          }
+        : null,
   };
   return {
     __typename: "Destination",
     id: DEST_ID,
-    name: type === "S3" ? "offsite-s3" : type === "SFTP" ? "nas-sftp" : "local-disk",
+    name: { S3: "offsite-s3", SFTP: "nas-sftp", DISK: "local-disk", WEBDAV: "cloud-dav" }[type],
     type,
     noDelete: false,
     objectLockMode: type === "S3" ? "COMPLIANCE" : null,

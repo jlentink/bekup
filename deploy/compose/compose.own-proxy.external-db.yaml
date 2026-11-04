@@ -51,6 +51,7 @@
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
+#   CI client ──your proxy /api/v1/──its network (bekup-external-api)──> external-api ──backend──> app database  (opt-in profile external-api)
 
 name: bekup
 
@@ -271,6 +272,10 @@ services:
       # SCRAM verifier). serve never receives the owner password.
       - bekup_database_owner_password
       - bekup_database_password
+      # The bekup_external password (opt-in external API, D-220): `db
+      # bootstrap --external-password-file
+      # /run/secrets/bekup_external_database_password` creates the role.
+      - bekup_external_database_password
       # CA bundle of your PostgreSQL's server certificate: [database]
       # tls_ca_file (default path), verified with tls_mode = "verify-full"
       # (empty when another TLS choice needs none, D-215).
@@ -310,6 +315,10 @@ services:
       # SCRAM verifier). serve never receives the owner password.
       - bekup_database_owner_password
       - bekup_database_password
+      # The bekup_external password (opt-in external API, D-220): `db
+      # bootstrap --external-password-file
+      # /run/secrets/bekup_external_database_password` creates the role.
+      - bekup_external_database_password
       # CA bundle of your PostgreSQL's server certificate: [database]
       # tls_ca_file (default path), verified with tls_mode = "verify-full"
       # (empty when another TLS choice needs none, D-215).
@@ -397,6 +406,10 @@ services:
       # skips the wildcard warning for exactly that address. No port is
       # published.
       BEKUP_LISTEN_SHAPE: own-proxy-join
+      # "enabled" when this deployment runs the opt-in external API (D-220;
+      # written to .env by `setup init|upgrade --external-api`): the UI then
+      # shows the curl examples of a job's API access, otherwise a note.
+      BEKUP_EXTERNAL_API: ${BEKUP_EXTERNAL_API:-}
     configs:
       - source: bekup_toml
         target: /etc/bekup/bekup.toml
@@ -458,6 +471,80 @@ services:
         # argon2id (64 MiB x argon2_max_concurrent) + S3 multipart buffers
         # (part size x concurrency) dominate memory; raise with care.
         limits: { cpus: "2.00", memory: 2G, pids: 512 }
+
+  # -------------------------------------------------------------------------
+  # external-api: the token-authenticated REST API for CI pipelines (D-220),
+  # OPT-IN: it runs only with the compose profile external-api, which
+  # `setup init|upgrade --external-api` adds to COMPOSE_PROFILES in .env
+  # (with BEKUP_EXTERNAL_API=enabled). serve's hardening, plain HTTP on YOUR
+  # proxy's Docker network as http://bekup-external-api:8081 (route
+  # https://<domain>/api/v1/ there, preferably to this container's name;
+  # setup prints the settings) and the `backend` network to the database,
+  # nothing else: no egress network, no runner, no metrics, no published
+  # port. YOUR proxy's network usually routes outward, so the external API
+  # can reach the internet (and every container on that network) through
+  # it: put your proxy's backends on an internal network (`docker network
+  # create --internal`; the proxy keeps its published ports on another
+  # one) to take that away. It reads only external-api.toml and its
+  # database login: never bekup.toml, the master key or a certificate, and
+  # it connects only as bekup_external, which may do nothing but call the
+  # api.* functions. It refuses to start until that role exists and
+  # `migrate up` granted it the api schema (docs/guides/external-api.md).
+  # -------------------------------------------------------------------------
+  external-api:
+    <<: *bekup-hardening
+    profiles: [external-api]
+    command: [external-api]
+    environment:
+      # Written to .env by `bekup setup` (D-212): the external API refuses
+      # to start on another version than setup prepared.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
+      # The own-proxy shape (D-215, D-220): Docker assigns the address on
+      # your proxy's network, so external-api.toml [listen] address =
+      # "0.0.0.0:8081" with allow_wildcard. With this literal the external
+      # API accepts connections only on its own address on your proxy's
+      # network (the alias bekup-external-api; plus loopback for the
+      # healthcheck) and closes every other one. No port is published.
+      BEKUP_LISTEN_SHAPE: own-proxy-join
+    configs:
+      - source: external_api_toml
+        target: /etc/bekup/external-api.toml
+    secrets:
+      # YOUR PostgreSQL (fields mode, D-207): external-api.toml [database]
+      # password_file of the bekup_external role.
+      - bekup_external_database_password
+      # CA bundle of your PostgreSQL's server certificate: [database]
+      # tls_ca_file (default path; empty when another TLS choice needs none,
+      # D-215).
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
+    networks:
+      proxy:
+        # YOUR reverse proxy's Docker network (BEKUP_PROXY_NETWORK). Your
+        # proxy forwards https://<domain>/api/v1/ to
+        # http://bekup-external-api:8081; external-api.toml [listen]
+        # trusted_proxy_hosts names your proxy's container (link mode:
+        # trusted_proxies its fixed address), so only it may forward client
+        # addresses (X-Forwarded-For).
+        aliases: [bekup-external-api]
+      backend: {}
+    # NO `ports:`. Only the reverse proxy reaches it.
+    healthcheck:
+      # Exec form (distroless): GET /healthz on listen.address.
+      test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "external-api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 128M, pids: 64 }
 
   # -------------------------------------------------------------------------
   # runner: the ONLY component with Docker access (D-003). Starts the
@@ -595,6 +682,10 @@ configs:
     file: ./bekup.toml
   runner_toml:
     file: ./runner.toml
+  # The opt-in external API (profile external-api, D-220); written by
+  # `setup init|upgrade --external-api` (needed only while it runs).
+  external_api_toml:
+    file: ./external-api.toml
 
 # ---------------------------------------------------------------------------
 # Secrets: file-based Docker secrets from ./secrets/ (gitignored), mounted at
@@ -616,6 +707,12 @@ secrets:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_password
   bekup_database_owner_password:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_database_owner_password
+  # The bekup_external password of the opt-in external API (D-220): migrate
+  # creates the role with it (db bootstrap --external-password-file), the
+  # external API logs in with it. Always written by setup; the role exists
+  # only once you created it.
+  bekup_external_database_password:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_external_database_password
   # Written by certs-init. The CA *key* (./secrets/certs/ca/ca.key) is never
   # given to any long-running service. Each component gets the CA trust
   # bundle from its own directory (it holds both CAs during a CA rotation),

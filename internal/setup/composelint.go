@@ -14,7 +14,7 @@ import (
 )
 
 // bekupServices are the services that run the bekup image.
-var bekupServices = []string{"setup", "setup-web", "setup-web-db", "certs-init", "migrate", "admin", "serve", "runner"}
+var bekupServices = []string{"setup", "setup-web", "setup-web-db", "certs-init", "migrate", "admin", "serve", "external-api", "runner"}
 
 // setupServices run as root with only CAP_CHOWN and bind-mount the
 // deployment directory: the setup container and the browser setup's

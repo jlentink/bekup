@@ -28,6 +28,11 @@ type Overlays struct {
 	// proxy's own network (D-216). serve is on it already, so only migrate
 	// and admin join the proxy network; there is no database network.
 	DBOnProxy bool
+	// ExternalAPI: the opt-in external API is enabled (D-220 amendment 4).
+	// Not an overlay of its own: it adds the external-api service to the
+	// DB-network overlay (unless that network is the proxy's, which it is
+	// on already) and to the Traefik labels overlay (the /api/v1/ route).
+	ExternalAPI bool
 }
 
 // Any reports whether at least one overlay applies.
@@ -50,6 +55,25 @@ const overlayServeLabels = `    # Routing for YOUR Traefik (Docker provider with
       traefik.http.routers.bekup.service: bekup
       traefik.http.services.bekup.loadbalancer.server.port: "8080"
       traefik.http.services.bekup.loadbalancer.responseforwarding.flushinterval: "-1ms"
+`
+
+// overlayExternalAPILabels is the Traefik label block on the external API
+// (D-220 amendment 4): the /api/v1/ route above serve's router, request
+// bodies at most 16 KiB (the API accepts an empty body or {}).
+const overlayExternalAPILabels = `    # The /api/v1/ route of the external API for YOUR Traefik (D-220): above
+    # serve's router, request bodies at most 16 KiB.
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${BEKUP_PROXY_NETWORK:-bekup-proxy}
+      traefik.http.routers.bekup-api.rule: "Host(` + "`${BEKUP_DOMAIN:-bekup.invalid}`" + `) && PathPrefix(` + "`/api/v1/`" + `)"
+      traefik.http.routers.bekup-api.priority: "400"
+      traefik.http.routers.bekup-api.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.bekup-api.tls: "true"
+      traefik.http.routers.bekup-api.tls.certresolver: ${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      traefik.http.routers.bekup-api.service: bekup-api
+      traefik.http.routers.bekup-api.middlewares: bekup-api-body
+      traefik.http.middlewares.bekup-api-body.buffering.maxRequestBodyBytes: "16384"
+      traefik.http.services.bekup-api.loadbalancer.server.port: "8081"
 `
 
 // overlayServeLink is serve's fixed address on the link network.
@@ -82,8 +106,8 @@ const overlayBackendInternal = `  # The app database is a container on YOUR Dock
 
 // overlayDBNetworks are the top-level networks of the DB-network overlay.
 const overlayDBNetworks = overlayBackendInternal + `  # YOUR database container's network (external; setup writes its name to
-  # .env as BEKUP_DB_NETWORK). Only migrate, serve, admin and the browser
-  # setup's database run (setup-web-db) join it.
+  # .env as BEKUP_DB_NETWORK). Only migrate, serve, admin, the browser
+  # setup's database run (setup-web-db) and the external API join it.
   database:
     external: true
     name: ${BEKUP_DB_NETWORK:-bekup-db}
@@ -149,6 +173,7 @@ func renderOverlay(o Overlays, staticTLSProxy Proxy, dbServices []string) string
 			}
 		}
 	}
+	b.WriteString(externalAPIOverlay(o))
 	if staticTLSProxy != "" {
 		b.WriteString(staticTLSBlock(staticTLSProxy))
 	}
@@ -157,6 +182,28 @@ func renderOverlay(o Overlays, staticTLSProxy Proxy, dbServices []string) string
 		b.WriteString("networks:\n" + overlayBackendInternal)
 	case o.DBNetwork:
 		b.WriteString("networks:\n" + overlayDBNetworks)
+	}
+	return b.String()
+}
+
+// externalAPIOverlay is the external-api block of the overlay (D-220
+// amendment 4; "" without one): with the external API enabled it reaches
+// the database container like serve (not when that network is the
+// proxy's: it is on it already) and gets its own route with the Traefik
+// labels.
+func externalAPIOverlay(o Overlays) string {
+	extDB := o.ExternalAPI && o.DBNetwork && !o.DBOnProxy
+	extLabels := o.ExternalAPI && o.ProxyLabels
+	if !extDB && !extLabels {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("  external-api:\n")
+	if extLabels {
+		b.WriteString(overlayExternalAPILabels)
+	}
+	if extDB {
+		b.WriteString("    networks:\n" + overlayDBJoin)
 	}
 	return b.String()
 }

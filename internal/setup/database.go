@@ -521,7 +521,7 @@ func resolveDBPasswords(root string, d *Database, ask func(role string) ([]byte,
 // roles SQL (SCRAM verifiers, never the passwords) while the passwords are
 // in memory. In single-account mode the owner file stays empty: compose
 // mounts it into migrate, bekup never reads it.
-func generateExternalDatabase(w *writer, l Layout, d *Database, p *dbPasswords) error {
+func generateExternalDatabase(w *writer, l Layout, d *Database, p *dbPasswords, extPw []byte) error {
 	if err := w.create(l.keys(dbPasswordName), p.app, 0o400); err != nil {
 		return err
 	}
@@ -541,7 +541,17 @@ func generateExternalDatabase(w *writer, l Layout, d *Database, p *dbPasswords) 
 	}
 	defer logging.DefaultRegistry.Register([]byte(ownerV))()
 	defer logging.DefaultRegistry.Register([]byte(appV))()
-	script, err := db.RolesSQLScript(db.NewRolesSQLPlan(d.Name, ownerV, appV, false, false))
+	plan := db.NewRolesSQLPlan(d.Name, ownerV, appV, false, false)
+	if extPw != nil {
+		// The external API is enabled (D-220): the DBA creates its role too.
+		extV, err := db.NewSCRAMVerifier(extPw)
+		if err != nil {
+			return err
+		}
+		defer logging.DefaultRegistry.Register([]byte(extV))()
+		plan = plan.WithExternal(extV)
+	}
+	script, err := db.RolesSQLScript(plan)
 	if err != nil {
 		return err
 	}
@@ -630,26 +640,20 @@ func (d *Database) dbAddress() string {
 
 // dbNextSteps returns the commands that prepare the external database,
 // in order (the compose project directory is the deployment directory).
-func dbNextSteps(d *Database, l Layout) []string {
-	// db bootstrap refuses a connection below verify-full without the
-	// explicit flag (D-207): the administrator's password and the DDL
-	// would cross an unverified or unencrypted connection.
-	insecure, insecureNote := "", ""
-	if d.TLS.Weak() {
-		insecure = " --allow-insecure-admin-connection"
-		insecureNote = fmt.Sprintf("\n     WARNING: --allow-insecure-admin-connection because of --db-tls %s: the admin login\n     and the DDL cross a connection that is encrypted but not verified", d.TLS)
-		if d.TLS == DBTLSDisable {
-			insecureNote = "\n     WARNING: --allow-insecure-admin-connection because of --db-tls disable: the admin login\n     and the DDL cross the network unencrypted and without channel binding, so a\n     container that ARP-spoofs the database on its Docker network can relay the\n     SCRAM login and hijack the admin session. Prefer --db-tls require."
-		}
-	}
+func dbNextSteps(d *Database, l Layout, externalAPI, externalInSQL bool) []string {
+	insecure, insecureNote := insecureAdmin(d.TLS)
 	switch d.Auth {
 	case DBAuthBootstrap:
 		admin := d.AdminUser
 		if admin == "" {
 			admin = "<admin role>"
 		}
+		ext, extRoles := "", "bekup_owner, bekup_app"
+		if externalAPI {
+			ext, extRoles = " "+externalRoleFlag, "bekup_owner, bekup_app, bekup_external (external API)"
+		}
 		return []string{
-			fmt.Sprintf("docker compose run --rm migrate db bootstrap --admin-user %s%s\n     (creates bekup_owner, bekup_app and the database %s with the generated passwords;\n     the admin password is asked on the terminal, used once and never stored)%s", admin, insecure, d.Name, insecureNote),
+			fmt.Sprintf("docker compose run --rm migrate db bootstrap --admin-user %s%s%s\n     (creates %s and the database %s with the generated passwords;\n     the admin password is asked on the terminal, used once and never stored)%s", admin, insecure, ext, extRoles, d.Name, insecureNote),
 			"docker compose run --rm migrate migrate check",
 		}
 	case DBAuthSingleAccount:
@@ -658,13 +662,36 @@ func dbNextSteps(d *Database, l Layout) []string {
 			"docker compose run --rm migrate migrate check",
 		}
 	case DBAuthDBASQL:
-		return []string{
+		steps := []string{
 			fmt.Sprintf("Hand %s to your DBA (it holds SCRAM verifiers, not the passwords;\n     keep it private) to run as a CREATEROLE + CREATEDB account:\n       psql -v ON_ERROR_STOP=1 --no-psqlrc -f %s \"host=%s port=%d dbname=postgres user=<admin> %s\"\n     then delete it (setup check warns while it exists)", l.keys(dbRolesSQLName), dbRolesSQLName, d.Host, d.Port, d.TLS.psqlSSL()),
-			"docker compose run --rm migrate migrate check",
 		}
+		if externalAPI && !externalInSQL {
+			steps = append(steps, externalRoleBootstrapStep(d, insecure, insecureNote))
+		}
+		return append(steps, "docker compose run --rm migrate migrate check")
 	default: // existing roles
-		return []string{"docker compose run --rm migrate migrate check   (the roles exist already: this verifies them)"}
+		steps := []string{}
+		if externalAPI {
+			steps = append(steps, externalRoleBootstrapStep(d, insecure, insecureNote))
+		}
+		return append(steps, "docker compose run --rm migrate migrate check   (the roles exist already: this verifies them)")
 	}
+}
+
+// insecureAdmin is the bootstrap flag (and its warning) a weak TLS choice
+// needs: db bootstrap refuses a connection below verify-full without the
+// explicit flag (D-207), because the administrator's password and the DDL
+// would cross an unverified or unencrypted connection.
+func insecureAdmin(t DBTLS) (flag, note string) {
+	if !t.Weak() {
+		return "", ""
+	}
+	flag = " --allow-insecure-admin-connection"
+	note = fmt.Sprintf("\n     WARNING: --allow-insecure-admin-connection because of --db-tls %s: the admin login\n     and the DDL cross a connection that is encrypted but not verified", t)
+	if t == DBTLSDisable {
+		note = "\n     WARNING: --allow-insecure-admin-connection because of --db-tls disable: the admin login\n     and the DDL cross the network unencrypted and without channel binding, so a\n     container that ARP-spoofs the database on its Docker network can relay the\n     SCRAM login and hijack the admin session. Prefer --db-tls require."
+	}
+	return flag, note
 }
 
 // dbCAExpiry reports whether a CA bundle holds a currently valid

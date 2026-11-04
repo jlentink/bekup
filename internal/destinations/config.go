@@ -16,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/sshpolicy"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
+	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
 // Type is a destination type.
@@ -23,13 +24,16 @@ type Type string
 
 // Destination types (the destination_type enum).
 const (
-	TypeDisk Type = "disk"
-	TypeS3   Type = "s3"
-	TypeSFTP Type = "sftp"
+	TypeDisk   Type = "disk"
+	TypeS3     Type = "s3"
+	TypeSFTP   Type = "sftp"
+	TypeWebDAV Type = "webdav"
 )
 
 // Valid reports whether t is a known type.
-func (t Type) Valid() bool { return t == TypeDisk || t == TypeS3 || t == TypeSFTP }
+func (t Type) Valid() bool {
+	return t == TypeDisk || t == TypeS3 || t == TypeSFTP || t == TypeWebDAV
+}
 
 // SFTP authentication methods (SFTPConfig.AuthMethod).
 const (
@@ -53,6 +57,12 @@ const (
 	maxSFTPUserLen    = sshpolicy.MaxUserLen
 	maxSFTPHostLen    = hostname.MaxLen
 	maxSFTPBasePathLn = 512
+	maxWebDAVURLLen   = 2048
+	maxWebDAVUserLen  = 256
+	maxWebDAVPassLen  = 1024
+	// WebDAV request timeout bounds (seconds; 0 = the default).
+	minWebDAVTimeout = 5
+	maxWebDAVTimeout = 600
 )
 
 // DiskConfig is the stored configuration of a disk destination.
@@ -99,6 +109,44 @@ type SFTPConfig struct {
 	PublicKey string `json:"public_key,omitempty"`
 }
 
+// WebDAVConfig is the stored, non-secret configuration of a WebDAV
+// destination (D-222). The password is in the sealed credentials; the
+// certificate pin lives in its own columns.
+type WebDAVConfig struct {
+	// URL is the https collection URL (generic) or the server root
+	// (nextcloud), without a trailing slash.
+	URL string `json:"url"`
+	// Flavor is "generic" or "nextcloud".
+	Flavor   string `json:"flavor"`
+	Username string `json:"username"`
+	// Path is the folder below the base (key prefix syntax).
+	Path string `json:"path,omitempty"`
+	// CABundlePEM, if set, replaces the system roots (unused while a
+	// certificate is pinned).
+	CABundlePEM string `json:"ca_bundle_pem,omitempty"`
+	// TimeoutSeconds bounds one metadata request (0: 60 s).
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	// UserID is the Nextcloud/ownCloud user id the server resolved for
+	// Username (current-user-principal) when the destination was saved;
+	// files live below it, and it may differ from the login name (e-mail
+	// or LDAP logins). Only for the location overlap check (D-222
+	// amendment); empty when unknown (generic flavor, or the server could
+	// not be asked while saving). Never an input.
+	UserID string `json:"user_id,omitempty"`
+}
+
+// TLSPin is a WebDAV destination's pinned server certificate (public
+// data, D-222).
+type TLSPin struct {
+	// SPKISHA256 is the SHA-256 of the certificate's public key (hex).
+	SPKISHA256 string
+	// CertificatePEM is the pinned certificate.
+	CertificatePEM string
+	// Certificate describes it (nil if it cannot be parsed).
+	Certificate *webdav.Certificate
+	SetAt       time.Time
+}
+
 // HostKey is a confirmed SFTP host-key pin (public data).
 type HostKey struct {
 	Type          string
@@ -119,15 +167,19 @@ type Destination struct {
 	ObjectLockMode          storage.LockMode
 	ObjectLockRetentionDays int
 
-	Disk *DiskConfig
-	S3   *S3Config
-	SFTP *SFTPConfig
+	Disk   *DiskConfig
+	S3     *S3Config
+	SFTP   *SFTPConfig
+	WebDAV *WebDAVConfig
 
 	HasSecretAccessKey bool
-	HasPassword        bool
-	HasPrivateKey      bool
-	HasPassphrase      bool
-	HostKey            *HostKey
+	// HasPassword: an SFTP or WebDAV password is stored.
+	HasPassword   bool
+	HasPrivateKey bool
+	HasPassphrase bool
+	HostKey       *HostKey
+	// TLSPin is the WebDAV certificate pin (nil: none).
+	TLSPin *TLSPin
 
 	// Ready reports whether the destination can be opened; otherwise
 	// NotReadyReason says what is missing (a fixed, presentable text).
@@ -194,6 +246,20 @@ type SFTPInput struct {
 	Passphrase []byte
 }
 
+// WebDAVInput sets the configuration of a WebDAV destination. It replaces
+// the whole non-secret configuration. Password is write-only; nil keeps
+// the stored one, except when the URL, flavor or username changes (D-140:
+// it must be entered again then).
+type WebDAVInput struct {
+	URL            string
+	Flavor         string // "" = generic
+	Username       string
+	Path           string
+	CABundlePEM    string
+	TimeoutSeconds int
+	Password       []byte
+}
+
 // CreateInput creates a destination: exactly the input matching Type is
 // set.
 type CreateInput struct {
@@ -203,6 +269,7 @@ type CreateInput struct {
 	Disk     *DiskInput
 	S3       *S3Input
 	SFTP     *SFTPInput
+	WebDAV   *WebDAVInput
 }
 
 // UpdateInput changes a destination; nil fields stay unchanged. At most
@@ -214,18 +281,35 @@ type UpdateInput struct {
 	Disk     *DiskInput
 	S3       *S3Input
 	SFTP     *SFTPInput
+	WebDAV   *WebDAVInput
 }
 
-// zeroInputs overwrites the secret fields of the inputs.
-func zeroInputs(s3in *S3Input, sftpIn *SFTPInput) {
-	if s3in != nil {
-		crypto.Zero(s3in.SecretAccessKey)
+// inputs are the per-type inputs of a create or update (at most one set).
+type inputs struct {
+	disk   *DiskInput
+	s3     *S3Input
+	sftp   *SFTPInput
+	webdav *WebDAVInput
+}
+
+// zero overwrites the secret fields of the inputs.
+func (in inputs) zero() {
+	if in.s3 != nil {
+		crypto.Zero(in.s3.SecretAccessKey)
 	}
-	if sftpIn != nil {
-		crypto.Zero(sftpIn.Password)
-		crypto.Zero(sftpIn.PrivateKey)
-		crypto.Zero(sftpIn.Passphrase)
+	if in.sftp != nil {
+		crypto.Zero(in.sftp.Password)
+		crypto.Zero(in.sftp.PrivateKey)
+		crypto.Zero(in.sftp.Passphrase)
 	}
+	if in.webdav != nil {
+		crypto.Zero(in.webdav.Password)
+	}
+}
+
+// set reports which inputs are present, by type.
+func (in inputs) set() map[Type]bool {
+	return map[Type]bool{TypeDisk: in.disk != nil, TypeS3: in.s3 != nil, TypeSFTP: in.sftp != nil, TypeWebDAV: in.webdav != nil}
 }
 
 // FieldError is an invalid input; Message is presentable (shared with
@@ -297,7 +381,44 @@ func s3ConfigOf(in *S3Input) (S3Config, error) {
 		c.Checksum = string(s3store.ChecksumWhenSupported)
 	}
 	if c.CABundlePEM != "" {
-		if err := checkCABundle([]byte(c.CABundlePEM)); err != nil {
+		if err := checkCABundle([]byte(c.CABundlePEM), "s3.caBundlePem"); err != nil {
+			return c, err
+		}
+		c.CABundlePEM += "\n"
+	}
+	return c, nil
+}
+
+// webdavConfigOf turns a WebDAV input into the stored config (without the
+// password). The URL is trimmed and loses a trailing slash.
+func webdavConfigOf(in *WebDAVInput) (WebDAVConfig, error) {
+	c := WebDAVConfig{
+		URL:            strings.TrimSuffix(strings.TrimSpace(in.URL), "/"),
+		Flavor:         strings.TrimSpace(in.Flavor),
+		Username:       strings.TrimSpace(in.Username),
+		Path:           strings.Trim(strings.TrimSpace(in.Path), "/"),
+		CABundlePEM:    strings.TrimSpace(in.CABundlePEM),
+		TimeoutSeconds: in.TimeoutSeconds,
+	}
+	if c.Flavor == "" {
+		c.Flavor = string(webdav.FlavorGeneric)
+	}
+	switch {
+	case len(c.URL) > maxWebDAVURLLen:
+		return c, fieldErr("webdav.url", "URL too long")
+	case len(c.Username) > maxWebDAVUserLen:
+		return c, fieldErr("webdav.username", "username too long")
+	case len(in.Password) > maxWebDAVPassLen:
+		return c, fieldErr("webdav.password", "password too long")
+	case len(c.CABundlePEM) > maxCABundleBytes:
+		return c, fieldErr("webdav.caBundlePem", "CA bundle too large (max %d KiB)", maxCABundleBytes>>10)
+	case !webdav.Flavor(c.Flavor).Valid():
+		return c, fieldErr("webdav.flavor", "unknown flavor")
+	case c.TimeoutSeconds != 0 && (c.TimeoutSeconds < minWebDAVTimeout || c.TimeoutSeconds > maxWebDAVTimeout):
+		return c, fieldErr("webdav.timeoutSeconds", "the request timeout must be %d..%d seconds", minWebDAVTimeout, maxWebDAVTimeout)
+	}
+	if c.CABundlePEM != "" {
+		if err := checkCABundle([]byte(c.CABundlePEM), "webdav.caBundlePem"); err != nil {
 			return c, err
 		}
 		c.CABundlePEM += "\n"
@@ -306,8 +427,8 @@ func s3ConfigOf(in *S3Input) (S3Config, error) {
 }
 
 // checkCABundle requires PEM certificates only (no private keys or other
-// blocks pasted by mistake).
-func checkCABundle(b []byte) error {
+// blocks pasted by mistake); field names the input in errors.
+func checkCABundle(b []byte, field string) error {
 	n := 0
 	for {
 		var block *pem.Block
@@ -316,15 +437,15 @@ func checkCABundle(b []byte) error {
 			break
 		}
 		if block.Type != "CERTIFICATE" {
-			return fieldErr("s3.caBundlePem", "the CA bundle may only contain CERTIFICATE blocks")
+			return fieldErr(field, "the CA bundle may only contain CERTIFICATE blocks")
 		}
 		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
-			return fieldErr("s3.caBundlePem", "the CA bundle contains an invalid certificate")
+			return fieldErr(field, "the CA bundle contains an invalid certificate")
 		}
 		n++
 	}
 	if n == 0 || strings.TrimSpace(string(b)) != "" {
-		return fieldErr("s3.caBundlePem", "the CA bundle must consist of PEM certificates")
+		return fieldErr(field, "the CA bundle must consist of PEM certificates")
 	}
 	return nil
 }

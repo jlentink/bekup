@@ -1,0 +1,42 @@
+# Traefik DYNAMIC configuration of the opt-in external API (D-220; file
+# provider). Rendered by deploy/traefik/entrypoint.sh ONLY when
+# BEKUP_EXTERNAL_API=enabled (setup writes it to .env with the compose
+# profile external-api); __BEKUP_DOMAIN__ is replaced with the validated
+# BEKUP_DOMAIN. The middlewares bekup-headers, bekup-ratelimit and
+# bekup-inflight are those of bekup.yml (one file provider).
+
+http:
+  routers:
+    # https://<domain>/api/v1/ only, above every UI router (the event
+    # stream router has 300). serve keeps everything else, including
+    # /api/download/. The external API never streams: its responses are
+    # small JSON documents, so the buffering middleware (the only body limit
+    # Traefik has) applies to requests and responses alike.
+    bekup-api:
+      entryPoints: [websecure]
+      rule: "Host(`__BEKUP_DOMAIN__`) && PathPrefix(`/api/v1/`)"
+      priority: 400
+      service: bekup-api
+      middlewares: [bekup-headers, bekup-ratelimit, bekup-inflight, bekup-api-body-limit]
+
+  middlewares:
+    # Request bodies above 16 KiB are rejected with 413 (the external API
+    # accepts only an empty body or {}; [limits] max_body_bytes is 16 KiB by
+    # default). Responses are bounded too.
+    bekup-api-body-limit:
+      buffering:
+        maxRequestBodyBytes: 16384
+        memRequestBodyBytes: 16384
+        maxResponseBodyBytes: 1048576
+        memResponseBodyBytes: 1048576
+
+  services:
+    bekup-api:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          # Fixed internal URL on the `frontend` network (no Docker socket,
+          # no discovery); external-api.toml [listen] trusted_proxies names
+          # this proxy's fixed address, so the forwarded client address is
+          # the one every token's address allowlist is checked against.
+          - url: "http://external-api:8081"

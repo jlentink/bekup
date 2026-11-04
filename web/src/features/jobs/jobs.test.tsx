@@ -455,6 +455,120 @@ describe("job editor", () => {
   });
 });
 
+describe("job editor database selection", () => {
+  const options = {
+    PreviewSchedule: () =>
+      ok({
+        previewSchedule: {
+          __typename: "SchedulePreview",
+          description: "Every day at 03:00 (UTC)",
+          next: ["2026-10-29T03:00:00Z"],
+          schedule: { __typename: "Schedule", kind: "INTERVAL", timezone: "UTC" },
+        },
+      }),
+    JobEditorOptions: () =>
+      ok({
+        connections: [
+          {
+            __typename: "Connection",
+            id: CONN_ID,
+            name: "billing-pg",
+            engine: "POSTGRES",
+            versionKey: "17",
+            temporary: false,
+          },
+        ],
+        destinations: [
+          {
+            __typename: "Destination",
+            id: DEST_ID,
+            name: "vault-s3",
+            type: "S3",
+            ready: true,
+            notReadyReason: null,
+          },
+        ],
+      }),
+  };
+
+  it("offers All, which backs up every database without a picker", async () => {
+    const { user, callsOf } = renderApp("/jobs/new", {
+      ...baseHandlers(),
+      ...options,
+      CreateJob: () =>
+        ok({
+          createJob: {
+            __typename: "CreateJobResult",
+            job: { __typename: "Job", id: JOB_ID, name: "Billing DB", slug: "billing-db" },
+            generatedPassphrase: "correct-horse-battery-staple-xyz",
+            generatedKeypair: null,
+          },
+        }),
+      ...detailHandlers(),
+    });
+    await user.type(await screen.findByLabelText("Name"), "Billing DB");
+    const conn = screen.getByRole("combobox", { name: "Connection" });
+    await waitFor(() => {
+      expect(within(conn).getByRole("option", { name: /billing-pg/ })).toBeInTheDocument();
+    });
+    await user.selectOptions(conn, CONN_ID);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Add a destination" }), DEST_ID);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("schedule-description")).toBeInTheDocument();
+    });
+    const modes = screen.getByRole("radiogroup", { name: "Databases" });
+    expect(
+      within(modes)
+        .getAllByRole("radio")
+        .map((r) => r.getAttribute("value")),
+    ).toEqual(["ALL", "SELECTED", "EXCLUDE"]);
+    await user.click(screen.getByRole("radio", { name: "All" }));
+    expect(screen.queryByRole("textbox", { name: "Add a database by name" })).toBeNull();
+    expect(screen.getByText(/Every database on the server is backed up/)).toBeInTheDocument();
+
+    // Exclude without a name is refused; All needs none.
+    await user.click(screen.getByRole("radio", { name: "Exclude" }));
+    await user.click(screen.getByRole("button", { name: "Create job" }));
+    expect(
+      await screen.findByText("Choose at least one database to exclude, or pick All."),
+    ).toBeInTheDocument();
+    expect(callsOf("CreateJob")).toHaveLength(0);
+
+    await user.click(screen.getByRole("radio", { name: "All" }));
+    await user.click(screen.getByRole("button", { name: "Create job" }));
+    await screen.findByRole("dialog", { name: "Save the new passphrase" });
+    const input = callsOf("CreateJob")[0]?.variables["input"] as Record<string, unknown>;
+    expect(input["dbMode"]).toBe("ALL");
+    expect(input["databases"]).toBeUndefined();
+    expect(input["exclude"]).toBeUndefined();
+  });
+
+  it("opens a job with exclusions on Exclude and clears them when switched to All", async () => {
+    const { user, callsOf } = renderApp(`/jobs/${JOB_ID}/edit`, {
+      ...baseHandlers(),
+      ...options,
+      ...detailHandlers(),
+      UpdateJob: () => ok({ updateJob: { __typename: "Job", id: JOB_ID } }),
+    });
+    expect(await screen.findByRole("radio", { name: "Exclude" })).toBeChecked();
+    expect(screen.getByText("scratch")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId("schedule-description")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("radio", { name: "All" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => {
+      expect(callsOf("UpdateJob")).toHaveLength(1);
+    });
+    const input = callsOf("UpdateJob")[0]?.variables["input"] as Record<string, unknown>;
+    expect(input["dbMode"]).toBe("ALL");
+    expect(input["exclude"]).toEqual([]);
+    expect(input["databases"]).toEqual([]);
+  });
+});
+
 describe("job detail", () => {
   it("runs an extra run and reports an active run", async () => {
     let active = false;

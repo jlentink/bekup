@@ -56,4 +56,14 @@ var (
 		Name:   "bekup_settings_events",
 		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenSettingsEvents(ctx) },
 	}
+
+	// APIRequests announces new external API run requests (payload: the
+	// request id, sent by api.request_run as bekup_external; D-220). It is
+	// a wake-up only: the workers' consumer (internal/apiaccess) ignores
+	// the payload and claims pending rows from the database itself, so a
+	// forged notification costs at most one extra claim query.
+	APIRequests = Channel{
+		Name:   "bekup_api_requests",
+		Listen: func(ctx context.Context, q *sqlc.Queries) error { return q.ListenAPIRequests(ctx) },
+	}
 )

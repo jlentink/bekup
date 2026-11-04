@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
@@ -117,6 +118,12 @@ type Resolver struct {
 	// RetentionHolds backs Job.retentionHolds (D-209; nil: the field
 	// reads as empty).
 	RetentionHolds RetentionHoldSource
+	// APITokens backs the external API token fields (D-220; nil: those
+	// fields fail with an internal error).
+	APITokens *apiaccess.Service
+	// RunnerTargets backs Query.runnerTargetPolicy (D-223; nil: the
+	// field fails with an internal error).
+	RunnerTargets RunnerTargetPolicySource
 }
 
 // RetentionHoldSource batch-loads the recorded retention holds of jobs

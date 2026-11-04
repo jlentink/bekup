@@ -18,3 +18,7 @@ func (r *mutationResolver) UpdateSsrfAllowlist(ctx context.Context, input model.
 func (r *queryResolver) SsrfAllowlist(ctx context.Context) (*model.SsrfAllowlist, error) {
 	return r.ssrfAllowlist(ctx)
 }
+
+func (r *queryResolver) RunnerTargetPolicy(ctx context.Context) (*model.RunnerTargetPolicy, error) {
+	return r.runnerTargetPolicy(ctx)
+}

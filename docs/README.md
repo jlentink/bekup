@@ -49,6 +49,7 @@ in by the task named on the page (see the
 - [Downloads](guides/downloads.md)
 - [Restore](guides/restore.md)
 - [Notifications](guides/notifications.md)
+- [External API for CI pipelines](guides/external-api.md)
 
 ## Operations and recovery
 

@@ -32,6 +32,11 @@ type BootstrapOptions struct {
 	// (two roles only; turned into SCRAM verifiers here, never sent; the
 	// caller zeroes them).
 	OwnerPassword, AppPassword []byte
+	// ExternalPassword (optional, two roles only) also creates the
+	// external API role bekup_external with this password (D-220; turned
+	// into a SCRAM verifier, the caller zeroes it). Without it an existing
+	// bekup_external is only checked.
+	ExternalPassword []byte
 	// ResetPasswords sets the passwords of existing login roles too.
 	ResetPasswords bool
 	// AdoptExistingRoles accepts bekup_owner/bekup_app roles that already
@@ -77,7 +82,9 @@ const revokeTimeout = 15 * time.Second
 // configured passwords (two roles) or as NOLOGIN roles the account keeps
 // (single-account mode), the database owned by bekup_owner with PUBLIC
 // revoked and CONNECT for bekup_app, and citext when bekup_owner could not
-// create it itself. It is idempotent once AdoptExistingRoles accepts the
+// create it itself; with ExternalPassword also the external API's login
+// role bekup_external with CONNECT (D-220; its api grants come from
+// `migrate up`). It is idempotent once AdoptExistingRoles accepts the
 // existing roles: they are checked (never silently changed; ResetPasswords
 // sets their passwords; other members or ADMIN OPTION holders than the
 // admin are refused), an existing database must already be owned by
@@ -105,7 +112,7 @@ func Bootstrap(ctx context.Context, o BootstrapOptions) (_ *BootstrapResult, err
 	q := sqlc.New(conn)
 	res := &BootstrapResult{TLS: ConnTLSFacts(conn.PgConn(), o.TLS)}
 	pl, err := o.plan(ctx, q, res)
-	for _, v := range []string{pl.plan.OwnerVerifier, pl.plan.AppVerifier} {
+	for _, v := range []string{pl.plan.OwnerVerifier, pl.plan.AppVerifier, pl.plan.ExternalVerifier} {
 		if v != "" {
 			reg.Register([]byte(v))
 		}
@@ -140,7 +147,8 @@ func Bootstrap(ctx context.Context, o BootstrapOptions) (_ *BootstrapResult, err
 		return o.revokeTempGrant(ctx, conn, reg, timeout, res)
 	}
 	pp := pl.plan
-	res.Changed = pp.CreateOwner || pp.CreateApp || pp.SetOwnerPassword || pp.SetAppPassword || pp.CreateDatabase
+	res.Changed = pp.CreateOwner || pp.CreateApp || pp.SetOwnerPassword || pp.SetAppPassword || pp.CreateDatabase ||
+		pp.CreateExternal || pp.SetExternalPassword
 	for _, st := range stmts {
 		if err := execStatement(ctx, conn, st); err != nil {
 			return res, errors.Join(err, revoke())
@@ -201,6 +209,9 @@ func (o *BootstrapOptions) validate() error {
 		return fmt.Errorf("invalid database name %q", o.Database)
 	}
 	if o.SingleAccount {
+		if len(o.ExternalPassword) > 0 {
+			return ErrExternalSingleAccount
+		}
 		if len(o.OwnerPassword) > 0 || len(o.AppPassword) > 0 || o.ResetPasswords {
 			return errors.New("single-account mode creates NOLOGIN roles without passwords")
 		}
@@ -216,6 +227,15 @@ func (o *BootstrapOptions) validate() error {
 	}
 	if subtle.ConstantTimeCompare(o.OwnerPassword, o.AppPassword) == 1 {
 		return errors.New("bekup_owner and bekup_app need different passwords (database.owner_password_file and database.password_file hold the same value)")
+	}
+	if o.ExternalPassword == nil {
+		return nil
+	}
+	if err := CheckRolePassword(o.ExternalPassword); err != nil {
+		return fmt.Errorf("the %s password: %w", ExternalRole, err)
+	}
+	if subtle.ConstantTimeCompare(o.ExternalPassword, o.OwnerPassword) == 1 || subtle.ConstantTimeCompare(o.ExternalPassword, o.AppPassword) == 1 {
+		return fmt.Errorf("%s needs its own password (it equals the bekup_owner or bekup_app password)", ExternalRole)
 	}
 	return nil
 }
@@ -260,7 +280,8 @@ func (o *BootstrapOptions) plan(ctx context.Context, q *sqlc.Queries, res *Boots
 	}
 	pg16 := admin.ServerVersionNum >= 160000
 
-	p := RolePlan{Database: o.Database, SingleAccount: o.SingleAccount}
+	wantExternal := len(o.ExternalPassword) > 0
+	p := RolePlan{Database: o.Database, SingleAccount: o.SingleAccount, External: wantExternal}
 	needCreateRole := false
 	var existing []string
 	for _, r := range []struct {
@@ -270,23 +291,33 @@ func (o *BootstrapOptions) plan(ctx context.Context, q *sqlc.Queries, res *Boots
 		reset     *bool
 		verifier  *string
 		pw        []byte
+		// optional: only checked when it exists (bekup_external without
+		// ExternalPassword).
+		optional bool
 	}{
-		{OwnerRole, nil, &p.CreateOwner, &p.SetOwnerPassword, &p.OwnerVerifier, o.OwnerPassword},
-		{AppRole, []string{OwnerRole}, &p.CreateApp, &p.SetAppPassword, &p.AppVerifier, o.AppPassword},
+		{OwnerRole, nil, &p.CreateOwner, &p.SetOwnerPassword, &p.OwnerVerifier, o.OwnerPassword, false},
+		{AppRole, []string{OwnerRole}, &p.CreateApp, &p.SetAppPassword, &p.AppVerifier, o.AppPassword, false},
+		{ExternalRole, []string{OwnerRole, AppRole}, &p.CreateExternal, &p.SetExternalPassword, &p.ExternalVerifier, o.ExternalPassword, !wantExternal},
 	} {
 		facts, err := q.BootstrapRoleFacts(ctx, r.name)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
+			if r.optional {
+				continue
+			}
 			*r.create = true
 			needCreateRole = true
 		case err != nil:
 			return bootstrapPlan{}, fmt.Errorf("read role %s: %w", r.name, err)
 		default:
+			if r.name == ExternalRole && o.SingleAccount {
+				return bootstrapPlan{}, fmt.Errorf("%w: the role exists on this server; drop it (DROP ROLE %s) or use two roles", ErrExternalSingleAccount, ExternalRole)
+			}
 			existing = append(existing, r.name)
 			if err := o.checkExistingRole(ctx, q, facts, r.forbidden, res); err != nil {
 				return bootstrapPlan{}, err
 			}
-			if o.ResetPasswords {
+			if o.ResetPasswords && !r.optional {
 				*r.reset = true
 				needCreateRole = true
 			}
@@ -363,7 +394,7 @@ func (o *BootstrapOptions) plan(ctx context.Context, q *sqlc.Queries, res *Boots
 		for _, r := range []struct {
 			role string
 			set  bool
-		}{{OwnerRole, p.SetOwnerPassword}, {AppRole, p.SetAppPassword}} {
+		}{{OwnerRole, p.SetOwnerPassword}, {AppRole, p.SetAppPassword}, {ExternalRole, p.SetExternalPassword}} {
 			if !r.set || !pg16 {
 				continue
 			}

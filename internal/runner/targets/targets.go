@@ -194,15 +194,48 @@ func FromConfig(c *config.Runner) (*Guard, error) {
 // Empty reports whether nothing is allowed (both allow lists empty).
 func (g *Guard) Empty() bool { return len(g.allowCIDRs) == 0 && len(g.allowHosts) == 0 }
 
-// Warnings returns the startup warnings of the allowlist.
+// Warnings returns the startup warnings of the allowlist (the text of
+// WarningCodes).
 func (g *Guard) Warnings() []string {
+	codes := g.WarningCodes()
+	if len(codes) == 0 {
+		return nil
+	}
+	out := make([]string, len(codes))
+	for i, c := range codes {
+		out[i] = warningText[c]
+	}
+	return out
+}
+
+// WarningCodes returns the startup warnings of the allowlist as stable
+// codes (GetTargetPolicy reports them; D-223).
+func (g *Guard) WarningCodes() []WarningCode {
 	if g.Empty() {
-		return []string{"targets: allow_cidrs and allow_hosts are empty, so every target database and SSH bastion is denied; configure [targets] in runner.toml"}
+		return []WarningCode{WarningEmptyAllowlist}
 	}
 	if len(g.bastions) == 0 {
-		return []string{WarningNoBastionTargets}
+		return []WarningCode{WarningBastionsUnrestricted}
 	}
 	return nil
+}
+
+// WarningCode identifies a startup warning of the allowlist.
+type WarningCode string
+
+// Startup warnings.
+const (
+	// WarningEmptyAllowlist: allow_cidrs and allow_hosts are empty, so
+	// every target is denied.
+	WarningEmptyAllowlist WarningCode = "empty_allowlist"
+	// WarningBastionsUnrestricted: bastion_targets is empty, so an allowed
+	// bastion may forward to any host behind the deny lists.
+	WarningBastionsUnrestricted WarningCode = "bastions_unrestricted"
+)
+
+var warningText = map[WarningCode]string{
+	WarningEmptyAllowlist:       "targets: allow_cidrs and allow_hosts are empty, so every target database and SSH bastion is denied; configure [targets] in runner.toml",
+	WarningBastionsUnrestricted: WarningNoBastionTargets,
 }
 
 // WarningNoBastionTargets is the startup warning of a runner without

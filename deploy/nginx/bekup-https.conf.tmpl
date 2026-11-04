@@ -102,6 +102,11 @@ server {
         proxy_read_timeout 180s;
     }
 
+    # The opt-in external API (D-220): /api/v1/ only, written by the
+    # entrypoint to /tmp/nginx/bekup-api.d/ ONLY when BEKUP_EXTERNAL_API=enabled
+    # (deploy/nginx/bekup-external-api.conf); empty otherwise.
+    include /tmp/nginx/bekup-api.d/*.conf;
+
     location / {
         set $bekup_upstream serve:8080;
         proxy_pass http://$bekup_upstream;

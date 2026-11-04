@@ -54,6 +54,9 @@ var SingleRootFields = []string{
 	// fan out many probes past the per-user limiter.
 	"Mutation.testDestination",
 	"Mutation.fetchDestinationHostKey",
+	// Captures a WebDAV server's certificate again before pinning it
+	// (D-222): one per request.
+	"Mutation.pinWebdavCertificate",
 	// Deletes a file on a destination with its stored credentials
 	// (D-209): one per request.
 	"Mutation.deleteUnrecordedFile",
@@ -72,6 +75,9 @@ var SingleRootFields = []string{
 	"Mutation.createTemporaryConnection",
 	// Download tickets (task 3.9, D-150): may carry an age identity.
 	"Mutation.createDownloadTicket",
+	// External API tokens (D-220): creates a credential and returns it
+	// once; one per request.
+	"Mutation.createApiToken",
 	// Restores (task 4.5, D-167): restoreArtifact may carry an age
 	// identity; both requests verify a signed manifest on a destination;
 	// restoreTargetDatabases and restorePreview make a runner call
@@ -115,6 +121,8 @@ var CredentialOperations = []authz.Operation{
 	authz.OpArtifactDownload,
 	// restoreArtifact may carry an age identity (D-167).
 	authz.OpRestoreArtifact,
+	// createApiToken creates a machine credential (D-220).
+	authz.OpAPITokenCreate,
 	authz.OpRestoreGlobals,
 }
 

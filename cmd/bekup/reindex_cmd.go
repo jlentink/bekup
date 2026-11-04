@@ -32,7 +32,7 @@ func newReindexCmd(g *globalFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reindex --destination-config <toml> [--job-slug <slug>] (--pubkey <k> | --import --destination-id <id>)",
 		Short: "List and verify the runs on a destination; with --import, record them for a job after a database loss",
-		Long: "Lists a destination (disk, S3 or SFTP, described by an offline TOML file with *_file credentials,\n" +
+		Long: "Lists a destination (disk, S3, SFTP or WebDAV, described by an offline TOML file with *_file credentials,\n" +
 			"see docs/recovery.md), groups its objects into runs, verifies each run's signed manifest (location,\n" +
 			"signature) and streams every artifact to check its size and SHA-256. The destination is opened\n" +
 			"read-only (no-delete mode) and never written.\n\n" +

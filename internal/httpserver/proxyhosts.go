@@ -46,7 +46,12 @@ import (
 // the join shape (Options.JoinMode) the listener accepts connections only
 // on serve's own address on the proxy network (and loopback for the
 // healthcheck), so bekup's internal networks and a database network cannot
-// reach the wildcard listener.
+// reach the wildcard listener. With Options.ExternalAPIAlias serve also
+// checks the opt-in external API's alias ExternalAPIAlias on that network
+// (the external API cannot audit; L2 of the D-220 review): its answers
+// must belong to one container other than serve, else serve warns and
+// reports them through Options.ExternalAPIAliasConflict (an audited
+// security alert); serve's readiness is not affected.
 
 // ProxyHostResolver returns the addresses of a host name.
 type ProxyHostResolver func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -59,6 +64,11 @@ type InterfaceAddrs func() ([]netip.Prefix, error)
 // compose files (D-215): the operator's proxy forwards to
 // http://bekup-serve:8080.
 const ServeAlias = "bekup-serve"
+
+// ExternalAPIAlias is the external API's network alias on the proxy
+// network of the own-proxy compose files (D-220): its trusted proxy hosts
+// are located through it like serve's through ServeAlias.
+const ExternalAPIAlias = "bekup-external-api"
 
 // Bounds and intervals of the resolution.
 const (
@@ -80,8 +90,8 @@ const (
 
 // Errors of the readiness check.
 var (
-	errAliasConflict = errors.New("httpserver: the network alias " + ServeAlias + " also resolves to another container's address (D-215)")
-	errSelfUnknown   = errors.New("httpserver: serve's address on the proxy network is unknown (the alias " + ServeAlias + " does not resolve to this container, D-215)")
+	errAliasConflict = errors.New("httpserver: the own network alias also resolves to another container's address (D-215)")
+	errSelfUnknown   = errors.New("httpserver: the own address on the proxy network is unknown (the own network alias does not resolve to this container, D-215)")
 )
 
 // defaultProxyHostResolver asks the process resolver (in a container:
@@ -156,6 +166,9 @@ const (
 // proxyHosts holds the configured names, their resolved addresses and
 // serve's own address on the proxy network.
 type proxyHosts struct {
+	// alias is this process's network alias on the proxy network
+	// (ServeAlias or ExternalAPIAlias).
+	alias    string
 	resolve  ProxyHostResolver
 	ifaces   InterfaceAddrs
 	logger   *slog.Logger
@@ -174,6 +187,14 @@ type proxyHosts struct {
 	// onConflict reports another container's addresses behind ServeAlias
 	// (an audited security alert); an error retries at the next refresh.
 	onConflict func(ctx context.Context, foreign []netip.Addr) error
+	// peerAlias is another bekup service's alias on the proxy network
+	// whose holders are checked too (serve: ExternalAPIAlias, L2 of the
+	// D-220 review; empty: none). Its answers must belong to one container
+	// that is not this one; onPeerConflict reports them otherwise (an
+	// audited security alert; an error retries at the next refresh).
+	// Readiness is not affected: the conflict concerns the other service.
+	peerAlias      string
+	onPeerConflict func(ctx context.Context, addrs []netip.Addr) error
 
 	// self is the latest ServeAlias result (nil: not checked).
 	self atomic.Pointer[selfState]
@@ -188,6 +209,7 @@ type proxyHosts struct {
 	stored      uint64
 	conflictKey string
 	selfKey     string
+	peerKey     string
 
 	warnMu   sync.Mutex
 	lastWarn time.Time
@@ -195,12 +217,17 @@ type proxyHosts struct {
 
 // proxyHostsOptions are the optional parts of newProxyHosts.
 type proxyHostsOptions struct {
+	// alias is the own network alias (empty: ServeAlias).
+	alias      string
 	resolve    ProxyHostResolver
 	ifaces     InterfaceAddrs
 	logger     *slog.Logger
 	checkSelf  bool
 	strict     bool
 	onConflict func(ctx context.Context, foreign []netip.Addr) error
+	// peerAlias and onPeerConflict: see proxyHosts.
+	peerAlias      string
+	onPeerConflict func(ctx context.Context, addrs []netip.Addr) error
 }
 
 func newProxyHosts(names []string, o proxyHostsOptions, publish func([]netip.Prefix, time.Time)) *proxyHosts {
@@ -210,11 +237,15 @@ func newProxyHosts(names []string, o proxyHostsOptions, publish func([]netip.Pre
 	if o.ifaces == nil {
 		o.ifaces = defaultInterfaceAddrs
 	}
+	if o.alias == "" {
+		o.alias = ServeAlias
+	}
 	return &proxyHosts{
-		resolve: o.resolve, ifaces: o.ifaces, logger: o.logger, now: time.Now,
+		alias: o.alias, resolve: o.resolve, ifaces: o.ifaces, logger: o.logger, now: time.Now,
 		interval: ProxyHostInterval, minGap: proxyHostMinGap,
 		checkSelf: o.checkSelf || o.strict, strict: o.strict,
 		publish: publish, onConflict: o.onConflict,
+		peerAlias: o.peerAlias, onPeerConflict: o.onPeerConflict,
 		names: normalizeHosts(names), byName: map[string]nameResult{},
 		kickCh: make(chan struct{}, 1),
 	}
@@ -413,7 +444,7 @@ func (h *proxyHosts) refresh(ctx context.Context) {
 		err   error
 	}
 	answers := make([]answer, len(names))
-	var self answer
+	var self, peer answer
 	lookup := func(name string, out *answer) {
 		rctx, cancel := context.WithTimeout(ctx, proxyHostTimeout)
 		defer cancel()
@@ -424,7 +455,11 @@ func (h *proxyHosts) refresh(ctx context.Context) {
 		wg.Go(func() { lookup(n, &answers[i]) })
 	}
 	if selfOn {
-		wg.Go(func() { lookup(ServeAlias, &self) })
+		wg.Go(func() { lookup(h.alias, &self) })
+	}
+	peerOn := selfOn && h.peerAlias != ""
+	if peerOn {
+		wg.Go(func() { lookup(h.peerAlias, &peer) })
 	}
 	wg.Wait()
 	if ctx.Err() != nil {
@@ -476,6 +511,68 @@ func (h *proxyHosts) refresh(ctx context.Context) {
 		h.logName(c.name, c.r)
 	}
 	h.reportConflict(ctx, st)
+	if peerOn {
+		h.reportPeerConflict(ctx, h.evalPeer(peer.addrs, peer.err))
+	}
+}
+
+// evalPeer checks the answers for peerAlias: they must belong to one
+// container (at most one address per family, as Docker assigns one per
+// network) that is not this one. It returns every answer when they do
+// not (a second holder of the alias, or this container), else nil. An
+// unresolvable alias (the other service is not running) is no conflict.
+func (h *proxyHosts) evalPeer(answers []netip.Addr, err error) []netip.Addr {
+	if err != nil || len(answers) == 0 {
+		return nil
+	}
+	addrs := canonicalAddrs(answers)
+	ifs, ierr := h.ifaces()
+	v4, v6, conflict := 0, 0, false
+	for _, a := range addrs {
+		if a.Is4() {
+			v4++
+		} else {
+			v6++
+		}
+		if ierr == nil && slices.ContainsFunc(ifs, func(p netip.Prefix) bool { return canonicalIP(p.Addr()) == a }) {
+			conflict = true
+		}
+	}
+	if v4 > 1 || v6 > 1 || conflict {
+		return addrs
+	}
+	return nil
+}
+
+// reportPeerConflict warns about and reports a conflict of peerAlias
+// once per set of addresses (again after a failed report, or when it
+// comes back after it was resolved).
+func (h *proxyHosts) reportPeerConflict(ctx context.Context, addrs []netip.Addr) {
+	key := joinAddrs(addrs)
+	h.mu.Lock()
+	prev := h.peerKey
+	h.peerKey = key
+	h.mu.Unlock()
+	if key == "" || key == prev {
+		return
+	}
+	if h.logger != nil {
+		h.logger.WarnContext(ctx, "another bekup service's network alias resolves to more than one container (or to this one): requests your proxy sends to that alias may reach another container (alias takeover); remove the other container's alias, or point your proxy at the service's container name",
+			slog.String("alias", h.peerAlias), slog.Any("addresses", addrStrings(addrs)))
+	}
+	if h.onPeerConflict == nil {
+		return
+	}
+	if err := h.onPeerConflict(ctx, slices.Clone(addrs)); err != nil {
+		if h.logger != nil {
+			h.logger.ErrorContext(ctx, "reporting the network alias conflict failed; retried at the next resolution", slog.String("alias", h.peerAlias), slog.Any("error", err))
+		}
+		h.mu.Lock()
+		if h.peerKey == key {
+			h.peerKey = ""
+		}
+		h.mu.Unlock()
+	}
 }
 
 func selfKey(st *selfState) string {
@@ -506,17 +603,18 @@ func (h *proxyHosts) logSelf(st *selfState) {
 	if h.logger == nil || st == nil {
 		return
 	}
+	alias := slog.String("alias", h.alias)
 	if st.known() {
-		h.logger.Info("serve's address on the proxy network", slog.String("alias", ServeAlias), slog.Any("addresses", addrStrings(st.own)))
+		h.logger.Info("own address on the proxy network (serve's or the external API's, by its network alias)", alias, slog.Any("addresses", addrStrings(st.own)))
 		return
 	}
 	if h.strict {
-		h.logger.Warn("the network alias bekup-serve does not resolve to an address of this container, so serve's address on the proxy network is unknown: trusted_proxy_hosts trust nothing and every non-loopback connection is refused (is serve on the proxy's network with the alias bekup-serve? D-215)",
-			slog.String("alias", ServeAlias))
+		h.logger.Warn("the own network alias does not resolve to an address of this container, so the own address on the proxy network is unknown: trusted_proxy_hosts trust nothing and every non-loopback connection is refused (is this container on the proxy's network with the logged alias? D-215)",
+			alias)
 		return
 	}
-	h.logger.Warn("the network alias bekup-serve does not resolve to an address of this container, so serve's address on the proxy network is unknown: trusted_proxy_hosts trust nothing (is serve on the proxy's network with the alias bekup-serve? D-215)",
-		slog.String("alias", ServeAlias))
+	h.logger.Warn("the own network alias does not resolve to an address of this container, so the own address on the proxy network is unknown: trusted_proxy_hosts trust nothing (is this container on the proxy's network with the logged alias? D-215)",
+		alias)
 }
 
 // logName logs a name whose trust changed (names and addresses are no
@@ -534,11 +632,11 @@ func (h *proxyHosts) logName(name string, r nameResult) {
 	case reasonNonPrivate:
 		h.logger.Warn("trusted proxy host resolves only to non-private addresses; it is not trusted", host)
 	case reasonOutside:
-		h.logger.Warn("trusted proxy host resolves only to addresses outside serve's subnet on the proxy network (or to a public or CGNAT range); it is not trusted (docs/installation/reverse-proxy.md#troubleshooting)", host)
+		h.logger.Warn("trusted proxy host resolves only to addresses outside the own subnet on the proxy network (or to a public or CGNAT range); it is not trusted (docs/installation/reverse-proxy.md#troubleshooting)", host)
 	case reasonCollision:
 		h.logger.Warn("trusted proxy host resolves to more than one address of one family on the proxy network: another container carries the same name or alias; it is not trusted until only one remains", host, slog.Any("addresses", addrStrings(r.addrs)))
 	case reasonSelfUnknown:
-		h.logger.Warn("trusted proxy host is not trusted while serve's own address on the proxy network is unknown (the alias bekup-serve)", host)
+		h.logger.Warn("trusted proxy host is not trusted while the own address on the proxy network is unknown (the own network alias does not resolve to this container)", host, slog.String("alias", h.alias))
 	default:
 		h.logger.Warn("trusted proxy host has no address; it is not trusted", host)
 	}
@@ -560,15 +658,15 @@ func (h *proxyHosts) reportConflict(ctx context.Context, st *selfState) {
 		return
 	}
 	if h.logger != nil {
-		h.logger.WarnContext(ctx, "the network alias bekup-serve also resolves to another container's address: requests your proxy sends to http://bekup-serve:8080 may reach that container (alias takeover, D-215); remove its alias or point your proxy at serve's container name; /readyz fails until then",
-			slog.String("alias", ServeAlias), slog.Any("foreign_addresses", addrStrings(st.foreign)), slog.Any("own_addresses", addrStrings(st.own)))
+		h.logger.WarnContext(ctx, "the own network alias also resolves to another container's address: requests your proxy sends to that alias may reach the other container (alias takeover, D-215); remove its alias or point your proxy at this container's name; /readyz fails until then",
+			slog.String("alias", h.alias), slog.Any("foreign_addresses", addrStrings(st.foreign)), slog.Any("own_addresses", addrStrings(st.own)))
 	}
 	if h.onConflict == nil {
 		return
 	}
 	if err := h.onConflict(ctx, slices.Clone(st.foreign)); err != nil {
 		if h.logger != nil {
-			h.logger.ErrorContext(ctx, "reporting the bekup-serve alias conflict failed; retried at the next resolution", slog.Any("error", err))
+			h.logger.ErrorContext(ctx, "reporting the network alias conflict failed; retried at the next resolution", slog.String("alias", h.alias), slog.Any("error", err))
 		}
 		h.mu.Lock()
 		if h.conflictKey == key {
@@ -674,7 +772,7 @@ func (h *proxyHosts) refused(c net.Conn) {
 	h.warnMu.Unlock()
 	local, peer := slog.String("local", c.LocalAddr().String()), slog.String("peer", c.RemoteAddr().String())
 	if !h.self.Load().known() {
-		h.logger.Warn("serve closed a connection because its address on the proxy network is unknown (the alias bekup-serve does not resolve to this container); every non-loopback connection is refused until it does (D-215)", local, peer)
+		h.logger.Warn("connection closed because the own address on the proxy network is unknown (the own network alias does not resolve to this container); every non-loopback connection is refused until it does (D-215)", local, peer, slog.String("alias", h.alias))
 		return
 	}
 	h.logger.Warn("serve closed a connection that did not arrive on its address on the proxy network: in the own-proxy join shape only your proxy's network reaches serve (D-215)", local, peer)

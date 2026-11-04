@@ -10,7 +10,7 @@
 # Profile `full` (`just dev-full`): additionally serve with air hot reload
 # (dev mode) after `migrate`, the runner, sample target DBs (PG 15, MySQL 8.4,
 # MariaDB 11.4) with seed data, a PG target reachable ONLY through an SSH
-# bastion (tunnel tests), minio with Object Lock and an SFTP server. Profile
+# bastion (tunnel tests), minio with Object Lock, an SFTP and a WebDAV server. Profile
 # `web` adds a containerised Vite dev server (needs `full`).
 #
 #   deploy/dev/gen-dev-keys.sh       # once (`just dev` runs it): dev keys/passwords/certs
@@ -473,6 +473,40 @@ services:
     # creates itself. Uploads are lost when the container is re-created.
     networks: [egress]
 
+  # WebDAV destination (D-222): rclone serve webdav over TLS with a
+  # throwaway SELF-SIGNED certificate (secrets/dev/webdav_tls.{crt,key},
+  # names webdav, localhost, 127.0.0.1): run the destination test and pin
+  # the certificate it shows. URL https://webdav:8443/backups (generic
+  # flavor), user `bekup`, password secrets/dev/webdav_password. The
+  # password is read from the secret file inside the shell and handed to
+  # rclone only through RCLONE_PASS (never on an argv). Uploads live on a
+  # tmpfs and are lost when the container is re-created.
+  webdav:
+    <<: *dev-hardening
+    profiles: [full]
+    image: rclone/rclone:1.74.0@sha256:d2e0e88359d0b2e67cfcd2c43d5405185eb8adfc207079df27c42da82c5207bc
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+      - /data:rw,noexec,nosuid,nodev,size=1g,uid=65532,gid=65532,mode=0700
+    cap_drop: [ALL]
+    environment:
+      HOME: /tmp
+      RCLONE_CONFIG: /tmp/rclone.conf
+    secrets: [dev_webdav_password, dev_webdav_tls_crt, dev_webdav_tls_key]
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        RCLONE_PASS="$$(cat /run/secrets/dev_webdav_password)"
+        export RCLONE_PASS
+        mkdir -p /data/backups
+        exec rclone serve webdav /data --addr :8443 --user bekup \
+          --cert /run/secrets/dev_webdav_tls_crt --key /run/secrets/dev_webdav_tls_key
+    networks: [egress]
+    ports:
+      - "127.0.0.1:${BEKUP_DEV_WEBDAV_PORT:-8444}:8443"   # DEV ONLY: curl/rclone from the host
+
   # SMTP sink (default profile): SMTP 127.0.0.1:1025 (for `just run`;
   # serve in `full` uses mailpit:1025), web UI http://127.0.0.1:8025.
   mailpit:
@@ -549,6 +583,12 @@ secrets:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_owner_password
   bekup_app_password:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_app_password
+  # The opt-in external API (D-220): always generated, the role only with
+  # BEKUP_EXTERNAL_API=enabled.
+  bekup_external_password:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_external_password
+  bekup_external_database_url:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/bekup_external_database_url
   serve_ca_crt:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/certs/serve/ca.crt
   bekup_client_crt:
@@ -581,5 +621,11 @@ secrets:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/minio_root_user
   dev_minio_root_password:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/minio_root_password
+  dev_webdav_password:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/webdav_password
+  dev_webdav_tls_crt:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/webdav_tls.crt
+  dev_webdav_tls_key:
+    file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/webdav_tls.key
   dev_bekup_ssh_pub:
     file: ${BEKUP_DEV_KEYS_DIR:-./secrets}/dev/bekup_ssh_ed25519.pub

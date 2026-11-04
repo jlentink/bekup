@@ -50,6 +50,8 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Query.ssrfAllowlist":          authz.OpSettingsView,
 	"Query.securityAlertTypes":     authz.OpAlertList,
 	"Mutation.updateSsrfAllowlist": authz.OpSettingsUpdate,
+	// The runner's target allowlist (D-223): admin, read-only.
+	"Query.runnerTargetPolicy": authz.OpRunnerTargetPolicyView,
 	// Runtime config reload (task 6.13, D-200): admin; reloading needs
 	// a step-up (re-checked in internal/configreload).
 	"Query.configStatus":             authz.OpConfigStatusView,
@@ -127,6 +129,8 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.fetchDestinationHostKey":       authz.OpDestinationHostKeyFetch,
 	"Mutation.confirmDestinationHostKey":     authz.OpDestinationHostKeyConfirm,
 	"Mutation.generateDestinationSshKeypair": authz.OpDestinationSSHKeyGenerate,
+	"Mutation.pinWebdavCertificate":          authz.OpDestinationTLSPin,
+	"Mutation.clearWebdavCertificatePin":     authz.OpDestinationTLSPinClear,
 
 	// Connections (task 2.11, D-135): admin CRUD with step-up for every
 	// change; maintainers see metadata, may test and list databases.
@@ -197,6 +201,15 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Mutation.enableJobEncryption":   authz.OpJobEncryptionKeysEdit,
 	"Mutation.disableJobEncryption":  authz.OpJobEncryptionOptOut,
 	"Mutation.exportJobPassphrases":  authz.OpJobPassphraseExport,
+	// External API tokens (D-220): admins and backup owners (role user),
+	// never maintainers; re-checked with the jobs of the token in
+	// internal/apiaccess (owners: every job of a new token, a job of the
+	// scope for revoke and address changes; listings filtered by
+	// JobScope).
+	"Query.apiTokens":                  authz.OpAPITokenList,
+	"Mutation.createApiToken":          authz.OpAPITokenCreate,
+	"Mutation.revokeApiToken":          authz.OpAPITokenRevoke,
+	"Mutation.updateApiTokenAddresses": authz.OpAPITokenUpdate,
 	// Downloads (task 3.9, D-150): admins and owners (role user) only,
 	// re-checked with the artifact's job in internal/downloads.
 	"Mutation.createDownloadTicket": authz.OpArtifactDownload,

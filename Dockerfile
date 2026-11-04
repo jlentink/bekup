@@ -67,6 +67,9 @@ RUN --mount=type=cache,id=bekup-pnpm-store,target=/pnpm/store \
     fi
 
 COPY --from=websrc /websrc/ ./
+# vite.config.ts reads the release version from ../VERSION (/src/VERSION);
+# the copy above only puts it next to the web files.
+COPY --from=websrc /websrc/VERSION /src/VERSION
 
 # The placeholder has no browser setup (dist-setup without index.html):
 # `setup web` then refuses to start (D-217) instead of listening, as root,
@@ -75,6 +78,8 @@ RUN set -eu; \
     if [ "${WEB_BUILD}" != "skip" ] && [ -f package.json ]; then \
         pnpm build; \
         test -f dist-setup/index.html; \
+        v=$(cat /src/VERSION); \
+        grep -rqF -e "\"$v\"" -e "\`$v\`" dist/assets || { echo "web build: the UI bundle does not carry version $v" >&2; exit 1; }; \
     else \
         echo "web/ not present or WEB_BUILD=skip: placeholder UI, no browser setup"; \
         rm -rf dist dist-setup; mkdir -p dist dist-setup; \

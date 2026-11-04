@@ -15,6 +15,14 @@ export const adminRoutes: RouteObject[] = [
     }),
   },
   {
+    // External API tokens (D-220).
+    path: "admin/api-access",
+    handle: access.nav("/admin/api-access"),
+    lazy: async () => ({
+      Component: (await import("../api-access/api-access-page")).ApiAccessPage,
+    }),
+  },
+  {
     path: "admin/audit",
     handle: access.nav("/admin/audit"),
     lazy: async () => ({ Component: (await import("./audit/audit-page")).AuditLogPage }),

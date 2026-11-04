@@ -68,6 +68,16 @@ func New(pool *pgxpool.Pool, opts Options) (*Client, error) {
 		// InsertTx accepts only catalog kinds, and a serve instance may
 		// insert kinds whose worker runs elsewhere (bekup worker).
 		SkipUnknownJobCheck: true,
+		// D-220: River never LISTENs. Any role that can connect (the
+		// external API's bekup_external too) can NOTIFY on any channel,
+		// and River acts on its river_control and river_leadership
+		// payloads without a database check (cancel a running job, pause
+		// a queue, force a leader to resign). In poll-only mode River
+		// reads all of it from its tables instead: new jobs every
+		// FetchPollInterval (default 1 s), cancel requests of running jobs
+		// (JobCancelTx sets metadata.cancel_attempted_at) and queue
+		// pauses every 2 s, leader elections every 5 s.
+		PollOnly: true,
 	}
 	working := opts.Workers != nil
 	if working {
@@ -157,8 +167,9 @@ func (c *Client) InsertTx(ctx context.Context, tx pgx.Tx, args river.JobArgs, o 
 
 // CancelTx cancels the River job jobID inside tx (River's JobCancelTx): a
 // job that is still queued is canceled at once, a running one is marked
-// and its worker's context is canceled (cross-process via River's control
-// notifications or polling). It returns the job's state after the call;
+// (metadata.cancel_attempted_at) and the River client working it cancels
+// its context within about 2 s (poll-only mode: River polls the cancel
+// requests of its running jobs; any process may call this). It returns the job's state after the call;
 // ErrJobNotFound when River no longer has the row.
 func (c *Client) CancelTx(ctx context.Context, tx pgx.Tx, jobID int64) (rivertype.JobState, error) {
 	row, err := c.river.JobCancelTx(ctx, tx, jobID)

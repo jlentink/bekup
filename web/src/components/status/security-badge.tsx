@@ -1,4 +1,4 @@
-import { LockOpen, ShieldOff, Webhook, type LucideIcon } from "lucide-react";
+import { Globe, LockOpen, ShieldOff, Webhook, type LucideIcon } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
@@ -21,6 +21,12 @@ const FLAG_META: Record<SecurityFlag, { label: string; description: string; icon
     description:
       "An administrator let every user's personal webhooks reach a private network (SSRF allowlist).",
     icon: Webhook,
+  },
+  "any-address": {
+    label: "Any address",
+    description:
+      "An administrator or a backup owner let this API token be used from any address: no client address allowlist protects it.",
+    icon: Globe,
   },
 };
 

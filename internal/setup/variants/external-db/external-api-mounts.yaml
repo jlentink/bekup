@@ -1,0 +1,9 @@
+    secrets:
+      # YOUR PostgreSQL (fields mode, D-207): external-api.toml [database]
+      # password_file of the bekup_external role.
+      - bekup_external_database_password
+      # CA bundle of your PostgreSQL's server certificate: [database]
+      # tls_ca_file (default path; empty when another TLS choice needs none,
+      # D-215).
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt

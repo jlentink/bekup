@@ -20,7 +20,7 @@ tls_ca_file = "/run/secrets/bekup_db_ca.crt"
 
 [netguard]
 # The dev destinations live on the private `egress` network.
-allow_hosts = ["minio", "sftp", "mailpit"]
+allow_hosts = ["minio", "sftp", "webdav", "mailpit"]
 
 [log]
 level = "debug"

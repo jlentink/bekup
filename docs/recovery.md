@@ -23,7 +23,7 @@ manager vault, an encrypted USB stick in a safe, a printed sheet).
 | **Job passphrases** (passphrase-mode jobs) | admin: `exportJobPassphrases` (step-up, audited, security alert), one file per job | decrypting passphrase-encrypted backups |
 | **age identities** (recipient-mode jobs) | the one-time private key download when the keypair was generated, or your own `age-keygen` identity | decrypting recipient-encrypted backups |
 | **Master keyring** | `bekup keys generate` output (see [key management](security/key-management.md)) | rebuilding bekup from a database backup; not needed by the offline tools |
-| **Destination access** | bucket name, endpoint, credentials, SFTP host key fingerprint | reaching the backups |
+| **Destination access** | bucket name, endpoint, credentials, SFTP host key fingerprint, WebDAV URL and pinned certificate | reaching the backups |
 
 Notes:
 
@@ -58,8 +58,9 @@ A directory without `manifest.json` is an incomplete or failed run. Copy
 the whole run directory (or at least `manifest.json` and the artifacts you
 need) to the machine where you recover; keep the original file names.
 
-For a disk destination you can work on the directory directly. For S3 and
-SFTP, download the objects with your usual tools, or let `bekup reindex`
+For a disk destination you can work on the directory directly. For S3,
+SFTP and WebDAV, download the objects with your usual tools (for WebDAV a
+browser, `rclone` or the Nextcloud/ownCloud client), or let `bekup reindex`
 list and verify them in place (section 5).
 
 ## 3. Verify
@@ -221,6 +222,18 @@ host_key_type = "ssh-ed25519"
 host_key_fingerprint = "SHA256:..."           # mandatory host key pin
 private_key_file = "/root/recovery/sftp-key"  # or password_file
 # private_key_passphrase_file = "..."
+```
+
+```toml
+type = "webdav"
+[webdav]
+url = "https://name.stackstorage.com"         # generic: the folder URL
+flavor = "nextcloud"                          # or "generic" (default)
+username = "name"
+password_file = "/root/recovery/webdav-pass"  # an app password
+path = "bekup"                                # the destination's folder, if any
+# ca_bundle_file = "/root/recovery/ca.pem"            # a private CA, or
+# pinned_certificate_file = "/root/recovery/nas.pem"  # the pinned certificate (PEM)
 ```
 
 Inventory (no database needed):

@@ -45,8 +45,8 @@ const SECTIONS: readonly {
   },
   {
     to: "/admin/settings/network",
-    label: "Outbound allowlist",
-    hint: "SSRF guard: private hosts",
+    label: "Network allowlists",
+    hint: "Outbound guard and runner targets",
     icon: Network,
     end: false,
   },

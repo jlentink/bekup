@@ -84,6 +84,11 @@ service RunnerService {
   // catalog plus runner.toml images.extra_file), so serve can offer every
   // client version the runner accepts.
   rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  // GetTargetPolicy returns the runner's target allowlist (runner.toml
+  // [targets]) as the runner applies it, so admins can see which database
+  // servers and SSH bastions the runner may reach (D-223). Read-only; it
+  // carries no secrets.
+  rpc GetTargetPolicy(GetTargetPolicyRequest) returns (GetTargetPolicyResponse);
   // ScratchStats captures the completeness statistics of a test-restore
   // scratch database (task 4.6): the same catalog reads and counts as the
   // Dump stats, through the same pinned, hostile-safe Go-driver session.
@@ -699,6 +704,92 @@ message AllowlistedImage {
   bool legacy = 5;
   // The entry comes from the runner's images.extra_file.
   bool extra = 6;
+}
+
+message GetTargetPolicyRequest {}
+
+// TargetPolicyWarning is a startup warning of the target allowlist.
+enum TargetPolicyWarning {
+  TARGET_POLICY_WARNING_UNSPECIFIED = 0;
+  // allow_cidrs and allow_hosts are empty: every target is denied.
+  TARGET_POLICY_WARNING_EMPTY_ALLOWLIST = 1;
+  // bastion_targets is empty: an allowed SSH bastion may forward to any
+  // host it reaches (only deny_cidrs and deny_hosts apply behind it).
+  TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED = 2;
+}
+
+// DeniedCategory is a class of addresses no runner.toml entry can allow
+// (internal/runner/targets AlwaysDenied).
+enum DeniedCategory {
+  DENIED_CATEGORY_UNSPECIFIED = 0;
+  DENIED_CATEGORY_LOOPBACK = 1;
+  // "This network" (0.0.0.0/8) and the unspecified IPv6 address.
+  DENIED_CATEGORY_UNSPECIFIED_ADDRESS = 2;
+  DENIED_CATEGORY_LINK_LOCAL = 3;
+  DENIED_CATEGORY_CLOUD_METADATA = 4;
+  DENIED_CATEGORY_MULTICAST_BROADCAST = 5;
+  DENIED_CATEGORY_RESERVED = 6;
+  // IPv4-compatible and IPv4-translated IPv6 forms.
+  DENIED_CATEGORY_IPV4_IN_IPV6 = 7;
+  DENIED_CATEGORY_TEREDO = 8;
+  // NAT64 and 6to4 addresses embedding an always-denied IPv4 address (the
+  // ranges are listed for orientation, not denied as a whole).
+  DENIED_CATEGORY_EMBEDDED_DENIED_IPV4 = 9;
+  // Other IPv6 outside global unicast 2000::/3 (no fixed ranges).
+  DENIED_CATEGORY_NON_GLOBAL_IPV6 = 10;
+}
+
+// TargetsKey is a key of runner.toml [targets].
+enum TargetsKey {
+  TARGETS_KEY_UNSPECIFIED = 0;
+  TARGETS_KEY_ALLOW_CIDRS = 1;
+  TARGETS_KEY_ALLOW_HOSTS = 2;
+  TARGETS_KEY_DENY_CIDRS = 3;
+  TARGETS_KEY_DENY_HOSTS = 4;
+  TARGETS_KEY_BASTION_TARGETS = 5;
+}
+
+message GetTargetPolicyResponse {
+  // The lists as the runner applies them: CIDRs masked and in the
+  // configured order, host names normalized and sorted. At most 256
+  // entries each (truncated is set when more are configured).
+  repeated string allow_cidrs = 1;
+  repeated string allow_hosts = 2;
+  repeated string deny_cidrs = 3;
+  repeated string deny_hosts = 4;
+  // bastion_targets grouped by bastion (sorted by bastion; at most 256
+  // targets in all).
+  repeated BastionTargetList bastion_targets = 5;
+  // docker.run_subnet_pool (always denied; per-run networks lie inside it).
+  string run_subnet_pool = 6;
+  // The runner's other own networks (always denied): the control network
+  // that holds listen.address and the runner container's addresses.
+  repeated string control_networks = 7;
+  // False until the runner knows its container's networks (Docker not
+  // initialized yet): control_networks is then incomplete.
+  bool control_networks_known = 8;
+  // The always-denied categories in a fixed order.
+  repeated AlwaysDeniedRange always_denied = 9;
+  repeated TargetPolicyWarning warnings = 10;
+  // The [targets] keys whose value came from an environment variable
+  // (BEKUP_TARGETS_*) instead of runner.toml.
+  repeated TargetsKey env_overrides = 11;
+  // True when a list was cut to 256 entries.
+  bool truncated = 12;
+}
+
+// BastionTargetList is the bastion_targets list of one bastion.
+message BastionTargetList {
+  // The bastion's normalized host name or IP address.
+  string bastion = 1;
+  // CIDRs, then host names.
+  repeated string targets = 2;
+}
+
+// AlwaysDeniedRange is one always-denied category with its ranges.
+message AlwaysDeniedRange {
+  DeniedCategory category = 1;
+  repeated string cidrs = 2;
 }
 
 message ScratchStatsRequest {

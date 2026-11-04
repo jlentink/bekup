@@ -411,16 +411,58 @@ func TestDiffListsSecretsByNameOnly(t *testing.T) {
 }
 
 func TestOnlyInputFor(t *testing.T) {
-	if err := onlyInputFor(TypeS3, false, true, false, true); err != nil {
+	if err := onlyInputFor(TypeS3, inputs{s3: &S3Input{}}, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := onlyInputFor(TypeS3, true, false, false, false); err == nil {
+	if err := onlyInputFor(TypeS3, inputs{disk: &DiskInput{}}, false); err == nil {
 		t.Fatal("disk input on S3 accepted")
 	}
-	if err := onlyInputFor(TypeSFTP, false, false, false, true); err == nil {
+	if err := onlyInputFor(TypeSFTP, inputs{}, true); err == nil {
 		t.Fatal("missing input accepted on create")
 	}
-	if err := onlyInputFor(TypeSFTP, false, false, false, false); err != nil {
+	if err := onlyInputFor(TypeSFTP, inputs{}, false); err != nil {
 		t.Fatal(err)
+	}
+	if err := onlyInputFor(TypeWebDAV, inputs{webdav: &WebDAVInput{}}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := onlyInputFor(TypeWebDAV, inputs{sftp: &SFTPInput{}}, false); err == nil {
+		t.Fatal("SFTP input on WebDAV accepted")
+	}
+}
+
+func TestWebDAVConfigOf(t *testing.T) {
+	c, err := webdavConfigOf(&WebDAVInput{URL: " https://cloud.example/ ", Username: " u ", Path: "/a/b/"})
+	if err != nil || c.URL != "https://cloud.example" || c.Flavor != "generic" || c.Username != "u" || c.Path != "a/b" {
+		t.Fatalf("got %+v, %v", c, err)
+	}
+	for name, in := range map[string]*WebDAVInput{
+		"flavor":   {URL: "https://x", Flavor: "s3"},
+		"timeout":  {URL: "https://x", TimeoutSeconds: 1},
+		"bundle":   {URL: "https://x", CABundlePEM: "not a certificate"},
+		"password": {URL: "https://x", Password: make([]byte, maxWebDAVPassLen+1)},
+	} {
+		if _, err := webdavConfigOf(in); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestWebDAVNotReady(t *testing.T) {
+	d := &Destination{Type: TypeWebDAV}
+	if r := notReadyReason(d); r != "set the password" {
+		t.Fatalf("reason %q", r)
+	}
+	d.HasPassword = true
+	if r := notReadyReason(d); r != "" {
+		t.Fatalf("reason %q", r)
+	}
+	d.LastTest = &LastTest{OK: false, Code: "overwrite_ignored"}
+	if r := notReadyReason(d); r != overwriteIgnoredReason {
+		t.Fatalf("reason %q", r)
+	}
+	d.LastTest.Stale = true // the settings changed since: test again
+	if r := notReadyReason(d); r != "" {
+		t.Fatalf("stale reason %q", r)
 	}
 }

@@ -229,8 +229,11 @@ func runModel(v *runstate.RunView, showActor bool) *model.Run {
 		LogLinesDropped:   int(v.LogLinesDropped),
 		UpdatedAt:         v.UpdatedAt,
 	}
-	if showActor && v.TriggeredBy != nil {
-		m.TriggeredBy = &model.RunActor{UserID: *v.TriggeredBy, DisplayName: v.TriggeredByName, Email: v.TriggeredByEmail}
+	if showActor && v.ActorUserID != nil {
+		m.TriggeredBy = &model.RunActor{UserID: *v.ActorUserID, DisplayName: v.TriggeredByName, Email: v.TriggeredByEmail}
+		if v.APITokenID != nil {
+			m.TriggeredBy.APIToken = &model.RunAPIToken{ID: *v.APITokenID, Name: runstate.SanitizeLine(v.APITokenName)}
+		}
 	}
 	return m
 }

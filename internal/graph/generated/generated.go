@@ -57,6 +57,38 @@ type ComplexityRoot struct {
 		Run     func(childComplexity int) int
 	}
 
+	ApiToken struct {
+		AllowAnyAddress func(childComplexity int) int
+		AllowedCidrs    func(childComplexity int) int
+		CreatedAt       func(childComplexity int) int
+		CreatedBy       func(childComplexity int) int
+		CreatedByMe     func(childComplexity int) int
+		ExpiresAt       func(childComplexity int) int
+		HiddenJobCount  func(childComplexity int) int
+		ID              func(childComplexity int) int
+		Jobs            func(childComplexity int) int
+		LastSeenAt      func(childComplexity int) int
+		LastSeenIP      func(childComplexity int) int
+		LastSeenRefused func(childComplexity int) int
+		LastUsedAt      func(childComplexity int) int
+		Name            func(childComplexity int) int
+		Prefix          func(childComplexity int) int
+		RevokedAt       func(childComplexity int) int
+	}
+
+	ApiTokenCreator struct {
+		Deleted     func(childComplexity int) int
+		DisplayName func(childComplexity int) int
+		Email       func(childComplexity int) int
+		ID          func(childComplexity int) int
+	}
+
+	ApiTokenJob struct {
+		Deleted func(childComplexity int) int
+		ID      func(childComplexity int) int
+		Name    func(childComplexity int) int
+	}
+
 	Artifact struct {
 		CreatedAt        func(childComplexity int) int
 		Database         func(childComplexity int) int
@@ -340,6 +372,11 @@ type ComplexityRoot struct {
 		Job                 func(childComplexity int) int
 	}
 
+	CreatedApiToken struct {
+		Plaintext func(childComplexity int) int
+		Token     func(childComplexity int) int
+	}
+
 	CreatedUser struct {
 		TemporaryPassword func(childComplexity int) int
 		User              func(childComplexity int) int
@@ -375,9 +412,10 @@ type ComplexityRoot struct {
 	}
 
 	DestinationSettings struct {
-		Disk func(childComplexity int) int
-		S3   func(childComplexity int) int
-		Sftp func(childComplexity int) int
+		Disk   func(childComplexity int) int
+		S3     func(childComplexity int) int
+		Sftp   func(childComplexity int) int
+		Webdav func(childComplexity int) int
 	}
 
 	DestinationSshKeypair struct {
@@ -392,6 +430,7 @@ type ComplexityRoot struct {
 		ProbeKey     func(childComplexity int) int
 		ProbeRemains func(childComplexity int) int
 		Steps        func(childComplexity int) int
+		Webdav       func(childComplexity int) int
 	}
 
 	DestinationTestStep struct {
@@ -618,12 +657,14 @@ type ComplexityRoot struct {
 		CancelRestore                 func(childComplexity int, id uuid.UUID) int
 		CancelRun                     func(childComplexity int, id uuid.UUID) int
 		ChangePassword                func(childComplexity int, currentPassword string, newPassword string) int
+		ClearWebdavCertificatePin     func(childComplexity int, id uuid.UUID) int
 		CompleteSecondFactor          func(childComplexity int, method model.SecondFactorKind, code *string, assertion model.JSON) int
 		CompleteStepUp                func(childComplexity int, method model.StepUpMethod, code *string, password *string, assertion model.JSON) int
 		ConfirmCertificatePin         func(childComplexity int, id uuid.UUID, input model.CertificatePinInput) int
 		ConfirmDestinationHostKey     func(childComplexity int, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) int
 		ConfirmSSHHostKey             func(childComplexity int, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) int
 		ConfirmTotpEnrollment         func(childComplexity int, code string) int
+		CreateAPIToken                func(childComplexity int, input model.CreateAPITokenInput) int
 		CreateConnection              func(childComplexity int, input model.CreateConnectionInput) int
 		CreateDestination             func(childComplexity int, input model.CreateDestinationInput) int
 		CreateDownloadTicket          func(childComplexity int, artifactID uuid.UUID, mode model.DownloadMode, ageIdentity *string) int
@@ -666,6 +707,7 @@ type ComplexityRoot struct {
 		Login                         func(childComplexity int, email string, password string) int
 		Logout                        func(childComplexity int) int
 		MarkNotificationsRead         func(childComplexity int, ids []uuid.UUID, all *bool) int
+		PinWebdavCertificate          func(childComplexity int, id uuid.UUID, fingerprint string) int
 		PrePullImage                  func(childComplexity int, id uuid.UUID) int
 		ReenableMyWebhook             func(childComplexity int, id uuid.UUID) int
 		RegenerateRecoveryCodes       func(childComplexity int) int
@@ -678,6 +720,7 @@ type ComplexityRoot struct {
 		ResetUserSecondFactors        func(childComplexity int, userID uuid.UUID) int
 		RestoreArtifact               func(childComplexity int, input model.RestoreArtifactInput) int
 		RestoreGlobals                func(childComplexity int, input model.RestoreGlobalsInput) int
+		RevokeAPIToken                func(childComplexity int, id uuid.UUID) int
 		RevokeSession                 func(childComplexity int, id uuid.UUID) int
 		RevokeUserSessions            func(childComplexity int, userID uuid.UUID) int
 		RotateMyWebhookKey            func(childComplexity int, id uuid.UUID) int
@@ -698,6 +741,7 @@ type ComplexityRoot struct {
 		TestMyWebhook                 func(childComplexity int, id uuid.UUID) int
 		TestSharedChannel             func(childComplexity int, id uuid.UUID) int
 		UnlockUser                    func(childComplexity int, id uuid.UUID) int
+		UpdateAPITokenAddresses       func(childComplexity int, id uuid.UUID, allowedCidrs []string, allowAnyAddress bool) int
 		UpdateConnection              func(childComplexity int, id uuid.UUID, input model.UpdateConnectionInput) int
 		UpdateDestination             func(childComplexity int, id uuid.UUID, input model.UpdateDestinationInput) int
 		UpdateJob                     func(childComplexity int, id uuid.UUID, input model.UpdateJobInput) int
@@ -843,6 +887,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		APITokens                  func(childComplexity int, jobID *uuid.UUID) int
 		Artifacts                  func(childComplexity int, filter *model.ArtifactFilter, first *int, after *string) int
 		AuditChainStatus           func(childComplexity int) int
 		AuditLog                   func(childComplexity int, filter *model.AuditLogFilter, first *int, after *string) int
@@ -875,6 +920,7 @@ type ComplexityRoot struct {
 		Restores                   func(childComplexity int, filter *model.RestoreFilter, first *int, after *string) int
 		Run                        func(childComplexity int, id uuid.UUID) int
 		RunLogs                    func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
+		RunnerTargetPolicy         func(childComplexity int) int
 		Runs                       func(childComplexity int, filter *model.RunFilter, first *int, after *string) int
 		SMTPSettings               func(childComplexity int) int
 		SchemaVersionPresets       func(childComplexity int) int
@@ -1079,9 +1125,15 @@ type ComplexityRoot struct {
 	}
 
 	RunActor struct {
+		APIToken    func(childComplexity int) int
 		DisplayName func(childComplexity int) int
 		Email       func(childComplexity int) int
 		UserID      func(childComplexity int) int
+	}
+
+	RunApiToken struct {
+		ID   func(childComplexity int) int
+		Name func(childComplexity int) int
 	}
 
 	RunCancellation struct {
@@ -1189,12 +1241,39 @@ type ComplexityRoot struct {
 		Message       func(childComplexity int) int
 	}
 
+	RunnerBastionTargets struct {
+		Bastion func(childComplexity int) int
+		Targets func(childComplexity int) int
+	}
+
+	RunnerDeniedRange struct {
+		Category func(childComplexity int) int
+		Cidrs    func(childComplexity int) int
+	}
+
 	RunnerHealth struct {
 		ActiveRuns        func(childComplexity int) int
 		DockerOk          func(childComplexity int) int
 		MaxConcurrentRuns func(childComplexity int) int
 		Up                func(childComplexity int) int
 		Version           func(childComplexity int) int
+	}
+
+	RunnerTargetPolicy struct {
+		AllowCidrs           func(childComplexity int) int
+		AllowHosts           func(childComplexity int) int
+		AlwaysDenied         func(childComplexity int) int
+		Available            func(childComplexity int) int
+		BastionTargets       func(childComplexity int) int
+		ControlNetworks      func(childComplexity int) int
+		ControlNetworksKnown func(childComplexity int) int
+		DenyCidrs            func(childComplexity int) int
+		DenyHosts            func(childComplexity int) int
+		EnvOverrides         func(childComplexity int) int
+		Reason               func(childComplexity int) int
+		RunSubnetPool        func(childComplexity int) int
+		Truncated            func(childComplexity int) int
+		Warnings             func(childComplexity int) int
 	}
 
 	S3DestinationSettings struct {
@@ -1256,9 +1335,10 @@ type ComplexityRoot struct {
 	}
 
 	ServerInfo struct {
-		DevMode           func(childComplexity int) int
-		InsecureTransport func(childComplexity int) int
-		Version           func(childComplexity int) int
+		DevMode            func(childComplexity int) int
+		ExternalAPIEnabled func(childComplexity int) int
+		InsecureTransport  func(childComplexity int) int
+		Version            func(childComplexity int) int
 	}
 
 	Session struct {
@@ -1600,6 +1680,39 @@ type ComplexityRoot struct {
 		RpID              func(childComplexity int) int
 		WebauthnAvailable func(childComplexity int) int
 	}
+
+	WebdavCertificate struct {
+		FingerprintSha256 func(childComplexity int) int
+		NotAfter          func(childComplexity int) int
+		NotBefore         func(childComplexity int) int
+		PinnedAt          func(childComplexity int) int
+		SelfSigned        func(childComplexity int) int
+		SpkiSha256        func(childComplexity int) int
+		SpkiSha256Base64  func(childComplexity int) int
+	}
+
+	WebdavDestinationSettings struct {
+		CaBundlePem       func(childComplexity int) int
+		Flavor            func(childComplexity int) int
+		HasPassword       func(childComplexity int) int
+		Path              func(childComplexity int) int
+		PinnedCertificate func(childComplexity int) int
+		TimeoutSeconds    func(childComplexity int) int
+		Trust             func(childComplexity int) int
+		URL               func(childComplexity int) int
+		Username          func(childComplexity int) int
+	}
+
+	WebdavTestDetails struct {
+		Certificate         func(childComplexity int) int
+		OverwriteProtection func(childComplexity int) int
+		PinMatches          func(childComplexity int) int
+		Server              func(childComplexity int) int
+		SuggestedFlavor     func(childComplexity int) int
+		Trust               func(childComplexity int) int
+		Trusted             func(childComplexity int) int
+		UploadMode          func(childComplexity int) int
+	}
 }
 
 // endregion ***************************** api!.gotpl *****************************
@@ -1626,6 +1739,9 @@ type MutationResolver interface {
 	Logout(ctx context.Context) (bool, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) (bool, error)
 	ChangePassword(ctx context.Context, currentPassword string, newPassword string) (bool, error)
+	CreateAPIToken(ctx context.Context, input model.CreateAPITokenInput) (*model.CreatedAPIToken, error)
+	RevokeAPIToken(ctx context.Context, id uuid.UUID) (*model.APIToken, error)
+	UpdateAPITokenAddresses(ctx context.Context, id uuid.UUID, allowedCidrs []string, allowAnyAddress bool) (*model.APIToken, error)
 	ReloadConfig(ctx context.Context) (*model.ConfigReloadRequest, error)
 	CreateConnection(ctx context.Context, input model.CreateConnectionInput) (*model.Connection, error)
 	UpdateConnection(ctx context.Context, id uuid.UUID, input model.UpdateConnectionInput) (*model.Connection, error)
@@ -1652,6 +1768,8 @@ type MutationResolver interface {
 	FetchDestinationHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error)
 	ConfirmDestinationHostKey(ctx context.Context, id uuid.UUID, authorizedKey string, expectedHost string, expectedPort int) (*model.Destination, error)
 	GenerateDestinationSSHKeypair(ctx context.Context, id uuid.UUID) (*model.DestinationSSHKeypair, error)
+	PinWebdavCertificate(ctx context.Context, id uuid.UUID, fingerprint string) (*model.Destination, error)
+	ClearWebdavCertificatePin(ctx context.Context, id uuid.UUID) (*model.Destination, error)
 	CreateDownloadTicket(ctx context.Context, artifactID uuid.UUID, mode model.DownloadMode, ageIdentity *string) (*model.DownloadTicket, error)
 	UpdateSMTPSettings(ctx context.Context, input model.UpdateSMTPSettingsInput) (*model.SMTPSettings, error)
 	SendTestEmail(ctx context.Context, to string) (*model.SMTPTestResult, error)
@@ -1724,6 +1842,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	ServerInfo(ctx context.Context) (*model.ServerInfo, error)
+	APITokens(ctx context.Context, jobID *uuid.UUID) ([]model.APIToken, error)
 	AuditLog(ctx context.Context, filter *model.AuditLogFilter, first *int, after *string) (*model.AuditLogConnection, error)
 	AuditChainStatus(ctx context.Context) (*model.AuditChainStatus, error)
 	Me(ctx context.Context) (*model.User, error)
@@ -1745,6 +1864,7 @@ type QueryResolver interface {
 	PreviewSchedule(ctx context.Context, input model.ScheduleInput, count *int, retention *model.JobRetentionInput) (*model.SchedulePreview, error)
 	SystemHealth(ctx context.Context) (*model.SystemHealth, error)
 	SsrfAllowlist(ctx context.Context) (*model.SsrfAllowlist, error)
+	RunnerTargetPolicy(ctx context.Context) (*model.RunnerTargetPolicy, error)
 	SharedChannels(ctx context.Context) ([]model.SharedChannel, error)
 	NotificationCatalog(ctx context.Context) ([]model.NotificationEventGroup, error)
 	MyNotificationPreferences(ctx context.Context) (*model.NotificationPreferences, error)
@@ -1843,6 +1963,147 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ActivityEvent.Run(childComplexity), true
+
+	case "ApiToken.allowAnyAddress":
+		if e.ComplexityRoot.ApiToken.AllowAnyAddress == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.AllowAnyAddress(childComplexity), true
+	case "ApiToken.allowedCidrs":
+		if e.ComplexityRoot.ApiToken.AllowedCidrs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.AllowedCidrs(childComplexity), true
+	case "ApiToken.createdAt":
+		if e.ComplexityRoot.ApiToken.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.CreatedAt(childComplexity), true
+	case "ApiToken.createdBy":
+		if e.ComplexityRoot.ApiToken.CreatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.CreatedBy(childComplexity), true
+	case "ApiToken.createdByMe":
+		if e.ComplexityRoot.ApiToken.CreatedByMe == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.CreatedByMe(childComplexity), true
+	case "ApiToken.expiresAt":
+		if e.ComplexityRoot.ApiToken.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.ExpiresAt(childComplexity), true
+	case "ApiToken.hiddenJobCount":
+		if e.ComplexityRoot.ApiToken.HiddenJobCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.HiddenJobCount(childComplexity), true
+	case "ApiToken.id":
+		if e.ComplexityRoot.ApiToken.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.ID(childComplexity), true
+	case "ApiToken.jobs":
+		if e.ComplexityRoot.ApiToken.Jobs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.Jobs(childComplexity), true
+	case "ApiToken.lastSeenAt":
+		if e.ComplexityRoot.ApiToken.LastSeenAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.LastSeenAt(childComplexity), true
+	case "ApiToken.lastSeenIp":
+		if e.ComplexityRoot.ApiToken.LastSeenIP == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.LastSeenIP(childComplexity), true
+	case "ApiToken.lastSeenRefused":
+		if e.ComplexityRoot.ApiToken.LastSeenRefused == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.LastSeenRefused(childComplexity), true
+	case "ApiToken.lastUsedAt":
+		if e.ComplexityRoot.ApiToken.LastUsedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.LastUsedAt(childComplexity), true
+	case "ApiToken.name":
+		if e.ComplexityRoot.ApiToken.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.Name(childComplexity), true
+	case "ApiToken.prefix":
+		if e.ComplexityRoot.ApiToken.Prefix == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.Prefix(childComplexity), true
+	case "ApiToken.revokedAt":
+		if e.ComplexityRoot.ApiToken.RevokedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.RevokedAt(childComplexity), true
+
+	case "ApiTokenCreator.deleted":
+		if e.ComplexityRoot.ApiTokenCreator.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenCreator.Deleted(childComplexity), true
+	case "ApiTokenCreator.displayName":
+		if e.ComplexityRoot.ApiTokenCreator.DisplayName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenCreator.DisplayName(childComplexity), true
+	case "ApiTokenCreator.email":
+		if e.ComplexityRoot.ApiTokenCreator.Email == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenCreator.Email(childComplexity), true
+	case "ApiTokenCreator.id":
+		if e.ComplexityRoot.ApiTokenCreator.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenCreator.ID(childComplexity), true
+
+	case "ApiTokenJob.deleted":
+		if e.ComplexityRoot.ApiTokenJob.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenJob.Deleted(childComplexity), true
+	case "ApiTokenJob.id":
+		if e.ComplexityRoot.ApiTokenJob.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenJob.ID(childComplexity), true
+	case "ApiTokenJob.name":
+		if e.ComplexityRoot.ApiTokenJob.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiTokenJob.Name(childComplexity), true
 
 	case "Artifact.createdAt":
 		if e.ComplexityRoot.Artifact.CreatedAt == nil {
@@ -3049,6 +3310,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CreateJobResult.Job(childComplexity), true
 
+	case "CreatedApiToken.plaintext":
+		if e.ComplexityRoot.CreatedApiToken.Plaintext == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CreatedApiToken.Plaintext(childComplexity), true
+	case "CreatedApiToken.token":
+		if e.ComplexityRoot.CreatedApiToken.Token == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CreatedApiToken.Token(childComplexity), true
+
 	case "CreatedUser.temporaryPassword":
 		if e.ComplexityRoot.CreatedUser.TemporaryPassword == nil {
 			break
@@ -3203,6 +3477,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DestinationSettings.Sftp(childComplexity), true
+	case "DestinationSettings.webdav":
+		if e.ComplexityRoot.DestinationSettings.Webdav == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSettings.Webdav(childComplexity), true
 
 	case "DestinationSshKeypair.destination":
 		if e.ComplexityRoot.DestinationSshKeypair.Destination == nil {
@@ -3253,6 +3533,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DestinationTestResult.Steps(childComplexity), true
+	case "DestinationTestResult.webdav":
+		if e.ComplexityRoot.DestinationTestResult.Webdav == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationTestResult.Webdav(childComplexity), true
 
 	case "DestinationTestStep.code":
 		if e.ComplexityRoot.DestinationTestStep.Code == nil {
@@ -4185,6 +4471,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ChangePassword(childComplexity, args["currentPassword"].(string), args["newPassword"].(string)), true
+	case "Mutation.clearWebdavCertificatePin":
+		if e.ComplexityRoot.Mutation.ClearWebdavCertificatePin == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_clearWebdavCertificatePin_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ClearWebdavCertificatePin(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.completeSecondFactor":
 		if e.ComplexityRoot.Mutation.CompleteSecondFactor == nil {
 			break
@@ -4251,6 +4548,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ConfirmTotpEnrollment(childComplexity, args["code"].(string)), true
+	case "Mutation.createApiToken":
+		if e.ComplexityRoot.Mutation.CreateAPIToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createApiToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateAPIToken(childComplexity, args["input"].(model.CreateAPITokenInput)), true
 	case "Mutation.createConnection":
 		if e.ComplexityRoot.Mutation.CreateConnection == nil {
 			break
@@ -4703,6 +5011,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.MarkNotificationsRead(childComplexity, args["ids"].([]uuid.UUID), args["all"].(*bool)), true
+	case "Mutation.pinWebdavCertificate":
+		if e.ComplexityRoot.Mutation.PinWebdavCertificate == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_pinWebdavCertificate_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.PinWebdavCertificate(childComplexity, args["id"].(uuid.UUID), args["fingerprint"].(string)), true
 	case "Mutation.prePullImage":
 		if e.ComplexityRoot.Mutation.PrePullImage == nil {
 			break
@@ -4820,6 +5139,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RestoreGlobals(childComplexity, args["input"].(model.RestoreGlobalsInput)), true
+	case "Mutation.revokeApiToken":
+		if e.ComplexityRoot.Mutation.RevokeAPIToken == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_revokeApiToken_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RevokeAPIToken(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.revokeSession":
 		if e.ComplexityRoot.Mutation.RevokeSession == nil {
 			break
@@ -5040,6 +5370,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UnlockUser(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.updateApiTokenAddresses":
+		if e.ComplexityRoot.Mutation.UpdateAPITokenAddresses == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateApiTokenAddresses_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateAPITokenAddresses(childComplexity, args["id"].(uuid.UUID), args["allowedCidrs"].([]string), args["allowAnyAddress"].(bool)), true
 	case "Mutation.updateConnection":
 		if e.ComplexityRoot.Mutation.UpdateConnection == nil {
 			break
@@ -5649,6 +5990,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PersonalWebhookWithKey.Webhook(childComplexity), true
 
+	case "Query.apiTokens":
+		if e.ComplexityRoot.Query.APITokens == nil {
+			break
+		}
+
+		args, err := ec.field_Query_apiTokens_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.APITokens(childComplexity, args["jobId"].(*uuid.UUID)), true
 	case "Query.artifacts":
 		if e.ComplexityRoot.Query.Artifacts == nil {
 			break
@@ -5942,6 +6294,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.RunLogs(childComplexity, args["runId"].(uuid.UUID), args["afterId"].(*string), args["first"].(*int)), true
+	case "Query.runnerTargetPolicy":
+		if e.ComplexityRoot.Query.RunnerTargetPolicy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.RunnerTargetPolicy(childComplexity), true
 	case "Query.runs":
 		if e.ComplexityRoot.Query.Runs == nil {
 			break
@@ -6861,6 +7219,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RunActivity.Run(childComplexity), true
 
+	case "RunActor.apiToken":
+		if e.ComplexityRoot.RunActor.APIToken == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunActor.APIToken(childComplexity), true
 	case "RunActor.displayName":
 		if e.ComplexityRoot.RunActor.DisplayName == nil {
 			break
@@ -6879,6 +7243,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RunActor.UserID(childComplexity), true
+
+	case "RunApiToken.id":
+		if e.ComplexityRoot.RunApiToken.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunApiToken.ID(childComplexity), true
+	case "RunApiToken.name":
+		if e.ComplexityRoot.RunApiToken.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunApiToken.Name(childComplexity), true
 
 	case "RunCancellation.jobId":
 		if e.ComplexityRoot.RunCancellation.JobID == nil {
@@ -7306,6 +7683,32 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RunWarning.Message(childComplexity), true
 
+	case "RunnerBastionTargets.bastion":
+		if e.ComplexityRoot.RunnerBastionTargets.Bastion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerBastionTargets.Bastion(childComplexity), true
+	case "RunnerBastionTargets.targets":
+		if e.ComplexityRoot.RunnerBastionTargets.Targets == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerBastionTargets.Targets(childComplexity), true
+
+	case "RunnerDeniedRange.category":
+		if e.ComplexityRoot.RunnerDeniedRange.Category == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerDeniedRange.Category(childComplexity), true
+	case "RunnerDeniedRange.cidrs":
+		if e.ComplexityRoot.RunnerDeniedRange.Cidrs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerDeniedRange.Cidrs(childComplexity), true
+
 	case "RunnerHealth.activeRuns":
 		if e.ComplexityRoot.RunnerHealth.ActiveRuns == nil {
 			break
@@ -7336,6 +7739,91 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RunnerHealth.Version(childComplexity), true
+
+	case "RunnerTargetPolicy.allowCidrs":
+		if e.ComplexityRoot.RunnerTargetPolicy.AllowCidrs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.AllowCidrs(childComplexity), true
+	case "RunnerTargetPolicy.allowHosts":
+		if e.ComplexityRoot.RunnerTargetPolicy.AllowHosts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.AllowHosts(childComplexity), true
+	case "RunnerTargetPolicy.alwaysDenied":
+		if e.ComplexityRoot.RunnerTargetPolicy.AlwaysDenied == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.AlwaysDenied(childComplexity), true
+	case "RunnerTargetPolicy.available":
+		if e.ComplexityRoot.RunnerTargetPolicy.Available == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.Available(childComplexity), true
+	case "RunnerTargetPolicy.bastionTargets":
+		if e.ComplexityRoot.RunnerTargetPolicy.BastionTargets == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.BastionTargets(childComplexity), true
+	case "RunnerTargetPolicy.controlNetworks":
+		if e.ComplexityRoot.RunnerTargetPolicy.ControlNetworks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.ControlNetworks(childComplexity), true
+	case "RunnerTargetPolicy.controlNetworksKnown":
+		if e.ComplexityRoot.RunnerTargetPolicy.ControlNetworksKnown == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.ControlNetworksKnown(childComplexity), true
+	case "RunnerTargetPolicy.denyCidrs":
+		if e.ComplexityRoot.RunnerTargetPolicy.DenyCidrs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.DenyCidrs(childComplexity), true
+	case "RunnerTargetPolicy.denyHosts":
+		if e.ComplexityRoot.RunnerTargetPolicy.DenyHosts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.DenyHosts(childComplexity), true
+	case "RunnerTargetPolicy.envOverrides":
+		if e.ComplexityRoot.RunnerTargetPolicy.EnvOverrides == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.EnvOverrides(childComplexity), true
+	case "RunnerTargetPolicy.reason":
+		if e.ComplexityRoot.RunnerTargetPolicy.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.Reason(childComplexity), true
+	case "RunnerTargetPolicy.runSubnetPool":
+		if e.ComplexityRoot.RunnerTargetPolicy.RunSubnetPool == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.RunSubnetPool(childComplexity), true
+	case "RunnerTargetPolicy.truncated":
+		if e.ComplexityRoot.RunnerTargetPolicy.Truncated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.Truncated(childComplexity), true
+	case "RunnerTargetPolicy.warnings":
+		if e.ComplexityRoot.RunnerTargetPolicy.Warnings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunnerTargetPolicy.Warnings(childComplexity), true
 
 	case "S3DestinationSettings.accessKeyId":
 		if e.ComplexityRoot.S3DestinationSettings.AccessKeyID == nil {
@@ -7589,6 +8077,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ServerInfo.DevMode(childComplexity), true
+	case "ServerInfo.externalApiEnabled":
+		if e.ComplexityRoot.ServerInfo.ExternalAPIEnabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ServerInfo.ExternalAPIEnabled(childComplexity), true
 	case "ServerInfo.insecureTransport":
 		if e.ComplexityRoot.ServerInfo.InsecureTransport == nil {
 			break
@@ -9016,6 +9510,153 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.WebAuthnStatus.WebauthnAvailable(childComplexity), true
 
+	case "WebdavCertificate.fingerprintSha256":
+		if e.ComplexityRoot.WebdavCertificate.FingerprintSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.FingerprintSha256(childComplexity), true
+	case "WebdavCertificate.notAfter":
+		if e.ComplexityRoot.WebdavCertificate.NotAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.NotAfter(childComplexity), true
+	case "WebdavCertificate.notBefore":
+		if e.ComplexityRoot.WebdavCertificate.NotBefore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.NotBefore(childComplexity), true
+	case "WebdavCertificate.pinnedAt":
+		if e.ComplexityRoot.WebdavCertificate.PinnedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.PinnedAt(childComplexity), true
+	case "WebdavCertificate.selfSigned":
+		if e.ComplexityRoot.WebdavCertificate.SelfSigned == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.SelfSigned(childComplexity), true
+	case "WebdavCertificate.spkiSha256":
+		if e.ComplexityRoot.WebdavCertificate.SpkiSha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.SpkiSha256(childComplexity), true
+	case "WebdavCertificate.spkiSha256Base64":
+		if e.ComplexityRoot.WebdavCertificate.SpkiSha256Base64 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavCertificate.SpkiSha256Base64(childComplexity), true
+
+	case "WebdavDestinationSettings.caBundlePem":
+		if e.ComplexityRoot.WebdavDestinationSettings.CaBundlePem == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.CaBundlePem(childComplexity), true
+	case "WebdavDestinationSettings.flavor":
+		if e.ComplexityRoot.WebdavDestinationSettings.Flavor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.Flavor(childComplexity), true
+	case "WebdavDestinationSettings.hasPassword":
+		if e.ComplexityRoot.WebdavDestinationSettings.HasPassword == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.HasPassword(childComplexity), true
+	case "WebdavDestinationSettings.path":
+		if e.ComplexityRoot.WebdavDestinationSettings.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.Path(childComplexity), true
+	case "WebdavDestinationSettings.pinnedCertificate":
+		if e.ComplexityRoot.WebdavDestinationSettings.PinnedCertificate == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.PinnedCertificate(childComplexity), true
+	case "WebdavDestinationSettings.timeoutSeconds":
+		if e.ComplexityRoot.WebdavDestinationSettings.TimeoutSeconds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.TimeoutSeconds(childComplexity), true
+	case "WebdavDestinationSettings.trust":
+		if e.ComplexityRoot.WebdavDestinationSettings.Trust == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.Trust(childComplexity), true
+	case "WebdavDestinationSettings.url":
+		if e.ComplexityRoot.WebdavDestinationSettings.URL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.URL(childComplexity), true
+	case "WebdavDestinationSettings.username":
+		if e.ComplexityRoot.WebdavDestinationSettings.Username == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavDestinationSettings.Username(childComplexity), true
+
+	case "WebdavTestDetails.certificate":
+		if e.ComplexityRoot.WebdavTestDetails.Certificate == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.Certificate(childComplexity), true
+	case "WebdavTestDetails.overwriteProtection":
+		if e.ComplexityRoot.WebdavTestDetails.OverwriteProtection == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.OverwriteProtection(childComplexity), true
+	case "WebdavTestDetails.pinMatches":
+		if e.ComplexityRoot.WebdavTestDetails.PinMatches == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.PinMatches(childComplexity), true
+	case "WebdavTestDetails.server":
+		if e.ComplexityRoot.WebdavTestDetails.Server == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.Server(childComplexity), true
+	case "WebdavTestDetails.suggestedFlavor":
+		if e.ComplexityRoot.WebdavTestDetails.SuggestedFlavor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.SuggestedFlavor(childComplexity), true
+	case "WebdavTestDetails.trust":
+		if e.ComplexityRoot.WebdavTestDetails.Trust == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.Trust(childComplexity), true
+	case "WebdavTestDetails.trusted":
+		if e.ComplexityRoot.WebdavTestDetails.Trusted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.Trusted(childComplexity), true
+	case "WebdavTestDetails.uploadMode":
+		if e.ComplexityRoot.WebdavTestDetails.UploadMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebdavTestDetails.UploadMode(childComplexity), true
+
 	}
 	return 0, false
 }
@@ -9029,6 +9670,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			graphql.NewInputUnmarshaler("AuditLogFilter", ec.unmarshalInputAuditLogFilter),
 			graphql.NewInputUnmarshaler("CertificatePinInput", ec.unmarshalInputCertificatePinInput),
 			graphql.NewInputUnmarshaler("ConnectionSshInput", ec.unmarshalInputConnectionSshInput),
+			graphql.NewInputUnmarshaler("CreateApiTokenInput", ec.unmarshalInputCreateApiTokenInput),
 			graphql.NewInputUnmarshaler("CreateConnectionInput", ec.unmarshalInputCreateConnectionInput),
 			graphql.NewInputUnmarshaler("CreateDestinationInput", ec.unmarshalInputCreateDestinationInput),
 			graphql.NewInputUnmarshaler("CreateJobInput", ec.unmarshalInputCreateJobInput),
@@ -9061,6 +9703,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 			graphql.NewInputUnmarshaler("UpdateSmtpSettingsInput", ec.unmarshalInputUpdateSmtpSettingsInput),
 			graphql.NewInputUnmarshaler("UpdateUserInput", ec.unmarshalInputUpdateUserInput),
 			graphql.NewInputUnmarshaler("UserFilter", ec.unmarshalInputUserFilter),
+			graphql.NewInputUnmarshaler("WebdavDestinationInput", ec.unmarshalInputWebdavDestinationInput),
 		)
 	}
 	first := true
@@ -9154,6 +9797,136 @@ func newExecutionContext(
 }
 
 var sources = []*ast.Source{
+	{Name: "../schema/api_access.graphqls", Input: `# External API tokens (D-220, Phase 2): per-job machine credentials of the
+# CI API (` + "`" + `/api/v1` + "`" + `, served by ` + "`" + `bekup external-api` + "`" + `). Admins manage tokens
+# for any jobs; backup owners (role user) for the jobs they own;
+# maintainers never. Every change needs a fresh step-up and is audited.
+
+"A job in an API token's scope."
+type ApiTokenJob {
+  id: UUID!
+  name: String!
+  "The job was deleted; the token can no longer start it."
+  deleted: Boolean!
+}
+
+"Who created an API token."
+type ApiTokenCreator {
+  id: UUID!
+  email: String!
+  displayName: String!
+  "The account was deleted."
+  deleted: Boolean!
+}
+
+"""
+An external API token as the caller may see it. The token itself is
+returned only once, by createApiToken; bekup keeps only a hash.
+"""
+type ApiToken {
+  id: UUID!
+  name: String!
+  """
+  The start of the token (` + "`" + `bkp_` + "`" + ` and the first characters of its public id
+  part) to recognize it in a CI secret store. Never part of the secret.
+  """
+  prefix: String!
+  "The jobs of the token's scope the caller may see."
+  jobs: [ApiTokenJob!]!
+  """
+  Jobs of the scope the caller may not see (backup owners see only the jobs
+  they own); counted only.
+  """
+  hiddenJobCount: Int!
+  "The creator: for admins always, for others only on their own tokens."
+  createdBy: ApiTokenCreator
+  "The caller created the token."
+  createdByMe: Boolean!
+  createdAt: Time!
+  expiresAt: Time!
+  revokedAt: Time
+  """
+  The networks (canonical CIDRs) the token may be used from; empty when
+  allowAnyAddress is set (exactly one of the two).
+  """
+  allowedCidrs: [String!]!
+  "The token may be used from any address (no allowlist; a permanent warning)."
+  allowAnyAddress: Boolean!
+  "The newest run request of the token."
+  lastUsedAt: Time
+  """
+  When and from which client address the token was last seen: its newest
+  run request or its newest refused attempt (lastSeenRefused).
+  """
+  lastSeenAt: Time
+  "null when the external API passed no address."
+  lastSeenIp: String
+  """
+  The last sighting was a valid token presented from an address outside its
+  allowlist and refused (it may be stolen).
+  """
+  lastSeenRefused: Boolean!
+}
+
+input CreateApiTokenInput {
+  "1-100 characters."
+  name: String!
+  """
+  The jobs the token may start (1-100). Backup owners may list only jobs
+  they own.
+  """
+  jobIds: [UUID!]!
+  "Between 1 and 365 days from now."
+  expiresAt: Time!
+  """
+  1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
+  must be empty when allowAnyAddress is set.
+  """
+  allowedCidrs: [String!]!
+  "Explicitly allow any client address (audited and alerted)."
+  allowAnyAddress: Boolean!
+}
+
+"A new API token."
+type CreatedApiToken {
+  token: ApiToken!
+  """
+  The token (` + "`" + `bkp_...` + "`" + `), returned only here and only once. Store it as a CI
+  secret (BEKUP_TOKEN); it cannot be shown again.
+  """
+  plaintext: String!
+}
+
+extend type Query {
+  """
+  API tokens, newest first (at most 500). Without jobId: admins see every
+  token, backup owners the tokens covering a job they own. With jobId: the
+  tokens covering that job (backup owners: a job they own).
+  """
+  apiTokens(jobId: UUID): [ApiToken!]! @hasRole(roles: [ADMIN, USER])
+}
+
+extend type Mutation {
+  """
+  Creates an API token for jobs (admins, or the owner of every listed job;
+  fresh step-up; audited and alerted). The plaintext is returned once.
+  """
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Revokes an API token at once (admins, or an owner of a job in its scope;
+  fresh step-up; audited).
+  """
+  revokeApiToken(id: UUID!): ApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Replaces the client addresses of an unrevoked API token: a list of 1-32
+  networks or allowAnyAddress, exactly one (the same callers as
+  revokeApiToken; fresh step-up; audited, "any address" alerted).
+  """
+  updateApiTokenAddresses(id: UUID!, allowedCidrs: [String!]!, allowAnyAddress: Boolean!): ApiToken!
+    @hasRole(roles: [ADMIN, USER])
+    @stepUp
+}
+`, BuiltIn: false},
 	{Name: "../schema/audit.graphqls", Input: `# Audit log (task 1.4; D-101, D-106). Admin only.
 
 extend type Query {
@@ -9216,6 +9989,8 @@ enum AuditActorKind {
   SYSTEM
   "A host operator running a bekup subcommand."
   CLI
+  "An external API token (details name the token and its run request)."
+  API
 }
 
 "Filters for auditLog; unset fields do not filter."
@@ -10144,7 +10919,7 @@ input CertificatePinInput {
   allowLeafRotation: Boolean
 }
 `, BuiltIn: false},
-	{Name: "../schema/destinations.graphqls", Input: `# Backup destinations (task 2.12; D-106, D-131). Admins manage them; every
+	{Name: "../schema/destinations.graphqls", Input: `# Backup destinations (task 2.12; D-106, D-131; WebDAV D-222). Admins manage them; every
 # change needs a fresh step-up and is audited. Maintainers see metadata only
 # (name, type, mode flags, readiness; ` + "`" + `settings` + "`" + ` is null for them) and may
 # test destinations. Credentials are write-only: inputs accept new values,
@@ -10156,6 +10931,54 @@ enum DestinationType {
   DISK
   S3
   SFTP
+  "WebDAV: Nextcloud, ownCloud (TransIP STACK), NAS boxes, Apache/nginx/rclone/Caddy, hosted WebDAV (D-222)."
+  WEBDAV
+}
+
+"The dialect of a WebDAV server."
+enum WebdavFlavor {
+  "Plain WebDAV: url is the folder that holds the backups; uploads are one streaming PUT."
+  GENERIC
+  """
+  Nextcloud or ownCloud (TransIP STACK too): url is the server address;
+  files live below the user's files and large uploads use the chunked
+  upload API (64 MiB chunks).
+  """
+  NEXTCLOUD
+}
+
+"How a WebDAV server's TLS certificate is verified."
+enum WebdavTrust {
+  "Against the system roots."
+  SYSTEM
+  "Only against the destination's CA bundle."
+  CA_BUNDLE
+  "Only the pinned certificate (and its key) is accepted."
+  PINNED
+  "No TLS at all: a plain http URL, accepted in dev mode only."
+  PLAIN_HTTP
+}
+
+"What a WebDAV test recognized the server as."
+enum WebdavServerKind {
+  NEXTCLOUD
+  OWNCLOUD
+}
+
+"How a WebDAV destination uploads."
+enum WebdavUploadMode {
+  "One streaming PUT."
+  SINGLE
+  "The Nextcloud/ownCloud chunked-upload API."
+  CHUNKED
+}
+
+"The outcome of the WebDAV overwrite probe."
+enum WebdavOverwriteProbe {
+  "The server refuses to move a file onto an existing one ('Overwrite: F'): required."
+  REFUSED
+  "The server replaced the existing file: bekup never writes to it."
+  IGNORED
 }
 
 "S3 Object Lock retention modes."
@@ -10228,6 +11051,40 @@ type DestinationSettings {
   disk: DiskDestinationSettings
   s3: S3DestinationSettings
   sftp: SftpDestinationSettings
+  webdav: WebdavDestinationSettings
+}
+
+type WebdavDestinationSettings {
+  "The https folder URL (GENERIC) or the server address (NEXTCLOUD)."
+  url: String!
+  flavor: WebdavFlavor!
+  username: String!
+  "Folder below the URL (GENERIC) or below the user's files (NEXTCLOUD); empty: the base itself."
+  path: String!
+  "A custom CA bundle (PEM) that replaces the system roots (unused while a certificate is pinned)."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (null: 60)."
+  timeoutSeconds: Int
+  hasPassword: Boolean!
+  "How the server certificate is verified."
+  trust: WebdavTrust!
+  "The pinned certificate; null until pinWebdavCertificate."
+  pinnedCertificate: WebdavCertificate
+}
+
+"A WebDAV server's TLS certificate (public data)."
+type WebdavCertificate {
+  "SHA-256 of the certificate's public key (SPKI), lowercase hex: compare it, then pass it to pinWebdavCertificate."
+  spkiSha256: String!
+  "The same SPKI SHA-256 in base64."
+  spkiSha256Base64: String!
+  "SHA-256 of the whole certificate (DER, hex), as browsers and openssl x509 -fingerprint -sha256 show it."
+  fingerprintSha256: String!
+  notBefore: Time!
+  notAfter: Time!
+  selfSigned: Boolean!
+  "When it was pinned (pinned certificates only)."
+  pinnedAt: Time
 }
 
 type DiskDestinationSettings {
@@ -10295,13 +11152,34 @@ type SshHostKey {
 "The result of testDestination: normalized codes and fixed messages only."
 type DestinationTestResult {
   ok: Boolean!
-  "Steps in order: connect, write, read, delete."
+  "Steps in order: connect, (WebDAV: overwrite,) write, read, delete."
   steps: [DestinationTestStep!]!
   "The probe object's key (below the destination's prefix)."
   probeKey: String
   "True when the probe object was left behind (no-delete mode, Object Lock or a failed delete)."
   probeRemains: Boolean!
   note: String
+  "WebDAV destinations only: the certificate, server and upload findings of the test (null for other types)."
+  webdav: WebdavTestDetails
+}
+
+"What a test of a WebDAV destination saw (fixed values and public data only)."
+type WebdavTestDetails {
+  trust: WebdavTrust!
+  "The certificate passed the trust check."
+  trusted: Boolean!
+  "The certificate the server presented (null when none was seen: unreachable or plain http)."
+  certificate: WebdavCertificate
+  "The presented certificate's key is the pinned one."
+  pinMatches: Boolean!
+  "The server looks like Nextcloud or ownCloud (its status.php answered); null otherwise."
+  server: WebdavServerKind
+  "The flavor the server suggests (NEXTCLOUD when server is set)."
+  suggestedFlavor: WebdavFlavor!
+  "The upload mode the write step used; null when it did not run."
+  uploadMode: WebdavUploadMode
+  "The overwrite probe; null when it did not finish."
+  overwriteProtection: WebdavOverwriteProbe
 }
 
 type DestinationTestStep {
@@ -10461,6 +11339,26 @@ extend type Mutation {
   public key.
   """
   generateDestinationSshKeypair(id: UUID!): DestinationSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Pins the TLS certificate a WebDAV destination's server presents (D-222):
+  bekup captures it again through the SSRF guard (TLS handshake only, no
+  credentials sent) and pins it only if the SHA-256 of its public key
+  equals ` + "`" + `fingerprint` + "`" + ` (WebdavCertificate.spkiSha256 from a test, compared
+  out of band; hex or base64). The certificate must name the URL's host
+  and be valid now. Afterwards only this certificate is accepted (no
+  system roots, no CA bundle). CONFLICT when the server now presents
+  another certificate; CONNECTION_FAILED when it cannot be reached. Rate
+  limited; must be the only field of its operation.
+  """
+  pinWebdavCertificate(id: UUID!, fingerprint: String!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Removes the certificate pin of a WebDAV destination: its server is
+  verified against the system roots or its CA bundle again. Audited and
+  alerted.
+  """
+  clearWebdavCertificatePin(id: UUID!): Destination! @hasRole(roles: [ADMIN]) @stepUp
 }
 
 input CreateDestinationInput {
@@ -10471,6 +11369,7 @@ input CreateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 "Fields to change; unset fields stay unchanged."
@@ -10480,6 +11379,7 @@ input UpdateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 input DiskDestinationInput {
@@ -10526,6 +11426,33 @@ input SftpDestinationInput {
   privateKey: String
   "Write-only; only together with privateKey."
   privateKeyPassphrase: String
+}
+
+input WebdavDestinationInput {
+  """
+  https URL (http only in dev mode): GENERIC the existing folder that holds
+  the backups (for example https://u123.your-storagebox.de/backups);
+  NEXTCLOUD the server address (for example https://cloud.example.com or
+  https://name.stackstorage.com). Changing it removes the pinned
+  certificate.
+  """
+  url: String!
+  "Default GENERIC."
+  flavor: WebdavFlavor
+  "HTTP Basic user name (no ':')."
+  username: String!
+  """
+  Write-only (an app password for Nextcloud/ownCloud). Omit to keep the
+  stored one, except when url, flavor or username changes: it must then be
+  entered again.
+  """
+  password: String
+  "Folder below the base; created if missing."
+  path: String
+  "PEM CA certificates that replace the system roots."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (5..600; default 60)."
+  timeoutSeconds: Int
 }
 `, BuiltIn: false},
 	{Name: "../schema/download.graphqls", Input: `# Backup downloads (task 3.9, D-150): admins and the backup owners of the
@@ -11441,6 +12368,108 @@ extend type Mutation {
   """
   updateSsrfAllowlist(input: SsrfAllowlistInput!): SsrfAllowlist! @hasRole(roles: [ADMIN]) @stepUp
 }
+
+# The runner's target allowlist (D-223). Admin only, read-only.
+#
+# Database servers and SSH bastions are reached by the runner, never by
+# serve, and only as the ` + "`" + `[targets]` + "`" + ` section of the runner's own
+# runner.toml allows. The runner has no database access, so this list
+# cannot be changed here: edit runner.toml on the runner host and restart
+# the runner.
+
+"A startup warning of the runner's target allowlist."
+enum RunnerTargetWarning {
+  "allow_cidrs and allow_hosts are empty: the runner refuses every database server and SSH bastion."
+  EMPTY_ALLOWLIST
+  """
+  bastion_targets is empty: an allowed SSH bastion may forward to any host
+  it reaches (only deny_cidrs and deny_hosts apply behind it).
+  """
+  BASTIONS_UNRESTRICTED
+}
+
+"A class of addresses that no runner.toml entry can allow."
+enum RunnerDeniedCategory {
+  LOOPBACK
+  "This network (0.0.0.0/8) and the unspecified IPv6 address."
+  UNSPECIFIED
+  LINK_LOCAL
+  CLOUD_METADATA
+  MULTICAST_BROADCAST
+  RESERVED
+  "IPv4-compatible and IPv4-translated IPv6 forms."
+  IPV4_IN_IPV6
+  TEREDO
+  "NAT64 and 6to4 addresses that embed an always-denied IPv4 address (the ranges are not denied as a whole)."
+  EMBEDDED_DENIED_IPV4
+  "Other IPv6 addresses outside global unicast 2000::/3 (no fixed ranges)."
+  NON_GLOBAL_IPV6
+}
+
+"A key of runner.toml [targets]."
+enum RunnerTargetsKey {
+  ALLOW_CIDRS
+  ALLOW_HOSTS
+  DENY_CIDRS
+  DENY_HOSTS
+  BASTION_TARGETS
+}
+
+"One always-denied category with its ranges."
+type RunnerDeniedRange {
+  category: RunnerDeniedCategory!
+  "The ranges (empty for NON_GLOBAL_IPV6)."
+  cidrs: [String!]!
+}
+
+"What one SSH bastion may forward to (bastion_targets)."
+type RunnerBastionTargets {
+  "The bastion's host name or IP address."
+  bastion: String!
+  "CIDRs, then host names."
+  targets: [String!]!
+}
+
+"""
+The runner's target allowlist as the runner applies it. When the runner
+cannot be asked, available is false, reason says why and the lists are
+empty.
+"""
+type RunnerTargetPolicy {
+  "True when the runner answered."
+  available: Boolean!
+  "Why the allowlist is unavailable (a fixed text; null when available)."
+  reason: String
+  "CIDRs the runner may connect to (masked, in the configured order)."
+  allowCidrs: [String!]!
+  "Host names the runner may connect to (normalized, sorted)."
+  allowHosts: [String!]!
+  "CIDRs refused before the allow lists."
+  denyCidrs: [String!]!
+  "Host names refused before the allow lists."
+  denyHosts: [String!]!
+  "bastion_targets grouped by bastion."
+  bastionTargets: [RunnerBastionTargets!]!
+  "docker.run_subnet_pool: always refused (every run's own network lies inside it)."
+  runSubnetPool: String
+  "The runner's control network and container addresses: always refused."
+  controlNetworks: [String!]!
+  "False until the runner knows its container's networks (Docker not ready): controlNetworks is then incomplete."
+  controlNetworksKnown: Boolean!
+  "The always-denied categories."
+  alwaysDenied: [RunnerDeniedRange!]!
+  "The runner's startup warnings about the allowlist."
+  warnings: [RunnerTargetWarning!]!
+  "The [targets] keys set by environment variables (BEKUP_TARGETS_*) instead of runner.toml."
+  envOverrides: [RunnerTargetsKey!]!
+  "True when a list was longer than the runner reports (256 entries)."
+  truncated: Boolean!
+}
+
+extend type Query {
+  "The runner's target allowlist (runner.toml [targets]; read-only)."
+  runnerTargetPolicy: RunnerTargetPolicy! @hasRole(roles: [ADMIN])
+}
 `, BuiltIn: false},
 	{Name: "../schema/notifications.graphqls", Input: `# Notifications (task 5.3b; D-161, D-177, D-183, D-191): shared channels
 # (admin), personal channels and the preference matrix (every user for
@@ -12221,6 +13250,8 @@ enum RunTrigger {
   MANUAL
   "startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward."
   EARLY
+  "A run request of an external API token (CI)."
+  API
 }
 
 "What a run item backs up."
@@ -12296,11 +13327,22 @@ type RunJobRef {
   deleted: Boolean!
 }
 
-"The user who started a manual run."
+"""
+Who started a manual, early or API run: the user, or for an API run the
+creator of the API token (apiToken names the token).
+"""
 type RunActor {
   userId: UUID!
   displayName: String!
   email: String!
+  "API runs: the token that requested the run (null once its request was pruned after 30 days, and for other runs)."
+  apiToken: RunApiToken
+}
+
+"The API token of an API run (never any part of the token itself)."
+type RunApiToken {
+  id: UUID!
+  name: String!
 }
 
 "A warning recorded by a run or item (fixed texts)."
@@ -12497,7 +13539,7 @@ type Run {
   job: RunJobRef!
   status: RunStatus!
   trigger: RunTrigger!
-  "The user of a manual run; admins and maintainers only (null for backup owners)."
+  "The user of a manual or early run, or the API token (and its creator) of an API run; admins and maintainers only (null for backup owners)."
   triggeredBy: RunActor
   scheduledFor: Time
   attempt: Int!
@@ -12752,6 +13794,12 @@ type ServerInfo {
   insecureTransport: Boolean!
   "True when dev mode is on (never in production)."
   devMode: Boolean!
+  """
+  True when this deployment runs the opt-in external API for CI pipelines
+  (D-220; BEKUP_EXTERNAL_API=enabled, written by setup). Not a secret and
+  not a security decision: the UI shows the curl examples only then.
+  """
+  externalApiEnabled: Boolean!
 }
 `, BuiltIn: false},
 	{Name: "../schema/schema_version.graphqls", Input: `# Schema version per database (D-210). A job may capture the schema
@@ -13671,6 +14719,70 @@ func (ec *executionContext) childFields_ActivityEvent(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type ActivityEvent", field.Name)
 }
 
+func (ec *executionContext) childFields_ApiToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_ApiToken_id(ctx, field)
+	case "name":
+		return ec.fieldContext_ApiToken_name(ctx, field)
+	case "prefix":
+		return ec.fieldContext_ApiToken_prefix(ctx, field)
+	case "jobs":
+		return ec.fieldContext_ApiToken_jobs(ctx, field)
+	case "hiddenJobCount":
+		return ec.fieldContext_ApiToken_hiddenJobCount(ctx, field)
+	case "createdBy":
+		return ec.fieldContext_ApiToken_createdBy(ctx, field)
+	case "createdByMe":
+		return ec.fieldContext_ApiToken_createdByMe(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_ApiToken_createdAt(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_ApiToken_expiresAt(ctx, field)
+	case "revokedAt":
+		return ec.fieldContext_ApiToken_revokedAt(ctx, field)
+	case "allowedCidrs":
+		return ec.fieldContext_ApiToken_allowedCidrs(ctx, field)
+	case "allowAnyAddress":
+		return ec.fieldContext_ApiToken_allowAnyAddress(ctx, field)
+	case "lastUsedAt":
+		return ec.fieldContext_ApiToken_lastUsedAt(ctx, field)
+	case "lastSeenAt":
+		return ec.fieldContext_ApiToken_lastSeenAt(ctx, field)
+	case "lastSeenIp":
+		return ec.fieldContext_ApiToken_lastSeenIp(ctx, field)
+	case "lastSeenRefused":
+		return ec.fieldContext_ApiToken_lastSeenRefused(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ApiToken", field.Name)
+}
+
+func (ec *executionContext) childFields_ApiTokenCreator(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_ApiTokenCreator_id(ctx, field)
+	case "email":
+		return ec.fieldContext_ApiTokenCreator_email(ctx, field)
+	case "displayName":
+		return ec.fieldContext_ApiTokenCreator_displayName(ctx, field)
+	case "deleted":
+		return ec.fieldContext_ApiTokenCreator_deleted(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ApiTokenCreator", field.Name)
+}
+
+func (ec *executionContext) childFields_ApiTokenJob(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_ApiTokenJob_id(ctx, field)
+	case "name":
+		return ec.fieldContext_ApiTokenJob_name(ctx, field)
+	case "deleted":
+		return ec.fieldContext_ApiTokenJob_deleted(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type ApiTokenJob", field.Name)
+}
+
 func (ec *executionContext) childFields_Artifact(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -14237,6 +15349,16 @@ func (ec *executionContext) childFields_CreateJobResult(ctx context.Context, fie
 	return nil, fmt.Errorf("no field named %q was found under type CreateJobResult", field.Name)
 }
 
+func (ec *executionContext) childFields_CreatedApiToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "token":
+		return ec.fieldContext_CreatedApiToken_token(ctx, field)
+	case "plaintext":
+		return ec.fieldContext_CreatedApiToken_plaintext(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type CreatedApiToken", field.Name)
+}
+
 func (ec *executionContext) childFields_CreatedUser(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "user":
@@ -14313,6 +15435,8 @@ func (ec *executionContext) childFields_DestinationSettings(ctx context.Context,
 		return ec.fieldContext_DestinationSettings_s3(ctx, field)
 	case "sftp":
 		return ec.fieldContext_DestinationSettings_sftp(ctx, field)
+	case "webdav":
+		return ec.fieldContext_DestinationSettings_webdav(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DestinationSettings", field.Name)
 }
@@ -14341,6 +15465,8 @@ func (ec *executionContext) childFields_DestinationTestResult(ctx context.Contex
 		return ec.fieldContext_DestinationTestResult_probeRemains(ctx, field)
 	case "note":
 		return ec.fieldContext_DestinationTestResult_note(ctx, field)
+	case "webdav":
+		return ec.fieldContext_DestinationTestResult_webdav(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DestinationTestResult", field.Name)
 }
@@ -15411,8 +16537,20 @@ func (ec *executionContext) childFields_RunActor(ctx context.Context, field grap
 		return ec.fieldContext_RunActor_displayName(ctx, field)
 	case "email":
 		return ec.fieldContext_RunActor_email(ctx, field)
+	case "apiToken":
+		return ec.fieldContext_RunActor_apiToken(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RunActor", field.Name)
+}
+
+func (ec *executionContext) childFields_RunApiToken(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_RunApiToken_id(ctx, field)
+	case "name":
+		return ec.fieldContext_RunApiToken_name(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RunApiToken", field.Name)
 }
 
 func (ec *executionContext) childFields_RunCancellation(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -15625,6 +16763,26 @@ func (ec *executionContext) childFields_RunWarning(ctx context.Context, field gr
 	return nil, fmt.Errorf("no field named %q was found under type RunWarning", field.Name)
 }
 
+func (ec *executionContext) childFields_RunnerBastionTargets(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "bastion":
+		return ec.fieldContext_RunnerBastionTargets_bastion(ctx, field)
+	case "targets":
+		return ec.fieldContext_RunnerBastionTargets_targets(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RunnerBastionTargets", field.Name)
+}
+
+func (ec *executionContext) childFields_RunnerDeniedRange(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "category":
+		return ec.fieldContext_RunnerDeniedRange_category(ctx, field)
+	case "cidrs":
+		return ec.fieldContext_RunnerDeniedRange_cidrs(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RunnerDeniedRange", field.Name)
+}
+
 func (ec *executionContext) childFields_RunnerHealth(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "up":
@@ -15639,6 +16797,40 @@ func (ec *executionContext) childFields_RunnerHealth(ctx context.Context, field 
 		return ec.fieldContext_RunnerHealth_maxConcurrentRuns(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type RunnerHealth", field.Name)
+}
+
+func (ec *executionContext) childFields_RunnerTargetPolicy(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "available":
+		return ec.fieldContext_RunnerTargetPolicy_available(ctx, field)
+	case "reason":
+		return ec.fieldContext_RunnerTargetPolicy_reason(ctx, field)
+	case "allowCidrs":
+		return ec.fieldContext_RunnerTargetPolicy_allowCidrs(ctx, field)
+	case "allowHosts":
+		return ec.fieldContext_RunnerTargetPolicy_allowHosts(ctx, field)
+	case "denyCidrs":
+		return ec.fieldContext_RunnerTargetPolicy_denyCidrs(ctx, field)
+	case "denyHosts":
+		return ec.fieldContext_RunnerTargetPolicy_denyHosts(ctx, field)
+	case "bastionTargets":
+		return ec.fieldContext_RunnerTargetPolicy_bastionTargets(ctx, field)
+	case "runSubnetPool":
+		return ec.fieldContext_RunnerTargetPolicy_runSubnetPool(ctx, field)
+	case "controlNetworks":
+		return ec.fieldContext_RunnerTargetPolicy_controlNetworks(ctx, field)
+	case "controlNetworksKnown":
+		return ec.fieldContext_RunnerTargetPolicy_controlNetworksKnown(ctx, field)
+	case "alwaysDenied":
+		return ec.fieldContext_RunnerTargetPolicy_alwaysDenied(ctx, field)
+	case "warnings":
+		return ec.fieldContext_RunnerTargetPolicy_warnings(ctx, field)
+	case "envOverrides":
+		return ec.fieldContext_RunnerTargetPolicy_envOverrides(ctx, field)
+	case "truncated":
+		return ec.fieldContext_RunnerTargetPolicy_truncated(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RunnerTargetPolicy", field.Name)
 }
 
 func (ec *executionContext) childFields_S3DestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -15765,6 +16957,8 @@ func (ec *executionContext) childFields_ServerInfo(ctx context.Context, field gr
 		return ec.fieldContext_ServerInfo_insecureTransport(ctx, field)
 	case "devMode":
 		return ec.fieldContext_ServerInfo_devMode(ctx, field)
+	case "externalApiEnabled":
+		return ec.fieldContext_ServerInfo_externalApiEnabled(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type ServerInfo", field.Name)
 }
@@ -16429,6 +17623,72 @@ func (ec *executionContext) childFields_WebAuthnStatus(ctx context.Context, fiel
 	return nil, fmt.Errorf("no field named %q was found under type WebAuthnStatus", field.Name)
 }
 
+func (ec *executionContext) childFields_WebdavCertificate(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "spkiSha256":
+		return ec.fieldContext_WebdavCertificate_spkiSha256(ctx, field)
+	case "spkiSha256Base64":
+		return ec.fieldContext_WebdavCertificate_spkiSha256Base64(ctx, field)
+	case "fingerprintSha256":
+		return ec.fieldContext_WebdavCertificate_fingerprintSha256(ctx, field)
+	case "notBefore":
+		return ec.fieldContext_WebdavCertificate_notBefore(ctx, field)
+	case "notAfter":
+		return ec.fieldContext_WebdavCertificate_notAfter(ctx, field)
+	case "selfSigned":
+		return ec.fieldContext_WebdavCertificate_selfSigned(ctx, field)
+	case "pinnedAt":
+		return ec.fieldContext_WebdavCertificate_pinnedAt(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type WebdavCertificate", field.Name)
+}
+
+func (ec *executionContext) childFields_WebdavDestinationSettings(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "url":
+		return ec.fieldContext_WebdavDestinationSettings_url(ctx, field)
+	case "flavor":
+		return ec.fieldContext_WebdavDestinationSettings_flavor(ctx, field)
+	case "username":
+		return ec.fieldContext_WebdavDestinationSettings_username(ctx, field)
+	case "path":
+		return ec.fieldContext_WebdavDestinationSettings_path(ctx, field)
+	case "caBundlePem":
+		return ec.fieldContext_WebdavDestinationSettings_caBundlePem(ctx, field)
+	case "timeoutSeconds":
+		return ec.fieldContext_WebdavDestinationSettings_timeoutSeconds(ctx, field)
+	case "hasPassword":
+		return ec.fieldContext_WebdavDestinationSettings_hasPassword(ctx, field)
+	case "trust":
+		return ec.fieldContext_WebdavDestinationSettings_trust(ctx, field)
+	case "pinnedCertificate":
+		return ec.fieldContext_WebdavDestinationSettings_pinnedCertificate(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type WebdavDestinationSettings", field.Name)
+}
+
+func (ec *executionContext) childFields_WebdavTestDetails(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "trust":
+		return ec.fieldContext_WebdavTestDetails_trust(ctx, field)
+	case "trusted":
+		return ec.fieldContext_WebdavTestDetails_trusted(ctx, field)
+	case "certificate":
+		return ec.fieldContext_WebdavTestDetails_certificate(ctx, field)
+	case "pinMatches":
+		return ec.fieldContext_WebdavTestDetails_pinMatches(ctx, field)
+	case "server":
+		return ec.fieldContext_WebdavTestDetails_server(ctx, field)
+	case "suggestedFlavor":
+		return ec.fieldContext_WebdavTestDetails_suggestedFlavor(ctx, field)
+	case "uploadMode":
+		return ec.fieldContext_WebdavTestDetails_uploadMode(ctx, field)
+	case "overwriteProtection":
+		return ec.fieldContext_WebdavTestDetails_overwriteProtection(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type WebdavTestDetails", field.Name)
+}
+
 func (ec *executionContext) childFields___Directive(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "name":
@@ -16697,6 +17957,20 @@ func (ec *executionContext) field_Mutation_changePassword_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_clearWebdavCertificatePin_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_completeSecondFactor_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -16874,6 +18148,20 @@ func (ec *executionContext) field_Mutation_confirmTotpEnrollment_args(ctx contex
 		return nil, err
 	}
 	args["code"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_createApiToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.CreateAPITokenInput, error) {
+			return ec.unmarshalNCreateApiTokenInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateAPITokenInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -17525,6 +18813,28 @@ func (ec *executionContext) field_Mutation_markNotificationsRead_args(ctx contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_pinWebdavCertificate_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "fingerprint",
+		func(ctx context.Context, v any) (string, error) {
+			return ec.unmarshalNString2string(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["fingerprint"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_prePullImage_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -17664,6 +18974,20 @@ func (ec *executionContext) field_Mutation_restoreGlobals_args(ctx context.Conte
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_revokeApiToken_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -18027,6 +19351,36 @@ func (ec *executionContext) field_Mutation_unlockUser_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateApiTokenAddresses_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "allowedCidrs",
+		func(ctx context.Context, v any) ([]string, error) {
+			return ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["allowedCidrs"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "allowAnyAddress",
+		func(ctx context.Context, v any) (bool, error) {
+			return ec.unmarshalNBoolean2bool(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["allowAnyAddress"] = arg2
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateConnection_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -18204,6 +19558,20 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_apiTokens_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "jobId",
+		func(ctx context.Context, v any) (*uuid.UUID, error) {
+			return ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["jobId"] = arg0
 	return args, nil
 }
 
@@ -19113,6 +20481,553 @@ func (ec *executionContext) fieldContext_ActivityEvent_restore(_ context.Context
 		},
 	}
 	return fc, nil
+}
+
+func (ec *executionContext) _ApiToken_id(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _ApiToken_name(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiToken_prefix(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_prefix(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Prefix, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_prefix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiToken_jobs(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_jobs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Jobs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.APITokenJob) graphql.Marshaler {
+			return ec.marshalNApiTokenJob2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenJobᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_jobs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ApiToken",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiTokenJob(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ApiToken_hiddenJobCount(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_hiddenJobCount(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HiddenJobCount, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v int) graphql.Marshaler {
+			return ec.marshalNInt2int(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_hiddenJobCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Int")
+}
+
+func (ec *executionContext) _ApiToken_createdBy(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_createdBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.APITokenCreator) graphql.Marshaler {
+			return ec.marshalOApiTokenCreator2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenCreator(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ApiToken",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiTokenCreator(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ApiToken_createdByMe(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_createdByMe(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedByMe, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_createdByMe(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ApiToken_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_revokedAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_revokedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RevokedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_revokedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_allowedCidrs(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_allowedCidrs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AllowedCidrs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_allowedCidrs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiToken_allowAnyAddress(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_allowAnyAddress(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AllowAnyAddress, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_allowAnyAddress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ApiToken_lastUsedAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_lastUsedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastUsedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_lastUsedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_lastSeenAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_lastSeenAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_lastSeenAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_lastSeenIp(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_lastSeenIp(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenIP, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_lastSeenIp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiToken_lastSeenRefused(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_lastSeenRefused(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenRefused, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_lastSeenRefused(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ApiTokenCreator_id(ctx context.Context, field graphql.CollectedField, obj *model.APITokenCreator) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenCreator_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenCreator_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenCreator", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _ApiTokenCreator_email(ctx context.Context, field graphql.CollectedField, obj *model.APITokenCreator) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenCreator_email(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenCreator_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenCreator", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiTokenCreator_displayName(ctx context.Context, field graphql.CollectedField, obj *model.APITokenCreator) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenCreator_displayName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenCreator_displayName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenCreator", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiTokenCreator_deleted(ctx context.Context, field graphql.CollectedField, obj *model.APITokenCreator) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenCreator_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenCreator_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenCreator", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ApiTokenJob_id(ctx context.Context, field graphql.CollectedField, obj *model.APITokenJob) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenJob_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenJob_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenJob", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _ApiTokenJob_name(ctx context.Context, field graphql.CollectedField, obj *model.APITokenJob) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenJob_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenJob_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenJob", field, false, false, "String")
+}
+
+func (ec *executionContext) _ApiTokenJob_deleted(ctx context.Context, field graphql.CollectedField, obj *model.APITokenJob) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiTokenJob_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ApiTokenJob_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiTokenJob", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _Artifact_id(ctx context.Context, field graphql.CollectedField, obj *model.Artifact) (ret graphql.Marshaler) {
@@ -23884,6 +25799,61 @@ func (ec *executionContext) fieldContext_CreateJobResult_generatedKeypair(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _CreatedApiToken_token(ctx context.Context, field graphql.CollectedField, obj *model.CreatedAPIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CreatedApiToken_token(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Token, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.APIToken) graphql.Marshaler {
+			return ec.marshalNApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CreatedApiToken_token(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CreatedApiToken",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiToken(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CreatedApiToken_plaintext(ctx context.Context, field graphql.CollectedField, obj *model.CreatedAPIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_CreatedApiToken_plaintext(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Plaintext, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_CreatedApiToken_plaintext(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("CreatedApiToken", field, false, false, "String")
+}
+
 func (ec *executionContext) _CreatedUser_user(ctx context.Context, field graphql.CollectedField, obj *model.CreatedUser) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24522,6 +26492,38 @@ func (ec *executionContext) fieldContext_DestinationSettings_sftp(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _DestinationSettings_webdav(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSettings_webdav(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Webdav, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavDestinationSettings) graphql.Marshaler {
+			return ec.marshalOWebdavDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavDestinationSettings(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSettings_webdav(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_WebdavDestinationSettings(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DestinationSshKeypair_destination(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSSHKeypair) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -24722,6 +26724,38 @@ func (ec *executionContext) _DestinationTestResult_note(ctx context.Context, fie
 }
 func (ec *executionContext) fieldContext_DestinationTestResult_note(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("DestinationTestResult", field, false, false, "String")
+}
+
+func (ec *executionContext) _DestinationTestResult_webdav(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationTestResult_webdav(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Webdav, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavTestDetails) graphql.Marshaler {
+			return ec.marshalOWebdavTestDetails2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTestDetails(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationTestResult_webdav(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DestinationTestResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_WebdavTestDetails(ctx, field)
+		},
+	}
+	return fc, nil
 }
 
 func (ec *executionContext) _DestinationTestStep_name(ctx context.Context, field graphql.CollectedField, obj *model.DestinationTestStep) (ret graphql.Marshaler) {
@@ -28242,6 +30276,213 @@ func (ec *executionContext) fieldContext_Mutation_changePassword(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createApiToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_createApiToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateAPIToken(ctx, fc.Args["input"].(model.CreateAPITokenInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal *model.CreatedAPIToken
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.CreatedAPIToken
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.CreatedAPIToken
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.CreatedAPIToken) graphql.Marshaler {
+			return ec.marshalNCreatedApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreatedAPIToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_createApiToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_CreatedApiToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createApiToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_revokeApiToken(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_revokeApiToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RevokeAPIToken(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal *model.APIToken
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.APIToken
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.APIToken
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.APIToken) graphql.Marshaler {
+			return ec.marshalNApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_revokeApiToken(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_revokeApiToken_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateApiTokenAddresses(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_updateApiTokenAddresses(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateAPITokenAddresses(ctx, fc.Args["id"].(uuid.UUID), fc.Args["allowedCidrs"].([]string), fc.Args["allowAnyAddress"].(bool))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal *model.APIToken
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.APIToken
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.APIToken
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.APIToken) graphql.Marshaler {
+			return ec.marshalNApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_updateApiTokenAddresses(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateApiTokenAddresses_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_reloadConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -29962,6 +32203,144 @@ func (ec *executionContext) fieldContext_Mutation_generateDestinationSshKeypair(
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_generateDestinationSshKeypair_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_pinWebdavCertificate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_pinWebdavCertificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().PinWebdavCertificate(ctx, fc.Args["id"].(uuid.UUID), fc.Args["fingerprint"].(string))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_pinWebdavCertificate(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_pinWebdavCertificate_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_clearWebdavCertificatePin(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_clearWebdavCertificatePin(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ClearWebdavCertificatePin(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.Destination
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.Destination
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Destination) graphql.Marshaler {
+			return ec.marshalNDestination2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestination(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_clearWebdavCertificatePin(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_Destination(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_clearWebdavCertificatePin_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -36237,6 +38616,68 @@ func (ec *executionContext) fieldContext_Query_serverInfo(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_apiTokens(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_apiTokens(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().APITokens(ctx, fc.Args["jobId"].(*uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal []model.APIToken
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.APIToken
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.APIToken) graphql.Marshaler {
+			return ec.marshalNApiToken2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_apiTokens(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_ApiToken(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_apiTokens_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_auditLog(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -37392,6 +39833,56 @@ func (ec *executionContext) fieldContext_Query_ssrfAllowlist(_ context.Context, 
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return ec.childFields_SsrfAllowlist(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_runnerTargetPolicy(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_runnerTargetPolicy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().RunnerTargetPolicy(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN"})
+				if err != nil {
+					var zeroVal *model.RunnerTargetPolicy
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RunnerTargetPolicy
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunnerTargetPolicy) graphql.Marshaler {
+			return ec.marshalNRunnerTargetPolicy2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetPolicy(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_runnerTargetPolicy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunnerTargetPolicy(ctx, field)
 		},
 	}
 	return fc, nil
@@ -42220,6 +44711,84 @@ func (ec *executionContext) fieldContext_RunActor_email(_ context.Context, field
 	return graphql.NewScalarFieldContext("RunActor", field, false, false, "String")
 }
 
+func (ec *executionContext) _RunActor_apiToken(ctx context.Context, field graphql.CollectedField, obj *model.RunActor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunActor_apiToken(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.APIToken, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RunAPIToken) graphql.Marshaler {
+			return ec.marshalORunApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunAPIToken(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RunActor_apiToken(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunActor",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunApiToken(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunApiToken_id(ctx context.Context, field graphql.CollectedField, obj *model.RunAPIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunApiToken_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunApiToken_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunApiToken", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RunApiToken_name(ctx context.Context, field graphql.CollectedField, obj *model.RunAPIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunApiToken_name(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunApiToken_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunApiToken", field, false, false, "String")
+}
+
 func (ec *executionContext) _RunCancellation_runId(ctx context.Context, field graphql.CollectedField, obj *model.RunCancellation) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -43933,6 +46502,98 @@ func (ec *executionContext) fieldContext_RunWarning_destinationId(_ context.Cont
 	return graphql.NewScalarFieldContext("RunWarning", field, false, false, "UUID")
 }
 
+func (ec *executionContext) _RunnerBastionTargets_bastion(ctx context.Context, field graphql.CollectedField, obj *model.RunnerBastionTargets) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerBastionTargets_bastion(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Bastion, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerBastionTargets_bastion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerBastionTargets", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerBastionTargets_targets(ctx context.Context, field graphql.CollectedField, obj *model.RunnerBastionTargets) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerBastionTargets_targets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Targets, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerBastionTargets_targets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerBastionTargets", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerDeniedRange_category(ctx context.Context, field graphql.CollectedField, obj *model.RunnerDeniedRange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerDeniedRange_category(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Category, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RunnerDeniedCategory) graphql.Marshaler {
+			return ec.marshalNRunnerDeniedCategory2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedCategory(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerDeniedRange_category(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerDeniedRange", field, false, false, "RunnerDeniedCategory")
+}
+
+func (ec *executionContext) _RunnerDeniedRange_cidrs(ctx context.Context, field graphql.CollectedField, obj *model.RunnerDeniedRange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerDeniedRange_cidrs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Cidrs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerDeniedRange_cidrs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerDeniedRange", field, false, false, "String")
+}
+
 func (ec *executionContext) _RunnerHealth_up(ctx context.Context, field graphql.CollectedField, obj *model.RunnerHealth) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -44046,6 +46707,346 @@ func (ec *executionContext) _RunnerHealth_maxConcurrentRuns(ctx context.Context,
 }
 func (ec *executionContext) fieldContext_RunnerHealth_maxConcurrentRuns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RunnerHealth", field, false, false, "Int")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_available(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_available(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Available, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_available(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_reason(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_allowCidrs(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_allowCidrs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AllowCidrs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_allowCidrs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_allowHosts(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_allowHosts(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AllowHosts, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_allowHosts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_denyCidrs(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_denyCidrs(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DenyCidrs, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_denyCidrs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_denyHosts(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_denyHosts(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DenyHosts, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_denyHosts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_bastionTargets(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_bastionTargets(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.BastionTargets, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RunnerBastionTargets) graphql.Marshaler {
+			return ec.marshalNRunnerBastionTargets2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerBastionTargetsᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_bastionTargets(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunnerTargetPolicy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunnerBastionTargets(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_runSubnetPool(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_runSubnetPool(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.RunSubnetPool, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_runSubnetPool(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_controlNetworks(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_controlNetworks(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ControlNetworks, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []string) graphql.Marshaler {
+			return ec.marshalNString2ᚕstringᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_controlNetworks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "String")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_controlNetworksKnown(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_controlNetworksKnown(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ControlNetworksKnown, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_controlNetworksKnown(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_alwaysDenied(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_alwaysDenied(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.AlwaysDenied, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RunnerDeniedRange) graphql.Marshaler {
+			return ec.marshalNRunnerDeniedRange2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedRangeᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_alwaysDenied(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunnerTargetPolicy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RunnerDeniedRange(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_warnings(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_warnings(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Warnings, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RunnerTargetWarning) graphql.Marshaler {
+			return ec.marshalNRunnerTargetWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarningᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_warnings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "RunnerTargetWarning")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_envOverrides(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_envOverrides(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EnvOverrides, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RunnerTargetsKey) graphql.Marshaler {
+			return ec.marshalNRunnerTargetsKey2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKeyᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_envOverrides(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "RunnerTargetsKey")
+}
+
+func (ec *executionContext) _RunnerTargetPolicy_truncated(ctx context.Context, field graphql.CollectedField, obj *model.RunnerTargetPolicy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RunnerTargetPolicy_truncated(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Truncated, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RunnerTargetPolicy_truncated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RunnerTargetPolicy", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _S3DestinationSettings_endpoint(ctx context.Context, field graphql.CollectedField, obj *model.S3DestinationSettings) (ret graphql.Marshaler) {
@@ -45061,6 +48062,29 @@ func (ec *executionContext) _ServerInfo_devMode(ctx context.Context, field graph
 	)
 }
 func (ec *executionContext) fieldContext_ServerInfo_devMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ServerInfo", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _ServerInfo_externalApiEnabled(ctx context.Context, field graphql.CollectedField, obj *model.ServerInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ServerInfo_externalApiEnabled(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExternalAPIEnabled, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_ServerInfo_externalApiEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("ServerInfo", field, false, false, "Boolean")
 }
 
@@ -50710,6 +53734,576 @@ func (ec *executionContext) fieldContext_WebAuthnStatus_rpId(_ context.Context, 
 	return graphql.NewScalarFieldContext("WebAuthnStatus", field, false, false, "String")
 }
 
+func (ec *executionContext) _WebdavCertificate_spkiSha256(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_spkiSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SpkiSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_spkiSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavCertificate_spkiSha256Base64(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_spkiSha256Base64(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SpkiSha256Base64, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_spkiSha256Base64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavCertificate_fingerprintSha256(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_fingerprintSha256(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.FingerprintSha256, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_fingerprintSha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavCertificate_notBefore(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_notBefore(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotBefore, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_notBefore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "Time")
+}
+
+func (ec *executionContext) _WebdavCertificate_notAfter(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_notAfter(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NotAfter, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_notAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "Time")
+}
+
+func (ec *executionContext) _WebdavCertificate_selfSigned(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_selfSigned(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SelfSigned, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_selfSigned(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _WebdavCertificate_pinnedAt(ctx context.Context, field graphql.CollectedField, obj *model.WebdavCertificate) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavCertificate_pinnedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinnedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavCertificate_pinnedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavCertificate", field, false, false, "Time")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_url(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_url(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.URL, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_flavor(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_flavor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Flavor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.WebdavFlavor) graphql.Marshaler {
+			return ec.marshalNWebdavFlavor2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_flavor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "WebdavFlavor")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_username(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_username(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_path(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_path(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_caBundlePem(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_caBundlePem(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CaBundlePem, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_caBundlePem(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "String")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_timeoutSeconds(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_timeoutSeconds(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.TimeoutSeconds, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *int) graphql.Marshaler {
+			return ec.marshalOInt2ᚖint(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_timeoutSeconds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "Int")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_hasPassword(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_hasPassword(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.HasPassword, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_hasPassword(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_trust(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_trust(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Trust, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.WebdavTrust) graphql.Marshaler {
+			return ec.marshalNWebdavTrust2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTrust(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_trust(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavDestinationSettings", field, false, false, "WebdavTrust")
+}
+
+func (ec *executionContext) _WebdavDestinationSettings_pinnedCertificate(ctx context.Context, field graphql.CollectedField, obj *model.WebdavDestinationSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavDestinationSettings_pinnedCertificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinnedCertificate, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavCertificate) graphql.Marshaler {
+			return ec.marshalOWebdavCertificate2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavCertificate(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavDestinationSettings_pinnedCertificate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WebdavDestinationSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_WebdavCertificate(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WebdavTestDetails_trust(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_trust(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Trust, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.WebdavTrust) graphql.Marshaler {
+			return ec.marshalNWebdavTrust2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTrust(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_trust(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "WebdavTrust")
+}
+
+func (ec *executionContext) _WebdavTestDetails_trusted(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_trusted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Trusted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_trusted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _WebdavTestDetails_certificate(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_certificate(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Certificate, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavCertificate) graphql.Marshaler {
+			return ec.marshalOWebdavCertificate2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavCertificate(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_certificate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WebdavTestDetails",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_WebdavCertificate(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WebdavTestDetails_pinMatches(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_pinMatches(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.PinMatches, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_pinMatches(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _WebdavTestDetails_server(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_server(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Server, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavServerKind) graphql.Marshaler {
+			return ec.marshalOWebdavServerKind2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavServerKind(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_server(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "WebdavServerKind")
+}
+
+func (ec *executionContext) _WebdavTestDetails_suggestedFlavor(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_suggestedFlavor(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SuggestedFlavor, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.WebdavFlavor) graphql.Marshaler {
+			return ec.marshalNWebdavFlavor2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_suggestedFlavor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "WebdavFlavor")
+}
+
+func (ec *executionContext) _WebdavTestDetails_uploadMode(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_uploadMode(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.UploadMode, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavUploadMode) graphql.Marshaler {
+			return ec.marshalOWebdavUploadMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavUploadMode(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_uploadMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "WebdavUploadMode")
+}
+
+func (ec *executionContext) _WebdavTestDetails_overwriteProtection(ctx context.Context, field graphql.CollectedField, obj *model.WebdavTestDetails) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_WebdavTestDetails_overwriteProtection(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.OverwriteProtection, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.WebdavOverwriteProbe) graphql.Marshaler {
+			return ec.marshalOWebdavOverwriteProbe2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavOverwriteProbe(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_WebdavTestDetails_overwriteProtection(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("WebdavTestDetails", field, false, false, "WebdavOverwriteProbe")
+}
+
 func (ec *executionContext) ___Directive_name(ctx context.Context, field graphql.CollectedField, obj *introspection.Directive) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -52084,6 +55678,76 @@ func UnmarshalConnectionSshInput(ctx context.Context, raw any) (model.Connection
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputCreateApiTokenInput(ctx context.Context, obj any) (model.CreateAPITokenInput, error) {
+	var it model.CreateAPITokenInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "jobIds", "expiresAt", "allowedCidrs", "allowAnyAddress"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "jobIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jobIds"))
+			data, err := ec.unmarshalNUUID2ᚕgithubᚗcomᚋgoogleᚋuuidᚐUUIDᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JobIds = data
+		case "expiresAt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expiresAt"))
+			data, err := ec.unmarshalNTime2timeᚐTime(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ExpiresAt = data
+		case "allowedCidrs":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowedCidrs"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowedCidrs = data
+		case "allowAnyAddress":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowAnyAddress"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AllowAnyAddress = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalCreateApiTokenInput unmarshals raw into the CreateApiTokenInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalCreateApiTokenInput(ctx context.Context, raw any) (model.CreateAPITokenInput, error) {
+	var out model.CreateAPITokenInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "CreateApiTokenInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputCreateConnectionInput(ctx context.Context, obj any) (model.CreateConnectionInput, error) {
 	var it model.CreateConnectionInput
 	if obj == nil {
@@ -52221,7 +55885,7 @@ func (ec *executionContext) unmarshalInputCreateDestinationInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "type", "noDelete", "disk", "s3", "sftp"}
+	fieldsInOrder := [...]string{"name", "type", "noDelete", "disk", "s3", "sftp", "webdav"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -52270,6 +55934,13 @@ func (ec *executionContext) unmarshalInputCreateDestinationInput(ctx context.Con
 				return it, err
 			}
 			it.Sftp = data
+		case "webdav":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("webdav"))
+			data, err := ec.unmarshalOWebdavDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Webdav = data
 		}
 	}
 	return it, nil
@@ -54125,7 +57796,7 @@ func (ec *executionContext) unmarshalInputUpdateDestinationInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "noDelete", "disk", "s3", "sftp"}
+	fieldsInOrder := [...]string{"name", "noDelete", "disk", "s3", "sftp", "webdav"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -54167,6 +57838,13 @@ func (ec *executionContext) unmarshalInputUpdateDestinationInput(ctx context.Con
 				return it, err
 			}
 			it.Sftp = data
+		case "webdav":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("webdav"))
+			data, err := ec.unmarshalOWebdavDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavDestinationInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Webdav = data
 		}
 	}
 	return it, nil
@@ -54618,6 +58296,90 @@ func UnmarshalUserFilter(ctx context.Context, raw any) (model.UserFilter, error)
 	return out, err
 }
 
+func (ec *executionContext) unmarshalInputWebdavDestinationInput(ctx context.Context, obj any) (model.WebdavDestinationInput, error) {
+	var it model.WebdavDestinationInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"url", "flavor", "username", "password", "path", "caBundlePem", "timeoutSeconds"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "url":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("url"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.URL = data
+		case "flavor":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("flavor"))
+			data, err := ec.unmarshalOWebdavFlavor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Flavor = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "path":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("path"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Path = data
+		case "caBundlePem":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("caBundlePem"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CaBundlePem = data
+		case "timeoutSeconds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("timeoutSeconds"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TimeoutSeconds = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalWebdavDestinationInput unmarshals raw into the WebdavDestinationInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalWebdavDestinationInput(ctx context.Context, raw any) (model.WebdavDestinationInput, error) {
+	var out model.WebdavDestinationInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "WebdavDestinationInput", raw, &out)
+	return out, err
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -54683,6 +58445,205 @@ func (ec *executionContext) _ActivityEvent(ctx context.Context, sel ast.Selectio
 		case "restore":
 			out.Values[i] = ec._ActivityEvent_restore(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var apiTokenImplementors = []string{"ApiToken"}
+
+func (ec *executionContext) _ApiToken(ctx context.Context, sel ast.SelectionSet, obj *model.APIToken) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, apiTokenImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ApiToken")
+		case "id":
+			out.Values[i] = ec._ApiToken_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._ApiToken_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prefix":
+			out.Values[i] = ec._ApiToken_prefix(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "jobs":
+			out.Values[i] = ec._ApiToken_jobs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hiddenJobCount":
+			out.Values[i] = ec._ApiToken_hiddenJobCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdBy":
+			out.Values[i] = ec._ApiToken_createdBy(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdByMe":
+			out.Values[i] = ec._ApiToken_createdByMe(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._ApiToken_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._ApiToken_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokedAt":
+			out.Values[i] = ec._ApiToken_revokedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "allowedCidrs":
+			out.Values[i] = ec._ApiToken_allowedCidrs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "allowAnyAddress":
+			out.Values[i] = ec._ApiToken_allowAnyAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastUsedAt":
+			out.Values[i] = ec._ApiToken_lastUsedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "lastSeenAt":
+			out.Values[i] = ec._ApiToken_lastSeenAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "lastSeenIp":
+			out.Values[i] = ec._ApiToken_lastSeenIp(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "lastSeenRefused":
+			out.Values[i] = ec._ApiToken_lastSeenRefused(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var apiTokenCreatorImplementors = []string{"ApiTokenCreator"}
+
+func (ec *executionContext) _ApiTokenCreator(ctx context.Context, sel ast.SelectionSet, obj *model.APITokenCreator) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, apiTokenCreatorImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ApiTokenCreator")
+		case "id":
+			out.Values[i] = ec._ApiTokenCreator_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "email":
+			out.Values[i] = ec._ApiTokenCreator_email(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayName":
+			out.Values[i] = ec._ApiTokenCreator_displayName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleted":
+			out.Values[i] = ec._ApiTokenCreator_deleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var apiTokenJobImplementors = []string{"ApiTokenJob"}
+
+func (ec *executionContext) _ApiTokenJob(ctx context.Context, sel ast.SelectionSet, obj *model.APITokenJob) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, apiTokenJobImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ApiTokenJob")
+		case "id":
+			out.Values[i] = ec._ApiTokenJob_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._ApiTokenJob_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleted":
+			out.Values[i] = ec._ApiTokenJob_deleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		default:
@@ -56494,6 +60455,44 @@ func (ec *executionContext) _CreateJobResult(ctx context.Context, sel ast.Select
 	return out
 }
 
+var createdApiTokenImplementors = []string{"CreatedApiToken"}
+
+func (ec *executionContext) _CreatedApiToken(ctx context.Context, sel ast.SelectionSet, obj *model.CreatedAPIToken) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, createdApiTokenImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CreatedApiToken")
+		case "token":
+			out.Values[i] = ec._CreatedApiToken_token(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "plaintext":
+			out.Values[i] = ec._CreatedApiToken_plaintext(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var createdUserImplementors = []string{"CreatedUser"}
 
 func (ec *executionContext) _CreatedUser(ctx context.Context, sel ast.SelectionSet, obj *model.CreatedUser) graphql.Marshaler {
@@ -56742,6 +60741,11 @@ func (ec *executionContext) _DestinationSettings(ctx context.Context, sel ast.Se
 			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
+		case "webdav":
+			out.Values[i] = ec._DestinationSettings_webdav(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -56835,6 +60839,11 @@ func (ec *executionContext) _DestinationTestResult(ctx context.Context, sel ast.
 			}
 		case "note":
 			out.Values[i] = ec._DestinationTestResult_note(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "webdav":
+			out.Values[i] = ec._DestinationTestResult_webdav(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
@@ -58314,6 +62323,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "createApiToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createApiToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokeApiToken":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_revokeApiToken(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateApiTokenAddresses":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateApiTokenAddresses(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "reloadConfig":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_reloadConfig(ctx, field)
@@ -58492,6 +62522,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "generateDestinationSshKeypair":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_generateDestinationSshKeypair(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinWebdavCertificate":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_pinWebdavCertificate(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "clearWebdavCertificatePin":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_clearWebdavCertificatePin(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -59907,6 +63951,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_serverInfo(ctx, field)
 				})
+		case "apiTokens":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_apiTokens(ctx, field)
+				})
 		case "auditLog":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -60032,6 +64082,12 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				true, true,
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_ssrfAllowlist(ctx, field)
+				})
+		case "runnerTargetPolicy":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_runnerTargetPolicy(ctx, field)
 				})
 		case "sharedChannels":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
@@ -61423,6 +65479,49 @@ func (ec *executionContext) _RunActor(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "apiToken":
+			out.Values[i] = ec._RunActor_apiToken(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var runApiTokenImplementors = []string{"RunApiToken"}
+
+func (ec *executionContext) _RunApiToken(ctx context.Context, sel ast.SelectionSet, obj *model.RunAPIToken) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runApiTokenImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunApiToken")
+		case "id":
+			out.Values[i] = ec._RunApiToken_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._RunApiToken_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -62123,6 +66222,82 @@ func (ec *executionContext) _RunWarning(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var runnerBastionTargetsImplementors = []string{"RunnerBastionTargets"}
+
+func (ec *executionContext) _RunnerBastionTargets(ctx context.Context, sel ast.SelectionSet, obj *model.RunnerBastionTargets) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runnerBastionTargetsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunnerBastionTargets")
+		case "bastion":
+			out.Values[i] = ec._RunnerBastionTargets_bastion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "targets":
+			out.Values[i] = ec._RunnerBastionTargets_targets(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var runnerDeniedRangeImplementors = []string{"RunnerDeniedRange"}
+
+func (ec *executionContext) _RunnerDeniedRange(ctx context.Context, sel ast.SelectionSet, obj *model.RunnerDeniedRange) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runnerDeniedRangeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunnerDeniedRange")
+		case "category":
+			out.Values[i] = ec._RunnerDeniedRange_category(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cidrs":
+			out.Values[i] = ec._RunnerDeniedRange_cidrs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var runnerHealthImplementors = []string{"RunnerHealth"}
 
 func (ec *executionContext) _RunnerHealth(ctx context.Context, sel ast.SelectionSet, obj *model.RunnerHealth) graphql.Marshaler {
@@ -62157,6 +66332,104 @@ func (ec *executionContext) _RunnerHealth(ctx context.Context, sel ast.Selection
 		case "maxConcurrentRuns":
 			out.Values[i] = ec._RunnerHealth_maxConcurrentRuns(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var runnerTargetPolicyImplementors = []string{"RunnerTargetPolicy"}
+
+func (ec *executionContext) _RunnerTargetPolicy(ctx context.Context, sel ast.SelectionSet, obj *model.RunnerTargetPolicy) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runnerTargetPolicyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunnerTargetPolicy")
+		case "available":
+			out.Values[i] = ec._RunnerTargetPolicy_available(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._RunnerTargetPolicy_reason(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "allowCidrs":
+			out.Values[i] = ec._RunnerTargetPolicy_allowCidrs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "allowHosts":
+			out.Values[i] = ec._RunnerTargetPolicy_allowHosts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "denyCidrs":
+			out.Values[i] = ec._RunnerTargetPolicy_denyCidrs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "denyHosts":
+			out.Values[i] = ec._RunnerTargetPolicy_denyHosts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bastionTargets":
+			out.Values[i] = ec._RunnerTargetPolicy_bastionTargets(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runSubnetPool":
+			out.Values[i] = ec._RunnerTargetPolicy_runSubnetPool(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "controlNetworks":
+			out.Values[i] = ec._RunnerTargetPolicy_controlNetworks(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "controlNetworksKnown":
+			out.Values[i] = ec._RunnerTargetPolicy_controlNetworksKnown(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "alwaysDenied":
+			out.Values[i] = ec._RunnerTargetPolicy_alwaysDenied(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "warnings":
+			out.Values[i] = ec._RunnerTargetPolicy_warnings(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "envOverrides":
+			out.Values[i] = ec._RunnerTargetPolicy_envOverrides(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "truncated":
+			out.Values[i] = ec._RunnerTargetPolicy_truncated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		default:
@@ -62567,6 +66840,11 @@ func (ec *executionContext) _ServerInfo(ctx context.Context, sel ast.SelectionSe
 			}
 		case "devMode":
 			out.Values[i] = ec._ServerInfo_devMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "externalApiEnabled":
+			out.Values[i] = ec._ServerInfo_externalApiEnabled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -64754,6 +69032,210 @@ func (ec *executionContext) _WebAuthnStatus(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var webdavCertificateImplementors = []string{"WebdavCertificate"}
+
+func (ec *executionContext) _WebdavCertificate(ctx context.Context, sel ast.SelectionSet, obj *model.WebdavCertificate) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, webdavCertificateImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WebdavCertificate")
+		case "spkiSha256":
+			out.Values[i] = ec._WebdavCertificate_spkiSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "spkiSha256Base64":
+			out.Values[i] = ec._WebdavCertificate_spkiSha256Base64(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fingerprintSha256":
+			out.Values[i] = ec._WebdavCertificate_fingerprintSha256(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notBefore":
+			out.Values[i] = ec._WebdavCertificate_notBefore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "notAfter":
+			out.Values[i] = ec._WebdavCertificate_notAfter(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "selfSigned":
+			out.Values[i] = ec._WebdavCertificate_selfSigned(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinnedAt":
+			out.Values[i] = ec._WebdavCertificate_pinnedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var webdavDestinationSettingsImplementors = []string{"WebdavDestinationSettings"}
+
+func (ec *executionContext) _WebdavDestinationSettings(ctx context.Context, sel ast.SelectionSet, obj *model.WebdavDestinationSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, webdavDestinationSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WebdavDestinationSettings")
+		case "url":
+			out.Values[i] = ec._WebdavDestinationSettings_url(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "flavor":
+			out.Values[i] = ec._WebdavDestinationSettings_flavor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._WebdavDestinationSettings_username(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "path":
+			out.Values[i] = ec._WebdavDestinationSettings_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "caBundlePem":
+			out.Values[i] = ec._WebdavDestinationSettings_caBundlePem(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "timeoutSeconds":
+			out.Values[i] = ec._WebdavDestinationSettings_timeoutSeconds(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "hasPassword":
+			out.Values[i] = ec._WebdavDestinationSettings_hasPassword(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "trust":
+			out.Values[i] = ec._WebdavDestinationSettings_trust(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pinnedCertificate":
+			out.Values[i] = ec._WebdavDestinationSettings_pinnedCertificate(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var webdavTestDetailsImplementors = []string{"WebdavTestDetails"}
+
+func (ec *executionContext) _WebdavTestDetails(ctx context.Context, sel ast.SelectionSet, obj *model.WebdavTestDetails) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, webdavTestDetailsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WebdavTestDetails")
+		case "trust":
+			out.Values[i] = ec._WebdavTestDetails_trust(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "trusted":
+			out.Values[i] = ec._WebdavTestDetails_trusted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "certificate":
+			out.Values[i] = ec._WebdavTestDetails_certificate(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "pinMatches":
+			out.Values[i] = ec._WebdavTestDetails_pinMatches(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "server":
+			out.Values[i] = ec._WebdavTestDetails_server(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "suggestedFlavor":
+			out.Values[i] = ec._WebdavTestDetails_suggestedFlavor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "uploadMode":
+			out.Values[i] = ec._WebdavTestDetails_uploadMode(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "overwriteProtection":
+			out.Values[i] = ec._WebdavTestDetails_overwriteProtection(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
 var __DirectiveImplementors = []string{"__Directive"}
 
 func (ec *executionContext) ___Directive(ctx context.Context, sel ast.SelectionSet, obj *introspection.Directive) graphql.Marshaler {
@@ -65130,6 +69612,54 @@ func (ec *executionContext) marshalNActivityEvent2ᚖgithubᚗcomᚋjlentinkᚋb
 		return graphql.Null
 	}
 	return ec._ActivityEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNApiToken2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx context.Context, sel ast.SelectionSet, v model.APIToken) graphql.Marshaler {
+	return ec._ApiToken(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNApiToken2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenᚄ(ctx context.Context, sel ast.SelectionSet, v []model.APIToken) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNApiToken2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPIToken(ctx context.Context, sel ast.SelectionSet, v *model.APIToken) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "ApiToken!")
+		return graphql.Null
+	}
+	return ec._ApiToken(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNApiTokenJob2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenJob(ctx context.Context, sel ast.SelectionSet, v model.APITokenJob) graphql.Marshaler {
+	return ec._ApiTokenJob(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNApiTokenJob2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenJobᚄ(ctx context.Context, sel ast.SelectionSet, v []model.APITokenJob) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNApiTokenJob2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenJob(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNArtifact2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐArtifact(ctx context.Context, sel ast.SelectionSet, v model.Artifact) graphql.Marshaler {
@@ -65529,6 +70059,11 @@ func (ec *executionContext) marshalNConnectionVersionInfo2ᚖgithubᚗcomᚋjlen
 	return ec._ConnectionVersionInfo(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNCreateApiTokenInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateAPITokenInput(ctx context.Context, v any) (model.CreateAPITokenInput, error) {
+	res, err := ec.unmarshalInputCreateApiTokenInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateConnectionInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateConnectionInput(ctx context.Context, v any) (model.CreateConnectionInput, error) {
 	res, err := ec.unmarshalInputCreateConnectionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -65565,6 +70100,14 @@ func (ec *executionContext) unmarshalNCreateTemporaryConnectionInput2githubᚗco
 func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreateUserInput(ctx context.Context, v any) (model.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCreatedApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreatedAPIToken(ctx context.Context, sel ast.SelectionSet, v *model.CreatedAPIToken) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "CreatedApiToken!")
+		return graphql.Null
+	}
+	return ec._CreatedApiToken(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNCreatedUser2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐCreatedUser(ctx context.Context, sel ast.SelectionSet, v *model.CreatedUser) graphql.Marshaler {
@@ -66978,12 +71521,150 @@ func (ec *executionContext) marshalNRunWarning2ᚕgithubᚗcomᚋjlentinkᚋbeku
 	return ret
 }
 
+func (ec *executionContext) marshalNRunnerBastionTargets2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerBastionTargets(ctx context.Context, sel ast.SelectionSet, v model.RunnerBastionTargets) graphql.Marshaler {
+	return ec._RunnerBastionTargets(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRunnerBastionTargets2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerBastionTargetsᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RunnerBastionTargets) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunnerBastionTargets2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerBastionTargets(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNRunnerDeniedCategory2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedCategory(ctx context.Context, v any) (model.RunnerDeniedCategory, error) {
+	var res model.RunnerDeniedCategory
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRunnerDeniedCategory2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedCategory(ctx context.Context, sel ast.SelectionSet, v model.RunnerDeniedCategory) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNRunnerDeniedRange2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedRange(ctx context.Context, sel ast.SelectionSet, v model.RunnerDeniedRange) graphql.Marshaler {
+	return ec._RunnerDeniedRange(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRunnerDeniedRange2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedRangeᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RunnerDeniedRange) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunnerDeniedRange2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerDeniedRange(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) marshalNRunnerHealth2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerHealth(ctx context.Context, sel ast.SelectionSet, v *model.RunnerHealth) graphql.Marshaler {
 	if v == nil {
 		graphql.AddInvalidNullError(ctx, "RunnerHealth!")
 		return graphql.Null
 	}
 	return ec._RunnerHealth(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRunnerTargetPolicy2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetPolicy(ctx context.Context, sel ast.SelectionSet, v *model.RunnerTargetPolicy) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RunnerTargetPolicy!")
+		return graphql.Null
+	}
+	return ec._RunnerTargetPolicy(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRunnerTargetWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarning(ctx context.Context, v any) (model.RunnerTargetWarning, error) {
+	var res model.RunnerTargetWarning
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRunnerTargetWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarning(ctx context.Context, sel ast.SelectionSet, v model.RunnerTargetWarning) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNRunnerTargetWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarningᚄ(ctx context.Context, v any) ([]model.RunnerTargetWarning, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]model.RunnerTargetWarning, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNRunnerTargetWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarning(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNRunnerTargetWarning2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarningᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RunnerTargetWarning) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunnerTargetWarning2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetWarning(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) unmarshalNRunnerTargetsKey2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKey(ctx context.Context, v any) (model.RunnerTargetsKey, error) {
+	var res model.RunnerTargetsKey
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRunnerTargetsKey2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKey(ctx context.Context, sel ast.SelectionSet, v model.RunnerTargetsKey) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNRunnerTargetsKey2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKeyᚄ(ctx context.Context, v any) ([]model.RunnerTargetsKey, error) {
+	vSlice := graphql.CoerceList(v)
+	var err error
+	res := make([]model.RunnerTargetsKey, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNRunnerTargetsKey2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKey(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNRunnerTargetsKey2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKeyᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RunnerTargetsKey) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunnerTargetsKey2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunnerTargetsKey(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalNS3ChecksumMode2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐS3ChecksumMode(ctx context.Context, v any) (model.S3ChecksumMode, error) {
@@ -67946,6 +72627,26 @@ func (ec *executionContext) marshalNWebAuthnStatus2ᚖgithubᚗcomᚋjlentinkᚋ
 	return ec._WebAuthnStatus(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNWebdavFlavor2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx context.Context, v any) (model.WebdavFlavor, error) {
+	var res model.WebdavFlavor
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWebdavFlavor2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx context.Context, sel ast.SelectionSet, v model.WebdavFlavor) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNWebdavTrust2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTrust(ctx context.Context, v any) (model.WebdavTrust, error) {
+	var res model.WebdavTrust
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWebdavTrust2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTrust(ctx context.Context, sel ast.SelectionSet, v model.WebdavTrust) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -68086,6 +72787,13 @@ func (ec *executionContext) marshalN__TypeKind2string(ctx context.Context, sel a
 		graphql.AddInvalidNullFromMarshaler(ctx, "__TypeKind!")
 	}
 	return res
+}
+
+func (ec *executionContext) marshalOApiTokenCreator2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAPITokenCreator(ctx context.Context, sel ast.SelectionSet, v *model.APITokenCreator) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ApiTokenCreator(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOArtifactFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐArtifactFilter(ctx context.Context, v any) (*model.ArtifactFilter, error) {
@@ -68777,6 +73485,13 @@ func (ec *executionContext) marshalORunActor2ᚖgithubᚗcomᚋjlentinkᚋbekup�
 	return ec._RunActor(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalORunApiToken2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunAPIToken(ctx context.Context, sel ast.SelectionSet, v *model.RunAPIToken) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RunApiToken(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalORunFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRunFilter(ctx context.Context, v any) (*model.RunFilter, error) {
 	if v == nil {
 		return nil, nil
@@ -69158,6 +73873,99 @@ func (ec *executionContext) unmarshalOUserFilter2ᚖgithubᚗcomᚋjlentinkᚋbe
 	}
 	res, err := ec.unmarshalInputUserFilter(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavCertificate2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavCertificate(ctx context.Context, sel ast.SelectionSet, v *model.WebdavCertificate) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._WebdavCertificate(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOWebdavDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavDestinationInput(ctx context.Context, v any) (*model.WebdavDestinationInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputWebdavDestinationInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavDestinationSettings2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavDestinationSettings(ctx context.Context, sel ast.SelectionSet, v *model.WebdavDestinationSettings) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._WebdavDestinationSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOWebdavFlavor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx context.Context, v any) (*model.WebdavFlavor, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.WebdavFlavor)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavFlavor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavFlavor(ctx context.Context, sel ast.SelectionSet, v *model.WebdavFlavor) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOWebdavOverwriteProbe2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavOverwriteProbe(ctx context.Context, v any) (*model.WebdavOverwriteProbe, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.WebdavOverwriteProbe)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavOverwriteProbe2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavOverwriteProbe(ctx context.Context, sel ast.SelectionSet, v *model.WebdavOverwriteProbe) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOWebdavServerKind2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavServerKind(ctx context.Context, v any) (*model.WebdavServerKind, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.WebdavServerKind)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavServerKind2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavServerKind(ctx context.Context, sel ast.SelectionSet, v *model.WebdavServerKind) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) marshalOWebdavTestDetails2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavTestDetails(ctx context.Context, sel ast.SelectionSet, v *model.WebdavTestDetails) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._WebdavTestDetails(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOWebdavUploadMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavUploadMode(ctx context.Context, v any) (*model.WebdavUploadMode, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.WebdavUploadMode)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWebdavUploadMode2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐWebdavUploadMode(ctx context.Context, sel ast.SelectionSet, v *model.WebdavUploadMode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

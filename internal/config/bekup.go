@@ -105,6 +105,9 @@ const (
 	DBOwnerRole = "bekup_owner"
 	// DBAppRole is the runtime role of serve and worker.
 	DBAppRole = "bekup_app"
+	// DBExternalRole is the optional role of `bekup external-api`
+	// (D-220): EXECUTE on the api schema's functions only.
+	DBExternalRole = "bekup_external"
 	// DefaultDBPort and DefaultDBName apply in fields mode.
 	DefaultDBPort = 5432
 	DefaultDBName = "bekup"

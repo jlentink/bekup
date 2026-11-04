@@ -17,15 +17,17 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 		Use:   "config",
 		Short: "Validate or print the effective configuration",
 	}
-	var runner bool
-	cmd.PersistentFlags().BoolVar(&runner, "runner", false, "use runner.toml instead of bekup.toml")
+	var which configFile
+	cmd.PersistentFlags().BoolVar(&which.runner, "runner", false, "use runner.toml instead of bekup.toml")
+	cmd.PersistentFlags().BoolVar(&which.externalAPI, "external-api", false, "use external-api.toml instead of bekup.toml")
+	cmd.MarkFlagsMutuallyExclusive("runner", "external-api")
 
 	validate := &cobra.Command{
 		Use:   "validate",
 		Short: "Load and validate the configuration; report every error at once",
 		Args:  cobra.NoArgs,
 		RunE: func(c *cobra.Command, _ []string) error {
-			return withConfig(c, g, runner, func(path string, dev bool, warnings []string, _ func(io.Writer) error) error {
+			return withConfig(c, g, which, func(path string, dev bool, warnings []string, _ func(io.Writer) error) error {
 				if path == "" {
 					path = "none (dev mode, built-in defaults)"
 				}
@@ -49,7 +51,7 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 			if !redacted {
 				return errors.New("config print only supports --redacted output; secrets are never printed")
 			}
-			return withConfig(c, g, runner, func(_ string, _ bool, _ []string, write func(io.Writer) error) error {
+			return withConfig(c, g, which, func(_ string, _ bool, _ []string, write func(io.Writer) error) error {
 				return write(c.OutOrStdout())
 			})
 		},
@@ -60,12 +62,22 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
-// withConfig loads bekup.toml or runner.toml, logs the loaded path and any
-// warnings to stderr, and passes the details to fn.
-func withConfig(c *cobra.Command, g *globalFlags, runner bool,
+// configFile selects the file of `bekup config` (bekup.toml by default).
+type configFile struct{ runner, externalAPI bool }
+
+// withConfig loads bekup.toml, runner.toml or external-api.toml, logs the
+// loaded path and any warnings to stderr, and passes the details to fn.
+func withConfig(c *cobra.Command, g *globalFlags, which configFile,
 	fn func(path string, dev bool, warnings []string, write func(io.Writer) error) error,
 ) error {
-	if runner {
+	if which.externalAPI {
+		res, _, err := loadExternalAPIConfig(c, g)
+		if err != nil {
+			return err
+		}
+		return fn(res.Path, res.Dev, res.Warnings, res.WriteRedacted)
+	}
+	if which.runner {
 		res, _, err := loadRunnerConfig(c, g)
 		if err != nil {
 			return err

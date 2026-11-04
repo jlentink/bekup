@@ -5,6 +5,7 @@ import {
   DatabaseBackup,
   HardDrive,
   History,
+  KeyRound,
   LayoutDashboard,
   RotateCcw,
   ScrollText,
@@ -67,6 +68,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       { to: "/admin/users", label: "Users", icon: Users, roles: ADMIN },
       { to: "/admin/channels", label: "Shared channels", icon: Bell, roles: ADMIN },
+      { to: "/admin/api-access", label: "API access", icon: KeyRound, roles: ADMIN },
       { to: "/admin/audit", label: "Audit log", icon: ScrollText, roles: ADMIN },
       { to: "/admin/settings", label: "Settings", icon: Settings, roles: ADMIN },
     ],

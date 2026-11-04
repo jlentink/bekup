@@ -97,7 +97,7 @@ func TestInitWritesDeployment(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if st.Image != a.Image.String() || st.Proxy != proxy || len(st.SecretGroups) != 3 || st.Ownership != OwnershipNone {
+			if st.Image != a.Image.String() || st.Proxy != proxy || len(st.SecretGroups) != 4 || st.Ownership != OwnershipNone {
 				t.Fatalf("state %+v", st)
 			}
 			if _, err := Check(CheckOptions{Dir: dir, Version: "1.2.3", Ownership: OwnershipNone, sys: (&fakeSys{}).env()}); err != nil {

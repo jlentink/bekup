@@ -81,6 +81,10 @@ type Options struct {
 	TLS *tls.Config
 	// Now overrides the clock (tests).
 	Now func() time.Time
+	// Sources are the sources of the loaded config's keys
+	// (config.Result.Sources); GetTargetPolicy reports the [targets] keys
+	// set by environment variables (D-223). nil: none known.
+	Sources map[string]config.Source
 
 	// impl replaces the service implementation (tests).
 	impl runnerpb.RunnerServiceServer
@@ -228,6 +232,10 @@ func New(opts Options) (*Server, error) {
 			runner = exec
 		}
 		svc.ops = newOperations(val, runner, checker, opts.Logger)
+		svc.ops.policy = targetPolicyInfo{runPool: runPool.Masked(), envKeys: targetEnvOverrides(opts.Sources)}
+		if exec != nil {
+			svc.ops.policy.ready = exec.Ready
+		}
 		impl = svc
 	}
 	runnerpb.RegisterRunnerServiceServer(s.grpc, impl)

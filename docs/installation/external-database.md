@@ -47,6 +47,11 @@ docker compose run --rm migrate migrate check
 docker compose up -d
 ```
 
+With the opt-in external API enabled (the wizard's last question, or
+`--external-api`) the bootstrap command also carries
+`--external-password-file /run/secrets/bekup_external_database_password`
+and creates its role too ([the external API role](#the-external-api-role)).
+
 The same with flags (no terminal needed; `--db-auth` defaults to
 `bootstrap`, `--db-location` to `remote`, `--db-tls` to `verify-ca-file`,
 `--db-port` to 5432, `--db-name` to `bekup`):
@@ -416,6 +421,43 @@ statements bootstrap would run. It grants `bekup_owner` to the executing
 account for its duration and revokes it as its last statement: if psql stops
 with an error in between, run `REVOKE bekup_owner FROM CURRENT_USER;` as the
 same account (the script's header says so too).
+
+### The external API role
+
+The opt-in [external API](../guides/external-api.md) (D-220) connects as a
+third login role, `bekup_external`, which may do nothing but call bekup's
+`api.*` functions (`bekup migrate up` grants them, every run again). With
+the external API enabled (`setup init|upgrade --external-api`) setup
+generates its password into `secrets/bekup_external_database_password`,
+which compose mounts into `migrate` (and `setup-web-db`) and the
+`external-api` service at `/run/secrets/bekup_external_database_password`,
+and writes `external-api.toml` with the server and TLS choice of
+`bekup.toml` and `user = "bekup_external"`.
+
+- **Bootstrap** creates it with `--external-password-file`; setup prints the
+  command with the flag (the browser setup passes it itself):
+
+  ```sh
+  docker compose run --rm migrate db bootstrap --admin-user <admin> \
+    --external-password-file /run/secrets/bekup_external_database_password
+  docker compose run --rm migrate
+  ```
+
+  On an existing deployment (bekup's roles exist already) add
+  `--adopt-existing-roles`: the existing roles and the database are checked,
+  never changed, and only `bekup_external` is created. Bootstrap then logs
+  in as `bekup_external` and runs its role checks.
+- **For a DBA:** `bekup db roles-sql ... --external-password-file <file>`
+  includes the role (with `--passwords prompt`: `--external-role`); setup's
+  `dba-sql` choice writes it into `bekup-roles.sql` when the external API is
+  enabled at install time.
+- **Single-account mode** does not support it: one account holding every
+  role would not isolate the external API, so bootstrap, `roles-sql` and
+  setup refuse it.
+
+`LOGIN NOINHERIT CONNECTION LIMIT 20`, no other attribute or membership;
+restrict it to TLS in your `pg_hba.conf` (`hostssl ... bekup_external ...
+scram-sha-256`), like bekup's other roles.
 
 ### Single-account mode (weakened, opt-in)
 

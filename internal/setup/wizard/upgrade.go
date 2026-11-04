@@ -42,6 +42,9 @@ func UpgradeConfirm(ui UI) func(*setup.UpgradeSummary) error {
 		if s.Following {
 			b.WriteString("The image follows a tag (NOT pinned by digest, D-212).\n")
 		}
+		if s.ExternalAPI {
+			fmt.Fprintf(&b, "External API: enabled (external-api.toml, .env %s=%s and the profile %s); the remaining steps are printed afterwards\n", setup.ExternalAPIEnvVar, setup.ExternalAPIEnabled, setup.ExternalAPIProfile)
+		}
 		for _, f := range s.Findings {
 			fmt.Fprintf(&b, "%s\n", f)
 		}

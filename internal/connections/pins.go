@@ -208,6 +208,11 @@ func verifyChain(chain []*x509.Certificate, anchor *x509.Certificate, host strin
 		invErr  x509.CertificateInvalidError
 	)
 	switch {
+	case errors.As(err, &hostErr) && len(chain[0].DNSNames) == 0 && len(chain[0].IPAddresses) == 0:
+		// Go (and every current TLS client) ignores the subject CN: a
+		// certificate that names its host only there never matches.
+		return fieldErr("certIndex", "the server's certificate has no Subject Alternative Name: TLS clients ignore the CN (%q), so it is not valid for %q. Reissue it with subjectAltName=DNS:%s (or IP:%s for an address)",
+			chain[0].Subject.CommonName, host, host, host)
 	case errors.As(err, &hostErr):
 		return fieldErr("certIndex", "the server's certificate is not valid for the host name %q (it would fail the runner's check)", host)
 	case errors.As(err, &invErr) && invErr.Reason == x509.Expired:

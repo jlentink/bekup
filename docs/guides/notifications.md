@@ -55,7 +55,7 @@ problem events (✱) also go to e-mail; webhooks are opt-in.**
 | | `destination.test_failed` ✱ | admins, maintainers |
 | Job & configuration | `job.created`, `job.updated`, `job.disabled`, `job.enabled`, `job.deleted`, `job.encryption_changed` ✱ | admins, maintainers, the job's owners |
 | | `connection.pin_changed` ✱, `connection.tls_downgraded` ✱, `connection.host_key_changed` ✱ | admins, maintainers |
-| Security (mandatory) | `security.account` ✱: a new sign-in (at most one per address and day), password changed or reset (also by `bekup admin reset-password`), a second factor added, removed or reset (also by `bekup admin reset-2fa`), a recovery code used or regenerated, the account or its second factor locked, your role changed, a passkey with a backwards signature counter (possible clone) | only you |
+| Security (mandatory) | `security.account` ✱: a new sign-in (at most one per address and day), password changed or reset (also by `bekup admin reset-password`), a second factor added, removed or reset (also by `bekup admin reset-2fa`), a recovery code used or regenerated, the account or its second factor locked, your role changed, a passkey with a backwards signature counter (possible clone), an external API token you created presented from an address outside its allowlist | only you |
 | | `security.system` ✱: see [Security alerts](#security-alerts) | admins |
 
 **Security events cannot be turned off:** they always go to your inbox and
@@ -84,7 +84,8 @@ description and repeat rule, D-198).
 | Alert | Severity | Sent |
 |---|---|---|
 | A security setting weakened (opt-out: connection TLS downgrade, job encryption off) | error | every time |
-| Database certificate pin, SSH tunnel host key or SFTP host key mismatch (possible impersonation) | critical | once per connection/destination and day |
+| Database certificate pin, SSH tunnel host key, SFTP host key or WebDAV certificate pin mismatch (possible impersonation) | critical | once per connection/destination and day |
+| The certificate pin of a WebDAV destination removed (`destination.tls_pin_cleared`) | warning | every time |
 | A backup file failed its verification before a restore (possible tampering), while staging or when the restore is requested | critical | every time |
 | Audit chain verification failed (hourly check, see below) | critical | once per finding |
 | Signed audit head could not be exported | error | once a day |
@@ -101,10 +102,15 @@ description and repeat rule, D-198).
 | The SSRF allowlist widened (an admin added CIDRs or host names, or scopes to an entry, that outbound connections may reach; the alert says so when users' personal webhooks gained access; D-196, D-198) | error | every time |
 | A configuration reload weakened security (`config_reload_weakened`: an applied `bekup.toml` change widened `trusted_proxies`, added a name to `trusted_proxy_hosts` or widened the `[netguard]` list, raised a rate, size or GraphQL limit, raised the lockout threshold or shortened a lockout, lowered a password bound, raised the retention deletion cap or the webhook failure threshold, shortened the partial cleanup age or turned `retention.dry_run` off; the alert names the keys, never values; D-200) | error | once per reload request and set of keys |
 | A passkey with a backwards signature counter (possible clone) | error | every time |
+| An external API token presented from an address outside its address allowlist and refused (`api_token_ip_denied`: the token may be stolen; names the token and the address; also sent to the token's creator as an account alert; D-220) | error | once per token and 10 minutes |
+| An external API token created (`api_token_created`: names the token, the number of jobs, whether it is limited to networks or allows any address, and the expiry date; D-220) | warning | every time |
+| An external API token allowed from any address, when it is created so or its address list is replaced by "any address" (`api_token_any_address`: no client address allowlist protects it; a change names who made it and whether that was the token's creator; D-220) | error | every time |
+| An external API token's address list widened: a network its old list did not cover was added (`api_token_addresses_widened`: names the token, the number of networks and who changed it, stressed when that was not the token's creator; the token's creator always gets it as an account alert too, also when "any address" was chosen; D-220) | warning | every time |
 | A download link presented after use, after expiry, by another session or without access | warning | once per link |
 | bekup running over plain HTTP outside dev mode, or with a weakened app-database TLS mode (D-095, D-100) | error | at startup and once a day |
 | bekup running in single-account database mode (`insecure_db_roles`: one database account runs migrations and the app, so a compromised server process could alter the schema and the audit log; D-207) | error | at startup and once a day |
 | bekup running an image that follows a tag instead of a digest (`unpinned_image`: `ghcr.io/jlentink/bekup:latest`, so whoever moves the tag decides which code runs; set up so, or reported by the runner for its own container image; D-212) | warning | at startup (or when the runner first reports it) and once a day |
+| Another container took the external API's network alias (`external_api_alias_conflict`: in the own-proxy shapes with the external API enabled, serve finds `bekup-external-api` on your proxy's Docker network resolving to more than one container or to serve, so requests with API tokens your proxy sends to `http://bekup-external-api:8081` may reach another container; lists every address; D-220) | critical | once per set of addresses and day (checked every 20 s) |
 | Another container took serve's network alias (`serve_alias_conflict`: in the own-proxy shapes `bekup-serve` on your proxy's Docker network also resolves to a container that is not serve, so requests your proxy sends to `http://bekup-serve:8080` may reach it; the alert lists that container's addresses; `/readyz` fails until it is gone; D-215) | critical | once per set of addresses and day (checked every 20 s) |
 | Failed sign-in burst: ≥ 20 failures from one address, ≥ 10 on one account or ≥ 100 in total within 15 minutes | error | once per address / account / instance and 15 minutes |
 | An internal certificate (runner mTLS client and CA, app-database CA and client certificate, the runner's server certificate) or a pinned database certificate expires within 30 days (warning), within 7 days (error) or expired | warning / error / critical | once per threshold and certificate |

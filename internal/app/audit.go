@@ -222,6 +222,35 @@ func (a *App) recordServeAliasConflict(ctx context.Context, foreign []netip.Addr
 	return nil
 }
 
+// recordExternalAPIAliasConflict records
+// security.external_api_alias_conflict (the audit observer raises the
+// security alert): the external API's alias bekup-external-api on the
+// proxy network resolves to more than one container or to serve (L2 of
+// the D-220 review). An error makes httpserver retry at the next
+// resolution.
+func (a *App) recordExternalAPIAliasConflict(ctx context.Context, addrs []netip.Addr) error {
+	out := make([]string, 0, len(addrs))
+	for _, f := range addrs {
+		out = append(out, f.String())
+	}
+	cctx, cancel := context.WithTimeout(ctx, startupTimeout(a.opts.Config))
+	defer cancel()
+	_, err := a.auditor.Record(cctx, audit.Event{
+		Actor:      audit.SystemActor(),
+		Action:     audit.ActionSecurityExternalAPIAliasConflict,
+		TargetType: "server",
+		Details: audit.Details{
+			"alias":     httpserver.ExternalAPIAlias,
+			"addresses": out,
+			"process":   a.processName(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("record %s: %w", audit.ActionSecurityExternalAPIAliasConflict, err)
+	}
+	return nil
+}
+
 // processName is "serve" or "worker" (audit details).
 func (a *App) processName() string {
 	if a.opts.Mode == ModeWorker {

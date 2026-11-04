@@ -16,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
 	"github.com/jlentink/bekup/internal/storage/sftp"
+	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
 // DestinationConfig is the offline description of a destination for
@@ -23,12 +24,13 @@ import (
 // paths, read with config.ReadSecretFile; the destination is always opened
 // in no-delete mode and reindex never writes to it.
 type DestinationConfig struct {
-	// Type is "disk", "s3" or "sftp".
-	Type string        `toml:"type"`
-	Disk *DiskSection  `toml:"disk"`
-	S3   *S3Section    `toml:"s3"`
-	SFTP *SFTPSection  `toml:"sftp"`
-	Net  *GuardSection `toml:"netguard"`
+	// Type is "disk", "s3", "sftp" or "webdav".
+	Type   string         `toml:"type"`
+	Disk   *DiskSection   `toml:"disk"`
+	S3     *S3Section     `toml:"s3"`
+	SFTP   *SFTPSection   `toml:"sftp"`
+	WebDAV *WebDAVSection `toml:"webdav"`
+	Net    *GuardSection  `toml:"netguard"`
 }
 
 // DiskSection describes a disk destination.
@@ -70,6 +72,24 @@ type SFTPSection struct {
 	PasswordFile         string `toml:"password_file"`
 }
 
+// WebDAVSection describes a WebDAV destination (D-222).
+type WebDAVSection struct {
+	// URL is the https collection URL (generic) or the server root
+	// (nextcloud).
+	URL string `toml:"url"`
+	// Flavor is "generic" (default) or "nextcloud".
+	Flavor       string `toml:"flavor"`
+	Username     string `toml:"username"`
+	PasswordFile string `toml:"password_file"`
+	Path         string `toml:"path"`
+	CABundleFile string `toml:"ca_bundle_file"`
+	// PinnedCertificateFile (PEM) pins the server certificate: it is then
+	// the only trust anchor, and its key must match.
+	PinnedCertificateFile string `toml:"pinned_certificate_file"`
+	// AllowHTTP permits an http:// URL (test setups only; logged).
+	AllowHTTP bool `toml:"allow_http"`
+}
+
 // GuardSection is the SSRF guard allowlist for the destination's host
 // (private addresses are blocked unless listed, as in [netguard]).
 type GuardSection struct {
@@ -101,13 +121,13 @@ func ParseDestinationConfig(data []byte) (*DestinationConfig, error) {
 		return nil, fmt.Errorf("destination config: %w", err)
 	}
 	sections := 0
-	for _, set := range []bool{c.Disk != nil, c.S3 != nil, c.SFTP != nil} {
+	for _, set := range []bool{c.Disk != nil, c.S3 != nil, c.SFTP != nil, c.WebDAV != nil} {
 		if set {
 			sections++
 		}
 	}
 	if sections != 1 {
-		return nil, errors.New("destination config: exactly one of [disk], [s3] or [sftp] is required")
+		return nil, errors.New("destination config: exactly one of [disk], [s3], [sftp] or [webdav] is required")
 	}
 	switch {
 	case c.Type == "disk" && c.Disk != nil:
@@ -131,8 +151,15 @@ func ParseDestinationConfig(data []byte) (*DestinationConfig, error) {
 		if c.SFTP.PassphraseFile != "" && c.SFTP.PrivateKeyFile == "" {
 			return nil, errors.New("destination config: sftp.private_key_passphrase_file needs sftp.private_key_file")
 		}
+	case c.Type == "webdav" && c.WebDAV != nil:
+		if c.WebDAV.PasswordFile == "" {
+			return nil, errors.New("destination config: webdav.password_file is required")
+		}
+		if c.WebDAV.CABundleFile != "" && c.WebDAV.PinnedCertificateFile != "" {
+			return nil, errors.New("destination config: set webdav.ca_bundle_file or webdav.pinned_certificate_file, not both")
+		}
 	default:
-		return nil, errors.New(`destination config: type must be "disk", "s3" or "sftp" and match its section`)
+		return nil, errors.New(`destination config: type must be "disk", "s3", "sftp" or "webdav" and match its section`)
 	}
 	return &c, nil
 }
@@ -171,6 +198,8 @@ func (c *DestinationConfig) Open(ctx context.Context, logger *slog.Logger) (stor
 		return c.openS3(ctx, guard, logger)
 	case "sftp":
 		return c.openSFTP(guard, logger)
+	case "webdav":
+		return c.openWebDAV(guard, logger)
 	}
 	return nil, errors.New("destination config: unknown type")
 }
@@ -225,6 +254,40 @@ func (c *DestinationConfig) openSFTP(guard *netguard.Guard, logger *slog.Logger)
 		HostKeyPin: sftp.HostKeyPin{Type: s.HostKeyType, FingerprintSHA256: s.HostKeyFingerprint, AuthorizedKey: s.HostKeyAuthorizedKey},
 		BasePath:   s.BasePath, Dir: s.Dir, NoDelete: true, Guard: guard, Logger: logger,
 	})
+}
+
+func (c *DestinationConfig) openWebDAV(guard *netguard.Guard, logger *slog.Logger) (storage.Destination, error) {
+	s := c.WebDAV
+	cfg := webdav.Config{
+		URL: s.URL, Flavor: webdav.Flavor(s.Flavor), Username: s.Username, Path: s.Path,
+		NoDelete: true, AllowHTTP: s.AllowHTTP, Guard: guard, Logger: logger,
+	}
+	if s.CABundleFile != "" {
+		pem, err := config.ReadPublicFile(s.CABundleFile)
+		if err != nil {
+			return nil, fmt.Errorf("webdav.ca_bundle_file: %w", err)
+		}
+		cfg.CABundlePEM = pem
+	}
+	if s.PinnedCertificateFile != "" {
+		pem, err := config.ReadPublicFile(s.PinnedCertificateFile)
+		if err != nil {
+			return nil, fmt.Errorf("webdav.pinned_certificate_file: %w", err)
+		}
+		cert, err := webdav.ParseCertificatePEM(pem)
+		if err != nil {
+			return nil, fmt.Errorf("webdav.pinned_certificate_file: %w", err)
+		}
+		info := webdav.CertificateOf(cert)
+		cfg.Pin = &webdav.Pin{CertificatePEM: info.PEM(), SPKISHA256: info.SPKISHA256}
+	}
+	pw, err := readSecret(s.PasswordFile, "webdav.password_file")
+	if err != nil {
+		return nil, err
+	}
+	// webdav.Open takes ownership of the password (and destroys it).
+	cfg.Password = pw
+	return webdav.Open(cfg)
 }
 
 // closeHook runs after once the wrapped destination is closed.

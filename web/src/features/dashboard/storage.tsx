@@ -6,7 +6,7 @@ import { formatBytes } from "@/lib/format";
 import type { StorageRow } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
-const TYPE_LABEL = { DISK: "Disk", S3: "S3", SFTP: "SFTP" } as const;
+const TYPE_LABEL = { DISK: "Disk", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" } as const;
 
 /**
  * Bytes of present artifacts per destination (destinationUsage, an exact

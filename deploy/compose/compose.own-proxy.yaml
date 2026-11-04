@@ -46,6 +46,7 @@
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
+#   CI client ──your proxy /api/v1/──its network (bekup-external-api)──> external-api ──backend──> app database  (opt-in profile external-api)
 
 name: bekup
 
@@ -382,6 +383,10 @@ services:
       # skips the wildcard warning for exactly that address. No port is
       # published.
       BEKUP_LISTEN_SHAPE: own-proxy-join
+      # "enabled" when this deployment runs the opt-in external API (D-220;
+      # written to .env by `setup init|upgrade --external-api`): the UI then
+      # shows the curl examples of a job's API access, otherwise a note.
+      BEKUP_EXTERNAL_API: ${BEKUP_EXTERNAL_API:-}
     configs:
       - source: bekup_toml
         target: /etc/bekup/bekup.toml
@@ -444,6 +449,80 @@ services:
         # argon2id (64 MiB x argon2_max_concurrent) + S3 multipart buffers
         # (part size x concurrency) dominate memory; raise with care.
         limits: { cpus: "2.00", memory: 2G, pids: 512 }
+
+  # -------------------------------------------------------------------------
+  # external-api: the token-authenticated REST API for CI pipelines (D-220),
+  # OPT-IN: it runs only with the compose profile external-api, which
+  # `setup init|upgrade --external-api` adds to COMPOSE_PROFILES in .env
+  # (with BEKUP_EXTERNAL_API=enabled). serve's hardening, plain HTTP on YOUR
+  # proxy's Docker network as http://bekup-external-api:8081 (route
+  # https://<domain>/api/v1/ there, preferably to this container's name;
+  # setup prints the settings) and the `backend` network to the database,
+  # nothing else: no egress network, no runner, no metrics, no published
+  # port. YOUR proxy's network usually routes outward, so the external API
+  # can reach the internet (and every container on that network) through
+  # it: put your proxy's backends on an internal network (`docker network
+  # create --internal`; the proxy keeps its published ports on another
+  # one) to take that away. It reads only external-api.toml and its
+  # database login: never bekup.toml, the master key or a certificate, and
+  # it connects only as bekup_external, which may do nothing but call the
+  # api.* functions. It refuses to start until that role exists and
+  # `migrate up` granted it the api schema (docs/guides/external-api.md).
+  # -------------------------------------------------------------------------
+  external-api:
+    <<: *bekup-hardening
+    profiles: [external-api]
+    command: [external-api]
+    environment:
+      # Written to .env by `bekup setup` (D-212): the external API refuses
+      # to start on another version than setup prepared.
+      BEKUP_SETUP_VERSION: ${BEKUP_SETUP_VERSION:-}
+      BEKUP_IMAGE_MODE: ${BEKUP_IMAGE_MODE:-}
+      # The own-proxy shape (D-215, D-220): Docker assigns the address on
+      # your proxy's network, so external-api.toml [listen] address =
+      # "0.0.0.0:8081" with allow_wildcard. With this literal the external
+      # API accepts connections only on its own address on your proxy's
+      # network (the alias bekup-external-api; plus loopback for the
+      # healthcheck) and closes every other one. No port is published.
+      BEKUP_LISTEN_SHAPE: own-proxy-join
+    configs:
+      - source: external_api_toml
+        target: /etc/bekup/external-api.toml
+    secrets:
+      # postgres://bekup_external:...@postgres:5432/bekup ([database]
+      # url_file of external-api.toml, the default path).
+      - bekup_external_database_url
+      # App DB TLS (D-100): [database] tls_ca_file default path.
+      - source: bekup_db_ca_crt
+        target: bekup_db_ca.crt
+    networks:
+      proxy:
+        # YOUR reverse proxy's Docker network (BEKUP_PROXY_NETWORK). Your
+        # proxy forwards https://<domain>/api/v1/ to
+        # http://bekup-external-api:8081; external-api.toml [listen]
+        # trusted_proxy_hosts names your proxy's container (link mode:
+        # trusted_proxies its fixed address), so only it may forward client
+        # addresses (X-Forwarded-For).
+        aliases: [bekup-external-api]
+      backend: {}
+    # NO `ports:`. Only the reverse proxy reaches it.
+    healthcheck:
+      # Exec form (distroless): GET /healthz on listen.address.
+      test: ["CMD", "/usr/local/bin/bekup", "healthcheck", "external-api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits: { cpus: "0.50", memory: 128M, pids: 64 }
 
   # -------------------------------------------------------------------------
   # runner: the ONLY component with Docker access (D-003). Starts the
@@ -550,6 +629,12 @@ services:
       # keys): the role passwords as Docker secret files.
       POSTGRES_BEKUP_OWNER_PASSWORD_FILE: /run/secrets/bekup_owner_password
       POSTGRES_BEKUP_APP_PASSWORD_FILE: /run/secrets/bekup_app_password
+      # Read only by deploy/postgres/init/20-bekup-external.sh (D-220): the
+      # login role of the opt-in external API, created on a new volume only
+      # when BEKUP_EXTERNAL_API=enabled (an existing volume: the documented
+      # `docker compose exec postgres ... --reload`, docs/guides/external-api.md).
+      POSTGRES_BEKUP_EXTERNAL_API: ${BEKUP_EXTERNAL_API:-}
+      POSTGRES_BEKUP_EXTERNAL_PASSWORD_FILE: /run/secrets/bekup_external_password
       # Read only by deploy/postgres/entrypoint.sh (these are the defaults).
       POSTGRES_BEKUP_TLS_CERT_FILE: /run/secrets/postgres.crt
       POSTGRES_BEKUP_TLS_KEY_FILE: /run/secrets/postgres.key
@@ -568,6 +653,9 @@ services:
       - postgres_password
       - bekup_owner_password
       - bekup_app_password
+      # Always mounted (setup always writes it); used only when the external
+      # API is enabled.
+      - bekup_external_password
       - source: postgres_crt
         target: postgres.crt
       - source: postgres_key
@@ -576,7 +664,8 @@ services:
         target: postgres_ca.crt
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      # Creates bekup_owner / bekup_app and the bekup database on first start.
+      # Creates bekup_owner / bekup_app and the bekup database (and, with the
+      # external API enabled, bekup_external) on first start.
       - type: bind
         source: ./deploy/postgres/init
         target: /docker-entrypoint-initdb.d
@@ -626,7 +715,7 @@ networks:
   proxy:
     external: true
     name: ${BEKUP_PROXY_NETWORK:-bekup-proxy}
-  # serve/migrate <-> postgres.
+  # serve/migrate/external-api <-> postgres.
   backend:
     internal: true
   # serve <-> runner (mTLS gRPC).
@@ -669,6 +758,10 @@ configs:
     file: ./bekup.toml
   runner_toml:
     file: ./runner.toml
+  # The opt-in external API (profile external-api, D-220); written by
+  # `setup init|upgrade --external-api` (needed only while it runs).
+  external_api_toml:
+    file: ./external-api.toml
 
 # ---------------------------------------------------------------------------
 # Secrets: file-based Docker secrets from ./secrets/ (gitignored), mounted at
@@ -695,6 +788,13 @@ secrets:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_owner_password
   bekup_app_password:
     file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_app_password
+  # The opt-in external API (D-220): the bekup_external role's password
+  # (postgres; the role exists only once the API is enabled) and its URL
+  # postgres://bekup_external:...@postgres:5432/bekup (external-api only).
+  bekup_external_password:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_external_password
+  bekup_external_database_url:
+    file: ${BEKUP_KEYS_DIR:-./secrets}/bekup_external_database_url
   # Written by certs-init. The CA *key* (./secrets/certs/ca/ca.key) is never
   # given to any long-running service. Each component gets the CA trust
   # bundle from its own directory (it holds both CAs during a CA rotation),

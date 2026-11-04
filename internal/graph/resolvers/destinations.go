@@ -2,9 +2,12 @@ package resolvers
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
+	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
 // Destination resolvers (task 2.12, D-131). Admins get the full non-secret
@@ -38,6 +42,7 @@ func destinationError(err error) error {
 		nr *destinations.NotReadyError
 		rl *destinations.RateLimitedError
 		hk *destinations.HostKeyFetchError
+		cf *destinations.CertificateFetchError
 	)
 	switch {
 	case err == nil:
@@ -63,8 +68,12 @@ func destinationError(err error) error {
 		return apierror.New(apierror.Conflict, "the destination is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
 	case errors.Is(err, destinations.ErrInUse):
 		return apierror.New(apierror.Conflict, "the destination is still used by a job")
+	case errors.As(err, &cf):
+		return apierror.New(apierror.ConnectionFailed, cf.Message)
+	case errors.Is(err, destinations.ErrCertificateChanged):
+		return apierror.New(apierror.Conflict, "the server now presents another certificate than the one you confirmed; test again and compare the new fingerprint")
 	case errors.Is(err, destinations.ErrWrongType):
-		return apierror.New(apierror.Validation, "only SFTP destinations have host keys and SSH keys")
+		return apierror.New(apierror.Validation, "only SFTP destinations have host keys and SSH keys, and only WebDAV destinations have certificate pins")
 	default:
 		return err
 	}
@@ -126,6 +135,9 @@ func (r *Resolver) createDestination(ctx context.Context, in model.CreateDestina
 	if ci.Disk, ci.S3, ci.SFTP, err = destinationInputs(in.Disk, in.S3, in.Sftp); err != nil {
 		return nil, err
 	}
+	if ci.WebDAV, err = webdavInput(in.Webdav); err != nil {
+		return nil, err
+	}
 	d, err := svc.Create(ctx, actor, ci)
 	if err != nil {
 		return nil, destinationError(err)
@@ -141,13 +153,17 @@ func (r *Resolver) updateDestination(ctx context.Context, id uuid.UUID, in model
 	// Setting credentials is its own operation (checked in addition to
 	// destination.update, which already requires step-up).
 	if (in.S3 != nil && in.S3.SecretAccessKey != nil) ||
-		(in.Sftp != nil && (in.Sftp.Password != nil || in.Sftp.PrivateKey != nil || in.Sftp.PrivateKeyPassphrase != nil)) {
+		(in.Sftp != nil && (in.Sftp.Password != nil || in.Sftp.PrivateKey != nil || in.Sftp.PrivateKeyPassphrase != nil)) ||
+		(in.Webdav != nil && in.Webdav.Password != nil) {
 		if err := r.Authz.Authorize(ctx, authz.OpDestinationSecretUpdate); err != nil {
 			return nil, err
 		}
 	}
 	ui := destinations.UpdateInput{Name: in.Name, NoDelete: in.NoDelete}
 	if ui.Disk, ui.S3, ui.SFTP, err = destinationInputs(in.Disk, in.S3, in.Sftp); err != nil {
+		return nil, err
+	}
+	if ui.WebDAV, err = webdavInput(in.Webdav); err != nil {
 		return nil, err
 	}
 	d, err := svc.Update(ctx, actor, id, ui)
@@ -189,7 +205,127 @@ func (r *Resolver) testDestination(ctx context.Context, id uuid.UUID) (*model.De
 		n := res.Note
 		out.Note = &n
 	}
+	if w := res.WebDAV; w != nil {
+		out.Webdav = webdavTestModel(w)
+	}
 	return out, nil
+}
+
+func (r *Resolver) pinWebdavCertificate(ctx context.Context, id uuid.UUID, fingerprint string) (*model.Destination, error) {
+	svc, _, actor, err := r.destinationCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d, err := svc.PinCertificate(ctx, actor, id, fingerprint)
+	if err != nil {
+		return nil, destinationError(err)
+	}
+	return destinationModel(&d, true), nil
+}
+
+func (r *Resolver) clearWebdavCertificatePin(ctx context.Context, id uuid.UUID) (*model.Destination, error) {
+	svc, _, actor, err := r.destinationCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d, err := svc.ClearCertificatePin(ctx, actor, id)
+	if err != nil {
+		return nil, destinationError(err)
+	}
+	return destinationModel(&d, true), nil
+}
+
+// webdavTestModel converts the WebDAV findings of a test.
+func webdavTestModel(w *destinations.WebDAVTest) *model.WebdavTestDetails {
+	m := &model.WebdavTestDetails{
+		Trust: webdavTrustModel(w.Trust), Trusted: w.Trusted, PinMatches: w.PinMatches,
+		SuggestedFlavor: model.WebdavFlavorGeneric,
+	}
+	if w.Certificate != nil {
+		m.Certificate = webdavCertificateModel(w.Certificate, nil)
+	}
+	switch w.Server {
+	case webdav.ServerNextcloud:
+		v := model.WebdavServerKindNextcloud
+		m.Server, m.SuggestedFlavor = &v, model.WebdavFlavorNextcloud
+	case webdav.ServerOwnCloud:
+		v := model.WebdavServerKindOwncloud
+		m.Server, m.SuggestedFlavor = &v, model.WebdavFlavorNextcloud
+	case webdav.ServerUnknown:
+	}
+	switch w.UploadMode {
+	case webdav.UploadSingle:
+		v := model.WebdavUploadModeSingle
+		m.UploadMode = &v
+	case webdav.UploadChunked:
+		v := model.WebdavUploadModeChunked
+		m.UploadMode = &v
+	case webdav.UploadUnknown:
+	}
+	switch w.Overwrite {
+	case destinations.OverwriteRefused:
+		v := model.WebdavOverwriteProbeRefused
+		m.OverwriteProtection = &v
+	case destinations.OverwriteIgnored:
+		v := model.WebdavOverwriteProbeIgnored
+		m.OverwriteProtection = &v
+	}
+	return m
+}
+
+func webdavTrustModel(t webdav.Trust) model.WebdavTrust {
+	switch t {
+	case webdav.TrustCABundle:
+		return model.WebdavTrustCaBundle
+	case webdav.TrustPinned:
+		return model.WebdavTrustPinned
+	case webdav.TrustPlainHTTP:
+		return model.WebdavTrustPlainHTTP
+	default:
+		return model.WebdavTrustSystem
+	}
+}
+
+// webdavCertificateModel converts certificate facts (pinnedAt for a pin).
+func webdavCertificateModel(c *webdav.Certificate, pinnedAt *time.Time) *model.WebdavCertificate {
+	return &model.WebdavCertificate{
+		SpkiSha256: hex.EncodeToString(c.SPKISHA256), SpkiSha256Base64: base64.StdEncoding.EncodeToString(c.SPKISHA256),
+		FingerprintSha256: hex.EncodeToString(c.SHA256), NotBefore: c.NotBefore, NotAfter: c.NotAfter,
+		SelfSigned: c.SelfSigned, PinnedAt: pinnedAt,
+	}
+}
+
+func webdavFlavorFromModel(f *model.WebdavFlavor) (string, bool) {
+	if f == nil {
+		return string(webdav.FlavorGeneric), true
+	}
+	switch *f {
+	case model.WebdavFlavorGeneric:
+		return string(webdav.FlavorGeneric), true
+	case model.WebdavFlavorNextcloud:
+		return string(webdav.FlavorNextcloud), true
+	default:
+		return "", false
+	}
+}
+
+// webdavInput converts the WebDAV input (nil when absent).
+func webdavInput(in *model.WebdavDestinationInput) (*destinations.WebDAVInput, error) {
+	if in == nil {
+		return nil, nil
+	}
+	flavor, ok := webdavFlavorFromModel(in.Flavor)
+	if !ok {
+		return nil, apierror.Invalid("webdav.flavor", "unknown flavor")
+	}
+	timeout := 0
+	if in.TimeoutSeconds != nil {
+		timeout = *in.TimeoutSeconds
+	}
+	return &destinations.WebDAVInput{
+		URL: in.URL, Flavor: flavor, Username: in.Username, Path: derefString(in.Path),
+		CABundlePEM: derefString(in.CaBundlePem), TimeoutSeconds: timeout, Password: secretBytes(in.Password),
+	}, nil
 }
 
 func (r *Resolver) fetchDestinationHostKey(ctx context.Context, id uuid.UUID) (*model.SSHHostKey, error) {
@@ -239,6 +375,8 @@ func destinationTypeFromModel(t model.DestinationType) (destinations.Type, bool)
 		return destinations.TypeS3, true
 	case model.DestinationTypeSftp:
 		return destinations.TypeSFTP, true
+	case model.DestinationTypeWebdav:
+		return destinations.TypeWebDAV, true
 	default:
 		return "", false
 	}
@@ -250,6 +388,8 @@ func destinationTypeModel(t destinations.Type) model.DestinationType {
 		return model.DestinationTypeS3
 	case destinations.TypeSFTP:
 		return model.DestinationTypeSftp
+	case destinations.TypeWebDAV:
+		return model.DestinationTypeWebdav
 	default:
 		return model.DestinationTypeDisk
 	}
@@ -456,6 +596,33 @@ func destinationModel(d *destinations.Destination, full bool) *model.Destination
 			}
 		}
 		set.Sftp = s
+	case d.WebDAV != nil:
+		c := d.WebDAV
+		s := &model.WebdavDestinationSettings{
+			URL: c.URL, Flavor: model.WebdavFlavorGeneric, Username: c.Username, Path: c.Path,
+			CaBundlePem: nonEmpty(c.CABundlePEM), HasPassword: d.HasPassword, Trust: model.WebdavTrustSystem,
+		}
+		if c.Flavor == string(webdav.FlavorNextcloud) {
+			s.Flavor = model.WebdavFlavorNextcloud
+		}
+		if c.TimeoutSeconds > 0 {
+			to := c.TimeoutSeconds
+			s.TimeoutSeconds = &to
+		}
+		u, uerr := webdav.ParseURL(c.URL, true)
+		switch {
+		case uerr == nil && u.Scheme() == "http":
+			s.Trust = model.WebdavTrustPlainHTTP
+		case d.TLSPin != nil:
+			s.Trust = model.WebdavTrustPinned
+		case c.CABundlePEM != "":
+			s.Trust = model.WebdavTrustCaBundle
+		}
+		if p := d.TLSPin; p != nil && p.Certificate != nil {
+			at := p.SetAt
+			s.PinnedCertificate = webdavCertificateModel(p.Certificate, &at)
+		}
+		set.Webdav = s
 	}
 	m.Settings = set
 	return m

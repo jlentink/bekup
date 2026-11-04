@@ -193,6 +193,14 @@ type DestinationResult struct {
 	Info storage.ObjectInfo
 }
 
+// Message describes a dropped target's failure for users (run logs): the
+// code's fixed message followed by the curated, secret-free detail the
+// backend or the fan-out attached (storage.WithDetail), never Err's raw
+// text.
+func (r DestinationResult) Message() string {
+	return storage.Describe(r.Code, r.Err)
+}
+
 // Result describes a pipeline run. Run returns it also on error, with the
 // destination outcomes known so far.
 type Result struct {

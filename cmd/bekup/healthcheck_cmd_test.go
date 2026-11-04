@@ -18,13 +18,13 @@ func TestHealthzURL(t *testing.T) {
 		"[fd00::10]:8080":           "http://[fd00::10]:8080/healthz",
 		"bekup.internal.example:80": "http://bekup.internal.example:80/healthz",
 	} {
-		got, err := healthzURL(in)
+		got, err := healthzURL("server.listen", in)
 		if err != nil || got != want {
 			t.Errorf("healthzURL(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
 	for _, bad := range []string{"", "8080", "host:", "[::1"} {
-		if _, err := healthzURL(bad); err == nil {
+		if _, err := healthzURL("server.listen", bad); err == nil {
 			t.Errorf("healthzURL(%q) accepted", bad)
 		}
 	}

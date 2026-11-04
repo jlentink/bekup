@@ -17,6 +17,7 @@ bekup config validate [flags]
 ```
       --config string      config file path (or BEKUP_CONFIG); a missing explicit file is an error
       --dev                dev mode (or BEKUP_DEV=1): relaxed guardrails, never use in production
+      --external-api       use external-api.toml instead of bekup.toml
       --log-level string   log level: debug, info, warn or error (overrides log.level)
       --runner             use runner.toml instead of bekup.toml
 ```

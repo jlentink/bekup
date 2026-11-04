@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/missed"
+	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
@@ -15,8 +17,8 @@ import (
 	"github.com/jlentink/bekup/internal/scheduler"
 )
 
-// poolHeadroom is the number of connections River's notifier, producers and
-// serve's own traffic need beside the queue workers.
+// poolHeadroom is the number of connections River's producers, elector and
+// pollers and serve's own traffic need beside the queue workers.
 const poolHeadroom = 4
 
 // newQueue builds the River client (task 3.4, D-145). With workers it is a
@@ -115,9 +117,45 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	if err := a.registerSecurityChecks(ws); err != nil {
 		return err
 	}
+	// External API run requests and access denials (D-220): decided
+	// requests and processed denials are pruned after 30 days.
+	if err := apiaccess.RegisterPrune(ws, a.pool); err != nil {
+		return err
+	}
 	// Temporary restore connections (task 4.4): expiry / after-restore
 	// cleanup with crypto-shredding.
 	return connections.RegisterCleanup(ws, a.connections)
+}
+
+// newAPIConsumer adds the consumer of the external API's run requests
+// and access denials (D-220) where the workers run: after the job service, on the bus that
+// carries bekup_api_requests (serve: the shared bus; worker: its own).
+func (a *App) newAPIConsumer(bus *pubsub.Bus) error {
+	if a.jobs == nil {
+		return errors.New("app: the API run request consumer needs the job service")
+	}
+	c, err := apiaccess.NewConsumer(apiaccess.ConsumerOptions{
+		DB: a.pool, Runner: a.jobs, Auditor: a.auditor, Bus: bus, Metrics: a.metrics, Logger: a.opts.Logger,
+	})
+	if err != nil {
+		return err
+	}
+	a.components = append(a.components, c)
+	return nil
+}
+
+// newAPITokens builds the external API token management service of the
+// GraphQL API (D-220; serve only) on the central policy and the alerting
+// auditor.
+func (a *App) newAPITokens() error {
+	svc, err := apiaccess.NewService(apiaccess.ServiceOptions{
+		DB: a.pool, Auditor: a.auditor, Authorizer: a.policy, Logger: a.opts.Logger,
+	})
+	if err != nil {
+		return err
+	}
+	a.apiTokens = svc
+	return nil
 }
 
 // queueInserter resolves the queue client late: workers are built before

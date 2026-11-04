@@ -49,7 +49,7 @@ export function GettingStarted({
     {
       icon: HardDrive,
       title: "Add a destination",
-      body: "Where encrypted backups go: a disk path, an S3 bucket or an SFTP server.",
+      body: "Where encrypted backups go: a disk path, an S3 bucket, an SFTP server or a WebDAV folder.",
       done: destinations > 0,
       to: "/destinations/new",
       action: "Add a destination",

@@ -1,6 +1,6 @@
 import { useMutation } from "@apollo/client/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Cloud, FolderTree, Loader2, MapPinned, Server } from "lucide-react";
+import { Cloud, FolderTree, Globe, Loader2, MapPinned, Server, ShieldAlert } from "lucide-react";
 import { useId, useMemo } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { Link, useNavigate } from "react-router";
@@ -30,6 +30,7 @@ import {
   buildSchema,
   type DestinationFormValues,
   effectiveSftpAuth,
+  effectiveWebdavPasswordAction,
   emptyValues,
   FORM_FIELDS,
   type Original,
@@ -38,6 +39,7 @@ import {
   toCreateInput,
   toUpdateInput,
   valuesFrom,
+  webdavNeedsPassword,
 } from "./form-model";
 import {
   CHECKSUM_LABEL,
@@ -54,11 +56,12 @@ import {
   DestinationsListQuery,
   UpdateDestinationMutation,
 } from "./operations";
+import { FLAVOR_DESCRIPTION, FLAVOR_LABEL, PATH_HELP, URL_HELP, WT } from "./webdav-text";
 
 const textarea =
   "w-full rounded-md border border-input bg-surface px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-surface-sunken";
 
-const TYPE_ICON = { S3: Cloud, SFTP: Server, DISK: FolderTree } as const;
+const TYPE_ICON = { S3: Cloud, SFTP: Server, WEBDAV: Globe, DISK: FolderTree } as const;
 
 type FormApi = ReturnType<typeof useForm<DestinationFormValues>>;
 
@@ -95,6 +98,7 @@ function TextField({
   mono = false,
   type = "text",
   className,
+  inputMode,
 }: {
   form: FormApi;
   name:
@@ -115,13 +119,19 @@ function TextField({
     | "sftp.basePath"
     | "sftp.dir"
     | "sftp.password"
-    | "sftp.privateKeyPassphrase";
+    | "sftp.privateKeyPassphrase"
+    | "webdav.url"
+    | "webdav.username"
+    | "webdav.password"
+    | "webdav.path"
+    | "webdav.timeoutSeconds";
   label: string;
   description?: string;
   placeholder?: string;
   mono?: boolean;
   type?: "text" | "password";
   className?: string;
+  inputMode?: "numeric";
 }) {
   return (
     <FormField
@@ -136,6 +146,7 @@ function TextField({
               autoComplete={type === "password" ? "new-password" : "off"}
               spellCheck={false}
               {...(placeholder ? { placeholder } : {})}
+              {...(inputMode ? { inputMode } : {})}
               className={cn(mono && "font-mono text-xs")}
               {...field}
             />
@@ -152,7 +163,7 @@ function TypePicker({ form }: { form: FormApi }) {
   const group = useId();
   const type = useWatch({ control: form.control, name: "type" });
   return (
-    <fieldset className="grid gap-3 sm:grid-cols-3">
+    <fieldset className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <legend className="sr-only">Destination type</legend>
       {TYPES.map((t) => {
         const Icon = TYPE_ICON[t];
@@ -505,6 +516,141 @@ function SftpFields({ form, original }: { form: FormApi; original: Original | un
   );
 }
 
+function FlavorPicker({ form }: { form: FormApi }) {
+  const group = useId();
+  const flavor = useWatch({ control: form.control, name: "webdav.flavor" });
+  const error = form.formState.errors.webdav?.flavor?.message;
+  return (
+    <fieldset
+      className="flex flex-col gap-2"
+      aria-describedby={error ? `${group}-error` : undefined}
+    >
+      <legend className="mb-1 text-sm font-medium">{WT.form.flavor}</legend>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(["GENERIC", "NEXTCLOUD"] as const).map((f) => {
+          const id = `${group}-${f}`;
+          return (
+            <label
+              key={f}
+              htmlFor={id}
+              className={cn(
+                "flex cursor-pointer flex-col gap-1.5 rounded-md border bg-card p-3.5 transition-colors hover:border-border-strong",
+                flavor === f && "border-primary ring-2 ring-primary/20",
+              )}
+            >
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id={id}
+                  type="radio"
+                  name={group}
+                  value={f}
+                  checked={flavor === f}
+                  onChange={() => {
+                    form.setValue("webdav.flavor", f);
+                    form.clearErrors("webdav.flavor");
+                  }}
+                  className="size-4 accent-primary"
+                />
+                {FLAVOR_LABEL[f]}
+              </span>
+              <span className="text-xs text-muted-foreground">{FLAVOR_DESCRIPTION[f]}</span>
+            </label>
+          );
+        })}
+      </div>
+      {error ? (
+        <p id={`${group}-error`} className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </fieldset>
+  );
+}
+
+function WebdavFields({ form, original }: { form: FormApi; original: Original | undefined }) {
+  const values = useWatch({ control: form.control }) as DestinationFormValues;
+  const flavor = values.webdav.flavor;
+  const stored = original?.settings?.webdav;
+  const reentry = webdavNeedsPassword(values, original);
+  const action = effectiveWebdavPasswordAction(values, original);
+  return (
+    <>
+      <FormGroup legend={WT.form.serverLegend} lead={WT.form.serverLead}>
+        <FlavorPicker form={form} />
+        <TextField
+          form={form}
+          name="webdav.url"
+          label={WT.form.url}
+          placeholder={URL_HELP[flavor].placeholder}
+          description={URL_HELP[flavor].description}
+          mono
+        />
+        <TextField
+          form={form}
+          name="webdav.path"
+          label={WT.form.path}
+          description={PATH_HELP[flavor]}
+          mono
+        />
+        {stored?.trust === "PINNED" ? (
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <ShieldAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+            <span>{WT.form.pinNote}</span>
+          </p>
+        ) : null}
+        <LocationNote editing={Boolean(original)} />
+      </FormGroup>
+      <FormGroup legend={WT.form.signInLegend} lead={WT.form.signInLead}>
+        <TextField form={form} name="webdav.username" label={WT.form.username} mono />
+        <WriteOnlyField
+          label={WT.form.password}
+          stored={stored?.hasPassword === true}
+          action={action}
+          onAction={(a) => {
+            form.setValue("webdav.passwordAction", a === "clear" ? "keep" : a);
+            form.setValue("webdav.password", "");
+            form.clearErrors("webdav.password");
+          }}
+          reentry={reentry ? WT.form.reentry : undefined}
+        >
+          <TextField
+            form={form}
+            name="webdav.password"
+            label={stored?.hasPassword ? WT.form.newPassword : WT.form.password}
+            description={WT.form.passwordHint}
+            type="password"
+          />
+        </WriteOnlyField>
+      </FormGroup>
+      <FormGroup legend={WT.form.tlsLegend} lead={WT.form.tlsLead}>
+        <FormField
+          control={form.control}
+          name="webdav.caBundlePem"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{WT.form.caBundle}</FormLabel>
+              <FormControl>
+                <textarea rows={4} spellCheck={false} className={textarea} {...field} />
+              </FormControl>
+              <FormDescription>{WT.form.caBundleHint}</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <TextField
+          form={form}
+          name="webdav.timeoutSeconds"
+          label={WT.form.timeout}
+          description={WT.form.timeoutHint}
+          placeholder="60"
+          inputMode="numeric"
+          className="sm:max-w-xs"
+        />
+      </FormGroup>
+    </>
+  );
+}
+
 /** Create or edit a destination (admins; step-up). */
 export function DestinationForm({ original }: { original?: Original }) {
   const editing = original !== undefined;
@@ -538,13 +684,18 @@ export function DestinationForm({ original }: { original?: Original }) {
         toast.success(
           v.type === "SFTP"
             ? "Destination created. Next: confirm the server's host key."
-            : "Destination created. Test it before the first backup.",
+            : v.type === "WEBDAV"
+              ? "Destination created. Test it: a self-signed certificate can be pinned from the result."
+              : "Destination created. Test it before the first backup.",
         );
         void navigate(id ? `/destinations/${id}` : "/destinations");
       }
     } catch (err) {
       if (!applyFieldErrors(err, form.setError, FORM_FIELDS, SERVER_FIELDS)) {
         reportActionError(err);
+      } else if (form.getFieldState("webdav.password").error) {
+        // Open the write-only input so the server's reason is visible.
+        form.setValue("webdav.passwordAction", "set");
       }
     }
   };
@@ -605,6 +756,7 @@ export function DestinationForm({ original }: { original?: Original }) {
         ) : null}
         {type === "S3" ? <S3Fields form={form} original={original} /> : null}
         {type === "SFTP" ? <SftpFields form={form} original={original} /> : null}
+        {type === "WEBDAV" ? <WebdavFields form={form} original={original} /> : null}
 
         <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background/95 py-4 backdrop-blur-sm">
           <Button asChild variant="outline">

@@ -1,4 +1,4 @@
--- Backup destinations (task 2.12, D-131). Only internal/destinations uses
+-- Backup destinations (task 2.12, D-131; WebDAV D-222). Only internal/destinations uses
 -- these queries; secret_enc is sealed under AAD destinations:<id>:secret.
 
 -- name: ListDestinations :many
@@ -29,8 +29,9 @@ VALUES (@id, @name, @type, @config, @secret_enc, @no_delete,
         @object_lock_mode, @object_lock_retention_days, @created_by)
 RETURNING *;
 
--- UpdateDestination replaces the mutable fields. The host-key pin is
--- cleared when clear_host_key is true (host or port changed).
+-- UpdateDestination replaces the mutable fields. The SFTP host-key pin is
+-- cleared when clear_host_key is true (host or port changed), the WebDAV
+-- certificate pin when clear_tls_pin is true (the URL changed, D-222).
 -- name: UpdateDestination :one
 UPDATE destinations
 SET name = @name,
@@ -43,8 +44,33 @@ SET name = @name,
     host_key_fingerprint = CASE WHEN @clear_host_key::boolean THEN NULL ELSE host_key_fingerprint END,
     host_key_authorized_key = CASE WHEN @clear_host_key::boolean THEN NULL ELSE host_key_authorized_key END,
     host_key_confirmed_at = CASE WHEN @clear_host_key::boolean THEN NULL ELSE host_key_confirmed_at END,
-    host_key_confirmed_by = CASE WHEN @clear_host_key::boolean THEN NULL ELSE host_key_confirmed_by END
+    host_key_confirmed_by = CASE WHEN @clear_host_key::boolean THEN NULL ELSE host_key_confirmed_by END,
+    tls_pin_sha256 = CASE WHEN @clear_tls_pin::boolean THEN NULL ELSE tls_pin_sha256 END,
+    tls_pin_certificate = CASE WHEN @clear_tls_pin::boolean THEN NULL ELSE tls_pin_certificate END,
+    tls_pin_set_at = CASE WHEN @clear_tls_pin::boolean THEN NULL ELSE tls_pin_set_at END,
+    tls_pin_set_by = CASE WHEN @clear_tls_pin::boolean THEN NULL ELSE tls_pin_set_by END
 WHERE id = @id AND deleted_at IS NULL
+RETURNING *;
+
+-- SetDestinationTLSPin pins a WebDAV destination's server certificate
+-- (D-222; only after the service captured it again and compared it).
+-- name: SetDestinationTLSPin :one
+UPDATE destinations
+SET tls_pin_sha256 = @tls_pin_sha256,
+    tls_pin_certificate = @tls_pin_certificate,
+    tls_pin_set_at = now(),
+    tls_pin_set_by = @set_by
+WHERE id = @id AND deleted_at IS NULL AND type = 'webdav'
+RETURNING *;
+
+-- ClearDestinationTLSPin removes a WebDAV destination's certificate pin.
+-- name: ClearDestinationTLSPin :one
+UPDATE destinations
+SET tls_pin_sha256 = NULL,
+    tls_pin_certificate = NULL,
+    tls_pin_set_at = NULL,
+    tls_pin_set_by = NULL
+WHERE id = @id AND deleted_at IS NULL AND type = 'webdav'
 RETURNING *;
 
 -- name: SetDestinationHostKey :one

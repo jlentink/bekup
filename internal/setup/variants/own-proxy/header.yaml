@@ -46,3 +46,4 @@
 #   serve ──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
 #   runner ──targets──> target databases   (runner only; serve can never reach them)
 #   serve ──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded in the app)
+#   CI client ──your proxy /api/v1/──its network (bekup-external-api)──> external-api ──backend──> app database  (opt-in profile external-api)

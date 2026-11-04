@@ -8,7 +8,9 @@ Prints a psql script that creates the roles bekup_owner and bekup_app and bekup'
 PostgreSQL 15+ server (D-207). With --passwords verifier (default) the roles get SCRAM-SHA-256
 verifiers of the passwords in --owner-password-file and --app-password-file: the passwords
 themselves are never printed, but the verifiers are sensitive (keep the output private). With
---passwords prompt the script asks for them with psql's \password instead. Output: stdout only.
+--passwords prompt the script asks for them with psql's \password instead. --external-password-file
+(or --external-role with prompts) also creates bekup_external, the login role of the optional
+external API (D-220; not with single-account mode). Output: stdout only.
 
 ```
 bekup db roles-sql [flags]
@@ -17,12 +19,14 @@ bekup db roles-sql [flags]
 ### Options
 
 ```
-      --app-password-file string     file with the bekup_app password (database.password_file)
-      --create-extensions            also create the citext extension as the admin (servers where it is not trusted)
-      --database string              name of bekup's database (database.name) (default "bekup")
-  -h, --help                         help for roles-sql
-      --owner-password-file string   file with the bekup_owner password (database.owner_password_file)
-      --passwords string             verifier: embed SCRAM verifiers of the password files; prompt: psql asks for the passwords (default "verifier")
+      --app-password-file string        file with the bekup_app password (database.password_file)
+      --create-extensions               also create the citext extension as the admin (servers where it is not trusted)
+      --database string                 name of bekup's database (database.name) (default "bekup")
+      --external-password-file string   also create bekup_external (external API, D-220) with the password in this file
+      --external-role                   with --passwords prompt: also create bekup_external (external API, D-220)
+  -h, --help                            help for roles-sql
+      --owner-password-file string      file with the bekup_owner password (database.owner_password_file)
+      --passwords string                verifier: embed SCRAM verifiers of the password files; prompt: psql asks for the passwords (default "verifier")
 ```
 
 ### Options inherited from parent commands

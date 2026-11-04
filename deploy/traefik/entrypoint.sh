@@ -14,6 +14,9 @@
 #   ACME_EMAIL               ACME account e-mail (required in acme mode)
 #   ACME_CA_SERVER           ACME directory URL (default: Let's Encrypt prod)
 #   PROXY_HTTPS_PUBLIC_PORT  public HTTPS port for the redirect (default 443)
+#   BEKUP_EXTERNAL_API       "enabled": also route /api/v1/ to the opt-in
+#                            external API (dynamic/external-api.yml.tmpl,
+#                            D-220); empty: no such route
 set -eu
 
 src=/etc/traefik/bekup
@@ -26,6 +29,7 @@ mode="${PROXY_TLS_MODE:-acme}"
 email="${ACME_EMAIL:-}"
 ca="${ACME_CA_SERVER:-https://acme-v02.api.letsencrypt.org/directory}"
 port="${PROXY_HTTPS_PUBLIC_PORT:-443}"
+external_api="${BEKUP_EXTERNAL_API:-}"
 
 # DNS name: labels of [a-z0-9-], at least one dot, max 253 characters.
 if ! { printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' &&
@@ -35,6 +39,11 @@ fi
 if ! { printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 ]; }; then
     die "PROXY_HTTPS_PUBLIC_PORT must be a port number"
 fi
+
+case "$external_api" in
+    "" | enabled) ;;
+    *) die "BEKUP_EXTERNAL_API must be 'enabled' or empty (it is written by bekup setup)" ;;
+esac
 
 case "$mode" in
     acme)
@@ -73,9 +82,15 @@ fi
 # Dynamic configuration (file provider).
 sed -e "s|__BEKUP_DOMAIN__|${domain}|g" "$src/dynamic/bekup.yml.tmpl" >"$out/dynamic/bekup.yml"
 cp "$src/dynamic/tls.yml" "$out/dynamic/tls.yml"
+if [ "$external_api" = enabled ]; then
+    sed -e "s|__BEKUP_DOMAIN__|${domain}|g" "$src/dynamic/external-api.yml.tmpl" >"$out/dynamic/external-api.yml"
+fi
 if [ "$mode" = static ]; then
     cp "$src/dynamic/static-certs.yml" "$out/dynamic/static-certs.yml"
 fi
 
 echo "traefik-entrypoint: serving https://${domain} (TLS mode: ${mode})"
+if [ "$external_api" = enabled ]; then
+    echo "traefik-entrypoint: routing https://${domain}/api/v1/ to the external API"
+fi
 exec traefik --configFile="$out/traefik.yml"

@@ -53,6 +53,9 @@ type Destination struct {
 	exclusive atomic.Bool
 	// testNoHardlink disables hardlink@openssh.com (tests only).
 	testNoHardlink bool
+	// sizeDelays are the waits between Put's stored-size checks
+	// (sizeRetryDelays; shorter in tests).
+	sizeDelays []time.Duration
 	// fallbackWarned limits the no-hardlink warning to once.
 	fallbackWarned atomic.Bool
 }
@@ -77,7 +80,7 @@ func Open(cfg Config) (*Destination, error) {
 		cfg.Auth.destroy()
 		return nil, err
 	}
-	return &Destination{s: s, creds: creds, dialMu: make(chan struct{}, 1)}, nil
+	return &Destination{s: s, creds: creds, dialMu: make(chan struct{}, 1), sizeDelays: sizeRetryDelays}, nil
 }
 
 // Capabilities implements storage.Destination.
@@ -232,20 +235,18 @@ func (d *Destination) Put(ctx context.Context, key storage.Key, r io.Reader, opt
 		return storage.ObjectInfo{}, err
 	}
 	if sess.fsync {
+		// fsync needs the open handle.
 		if err := f.Sync(); err != nil {
 			return storage.ObjectInfo{}, mapErr("sftp: sync object", err)
 		}
-	}
-	st, err := f.Stat()
-	if err != nil {
-		return storage.ObjectInfo{}, mapErr("sftp: stat object", err)
 	}
 	fileClosed = true
 	if err := f.Close(); err != nil {
 		return storage.ObjectInfo{}, mapErr("sftp: close object", err)
 	}
-	if st.Size() != n {
-		return storage.ObjectInfo{}, fmt.Errorf("%w: the server stored %d of %d bytes", storage.ErrChecksumMismatch, st.Size(), n)
+	st, err := d.storedSize(ctx, sess, tmp, n)
+	if err != nil {
+		return storage.ObjectInfo{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return storage.ObjectInfo{}, err
@@ -261,6 +262,60 @@ func (d *Destination) Put(ctx context.Context, key storage.Key, r io.Reader, opt
 		SHA256:      sum,
 		ContentType: opts.ContentType,
 	}, nil
+}
+
+// sizeRetryDelays are the waits between the stored-size checks of Put
+// (5 checks over about 3 s).
+var sizeRetryDelays = []time.Duration{200 * time.Millisecond, 400 * time.Millisecond, 800 * time.Millisecond, 1600 * time.Millisecond}
+
+// storedSize checks that the closed temporary file tmp holds all n bytes
+// and returns its attributes. It stats the path, not the handle:
+// cloud-backed SFTP gateways (TransIP STACK on ownCloud and similar)
+// report a stale or zero size for an open handle and may commit an upload
+// asynchronously after the close, so a file that is still short or not
+// yet visible is checked again a few times with backoff. A size that stays
+// different fails with ErrChecksumMismatch.
+func (d *Destination) storedSize(ctx context.Context, sess *session, tmp string, n int64) (os.FileInfo, error) {
+	delays := d.sizeDelays
+	var (
+		got     int64
+		missing bool
+	)
+	for i := 0; ; i++ {
+		fi, err := sess.sftp.Lstat(tmp)
+		switch {
+		case err == nil && !fi.Mode().IsRegular():
+			return nil, storage.WithDetail(
+				fmt.Errorf("%w: sftp: the temporary file is no longer a regular file", storage.ErrChecksumMismatch),
+				"the uploaded file was replaced on the server")
+		case err == nil && fi.Size() == n:
+			return fi, nil
+		case err == nil:
+			got, missing = fi.Size(), false
+		case errors.Is(err, fs.ErrNotExist):
+			got, missing = 0, true
+		default:
+			return nil, mapErr("sftp: stat object", err)
+		}
+		if got > n || i >= len(delays) {
+			break
+		}
+		t := time.NewTimer(delays[i])
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil, ctx.Err()
+		case <-t.C:
+		}
+	}
+	if missing {
+		return nil, storage.WithDetail(
+			fmt.Errorf("%w: sftp: the temporary file of %d bytes is missing after closing", storage.ErrChecksumMismatch, n),
+			"the server did not show the uploaded file ("+storage.FormatSize(n)+" written) after closing")
+	}
+	return nil, storage.WithDetail(
+		fmt.Errorf("%w: sftp: the server reported %d of %d bytes after closing", storage.ErrChecksumMismatch, got, n),
+		"the server reported "+storage.FormatSizes(got, n)+" after closing")
 }
 
 // createPartial creates the parent directories and an exclusive temporary
@@ -365,6 +420,15 @@ func info(key storage.Key, fi os.FileInfo) storage.ObjectInfo {
 }
 
 // Get implements storage.Destination.
+//
+// SFTP cannot open without following links and has no inode numbers, so
+// the opened file is compared with what Lstat saw: the handle's FSTAT
+// must agree in type, size and modification time. Cloud-backed gateways
+// (TransIP STACK and similar) may misreport an open handle's attributes;
+// then the path is checked again (directories and entry) and accepted
+// only if the entry is unchanged across the open. Either way the reader
+// enforces the Lstat size: a short or long stream fails with
+// ErrChecksumMismatch, and callers verify the SHA-256 on top.
 func (d *Destination) Get(ctx context.Context, key storage.Key) (io.ReadCloser, storage.ObjectInfo, error) {
 	sess, err := d.check(ctx, key)
 	if err != nil {
@@ -381,30 +445,55 @@ func (d *Destination) Get(ctx context.Context, key storage.Key) (io.ReadCloser, 
 	if err != nil {
 		return nil, storage.ObjectInfo{}, mapErr("sftp: open object", err)
 	}
-	// SFTP cannot open without following links; compare what was opened
-	// with what Lstat saw (no inode numbers in SFTP v3).
-	ofi, err := f.Stat()
-	if err != nil || !ofi.Mode().IsRegular() || ofi.Size() != fi.Size() || !ofi.ModTime().Equal(fi.ModTime()) {
-		discard(f.Close())
-		if err != nil {
-			return nil, storage.ObjectInfo{}, mapErr("sftp: stat object", err)
+	if ofi, err := f.Stat(); err != nil || !sameEntry(ofi, fi) {
+		// The handle's attributes disagree (or FSTAT failed): accept only
+		// if the directory entry did not change across the open.
+		again, lerr := lstatRegular(sess, key)
+		if lerr != nil || !sameEntry(again, fi) {
+			discard(f.Close())
+			if lerr != nil && !errors.Is(lerr, storage.ErrNotFound) {
+				return nil, storage.ObjectInfo{}, lerr
+			}
+			return nil, storage.ObjectInfo{}, storage.WithDetail(storage.ErrNotFound,
+				"the opened file did not match its directory entry (type, size or modification time)")
 		}
-		return nil, storage.ObjectInfo{}, storage.ErrNotFound
 	}
-	return &reader{ctx: ctx, f: f}, info(key, ofi), nil
+	return &reader{ctx: ctx, f: f, want: fi.Size()}, info(key, fi), nil
 }
 
-// reader checks ctx before every read.
+// sameEntry reports whether got is a regular file with a's size and
+// modification time.
+func sameEntry(got, a os.FileInfo) bool {
+	return got.Mode().IsRegular() && got.Size() == a.Size() && got.ModTime().Equal(a.ModTime())
+}
+
+// reader checks ctx before every read and enforces the expected length.
 type reader struct {
-	ctx context.Context
-	f   *pkgsftp.File
+	ctx  context.Context
+	f    *pkgsftp.File
+	want int64
+	n    int64
 }
 
 func (r *reader) Read(b []byte) (int, error) {
 	if err := r.ctx.Err(); err != nil {
 		return 0, err
 	}
-	return r.f.Read(b)
+	m, err := r.f.Read(b)
+	r.n += int64(m)
+	if r.n > r.want {
+		// Never hand out bytes beyond the expected length.
+		keep := max(int64(m)-(r.n-r.want), 0)
+		return int(keep), storage.WithDetail(
+			fmt.Errorf("%w: sftp: the server returned more than the expected %d bytes", storage.ErrChecksumMismatch, r.want),
+			"the server returned more than the expected "+storage.FormatSize(r.want))
+	}
+	if errors.Is(err, io.EOF) && r.n != r.want {
+		return m, storage.WithDetail(
+			fmt.Errorf("%w: sftp: read %d of %d bytes", storage.ErrChecksumMismatch, r.n, r.want),
+			"read "+storage.FormatSizes(r.n, r.want))
+	}
+	return m, err
 }
 
 func (r *reader) Close() error { return r.f.Close() }

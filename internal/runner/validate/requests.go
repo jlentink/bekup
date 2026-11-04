@@ -271,6 +271,12 @@ func (v *Validator) ListImages(req *runnerpb.ListImagesRequest) error {
 	return checkEnvelope(req, MaxRequestBytes)
 }
 
+// GetTargetPolicy validates a GetTargetPolicyRequest (no fields; size and
+// unknown fields only).
+func (v *Validator) GetTargetPolicy(req *runnerpb.GetTargetPolicyRequest) error {
+	return checkEnvelope(req, MaxRequestBytes)
+}
+
 // dumpKind maps the proto dump kind; globals exist for PostgreSQL only.
 func dumpKind(field string, k engine.Kind, d runnerpb.DumpKind) error {
 	switch d {

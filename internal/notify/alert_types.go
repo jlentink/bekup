@@ -21,14 +21,20 @@ type SecurityAlertType struct {
 
 // alertDescriptions are the reference texts of the kinds whose inbox
 // sentence carries values (systemBody); the others use systemMessages.
+//
+//nolint:gosec // G101: alert descriptions that mention API tokens, not credentials
 var alertDescriptions = map[string]string{
-	KindLoginBurstAddress: fmt.Sprintf("At least %d failed sign-ins from one client address within %d minutes.", BurstPerAddress, int(BurstWindow.Minutes())),
-	KindLoginBurstAccount: fmt.Sprintf("At least %d failed sign-ins on one account within %d minutes.", BurstPerAccount, int(BurstWindow.Minutes())),
-	KindLoginBurstGlobal:  fmt.Sprintf("At least %d failed sign-ins in total within %d minutes.", BurstGlobal, int(BurstWindow.Minutes())),
-	KindCertExpiring:      "An internal certificate expires soon.",
-	KindCertExpired:       "An internal certificate expired.",
-	KindPinExpiring:       "The pinned certificate of a database connection expires soon.",
-	KindPinExpired:        "The pinned certificate of a database connection expired.",
+	KindLoginBurstAddress:        fmt.Sprintf("At least %d failed sign-ins from one client address within %d minutes.", BurstPerAddress, int(BurstWindow.Minutes())),
+	KindLoginBurstAccount:        fmt.Sprintf("At least %d failed sign-ins on one account within %d minutes.", BurstPerAccount, int(BurstWindow.Minutes())),
+	KindLoginBurstGlobal:         fmt.Sprintf("At least %d failed sign-ins in total within %d minutes.", BurstGlobal, int(BurstWindow.Minutes())),
+	KindCertExpiring:             "An internal certificate expires soon.",
+	KindCertExpired:              "An internal certificate expired.",
+	KindPinExpiring:              "The pinned certificate of a database connection expires soon.",
+	KindPinExpired:               "The pinned certificate of a database connection expired.",
+	KindAPIAddressDenied:         "A valid external API token was presented from an address outside its address allowlist and refused (it may be stolen); its creator is alerted too.",
+	KindAPITokenCreated:          "An external API token was created (a machine credential that can start backups of its jobs).",
+	KindAPITokenAnyAddress:       "An external API token may be used from any address (no client address allowlist), chosen when it was created or by an address change; a change names who made it and alerts the token's creator too.",
+	KindAPITokenAddressesWidened: "An address change lets an external API token be used from networks its old address list did not cover; it names who made the change, and the token's creator is alerted too.",
 }
 
 // alertRepeat is the repeat rule of the deduplicated kinds (every other
@@ -39,10 +45,12 @@ var alertRepeat = map[string]string{
 	KindInsecureDBRoles:            "once a day",
 	KindUnpinnedImage:              "once a day",
 	KindServeAliasConflict:         "once per set of foreign addresses and day",
+	KindExternalAPIAliasConflict:   "once per set of addresses and day",
 	KindAuditHeadExportFailed:      "once a day",
 	KindTLSPinMismatch:             "once per connection and day",
 	KindSSHHostKeyMismatch:         "once per connection and day",
 	KindDestinationHostKeyMismatch: "once per destination and day",
+	KindDestinationTLSPinMismatch:  "once per destination and day",
 	KindRetentionAborted:           "once per job, destination and day",
 	KindDownloadRejected:           "once per download link",
 	KindArtifactDeletedExternally:  "once per backup file",
@@ -55,6 +63,7 @@ var alertRepeat = map[string]string{
 	KindPinExpiring:                "once per pin and warning threshold",
 	KindPinExpired:                 "once per pin",
 	KindConfigReloadWeakened:       "once per reload request and set of keys",
+	KindAPIAddressDenied:           "once per API token and 10 minutes",
 }
 
 var severityRank = map[Severity]int{SeverityCritical: 0, SeverityError: 1, SeverityWarning: 2, SeverityInfo: 3}

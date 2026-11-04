@@ -292,6 +292,10 @@ func TestNewRiverConfig(t *testing.T) {
 	if !cfg.FetchOnlyKnownKinds {
 		t.Error("workers must fetch only known kinds")
 	}
+	// D-220: River must never LISTEN (forged river_control notifications).
+	if !cfg.PollOnly {
+		t.Error("worker client must be poll-only")
+	}
 	if len(cfg.Queues) != len(Queues()) {
 		t.Fatalf("queues %v", cfg.Queues)
 	}
@@ -313,6 +317,9 @@ func TestNewRiverConfig(t *testing.T) {
 	}
 	if ins.Working() || ins.RiverConfig().Queues != nil {
 		t.Fatal("insert-only client has queues")
+	}
+	if !ins.RiverConfig().PollOnly {
+		t.Error("insert-only client must be poll-only")
 	}
 	if _, err := New(nil, Options{Settings: s, Logger: slog.New(slog.DiscardHandler)}); err == nil {
 		t.Fatal("nil pool accepted")

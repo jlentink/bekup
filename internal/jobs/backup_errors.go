@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/jlentink/bekup/internal/connections"
+	"github.com/jlentink/bekup/internal/pipeline"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/runstate"
 	"github.com/jlentink/bekup/internal/storage"
@@ -128,6 +129,13 @@ func securityReason(err error) bool {
 }
 
 // destinationWarning describes a dropped destination (fixed texts).
+// destinationDropLine is the run-log line of a dropped destination: the
+// reason, the code's fixed message and the backend's curated detail
+// (storage.WithDetail), never the raw error.
+func destinationDropLine(label, dest string, d *pipeline.DestinationResult) string {
+	return fmt.Sprintf("%s: destination %s dropped (%s: %s)", label, dest, d.Reason, d.Message())
+}
+
 func destinationWarning(db, dest, reason string, code storage.ErrorCode) runstate.Warning {
 	msg := "the destination was dropped: " + code.Message()
 	switch reason {

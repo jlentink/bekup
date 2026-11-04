@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@apollo/client/react";
 import {
   Ban,
+  Database,
   FileLock2,
   Globe,
   Info,
@@ -12,7 +13,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { SecurityBadge } from "@/components/status/security-badge";
@@ -52,10 +53,19 @@ import {
   type ListKind,
   type Row,
 } from "./model";
+import { RT } from "./runner-messages";
+import { RunnerTargetsPart } from "./runner-targets";
 
 const T = {
-  title: "Outbound allowlist",
-  lead: "Every outbound connection of bekup (S3, SFTP, SMTP, webhooks) passes a dial-time SSRF guard. Public addresses are allowed; private ranges only when they are on this allowlist, and only for the uses each entry names.",
+  title: "Network allowlists",
+  pageLead:
+    "Two separate lists decide where connections may go: one for bekup's own connections to storage and notification services, and one for the runner's connections to database servers.",
+  ownPart: "bekup's own connections (S3, SFTP, WebDAV, SMTP, webhooks)",
+  ownIndex: "01",
+  runnerIndex: "02",
+  lead: "Every outbound connection of bekup (S3, SFTP, WebDAV, SMTP, webhooks) passes a dial-time SSRF guard. Public addresses are allowed; private ranges only when they are on this allowlist, and only for the uses each entry names.",
+  runnerNote:
+    "Database servers and SSH bastions are not reached through this list: the runner connects to them, under its own list shown below.",
   guide: "[netguard] reference",
   stepUp: "Changes need a step-up",
   cidrsTitle: "Networks (CIDRs)",
@@ -75,7 +85,7 @@ const T = {
     PERSONAL_WEBHOOKS: "Personal webhooks",
   } satisfies Record<SsrfScope, string>,
   scopeHelp: {
-    DESTINATIONS: "S3 and SFTP destinations",
+    DESTINATIONS: "S3, SFTP and WebDAV destinations",
     SMTP: "The SMTP server",
     SHARED_WEBHOOKS: "Notification webhooks configured by admins",
     PERSONAL_WEBHOOKS: "Webhooks any user can enter for themselves",
@@ -146,7 +156,11 @@ const T = {
 
 type Errors = Partial<Record<string, string>>;
 
-/** The SSRF allowlist (D-120, D-196): bootstrap entries plus the admin list. */
+/**
+ * The network allowlists: bekup's own SSRF allowlist (D-120, D-196:
+ * bootstrap entries plus the admin list) and, read-only, the runner's
+ * target allowlist (D-223).
+ */
 export function NetworkAllowlistPage() {
   const { data, error, refetch } = useQuery(SsrfAllowlistQuery, {
     fetchPolicy: "cache-and-network",
@@ -155,74 +169,146 @@ export function NetworkAllowlistPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-rule pb-4">
-        <div className="flex max-w-prose flex-col gap-1">
-          <h2 className="font-display text-3xl">{T.title}</h2>
-          <p className="text-sm text-muted-foreground">{T.lead}</p>
-          <DocLink href={docs.netguard}>{T.guide}</DocLink>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {list?.personalWebhooksWidened ? (
-            <SecurityBadge flag="personal-webhooks-widened" data-testid="personal-widened-badge" />
-          ) : null}
-          <Tag tone="neutral">{T.stepUp}</Tag>
-        </div>
+      <div className="flex max-w-prose flex-col gap-1 pb-2">
+        <h2 className="font-display text-3xl">{T.title}</h2>
+        <p className="text-sm text-muted-foreground">{T.pageLead}</p>
       </div>
-      {error && !data ? (
-        <Alert variant="destructive" className="mt-6">
-          <AlertDescription className="flex flex-wrap items-center gap-3">
-            {userMessage(error)}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void refetch().catch(() => undefined);
-              }}
-            >
-              {messages.common.retry}
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : !list ? (
-        <div className="mt-6 flex flex-col gap-3" aria-busy="true">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </div>
-      ) : (
-        // A new server state (save, reload) starts a fresh draft.
-        <AllowlistEditor
-          key={list.updatedAt ?? "never"}
-          list={list}
-          onReload={async () => {
-            await refetch();
-          }}
-        />
-      )}
-      <Section icon={Ban} title={T.rulesTitle} lead={T.rulesLead}>
-        <ul className="grid gap-1.5 text-sm">
-          {T.hard.map((r) => (
-            <li key={r} className="flex items-start gap-2">
-              <Ban aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-failed" />
-              {r}
-            </li>
-          ))}
-        </ul>
-      </Section>
-      <Section icon={Network} title={T.softTitle}>
-        <ul className="grid gap-1.5 text-sm">
-          {T.soft.map((r) => (
-            <li key={r} className="flex items-start gap-2">
-              <ShieldCheck
+      <Part
+        index={T.ownIndex}
+        title={T.ownPart}
+        testId="network-part-own"
+        aside={
+          <>
+            {list?.personalWebhooksWidened ? (
+              <SecurityBadge
+                flag="personal-webhooks-widened"
+                data-testid="personal-widened-badge"
+              />
+            ) : null}
+            <Tag tone="neutral">{T.stepUp}</Tag>
+          </>
+        }
+        lead={
+          <>
+            <p>{T.lead}</p>
+            <p className="flex items-start gap-2 text-foreground" data-testid="network-runner-note">
+              <Database
                 aria-hidden="true"
                 className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
               />
-              {r}
-            </li>
-          ))}
-        </ul>
-        <p className="text-sm text-muted-foreground">{T.noProxy}</p>
-      </Section>
+              {T.runnerNote}
+            </p>
+            <DocLink href={docs.netguard}>{T.guide}</DocLink>
+          </>
+        }
+      >
+        {error && !data ? (
+          <Alert variant="destructive" className="mt-6">
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              {userMessage(error)}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void refetch().catch(() => undefined);
+                }}
+              >
+                {messages.common.retry}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : !list ? (
+          <div className="mt-6 flex flex-col gap-3" aria-busy="true">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : (
+          // A new server state (save, reload) starts a fresh draft.
+          <AllowlistEditor
+            key={list.updatedAt ?? "never"}
+            list={list}
+            onReload={async () => {
+              await refetch();
+            }}
+          />
+        )}
+        <Section icon={Ban} title={T.rulesTitle} lead={T.rulesLead}>
+          <ul className="grid gap-1.5 text-sm">
+            {T.hard.map((r) => (
+              <li key={r} className="flex items-start gap-2">
+                <Ban aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-status-failed" />
+                {r}
+              </li>
+            ))}
+          </ul>
+        </Section>
+        <Section icon={Network} title={T.softTitle}>
+          <ul className="grid gap-1.5 text-sm">
+            {T.soft.map((r) => (
+              <li key={r} className="flex items-start gap-2">
+                <ShieldCheck
+                  aria-hidden="true"
+                  className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                />
+                {r}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-muted-foreground">{T.noProxy}</p>
+        </Section>
+      </Part>
+      <Part
+        index={T.runnerIndex}
+        title={RT.title}
+        testId="network-part-runner"
+        aside={<Tag tone="neutral">{RT.readOnly}</Tag>}
+        lead={<p>{RT.lead}</p>}
+      >
+        <RunnerTargetsPart />
+      </Part>
     </div>
+  );
+}
+
+/**
+ * One of the page's two allowlists: a numbered band with its own heading,
+ * so the two lists never read as one.
+ */
+function Part({
+  index,
+  title,
+  lead,
+  aside,
+  testId,
+  children,
+}: {
+  index: string;
+  title: string;
+  lead: ReactNode;
+  aside: ReactNode;
+  testId: string;
+  children: ReactNode;
+}) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} data-testid={testId} className="flex flex-col pt-8">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-t-2 border-foreground/70 pt-4 pb-4">
+        <div className="flex max-w-prose min-w-0 flex-col gap-1.5">
+          <span
+            aria-hidden="true"
+            className="font-mono text-2xs text-muted-foreground tabular-nums"
+          >
+            {index}
+          </span>
+          <h2 id={headingId} className="font-display text-2xl">
+            {title}
+          </h2>
+          <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">{lead}</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">{aside}</div>
+      </div>
+      <div className="flex flex-col border-t border-rule">{children}</div>
+    </section>
   );
 }
 
@@ -328,7 +414,7 @@ function AllowlistEditor({
   return (
     <form
       noValidate
-      aria-label={T.title}
+      aria-label={T.ownPart}
       onSubmit={(e) => {
         e.preventDefault();
         void save();

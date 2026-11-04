@@ -20,6 +20,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/auth/passkey"
 	"github.com/jlentink/bekup/internal/authz"
@@ -139,6 +140,12 @@ type Options struct {
 	ConfigReload *configreload.API
 	// RetentionHolds backs Job.retentionHolds (D-209; nil: empty).
 	RetentionHolds resolvers.RetentionHoldSource
+	// APITokens backs the external API token fields (D-220; nil: those
+	// fields fail with an internal error).
+	APITokens *apiaccess.Service
+	// RunnerTargets backs Query.runnerTargetPolicy (D-223; nil: the field
+	// fails with an internal error).
+	RunnerTargets resolvers.RunnerTargetPolicySource
 }
 
 // Handler is the /graphql endpoint.
@@ -199,6 +206,8 @@ func New(opts Options) (*Handler, error) {
 			AuditChain:      opts.AuditChain,
 			ConfigReload:    opts.ConfigReload,
 			RetentionHolds:  opts.RetentionHolds,
+			APITokens:       opts.APITokens,
+			RunnerTargets:   opts.RunnerTargets,
 		},
 		Directives: directives(opts.Access),
 	})

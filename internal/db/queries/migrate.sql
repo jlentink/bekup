@@ -132,3 +132,68 @@ LEFT JOIN pg_catalog.pg_database AS d ON d.oid = s.setdatabase
 WHERE (s.setrole = 0 OR r.rolname::text = ANY (sqlc.arg(role_names)::text[]))
   AND (s.setdatabase = 0 OR d.datname = pg_catalog.current_database())
 ORDER BY 1, 2;
+
+-- SyncExternalGrants re-applies the privileges of the external API role
+-- bekup_external after the migrations (D-220): see migration 00037. false:
+-- the role does not exist (nothing to do).
+-- name: SyncExternalGrants :one
+SELECT public.bekup_sync_external_grants()::boolean AS synced;
+
+-- ExternalRoleExists reports whether the optional role bekup_external
+-- exists (D-220).
+-- name: ExternalRoleExists :one
+SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles AS r WHERE r.rolname = sqlc.arg(role_name)::text)::boolean AS role_exists;
+
+-- ExternalRoleFindings is the privilege audit of bekup_external (D-220):
+-- everything the role may do in this database beyond CONNECT, USAGE on
+-- schema api and EXECUTE on the allowlisted api functions (signatures as
+-- "name(type, ...)"), and every role it is a member of (a NOINHERIT role
+-- could still SET ROLE to it). Privileges through PUBLIC count; functions
+-- that belong to an extension are left out (the role has no USAGE on
+-- their schema). Names only, ordered.
+-- name: ExternalRoleFindings :many
+SELECT f.finding::text AS finding
+FROM (
+    SELECT ('member of role ' || g.rolname::text) AS finding
+    FROM pg_catalog.pg_auth_members AS am
+    JOIN pg_catalog.pg_roles AS g ON g.oid = am.roleid
+    JOIN pg_catalog.pg_roles AS m ON m.oid = am.member
+    WHERE m.rolname = sqlc.arg(role_name)::text
+    UNION ALL
+    SELECT ('CREATE or TEMPORARY on database ' || d.datname::text)
+    FROM pg_catalog.pg_database AS d
+    WHERE d.datname = pg_catalog.current_database()
+      AND pg_catalog.has_database_privilege(sqlc.arg(role_name)::text, d.oid, 'CREATE, TEMPORARY')
+    UNION ALL
+    SELECT ('USAGE or CREATE on schema ' || n.nspname::text)
+    FROM pg_catalog.pg_namespace AS n
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND n.nspname NOT LIKE 'pg\_toast%'
+      AND n.nspname NOT LIKE 'pg\_temp\_%'
+      AND (pg_catalog.has_schema_privilege(sqlc.arg(role_name)::text, n.oid, 'CREATE')
+           OR (n.nspname <> 'api' AND pg_catalog.has_schema_privilege(sqlc.arg(role_name)::text, n.oid, 'USAGE')))
+    UNION ALL
+    SELECT ('privileges on ' || n.nspname::text || '.' || c.relname::text)
+    FROM pg_catalog.pg_class AS c
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND n.nspname NOT LIKE 'pg\_toast%'
+      AND ((c.relkind IN ('r', 'p', 'v', 'm', 'f')
+            AND (pg_catalog.has_table_privilege(sqlc.arg(role_name)::text, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                 OR pg_catalog.has_any_column_privilege(sqlc.arg(role_name)::text, c.oid, 'SELECT, INSERT, UPDATE, REFERENCES')))
+           OR (c.relkind = 'S'
+               AND pg_catalog.has_sequence_privilege(sqlc.arg(role_name)::text, c.oid, 'USAGE, SELECT, UPDATE')))
+    UNION ALL
+    SELECT ('EXECUTE on ' || n.nspname::text || '.' || p.proname::text || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')')
+    FROM pg_catalog.pg_proc AS p
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND NOT EXISTS (
+          SELECT 1 FROM pg_catalog.pg_depend AS dep
+          JOIN pg_catalog.pg_class AS cat ON cat.oid = dep.classid
+          WHERE cat.relname = 'pg_proc' AND dep.objid = p.oid AND dep.deptype = 'e')
+      AND pg_catalog.has_function_privilege(sqlc.arg(role_name)::text, p.oid, 'EXECUTE')
+      AND NOT (n.nspname = 'api'
+               AND (p.proname::text || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')') = ANY (sqlc.arg(allowed_functions)::text[]))
+) AS f
+ORDER BY 1;

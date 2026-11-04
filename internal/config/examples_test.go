@@ -22,6 +22,13 @@ func repoFile(t *testing.T, rel string) string {
 
 func checkExample(t *testing.T, name string, newCfg func() any, load func(Options) ([]Field, error)) {
 	t.Helper()
+	checkExampleWith(t, name, commentedExampleKeys, newCfg, load)
+}
+
+// checkExampleWith is checkExample with the keys the example documents
+// only as comments.
+func checkExampleWith(t *testing.T, name string, commented map[string]bool, newCfg func() any, load func(Options) ([]Field, error)) {
+	t.Helper()
 	content := repoFile(t, name)
 	// Copy to a private file so repository checkout permissions don't matter.
 	p := writeFile(t, safeDir(t), filepath.Base(name), content, 0o600)
@@ -38,7 +45,7 @@ func checkExample(t *testing.T, name string, newCfg func() any, load func(Option
 	all := fieldsOf(newCfg())
 	for i := range all {
 		f := &all[i]
-		if f.InlineSecret || commentedExampleKeys[f.Path] {
+		if f.InlineSecret || commented[f.Path] {
 			// Inline secrets are dev-only: they must be documented as a
 			// commented-out line in their section, never set.
 			if _, set := doc[f.Section][f.Key]; set {
@@ -104,6 +111,28 @@ func TestRunnerExampleCoversEveryKey(t *testing.T) {
 	})
 }
 
+// externalCommentedKeys are the fields-mode keys and the bekup.toml keys
+// the external API refuses: external-api.example.toml lists them as
+// comments.
+var externalCommentedKeys = map[string]bool{
+	"database.host": true, "database.port": true, "database.name": true, "database.user": true,
+	"database.password_file": true, "database.owner_user": true, "database.owner_password_file": true,
+	"database.owner_url_file": true, "database.single_account": true, "database.tls_server_name": true,
+}
+
+func TestExternalAPIExampleCoversEveryKey(t *testing.T) {
+	checkExampleWith(t, "external-api.example.toml", externalCommentedKeys, func() any { c := DefaultExternalAPI(); return &c }, func(o Options) ([]Field, error) {
+		res, err := LoadExternalAPI(o)
+		if err != nil {
+			return nil, err
+		}
+		if res.Dev {
+			t.Error("example must not enable dev mode")
+		}
+		return res.Fields(), nil
+	})
+}
+
 func TestDocsReferenceUpToDate(t *testing.T) {
 	doc := repoFile(t, "docs/configuration.md")
 	_, rest, ok := strings.Cut(doc, ReferenceBegin)
@@ -123,7 +152,8 @@ func TestDocsReferenceUpToDate(t *testing.T) {
 	}
 	b := DefaultBekup()
 	r := DefaultRunner()
-	for _, f := range append(fieldsOf(&b), fieldsOf(&r)...) {
+	x := DefaultExternalAPI()
+	for _, f := range append(append(fieldsOf(&b), fieldsOf(&r)...), fieldsOf(&x)...) {
 		if !strings.Contains(doc, "`"+f.Env+"`") || !strings.Contains(doc, "`["+f.Section+"]`") {
 			t.Errorf("docs do not mention %s (%s)", f.Path, f.Env)
 		}

@@ -110,11 +110,27 @@ func DatabaseStep(o DatabaseOptions) func(context.Context, wizard.UI, string) er
 	}
 }
 
+// externalRoleCommand creates the external API's role on your PostgreSQL
+// with an account that may create roles (D-220).
+var externalRoleCommand = "docker compose run --rm migrate db bootstrap --admin-user <admin role> --adopt-existing-roles --external-password-file " + setup.ExternalDBPasswordTarget
+
 // roles runs db bootstrap when the deployment's roles come from it
 // (bootstrap, single-account); with existing roles or the DBA's SQL the
 // roles exist already.
 func (o *DatabaseOptions) roles(ctx context.Context, ui wizard.UI, st *setup.State, cfg *config.Bekup) error {
 	out := ui.Out()
+	switch {
+	case st.ExternalAPI && st.DatabaseAuth == setup.DBAuthExistingRoles:
+		// The external API's role (D-220) comes from an account that may
+		// create roles: the command setup printed.
+		_, _ = fmt.Fprintf(out, "roles:   bekup_external (the external API) is created by an account with CREATEROLE:\n         %s\n", externalRoleCommand)
+	case st.ExternalAPI && st.DatabaseAuth == setup.DBAuthDBASQL:
+		// Setup put the role into the DBA's roles SQL when the API was
+		// enabled at setup; only an API enabled later (setup upgrade
+		// --external-api) needs the command.
+		_, _ = fmt.Fprintf(out, "roles:   bekup_external (the external API) is in the roles SQL setup wrote for your DBA (bekup-roles.sql);\n         only if the API was enabled after that SQL ran (setup upgrade --external-api), an account\n         with CREATEROLE creates it: %s\n", externalRoleCommand)
+	default:
+	}
 	switch st.DatabaseAuth {
 	case setup.DBAuthExistingRoles:
 		_, _ = fmt.Fprintln(out, "roles:   bekup_owner and bekup_app exist already (existing-roles); the migration checks them")
@@ -192,6 +208,11 @@ func (o *DatabaseOptions) bootstrapRequest(ui wizard.UI, st *setup.State, cfg *c
 	}
 	if st.DatabaseAuth == setup.DBAuthSingleAccount {
 		return req, nothing, nil // database.user logs in with database.password_file
+	}
+	if st.ExternalAPI {
+		// The external API is enabled (D-220): bootstrap creates its role
+		// too, with the password file compose mounts here.
+		req.ExternalPasswordFile = setup.ExternalDBPasswordTarget
 	}
 	user, err := ui.Input("Administrator role", "A role that may create roles and databases (CREATEROLE + CREATEDB, or a managed\nadmin role such as rds_superuser).", "postgres", func(s string) error {
 		if !config.ValidDBRoleName(s) {

@@ -39,6 +39,15 @@ runner refuse to start), then start:
 Pin a digest again with --image <repo>:<tag>@sha256:<digest> (setup-first;
 with the committed file BEKUP_IMAGE=<pinned> in the shell).
 
+Enable the opt-in external API for CI pipelines on an existing deployment
+(D-220) with --external-api: it writes external-api.toml (trusting the proxy
+serve trusts) and BEKUP_EXTERNAL_API=enabled plus the external-api profile in
+.env, and prints the steps that remain: the database role (bundled: a
+`docker compose exec postgres` command; your PostgreSQL: `db bootstrap --external-password-file`),
+`docker compose run --rm migrate`, `docker compose up -d`, a block for an existing
+compose.override.yaml (never rewritten) and your own proxy's /api/v1/ route.
+Not with single-account mode.
+
 On a terminal the upgrade is guided (D-208): it shows the versions, the
 compose changes, new secrets and the restart, asks for the backup and then
 for confirmation before writing anything (--non-interactive skips it).
@@ -55,6 +64,7 @@ bekup setup upgrade [flags]
       --ca-passphrase-file string   file with the CA key passphrase (min 16 characters; checked like every secret file)
       --ca-passphrase-stdin         read the CA key passphrase from the first line of stdin
       --dir string                  deployment directory created by setup init (default "/deploy")
+      --external-api                enable the opt-in external API for CI pipelines on this deployment (D-220): writes external-api.toml, BEKUP_EXTERNAL_API=enabled and the external-api profile in .env, and prints the remaining steps (the database role, migrate, a block for an existing compose.override.yaml, your proxy's route)
       --force                       replace locally edited generated files (a .bak-<timestamp> copy is kept)
       --generate-ca-passphrase      generate a passphrase and show it ONCE on stderr (only when stderr is a terminal; run with --log-driver none)
   -h, --help                        help for upgrade

@@ -47,6 +47,10 @@ export const RunDetailQuery = graphql(`
         userId
         displayName
         email
+        apiToken {
+          id
+          name
+        }
       }
       scheduledFor
       attempt
@@ -164,6 +168,10 @@ export const RunActivitySubscription = graphql(`
           userId
           displayName
           email
+          apiToken {
+            id
+            name
+          }
         }
         scheduledFor
         attempt

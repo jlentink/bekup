@@ -4,6 +4,10 @@
       # SCRAM verifier). serve never receives the owner password.
       - bekup_database_owner_password
       - bekup_database_password
+      # The bekup_external password (opt-in external API, D-220): `db
+      # bootstrap --external-password-file
+      # /run/secrets/bekup_external_database_password` creates the role.
+      - bekup_external_database_password
       # CA bundle of your PostgreSQL's server certificate: [database]
       # tls_ca_file (default path), verified with tls_mode = "verify-full"
       # (empty when another TLS choice needs none, D-215).

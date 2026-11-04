@@ -98,9 +98,15 @@ export function meFixture(
   };
 }
 
-export function serverInfoFixture(insecureTransport = false) {
+export function serverInfoFixture(insecureTransport = false, externalApiEnabled = true) {
   return {
-    serverInfo: { __typename: "ServerInfo", version: "1.0.0", insecureTransport, devMode: false },
+    serverInfo: {
+      __typename: "ServerInfo",
+      version: "1.0.0",
+      insecureTransport,
+      devMode: false,
+      externalApiEnabled,
+    },
   };
 }
 

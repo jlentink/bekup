@@ -374,7 +374,7 @@ type initFlags struct {
 	variant, serveIP, proxyIP, database                                  string
 	proxyNetwork, proxyContainer, proxyMode                              string
 	dbLocation, dbTLS                                                    string
-	proxyLabels                                                          bool
+	proxyLabels, externalAPI                                             bool
 	acmeStaging, nonInteractive, keepExisting, force, regenerate         bool
 	allowVersionMismatch, writeCompose, useExistingCA                    bool
 	dockerGID                                                            int
@@ -445,6 +445,12 @@ prints the one ` + "`docker compose run --rm migrate db bootstrap`" + ` command)
 (--db-user: one account for everything; an explicit weakening). setup has no
 network: it never connects to the database.
 
+The opt-in external API for CI pipelines (--external-api, D-220): the compose
+profile external-api, https://<domain>/api/v1/ through the bundled proxy (your
+own proxy: setup prints the route), external-api.toml and the bekup_external
+database role (bundled: created with the new volume; your PostgreSQL: the
+printed bootstrap command). Not with --db-auth single-account.
+
 On a terminal, missing answers are prompted; --non-interactive requires the
 flags instead. Existing files are never overwritten without --force (non-secret
 files only) or --regenerate-secrets (terminal + typed confirmation). An
@@ -500,6 +506,8 @@ func (fl *initFlags) register(cmd *cobra.Command) {
 	f.StringVar(&fl.net.RunnerCtlIP, "runner-ip", "", "advanced: RUNNER_CTL_IP (default 10.213.251.10)")
 	f.StringVar(&fl.net.MetricsSubnet, "metrics-subnet", "", "advanced: METRICS_SUBNET (default 10.213.252.0/24)")
 	f.StringVar(&fl.net.ServeMetricsIP, "metrics-ip", "", "advanced: SERVE_METRICS_IP (default 10.213.252.10)")
+	f.BoolVar(&fl.externalAPI, "external-api", false, "enable the opt-in external API for CI pipelines (D-220): the compose profile external-api, https://<domain>/api/v1/ through the proxy, external-api.toml; not with --db-auth single-account")
+	f.StringVar(&fl.net.ExternalAPIFrontendIP, "external-api-ip", "", "advanced, --external-api: EXTERNAL_API_FRONTEND_IP, the external API's fixed address on the frontend network (default 10.213.250.11; not own-proxy)")
 	f.StringVar(&fl.db.Host, "db-host", "", "external database: host name or IP address of your PostgreSQL (15-17)")
 	f.IntVar(&fl.db.Port, "db-port", 0, "external database: port (default 5432)")
 	f.StringVar(&fl.db.Name, "db-name", "", "external database: name of bekup's database (default bekup)")
@@ -593,6 +601,7 @@ func (fl *initFlags) options(c *cobra.Command) (setup.Options, error) {
 		KeysDir: fl.keysDir, Network: fl.net, Link: fl.link,
 		TraefikEntrypoint: fl.traefikEntrypoint, TraefikCertResolver: fl.traefikCertResolver,
 		DB: db, ProxyMode: proxyMode, ProxyContainer: fl.proxyContainer, ProxyLabels: fl.proxyLabels,
+		ExternalAPI: fl.externalAPI,
 	}
 	if proxyMode == setup.ProxyLink {
 		a.Link.Name = fl.proxyNetwork
@@ -720,6 +729,7 @@ func newSetupUpgradeCmd() *cobra.Command {
 		dir, imageRaw, ownership                    string
 		allowDowngrade, allowVersionMismatch, force bool
 		writeCompose, nonInteractive, plain         bool
+		externalAPI                                 bool
 		pf                                          caPassFlags
 	)
 	cmd := &cobra.Command{
@@ -760,6 +770,15 @@ runner refuse to start), then start:
 Pin a digest again with --image <repo>:<tag>@sha256:<digest> (setup-first;
 with the committed file BEKUP_IMAGE=<pinned> in the shell).
 
+Enable the opt-in external API for CI pipelines on an existing deployment
+(D-220) with --external-api: it writes external-api.toml (trusting the proxy
+serve trusts) and BEKUP_EXTERNAL_API=enabled plus the external-api profile in
+.env, and prints the steps that remain: the database role (bundled: a
+` + "`docker compose exec postgres`" + ` command; your PostgreSQL: ` + "`db bootstrap --external-password-file`" + `),
+` + "`docker compose run --rm migrate`" + `, ` + "`docker compose up -d`" + `, a block for an existing
+compose.override.yaml (never rewritten) and your own proxy's /api/v1/ route.
+Not with single-account mode.
+
 On a terminal the upgrade is guided (D-208): it shows the versions, the
 compose changes, new secrets and the restart, asks for the backup and then
 for confirmation before writing anything (--non-interactive skips it).`,
@@ -787,6 +806,7 @@ for confirmation before writing anything (--non-interactive skips it).`,
 				Dir: dir, Version: version, Image: img, WriteCompose: writeCompose,
 				AllowVersionMismatch: allowVersionMismatch, AllowDowngrade: allowDowngrade,
 				Force: force, Ownership: mode, CAPassphrase: passFn, Out: c.OutOrStdout(),
+				ExternalAPI: externalAPI,
 			}
 			if !nonInteractive {
 				if ui, ok := setupUI(c, plain); ok {
@@ -806,6 +826,7 @@ for confirmation before writing anything (--non-interactive skips it).`,
 	f.StringVar(&ownership, "ownership", string(setup.OwnershipAuto), "auto, chown, print or none")
 	f.BoolVar(&nonInteractive, "non-interactive", false, "no guided confirmation on a terminal")
 	f.BoolVar(&plain, "plain", false, "plain-text interface for the guided upgrade (NO_COLOR only drops the colors)")
+	f.BoolVar(&externalAPI, "external-api", false, "enable the opt-in external API for CI pipelines on this deployment (D-220): writes external-api.toml, BEKUP_EXTERNAL_API=enabled and the external-api profile in .env, and prints the remaining steps (the database role, migrate, a block for an existing compose.override.yaml, your proxy's route)")
 	pf.register(cmd)
 	return cmd
 }

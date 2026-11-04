@@ -15,7 +15,11 @@
 // on a changed schedule and on enable; disable and delete clear it. Delete
 // is soft (a running run finishes; the worker re-checks the job). RunNow
 // enqueues a backup_run River job with the job id only; River's unique key
-// refuses a second active run (ErrRunActive).
+// refuses a second active run (ErrRunActive). RunFromAPI is the one path
+// without a principal (D-220): the external API's consumer calls it in its
+// transaction, and the SQL scope rule of the API token
+// (public.api_token_job_allowed) authorizes it instead of the policy; it
+// shares enqueueManualTx with RunNow.
 //
 // Ownership implements authz.Ownership with real queries on job_owners and
 // jobs: owner grants (view, run now, downloads, restores of the job) apply

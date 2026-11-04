@@ -25,6 +25,8 @@ const (
 	OwnerRole = config.DBOwnerRole
 	// AppRole is the runtime role of serve and worker.
 	AppRole = config.DBAppRole
+	// ExternalRole is the optional role of `bekup external-api` (D-220).
+	ExternalRole = config.DBExternalRole
 )
 
 // MigrationStatus is the state of one migration.
@@ -119,8 +121,11 @@ func checkSessionRole(ctx context.Context, q *sqlc.Queries, role, login, hint st
 	}
 	if sr.ActiveRole != role {
 		what := "the app must connect"
-		if role == OwnerRole {
+		switch role {
+		case OwnerRole:
 			what = "migrations must run"
+		case ExternalRole:
+			what = "the external API must connect"
 		}
 		return fmt.Errorf("%s as %s, connected as %q (%s)", what, role, sr.ActiveRole, hint)
 	}
@@ -181,7 +186,9 @@ func safeMethod(m string) string {
 // migration 00001 is first applied, D-092/D-098): the session must be a plain
 // bekup_owner (or, in single-account mode, the configured login acting as
 // bekup_owner), bekup_app must exist, and neither role may hold or inherit
-// dangerous privileges (see checkRole).
+// dangerous privileges (see checkRole). When the optional external API role
+// bekup_external exists it must pass the same checks (its privilege audit
+// follows the grant sync in Up), and single-account mode is refused (D-220).
 func checkOwnerRole(ctx context.Context, q *sqlc.Queries, login string) error {
 	if err := checkSessionRole(ctx, q, OwnerRole, login, "check database.owner_url_file / database.owner_password_file"); err != nil {
 		return err
@@ -194,7 +201,7 @@ func checkOwnerRole(ctx context.Context, q *sqlc.Queries, login string) error {
 	if err != nil {
 		return err
 	}
-	return errors.Join(validateRole(owner), validateRole(app))
+	return errors.Join(validateRole(owner), validateRole(app), checkExternalForMigrate(ctx, q, login))
 }
 
 // CheckAppRole verifies that db is connected as bekup_app and that the role
@@ -293,13 +300,18 @@ func (m *Migrator) withLock(ctx context.Context, fn func() error) (err error) {
 	return fn()
 }
 
-// Up applies all pending migrations.
+// Up applies all pending migrations, then re-applies the privileges of
+// the external API role bekup_external when it exists and audits them
+// (D-220; also when nothing was pending: the role may be newer than the
+// schema).
 func (m *Migrator) Up(ctx context.Context) ([]MigrationResult, error) {
 	var res []*goose.MigrationResult
 	err := m.withLock(ctx, func() error {
 		var err error
-		res, err = m.provider.Up(ctx)
-		return err
+		if res, err = m.provider.Up(ctx); err != nil {
+			return err
+		}
+		return syncExternal(ctx, sqlc.New(m.lockConn), m.login)
 	})
 	if err != nil {
 		return results(res), fmt.Errorf("apply migrations: %w", err)

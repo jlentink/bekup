@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { reportActionError } from "@/features/auth/use-step-up";
+import { ApiAccessPanel } from "@/features/api-access/api-access-panel";
 import { RunHistory } from "@/features/runs/run-history";
 import { RunStatusBadge } from "@/features/runs/run-status";
 import { isActive } from "@/features/runs/run-status-model";
@@ -336,6 +337,9 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
       </section>
 
       <TestRestoreSection job={job} />
+
+      {/* D-220: admins and the job's backup owners; never maintainers. */}
+      {flags.admin || flags.owner ? <ApiAccessPanel jobId={job.id} jobName={job.name} /> : null}
 
       <ConfirmDialog
         open={deleting}

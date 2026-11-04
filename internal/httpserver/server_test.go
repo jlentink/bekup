@@ -403,7 +403,7 @@ func TestUntrustedXFFWarning(t *testing.T) {
 		}
 		return r
 	}
-	count := func() int { return strings.Count(buf.String(), "not in server.trusted_proxies") }
+	count := func() int { return strings.Count(buf.String(), "not in the trusted proxy list") }
 	x.check(mk("10.213.253.5:1", "/api/x", true), trusted)   // trusted proxy
 	x.check(mk("10.213.253.7:1", "/api/x", false), trusted)  // no header
 	x.check(mk("10.213.253.7:1", "/healthz", true), trusted) // health probe

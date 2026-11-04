@@ -637,6 +637,41 @@ describe("audit log", () => {
   });
 });
 
+function runnerPolicy(over: Record<string, unknown> = {}) {
+  return {
+    __typename: "RunnerTargetPolicy",
+    available: true,
+    reason: null,
+    allowCidrs: ["10.20.0.0/16"],
+    allowHosts: ["db.internal.example.com"],
+    denyCidrs: ["10.20.99.0/24"],
+    denyHosts: [],
+    bastionTargets: [
+      {
+        __typename: "RunnerBastionTargets",
+        bastion: "bastion.example.com",
+        targets: ["10.30.0.0/24", "db.internal"],
+      },
+    ],
+    runSubnetPool: "10.214.0.0/16",
+    controlNetworks: ["172.30.0.0/24"],
+    controlNetworksKnown: true,
+    alwaysDenied: [
+      { __typename: "RunnerDeniedRange", category: "LOOPBACK", cidrs: ["127.0.0.0/8", "::1/128"] },
+      {
+        __typename: "RunnerDeniedRange",
+        category: "CLOUD_METADATA",
+        cidrs: ["169.254.169.254/32"],
+      },
+      { __typename: "RunnerDeniedRange", category: "NON_GLOBAL_IPV6", cidrs: [] },
+    ],
+    warnings: [],
+    envOverrides: [],
+    truncated: false,
+    ...over,
+  };
+}
+
 describe("SSRF allowlist", () => {
   const DEFAULTS = ["DESTINATIONS", "SMTP", "SHARED_WEBHOOKS"];
   const entry = (value: string, scopes: string[] = DEFAULTS) => ({
@@ -672,6 +707,7 @@ describe("SSRF allowlist", () => {
       withStepUp(
         {
           AdminSsrfAllowlist: () => ok({ ssrfAllowlist: allowlist() }),
+          AdminRunnerTargetPolicy: () => ok({ runnerTargetPolicy: runnerPolicy() }),
           AdminUpdateSsrfAllowlist: (v) => {
             const input = v["input"] as { cidrEntries: EntryInput[]; hostEntries: EntryInput[] };
             return ok({
@@ -728,6 +764,7 @@ describe("SSRF allowlist", () => {
       withStepUp(
         {
           AdminSsrfAllowlist: () => ok({ ssrfAllowlist: allowlist() }),
+          AdminRunnerTargetPolicy: () => ok({ runnerTargetPolicy: runnerPolicy() }),
           AdminUpdateSsrfAllowlist: (v) => {
             const input = v["input"] as { cidrEntries: EntryInput[]; hostEntries: EntryInput[] };
             return ok({
@@ -769,6 +806,7 @@ describe("SSRF allowlist", () => {
     const { user } = renderApp("/admin/settings/network", {
       ...baseHandlers(),
       AdminSsrfAllowlist: () => ok({ ssrfAllowlist: allowlist() }),
+      AdminRunnerTargetPolicy: () => ok({ runnerTargetPolicy: runnerPolicy() }),
     });
     const uses = await screen.findByRole("group", { name: "Uses of CIDR 1" });
     await user.click(within(uses).getByRole("checkbox", { name: /Destinations/ }));
@@ -787,6 +825,7 @@ describe("SSRF allowlist", () => {
     const { user } = renderApp("/admin/settings/network", {
       ...baseHandlers(),
       AdminSsrfAllowlist: () => ok({ ssrfAllowlist: allowlist({ ignoredEntries: 1 }) }),
+      AdminRunnerTargetPolicy: () => ok({ runnerTargetPolicy: runnerPolicy() }),
       AdminUpdateSsrfAllowlist: () => {
         call++;
         if (call === 1) {
@@ -822,6 +861,183 @@ describe("SSRF allowlist", () => {
     await user.click(screen.getByRole("button", { name: "Save allowlist" }));
     expect(await screen.findByText("Changed in the meantime")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+  });
+});
+
+describe("network allowlists: the runner's target allowlist", () => {
+  const ssrf = () =>
+    ok({
+      ssrfAllowlist: {
+        __typename: "SsrfAllowlist",
+        cidrEntries: [],
+        hostEntries: [],
+        configScopes: ["DESTINATIONS"],
+        defaultScopes: ["DESTINATIONS"],
+        personalWebhooksWidened: false,
+        configCidrs: [],
+        configHosts: [],
+        loopbackAllowed: false,
+        ignoredEntries: 0,
+        maxEntries: 256,
+        updatedAt: null,
+      },
+    });
+
+  it("labels the two lists apart and in the settings nav", async () => {
+    renderApp("/admin/settings/network", {
+      ...baseHandlers(),
+      AdminSsrfAllowlist: ssrf,
+      AdminRunnerTargetPolicy: () => ok({ runnerTargetPolicy: runnerPolicy() }),
+    });
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Network allowlists" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "bekup's own connections (S3, SFTP, WebDAV, SMTP, webhooks)",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Database servers (runner)" })).toBeInTheDocument();
+    expect(screen.getByTestId("network-runner-note")).toHaveTextContent(
+      /Database servers and SSH bastions are not reached through this list/,
+    );
+    expect(screen.getByRole("link", { name: /Network allowlists/ })).toHaveAttribute(
+      "href",
+      "/admin/settings/network",
+    );
+    expect(screen.queryByText(/Outbound allowlist/)).toBeNull();
+  });
+
+  it("shows the lists, bastions, own networks and always-refused ranges read-only", async () => {
+    renderApp("/admin/settings/network", {
+      ...baseHandlers(),
+      AdminSsrfAllowlist: ssrf,
+      AdminRunnerTargetPolicy: () =>
+        ok({ runnerTargetPolicy: runnerPolicy({ envOverrides: ["ALLOW_CIDRS", "DENY_HOSTS"] }) }),
+    });
+    const part = await screen.findByTestId("network-part-runner");
+    expect(await within(part).findByTestId("runner-allow-cidrs")).toHaveTextContent("10.20.0.0/16");
+    expect(within(part).getByTestId("runner-allow-hosts")).toHaveTextContent(
+      "db.internal.example.com",
+    );
+    expect(within(part).getByTestId("runner-deny-cidrs")).toHaveTextContent("10.20.99.0/24");
+    expect(within(part).getByTestId("runner-deny-hosts")).toHaveTextContent(
+      "No host names refused.",
+    );
+    const bastions = within(part).getByRole("table", { name: /SSH bastions/ });
+    const row = within(bastions).getByRole("row", { name: /bastion\.example\.com/ });
+    expect(row).toHaveTextContent("10.30.0.0/24");
+    expect(row).toHaveTextContent("db.internal");
+    expect(within(part).getByTestId("runner-pool")).toHaveTextContent("10.214.0.0/16");
+    expect(within(part).getByTestId("runner-control")).toHaveTextContent("172.30.0.0/24");
+    const denied = within(part).getByTestId("runner-always-denied");
+    expect(denied).toHaveTextContent("Loopback");
+    expect(denied).toHaveTextContent("169.254.169.254/32");
+    expect(denied).toHaveTextContent("Other IPv6 outside global unicast (2000::/3)");
+    expect(within(part).getByTestId("runner-targets-edit-note")).toHaveTextContent(
+      "Edited in runner.toml [targets] on the runner host; restart the runner to apply.",
+    );
+    expect(within(part).getByRole("link", { name: /Runner target allowlist/ })).toHaveAttribute(
+      "href",
+      expect.stringContaining("target-allowlist.md#where-it-is-shown") as string,
+    );
+    expect(within(part).getByTestId("runner-targets-env")).toHaveTextContent(
+      "allow_cidrs, deny_hosts",
+    );
+    // Read-only: nothing to type into or save in the runner part.
+    expect(within(part).queryByRole("textbox")).toBeNull();
+    expect(within(part).queryByRole("checkbox")).toBeNull();
+    expect(within(part).queryByRole("button")).toBeNull();
+    expect(screen.queryByTestId("runner-targets-warnings")).toBeNull();
+  });
+
+  it("explains empty lists and shows the runner's warnings", async () => {
+    renderApp("/admin/settings/network", {
+      ...baseHandlers(),
+      AdminSsrfAllowlist: ssrf,
+      AdminRunnerTargetPolicy: () =>
+        ok({
+          runnerTargetPolicy: runnerPolicy({
+            allowCidrs: [],
+            allowHosts: [],
+            denyCidrs: [],
+            bastionTargets: [],
+            controlNetworks: [],
+            controlNetworksKnown: false,
+            warnings: ["EMPTY_ALLOWLIST"],
+            truncated: true,
+          }),
+        }),
+    });
+    expect(await screen.findByTestId("runner-allow-cidrs")).toHaveTextContent(
+      "No CIDR allowed — every database server is refused",
+    );
+    expect(screen.getByTestId("runner-nothing-allowed")).toHaveTextContent(
+      "the runner refuses every database server and SSH bastion",
+    );
+    expect(screen.getByText("Refuses everything")).toBeInTheDocument();
+    expect(screen.getByTestId("runner-targets-warnings")).toHaveTextContent(
+      "allow_cidrs and allow_hosts are empty",
+    );
+    expect(screen.getByTestId("runner-no-bastions")).toHaveTextContent("No bastion is restricted");
+    expect(screen.getByTestId("runner-control")).toHaveTextContent("Not known yet");
+    expect(screen.getByTestId("runner-targets-truncated")).toBeInTheDocument();
+  });
+
+  it("shows a calm notice when the runner is unavailable and keeps the rest of the page", async () => {
+    let calls = 0;
+    const { user } = renderApp("/admin/settings/network", {
+      ...baseHandlers(),
+      AdminSsrfAllowlist: () =>
+        ok({
+          ssrfAllowlist: {
+            ...(ssrf().data as { ssrfAllowlist: Record<string, unknown> }).ssrfAllowlist,
+            cidrEntries: [
+              { __typename: "SsrfAllowlistEntry", value: "10.9.0.0/16", scopes: ["DESTINATIONS"] },
+            ],
+          },
+        }),
+      AdminRunnerTargetPolicy: () => {
+        calls++;
+        return ok({
+          runnerTargetPolicy:
+            calls === 1
+              ? runnerPolicy({
+                  available: false,
+                  reason: "The runner could not be reached.",
+                  allowCidrs: [],
+                  allowHosts: [],
+                  denyCidrs: [],
+                  bastionTargets: [],
+                  alwaysDenied: [],
+                  runSubnetPool: null,
+                  controlNetworks: [],
+                })
+              : runnerPolicy(),
+        });
+      },
+    });
+    const notice = await screen.findByTestId("runner-targets-unavailable");
+    expect(notice).toHaveTextContent("The runner's list is not available right now");
+    expect(notice).toHaveTextContent("The runner could not be reached.");
+    // Calm: the default alert, not the destructive one.
+    expect(notice.className).not.toMatch(/destructive/);
+    // The SSRF editor still works.
+    expect(screen.getByDisplayValue("10.9.0.0/16")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add CIDR" })).toBeEnabled();
+    await user.click(within(notice).getByRole("button", { name: "Ask again" }));
+    expect(await screen.findByTestId("runner-allow-cidrs")).toHaveTextContent("10.20.0.0/16");
+    expect(screen.queryByTestId("runner-targets-unavailable")).toBeNull();
+  });
+
+  it("keeps the page usable when the query itself fails", async () => {
+    renderApp("/admin/settings/network", {
+      ...baseHandlers(),
+      AdminSsrfAllowlist: ssrf,
+      AdminRunnerTargetPolicy: () => gqlError("INTERNAL", "internal error"),
+    });
+    expect(await screen.findByTestId("runner-targets-unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add CIDR" })).toBeInTheDocument();
   });
 });
 

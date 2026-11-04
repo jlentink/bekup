@@ -137,6 +137,8 @@ var accountMessages = map[string]string{
 	KindSecondFactorLocked:       "Second-factor checks of your account were locked after repeated failures.",
 	KindRoleChanged:              "The role of your account was changed.",
 	KindPasskeyCloneSuspected:    "A passkey of your account reported a signature counter that went backwards (possibly a cloned authenticator); the sign-in was refused. Review your passkeys.",
+	KindAPIAddressDenied:         "An external API token you created was presented from an address outside its address allowlist and refused; it may be stolen.",
+	KindAPITokenAddressesWidened: "The client addresses of an external API token you created were widened.",
 }
 
 var systemMessages = map[string]string{
@@ -150,6 +152,8 @@ var systemMessages = map[string]string{
 	KindTLSPinMismatch:             "A database server presented a certificate that does not match its pin.",
 	KindSSHHostKeyMismatch:         "An SSH tunnel host presented a host key that does not match its pin.",
 	KindDestinationHostKeyMismatch: "An SFTP destination presented a host key that does not match its pin.",
+	KindDestinationTLSPinMismatch:  "A WebDAV destination presented a TLS certificate that does not match its pin.",
+	KindDestinationTLSPinCleared:   "The certificate pin of a WebDAV destination was removed; its server is verified against the system roots or its CA bundle again.",
 	KindRestoreVerificationFailed:  "A backup file failed its verification before a restore (possible tampering).",
 	// Task 5.5 (D-190).
 	KindJobOwnerAdded:               "An owner was added to a job (the account gains access to its backups).",
@@ -170,6 +174,7 @@ var systemMessages = map[string]string{
 	KindInsecureDBRoles:             "bekup runs migrations and the app with one database account (single-account mode), so a compromised server process could alter the schema and the audit log.",
 	KindUnpinnedImage:               "bekup runs an image that follows a tag (such as :latest) instead of a digest, so whoever moves the tag decides which code runs; pin a digest with setup upgrade --image to remove this warning.",
 	KindServeAliasConflict:          "The network alias bekup-serve on your reverse proxy's Docker network also points to another container, so requests your proxy sends to http://bekup-serve:8080 may reach it. Remove that container's alias, or point the proxy at serve's container name.",
+	KindExternalAPIAliasConflict:    "The network alias bekup-external-api on your reverse proxy's Docker network points to more than one container (or to serve), so requests with API tokens your proxy sends to http://bekup-external-api:8081 may reach another container. Remove the other container's alias, or point the proxy at the external API's container name.",
 	KindAuditHeadExportFailed:       "The signed audit chain head could not be exported.",
 	KindCLIAction:                   "A break-glass command was run on the bekup host.",
 	KindSSRFAllowlistWidened:        "The SSRF allowlist was widened: bekup may now connect to more private hosts or networks. Review the change in the audit log.",
@@ -268,6 +273,13 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 		if EventType(ev.Type) == SecurityAccount {
 			path = "/profile/security"
 			body = accountMessages[str(d, "kind")]
+			switch str(d, "kind") {
+			case KindAPIAddressDenied:
+				body = apiDenialBody(d)
+			case KindAPITokenAddressesWidened:
+				body = apiWidenedBody(d)
+			default:
+			}
 		} else {
 			path = "/admin/audit"
 			body = systemBody(d)

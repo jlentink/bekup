@@ -51,6 +51,7 @@ const (
 	RunnerService_DropTempDatabase_FullMethodName           = "/runner.v1.RunnerService/DropTempDatabase"
 	RunnerService_PrePull_FullMethodName                    = "/runner.v1.RunnerService/PrePull"
 	RunnerService_ListImages_FullMethodName                 = "/runner.v1.RunnerService/ListImages"
+	RunnerService_GetTargetPolicy_FullMethodName            = "/runner.v1.RunnerService/GetTargetPolicy"
 	RunnerService_ScratchStats_FullMethodName               = "/runner.v1.RunnerService/ScratchStats"
 	RunnerService_DropScratchDatabase_FullMethodName        = "/runner.v1.RunnerService/DropScratchDatabase"
 	RunnerService_NeutralizeRestoredDatabase_FullMethodName = "/runner.v1.RunnerService/NeutralizeRestoredDatabase"
@@ -110,6 +111,11 @@ type RunnerServiceClient interface {
 	// catalog plus runner.toml images.extra_file), so serve can offer every
 	// client version the runner accepts.
 	ListImages(ctx context.Context, in *ListImagesRequest, opts ...grpc.CallOption) (*ListImagesResponse, error)
+	// GetTargetPolicy returns the runner's target allowlist (runner.toml
+	// [targets]) as the runner applies it, so admins can see which database
+	// servers and SSH bastions the runner may reach (D-223). Read-only; it
+	// carries no secrets.
+	GetTargetPolicy(ctx context.Context, in *GetTargetPolicyRequest, opts ...grpc.CallOption) (*GetTargetPolicyResponse, error)
 	// ScratchStats captures the completeness statistics of a test-restore
 	// scratch database (task 4.6): the same catalog reads and counts as the
 	// Dump stats, through the same pinned, hostile-safe Go-driver session.
@@ -292,6 +298,16 @@ func (c *runnerServiceClient) ListImages(ctx context.Context, in *ListImagesRequ
 	return out, nil
 }
 
+func (c *runnerServiceClient) GetTargetPolicy(ctx context.Context, in *GetTargetPolicyRequest, opts ...grpc.CallOption) (*GetTargetPolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTargetPolicyResponse)
+	err := c.cc.Invoke(ctx, RunnerService_GetTargetPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runnerServiceClient) ScratchStats(ctx context.Context, in *ScratchStatsRequest, opts ...grpc.CallOption) (*ScratchStatsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ScratchStatsResponse)
@@ -376,6 +392,11 @@ type RunnerServiceServer interface {
 	// catalog plus runner.toml images.extra_file), so serve can offer every
 	// client version the runner accepts.
 	ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error)
+	// GetTargetPolicy returns the runner's target allowlist (runner.toml
+	// [targets]) as the runner applies it, so admins can see which database
+	// servers and SSH bastions the runner may reach (D-223). Read-only; it
+	// carries no secrets.
+	GetTargetPolicy(context.Context, *GetTargetPolicyRequest) (*GetTargetPolicyResponse, error)
 	// ScratchStats captures the completeness statistics of a test-restore
 	// scratch database (task 4.6): the same catalog reads and counts as the
 	// Dump stats, through the same pinned, hostile-safe Go-driver session.
@@ -442,6 +463,9 @@ func (UnimplementedRunnerServiceServer) PrePull(context.Context, *PrePullRequest
 }
 func (UnimplementedRunnerServiceServer) ListImages(context.Context, *ListImagesRequest) (*ListImagesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListImages not implemented")
+}
+func (UnimplementedRunnerServiceServer) GetTargetPolicy(context.Context, *GetTargetPolicyRequest) (*GetTargetPolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTargetPolicy not implemented")
 }
 func (UnimplementedRunnerServiceServer) ScratchStats(context.Context, *ScratchStatsRequest) (*ScratchStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ScratchStats not implemented")
@@ -671,6 +695,24 @@ func _RunnerService_ListImages_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RunnerService_GetTargetPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTargetPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RunnerServiceServer).GetTargetPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RunnerService_GetTargetPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RunnerServiceServer).GetTargetPolicy(ctx, req.(*GetTargetPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RunnerService_ScratchStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ScratchStatsRequest)
 	if err := dec(in); err != nil {
@@ -767,6 +809,10 @@ var RunnerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListImages",
 			Handler:    _RunnerService_ListImages_Handler,
+		},
+		{
+			MethodName: "GetTargetPolicy",
+			Handler:    _RunnerService_GetTargetPolicy_Handler,
 		},
 		{
 			MethodName: "ScratchStats",

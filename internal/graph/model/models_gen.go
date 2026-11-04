@@ -28,6 +28,60 @@ type ActivityEvent struct {
 	Restore *Restore `json:"restore,omitempty"`
 }
 
+// An external API token as the caller may see it. The token itself is
+// returned only once, by createApiToken; bekup keeps only a hash.
+type APIToken struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	// The start of the token (`bkp_` and the first characters of its public id
+	// part) to recognize it in a CI secret store. Never part of the secret.
+	Prefix string `json:"prefix"`
+	// The jobs of the token's scope the caller may see.
+	Jobs []APITokenJob `json:"jobs"`
+	// Jobs of the scope the caller may not see (backup owners see only the jobs
+	// they own); counted only.
+	HiddenJobCount int `json:"hiddenJobCount"`
+	// The creator: for admins always, for others only on their own tokens.
+	CreatedBy *APITokenCreator `json:"createdBy,omitempty"`
+	// The caller created the token.
+	CreatedByMe bool       `json:"createdByMe"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	ExpiresAt   time.Time  `json:"expiresAt"`
+	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
+	// The networks (canonical CIDRs) the token may be used from; empty when
+	// allowAnyAddress is set (exactly one of the two).
+	AllowedCidrs []string `json:"allowedCidrs"`
+	// The token may be used from any address (no allowlist; a permanent warning).
+	AllowAnyAddress bool `json:"allowAnyAddress"`
+	// The newest run request of the token.
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	// When and from which client address the token was last seen: its newest
+	// run request or its newest refused attempt (lastSeenRefused).
+	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
+	// null when the external API passed no address.
+	LastSeenIP *string `json:"lastSeenIp,omitempty"`
+	// The last sighting was a valid token presented from an address outside its
+	// allowlist and refused (it may be stolen).
+	LastSeenRefused bool `json:"lastSeenRefused"`
+}
+
+// Who created an API token.
+type APITokenCreator struct {
+	ID          uuid.UUID `json:"id"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"displayName"`
+	// The account was deleted.
+	Deleted bool `json:"deleted"`
+}
+
+// A job in an API token's scope.
+type APITokenJob struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	// The job was deleted; the token can no longer start it.
+	Deleted bool `json:"deleted"`
+}
+
 // One object stored on a destination.
 type Artifact struct {
 	ID    uuid.UUID `json:"id"`
@@ -501,6 +555,21 @@ type ConnectionVersionInfo struct {
 	Warnings          []string `json:"warnings"`
 }
 
+type CreateAPITokenInput struct {
+	// 1-100 characters.
+	Name string `json:"name"`
+	// The jobs the token may start (1-100). Backup owners may list only jobs
+	// they own.
+	JobIds []uuid.UUID `json:"jobIds"`
+	// Between 1 and 365 days from now.
+	ExpiresAt time.Time `json:"expiresAt"`
+	// 1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
+	// must be empty when allowAnyAddress is set.
+	AllowedCidrs []string `json:"allowedCidrs"`
+	// Explicitly allow any client address (audited and alerted).
+	AllowAnyAddress bool `json:"allowAnyAddress"`
+}
+
 type CreateConnectionInput struct {
 	Name       string         `json:"name"`
 	Engine     DatabaseEngine `json:"engine"`
@@ -527,10 +596,11 @@ type CreateDestinationInput struct {
 	Name string          `json:"name"`
 	Type DestinationType `json:"type"`
 	// Never delete from this destination (default false).
-	NoDelete *bool                 `json:"noDelete,omitempty"`
-	Disk     *DiskDestinationInput `json:"disk,omitempty"`
-	S3       *S3DestinationInput   `json:"s3,omitempty"`
-	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
+	NoDelete *bool                   `json:"noDelete,omitempty"`
+	Disk     *DiskDestinationInput   `json:"disk,omitempty"`
+	S3       *S3DestinationInput     `json:"s3,omitempty"`
+	Sftp     *SftpDestinationInput   `json:"sftp,omitempty"`
+	Webdav   *WebdavDestinationInput `json:"webdav,omitempty"`
 }
 
 type CreateJobInput struct {
@@ -608,6 +678,14 @@ type CreateUserInput struct {
 	Role        Role   `json:"role"`
 }
 
+// A new API token.
+type CreatedAPIToken struct {
+	Token *APIToken `json:"token"`
+	// The token (`bkp_...`), returned only here and only once. Store it as a CI
+	// secret (BEKUP_TOKEN); it cannot be shown again.
+	Plaintext string `json:"plaintext"`
+}
+
 // A newly created account and its one-time temporary password.
 type CreatedUser struct {
 	User              *User              `json:"user"`
@@ -662,9 +740,10 @@ type DestinationLastTest struct {
 
 // Per-type settings; exactly the field of the destination's type is set.
 type DestinationSettings struct {
-	Disk *DiskDestinationSettings `json:"disk,omitempty"`
-	S3   *S3DestinationSettings   `json:"s3,omitempty"`
-	Sftp *SftpDestinationSettings `json:"sftp,omitempty"`
+	Disk   *DiskDestinationSettings   `json:"disk,omitempty"`
+	S3     *S3DestinationSettings     `json:"s3,omitempty"`
+	Sftp   *SftpDestinationSettings   `json:"sftp,omitempty"`
+	Webdav *WebdavDestinationSettings `json:"webdav,omitempty"`
 }
 
 // The public half of a generated SSH keypair; the private key is stored encrypted and never returned.
@@ -678,13 +757,15 @@ type DestinationSSHKeypair struct {
 // The result of testDestination: normalized codes and fixed messages only.
 type DestinationTestResult struct {
 	Ok bool `json:"ok"`
-	// Steps in order: connect, write, read, delete.
+	// Steps in order: connect, (WebDAV: overwrite,) write, read, delete.
 	Steps []DestinationTestStep `json:"steps"`
 	// The probe object's key (below the destination's prefix).
 	ProbeKey *string `json:"probeKey,omitempty"`
 	// True when the probe object was left behind (no-delete mode, Object Lock or a failed delete).
 	ProbeRemains bool    `json:"probeRemains"`
 	Note         *string `json:"note,omitempty"`
+	// WebDAV destinations only: the certificate, server and upload findings of the test (null for other types).
+	Webdav *WebdavTestDetails `json:"webdav,omitempty"`
 }
 
 type DestinationTestStep struct {
@@ -1528,7 +1609,7 @@ type Run struct {
 	Job     *RunJobRef `json:"job"`
 	Status  RunStatus  `json:"status"`
 	Trigger RunTrigger `json:"trigger"`
-	// The user of a manual run; admins and maintainers only (null for backup owners).
+	// The user of a manual or early run, or the API token (and its creator) of an API run; admins and maintainers only (null for backup owners).
 	TriggeredBy  *RunActor  `json:"triggeredBy,omitempty"`
 	ScheduledFor *time.Time `json:"scheduledFor,omitempty"`
 	Attempt      int        `json:"attempt"`
@@ -1567,11 +1648,20 @@ type RunActivity struct {
 	Logs *RunLogBatch `json:"logs,omitempty"`
 }
 
-// The user who started a manual run.
+// Who started a manual, early or API run: the user, or for an API run the
+// creator of the API token (apiToken names the token).
 type RunActor struct {
 	UserID      uuid.UUID `json:"userId"`
 	DisplayName string    `json:"displayName"`
 	Email       string    `json:"email"`
+	// API runs: the token that requested the run (null once its request was pruned after 30 days, and for other runs).
+	APIToken *RunAPIToken `json:"apiToken,omitempty"`
+}
+
+// The API token of an API run (never any part of the token itself).
+type RunAPIToken struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
 }
 
 // An accepted cancelRun.
@@ -1734,6 +1824,21 @@ type RunWarning struct {
 	DestinationID *uuid.UUID `json:"destinationId,omitempty"`
 }
 
+// What one SSH bastion may forward to (bastion_targets).
+type RunnerBastionTargets struct {
+	// The bastion's host name or IP address.
+	Bastion string `json:"bastion"`
+	// CIDRs, then host names.
+	Targets []string `json:"targets"`
+}
+
+// One always-denied category with its ranges.
+type RunnerDeniedRange struct {
+	Category RunnerDeniedCategory `json:"category"`
+	// The ranges (empty for NON_GLOBAL_IPV6).
+	Cidrs []string `json:"cidrs"`
+}
+
 // The runner as seen through its Health RPC (mTLS).
 type RunnerHealth struct {
 	// The runner answered.
@@ -1746,6 +1851,40 @@ type RunnerHealth struct {
 	ActiveRuns *int `json:"activeRuns,omitempty"`
 	// The runner's limit of concurrent containers (null when it did not answer).
 	MaxConcurrentRuns *int `json:"maxConcurrentRuns,omitempty"`
+}
+
+// The runner's target allowlist as the runner applies it. When the runner
+// cannot be asked, available is false, reason says why and the lists are
+// empty.
+type RunnerTargetPolicy struct {
+	// True when the runner answered.
+	Available bool `json:"available"`
+	// Why the allowlist is unavailable (a fixed text; null when available).
+	Reason *string `json:"reason,omitempty"`
+	// CIDRs the runner may connect to (masked, in the configured order).
+	AllowCidrs []string `json:"allowCidrs"`
+	// Host names the runner may connect to (normalized, sorted).
+	AllowHosts []string `json:"allowHosts"`
+	// CIDRs refused before the allow lists.
+	DenyCidrs []string `json:"denyCidrs"`
+	// Host names refused before the allow lists.
+	DenyHosts []string `json:"denyHosts"`
+	// bastion_targets grouped by bastion.
+	BastionTargets []RunnerBastionTargets `json:"bastionTargets"`
+	// docker.run_subnet_pool: always refused (every run's own network lies inside it).
+	RunSubnetPool *string `json:"runSubnetPool,omitempty"`
+	// The runner's control network and container addresses: always refused.
+	ControlNetworks []string `json:"controlNetworks"`
+	// False until the runner knows its container's networks (Docker not ready): controlNetworks is then incomplete.
+	ControlNetworksKnown bool `json:"controlNetworksKnown"`
+	// The always-denied categories.
+	AlwaysDenied []RunnerDeniedRange `json:"alwaysDenied"`
+	// The runner's startup warnings about the allowlist.
+	Warnings []RunnerTargetWarning `json:"warnings"`
+	// The [targets] keys set by environment variables (BEKUP_TARGETS_*) instead of runner.toml.
+	EnvOverrides []RunnerTargetsKey `json:"envOverrides"`
+	// True when a list was longer than the runner reports (256 entries).
+	Truncated bool `json:"truncated"`
 }
 
 type S3DestinationInput struct {
@@ -1880,6 +2019,10 @@ type ServerInfo struct {
 	InsecureTransport bool `json:"insecureTransport"`
 	// True when dev mode is on (never in production).
 	DevMode bool `json:"devMode"`
+	// True when this deployment runs the opt-in external API for CI pipelines
+	// (D-220; BEKUP_EXTERNAL_API=enabled, written by setup). Not a secret and
+	// not a security decision: the UI shows the curl examples only then.
+	ExternalAPIEnabled bool `json:"externalApiEnabled"`
 }
 
 // One of your sessions. The session token itself is never exposed.
@@ -2395,11 +2538,12 @@ type UpdateConnectionInput struct {
 
 // Fields to change; unset fields stay unchanged.
 type UpdateDestinationInput struct {
-	Name     *string               `json:"name,omitempty"`
-	NoDelete *bool                 `json:"noDelete,omitempty"`
-	Disk     *DiskDestinationInput `json:"disk,omitempty"`
-	S3       *S3DestinationInput   `json:"s3,omitempty"`
-	Sftp     *SftpDestinationInput `json:"sftp,omitempty"`
+	Name     *string                 `json:"name,omitempty"`
+	NoDelete *bool                   `json:"noDelete,omitempty"`
+	Disk     *DiskDestinationInput   `json:"disk,omitempty"`
+	S3       *S3DestinationInput     `json:"s3,omitempty"`
+	Sftp     *SftpDestinationInput   `json:"sftp,omitempty"`
+	Webdav   *WebdavDestinationInput `json:"webdav,omitempty"`
 }
 
 // Fields to change; unset fields stay unchanged. The slug cannot change.
@@ -2555,6 +2699,81 @@ type WebAuthnStatus struct {
 	RpID *string `json:"rpId,omitempty"`
 }
 
+// A WebDAV server's TLS certificate (public data).
+type WebdavCertificate struct {
+	// SHA-256 of the certificate's public key (SPKI), lowercase hex: compare it, then pass it to pinWebdavCertificate.
+	SpkiSha256 string `json:"spkiSha256"`
+	// The same SPKI SHA-256 in base64.
+	SpkiSha256Base64 string `json:"spkiSha256Base64"`
+	// SHA-256 of the whole certificate (DER, hex), as browsers and openssl x509 -fingerprint -sha256 show it.
+	FingerprintSha256 string    `json:"fingerprintSha256"`
+	NotBefore         time.Time `json:"notBefore"`
+	NotAfter          time.Time `json:"notAfter"`
+	SelfSigned        bool      `json:"selfSigned"`
+	// When it was pinned (pinned certificates only).
+	PinnedAt *time.Time `json:"pinnedAt,omitempty"`
+}
+
+type WebdavDestinationInput struct {
+	// https URL (http only in dev mode): GENERIC the existing folder that holds
+	// the backups (for example https://u123.your-storagebox.de/backups);
+	// NEXTCLOUD the server address (for example https://cloud.example.com or
+	// https://name.stackstorage.com). Changing it removes the pinned
+	// certificate.
+	URL string `json:"url"`
+	// Default GENERIC.
+	Flavor *WebdavFlavor `json:"flavor,omitempty"`
+	// HTTP Basic user name (no ':').
+	Username string `json:"username"`
+	// Write-only (an app password for Nextcloud/ownCloud). Omit to keep the
+	// stored one, except when url, flavor or username changes: it must then be
+	// entered again.
+	Password *string `json:"password,omitempty"`
+	// Folder below the base; created if missing.
+	Path *string `json:"path,omitempty"`
+	// PEM CA certificates that replace the system roots.
+	CaBundlePem *string `json:"caBundlePem,omitempty"`
+	// Timeout of one metadata request in seconds (5..600; default 60).
+	TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
+}
+
+type WebdavDestinationSettings struct {
+	// The https folder URL (GENERIC) or the server address (NEXTCLOUD).
+	URL      string       `json:"url"`
+	Flavor   WebdavFlavor `json:"flavor"`
+	Username string       `json:"username"`
+	// Folder below the URL (GENERIC) or below the user's files (NEXTCLOUD); empty: the base itself.
+	Path string `json:"path"`
+	// A custom CA bundle (PEM) that replaces the system roots (unused while a certificate is pinned).
+	CaBundlePem *string `json:"caBundlePem,omitempty"`
+	// Timeout of one metadata request in seconds (null: 60).
+	TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
+	HasPassword    bool `json:"hasPassword"`
+	// How the server certificate is verified.
+	Trust WebdavTrust `json:"trust"`
+	// The pinned certificate; null until pinWebdavCertificate.
+	PinnedCertificate *WebdavCertificate `json:"pinnedCertificate,omitempty"`
+}
+
+// What a test of a WebDAV destination saw (fixed values and public data only).
+type WebdavTestDetails struct {
+	Trust WebdavTrust `json:"trust"`
+	// The certificate passed the trust check.
+	Trusted bool `json:"trusted"`
+	// The certificate the server presented (null when none was seen: unreachable or plain http).
+	Certificate *WebdavCertificate `json:"certificate,omitempty"`
+	// The presented certificate's key is the pinned one.
+	PinMatches bool `json:"pinMatches"`
+	// The server looks like Nextcloud or ownCloud (its status.php answered); null otherwise.
+	Server *WebdavServerKind `json:"server,omitempty"`
+	// The flavor the server suggests (NEXTCLOUD when server is set).
+	SuggestedFlavor WebdavFlavor `json:"suggestedFlavor"`
+	// The upload mode the write step used; null when it did not run.
+	UploadMode *WebdavUploadMode `json:"uploadMode,omitempty"`
+	// The overwrite probe; null when it did not finish.
+	OverwriteProtection *WebdavOverwriteProbe `json:"overwriteProtection,omitempty"`
+}
+
 // What an artifact holds.
 type ArtifactKind string
 
@@ -2684,17 +2903,20 @@ const (
 	AuditActorKindSystem AuditActorKind = "SYSTEM"
 	// A host operator running a bekup subcommand.
 	AuditActorKindCli AuditActorKind = "CLI"
+	// An external API token (details name the token and its run request).
+	AuditActorKindAPI AuditActorKind = "API"
 )
 
 var AllAuditActorKind = []AuditActorKind{
 	AuditActorKindUser,
 	AuditActorKindSystem,
 	AuditActorKindCli,
+	AuditActorKindAPI,
 }
 
 func (e AuditActorKind) IsValid() bool {
 	switch e {
-	case AuditActorKindUser, AuditActorKindSystem, AuditActorKindCli:
+	case AuditActorKindUser, AuditActorKindSystem, AuditActorKindCli, AuditActorKindAPI:
 		return true
 	}
 	return false
@@ -3296,17 +3518,20 @@ const (
 	DestinationTypeDisk DestinationType = "DISK"
 	DestinationTypeS3   DestinationType = "S3"
 	DestinationTypeSftp DestinationType = "SFTP"
+	// WebDAV: Nextcloud, ownCloud (TransIP STACK), NAS boxes, Apache/nginx/rclone/Caddy, hosted WebDAV (D-222).
+	DestinationTypeWebdav DestinationType = "WEBDAV"
 )
 
 var AllDestinationType = []DestinationType{
 	DestinationTypeDisk,
 	DestinationTypeS3,
 	DestinationTypeSftp,
+	DestinationTypeWebdav,
 }
 
 func (e DestinationType) IsValid() bool {
 	switch e {
-	case DestinationTypeDisk, DestinationTypeS3, DestinationTypeSftp:
+	case DestinationTypeDisk, DestinationTypeS3, DestinationTypeSftp, DestinationTypeWebdav:
 		return true
 	}
 	return false
@@ -4680,6 +4905,8 @@ const (
 	RunTriggerManual RunTrigger = "MANUAL"
 	// startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward.
 	RunTriggerEarly RunTrigger = "EARLY"
+	// A run request of an external API token (CI).
+	RunTriggerAPI RunTrigger = "API"
 )
 
 var AllRunTrigger = []RunTrigger{
@@ -4687,11 +4914,12 @@ var AllRunTrigger = []RunTrigger{
 	RunTriggerCatchUp,
 	RunTriggerManual,
 	RunTriggerEarly,
+	RunTriggerAPI,
 }
 
 func (e RunTrigger) IsValid() bool {
 	switch e {
-	case RunTriggerSchedule, RunTriggerCatchUp, RunTriggerManual, RunTriggerEarly:
+	case RunTriggerSchedule, RunTriggerCatchUp, RunTriggerManual, RunTriggerEarly, RunTriggerAPI:
 		return true
 	}
 	return false
@@ -4727,6 +4955,203 @@ func (e *RunTrigger) UnmarshalJSON(b []byte) error {
 }
 
 func (e RunTrigger) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A class of addresses that no runner.toml entry can allow.
+type RunnerDeniedCategory string
+
+const (
+	RunnerDeniedCategoryLoopback RunnerDeniedCategory = "LOOPBACK"
+	// This network (0.0.0.0/8) and the unspecified IPv6 address.
+	RunnerDeniedCategoryUnspecified        RunnerDeniedCategory = "UNSPECIFIED"
+	RunnerDeniedCategoryLinkLocal          RunnerDeniedCategory = "LINK_LOCAL"
+	RunnerDeniedCategoryCloudMetadata      RunnerDeniedCategory = "CLOUD_METADATA"
+	RunnerDeniedCategoryMulticastBroadcast RunnerDeniedCategory = "MULTICAST_BROADCAST"
+	RunnerDeniedCategoryReserved           RunnerDeniedCategory = "RESERVED"
+	// IPv4-compatible and IPv4-translated IPv6 forms.
+	RunnerDeniedCategoryIPV4InIPV6 RunnerDeniedCategory = "IPV4_IN_IPV6"
+	RunnerDeniedCategoryTeredo     RunnerDeniedCategory = "TEREDO"
+	// NAT64 and 6to4 addresses that embed an always-denied IPv4 address (the ranges are not denied as a whole).
+	RunnerDeniedCategoryEmbeddedDeniedIPV4 RunnerDeniedCategory = "EMBEDDED_DENIED_IPV4"
+	// Other IPv6 addresses outside global unicast 2000::/3 (no fixed ranges).
+	RunnerDeniedCategoryNonGlobalIPV6 RunnerDeniedCategory = "NON_GLOBAL_IPV6"
+)
+
+var AllRunnerDeniedCategory = []RunnerDeniedCategory{
+	RunnerDeniedCategoryLoopback,
+	RunnerDeniedCategoryUnspecified,
+	RunnerDeniedCategoryLinkLocal,
+	RunnerDeniedCategoryCloudMetadata,
+	RunnerDeniedCategoryMulticastBroadcast,
+	RunnerDeniedCategoryReserved,
+	RunnerDeniedCategoryIPV4InIPV6,
+	RunnerDeniedCategoryTeredo,
+	RunnerDeniedCategoryEmbeddedDeniedIPV4,
+	RunnerDeniedCategoryNonGlobalIPV6,
+}
+
+func (e RunnerDeniedCategory) IsValid() bool {
+	switch e {
+	case RunnerDeniedCategoryLoopback, RunnerDeniedCategoryUnspecified, RunnerDeniedCategoryLinkLocal, RunnerDeniedCategoryCloudMetadata, RunnerDeniedCategoryMulticastBroadcast, RunnerDeniedCategoryReserved, RunnerDeniedCategoryIPV4InIPV6, RunnerDeniedCategoryTeredo, RunnerDeniedCategoryEmbeddedDeniedIPV4, RunnerDeniedCategoryNonGlobalIPV6:
+		return true
+	}
+	return false
+}
+
+func (e RunnerDeniedCategory) String() string {
+	return string(e)
+}
+
+func (e *RunnerDeniedCategory) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunnerDeniedCategory(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunnerDeniedCategory", str)
+	}
+	return nil
+}
+
+func (e RunnerDeniedCategory) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunnerDeniedCategory) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunnerDeniedCategory) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A startup warning of the runner's target allowlist.
+type RunnerTargetWarning string
+
+const (
+	// allow_cidrs and allow_hosts are empty: the runner refuses every database server and SSH bastion.
+	RunnerTargetWarningEmptyAllowlist RunnerTargetWarning = "EMPTY_ALLOWLIST"
+	// bastion_targets is empty: an allowed SSH bastion may forward to any host
+	// it reaches (only deny_cidrs and deny_hosts apply behind it).
+	RunnerTargetWarningBastionsUnrestricted RunnerTargetWarning = "BASTIONS_UNRESTRICTED"
+)
+
+var AllRunnerTargetWarning = []RunnerTargetWarning{
+	RunnerTargetWarningEmptyAllowlist,
+	RunnerTargetWarningBastionsUnrestricted,
+}
+
+func (e RunnerTargetWarning) IsValid() bool {
+	switch e {
+	case RunnerTargetWarningEmptyAllowlist, RunnerTargetWarningBastionsUnrestricted:
+		return true
+	}
+	return false
+}
+
+func (e RunnerTargetWarning) String() string {
+	return string(e)
+}
+
+func (e *RunnerTargetWarning) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunnerTargetWarning(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunnerTargetWarning", str)
+	}
+	return nil
+}
+
+func (e RunnerTargetWarning) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunnerTargetWarning) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunnerTargetWarning) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A key of runner.toml [targets].
+type RunnerTargetsKey string
+
+const (
+	RunnerTargetsKeyAllowCidrs     RunnerTargetsKey = "ALLOW_CIDRS"
+	RunnerTargetsKeyAllowHosts     RunnerTargetsKey = "ALLOW_HOSTS"
+	RunnerTargetsKeyDenyCidrs      RunnerTargetsKey = "DENY_CIDRS"
+	RunnerTargetsKeyDenyHosts      RunnerTargetsKey = "DENY_HOSTS"
+	RunnerTargetsKeyBastionTargets RunnerTargetsKey = "BASTION_TARGETS"
+)
+
+var AllRunnerTargetsKey = []RunnerTargetsKey{
+	RunnerTargetsKeyAllowCidrs,
+	RunnerTargetsKeyAllowHosts,
+	RunnerTargetsKeyDenyCidrs,
+	RunnerTargetsKeyDenyHosts,
+	RunnerTargetsKeyBastionTargets,
+}
+
+func (e RunnerTargetsKey) IsValid() bool {
+	switch e {
+	case RunnerTargetsKeyAllowCidrs, RunnerTargetsKeyAllowHosts, RunnerTargetsKeyDenyCidrs, RunnerTargetsKeyDenyHosts, RunnerTargetsKeyBastionTargets:
+		return true
+	}
+	return false
+}
+
+func (e RunnerTargetsKey) String() string {
+	return string(e)
+}
+
+func (e *RunnerTargetsKey) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunnerTargetsKey(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunnerTargetsKey", str)
+	}
+	return nil
+}
+
+func (e RunnerTargetsKey) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunnerTargetsKey) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunnerTargetsKey) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
@@ -5892,6 +6317,302 @@ func (e *TLSPinStatus) UnmarshalJSON(b []byte) error {
 }
 
 func (e TLSPinStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// The dialect of a WebDAV server.
+type WebdavFlavor string
+
+const (
+	// Plain WebDAV: url is the folder that holds the backups; uploads are one streaming PUT.
+	WebdavFlavorGeneric WebdavFlavor = "GENERIC"
+	// Nextcloud or ownCloud (TransIP STACK too): url is the server address;
+	// files live below the user's files and large uploads use the chunked
+	// upload API (64 MiB chunks).
+	WebdavFlavorNextcloud WebdavFlavor = "NEXTCLOUD"
+)
+
+var AllWebdavFlavor = []WebdavFlavor{
+	WebdavFlavorGeneric,
+	WebdavFlavorNextcloud,
+}
+
+func (e WebdavFlavor) IsValid() bool {
+	switch e {
+	case WebdavFlavorGeneric, WebdavFlavorNextcloud:
+		return true
+	}
+	return false
+}
+
+func (e WebdavFlavor) String() string {
+	return string(e)
+}
+
+func (e *WebdavFlavor) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WebdavFlavor(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WebdavFlavor", str)
+	}
+	return nil
+}
+
+func (e WebdavFlavor) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WebdavFlavor) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WebdavFlavor) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// The outcome of the WebDAV overwrite probe.
+type WebdavOverwriteProbe string
+
+const (
+	// The server refuses to move a file onto an existing one ('Overwrite: F'): required.
+	WebdavOverwriteProbeRefused WebdavOverwriteProbe = "REFUSED"
+	// The server replaced the existing file: bekup never writes to it.
+	WebdavOverwriteProbeIgnored WebdavOverwriteProbe = "IGNORED"
+)
+
+var AllWebdavOverwriteProbe = []WebdavOverwriteProbe{
+	WebdavOverwriteProbeRefused,
+	WebdavOverwriteProbeIgnored,
+}
+
+func (e WebdavOverwriteProbe) IsValid() bool {
+	switch e {
+	case WebdavOverwriteProbeRefused, WebdavOverwriteProbeIgnored:
+		return true
+	}
+	return false
+}
+
+func (e WebdavOverwriteProbe) String() string {
+	return string(e)
+}
+
+func (e *WebdavOverwriteProbe) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WebdavOverwriteProbe(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WebdavOverwriteProbe", str)
+	}
+	return nil
+}
+
+func (e WebdavOverwriteProbe) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WebdavOverwriteProbe) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WebdavOverwriteProbe) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What a WebDAV test recognized the server as.
+type WebdavServerKind string
+
+const (
+	WebdavServerKindNextcloud WebdavServerKind = "NEXTCLOUD"
+	WebdavServerKindOwncloud  WebdavServerKind = "OWNCLOUD"
+)
+
+var AllWebdavServerKind = []WebdavServerKind{
+	WebdavServerKindNextcloud,
+	WebdavServerKindOwncloud,
+}
+
+func (e WebdavServerKind) IsValid() bool {
+	switch e {
+	case WebdavServerKindNextcloud, WebdavServerKindOwncloud:
+		return true
+	}
+	return false
+}
+
+func (e WebdavServerKind) String() string {
+	return string(e)
+}
+
+func (e *WebdavServerKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WebdavServerKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WebdavServerKind", str)
+	}
+	return nil
+}
+
+func (e WebdavServerKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WebdavServerKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WebdavServerKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How a WebDAV server's TLS certificate is verified.
+type WebdavTrust string
+
+const (
+	// Against the system roots.
+	WebdavTrustSystem WebdavTrust = "SYSTEM"
+	// Only against the destination's CA bundle.
+	WebdavTrustCaBundle WebdavTrust = "CA_BUNDLE"
+	// Only the pinned certificate (and its key) is accepted.
+	WebdavTrustPinned WebdavTrust = "PINNED"
+	// No TLS at all: a plain http URL, accepted in dev mode only.
+	WebdavTrustPlainHTTP WebdavTrust = "PLAIN_HTTP"
+)
+
+var AllWebdavTrust = []WebdavTrust{
+	WebdavTrustSystem,
+	WebdavTrustCaBundle,
+	WebdavTrustPinned,
+	WebdavTrustPlainHTTP,
+}
+
+func (e WebdavTrust) IsValid() bool {
+	switch e {
+	case WebdavTrustSystem, WebdavTrustCaBundle, WebdavTrustPinned, WebdavTrustPlainHTTP:
+		return true
+	}
+	return false
+}
+
+func (e WebdavTrust) String() string {
+	return string(e)
+}
+
+func (e *WebdavTrust) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WebdavTrust(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WebdavTrust", str)
+	}
+	return nil
+}
+
+func (e WebdavTrust) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WebdavTrust) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WebdavTrust) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How a WebDAV destination uploads.
+type WebdavUploadMode string
+
+const (
+	// One streaming PUT.
+	WebdavUploadModeSingle WebdavUploadMode = "SINGLE"
+	// The Nextcloud/ownCloud chunked-upload API.
+	WebdavUploadModeChunked WebdavUploadMode = "CHUNKED"
+)
+
+var AllWebdavUploadMode = []WebdavUploadMode{
+	WebdavUploadModeSingle,
+	WebdavUploadModeChunked,
+}
+
+func (e WebdavUploadMode) IsValid() bool {
+	switch e {
+	case WebdavUploadModeSingle, WebdavUploadModeChunked:
+		return true
+	}
+	return false
+}
+
+func (e WebdavUploadMode) String() string {
+	return string(e)
+}
+
+func (e *WebdavUploadMode) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WebdavUploadMode(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WebdavUploadMode", str)
+	}
+	return nil
+}
+
+func (e WebdavUploadMode) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WebdavUploadMode) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WebdavUploadMode) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

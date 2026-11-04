@@ -9,15 +9,19 @@ a configuration change; D-187, D-195); maintainers see it read only and may
 run tests.
 The form adapts to the type (S3: endpoint, region, bucket, prefix, path
 style, encryption, checksums, Object Lock, custom CA; SFTP: server, user,
-base path and sign-in; disk: the directory). Secret keys and passwords are
-write-only; changing an SFTP destination's server, user or base path asks
-for its stored password again (D-140). SFTP host keys are fetched, compared
-and confirmed explicitly, and **Generate keypair** shows the public key to
-install.
+base path and sign-in; WebDAV: URL, flavor, user, password, folder and
+optional CA bundle; disk: the directory). Secret keys and passwords are
+write-only; changing an SFTP destination's server, user or base path, or a
+WebDAV destination's URL, flavor or username, asks for its stored password
+again (D-140). SFTP host keys are fetched, compared and confirmed
+explicitly, and **Generate keypair** shows the public key to install;
+WebDAV certificates are pinned from a test result the same way.
 
 A destination is a reusable place where bekup writes backup artifacts:
 local disk (confined to the disk root), S3 and S3-compatible storage
-(Object Lock, no-delete mode, custom CA) and SFTP with pinned host keys.
+(Object Lock, no-delete mode, custom CA), SFTP with pinned host keys and
+WebDAV (Nextcloud, ownCloud and TransIP STACK, NAS boxes, Apache/nginx/
+rclone/Caddy, hosted WebDAV such as Hetzner Storage Box).
 
 ## What every destination guarantees
 
@@ -61,6 +65,18 @@ its location while it still holds backups. "The same location" means:
 | Local disk | the directory below `storage.disk_root` (`nightly` and `nightly/db` overlap, `nightly` and `nightly2` do not) |
 | S3 | the endpoint (empty and every `*.amazonaws.com` endpoint are AWS) and the bucket, then the key prefix (an empty prefix contains every other one) |
 | SFTP | the host and port (plus the user when the base path is relative to the user's home), then base path + subdirectory |
+| WebDAV | the host and port, then the URL path + folder, compared case-insensitively; Nextcloud/ownCloud destinations (and generic URLs into `remote.php/webdav` or `remote.php/dav/files/<user>`) per user and server root. The user is the login name and, for the `NEXTCLOUD` flavor, the user id the server reports for it when the destination is saved (an e-mail or LDAP login and the user name are the same user) |
+
+Saving a `NEXTCLOUD` destination asks the server once for the account's
+user id (the files live below it, and it may differ from the login name).
+When the server cannot be asked while saving (offline, a certificate that
+still needs a pin, a wrong password), the check falls back to the login
+name, so two different logins of one user (for example `alice@example.com`
+and `alice`) are not recognized as the same location until the
+destination is saved again while the server answers. Use one login per
+Nextcloud user for bekup, and save the destination again after pinning
+its certificate. Generic URLs into `remote.php/webdav` are compared by the
+login name only.
 
 To take over backups that already exist at a location (for example
 written by another bekup installation), import them with
@@ -360,6 +376,23 @@ server that implements that rename as an overwriting rename leaves a small
 race. Partial files are never listed as backups and are removed after a
 failure or by the periodic maintenance.
 
+After closing the partial file bekup checks with a stat of its path that
+the server holds every byte it wrote. Cloud storage with SFTP access, such
+as **TransIP STACK** (ownCloud behind an SFTP gateway), is supported: such
+gateways report a wrong size while a file is still open and may store an
+upload a moment after it was closed, so bekup re-checks a short or not yet
+visible file for about 3 seconds. If the server keeps reporting another
+size the upload fails and the run log says what the server reported, for
+example `destination … dropped (error: the data did not match the expected
+checksum: the server reported 0 B of 41.2 MiB after closing)`. Reading a
+backup back (restores, downloads, verification) works on such gateways
+too: when the server misreports an open file, bekup accepts it only if
+its directory entry is unchanged and stops with an error if the server
+sends fewer or more bytes than that entry says. These checks are only
+plausibility checks: integrity rests on age encryption and the signed
+manifest, and test restores read the backups back from the destination
+and verify them.
+
 bekup never follows symbolic links below the base directory: uploads
 through a linked directory are refused, linked files are treated as
 missing and skipped in listings. The base directory itself is resolved
@@ -391,6 +424,129 @@ could still redirect an access between bekup's check and its use. The
 server is trusted to enforce its permissions and chroot; the backups'
 integrity rests on age encryption and the signed manifest.
 
+## WebDAV
+
+A WebDAV destination stores backups on a WebDAV server through bekup's own
+small client (no WebDAV library). It connects through the network
+allowlist like S3 and SFTP, speaks **https only** (plain http only in dev
+mode) and signs in with **HTTP Basic authentication over HTTPS** (a
+username and a password or app password). bekup never follows a redirect
+(a redirect fails with "the server answered with a redirect": check the
+URL, https and the exact folder address) and never sends the password to
+another host.
+
+Two flavors:
+
+| Flavor | URL | Uploads |
+|---|---|---|
+| `GENERIC` (default) | the existing folder that holds the backups, e.g. `https://u123456.your-storagebox.de/backups` or `https://nas.local:5006/backups` | one streaming `PUT` |
+| `NEXTCLOUD` | the server address, e.g. `https://cloud.example.com` (or with its path, `https://example.com/nextcloud`), `https://name.stackstorage.com` | the Nextcloud/ownCloud chunked-upload API: 64 MiB chunks, so PHP and proxy upload limits never see a multi-GB dump |
+
+The optional **folder** (`path`) lies below the URL (generic) or below the
+user's files (Nextcloud) and is created if missing; with the generic
+flavor the URL's folder itself must exist. The test suggests the Nextcloud
+flavor when the server answers like Nextcloud or ownCloud.
+
+### How bekup writes
+
+Every upload goes to a hidden temporary file `.<random>.partial` next to
+its final name, is hashed while it streams, its stored size is checked,
+and only then is it renamed to the final name with `MOVE` and
+**`Overwrite: F`**, which tells the server to refuse when the name exists.
+WebDAV has no "create only if new" that every server supports, so
+"never overwrite" depends on the server honoring that header. bekup
+proves it before the first upload of every run and in every test (the
+**overwrite probe**, step `overwrite`): it writes two hidden files and
+moves one onto the other with `Overwrite: F`; the server must refuse and
+leave the other file unchanged. A server (or a proxy in front of it) that
+replaces the file is **never written to**: uploads fail with
+`overwrite_ignored`, and after such a test the destination is not ready
+until a new test passes. Fix the server (for example a reverse proxy that
+drops the `Overwrite` header) and test again.
+
+With the Nextcloud flavor bekup creates an upload folder
+`bekup-<random>` below `remote.php/dav/uploads/<user>/`, uploads the
+chunks and moves them into place with `Overwrite: F` and the total size
+(`OC-Total-Length`), which the server checks. One upload holds one chunk
+(64 MiB) in memory. If the server has no chunked-upload endpoint, bekup
+falls back to the single `PUT`; the test shows the mode it used.
+
+The daily maintenance removes leftover partials and bekup's own upload
+folders older than 24 hours (never other clients' uploads) and removes
+empty run folders. It never deletes job folders: a WebDAV delete of a
+folder is recursive, and a new backup run may be creating its folder there
+at that moment. Deletes of backups touch files only. WebDAV has no
+immutability; no-delete mode works as everywhere (give the account no
+delete rights on the server too where possible).
+
+### TLS: system roots, CA bundle or a pinned certificate
+
+By default the server certificate is checked against the system roots. A
+**CA bundle** (PEM) replaces them for a private CA. For a self-signed
+certificate (typical for a Synology or QNAP box on the LAN) **pin the
+certificate**:
+
+1. Create the destination and run **Test**. The `connect` step fails with
+   "the server's TLS certificate is not trusted"; the result shows the
+   certificate's SPKI SHA-256 (the hash of its public key), its SHA-256 and
+   its validity.
+2. Compare the fingerprint out of band, for example on the server:
+   `openssl x509 -in cert.pem -noout -pubkey | openssl pkey -pubin -outform der | openssl dgst -sha256`
+   (SPKI) or `openssl x509 -in cert.pem -noout -fingerprint -sha256`
+   (certificate), or in the NAS's certificate settings.
+3. Choose **Pin this certificate** (admin, step-up). bekup connects again,
+   and pins the certificate only if it still has that key.
+
+From then on only this certificate is accepted (not the system roots, not
+the CA bundle); the host name and validity are still checked, so the
+certificate must name the host or IP address of the URL. NAS default
+certificates are often issued for another name: create one for the
+address you use (DSM: *Control Panel → Security → Certificate → Add →
+Create a self-signed certificate*, with the host name or IP as subject
+alternative name; QTS: *Control Panel → Security → SSL Certificate &
+Private Key*). When the server's certificate is renewed, the test reports
+`tls_pin_mismatch` (a security event: audited as
+`destination.tls_pin_mismatch` and alerted to every admin); check the new
+certificate and pin it again. Changing the URL removes the pin.
+
+### Servers
+
+- **Nextcloud and ownCloud.** Use the `NEXTCLOUD` flavor with the server
+  address and create an **app password** for bekup (Nextcloud: *Settings →
+  Security → Devices & sessions*; ownCloud: *Settings → Security → App
+  passwords*); with two-factor authentication it is required. bekup finds
+  the account's user id itself (it may differ from the login name).
+- **Folder listings.** bekup matches the server's listing with the folder
+  it asked for, also when the server spells the folder in another letter
+  case or Unicode form (a case-insensitive server, names stored
+  decomposed). A listing that names neither the folder nor anything in it
+  fails with "the server's listing names the folder differently than
+  requested" instead of looking empty: check the spelling of the URL and
+  folder.
+- **TransIP STACK** is built on ownCloud: flavor `NEXTCLOUD`, URL
+  `https://<name>.stackstorage.com`, your STACK user and a STACK app
+  password if two-factor authentication is on. The test shows whether the
+  chunked uploads work (`uploadMode: CHUNKED`); otherwise bekup uses the
+  single `PUT`. The generic flavor with
+  `https://<name>.stackstorage.com/remote.php/webdav` works too, but then
+  every upload is one request.
+- **Synology / QNAP.** Enable the WebDAV server (DSM: *WebDAV Server*
+  package, HTTPS port 5006), create a shared folder and a dedicated user,
+  then use `GENERIC` with `https://<nas>:5006/<shared folder>` and pin the
+  certificate (above).
+- **Hetzner Storage Box.** Enable WebDAV for the box (or a sub-account),
+  then `GENERIC` with `https://<user>.your-storagebox.de/<folder>` (the
+  folder must exist); the certificate is publicly trusted.
+- **Apache mod_dav, nginx (dav + dav_ext), rclone, Caddy (webdav plugin).**
+  `GENERIC` with the folder URL. The overwrite probe tells you whether the
+  server honours `Overwrite: F`.
+
+### Network access
+
+Like S3 and SFTP, the server's host must resolve to an address the
+network allowlist permits; a NAS on the LAN needs an allowlist entry
+(*Administration → Network*).
+
 ## Testing a destination
 
 The destination test writes a small probe object under
@@ -407,9 +563,12 @@ show the same "refused access" message, and all network failures (DNS,
 refused connection, TLS, blocked by the network allowlist) the same
 "could not be reached" message; admins find the details in the server log.
 
-The result lists the steps `connect`, `write`, `read` and `delete`, each
-with a normalized code (`ok`, `permission_denied`, `host_key_mismatch`,
-`network`, `timeout`, ...) and a fixed message. Admins and maintainers may test; tests are
+The result lists the steps `connect`, `write`, `read` and `delete` (WebDAV:
+`connect`, `overwrite`, `write`, `read`, `delete`), each with a normalized
+code (`ok`, `permission_denied`, `host_key_mismatch`, `tls_pin_mismatch`,
+`overwrite_ignored`, `network`, `timeout`, ...) and a fixed message, in some
+cases followed by a short detail bekup composes itself (an HTTP status
+number, a size, never server text). Admins and maintainers may test; tests are
 limited to 10 per minute per user (burst 5), a few at a time, and one per
 request.
 
@@ -446,13 +605,15 @@ GraphQL operations (all POST to `/graphql`):
 | Field | Who | Purpose |
 |---|---|---|
 | `destinations`, `destination(id)` | admin, maintainer | List / view (settings for admins only) |
-| `createDestination(input)` | admin, step-up | Create; exactly the `disk`, `s3` or `sftp` input matching `type` |
+| `createDestination(input)` | admin, step-up | Create; exactly the `disk`, `s3`, `sftp` or `webdav` input matching `type` |
 | `updateDestination(id, input)` | admin, step-up | A settings input replaces the whole non-secret configuration of its type |
 | `deleteDestination(id)` | admin, step-up | Soft delete (the name can be reused) |
 | `testDestination(id)` | admin, maintainer | Probe write/read/delete (see above) |
 | `fetchDestinationHostKey(id)` | admin | Show the host key the SFTP destination's stored host presents (trust on first use; nothing is stored) |
 | `confirmDestinationHostKey(id, authorizedKey, expectedHost, expectedPort)` | admin, step-up | Pin the host key of an SFTP destination (fails with `CONFLICT` if host/port changed since the fetch) |
 | `generateDestinationSshKeypair(id)` | admin, step-up | New ed25519 key for an SFTP destination; returns the public key only |
+| `pinWebdavCertificate(id, fingerprint)` | admin, step-up | Pin the certificate a WebDAV server presents, if its SPKI SHA-256 is `fingerprint` (captured again; `CONFLICT` if it changed); only field of its request |
+| `clearWebdavCertificatePin(id)` | admin, step-up | Remove a WebDAV certificate pin (audited and alerted) |
 | `destinationUnrecordedFiles(destinationId, first, after)` | admin | The unrecorded files found by the daily scan (paged by key), with totals and the last scan time (D-209) |
 | `deleteUnrecordedFile(destinationId, id)` | admin, step-up | Delete one unrecorded file (re-checked, audited; refused in no-delete mode); only field of its request |
 
@@ -516,6 +677,31 @@ mutation {
 
 Changing the host or port of an SFTP destination removes the pinned host
 key: confirm the new server's key again.
+
+### Setting up a WebDAV destination
+
+```graphql
+mutation {
+  createDestination(input: {
+    name: "STACK"
+    type: WEBDAV
+    webdav: {
+      url: "https://name.stackstorage.com"
+      flavor: NEXTCLOUD
+      username: "name"
+      password: "<app password>"
+      path: "bekup"
+    }
+  }) { id ready }
+}
+```
+
+Then `testDestination(id)`: the result's `webdav` field holds the
+certificate (`spkiSha256`, `fingerprintSha256`, validity), `trusted`, the
+recognized `server` and `suggestedFlavor`, the `uploadMode` and the
+`overwriteProtection` (`REFUSED` is required). For a self-signed
+certificate, compare `spkiSha256` out of band and call
+`pinWebdavCertificate(id, fingerprint: "<spkiSha256>")`, then test again.
 
 A deleted destination disappears from the API, but backup, retention and
 restore workers can still open it for the artifacts stored there.

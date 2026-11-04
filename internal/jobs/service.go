@@ -1136,30 +1136,134 @@ func (s *Service) RunNow(ctx context.Context, actor Actor, id uuid.UUID) (RunReq
 	if s.o.Queue == nil {
 		return RunRequest{}, errors.New("jobs: no queue configured")
 	}
-	req := RunRequest{JobID: id, RequestedAt: s.o.Now().UTC()}
+	var req RunRequest
 	err := db.TxWith(ctx, s.o.DB, func(tx pgx.Tx, q *sqlc.Queries) error {
-		job, err := q.GetJobForShare(ctx, id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("jobs: load: %w", err)
-		}
-		if !job.Enabled {
-			return ErrDisabled
-		}
 		by := actor.UserID
-		res, err := runstate.EnqueueTx(ctx, tx, s.o.Queue, s.o.Publisher, queue.BackupRunArgs{JobID: id, Trigger: queue.TriggerManual, TriggeredBy: &by})
-		if err != nil {
-			return fmt.Errorf("jobs: enqueue run: %w", err)
-		}
-		if res.Duplicate {
-			return ErrRunActive
-		}
-		req.QueueJobID, req.RunID = res.JobID, res.RunID
-		return s.record(ctx, q, actor, audit.ActionJobRunRequested, id, audit.Details{"name": job.Name, "queue_job_id": res.JobID, "run_id": res.RunID.String()})
+		var err error
+		req, err = s.enqueueManualTx(ctx, tx, q, id, manualRun{
+			trigger: queue.TriggerManual, triggeredBy: &by, actor: audit.UserActor(actor.UserID), ip: actor.IP,
+		})
+		return err
 	})
 	if err != nil {
+		return RunRequest{}, err
+	}
+	return req, nil
+}
+
+// APIActor is an external API token acting on one of its run requests
+// (D-220). The token's name is read from the database; IP is the CI
+// client's address recorded with the request (audited; may be invalid).
+type APIActor struct {
+	TokenID   uuid.UUID
+	RequestID uuid.UUID
+	IP        netip.Addr
+}
+
+// Errors of RunFromAPI (D-220) besides ErrNotFound, ErrDisabled and
+// ErrRunActive.
+var (
+	// ErrAPITokenInvalid: the token is unknown, revoked or expired, or its
+	// creator may no longer hold one (public.api_token_valid).
+	ErrAPITokenInvalid = errors.New("jobs: the API token is no longer valid")
+	// ErrAPIJobOutOfScope: the job is deleted or no longer in the token's
+	// scope (public.api_token_job_allowed: e.g. the creator lost the
+	// ownership or was demoted to user).
+	ErrAPIJobOutOfScope = errors.New("jobs: the job is not in the API token's scope")
+)
+
+// RunFromAPI enqueues the backup run of an external API run request
+// (trigger api, D-220) in tx, the consumer's transaction (internal/apiaccess).
+// It has no principal in ctx and does not consult the policy: it is
+// authorized by the SQL scope rule, re-checked in tx with the token row
+// locked (a concurrent revocation waits) and the job share-locked: an
+// invalid token is ErrAPITokenInvalid, a job outside the scope
+// ErrAPIJobOutOfScope. Then it behaves like RunNow (ErrNotFound,
+// ErrDisabled, ErrRunActive) and audits job.run_requested with the api
+// actor (token id and name, request id; never any part of the token
+// secret). On an error tx holds partial work: roll it (or its savepoint)
+// back.
+func (s *Service) RunFromAPI(ctx context.Context, tx pgx.Tx, actor APIActor, id uuid.UUID) (RunRequest, error) {
+	if s.o.Queue == nil {
+		return RunRequest{}, errors.New("jobs: no queue configured")
+	}
+	if actor.TokenID == uuid.Nil || actor.RequestID == uuid.Nil {
+		return RunRequest{}, errors.New("jobs: API actor without token or request id")
+	}
+	q := sqlc.New(tx)
+	tok, err := q.GetAPITokenForUpdate(ctx, actor.TokenID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RunRequest{}, ErrAPITokenInvalid
+	}
+	if err != nil {
+		return RunRequest{}, fmt.Errorf("jobs: lock the API token: %w", err)
+	}
+	valid, err := q.APITokenValid(ctx, tok.ID)
+	if err != nil {
+		return RunRequest{}, fmt.Errorf("jobs: check the API token: %w", err)
+	}
+	if !valid {
+		return RunRequest{}, ErrAPITokenInvalid
+	}
+	return s.enqueueManualTx(ctx, tx, q, id, manualRun{
+		trigger: queue.TriggerAPI, actor: audit.APIActor(tok.ID, tok.Name, actor.RequestID), ip: actor.IP,
+		check: func(ctx context.Context, q *sqlc.Queries) error {
+			ok, err := q.APITokenJobAllowed(ctx, sqlc.APITokenJobAllowedParams{TokenID: tok.ID, JobID: id})
+			if err != nil {
+				return fmt.Errorf("jobs: check the API token's scope: %w", err)
+			}
+			if !ok {
+				return ErrAPIJobOutOfScope
+			}
+			return nil
+		},
+	})
+}
+
+// manualRun describes an unscheduled run for enqueueManualTx.
+type manualRun struct {
+	trigger     queue.Trigger
+	triggeredBy *uuid.UUID
+	actor       audit.Actor
+	ip          netip.Addr
+	// check runs after the job is share-locked, before anything is
+	// written (nil: none).
+	check func(ctx context.Context, q *sqlc.Queries) error
+}
+
+// enqueueManualTx is the shared body of RunNow and RunFromAPI: in tx it
+// share-locks the job (ErrNotFound when gone), runs m.check, refuses a
+// disabled job (ErrDisabled), enqueues the run with its queued run row
+// (River's unique key: ErrRunActive) and audits job.run_requested.
+func (s *Service) enqueueManualTx(ctx context.Context, tx pgx.Tx, q *sqlc.Queries, id uuid.UUID, m manualRun) (RunRequest, error) {
+	req := RunRequest{JobID: id, RequestedAt: s.o.Now().UTC()}
+	job, err := q.GetJobForShare(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RunRequest{}, ErrNotFound
+	}
+	if err != nil {
+		return RunRequest{}, fmt.Errorf("jobs: load: %w", err)
+	}
+	if m.check != nil {
+		if err := m.check(ctx, q); err != nil {
+			return RunRequest{}, err
+		}
+	}
+	if !job.Enabled {
+		return RunRequest{}, ErrDisabled
+	}
+	res, err := runstate.EnqueueTx(ctx, tx, s.o.Queue, s.o.Publisher, queue.BackupRunArgs{JobID: id, Trigger: m.trigger, TriggeredBy: m.triggeredBy})
+	if err != nil {
+		return RunRequest{}, fmt.Errorf("jobs: enqueue run: %w", err)
+	}
+	if res.Duplicate {
+		return RunRequest{}, ErrRunActive
+	}
+	req.QueueJobID, req.RunID = res.JobID, res.RunID
+	if _, err := s.o.Auditor.RecordTx(ctx, q, audit.Event{
+		Actor: m.actor, Action: audit.ActionJobRunRequested, TargetType: AuditTargetType, TargetID: id.String(), IP: m.ip,
+		Details: audit.Details{"name": job.Name, "queue_job_id": res.JobID, "run_id": res.RunID.String()},
+	}); err != nil {
 		return RunRequest{}, err
 	}
 	return req, nil

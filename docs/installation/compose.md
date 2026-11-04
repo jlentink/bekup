@@ -70,16 +70,17 @@ The repository root holds the sources:
 
 ```
 traefik | nginx ──frontend──> serve ──backend──> postgres
-                                     │ └──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded)
-                                     └──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
-                                                                    └──targets──> target databases
+      │                              │ └──egress──> S3 / SFTP / SMTP / webhooks (SSRF-guarded)
+      │                              └──runner-ctl (mTLS gRPC)──> runner ──docker.sock──> dockerd
+      │                                                             └──targets──> target databases
+      └── /api/v1/ ──frontend──> external-api ──backend──> postgres   (opt-in profile external-api)
 ```
 
 | Network | Internal | Members | Why |
 |---|---|---|---|
-| `frontend` | yes | reverse proxy (fixed `10.213.250.5`), `serve` (fixed `10.213.250.10`) | the only way to reach the UI; fixed proxy address for `trusted_proxies` |
+| `frontend` | yes | reverse proxy (fixed `10.213.250.5`), `serve` (fixed `10.213.250.10`), `external-api` (fixed `10.213.250.11`, opt-in) | the only way to reach the UI and the external API; fixed proxy address for `trusted_proxies` |
 | `edge` | no | reverse proxy, `certbot` | published ports 80/443 and outbound ACME (a published port needs a non-internal network) |
-| `backend` | yes | `serve`, `migrate`, `admin`, `postgres` | the app database is unreachable from everything else |
+| `backend` | yes | `serve`, `migrate`, `admin`, `postgres`, `external-api` (opt-in) | the app database is unreachable from everything else |
 | `runner-ctl` | yes | `serve`, `runner` | mTLS gRPC only; fixed subnet so the runner can bind to it |
 | `targets` | no | `runner` | dump traffic to target databases and SSH bastions; the runner's target allowlist decides what is reachable |
 | `egress` | no | `serve` | uploads to destinations, SMTP and webhooks, every dial checked by the SSRF guard |
@@ -92,15 +93,15 @@ bundled proxy, no `frontend` or `edge` network and publishes no ports;
 
 | Network | Internal | Members | Why |
 |---|---|---|---|
-| `proxy` (external: your proxy's network, `BEKUP_PROXY_NETWORK`) | yours | your proxy, `serve` (alias `bekup-serve`, no fixed address), whatever else you run there | the only way to reach the UI: your proxy forwards to `http://bekup-serve:8080`; `trusted_proxy_hosts` names your proxy's container |
-| `backend` | yes | `serve`, `migrate`, `admin`, `postgres` | as above |
+| `proxy` (external: your proxy's network, `BEKUP_PROXY_NETWORK`) | yours | your proxy, `serve` (alias `bekup-serve`, no fixed address), `external-api` (alias `bekup-external-api`, opt-in), whatever else you run there | the only way to reach the UI: your proxy forwards to `http://bekup-serve:8080` (and `/api/v1/` to `http://bekup-external-api:8081`); `trusted_proxy_hosts` names your proxy's container |
+| `backend` | yes | `serve`, `migrate`, `admin`, `postgres`, `external-api` (opt-in) | as above |
 | `runner-ctl` | yes | `serve` (`10.213.251.x`), `runner` (fixed `10.213.251.10`) | as above |
 | `targets` | no | `runner` | as above |
 | `egress` | no | `serve` | as above |
 | `metrics` | yes | `serve` (fixed `10.213.252.10`) | as above |
 
-Only `serve` joins `proxy`; the lint refuses every other service of the
-project there. Other containers on your network can reach `serve:8080`
+Only `serve` (and, enabled, `external-api`) joins `proxy`; the lint refuses
+every other service of the project there. Other containers on your network can reach `serve:8080`
 directly but cannot forge client addresses
 ([residual risk](reverse-proxy.md#trust-by-container-name)). The stricter
 alternative is link mode (`--proxy-network-mode link`): `proxy` is then a
@@ -109,9 +110,10 @@ addresses for your proxy (`10.213.253.5`) and `serve` (`10.213.253.10`)
 ([reverse-proxy.md](reverse-proxy.md#advanced-dedicated-link-network)).
 
 With a [database container](external-database.md#database-container-on-this-docker-host)
-on this Docker host, `migrate`, `serve`, `admin` and the browser setup's
-`setup-web-db` also join its network as the external network `database`
-(`BEKUP_DB_NETWORK`), and nothing else of the project may. When that is
+on this Docker host, `migrate`, `serve`, `admin`, the browser setup's
+`setup-web-db` and, enabled, `external-api` also join its network as the
+external network `database` (`BEKUP_DB_NETWORK`), and nothing else of the
+project may. When that is
 your proxy's own network (own-proxy join mode, D-216), only `migrate`,
 `admin` and `setup-web-db` join `proxy` in addition and there is no
 `database` network.
@@ -129,6 +131,7 @@ The two fixed subnets (`frontend` 10.213.250.0/24, `runner-ctl`
 10.213.251.0/24) lie outside Docker's default address pools so that they
 don't collide with networks Docker allocates automatically. If they clash with
 your LAN, set `FRONTEND_SUBNET`, `SERVE_FRONTEND_IP`, `PROXY_FRONTEND_IP`,
+`EXTERNAL_API_FRONTEND_IP` (with the external API; setup's `--external-api-ip`),
 `RUNNER_CTL_SUBNET` and `RUNNER_CTL_IP` (in your shell or a `.env` next to the compose file; these are
 compose variables, not bekup configuration keys) and update the TOML files to
 match.
@@ -146,7 +149,7 @@ Every bekup service gets the same baseline:
 | resource limits (`cpus`, `memory`, `pids`) | a runaway process cannot starve the host |
 | bounded `json-file` logs | logs cannot fill the disk |
 | `restart: unless-stopped` | long-running services come back after a crash or reboot |
-| exec-form healthchecks (`bekup healthcheck serve|runner`) | work without a shell; `serve` probes `/healthz` (task 1.1, D-080, D-102), `runner` queries the standard gRPC health service on its container-local unix socket `listen.health_socket` (task 2.4, D-125) |
+| exec-form healthchecks (`bekup healthcheck serve|runner|external-api`) | work without a shell; `serve` and `external-api` probe `/healthz` (task 1.1, D-080, D-102, D-220), `runner` queries the standard gRPC health service on its container-local unix socket `listen.health_socket` (task 2.4, D-125) |
 
 The app database (`postgres:17-alpine`) runs as UID 70 directly, with a
 read-only root filesystem, no capabilities, SCRAM-SHA-256 for both local and
@@ -166,6 +169,34 @@ and the `postgres` certificate from `certs-init`; `serve` and `migrate`
 verify it with `[database] tls_mode = "verify-full"` against
 `secrets/certs/postgres/ca.crt`. Details, weakened modes and rotation:
 [App DB TLS](../security/app-db-tls.md).
+
+### The external API
+
+`external-api` (D-220) is the token-authenticated REST API for CI pipelines
+([guide](../guides/external-api.md)). It is **opt-in**: the service belongs
+to the compose profile `external-api`, so `docker compose up -d` starts it
+only when `COMPOSE_PROFILES` in `.env` names the profile. Setup enables it
+(`setup init --external-api`, the wizard's question, or `setup upgrade
+--external-api`) and writes:
+
+| Variable or file | Effect |
+|---|---|
+| `COMPOSE_PROFILES=...,external-api` | starts the service |
+| `BEKUP_EXTERNAL_API=enabled` | the bundled proxy routes `/api/v1/` to it; a new bundled database volume creates the role `bekup_external` (`deploy/postgres/init/20-bekup-external.sh`, through `POSTGRES_BEKUP_EXTERNAL_API`); serve tells the UI (`serverInfo.externalApiEnabled`). Only `enabled` or empty; anything else stops the proxies and serve. |
+| `EXTERNAL_API_FRONTEND_IP` (default `10.213.250.11`) | its fixed address on `frontend`; written only when you choose another one |
+| `external-api.toml` | its configuration (config `external_api_toml`), the same trusted proxy as serve's |
+| `bekup_external_password`, `bekup_external_database_url` (bundled) or `bekup_external_database_password` (external database) | the role's login; always written, because `postgres` (or, with your PostgreSQL, `migrate` and `setup-web-db`) mounts it |
+
+The service has serve's hardening (read-only, no capabilities,
+no-new-privileges, UID 65532, `/tmp` tmpfs), 0.5 CPU / 128 MB / 64
+processes, `command: [external-api]`, only its config, its database login
+and the database CA, the networks `frontend` (fixed address) and `backend`
+(own-proxy: your proxy's network as `bekup-external-api`, in the join shape
+`BEKUP_LISTEN_SHAPE: own-proxy-join` like serve) and no published port. It
+gets no `egress`, `runner-ctl` or `metrics`, never the master key, a
+certificate or `bekup.toml`. It refuses to start (and restarts) until its
+role exists and `migrate` granted it the api functions. The hardening lint
+pins it like every shipped service.
 
 ### Migrations
 
@@ -333,7 +364,9 @@ written before the summary:
    passwords;
 7. the Docker socket group and, optionally, the target database networks
    and host names (`runner.toml [targets]`);
-8. a summary of the answers and the final confirmation.
+8. whether to enable the opt-in [external API](#the-external-api) for CI
+   pipelines (default no; not asked in single-account mode);
+9. a summary of the answers and the final confirmation.
 
 Then it shows a generated CA passphrase once on the alternate screen (store
 it offline with the CA media), writes the deployment with exactly the code
@@ -998,10 +1031,12 @@ never become bekup's configuration.
 | `.env` | operator | 0:0 | 0644 |
 | `bekup.toml` | operator | 0:0 | 0644 |
 | `runner.toml` | operator | 0:0 | 0644 |
+| `external-api.toml` (with the external API enabled, D-220) | operator | 0:0 | 0644 |
 | `compose.override.yaml` (static TLS or setup-only overlays, D-215) | operator | 0:0 | 0644 |
 | `proxy-tls/` | operator | 0:0 | 0755 |
 | `reference/` | generated-upgradable | 0:0 | 0755 |
 | `reference/bekup.example.toml` | generated-upgradable | 0:0 | 0644 |
+| `reference/external-api.example.toml` | generated-upgradable | 0:0 | 0644 |
 | `reference/runner.example.toml` | generated-upgradable | 0:0 | 0644 |
 | `deploy/**` (`*.sh` and directories 0755) | generated-upgradable | 0:0 | 0644 |
 | `secrets/` | secret | 0:0 | 0711 |
@@ -1011,6 +1046,8 @@ never become bekup's configuration.
 | `secrets/postgres_password` (bundled database) | secret | 70:70 | 0400 |
 | `secrets/bekup_owner_password` (bundled database) | secret | 70:70 | 0400 |
 | `secrets/bekup_app_password` (bundled database) | secret | 70:70 | 0400 |
+| `secrets/bekup_external_password` (bundled database) | secret | 70:70 | 0400 |
+| `secrets/bekup_external_database_url` (bundled database) | secret | 65532:65532 | 0400 |
 | `secrets/certs/` | secret | 0:0 | 0711 |
 | `secrets/certs/serve/` | secret | 0:0 | 0711 |
 | `secrets/certs/serve/serve.crt` | secret | 0:0 | 0644 |
@@ -1031,6 +1068,7 @@ never become bekup's configuration.
 | `secrets/bekup_database_owner_password` (external database) | secret | 65532:65532 | 0400 |
 | `secrets/bekup_database_ca.crt` (external database) | operator | 0:0 | 0644 |
 | `secrets/bekup-roles.sql` (external database, `dba-sql` only) | secret | 0:0 | 0600 |
+| `secrets/bekup_external_database_password` (external database) | secret | 65532:65532 | 0400 |
 <!-- setup-manifest:end -->
 
 Docker Desktop (macOS/Windows) maps ownership itself. For the dev stack,
@@ -1250,13 +1288,15 @@ and adds in the `full` profile:
 | `bastion` | OpenSSH, user `tunnel`, key-only, port 2222, TCP forwarding enabled by a pinned init script (no runtime `DOCKER_MODS` download) | none |
 | `minio` + `minio-init` | S3 with buckets `bekup-dev` (versioned) and `bekup-dev-locked` (Object Lock, GOVERNANCE 1 day) | console http://127.0.0.1:9001 |
 | `sftp` | SFTP destination, user `bekup`, key-only, writable `upload/`, stable host key | none |
+| `webdav` | WebDAV destination (`rclone serve webdav`, D-222): URL `https://webdav:8443/backups` (generic flavor), user `bekup`, password `secrets/dev/webdav_password`, a self-signed certificate (`secrets/dev/webdav_tls.crt`, names `webdav`, `localhost`, `127.0.0.1`) to pin from the destination test; uploads on a tmpfs | https://127.0.0.1:8444 (`BEKUP_DEV_WEBDAV_PORT`) |
 | `traefik` / `nginx` (profile) | HTTPS with a local certificate (`deploy/dev/gen-dev-tls.sh`), no ACME | https://bekup.localhost:8443 |
 
 `deploy/dev/gen-dev-keys.sh` writes every dev password, the master key
 placeholder, a dev PKI from `bekup certs init` (runner + serve, unencrypted
 dev CA key, 90-day leaves), the SSH client key
-(`secrets/dev/bekup_ssh_ed25519`, accepted by the bastion and the SFTP server)
-and the SFTP host key, plus `secrets/local/` for native bekup processes (role
+(`secrets/dev/bekup_ssh_ed25519`, accepted by the bastion and the SFTP server),
+the SFTP host key, the WebDAV password and its self-signed certificate (not
+from the dev CA, which is name-constrained to bekup's components), plus `secrets/local/` for native bekup processes (role
 URLs via `127.0.0.1`, copies of the master keyring and DB CA). Files are
 `0600`, directories `0700`, and existing files are kept unless you pass
 `--force`. `BEKUP_DEV_KEYS_DIR` moves `./secrets` (also for the compose dev

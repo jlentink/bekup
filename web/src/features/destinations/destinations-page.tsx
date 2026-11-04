@@ -63,7 +63,7 @@ export function DestinationsPage() {
       <PageHeader
         eyebrow="Infrastructure"
         title="Destinations"
-        description="Where encrypted backups are written: local disk, S3 or SFTP. Credentials are write-only."
+        description="Where encrypted backups are written: local disk, S3, SFTP or WebDAV. Credentials are write-only."
         actions={
           isAdmin ? (
             <Button asChild>

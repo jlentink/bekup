@@ -178,6 +178,22 @@ func (l *RateLimiter[K]) AllowN(key K, n int) (bool, time.Duration) {
 	return false, wait
 }
 
+// Refund gives back n tokens taken by AllowN for key (capped at the
+// burst). It lets a limiter count only failures atomically: take a token
+// before an attempt (refused when none is left), give it back when the
+// attempt succeeds. An evicted or unknown key is ignored.
+func (l *RateLimiter[K]) Refund(key K, n int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	el, ok := l.buckets[key]
+	if !ok {
+		return
+	}
+	if b, ok := el.Value.(*bucket[K]); ok {
+		b.tokens = math.Min(l.burst, b.tokens+float64(max(n, 1)))
+	}
+}
+
 // RetryAfterSeconds is the Retry-After value for wait (whole seconds, at
 // least 1).
 func RetryAfterSeconds(wait time.Duration) int64 {
@@ -185,16 +201,20 @@ func RetryAfterSeconds(wait time.Duration) int64 {
 }
 
 func writeTooMany(w http.ResponseWriter, wait time.Duration) {
-	w.Header().Set("Retry-After", strconv.FormatInt(RetryAfterSeconds(wait), 10))
-	writeError(w, http.StatusTooManyRequests)
+	writeTooManyWith(w, wait, writeError)
 }
 
-func rateLimit(l *RateLimiter[netip.Prefix]) func(http.Handler) http.Handler {
+func writeTooManyWith(w http.ResponseWriter, wait time.Duration, fail errorWriter) {
+	w.Header().Set("Retry-After", strconv.FormatInt(RetryAfterSeconds(wait), 10))
+	fail(w, http.StatusTooManyRequests)
+}
+
+func rateLimit(l *RateLimiter[netip.Prefix], fail errorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ok, wait := l.Allow(IPKey(ClientIP(r.Context())))
 			if !ok {
-				writeTooMany(w, wait)
+				writeTooManyWith(w, wait, fail)
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -154,8 +154,14 @@ func (c *Bekup) MasterKey() ([]byte, error) {
 // database.tls_client_key_file, or nil when none is configured. Zero the
 // result after use.
 func (c *Bekup) DatabaseTLSClientKey() ([]byte, error) {
-	if c.Database.TLSClientKeyFile == "" {
+	return c.Database.TLSClientKey()
+}
+
+// TLSClientKey returns the TLS client private key from tls_client_key_file,
+// or nil when none is configured. Zero the result after use.
+func (d *Database) TLSClientKey() ([]byte, error) {
+	if d.TLSClientKeyFile == "" {
 		return nil, nil
 	}
-	return ReadSecretFile(c.Database.TLSClientKeyFile)
+	return ReadSecretFile(d.TLSClientKeyFile)
 }

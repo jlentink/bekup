@@ -19,6 +19,7 @@ Probe a local bekup component (container healthchecks; exit 0 healthy, 1 unhealt
 ### SEE ALSO
 
 * [bekup](bekup.md)	 - bekup: secure, self-hosted database backup manager
+* [bekup healthcheck external-api](bekup_healthcheck_external-api.md)	 - GET /healthz on the address from external-api.toml listen.address
 * [bekup healthcheck runner](bekup_healthcheck_runner.md)	 - Query the runner's local health socket (listen.health_socket; no client certificate needed)
 * [bekup healthcheck serve](bekup_healthcheck_serve.md)	 - GET /healthz on the address from server.listen (no shell or curl needed)
 

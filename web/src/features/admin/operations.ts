@@ -348,6 +348,35 @@ export const UpdateSsrfAllowlistMutation = graphql(`
   }
 `);
 
+/* ---- The runner's target allowlist (D-223): read-only runner.toml [targets] ---- */
+
+export const RunnerTargetPolicyQuery = graphql(`
+  query AdminRunnerTargetPolicy {
+    runnerTargetPolicy {
+      available
+      reason
+      allowCidrs
+      allowHosts
+      denyCidrs
+      denyHosts
+      bastionTargets {
+        bastion
+        targets
+      }
+      runSubnetPool
+      controlNetworks
+      controlNetworksKnown
+      alwaysDenied {
+        category
+        cidrs
+      }
+      warnings
+      envOverrides
+      truncated
+    }
+  }
+`);
+
 /* ---- Runtime config reload (task 6.13, D-200): key names only, never values ---- */
 
 export const ConfigProcessResultFields = graphql(`

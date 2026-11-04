@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"log/slog"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,9 +13,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/engine"
 	"github.com/jlentink/bekup/internal/runner/executor"
 	"github.com/jlentink/bekup/internal/runner/spec"
+	"github.com/jlentink/bekup/internal/runner/targets"
 	"github.com/jlentink/bekup/internal/runner/validate"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
@@ -302,4 +305,152 @@ func apiEngine(k engine.Kind) (runnerpb.Engine, bool) {
 	default:
 		return runnerpb.Engine_ENGINE_UNSPECIFIED, false
 	}
+}
+
+// maxPolicyEntries bounds every list of a GetTargetPolicy answer (and the
+// bastion targets in all), so the answer stays far below
+// runnerpb.MaxMessageBytes even with the longest configurable lists.
+const maxPolicyEntries = 256
+
+// targetPolicyInfo is what GetTargetPolicy needs besides the guard.
+type targetPolicyInfo struct {
+	// runPool is docker.run_subnet_pool.
+	runPool netip.Prefix
+	// envKeys are the [targets] keys set by environment variables.
+	envKeys []runnerpb.TargetsKey
+	// ready reports whether the executor knows the runner's own
+	// networks (nil: never).
+	ready func() bool
+}
+
+// targetsKeyPaths maps the config paths of [targets] to the API enum.
+var targetsKeyPaths = []struct {
+	path string
+	key  runnerpb.TargetsKey
+}{
+	{"targets.allow_cidrs", runnerpb.TargetsKey_TARGETS_KEY_ALLOW_CIDRS},
+	{"targets.allow_hosts", runnerpb.TargetsKey_TARGETS_KEY_ALLOW_HOSTS},
+	{"targets.deny_cidrs", runnerpb.TargetsKey_TARGETS_KEY_DENY_CIDRS},
+	{"targets.deny_hosts", runnerpb.TargetsKey_TARGETS_KEY_DENY_HOSTS},
+	{"targets.bastion_targets", runnerpb.TargetsKey_TARGETS_KEY_BASTION_TARGETS},
+}
+
+// targetEnvOverrides lists the [targets] keys whose value came from the
+// environment (config.Result.Sources).
+func targetEnvOverrides(sources map[string]config.Source) []runnerpb.TargetsKey {
+	var out []runnerpb.TargetsKey
+	for _, k := range targetsKeyPaths {
+		if sources[k.path] == config.SourceEnv {
+			out = append(out, k.key)
+		}
+	}
+	return out
+}
+
+var deniedCategories = map[targets.DeniedCategory]runnerpb.DeniedCategory{
+	targets.DeniedLoopback:      runnerpb.DeniedCategory_DENIED_CATEGORY_LOOPBACK,
+	targets.DeniedUnspecified:   runnerpb.DeniedCategory_DENIED_CATEGORY_UNSPECIFIED_ADDRESS,
+	targets.DeniedLinkLocal:     runnerpb.DeniedCategory_DENIED_CATEGORY_LINK_LOCAL,
+	targets.DeniedCloudMetadata: runnerpb.DeniedCategory_DENIED_CATEGORY_CLOUD_METADATA,
+	targets.DeniedMulticast:     runnerpb.DeniedCategory_DENIED_CATEGORY_MULTICAST_BROADCAST,
+	targets.DeniedReserved:      runnerpb.DeniedCategory_DENIED_CATEGORY_RESERVED,
+	targets.DeniedIPv4InIPv6:    runnerpb.DeniedCategory_DENIED_CATEGORY_IPV4_IN_IPV6,
+	targets.DeniedTeredo:        runnerpb.DeniedCategory_DENIED_CATEGORY_TEREDO,
+	targets.DeniedEmbeddedIPv4:  runnerpb.DeniedCategory_DENIED_CATEGORY_EMBEDDED_DENIED_IPV4,
+	targets.DeniedNonGlobalIPv6: runnerpb.DeniedCategory_DENIED_CATEGORY_NON_GLOBAL_IPV6,
+}
+
+var policyWarnings = map[targets.WarningCode]runnerpb.TargetPolicyWarning{
+	targets.WarningEmptyAllowlist:       runnerpb.TargetPolicyWarning_TARGET_POLICY_WARNING_EMPTY_ALLOWLIST,
+	targets.WarningBastionsUnrestricted: runnerpb.TargetPolicyWarning_TARGET_POLICY_WARNING_BASTIONS_UNRESTRICTED,
+}
+
+// getTargetPolicy implements GetTargetPolicy (D-223): the target
+// allowlist as the guard applies it, the runner's own networks, the
+// always-denied categories and the startup warnings. Read-only.
+func (o *operations) getTargetPolicy(ctx context.Context, req *runnerpb.GetTargetPolicyRequest) (resp *runnerpb.GetTargetPolicyResponse, err error) {
+	a := newAudit("GetTargetPolicy", "")
+	defer func() { o.audit(ctx, a, err) }()
+	if err := o.val.GetTargetPolicy(req); err != nil {
+		return nil, err
+	}
+	p := o.val.Guard().Policy()
+	resp = &runnerpb.GetTargetPolicyResponse{
+		EnvOverrides:         slices.Clone(o.policy.envKeys),
+		ControlNetworksKnown: o.policy.ready != nil && o.policy.ready(),
+	}
+	limit := func(in []string) []string {
+		if len(in) > maxPolicyEntries {
+			resp.Truncated = true
+			return in[:maxPolicyEntries]
+		}
+		return in
+	}
+	resp.AllowCidrs = limit(prefixStrings(p.AllowCIDRs))
+	resp.AllowHosts = limit(p.AllowHosts)
+	resp.DenyCidrs = limit(prefixStrings(p.DenyCIDRs))
+	resp.DenyHosts = limit(p.DenyHosts)
+	budget := maxPolicyEntries
+	for _, b := range p.Bastions {
+		if budget == 0 {
+			resp.Truncated = true
+			break
+		}
+		list := append(prefixStrings(b.CIDRs), b.Hosts...)
+		if len(list) > budget {
+			list, resp.Truncated = list[:budget], true
+		}
+		budget -= len(list)
+		resp.BastionTargets = append(resp.BastionTargets, &runnerpb.BastionTargetList{Bastion: b.Bastion, Targets: list})
+	}
+	pool := o.policy.runPool
+	if pool.IsValid() {
+		resp.RunSubnetPool = pool.String()
+	}
+	resp.ControlNetworks = limit(prefixStrings(controlNetworks(p.OwnNetworks, pool)))
+	for _, r := range targets.AlwaysDenied() {
+		if c, ok := deniedCategories[r.Category]; ok {
+			resp.AlwaysDenied = append(resp.AlwaysDenied, &runnerpb.AlwaysDeniedRange{Category: c, Cidrs: prefixStrings(r.Prefixes)})
+		}
+	}
+	for _, w := range p.Warnings {
+		if c, ok := policyWarnings[w]; ok {
+			resp.Warnings = append(resp.Warnings, c)
+		}
+	}
+	a.extra = append(a.extra,
+		slog.Int("allow_entries", len(p.AllowCIDRs)+len(p.AllowHosts)),
+		slog.Int("bastions", len(p.Bastions)),
+		slog.Bool("truncated", resp.Truncated))
+	return resp, nil
+}
+
+// controlNetworks are the own networks outside the run subnet pool (the
+// pool and the per-run networks inside it are reported as the pool),
+// deduplicated and sorted.
+func controlNetworks(own []netip.Prefix, pool netip.Prefix) []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(own))
+	for _, p := range own {
+		if pool.IsValid() && p.Bits() >= pool.Bits() && pool.Contains(p.Addr()) {
+			continue
+		}
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b netip.Prefix) int {
+		if c := a.Addr().Compare(b.Addr()); c != 0 {
+			return c
+		}
+		return a.Bits() - b.Bits()
+	})
+	return out
+}
+
+func prefixStrings(in []netip.Prefix) []string {
+	out := make([]string, len(in))
+	for i, p := range in {
+		out[i] = p.String()
+	}
+	return out
 }

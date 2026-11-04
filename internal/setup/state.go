@@ -118,6 +118,10 @@ type State struct {
 	// DatabaseTLS (external only) is the TLS choice setup wrote (empty in
 	// older states: verify-ca-file).
 	DatabaseTLS DBTLS `json:"database_tls,omitempty"`
+	// ExternalAPI: the opt-in external API is enabled (D-220): the compose
+	// profile external-api, BEKUP_EXTERNAL_API=enabled and
+	// external-api.toml.
+	ExternalAPI bool `json:"external_api,omitempty"`
 	// ImportedFiles are the operator's secret source files that setup
 	// copied below the keys directory (--db-password-file,
 	// --db-owner-password-file, --import-master-key), relative to the
@@ -302,6 +306,9 @@ func (s *State) validate() error {
 	default:
 		return fmt.Errorf("invalid database_mode %q (empty for the bundled database, or external)", bounded(string(s.DatabaseMode)))
 	}
+	if s.ExternalAPI && s.DatabaseAuth == DBAuthSingleAccount {
+		return errors.New("external_api: single-account mode does not support the external API (D-220)")
+	}
 	if len(s.ImportedFiles) > maxImportedFiles {
 		return errors.New("too many imported_files")
 	}
@@ -314,7 +321,7 @@ func (s *State) validate() error {
 	}
 	for _, g := range s.SecretGroups {
 		switch g {
-		case groupMasterKey, groupDatabase, groupDatabaseExternal, groupCerts:
+		case groupMasterKey, groupDatabase, groupDatabaseExternal, groupCerts, groupExternalAPI:
 		default:
 			return fmt.Errorf("unknown secret group %q", bounded(g))
 		}
@@ -376,6 +383,7 @@ func (s *State) overlays() Overlays {
 		ProxyLink:   s.Variant.OwnProxy() && s.ProxyNetworkMode == ProxyLink,
 		DBNetwork:   s.DatabaseMode == DBExternal && s.DatabaseLocation == DBDocker,
 		DBOnProxy:   s.DatabaseMode == DBExternal && s.DatabaseLocation == DBDocker && s.ownProxyJoin() && s.DBNetwork == s.ProxyNetwork,
+		ExternalAPI: s.ExternalAPI,
 	}
 }
 
@@ -412,7 +420,7 @@ func (s *State) validateOwnProxy() error {
 
 // manifestOptions returns the manifest options of the deployment.
 func (s *State) manifestOptions() ManifestOptions {
-	return ManifestOptions{StaticTLS: s.staticTLS(), Overlays: s.overlays().Any(), ComposeOperator: s.ComposeMode == ComposeOperator, ExternalDB: s.DatabaseMode == DBExternal}
+	return ManifestOptions{StaticTLS: s.staticTLS(), Overlays: s.overlays().Any(), ComposeOperator: s.ComposeMode == ComposeOperator, ExternalDB: s.DatabaseMode == DBExternal, ExternalAPI: s.ExternalAPI}
 }
 
 // dbMode returns the recorded database mode (DBBundled for an empty one).

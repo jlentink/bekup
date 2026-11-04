@@ -16,6 +16,14 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: api; Type: SCHEMA; Schema: -; Owner: bekup_owner
+--
+
+CREATE SCHEMA api;
+
+ALTER SCHEMA api OWNER TO bekup_owner;
+
+--
 -- Name: public; Type: SCHEMA; Schema: -; Owner: bekup_owner
 --
 
@@ -28,6 +36,18 @@ ALTER SCHEMA public OWNER TO bekup_owner;
 --
 
 CREATE EXTENSION IF NOT EXISTS citext WITH SCHEMA public;
+
+--
+-- Name: api_request_outcome; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.api_request_outcome AS ENUM (
+    'pending',
+    'accepted',
+    'rejected'
+);
+
+ALTER TYPE public.api_request_outcome OWNER TO bekup_owner;
 
 --
 -- Name: artifact_kind; Type: TYPE; Schema: public; Owner: bekup_owner
@@ -96,7 +116,8 @@ ALTER TYPE public.connection_tls_mode OWNER TO bekup_owner;
 CREATE TYPE public.destination_type AS ENUM (
     'disk',
     's3',
-    'sftp'
+    'sftp',
+    'webdav'
 );
 
 ALTER TYPE public.destination_type OWNER TO bekup_owner;
@@ -301,7 +322,8 @@ CREATE TYPE public.run_trigger AS ENUM (
     'schedule',
     'catch_up',
     'manual',
-    'early'
+    'early',
+    'api'
 );
 
 ALTER TYPE public.run_trigger OWNER TO bekup_owner;
@@ -365,6 +387,468 @@ CREATE TYPE public.user_role AS ENUM (
 );
 
 ALTER TYPE public.user_role OWNER TO bekup_owner;
+
+--
+-- Name: authenticate_result; Type: VIEW; Schema: api; Owner: bekup_owner
+--
+
+CREATE VIEW api.authenticate_result AS
+ SELECT NULL::uuid AS token_id,
+    NULL::text AS name,
+    NULL::timestamp with time zone AS expires_at
+  WHERE false;
+
+ALTER VIEW api.authenticate_result OWNER TO bekup_owner;
+
+--
+-- Name: authenticate(uuid, bytea, inet); Type: FUNCTION; Schema: api; Owner: bekup_owner
+--
+
+CREATE FUNCTION api.authenticate(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) RETURNS SETOF api.authenticate_result
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF public.api_token_admit(p_token_id, p_secret_hash, p_client_ip) THEN
+        RETURN QUERY
+            SELECT t.id, t.name, t.expires_at
+            FROM public.api_tokens AS t
+            WHERE t.id = p_token_id;
+    END IF;
+END
+$$;
+
+ALTER FUNCTION api.authenticate(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: request_run_result; Type: VIEW; Schema: api; Owner: bekup_owner
+--
+
+CREATE VIEW api.request_run_result AS
+ SELECT NULL::uuid AS request_id,
+    NULL::timestamp with time zone AS created_at,
+    NULL::text AS refusal,
+    NULL::boolean AS replayed,
+    NULL::timestamp with time zone AS retry_at
+  WHERE false;
+
+ALTER VIEW api.request_run_result OWNER TO bekup_owner;
+
+--
+-- Name: request_run(uuid, bytea, uuid, text, inet); Type: FUNCTION; Schema: api; Owner: bekup_owner
+--
+
+CREATE FUNCTION api.request_run(p_token_id uuid, p_secret_hash bytea, p_job_id uuid, p_idempotency_key text, p_ip inet) RETURNS SETOF api.request_run_result
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $_$
+DECLARE
+    v_prev    public.run_requests%ROWTYPE;
+    v_count   bigint;
+    v_oldest  timestamptz;
+    v_enabled boolean;
+    v_id      uuid;
+    v_created timestamptz;
+    v_cidrs   cidr[];
+    v_any     boolean;
+    v_ip      inet;
+BEGIN
+    IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'api.request_run requires READ COMMITTED isolation'
+            USING ERRCODE = 'object_not_in_prerequisite_state';
+    END IF;
+    IF NOT public.api_token_admit(p_token_id, p_secret_hash, p_ip) THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'unauthenticated'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    -- Under the lock again: a revocation or an address change that
+    -- committed meanwhile applies to this request.
+    SELECT t.allowed_cidrs, t.allow_any_address INTO v_cidrs, v_any
+    FROM public.api_tokens AS t
+    WHERE t.id = p_token_id AND t.secret_hash = p_secret_hash
+    FOR NO KEY UPDATE OF t;
+    IF NOT FOUND OR NOT public.api_token_valid(p_token_id)
+       OR NOT public.api_client_ip_allowed(v_cidrs, v_any, p_ip) THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'unauthenticated'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    v_ip := public.api_client_ip(p_ip);
+    IF p_job_id IS NULL
+       OR (p_idempotency_key IS NOT NULL AND p_idempotency_key !~ '^[!-~]{1,255}$')
+       OR (p_ip IS NOT NULL AND v_ip IS NULL) THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'invalid_request'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    IF NOT public.api_token_job_allowed(p_token_id, p_job_id) THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'not_found'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+
+    IF p_idempotency_key IS NOT NULL THEN
+        SELECT r.* INTO v_prev FROM public.run_requests AS r
+        WHERE r.token_id = p_token_id AND r.idempotency_key = p_idempotency_key;
+        IF FOUND THEN
+            IF v_prev.created_at > pg_catalog.now() - interval '24 hours' THEN
+                IF v_prev.job_id <> p_job_id THEN
+                    RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'idempotency_mismatch'::text, false, NULL::timestamptz;
+                    RETURN;
+                END IF;
+                RETURN QUERY SELECT v_prev.id, v_prev.created_at, NULL::text, true, NULL::timestamptz;
+                RETURN;
+            END IF;
+            -- Older than the replay window: the key is free again.
+            UPDATE public.run_requests AS r SET idempotency_key = NULL WHERE r.id = v_prev.id;
+        END IF;
+    END IF;
+
+    SELECT pg_catalog.count(*) INTO v_count FROM public.run_requests AS r
+    WHERE r.token_id = p_token_id AND r.outcome = 'pending';
+    IF v_count >= 3 THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'too_many_pending'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    SELECT pg_catalog.count(*), pg_catalog.min(r.created_at) INTO v_count, v_oldest FROM public.run_requests AS r
+    WHERE r.token_id = p_token_id AND r.created_at > pg_catalog.now() - interval '1 hour';
+    IF v_count >= 30 THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'rate_limited'::text, false, v_oldest + interval '1 hour';
+        RETURN;
+    END IF;
+
+    SELECT j.enabled INTO v_enabled FROM public.jobs AS j WHERE j.id = p_job_id AND j.deleted_at IS NULL;
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'not_found'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    IF NOT v_enabled THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'job_disabled'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+    -- River's unique key of backup_run is the job id in the states of
+    -- internal/queue.UniqueStates.
+    IF EXISTS (
+        SELECT 1 FROM public.river_job AS rj
+        WHERE rj.kind = 'backup_run'
+          AND rj.args @> pg_catalog.jsonb_build_object('job_id', p_job_id)
+          AND rj.state::text IN ('available', 'pending', 'retryable', 'running', 'scheduled')
+    ) THEN
+        RETURN QUERY SELECT NULL::uuid, NULL::timestamptz, 'run_active'::text, false, NULL::timestamptz;
+        RETURN;
+    END IF;
+
+    INSERT INTO public.run_requests AS r (token_id, job_id, ip, idempotency_key)
+    VALUES (p_token_id, p_job_id, v_ip, p_idempotency_key)
+    RETURNING r.id, r.created_at INTO v_id, v_created;
+    PERFORM pg_catalog.pg_notify('bekup_api_requests', v_id::text);
+    RETURN QUERY SELECT v_id, v_created, NULL::text, false, NULL::timestamptz;
+END
+$_$;
+
+ALTER FUNCTION api.request_run(p_token_id uuid, p_secret_hash bytea, p_job_id uuid, p_idempotency_key text, p_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: request_status_result; Type: VIEW; Schema: api; Owner: bekup_owner
+--
+
+CREATE VIEW api.request_status_result AS
+ SELECT NULL::uuid AS request_id,
+    NULL::uuid AS job_id,
+    NULL::text AS outcome,
+    NULL::text AS reason,
+    NULL::timestamp with time zone AS created_at,
+    NULL::timestamp with time zone AS decided_at,
+    NULL::bigint AS river_job_id,
+    NULL::text AS river_state,
+    NULL::uuid AS run_id,
+    NULL::text AS run_status,
+    NULL::integer AS run_attempt,
+    NULL::timestamp with time zone AS run_queued_at,
+    NULL::timestamp with time zone AS run_started_at,
+    NULL::timestamp with time zone AS run_finished_at
+  WHERE false;
+
+ALTER VIEW api.request_status_result OWNER TO bekup_owner;
+
+--
+-- Name: request_status(uuid, bytea, uuid, inet); Type: FUNCTION; Schema: api; Owner: bekup_owner
+--
+
+CREATE FUNCTION api.request_status(p_token_id uuid, p_secret_hash bytea, p_request_id uuid, p_client_ip inet) RETURNS SETOF api.request_status_result
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NOT public.api_token_admit(p_token_id, p_secret_hash, p_client_ip) THEN
+        RETURN;
+    END IF;
+    RETURN QUERY
+        SELECT r.id, r.job_id, r.outcome::text, r.reason, r.created_at,
+               r.decided_at, r.river_job_id, rj.state::text,
+               lr.id, lr.status::text, lr.attempt, lr.queued_at,
+               lr.started_at, lr.finished_at
+        FROM public.run_requests AS r
+        LEFT JOIN public.river_job AS rj ON rj.id = r.river_job_id
+        LEFT JOIN LATERAL (
+            SELECT x.id, x.status, x.attempt, x.queued_at, x.started_at, x.finished_at
+            FROM public.runs AS x
+            WHERE x.river_job_id = r.river_job_id AND x.job_id = r.job_id
+            ORDER BY x.attempt DESC, x.created_at DESC, x.id DESC
+            LIMIT 1
+        ) AS lr ON true
+        WHERE r.token_id = p_token_id
+          AND r.id = p_request_id
+          AND public.api_token_job_allowed(p_token_id, r.job_id);
+END
+$$;
+
+ALTER FUNCTION api.request_status(p_token_id uuid, p_secret_hash bytea, p_request_id uuid, p_client_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: schema_version(); Type: FUNCTION; Schema: api; Owner: bekup_owner
+--
+
+CREATE FUNCTION api.schema_version() RETURNS bigint
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT public.bekup_schema_version()
+$$;
+
+ALTER FUNCTION api.schema_version() OWNER TO bekup_owner;
+
+--
+-- Name: token_jobs_result; Type: VIEW; Schema: api; Owner: bekup_owner
+--
+
+CREATE VIEW api.token_jobs_result AS
+ SELECT NULL::uuid AS job_id,
+    NULL::text AS job_name
+  WHERE false;
+
+ALTER VIEW api.token_jobs_result OWNER TO bekup_owner;
+
+--
+-- Name: token_jobs(uuid, bytea, inet); Type: FUNCTION; Schema: api; Owner: bekup_owner
+--
+
+CREATE FUNCTION api.token_jobs(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) RETURNS SETOF api.token_jobs_result
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF public.api_token_admit(p_token_id, p_secret_hash, p_client_ip) THEN
+        RETURN QUERY
+            SELECT j.id, j.name
+            FROM public.api_token_jobs AS tj
+            JOIN public.jobs AS j ON j.id = tj.job_id
+            WHERE tj.token_id = p_token_id
+              AND public.api_token_job_allowed(p_token_id, j.id)
+            ORDER BY pg_catalog.lower(j.name), j.id;
+    END IF;
+END
+$$;
+
+ALTER FUNCTION api.token_jobs(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: api_access_denials_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_access_denials_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.token_id IS DISTINCT FROM OLD.token_id
+       OR NEW.client_ip IS DISTINCT FROM OLD.client_ip OR NEW.denied_at IS DISTINCT FROM OLD.denied_at
+       OR (OLD.processed_at IS NOT NULL AND NEW.processed_at IS DISTINCT FROM OLD.processed_at) THEN
+        RAISE EXCEPTION 'api_access_denials: denial % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.api_access_denials_guard() OWNER TO bekup_owner;
+
+--
+-- Name: api_cidrs_valid(cidr[]); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_cidrs_valid(p_cidrs cidr[]) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT p_cidrs IS NOT NULL
+       AND pg_catalog.cardinality(p_cidrs) <= 32
+       AND (pg_catalog.cardinality(p_cidrs) = 0 OR pg_catalog.array_ndims(p_cidrs) = 1)
+       AND NOT EXISTS (
+           SELECT 1 FROM pg_catalog.unnest(p_cidrs) AS c (net)
+           WHERE c.net IS NULL
+              OR pg_catalog.masklen(c.net) < CASE pg_catalog.family(c.net) WHEN 4 THEN 8 ELSE 32 END
+              OR (pg_catalog.family(c.net) = 6 AND c.net::inet <<= '::ffff:0.0.0.0/96'::inet))
+       AND (SELECT pg_catalog.count(DISTINCT c.net) FROM pg_catalog.unnest(p_cidrs) AS c (net))
+           = pg_catalog.cardinality(p_cidrs)
+$$;
+
+ALTER FUNCTION public.api_cidrs_valid(p_cidrs cidr[]) OWNER TO bekup_owner;
+
+--
+-- Name: api_client_ip(inet); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_client_ip(p_ip inet) RETURNS inet
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT CASE
+        WHEN p_ip IS NULL
+             OR pg_catalog.masklen(p_ip) <> CASE pg_catalog.family(p_ip) WHEN 4 THEN 32 ELSE 128 END THEN NULL
+        WHEN pg_catalog.family(p_ip) = 6 AND p_ip <<= '::ffff:0.0.0.0/96'::inet
+            THEN '0.0.0.0'::inet + (p_ip - '::ffff:0.0.0.0'::inet)
+        ELSE p_ip
+    END
+$$;
+
+ALTER FUNCTION public.api_client_ip(p_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: api_client_ip_allowed(cidr[], boolean, inet); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_client_ip_allowed(p_cidrs cidr[], p_any boolean, p_ip inet) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT CASE
+        WHEN p_any THEN true
+        ELSE coalesce(public.api_client_ip(p_ip) <<= ANY (p_cidrs::inet[]), false)
+    END
+$$;
+
+ALTER FUNCTION public.api_client_ip_allowed(p_cidrs cidr[], p_any boolean, p_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: api_token_admit(uuid, bytea, inet); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_token_admit(p_token_id uuid, p_secret_hash bytea, p_ip inet) RETURNS boolean
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+DECLARE
+    v_cidrs cidr[];
+    v_any   boolean;
+    v_id    uuid;
+BEGIN
+    IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION 'the api functions require READ COMMITTED isolation'
+            USING ERRCODE = 'object_not_in_prerequisite_state';
+    END IF;
+    IF p_token_id IS NULL OR p_secret_hash IS NULL OR pg_catalog.octet_length(p_secret_hash) <> 32 THEN
+        RETURN false;
+    END IF;
+    SELECT t.allowed_cidrs, t.allow_any_address INTO v_cidrs, v_any
+    FROM public.api_tokens AS t
+    WHERE t.id = p_token_id AND t.secret_hash = p_secret_hash;
+    IF NOT FOUND OR NOT public.api_token_valid(p_token_id) THEN
+        RETURN false;
+    END IF;
+    IF public.api_client_ip_allowed(v_cidrs, v_any, p_ip) THEN
+        RETURN true;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.api_access_denials AS d
+               WHERE d.token_id = p_token_id AND d.denied_at > pg_catalog.now() - interval '10 minutes') THEN
+        RETURN false;
+    END IF;
+    PERFORM 1 FROM public.api_tokens AS t WHERE t.id = p_token_id FOR NO KEY UPDATE OF t;
+    IF NOT EXISTS (SELECT 1 FROM public.api_access_denials AS d
+                   WHERE d.token_id = p_token_id AND d.denied_at > pg_catalog.now() - interval '10 minutes') THEN
+        INSERT INTO public.api_access_denials AS d (token_id, client_ip)
+        VALUES (p_token_id, public.api_client_ip(p_ip))
+        RETURNING d.id INTO v_id;
+        PERFORM pg_catalog.pg_notify('bekup_api_requests', 'denial:' || v_id::text);
+    END IF;
+    RETURN false;
+END
+$$;
+
+ALTER FUNCTION public.api_token_admit(p_token_id uuid, p_secret_hash bytea, p_ip inet) OWNER TO bekup_owner;
+
+--
+-- Name: api_token_job_allowed(uuid, uuid); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_token_job_allowed(p_token_id uuid, p_job_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.api_tokens AS t
+        JOIN public.api_token_jobs AS tj ON tj.token_id = t.id AND tj.job_id = p_job_id
+        JOIN public.jobs AS j ON j.id = tj.job_id AND j.deleted_at IS NULL
+        JOIN public.users AS u ON u.id = t.created_by
+        WHERE t.id = p_token_id
+          AND public.api_token_valid(t.id)
+          AND (u.role = 'admin'
+               OR (u.role = 'user' AND EXISTS (
+                   SELECT 1 FROM public.job_owners AS o WHERE o.job_id = j.id AND o.user_id = u.id)))
+    )
+$$;
+
+ALTER FUNCTION public.api_token_job_allowed(p_token_id uuid, p_job_id uuid) OWNER TO bekup_owner;
+
+--
+-- Name: api_token_valid(uuid); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_token_valid(p_token_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.api_tokens AS t
+        JOIN public.users AS u ON u.id = t.created_by
+        WHERE t.id = p_token_id
+          AND t.revoked_at IS NULL
+          AND t.expires_at > pg_catalog.now()
+          AND NOT u.disabled
+          AND u.deleted_at IS NULL
+          AND u.role IN ('admin', 'user')
+    )
+$$;
+
+ALTER FUNCTION public.api_token_valid(p_token_id uuid) OWNER TO bekup_owner;
+
+--
+-- Name: api_tokens_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.api_tokens_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.name IS DISTINCT FROM OLD.name
+       OR NEW.secret_hash IS DISTINCT FROM OLD.secret_hash OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+        RAISE EXCEPTION 'api_tokens: token % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.revoked_at IS NOT NULL AND (NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+                                       OR NEW.revoked_by IS DISTINCT FROM OLD.revoked_by
+                                       OR NEW.allowed_cidrs IS DISTINCT FROM OLD.allowed_cidrs
+                                       OR NEW.allow_any_address IS DISTINCT FROM OLD.allow_any_address) THEN
+        RAISE EXCEPTION 'api_tokens: token % is already revoked', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.api_tokens_guard() OWNER TO bekup_owner;
 
 --
 -- Name: artifacts_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
@@ -491,6 +975,47 @@ CREATE FUNCTION public.bekup_schema_version() RETURNS bigint
 $$;
 
 ALTER FUNCTION public.bekup_schema_version() OWNER TO bekup_owner;
+
+--
+-- Name: bekup_sync_external_grants(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.bekup_sync_external_grants() RETURNS boolean
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF current_user <> 'bekup_owner' THEN
+        RAISE EXCEPTION 'bekup_sync_external_grants must run as bekup_owner (running as %)', current_user
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles AS r WHERE r.rolname = 'bekup_external') THEN
+        RETURN false;
+    END IF;
+    REVOKE ALL ON ALL TABLES IN SCHEMA public, api FROM bekup_external;
+    REVOKE ALL ON ALL SEQUENCES IN SCHEMA public, api FROM bekup_external;
+    REVOKE ALL ON ALL ROUTINES IN SCHEMA public, api FROM bekup_external;
+    REVOKE ALL ON SCHEMA public FROM bekup_external;
+    REVOKE CREATE ON SCHEMA api FROM bekup_external;
+    EXECUTE pg_catalog.format('REVOKE CREATE, TEMPORARY ON DATABASE %I FROM bekup_external', pg_catalog.current_database());
+    -- CONNECT may come from the init script or bootstrap (another
+    -- grantor); grant it only when missing.
+    IF NOT pg_catalog.has_database_privilege('bekup_external', pg_catalog.current_database(), 'CONNECT') THEN
+        EXECUTE pg_catalog.format('GRANT CONNECT ON DATABASE %I TO bekup_external', pg_catalog.current_database());
+    END IF;
+    GRANT USAGE ON SCHEMA api TO bekup_external;
+    GRANT EXECUTE ON FUNCTION
+        api.authenticate(uuid, bytea, inet),
+        api.token_jobs(uuid, bytea, inet),
+        api.request_run(uuid, bytea, uuid, text, inet),
+        api.request_status(uuid, bytea, uuid, inet),
+        api.schema_version()
+        TO bekup_external;
+    RETURN true;
+END
+$$;
+
+ALTER FUNCTION public.bekup_sync_external_grants() OWNER TO bekup_owner;
 
 --
 -- Name: download_tickets_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
@@ -638,6 +1163,35 @@ $$;
 ALTER FUNCTION public.river_job_state_in_bitmask(bitmask bit, state public.river_job_state) OWNER TO bekup_owner;
 
 --
+-- Name: run_requests_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.run_requests_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.token_id IS DISTINCT FROM OLD.token_id
+       OR NEW.job_id IS DISTINCT FROM OLD.job_id OR NEW.ip IS DISTINCT FROM OLD.ip
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR (NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key AND NEW.idempotency_key IS NOT NULL) THEN
+        RAISE EXCEPTION 'run_requests: the identity of request % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.outcome <> 'pending' AND (NEW.outcome IS DISTINCT FROM OLD.outcome OR NEW.reason IS DISTINCT FROM OLD.reason
+                                     OR NEW.river_job_id IS DISTINCT FROM OLD.river_job_id
+                                     OR NEW.run_id IS DISTINCT FROM OLD.run_id
+                                     OR NEW.decided_at IS DISTINCT FROM OLD.decided_at) THEN
+        RAISE EXCEPTION 'run_requests: request % is already decided', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.run_requests_guard() OWNER TO bekup_owner;
+
+--
 -- Name: runs_terminal_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
 --
 
@@ -776,6 +1330,62 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: api_access_denials; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.api_access_denials (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    token_id uuid NOT NULL,
+    client_ip inet,
+    denied_at timestamp with time zone DEFAULT now() NOT NULL,
+    processed_at timestamp with time zone,
+    CONSTRAINT api_access_denials_ip_host CHECK ((masklen(client_ip) =
+CASE family(client_ip)
+    WHEN 4 THEN 32
+    ELSE 128
+END)),
+    CONSTRAINT api_access_denials_ip_unmapped CHECK ((NOT (client_ip <<= '::ffff:0.0.0.0/96'::inet)))
+);
+
+ALTER TABLE public.api_access_denials OWNER TO bekup_owner;
+
+--
+-- Name: api_token_jobs; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.api_token_jobs (
+    token_id uuid NOT NULL,
+    job_id uuid NOT NULL
+);
+
+ALTER TABLE public.api_token_jobs OWNER TO bekup_owner;
+
+--
+-- Name: api_tokens; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.api_tokens (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    secret_hash bytea NOT NULL,
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    revoked_by uuid,
+    allowed_cidrs cidr[] DEFAULT '{}'::cidr[] NOT NULL,
+    allow_any_address boolean NOT NULL,
+    CONSTRAINT api_tokens_addresses CHECK ((allow_any_address = (cardinality(allowed_cidrs) = 0))),
+    CONSTRAINT api_tokens_allowed_cidrs CHECK (public.api_cidrs_valid(allowed_cidrs)),
+    CONSTRAINT api_tokens_expiry CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '366 days'::interval)))),
+    CONSTRAINT api_tokens_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
+    CONSTRAINT api_tokens_revoked_by CHECK (((revoked_by IS NULL) OR (revoked_at IS NOT NULL))),
+    CONSTRAINT api_tokens_secret_hash_length CHECK ((octet_length(secret_hash) = 32))
+);
+
+ALTER TABLE public.api_tokens OWNER TO bekup_owner;
+
+--
 -- Name: artifact_holds; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -877,7 +1487,7 @@ CREATE TABLE public.audit_log (
     prev_hash bytea NOT NULL,
     hash bytea NOT NULL,
     CONSTRAINT audit_log_action_length CHECK (((char_length(action) >= 1) AND (char_length(action) <= 128))),
-    CONSTRAINT audit_log_actor_kind_valid CHECK ((actor_kind = ANY (ARRAY['user'::text, 'system'::text, 'cli'::text]))),
+    CONSTRAINT audit_log_actor_kind_valid CHECK ((actor_kind = ANY (ARRAY['user'::text, 'system'::text, 'cli'::text, 'api'::text]))),
     CONSTRAINT audit_log_details_size CHECK ((octet_length((details)::text) <= 65536)),
     CONSTRAINT audit_log_hash_length CHECK ((octet_length(hash) = 32)),
     CONSTRAINT audit_log_ip_host CHECK ((masklen(ip) =
@@ -1100,6 +1710,10 @@ CREATE TABLE public.destinations (
     last_test_ok boolean,
     last_test_code text,
     last_test_settings_at timestamp with time zone,
+    tls_pin_sha256 text,
+    tls_pin_certificate text,
+    tls_pin_set_at timestamp with time zone,
+    tls_pin_set_by uuid,
     CONSTRAINT destinations_config_object CHECK ((jsonb_typeof(config) = 'object'::text)),
     CONSTRAINT destinations_config_size CHECK ((octet_length((config)::text) <= 524288)),
     CONSTRAINT destinations_host_key_complete CHECK ((((host_key_type IS NULL) = (host_key_fingerprint IS NULL)) AND ((host_key_type IS NULL) = (host_key_authorized_key IS NULL)) AND ((host_key_type IS NULL) = (host_key_confirmed_at IS NULL)))),
@@ -1112,7 +1726,11 @@ CREATE TABLE public.destinations (
     CONSTRAINT destinations_object_lock_days CHECK (((object_lock_retention_days IS NULL) OR ((object_lock_retention_days >= 1) AND (object_lock_retention_days <= 36500)))),
     CONSTRAINT destinations_object_lock_mode CHECK (((object_lock_mode IS NULL) OR (object_lock_mode = ANY (ARRAY['governance'::text, 'compliance'::text])))),
     CONSTRAINT destinations_object_lock_s3_only CHECK (((object_lock_mode IS NULL) OR (type = 's3'::public.destination_type))),
-    CONSTRAINT destinations_secret_size CHECK ((octet_length(secret_enc) <= 131072))
+    CONSTRAINT destinations_secret_size CHECK ((octet_length(secret_enc) <= 131072)),
+    CONSTRAINT destinations_tls_pin_certificate_size CHECK (((tls_pin_certificate IS NULL) OR ((octet_length(tls_pin_certificate) <= 16384) AND (tls_pin_certificate ~~ '-----BEGIN CERTIFICATE-----%'::text)))),
+    CONSTRAINT destinations_tls_pin_complete CHECK ((((tls_pin_sha256 IS NULL) = (tls_pin_certificate IS NULL)) AND ((tls_pin_sha256 IS NULL) = (tls_pin_set_at IS NULL)))),
+    CONSTRAINT destinations_tls_pin_format CHECK (((tls_pin_sha256 IS NULL) OR (tls_pin_sha256 ~ '^[0-9a-f]{64}$'::text))),
+    CONSTRAINT destinations_tls_pin_webdav_only CHECK (((tls_pin_sha256 IS NULL) OR (type = 'webdav'::public.destination_type)))
 );
 
 ALTER TABLE public.destinations OWNER TO bekup_owner;
@@ -1784,6 +2402,34 @@ ALTER TABLE public.run_logs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 );
 
 --
+-- Name: run_requests; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.run_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    token_id uuid NOT NULL,
+    job_id uuid NOT NULL,
+    ip inet,
+    idempotency_key text,
+    outcome public.api_request_outcome DEFAULT 'pending'::public.api_request_outcome NOT NULL,
+    reason text,
+    river_job_id bigint,
+    run_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT run_requests_idempotency_key_format CHECK ((idempotency_key ~ '^[!-~]{1,255}$'::text)),
+    CONSTRAINT run_requests_ip_host CHECK ((masklen(ip) =
+CASE family(ip)
+    WHEN 4 THEN 32
+    ELSE 128
+END)),
+    CONSTRAINT run_requests_outcome_fields CHECK ((((outcome = 'pending'::public.api_request_outcome) AND (reason IS NULL) AND (river_job_id IS NULL) AND (run_id IS NULL) AND (decided_at IS NULL)) OR ((outcome = 'accepted'::public.api_request_outcome) AND (reason IS NULL) AND (river_job_id IS NOT NULL) AND (run_id IS NOT NULL) AND (decided_at IS NOT NULL)) OR ((outcome = 'rejected'::public.api_request_outcome) AND (reason IS NOT NULL) AND (river_job_id IS NULL) AND (run_id IS NULL) AND (decided_at IS NOT NULL)))),
+    CONSTRAINT run_requests_reason CHECK ((reason = ANY (ARRAY['run_active'::text, 'job_disabled'::text, 'job_gone'::text, 'token_invalid'::text, 'expired'::text])))
+);
+
+ALTER TABLE public.run_requests OWNER TO bekup_owner;
+
+--
 -- Name: run_slots; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -2197,6 +2843,34 @@ ALTER TABLE ONLY public.river_job ALTER COLUMN id SET DEFAULT nextval('public.ri
 ALTER TABLE ONLY public.river_notification ALTER COLUMN id SET DEFAULT nextval('public.river_notification_id_seq'::regclass);
 
 --
+-- Name: api_access_denials api_access_denials_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_access_denials
+    ADD CONSTRAINT api_access_denials_pkey PRIMARY KEY (id);
+
+--
+-- Name: api_token_jobs api_token_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_token_jobs
+    ADD CONSTRAINT api_token_jobs_pkey PRIMARY KEY (token_id, job_id);
+
+--
+-- Name: api_tokens api_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_pkey PRIMARY KEY (id);
+
+--
+-- Name: api_tokens api_tokens_secret_hash_key; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_secret_hash_key UNIQUE (secret_hash);
+
+--
 -- Name: artifact_holds artifact_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2491,6 +3165,13 @@ ALTER TABLE ONLY public.run_logs
     ADD CONSTRAINT run_logs_pkey PRIMARY KEY (id);
 
 --
+-- Name: run_requests run_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_requests
+    ADD CONSTRAINT run_requests_pkey PRIMARY KEY (id);
+
+--
 -- Name: run_slots run_slots_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -2608,6 +3289,36 @@ ALTER TABLE ONLY public.webauthn_credentials
 
 ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_pkey PRIMARY KEY (id);
+
+--
+-- Name: api_access_denials_denied_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX api_access_denials_denied_idx ON public.api_access_denials USING btree (denied_at);
+
+--
+-- Name: api_access_denials_pending_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX api_access_denials_pending_idx ON public.api_access_denials USING btree (denied_at, id) WHERE (processed_at IS NULL);
+
+--
+-- Name: api_access_denials_token_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX api_access_denials_token_idx ON public.api_access_denials USING btree (token_id, denied_at DESC, id DESC);
+
+--
+-- Name: api_token_jobs_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX api_token_jobs_job_idx ON public.api_token_jobs USING btree (job_id);
+
+--
+-- Name: api_tokens_created_by_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX api_tokens_created_by_idx ON public.api_tokens USING btree (created_by);
 
 --
 -- Name: artifact_holds_artifact_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -3030,6 +3741,36 @@ CREATE UNIQUE INDEX run_items_unique_idx ON public.run_items USING btree (run_id
 CREATE INDEX run_logs_run_idx ON public.run_logs USING btree (run_id, id);
 
 --
+-- Name: run_requests_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_requests_created_idx ON public.run_requests USING btree (created_at);
+
+--
+-- Name: run_requests_idempotency_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX run_requests_idempotency_key ON public.run_requests USING btree (token_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+--
+-- Name: run_requests_pending_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_requests_pending_idx ON public.run_requests USING btree (created_at, id) WHERE (outcome = 'pending'::public.api_request_outcome);
+
+--
+-- Name: run_requests_river_job_key; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX run_requests_river_job_key ON public.run_requests USING btree (river_job_id) WHERE (river_job_id IS NOT NULL);
+
+--
+-- Name: run_requests_token_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX run_requests_token_idx ON public.run_requests USING btree (token_id, created_at DESC, id DESC);
+
+--
 -- Name: run_slots_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -3174,6 +3915,18 @@ CREATE INDEX webauthn_ceremonies_user_id_idx ON public.webauthn_ceremonies USING
 CREATE INDEX webauthn_credentials_user_id_idx ON public.webauthn_credentials USING btree (user_id);
 
 --
+-- Name: api_access_denials api_access_denials_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER api_access_denials_guard BEFORE UPDATE ON public.api_access_denials FOR EACH ROW EXECUTE FUNCTION public.api_access_denials_guard();
+
+--
+-- Name: api_tokens api_tokens_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER api_tokens_guard BEFORE UPDATE ON public.api_tokens FOR EACH ROW EXECUTE FUNCTION public.api_tokens_guard();
+
+--
 -- Name: artifacts artifacts_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -3270,6 +4023,12 @@ CREATE TRIGGER restores_guard BEFORE UPDATE ON public.restores FOR EACH ROW EXEC
 CREATE TRIGGER restores_set_updated_at BEFORE UPDATE ON public.restores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
+-- Name: run_requests run_requests_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER run_requests_guard BEFORE UPDATE ON public.run_requests FOR EACH ROW EXECUTE FUNCTION public.run_requests_guard();
+
+--
 -- Name: runs runs_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
@@ -3334,6 +4093,41 @@ CREATE TRIGGER users_email_change_unverify BEFORE UPDATE OF email ON public.user
 --
 
 CREATE TRIGGER users_set_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: api_access_denials api_access_denials_token_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_access_denials
+    ADD CONSTRAINT api_access_denials_token_id_fkey FOREIGN KEY (token_id) REFERENCES public.api_tokens(id);
+
+--
+-- Name: api_token_jobs api_token_jobs_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_token_jobs
+    ADD CONSTRAINT api_token_jobs_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: api_token_jobs api_token_jobs_token_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_token_jobs
+    ADD CONSTRAINT api_token_jobs_token_id_fkey FOREIGN KEY (token_id) REFERENCES public.api_tokens(id);
+
+--
+-- Name: api_tokens api_tokens_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+--
+-- Name: api_tokens api_tokens_revoked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.users(id);
 
 --
 -- Name: artifact_holds artifact_holds_artifact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -3453,6 +4247,13 @@ ALTER TABLE ONLY public.destinations
 
 ALTER TABLE ONLY public.destinations
     ADD CONSTRAINT destinations_host_key_confirmed_by_fkey FOREIGN KEY (host_key_confirmed_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: destinations destinations_tls_pin_set_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.destinations
+    ADD CONSTRAINT destinations_tls_pin_set_by_fkey FOREIGN KEY (tls_pin_set_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 --
 -- Name: download_tickets download_tickets_artifact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -3770,6 +4571,27 @@ ALTER TABLE ONLY public.run_logs
     ADD CONSTRAINT run_logs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
 
 --
+-- Name: run_requests run_requests_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_requests
+    ADD CONSTRAINT run_requests_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
+-- Name: run_requests run_requests_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_requests
+    ADD CONSTRAINT run_requests_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+
+--
+-- Name: run_requests run_requests_token_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.run_requests
+    ADD CONSTRAINT run_requests_token_id_fkey FOREIGN KEY (token_id) REFERENCES public.api_tokens(id);
+
+--
 -- Name: runs runs_cancel_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -3924,11 +4746,105 @@ ALTER TABLE ONLY public.webauthn_credentials
     ADD CONSTRAINT webauthn_credentials_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 --
+-- Name: SCHEMA api; Type: ACL; Schema: -; Owner: bekup_owner
+--
+
+GRANT USAGE ON SCHEMA api TO bekup_external;
+
+--
 -- Name: SCHEMA public; Type: ACL; Schema: -; Owner: bekup_owner
 --
 
 REVOKE USAGE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO bekup_app;
+
+--
+-- Name: FUNCTION authenticate(p_token_id uuid, p_secret_hash bytea, p_client_ip inet); Type: ACL; Schema: api; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION api.authenticate(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION api.authenticate(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) TO bekup_external;
+
+--
+-- Name: FUNCTION request_run(p_token_id uuid, p_secret_hash bytea, p_job_id uuid, p_idempotency_key text, p_ip inet); Type: ACL; Schema: api; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION api.request_run(p_token_id uuid, p_secret_hash bytea, p_job_id uuid, p_idempotency_key text, p_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION api.request_run(p_token_id uuid, p_secret_hash bytea, p_job_id uuid, p_idempotency_key text, p_ip inet) TO bekup_external;
+
+--
+-- Name: FUNCTION request_status(p_token_id uuid, p_secret_hash bytea, p_request_id uuid, p_client_ip inet); Type: ACL; Schema: api; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION api.request_status(p_token_id uuid, p_secret_hash bytea, p_request_id uuid, p_client_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION api.request_status(p_token_id uuid, p_secret_hash bytea, p_request_id uuid, p_client_ip inet) TO bekup_external;
+
+--
+-- Name: FUNCTION schema_version(); Type: ACL; Schema: api; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION api.schema_version() FROM PUBLIC;
+GRANT ALL ON FUNCTION api.schema_version() TO bekup_external;
+
+--
+-- Name: FUNCTION token_jobs(p_token_id uuid, p_secret_hash bytea, p_client_ip inet); Type: ACL; Schema: api; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION api.token_jobs(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION api.token_jobs(p_token_id uuid, p_secret_hash bytea, p_client_ip inet) TO bekup_external;
+
+--
+-- Name: FUNCTION api_access_denials_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_access_denials_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION api_cidrs_valid(p_cidrs cidr[]); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_cidrs_valid(p_cidrs cidr[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.api_cidrs_valid(p_cidrs cidr[]) TO bekup_app;
+
+--
+-- Name: FUNCTION api_client_ip(p_ip inet); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_client_ip(p_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.api_client_ip(p_ip inet) TO bekup_app;
+
+--
+-- Name: FUNCTION api_client_ip_allowed(p_cidrs cidr[], p_any boolean, p_ip inet); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_client_ip_allowed(p_cidrs cidr[], p_any boolean, p_ip inet) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.api_client_ip_allowed(p_cidrs cidr[], p_any boolean, p_ip inet) TO bekup_app;
+
+--
+-- Name: FUNCTION api_token_admit(p_token_id uuid, p_secret_hash bytea, p_ip inet); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_token_admit(p_token_id uuid, p_secret_hash bytea, p_ip inet) FROM PUBLIC;
+
+--
+-- Name: FUNCTION api_token_job_allowed(p_token_id uuid, p_job_id uuid); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_token_job_allowed(p_token_id uuid, p_job_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.api_token_job_allowed(p_token_id uuid, p_job_id uuid) TO bekup_app;
+
+--
+-- Name: FUNCTION api_token_valid(p_token_id uuid); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_token_valid(p_token_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.api_token_valid(p_token_id uuid) TO bekup_app;
+
+--
+-- Name: FUNCTION api_tokens_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.api_tokens_guard() FROM PUBLIC;
 
 --
 -- Name: FUNCTION artifacts_guard(); Type: ACL; Schema: public; Owner: bekup_owner
@@ -3970,6 +4886,12 @@ REVOKE ALL ON FUNCTION public.bekup_schema_version() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.bekup_schema_version() TO bekup_app;
 
 --
+-- Name: FUNCTION bekup_sync_external_grants(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.bekup_sync_external_grants() FROM PUBLIC;
+
+--
 -- Name: FUNCTION download_tickets_guard(); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -4007,6 +4929,12 @@ REVOKE ALL ON FUNCTION public.river_job_state_in_bitmask(bitmask bit, state publ
 GRANT ALL ON FUNCTION public.river_job_state_in_bitmask(bitmask bit, state public.river_job_state) TO bekup_app;
 
 --
+-- Name: FUNCTION run_requests_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.run_requests_guard() FROM PUBLIC;
+
+--
 -- Name: FUNCTION runs_terminal_guard(); Type: ACL; Schema: public; Owner: bekup_owner
 --
 
@@ -4041,6 +4969,54 @@ REVOKE ALL ON FUNCTION public.user_channels_limit() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.users_email_change_unverify() FROM PUBLIC;
+
+--
+-- Name: TABLE api_access_denials; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,DELETE ON TABLE public.api_access_denials TO bekup_app;
+
+--
+-- Name: COLUMN api_access_denials.processed_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(processed_at) ON TABLE public.api_access_denials TO bekup_app;
+
+--
+-- Name: TABLE api_token_jobs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.api_token_jobs TO bekup_app;
+
+--
+-- Name: TABLE api_tokens; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.api_tokens TO bekup_app;
+
+--
+-- Name: COLUMN api_tokens.revoked_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(revoked_at) ON TABLE public.api_tokens TO bekup_app;
+
+--
+-- Name: COLUMN api_tokens.revoked_by; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(revoked_by) ON TABLE public.api_tokens TO bekup_app;
+
+--
+-- Name: COLUMN api_tokens.allowed_cidrs; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(allowed_cidrs) ON TABLE public.api_tokens TO bekup_app;
+
+--
+-- Name: COLUMN api_tokens.allow_any_address; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(allow_any_address) ON TABLE public.api_tokens TO bekup_app;
 
 --
 -- Name: TABLE artifact_holds; Type: ACL; Schema: public; Owner: bekup_owner
@@ -4551,6 +5527,42 @@ GRANT SELECT,INSERT ON TABLE public.run_logs TO bekup_app;
 --
 
 GRANT SELECT,USAGE ON SEQUENCE public.run_logs_id_seq TO bekup_app;
+
+--
+-- Name: TABLE run_requests; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,DELETE ON TABLE public.run_requests TO bekup_app;
+
+--
+-- Name: COLUMN run_requests.outcome; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(outcome) ON TABLE public.run_requests TO bekup_app;
+
+--
+-- Name: COLUMN run_requests.reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(reason) ON TABLE public.run_requests TO bekup_app;
+
+--
+-- Name: COLUMN run_requests.river_job_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(river_job_id) ON TABLE public.run_requests TO bekup_app;
+
+--
+-- Name: COLUMN run_requests.run_id; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(run_id) ON TABLE public.run_requests TO bekup_app;
+
+--
+-- Name: COLUMN run_requests.decided_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(decided_at) ON TABLE public.run_requests TO bekup_app;
 
 --
 -- Name: TABLE run_slots; Type: ACL; Schema: public; Owner: bekup_owner

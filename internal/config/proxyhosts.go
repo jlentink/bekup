@@ -41,7 +41,7 @@ var containerNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$`)
 // operator's own Traefik is commonly named so (D-215 amendment 2).
 var ReservedContainerNames = []string{
 	"serve", "runner", "migrate", "admin", "setup", "certs-init", "postgres",
-	"bekup-serve", "worker", "traefik-init",
+	"bekup-serve", "worker", "traefik-init", "external-api", "bekup-external-api",
 }
 
 // IsReservedContainerName reports whether s is one of
@@ -66,6 +66,12 @@ func ValidContainerName(s string) bool {
 
 // trustedProxyHosts checks server.trusted_proxy_hosts.
 func (v *validator) trustedProxyHosts(path string, hosts []string) {
+	v.trustedProxyHostsFor(path, "server.trusted_proxies", hosts)
+}
+
+// trustedProxyHostsFor checks a trusted_proxy_hosts list; cidrKey names
+// the CIDR list an IP address belongs into.
+func (v *validator) trustedProxyHostsFor(path, cidrKey string, hosts []string) {
 	if len(hosts) > MaxTrustedProxyHosts {
 		v.addf(path, "at most %d names (got %d)", MaxTrustedProxyHosts, len(hosts))
 	}
@@ -75,7 +81,7 @@ func (v *validator) trustedProxyHosts(path string, hosts []string) {
 		case strings.Contains(h, "*"):
 			v.addf(path, "%q: wildcards are not allowed (name each proxy container)", bounded(h))
 		case isIPLiteral(h):
-			v.addf(path, "%q is an IP address: put it into server.trusted_proxies as a /32 or /128", bounded(h))
+			v.addf(path, "%q is an IP address: put it into %s as a /32 or /128", bounded(h), cidrKey)
 		case IsReservedContainerName(h):
 			v.addf(path, "%q is the name of one of bekup's own services; name your proxy's container", bounded(h))
 		case !ValidContainerName(h):

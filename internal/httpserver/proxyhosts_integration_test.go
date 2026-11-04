@@ -127,8 +127,8 @@ func TestIntegrationTrustedProxyHosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("server log: %v\n%s", err, logs)
 	}
-	if !strings.Contains(logs, "trusted proxy host resolved") || !strings.Contains(logs, "not in server.trusted_proxies") ||
-		!strings.Contains(logs, "serve's address on the proxy network") {
+	if !strings.Contains(logs, "trusted proxy host resolved") || !strings.Contains(logs, "not in the trusted proxy list") ||
+		!strings.Contains(logs, "own address on the proxy network") {
 		t.Fatalf("server log lacks the resolution, the untrusted warning or the own address:\n%s", logs)
 	}
 

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Destination is a backup destination backend (Disk, S3, SFTP).
+// Destination is a backup destination backend (Disk, S3, SFTP, WebDAV).
 //
 // All methods are safe for concurrent use. Keys are always validated [Key]
 // values; the zero Key is only accepted as a List/Test prefix.
@@ -157,7 +157,7 @@ type ListPage struct {
 
 // Capabilities describe a backend.
 type Capabilities struct {
-	// Type is "disk", "s3" or "sftp".
+	// Type is "disk", "s3", "sftp" or "webdav".
 	Type string
 	// SupportsObjectLock reports that Put honors lock options and
 	// Delete may be refused by a lock.
@@ -183,10 +183,12 @@ type Capabilities struct {
 
 // TestStep is one step of a destination test.
 type TestStep struct {
-	Name    string // "write", "read" or "delete"
-	OK      bool
-	Code    ErrorCode
-	Message string // fixed text from ErrorCode.Message, never raw errors
+	Name string // "write", "read" or "delete"
+	OK   bool
+	Code ErrorCode
+	// Message is the code's fixed text plus a curated detail
+	// (storage.Describe), never a raw error.
+	Message string
 }
 
 // TestResult is the result of Destination.Test.
@@ -299,10 +301,17 @@ func okStep(name string) TestStep {
 	return TestStep{Name: name, OK: true, Code: CodeOK, Message: CodeOK.Message()}
 }
 
-func failStep(name string, err error) TestStep {
+// FailStep is the failed TestStep of err: its class and the presentable
+// text of Describe (the fixed message plus a curated detail).
+func FailStep(name string, err error) TestStep {
 	c := Classify(err)
-	return TestStep{Name: name, Code: c, Message: c.Message()}
+	return TestStep{Name: name, Code: c, Message: Describe(c, err)}
 }
+
+// OKStep is a successful TestStep.
+func OKStep(name string) TestStep { return okStep(name) }
+
+func failStep(name string, err error) TestStep { return FailStep(name, err) }
 
 // All iterates every object below prefix across pages. Iteration stops
 // at the first error, which is yielded once.

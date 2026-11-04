@@ -9,7 +9,13 @@ import {
 } from "@/features/connections/test-fixtures";
 import { baseHandlers, gqlError, meFixture, ok, renderApp, type Vars } from "@/test/mock-api";
 
-import { sftpNeedsPassword, toUpdateInput, valuesFrom, type Original } from "./form-model";
+import {
+  sftpNeedsPassword,
+  toUpdateInput,
+  valuesFrom,
+  webdavNeedsPassword,
+  type Original,
+} from "./form-model";
 
 beforeAll(stubResizeObserver);
 
@@ -521,5 +527,353 @@ describe("destination form model", () => {
       sftp: { host: "files.example", port: 22, user: "bekup", basePath: "/srv/backups", dir: "" },
     });
     expect(sftpNeedsPassword({ ...v, sftp: { ...v.sftp, basePath: "/other" } }, orig)).toBe(true);
+  });
+});
+
+const SPKI = "0123456789abcdef".repeat(4);
+const CERT_SHA = "fedcba9876543210".repeat(4);
+
+function webdavCert(overrides: Record<string, unknown> = {}) {
+  return {
+    __typename: "WebdavCertificate",
+    spkiSha256: SPKI,
+    spkiSha256Base64: "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=",
+    fingerprintSha256: CERT_SHA,
+    notBefore: "2026-01-01T00:00:00Z",
+    notAfter: "2036-01-01T00:00:00Z",
+    selfSigned: true,
+    ...overrides,
+  };
+}
+
+/** A WebDAV destination with its settings overridden. */
+function webdavDestination(webdav: Record<string, unknown> = {}, admin = true) {
+  const d = destinationFixture("WEBDAV", {}, admin);
+  if (!d.settings) return d;
+  return { ...d, settings: { ...d.settings, webdav: { ...d.settings.webdav, ...webdav } } };
+}
+
+/** A failed WebDAV test: self-signed, untrusted, Nextcloud seen, overwrite ignored. */
+function webdavTest(webdav: Record<string, unknown> = {}) {
+  return ok({
+    testDestination: {
+      __typename: "DestinationTestResult",
+      ok: false,
+      probeKey: null,
+      probeRemains: false,
+      note: null,
+      steps: [
+        { __typename: "DestinationTestStep", name: "connect", ok: true, code: "ok", message: "" },
+        {
+          __typename: "DestinationTestStep",
+          name: "overwrite",
+          ok: false,
+          code: "overwrite_ignored",
+          message: "The server ignores Overwrite: F.",
+        },
+      ],
+      webdav: {
+        __typename: "WebdavTestDetails",
+        trust: "SYSTEM",
+        trusted: false,
+        certificate: webdavCert(),
+        pinMatches: false,
+        server: "NEXTCLOUD",
+        suggestedFlavor: "NEXTCLOUD",
+        uploadMode: null,
+        overwriteProtection: "IGNORED",
+        ...webdav,
+      },
+    },
+  });
+}
+
+describe("WebDAV destinations (D-222)", () => {
+  it("creates a Nextcloud WebDAV destination through the form", async () => {
+    const { user, callsOf } = renderApp("/destinations/new", {
+      ...baseHandlers(),
+      DestinationsList: () => ok({ destinations: [] }),
+      DestinationDetail: () => ok({ destination: webdavDestination() }),
+      DestinationUnrecordedFiles: noUnrecorded,
+      CreateDestination: () =>
+        ok({ createDestination: { __typename: "Destination", id: DEST_ID, name: "cloud-dav" } }),
+    });
+    await user.click(await screen.findByRole("radio", { name: /^WebDAV/ }));
+    await user.type(screen.getByLabelText("Name"), "cloud-dav");
+    // The URL help follows the server type.
+    expect(screen.getByText(/existing folder that holds the backups/)).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /^Nextcloud \/ ownCloud/ }));
+    expect(screen.getByText(/https:\/\/name\.stackstorage\.com/)).toBeInTheDocument();
+    expect(screen.getByText(/Basic auth, over HTTPS only/)).toBeInTheDocument();
+    expect(screen.getByText(/use an app password/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("URL"), "http//cloud.example.com");
+    await user.type(screen.getByLabelText("Request timeout (seconds, optional)"), "4");
+    await user.click(screen.getByRole("button", { name: "Create destination" }));
+    expect(
+      await screen.findByText("Enter an https:// URL (http only in dev mode)."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Enter the username.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Enter a whole number of seconds between 5 and 600."),
+    ).toBeInTheDocument();
+    expect(callsOf("CreateDestination")).toHaveLength(0);
+
+    const url = screen.getByLabelText("URL");
+    await user.clear(url);
+    await user.type(url, "https://cloud.example.com");
+    await user.type(screen.getByLabelText("Username"), "bekup");
+    await user.type(screen.getByLabelText("Password"), "app-pass-123");
+    await user.type(screen.getByLabelText("Folder"), "Backups/bekup");
+    const timeout = screen.getByLabelText("Request timeout (seconds, optional)");
+    await user.clear(timeout);
+    await user.type(timeout, "120");
+    await user.click(screen.getByRole("button", { name: "Create destination" }));
+    await waitFor(() => {
+      expect(callsOf("CreateDestination")).toHaveLength(1);
+    });
+    expect(callsOf("CreateDestination")[0]?.variables).toEqual({
+      input: {
+        name: "cloud-dav",
+        type: "WEBDAV",
+        noDelete: false,
+        webdav: {
+          url: "https://cloud.example.com",
+          flavor: "NEXTCLOUD",
+          username: "bekup",
+          password: "app-pass-123",
+          path: "Backups/bekup",
+          timeoutSeconds: 120,
+        },
+      },
+    });
+    await screen.findByRole("heading", { name: "cloud-dav" });
+    expect(document.body.textContent).not.toContain("app-pass-123");
+  });
+
+  it("asks for the password again when the username changes; maps server field errors", async () => {
+    let attempt = 0;
+    const { user, callsOf } = renderApp(`/destinations/${DEST_ID}/edit`, {
+      ...baseHandlers(),
+      DestinationDetail: () => ok({ destination: webdavDestination() }),
+      DestinationsList: () => ok({ destinations: [] }),
+      UpdateDestination: () => {
+        attempt++;
+        return attempt === 1
+          ? gqlError("VALIDATION", "the server refused the URL", "webdav.url")
+          : gqlError(
+              "VALIDATION",
+              "the URL, flavor or username changed: enter the password again",
+              "webdav.password",
+            );
+      },
+    });
+    const username = await screen.findByLabelText("Username");
+    // The stored password is write-only.
+    expect(screen.getByText("Stored")).toBeInTheDocument();
+    expect(screen.queryByLabelText("New password")).toBeNull();
+
+    // Unchanged endpoint: no password is sent; a server error lands on its field.
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("The server refused the URL.")).toBeInTheDocument();
+    expect(screen.getByLabelText("URL")).toHaveAttribute("aria-invalid", "true");
+    expect(callsOf("UpdateDestination")[0]?.variables).toEqual({
+      id: DEST_ID,
+      input: {
+        webdav: {
+          url: "https://cloud.example.com",
+          flavor: "NEXTCLOUD",
+          username: "bekup",
+          path: "Backups",
+        },
+      },
+    });
+
+    // A server-side password error opens the write-only input to show it.
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(
+      await screen.findByText("The URL, flavor or username changed: enter the password again."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("New password")).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(username);
+    await user.type(username, "backup-bot");
+    expect(await screen.findByText(/The URL, server type or username changed/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(
+      await screen.findByText(/enter the password again\. A stored password/),
+    ).toBeInTheDocument();
+    expect(callsOf("UpdateDestination")).toHaveLength(2);
+  });
+
+  it("shows the TLS state and removes a pin behind a confirmation and a step-up", async () => {
+    const state = { stepped: false };
+    let cleared = false;
+    const { user, callsOf } = renderApp(`/destinations/${DEST_ID}`, {
+      ...baseHandlers(),
+      ...stepUpHandlers(state),
+      DestinationDetail: () =>
+        ok({
+          destination: cleared
+            ? webdavDestination()
+            : webdavDestination({
+                trust: "PINNED",
+                pinnedCertificate: webdavCert({ pinnedAt: "2026-10-20T08:00:00Z" }),
+              }),
+        }),
+      DestinationUnrecordedFiles: noUnrecorded,
+      ClearWebdavCertificatePin: () => {
+        if (!state.stepped)
+          return gqlError("STEP_UP_REQUIRED", "please confirm your identity again");
+        cleared = true;
+        return ok({
+          clearWebdavCertificatePin: { __typename: "Destination", id: DEST_ID, ready: true },
+        });
+      },
+    });
+    const tls = await screen.findByRole("region", { name: "TLS" });
+    expect(within(tls).getAllByText("Pinned certificate").length).toBeGreaterThan(0);
+    const pinned = within(tls).getByTestId("pinned-certificate");
+    expect(within(pinned).getByText(SPKI)).toBeInTheDocument();
+    expect(within(pinned).getByText(/^FE:DC:BA:98/)).toBeInTheDocument();
+    expect(within(pinned).getByText("Self-signed")).toBeInTheDocument();
+    expect(within(pinned).getByText("Pinned")).toBeInTheDocument();
+    const config = screen.getByRole("region", { name: "Configuration" });
+    expect(within(config).getByText("https://cloud.example.com")).toBeInTheDocument();
+    expect(within(config).getByText("Nextcloud / ownCloud")).toBeInTheDocument();
+    expect(within(config).getByText("60 s (default)")).toBeInTheDocument();
+
+    await user.click(within(tls).getByRole("button", { name: "Remove pin" }));
+    const dialog = await screen.findByRole("dialog", { name: "Remove the certificate pin?" });
+    expect(within(dialog).getByText(/system roots again/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/audited and raises a security alert/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Remove pin" }));
+    const stepUp = await screen.findByRole("dialog", { name: "Confirm your identity" });
+    await user.type(within(stepUp).getByLabelText("6-digit code"), "654321");
+    await user.click(within(stepUp).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => {
+      expect(callsOf("ClearWebdavCertificatePin")).toHaveLength(2);
+    });
+    expect(callsOf("ClearWebdavCertificatePin")[1]?.variables).toEqual({ id: DEST_ID });
+    expect(await within(tls).findByText(/run the test above and pin/)).toBeInTheDocument();
+  });
+
+  it("shows the WebDAV test details and pins the presented certificate", async () => {
+    const state = { stepped: false };
+    const { user, callsOf } = renderApp(`/destinations/${DEST_ID}`, {
+      ...baseHandlers(),
+      ...stepUpHandlers(state),
+      DestinationDetail: () => ok({ destination: webdavDestination({ flavor: "GENERIC" }) }),
+      DestinationUnrecordedFiles: noUnrecorded,
+      TestDestination: () => webdavTest(),
+      PinWebdavCertificate: () =>
+        state.stepped
+          ? ok({ pinWebdavCertificate: { __typename: "Destination", id: DEST_ID, ready: true } })
+          : gqlError("STEP_UP_REQUIRED", "please confirm your identity again"),
+    });
+    await user.click(await screen.findByRole("button", { name: "Test destination" }));
+    const steps = await screen.findByRole("list", { name: "Test steps" });
+    expect(within(steps).getByText("Overwrite protection")).toBeInTheDocument();
+    expect(within(steps).getByText("overwrite_ignored")).toBeInTheDocument();
+
+    const details = screen.getByTestId("webdav-test-details");
+    expect(within(details).getByText("Not trusted")).toBeInTheDocument();
+    expect(within(details).getByTestId("test-spki")).toHaveTextContent(SPKI);
+    expect(within(details).getByText("Nextcloud")).toBeInTheDocument();
+    expect(
+      within(details).getByText(/This looks like Nextcloud: use the Nextcloud/),
+    ).toBeInTheDocument();
+    const ignored = within(details).getByTestId("overwrite-ignored");
+    expect(ignored).toHaveTextContent(/This server would replace existing backups/);
+    expect(ignored).toHaveTextContent(/ignored it and replaced the file/);
+    expect(ignored).toHaveTextContent(/bekup refuses to write to it/);
+
+    await user.click(within(details).getByRole("button", { name: "Pin this certificate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Pin this certificate" });
+    expect(within(dialog).getByTestId("pin-spki")).toHaveTextContent(SPKI);
+    expect(within(dialog).getByText(/^FE:DC:BA:98/)).toBeInTheDocument();
+    const pin = within(dialog).getByRole("button", { name: "Pin certificate" });
+    expect(pin).toBeDisabled();
+    await user.click(within(dialog).getByLabelText(/I compared the fingerprint/));
+    await user.click(pin);
+    const stepUp = await screen.findByRole("dialog", { name: "Confirm your identity" });
+    await user.type(within(stepUp).getByLabelText("6-digit code"), "654321");
+    await user.click(within(stepUp).getByRole("button", { name: "Confirm" }));
+    await waitFor(() => {
+      expect(callsOf("PinWebdavCertificate")).toHaveLength(2);
+    });
+    expect(callsOf("PinWebdavCertificate")[1]?.variables).toEqual({
+      id: DEST_ID,
+      fingerprint: SPKI,
+    });
+    expect(await within(details).findByText(/Certificate pinned\. Test again/)).toBeInTheDocument();
+    expect(within(details).queryByRole("button", { name: "Pin this certificate" })).toBeNull();
+  });
+
+  it("tells the admin to test again when the certificate changed (CONFLICT)", async () => {
+    const { user } = renderApp(`/destinations/${DEST_ID}`, {
+      ...baseHandlers(),
+      ...stepUpHandlers({ stepped: true }),
+      DestinationDetail: () => ok({ destination: webdavDestination() }),
+      DestinationUnrecordedFiles: noUnrecorded,
+      TestDestination: () =>
+        webdavTest({
+          trust: "PINNED",
+          trusted: false,
+          pinMatches: false,
+          overwriteProtection: "REFUSED",
+        }),
+      PinWebdavCertificate: () => gqlError("CONFLICT", "the server presents another certificate"),
+    });
+    await user.click(await screen.findByRole("button", { name: "Test destination" }));
+    const details = await screen.findByTestId("webdav-test-details");
+    expect(within(details).getByText("Does not match the pin")).toBeInTheDocument();
+    expect(
+      within(details).getByText(/presents a different key than the pinned one/),
+    ).toBeInTheDocument();
+    expect(within(details).queryByTestId("overwrite-ignored")).toBeNull();
+    // Same flavor as suggested: no hint.
+    expect(within(details).queryByText(/This looks like/)).toBeNull();
+    await user.click(within(details).getByRole("button", { name: "Pin this certificate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Pin this certificate" });
+    await user.click(within(dialog).getByLabelText(/I compared the fingerprint/));
+    await user.click(within(dialog).getByRole("button", { name: "Pin certificate" }));
+    expect(
+      await within(dialog).findByText(
+        /now presents a different certificate.*test the destination again/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows maintainers the test details without pin actions", async () => {
+    const { user } = renderApp(`/destinations/${DEST_ID}`, {
+      ...baseHandlers(maintainer),
+      DestinationDetail: () => ok({ destination: webdavDestination({}, false) }),
+      TestDestination: () => webdavTest(),
+    });
+    expect(await screen.findByRole("heading", { name: "cloud-dav" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "TLS" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Test destination" }));
+    const details = await screen.findByTestId("webdav-test-details");
+    expect(within(details).getByTestId("test-spki")).toHaveTextContent(SPKI);
+    expect(within(details).getByTestId("overwrite-ignored")).toBeInTheDocument();
+    expect(within(details).queryByRole("button", { name: "Pin this certificate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove pin" })).toBeNull();
+  });
+
+  it("form model: a stored password is only re-entered for a new endpoint", () => {
+    const orig = webdavDestination() as unknown as Original;
+    const v = valuesFrom(orig);
+    expect(webdavNeedsPassword(v, orig)).toBe(false);
+    expect(
+      webdavNeedsPassword(
+        { ...v, webdav: { ...v.webdav, url: "https://cloud.example.com/" } },
+        orig,
+      ),
+    ).toBe(false);
+    expect(webdavNeedsPassword({ ...v, webdav: { ...v.webdav, flavor: "GENERIC" } }, orig)).toBe(
+      true,
+    );
+    expect(webdavNeedsPassword({ ...v, webdav: { ...v.webdav, path: "Other" } }, orig)).toBe(false);
   });
 });

@@ -107,7 +107,8 @@ configuration keys. bekup itself never reads them.
 | `ACME_EMAIL` | both (ACME) | none (required) | Let's Encrypt account e-mail |
 | `ACME_CA_SERVER` | both (ACME) | Let's Encrypt production | ACME directory URL (https only), for example the staging CA |
 | `PROXY_TLS_MODE` | both | `acme` | `static` uses your own certificate mounted at `/certs/tls.crt` + `/certs/tls.key` (internal PKI, dev) |
-| `COMPOSE_PROFILES` | – | none | `traefik` or `nginx`: selects the proxy profile (compose itself reads it) |
+| `COMPOSE_PROFILES` | – | none | `traefik` or `nginx`: selects the proxy profile (compose itself reads it); `external-api` adds the opt-in external API |
+| `BEKUP_EXTERNAL_API` | both | empty | `enabled`: route `/api/v1/` to the opt-in [external API](#external-api) (setup writes it); anything but `enabled` or empty stops the proxy |
 | `PROXY_FRONTEND_IP` | both | `10.213.250.5` | the proxy's fixed address on `frontend` |
 | `FRONTEND_SUBNET`, `SERVE_FRONTEND_IP` | both | `10.213.250.0/24`, `10.213.250.10` | see [compose.md](compose.md) |
 
@@ -213,6 +214,10 @@ Both profiles enforce the same baseline:
   ping). `static-acme.yml.tmpl` adds the Let's Encrypt resolver in ACME mode.
 - `dynamic/bekup.yml.tmpl`: routers, middlewares (headers, rate limit,
   in-flight limit, body limit) and the service `http://serve:8080`.
+- `dynamic/external-api.yml.tmpl`: rendered only with
+  `BEKUP_EXTERNAL_API=enabled` ([external API](#external-api)): the router
+  `bekup-api` for `/api/v1/` (priority 400, above the stream router's 300),
+  a 16 KiB body limit and the service `http://external-api:8081`.
 - `dynamic/tls.yml`: TLS options. `dynamic/static-certs.yml`: static mode
   only.
 - `entrypoint.sh`: validates the variables, renders the templates into
@@ -247,6 +252,9 @@ confusion between proxy and backend.
 - `bekup-https.conf.tmpl`: the site. `bekup-http-only.conf.tmpl`: used only
   before the first certificate exists, and serves nothing but the ACME
   challenge.
+- `bekup-external-api.conf`: the `location ^~ /api/v1/` of the
+  [external API](#external-api) (16 KiB bodies, `http://external-api:8081`),
+  copied into the HTTPS site only with `BEKUP_EXTERNAL_API=enabled`.
 - `entrypoint.sh`: validates the variables, renders the site with `envsubst`,
   runs nginx and checks every 5 minutes whether the certificate changed. If
   it did, the script runs `nginx -t` and reloads nginx, or keeps the old
@@ -673,6 +681,77 @@ An nginx in a container resolves `bekup-serve` through Docker's DNS when it
 starts; after `serve` is recreated, reload nginx (or use a `resolver
 127.0.0.11` with a variable in `proxy_pass`).
 
+### External API
+
+With the opt-in external API enabled (D-220,
+[guide](../guides/external-api.md#enabling-it)) your proxy needs a second
+route on the same domain: **`/api/v1/` to `http://bekup-external-api:8081`**
+(the alias of `external-api` on your proxy's network), above the UI's
+route, with request bodies of at most 16 KiB. Everything else, including
+`/api/download/`, stays on `http://bekup-serve:8080`. `setup init|upgrade
+--external-api` prints these settings; the external API trusts
+`X-Forwarded-For` only from the proxy serve trusts (its
+`external-api.toml` names the same container, link mode the same fixed
+address). In the join shape it, too, accepts connections only on its
+address on your proxy's network (and loopback).
+
+The alias can be taken over like `bekup-serve` ([alias
+check](#alias-check)): another container on your proxy's network with the
+alias `bekup-external-api` may receive requests **with API tokens**. The
+external API logs a WARN and fails its `/readyz` when its alias also
+resolves to another container, and `serve` (which shares the network and
+can audit) checks the alias every 20 s: more than one container (or
+`serve` itself) behind it records `security.external_api_alias_conflict`
+and sends the critical `external_api_alias_conflict` alert to every admin.
+Neither check can see a container that holds the alias while the external
+API is stopped. **Where your proxy allows it, forward `/api/v1/` to the
+external API's container name instead of the alias**: with the shipped
+compose file `<project>-external-api-1`, for example
+`bekup-external-api-1` (container names are unique per Docker daemon); the
+examples below use the alias because it does not depend on the project
+name.
+
+The external API has no egress network of its own, but your proxy's
+network usually routes outward: on it the external API (like `serve`) can
+reach the internet and every container there. Where your proxy allows it,
+put its backends on an `internal` network (`docker network create
+--internal ...`) and keep the proxy's published ports on another network.
+
+- **Nginx Proxy Manager:** on the Proxy Host, a *Custom Location*
+  `/api/v1/` with scheme `http`, forward hostname `bekup-external-api`,
+  port `8081`, and in its Advanced field `client_max_body_size 16k;`.
+- **Traefik (file provider):** a router with the rule
+  ``Host(`backup.example.com`) && PathPrefix(`/api/v1/`)``, a priority above
+  the UI router, a `buffering` middleware with `maxRequestBodyBytes: 16384`
+  and a service with `url: http://bekup-external-api:8081`. With
+  `--proxy-labels` setup puts these labels on `external-api` in
+  `compose.override.yaml` (router `bekup-api`, priority 400).
+- **Caddy:** `handle /api/v1/* { request_body { max_size 16KB }
+  reverse_proxy bekup-external-api:8081 }` before the UI's `reverse_proxy`.
+- **nginx:**
+
+  ```nginx
+  location ^~ /api/v1/ {
+      client_max_body_size 16k;
+      proxy_pass http://bekup-external-api:8081;
+      proxy_set_header Host              $host;
+      proxy_set_header X-Forwarded-For   $remote_addr;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header Forwarded         "";
+  }
+  ```
+
+The bundled Traefik and nginx do the same by themselves once
+`BEKUP_EXTERNAL_API=enabled` is in `.env`. With `--proxy none` (variant
+`full`), route `/api/v1/` to `http://10.213.250.11:8081`
+(`EXTERNAL_API_FRONTEND_IP`) on the `frontend` network; `external-api.toml`
+trusts the `--trusted-proxy` CIDRs of `bekup.toml`.
+
+Check the route from the CI runner: `curl -fsS -H "Authorization: Bearer
+$BEKUP_TOKEN" https://backup.example.com/api/v1/self` answers with the
+token's name and the client address bekup sees (`clientIp`): it must be the
+runner's address, not your proxy's.
+
 ### Advanced: dedicated link network
 
 For operators who want no other container next to `serve`, link mode
@@ -753,7 +832,8 @@ headers mean the proxy adds its own: turn that off. `docker compose ps`
 must show no published port on any bekup service.
 
 If serve's log shows the warning "X-Forwarded-For from a peer that is not
-in server.trusted_proxies (or trusted_proxy_hosts)", requests arrive from a
+in the trusted proxy list (trusted_proxies or trusted_proxy_hosts)" (the
+`setting` field names the key), requests arrive from a
 peer bekup does not trust. bekup then ignores the header and sees every
 client as the proxy, so per-client rate limits and audit addresses are
 wrong. In join mode check that `trusted_proxy_hosts` names the proxy's
@@ -765,7 +845,7 @@ not match it.
 
 ### Troubleshooting
 
-- **"trusted proxy host resolves only to addresses outside serve's subnet
+- **"trusted proxy host resolves only to addresses outside the own subnet
   on the proxy network (or to a public or CGNAT range)"**: the proxy's
   address is not in the subnet of `serve`'s interface on that network
   (the name belongs to a container on another network), or your Docker
@@ -776,9 +856,10 @@ not match it.
   (`docker network create --subnet 172.30.0.0/24 ...`, or
   `default-address-pools` in `daemon.json`), or use the
   [link network](#advanced-dedicated-link-network).
-- **"the network alias bekup-serve does not resolve to an address of this
-  container"**: `serve` is not on your proxy's network with the alias
-  `bekup-serve` (check `BEKUP_PROXY_NETWORK` and that compose.yaml is the
+- **"the own network alias does not resolve to an address of this
+  container"** (field `alias`: `bekup-serve`, or `bekup-external-api` in
+  the external API's log): `serve` is not on your proxy's network with the
+  alias `bekup-serve` (check `BEKUP_PROXY_NETWORK` and that compose.yaml is the
   own-proxy release file). Until it is, `serve` refuses every non-loopback
   connection and `/readyz` fails.
 - **"serve closed a connection that did not arrive on its address on the
@@ -815,8 +896,9 @@ host is your own routing (D-215). The requirements and the
       no HSTS of its own, and serve logs no untrusted `X-Forwarded-For`
       warning. Join mode: `trusted_proxy_hosts` names only your proxy's
       container, only containers you trust are on its network, no other
-      container carries the alias `bekup-serve`, and `/readyz` answers
-      `ok`; forward to serve's container name where your proxy allows it.
+      container carries the alias `bekup-serve` (or `bekup-external-api`),
+      and `/readyz` answers `ok`; forward to serve's (and the external
+      API's) container name where your proxy allows it.
       Link
       mode: the proxy sits at the fixed address on `bekup-proxy`
       (`10.213.253.5`).

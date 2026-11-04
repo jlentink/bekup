@@ -34,6 +34,99 @@ func (q *Queries) CurrentRoleName(ctx context.Context) (string, error) {
 	return role_name, err
 }
 
+const externalRoleExists = `-- name: ExternalRoleExists :one
+SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_roles AS r WHERE r.rolname = $1::text)::boolean AS role_exists
+`
+
+// ExternalRoleExists reports whether the optional role bekup_external
+// exists (D-220).
+func (q *Queries) ExternalRoleExists(ctx context.Context, roleName string) (bool, error) {
+	row := q.db.QueryRow(ctx, externalRoleExists, roleName)
+	var role_exists bool
+	err := row.Scan(&role_exists)
+	return role_exists, err
+}
+
+const externalRoleFindings = `-- name: ExternalRoleFindings :many
+SELECT f.finding::text AS finding
+FROM (
+    SELECT ('member of role ' || g.rolname::text) AS finding
+    FROM pg_catalog.pg_auth_members AS am
+    JOIN pg_catalog.pg_roles AS g ON g.oid = am.roleid
+    JOIN pg_catalog.pg_roles AS m ON m.oid = am.member
+    WHERE m.rolname = $1::text
+    UNION ALL
+    SELECT ('CREATE or TEMPORARY on database ' || d.datname::text)
+    FROM pg_catalog.pg_database AS d
+    WHERE d.datname = pg_catalog.current_database()
+      AND pg_catalog.has_database_privilege($1::text, d.oid, 'CREATE, TEMPORARY')
+    UNION ALL
+    SELECT ('USAGE or CREATE on schema ' || n.nspname::text)
+    FROM pg_catalog.pg_namespace AS n
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND n.nspname NOT LIKE 'pg\_toast%'
+      AND n.nspname NOT LIKE 'pg\_temp\_%'
+      AND (pg_catalog.has_schema_privilege($1::text, n.oid, 'CREATE')
+           OR (n.nspname <> 'api' AND pg_catalog.has_schema_privilege($1::text, n.oid, 'USAGE')))
+    UNION ALL
+    SELECT ('privileges on ' || n.nspname::text || '.' || c.relname::text)
+    FROM pg_catalog.pg_class AS c
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND n.nspname NOT LIKE 'pg\_toast%'
+      AND ((c.relkind IN ('r', 'p', 'v', 'm', 'f')
+            AND (pg_catalog.has_table_privilege($1::text, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                 OR pg_catalog.has_any_column_privilege($1::text, c.oid, 'SELECT, INSERT, UPDATE, REFERENCES')))
+           OR (c.relkind = 'S'
+               AND pg_catalog.has_sequence_privilege($1::text, c.oid, 'USAGE, SELECT, UPDATE')))
+    UNION ALL
+    SELECT ('EXECUTE on ' || n.nspname::text || '.' || p.proname::text || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')')
+    FROM pg_catalog.pg_proc AS p
+    JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace
+    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+      AND NOT EXISTS (
+          SELECT 1 FROM pg_catalog.pg_depend AS dep
+          JOIN pg_catalog.pg_class AS cat ON cat.oid = dep.classid
+          WHERE cat.relname = 'pg_proc' AND dep.objid = p.oid AND dep.deptype = 'e')
+      AND pg_catalog.has_function_privilege($1::text, p.oid, 'EXECUTE')
+      AND NOT (n.nspname = 'api'
+               AND (p.proname::text || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')') = ANY ($2::text[]))
+) AS f
+ORDER BY 1
+`
+
+type ExternalRoleFindingsParams struct {
+	RoleName         string   `json:"roleName"`
+	AllowedFunctions []string `json:"allowedFunctions"`
+}
+
+// ExternalRoleFindings is the privilege audit of bekup_external (D-220):
+// everything the role may do in this database beyond CONNECT, USAGE on
+// schema api and EXECUTE on the allowlisted api functions (signatures as
+// "name(type, ...)"), and every role it is a member of (a NOINHERIT role
+// could still SET ROLE to it). Privileges through PUBLIC count; functions
+// that belong to an extension are left out (the role has no USAGE on
+// their schema). Names only, ordered.
+func (q *Queries) ExternalRoleFindings(ctx context.Context, arg ExternalRoleFindingsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, externalRoleFindings, arg.RoleName, arg.AllowedFunctions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var finding string
+		if err := rows.Scan(&finding); err != nil {
+			return nil, err
+		}
+		items = append(items, finding)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const preflightCitext = `-- name: PreflightCitext :one
 SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_extension AS e WHERE e.extname = 'citext')::boolean AS installed,
        EXISTS (SELECT 1 FROM pg_catalog.pg_available_extensions AS a WHERE a.name = 'citext')::boolean AS available,
@@ -366,4 +459,18 @@ func (q *Queries) SessionSystemUser(ctx context.Context) (string, error) {
 	var system_user string
 	err := row.Scan(&system_user)
 	return system_user, err
+}
+
+const syncExternalGrants = `-- name: SyncExternalGrants :one
+SELECT public.bekup_sync_external_grants()::boolean AS synced
+`
+
+// SyncExternalGrants re-applies the privileges of the external API role
+// bekup_external after the migrations (D-220): see migration 00037. false:
+// the role does not exist (nothing to do).
+func (q *Queries) SyncExternalGrants(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, syncExternalGrants)
+	var synced bool
+	err := row.Scan(&synced)
+	return synced, err
 }

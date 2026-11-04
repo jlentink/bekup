@@ -300,8 +300,8 @@ func destinationBudget(ctx context.Context, left int) (context.Context, context.
 	return context.WithTimeout(ctx, maxDestinationBudget)
 }
 
-// maintainDestinations removes leftover temporary files (disk and SFTP,
-// deleted destinations with present artifacts included) and runs the
+// maintainDestinations removes leftover temporary files (disk, SFTP and
+// WebDAV, deleted destinations with present artifacts included) and runs the
 // unrecorded-file scan with empty-directory pruning on every non-deleted
 // destination (D-209), each within its share of the time
 // (destinationBudget). A destination that fails is logged and skipped.
@@ -324,7 +324,8 @@ func (w *Worker) maintainDestinations(ctx context.Context, age time.Duration) er
 // maintainDestination is the daily maintenance of one destination.
 func (w *Worker) maintainDestination(ctx context.Context, row sqlc.ListDailyMaintenanceDestinationsRow, age time.Duration) {
 	scan := w.o.Unrecorded != nil && !row.Deleted
-	partials := row.Type == sqlc.DestinationTypeDisk || row.Type == sqlc.DestinationTypeSftp
+	partials := row.Type == sqlc.DestinationTypeDisk || row.Type == sqlc.DestinationTypeSftp ||
+		row.Type == sqlc.DestinationTypeWebdav
 	if !scan && !partials {
 		return
 	}

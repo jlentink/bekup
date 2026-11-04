@@ -324,3 +324,39 @@ func TestDefaultsDenyOwnersAndFactors(t *testing.T) {
 		t.Errorf("NoSecondFactors: %v", err)
 	}
 }
+
+// D-220: a backup owner creates API tokens only for jobs they own (every
+// job of the scope) and maintainers never, not even as listed owners.
+func TestAPITokenScope(t *testing.T) {
+	f := newFixture()
+	other := uuid.New()
+	f.own.AddOwner(other, f.subjects[iUser].UserID)
+	owner := f.ctx(t, iOwner, false)
+	cases := []struct {
+		name string
+		op   authz.Operation
+		res  []authz.Resource
+		want byte
+	}{
+		{"create for own job", authz.OpAPITokenCreate, []authz.Resource{authz.Job{ID: f.job}}, 'Y'},
+		{"create for own and foreign", authz.OpAPITokenCreate, []authz.Resource{authz.Job{ID: f.job}, authz.Job{ID: other}}, 'F'},
+		{"create without jobs", authz.OpAPITokenCreate, nil, 'F'},
+		{"revoke with an owned job of the scope", authz.OpAPITokenRevoke, []authz.Resource{authz.Job{ID: f.job}}, 'Y'},
+		{"revoke with a foreign job", authz.OpAPITokenRevoke, []authz.Resource{authz.Job{ID: other}}, 'F'},
+		{"update with an owned job of the scope", authz.OpAPITokenUpdate, []authz.Resource{authz.Job{ID: f.job}}, 'Y'},
+	}
+	for _, c := range cases {
+		if got := outcome(f.pol.Authorize(owner, c.op, c.res...)); got != c.want {
+			t.Errorf("%s: got %c, want %c", c.name, got, c.want)
+		}
+	}
+	for _, op := range []authz.Operation{authz.OpAPITokenCreate, authz.OpAPITokenList, authz.OpAPITokenRevoke, authz.OpAPITokenUpdate} {
+		mo := f.ctx(t, iMaintainerOwner, false)
+		if err := f.pol.Authorize(mo, op, authz.Job{ID: f.job}); !apierror.IsCode(err, apierror.Forbidden) {
+			t.Errorf("%s maintainer-owner: %v", op, err)
+		}
+		if err := f.pol.Precheck(mo, op); !apierror.IsCode(err, apierror.Forbidden) {
+			t.Errorf("%s maintainer-owner precheck: %v", op, err)
+		}
+	}
+}

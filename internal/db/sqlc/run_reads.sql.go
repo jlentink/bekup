@@ -31,10 +31,13 @@ func (q *Queries) GetRunLogCounts(ctx context.Context, id uuid.UUID) (GetRunLogC
 
 const getRunView = `-- name: GetRunView :one
 SELECT runs.id, runs.job_id, runs.trigger, runs.triggered_by, runs.scheduled_for, runs.status, runs.river_job_id, runs.attempt, runs.queued_at, runs.started_at, runs.finished_at, runs.storage_timestamp, runs.error_code, runs.error_message, runs.warnings, runs.bytes_raw, runs.bytes_stored, runs.cancel_requested_at, runs.cancel_requested_by, runs.log_lines, runs.log_lines_dropped, runs.created_at, runs.updated_at, runs.has_warnings, runs.notices, j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE runs.id = $1
 `
 
@@ -43,8 +46,11 @@ type GetRunViewRow struct {
 	JobName          string     `json:"jobName"`
 	JobSlug          string     `json:"jobSlug"`
 	JobDeletedAt     *time.Time `json:"jobDeletedAt"`
+	ActorUserID      *uuid.UUID `json:"actorUserId"`
 	TriggeredByName  *string    `json:"triggeredByName"`
 	TriggeredByEmail *string    `json:"triggeredByEmail"`
+	ApiTokenID       *uuid.UUID `json:"apiTokenId"`
+	ApiTokenName     *string    `json:"apiTokenName"`
 }
 
 func (q *Queries) GetRunView(ctx context.Context, id uuid.UUID) (GetRunViewRow, error) {
@@ -79,8 +85,11 @@ func (q *Queries) GetRunView(ctx context.Context, id uuid.UUID) (GetRunViewRow, 
 		&i.JobName,
 		&i.JobSlug,
 		&i.JobDeletedAt,
+		&i.ActorUserID,
 		&i.TriggeredByName,
 		&i.TriggeredByEmail,
+		&i.ApiTokenID,
+		&i.ApiTokenName,
 	)
 	return i, err
 }
@@ -267,10 +276,13 @@ func (q *Queries) ListArtifactsPage(ctx context.Context, arg ListArtifactsPagePa
 
 const listRecentRunsForJobs = `-- name: ListRecentRunsForJobs :many
 SELECT runs.id, runs.job_id, runs.trigger, runs.triggered_by, runs.scheduled_for, runs.status, runs.river_job_id, runs.attempt, runs.queued_at, runs.started_at, runs.finished_at, runs.storage_timestamp, runs.error_code, runs.error_message, runs.warnings, runs.bytes_raw, runs.bytes_stored, runs.cancel_requested_at, runs.cancel_requested_by, runs.log_lines, runs.log_lines_dropped, runs.created_at, runs.updated_at, runs.has_warnings, runs.notices, j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE runs.id IN (
     SELECT x.id FROM jobs jj
     CROSS JOIN LATERAL (
@@ -291,8 +303,11 @@ type ListRecentRunsForJobsRow struct {
 	JobName          string     `json:"jobName"`
 	JobSlug          string     `json:"jobSlug"`
 	JobDeletedAt     *time.Time `json:"jobDeletedAt"`
+	ActorUserID      *uuid.UUID `json:"actorUserId"`
 	TriggeredByName  *string    `json:"triggeredByName"`
 	TriggeredByEmail *string    `json:"triggeredByEmail"`
+	ApiTokenID       *uuid.UUID `json:"apiTokenId"`
+	ApiTokenName     *string    `json:"apiTokenName"`
 }
 
 // ListRecentRunsForJobs returns the newest @per_job runs of each job
@@ -335,8 +350,11 @@ func (q *Queries) ListRecentRunsForJobs(ctx context.Context, arg ListRecentRunsF
 			&i.JobName,
 			&i.JobSlug,
 			&i.JobDeletedAt,
+			&i.ActorUserID,
 			&i.TriggeredByName,
 			&i.TriggeredByEmail,
+			&i.ApiTokenID,
+			&i.ApiTokenName,
 		); err != nil {
 			return nil, err
 		}
@@ -438,10 +456,13 @@ func (q *Queries) ListRunItemsForRuns(ctx context.Context, runIds []uuid.UUID) (
 const listRunsPage = `-- name: ListRunsPage :many
 
 SELECT runs.id, runs.job_id, runs.trigger, runs.triggered_by, runs.scheduled_for, runs.status, runs.river_job_id, runs.attempt, runs.queued_at, runs.started_at, runs.finished_at, runs.storage_timestamp, runs.error_code, runs.error_message, runs.warnings, runs.bytes_raw, runs.bytes_stored, runs.cancel_requested_at, runs.cancel_requested_by, runs.log_lines, runs.log_lines_dropped, runs.created_at, runs.updated_at, runs.has_warnings, runs.notices, j.name AS job_name, j.slug AS job_slug, j.deleted_at AS job_deleted_at,
-       u.display_name AS triggered_by_name, u.email AS triggered_by_email
+       u.id AS actor_user_id, u.display_name AS triggered_by_name, u.email AS triggered_by_email,
+       at.id AS api_token_id, at.name AS api_token_name
 FROM runs
 JOIN jobs j ON j.id = runs.job_id
-LEFT JOIN users u ON u.id = runs.triggered_by
+LEFT JOIN run_requests rr ON runs.trigger = 'api' AND rr.river_job_id = runs.river_job_id
+LEFT JOIN api_tokens at ON at.id = rr.token_id
+LEFT JOIN users u ON u.id = coalesce(runs.triggered_by, at.created_by)
 WHERE ($1::boolean OR EXISTS (
         SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
         WHERE o.job_id = runs.job_id AND o.user_id = $2::uuid AND ou.deleted_at IS NULL))
@@ -474,14 +495,20 @@ type ListRunsPageRow struct {
 	JobName          string     `json:"jobName"`
 	JobSlug          string     `json:"jobSlug"`
 	JobDeletedAt     *time.Time `json:"jobDeletedAt"`
+	ActorUserID      *uuid.UUID `json:"actorUserId"`
 	TriggeredByName  *string    `json:"triggeredByName"`
 	TriggeredByEmail *string    `json:"triggeredByEmail"`
+	ApiTokenID       *uuid.UUID `json:"apiTokenId"`
+	ApiTokenName     *string    `json:"apiTokenName"`
 }
 
 // Run history reads for the GraphQL API (task 3.7). Read only; the run
 // tables are written by internal/runstate (runs.sql). Listings take
 // scope_all = false to limit rows to the jobs @user_id owns (authz.JobScope,
-// the same rule as IsJobOwner: deleted users own nothing).
+// the same rule as IsJobOwner: deleted users own nothing). The actor of a
+// run is the user of a manual or early run, or for an API run (D-220) the
+// token that requested it (its accepted run request, until the request is
+// pruned after 30 days) and the token's creator.
 // ListRunsPage returns one page of runs, newest first ((queued_at, id)
 // descending), after the cursor.
 func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]ListRunsPageRow, error) {
@@ -533,8 +560,11 @@ func (q *Queries) ListRunsPage(ctx context.Context, arg ListRunsPageParams) ([]L
 			&i.JobName,
 			&i.JobSlug,
 			&i.JobDeletedAt,
+			&i.ActorUserID,
 			&i.TriggeredByName,
 			&i.TriggeredByEmail,
+			&i.ApiTokenID,
+			&i.ApiTokenName,
 		); err != nil {
 			return nil, err
 		}

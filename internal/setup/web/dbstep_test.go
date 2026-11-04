@@ -101,6 +101,44 @@ func TestDatabaseStepBootstrap(t *testing.T) {
 	}
 }
 
+// TestDatabaseStepExternalAPI (D-220 amendment 4): with the external API
+// enabled bootstrap creates its role from the mounted password file; with
+// existing roles the step names the command that creates it.
+func TestDatabaseStepExternalAPI(t *testing.T) {
+	h := &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthBootstrap, ExternalAPI: true}, tlsMode: config.DBTLSVerifyFull}
+	s, err := runStep(t, h, []wizard.Answer{
+		{Title: "Create bekup's roles", Value: dbChoiceBootstrap},
+		{Title: "Administrator role", Value: "dbadmin"},
+		{Title: "Existing bekup roles", Value: "no"},
+		{Title: "Administrator password", Value: "admin-pass-123"},
+	})
+	if err != nil || len(h.bootReqs) != 1 || h.bootReqs[0].ExternalPasswordFile != setup.ExternalDBPasswordTarget {
+		t.Fatalf("bootstrap: %v %+v\n%v", err, h.bootReqs, s.Screens)
+	}
+	h = &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthBootstrap}, tlsMode: config.DBTLSVerifyFull}
+	if _, err := runStep(t, h, []wizard.Answer{
+		{Title: "Create bekup's roles", Value: dbChoiceBootstrap},
+		{Title: "Administrator role", Value: "dbadmin"},
+		{Title: "Existing bekup roles", Value: "no"},
+		{Title: "Administrator password", Value: "admin-pass-123"},
+	}); err != nil || h.bootReqs[0].ExternalPasswordFile != "" {
+		t.Fatalf("without the external API: %v %+v", err, h.bootReqs)
+	}
+	h = &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthExistingRoles, ExternalAPI: true}, tlsMode: config.DBTLSVerifyFull}
+	s, err = runStep(t, h, nil)
+	if err != nil || len(h.bootReqs) != 0 || !strings.Contains(s.Output.String(), "--adopt-existing-roles --external-password-file "+setup.ExternalDBPasswordTarget) {
+		t.Fatalf("existing roles: %v\n%s", err, s.Output.String())
+	}
+	// dba-sql: setup put the role into the DBA's roles SQL; the command
+	// only for an API enabled after that SQL ran.
+	h = &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthDBASQL, ExternalAPI: true}, tlsMode: config.DBTLSVerifyFull}
+	s, err = runStep(t, h, []wizard.Answer{{Title: "Roles from your DBA"}})
+	if out := s.Output.String(); err != nil || len(h.bootReqs) != 0 || !strings.Contains(out, "is in the roles SQL setup wrote for your DBA (bekup-roles.sql)") ||
+		!strings.Contains(out, "only if the API was enabled after that SQL ran") || strings.Contains(out, "is created by an account with CREATEROLE") {
+		t.Fatalf("dba sql: %v\n%s", err, out)
+	}
+}
+
 // A weak tls_mode needs the explicit confirmation; declining goes back.
 func TestDatabaseStepInsecureAdmin(t *testing.T) {
 	h := &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthBootstrap}, tlsMode: config.DBTLSRequire}

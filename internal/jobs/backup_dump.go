@@ -299,7 +299,7 @@ func (e *runExec) dumpItem(ctx context.Context, kind pipeline.EntryKind, db stri
 		}
 		ds.lost = true
 		it.warnings = append(it.warnings, destinationWarning(db, ds.id.String(), string(d.Reason), d.Code))
-		e.logs.Logf(runstate.LevelWarn, "%s: destination %s dropped (%s: %s)", it.label(), ds.id, d.Reason, d.Code.Message())
+		e.logs.Logf(runstate.LevelWarn, "%s", destinationDropLine(it.label(), ds.id.String(), d))
 		e.log.WarnContext(ctx, "destination dropped", slog.String("destination_id", ds.id.String()), slog.String("reason", string(d.Reason)),
 			slog.String("code", string(d.Code)), slog.Any("error", d.Err))
 		e.reportDestination(ctx, ds.id, d.Code)

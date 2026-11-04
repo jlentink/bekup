@@ -43,8 +43,10 @@ func RunDir(jobSlug string, runTimestamp time.Time) string {
 	return jobSlug + "/" + TimestampSegment(runTimestamp)
 }
 
-// DirPruner is implemented by the backends with real directories (disk and
-// SFTP). PruneEmptyDirs removes empty directories of bekup's layout: run
+// DirPruner is implemented by the backends with real directories (disk,
+// SFTP and WebDAV; WebDAV prunes run directories only, because a WebDAV
+// DELETE of a collection is recursive and a job collection may receive a
+// new run at any moment, D-222). PruneEmptyDirs removes empty directories of bekup's layout: run
 // directories ({job slug}/{timestamp}) and job directories ({job slug})
 // whose modification time is older than olderThan, and only for job slugs
 // isJob accepts (nil: every valid slug). It never removes the destination

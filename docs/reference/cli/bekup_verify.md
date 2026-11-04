@@ -6,7 +6,7 @@ Verify a run's signed manifest and its artifacts offline (no database needed)
 
 Verifies the ed25519 signature of a run's manifest.json with the instance public key(s) given by
 --pubkey, then streams every artifact the manifest lists and compares its size and SHA-256.
-Works on a disk destination's run directory or on files downloaded from S3/SFTP. Prints the
+Works on a disk destination's run directory or on files downloaded from S3/SFTP/WebDAV. Prints the
 engine, databases, sizes, encryption and the completeness statistics; exits non-zero on any
 failure. Check that the job and run shown are the ones you expect. See docs/recovery.md.
 

@@ -141,6 +141,7 @@ dev_keys_ready() {
 	k=$(dev_keys_dir)
 	l="$k/local"
 	for f in "$k/postgres_password" "$k/bekup_owner_password" "$k/bekup_app_password" \
+		"$k/bekup_external_password" "$k/bekup_external_database_url" \
 		"$k/certs/postgres/postgres.crt" "$k/certs/postgres/postgres.key" "$k/certs/postgres/ca.crt" \
 		"$k/certs/serve/serve.crt" "$k/certs/serve/serve.key" "$k/certs/serve/ca.crt" \
 		"$l/bekup_database_url" "$l/bekup_database_owner_url" "$l/bekup_master_key" "$l/postgres_ca.crt" \

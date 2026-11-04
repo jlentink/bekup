@@ -216,13 +216,13 @@ func envVars(a *Answers, version string) []EnvVar {
 		vs = append(vs, EnvVar{ImageEnvVar, a.Image.String()})
 	}
 	vs = append(vs, deploymentEnv(version, imageModeOf(a.Image))...)
-	if a.Variant == VariantFull {
-		// Only the full variant selects its proxy with a profile.
-		profiles := ""
-		if a.Proxy != ProxyNone {
-			profiles = string(a.Proxy)
-		}
-		vs = append(vs, EnvVar{"COMPOSE_PROFILES", profiles})
+	if a.Variant == VariantFull || a.ExternalAPI {
+		// The full variant selects its proxy with a profile; the external
+		// API is a profile in every variant (D-220).
+		vs = append(vs, EnvVar{"COMPOSE_PROFILES", composeProfiles(a.Variant, a.Proxy, a.ExternalAPI)})
+	}
+	if a.ExternalAPI {
+		vs = append(vs, EnvVar{ExternalAPIEnvVar, ExternalAPIEnabled})
 	}
 	vs = append(vs, EnvVar{"BEKUP_DOMAIN", a.Domain})
 	if a.bundledProxy() {
@@ -260,7 +260,7 @@ func envVars(a *Answers, version string) []EnvVar {
 
 // frontendVar reports the compose variables of the frontend network.
 func frontendVar(name string) bool {
-	return name == "FRONTEND_SUBNET" || name == "SERVE_FRONTEND_IP" || name == "PROXY_FRONTEND_IP"
+	return name == "FRONTEND_SUBNET" || name == "SERVE_FRONTEND_IP" || name == "PROXY_FRONTEND_IP" || name == "EXTERNAL_API_FRONTEND_IP"
 }
 
 // validEnvValue reports a value .env carries as written (parseDotEnv and
@@ -407,6 +407,9 @@ func operatorFiles(a *Answers, version string) map[string][]byte {
 	}
 	if o := renderOverride(a); o != nil {
 		files[OverrideFile] = o
+	}
+	if a.ExternalAPI {
+		files[ExternalAPITOML] = renderExternalAPITOML(a.externalAPIShape())
 	}
 	return files
 }

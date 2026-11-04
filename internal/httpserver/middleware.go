@@ -105,7 +105,10 @@ const missingXFFWarnInterval = 5 * time.Minute
 // directly). Only the peer address is logged, never header values.
 type xffWarner struct {
 	logger *slog.Logger
-	now    func() time.Time
+	// setting names the trusted proxy keys in the warnings
+	// ("server.trusted_proxies" when empty).
+	setting string
+	now     func() time.Time
 	// untrusted is called for every X-Forwarded-For from an untrusted
 	// peer: the trusted proxy hosts are re-resolved (D-215; a recreated
 	// proxy container has a new address).
@@ -150,9 +153,18 @@ func (x *xffWarner) check(r *http.Request, trusted []netip.Prefix) {
 	case hasXFF && !trustedPeer:
 		if x.allow(&x.lastUntrusted) {
 			x.logger.LogAttrs(r.Context(), slog.LevelWarn,
-				"X-Forwarded-For from a peer that is not in server.trusted_proxies (or trusted_proxy_hosts); the header is ignored (is the reverse proxy at its configured fixed address, or its container name right?)", warnAttrs(r, peer)...)
+				"X-Forwarded-For from a peer that is not in the trusted proxy list (trusted_proxies or trusted_proxy_hosts); the header is ignored (is the reverse proxy at its configured fixed address, or its container name right?)",
+				append(warnAttrs(r, peer), slog.String("setting", x.settingName()))...)
 		}
 	}
+}
+
+// settingName is the trusted proxy key named in the warnings.
+func (x *xffWarner) settingName() string {
+	if x.setting == "" {
+		return "server.trusted_proxies"
+	}
+	return x.setting
 }
 
 // warnAttrs are the attributes of the warnings: the peer only, never a
@@ -329,11 +341,14 @@ func logRequest(ctx context.Context, logger *slog.Logger, r *http.Request, sw *s
 	)
 }
 
-func accessLog(logger *slog.Logger, redacted []string) func(http.Handler) http.Handler {
+// accessLog logs every request once it is answered: method, the path as
+// mapped by logged (never the query string, never a header), status,
+// size, duration, client address and request ID.
+func accessLog(logger *slog.Logger, logged func(path string) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			sw := &statusWriter{ResponseWriter: w}
-			defer logRequest(r.Context(), logger, r, sw, logPath(r.URL.Path, redacted), time.Now())
+			defer logRequest(r.Context(), logger, r, sw, logged(r.URL.Path), time.Now())
 			next.ServeHTTP(sw, r)
 		})
 	}
@@ -341,8 +356,12 @@ func accessLog(logger *slog.Logger, redacted []string) func(http.Handler) http.H
 
 // --- 4. panic recovery -----------------------------------------------------
 
+// errorWriter answers a request with a generic error for status: plain
+// text on serve (writeError), JSON on the external API (D-220).
+type errorWriter func(w http.ResponseWriter, status int)
+
 // handlePanic must be deferred directly (it calls recover).
-func handlePanic(ctx context.Context, logger *slog.Logger, w http.ResponseWriter) {
+func handlePanic(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, fail errorWriter) {
 	p := recover()
 	if p == nil {
 		return
@@ -359,13 +378,13 @@ func handlePanic(ctx context.Context, logger *slog.Logger, w http.ResponseWriter
 		// The response has started; abort the connection instead.
 		panic(http.ErrAbortHandler)
 	}
-	writeError(w, http.StatusInternalServerError)
+	fail(w, http.StatusInternalServerError)
 }
 
-func recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
+func recoverer(logger *slog.Logger, fail errorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer handlePanic(r.Context(), logger, w)
+			defer handlePanic(r.Context(), logger, w, fail)
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -385,13 +404,19 @@ const HSTSValue = "max-age=63072000; includeSubDomains"
 
 // SecurityHeaders sets the D-082 CSP and bekup's security headers on
 // every response (the browser setup reuses them, D-217).
-func SecurityHeaders(https bool) func(http.Handler) http.Handler { return securityHeaders(https) }
+func SecurityHeaders(https bool) func(http.Handler) http.Handler {
+	return securityHeaders(https, ContentSecurityPolicy)
+}
 
-func securityHeaders(https bool) func(http.Handler) http.Handler {
+// APIContentSecurityPolicy is the policy of the external API's JSON
+// responses (D-220): nothing may load, nothing may frame them.
+const APIContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'"
+
+func securityHeaders(https bool, csp string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
-			h.Set("Content-Security-Policy", ContentSecurityPolicy)
+			h.Set("Content-Security-Policy", csp)
 			h.Set("X-Content-Type-Options", "nosniff")
 			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("X-Frame-Options", "DENY")
@@ -479,12 +504,12 @@ func IsBodyTooLarge(err error) bool {
 	return errors.As(err, &mbe)
 }
 
-func bodyLimit(current func() int64) func(http.Handler) http.Handler {
+func bodyLimit(current func() int64, fail errorWriter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			limit := current()
 			if r.ContentLength > limit {
-				writeError(w, http.StatusRequestEntityTooLarge)
+				fail(w, http.StatusRequestEntityTooLarge)
 				return
 			}
 			if r.Body != nil && r.Body != http.NoBody {

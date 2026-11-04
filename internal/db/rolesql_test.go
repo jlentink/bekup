@@ -29,8 +29,8 @@ func fixedVerifier(t *testing.T, pw string, salt byte) string {
 }
 
 func TestRolesSQLGolden(t *testing.T) {
-	const ownerPW, appPW = "owner-password-0123456789", `app-p@ss'w"o\rd;--0123`
-	ownerV, appV := fixedVerifier(t, ownerPW, 1), fixedVerifier(t, appPW, 2)
+	const ownerPW, appPW, extPW = "owner-password-0123456789", `app-p@ss'w"o\rd;--0123`, "external-password-0123456789"
+	ownerV, appV, extV := fixedVerifier(t, ownerPW, 1), fixedVerifier(t, appPW, 2), fixedVerifier(t, extPW, 3)
 	tests := []struct {
 		name string
 		plan RolePlan
@@ -38,6 +38,8 @@ func TestRolesSQLGolden(t *testing.T) {
 		{"roles_verifier", NewRolesSQLPlan("bekup", ownerV, appV, false, false)},
 		{"roles_verifier_citext", NewRolesSQLPlan("bekup_prod", ownerV, appV, false, true)},
 		{"roles_prompt", NewRolesSQLPlan("bekup", "", "", true, false)},
+		{"roles_verifier_external", NewRolesSQLPlan("bekup", ownerV, appV, false, false).WithExternal(extV)},
+		{"roles_prompt_external", NewRolesSQLPlan("bekup", "", "", true, false).WithExternal("")},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -45,7 +47,7 @@ func TestRolesSQLGolden(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, secret := range []string{ownerPW, appPW, "p@ss"} {
+			for _, secret := range []string{ownerPW, appPW, extPW, "p@ss"} {
 				if strings.Contains(got, secret) {
 					t.Fatalf("script contains a plaintext password")
 				}
@@ -130,15 +132,75 @@ func TestRolePlanStatements(t *testing.T) {
 	}
 
 	for name, p := range map[string]RolePlan{
-		"bad database":          {Database: `x"; DROP`, CreateOwner: true, OwnerVerifier: ownerV},
-		"postgres":              {Database: "postgres"},
-		"missing verifier":      {Database: "bekup", CreateOwner: true},
-		"malformed verifier":    {Database: "bekup", CreateApp: true, AppVerifier: "SCRAM-SHA-256$4096:x'; DROP ROLE x; --"},
-		"single with passwords": {Database: "bekup", SingleAccount: true, SetAppPassword: true},
+		"bad database":           {Database: `x"; DROP`, CreateOwner: true, OwnerVerifier: ownerV},
+		"postgres":               {Database: "postgres"},
+		"missing verifier":       {Database: "bekup", CreateOwner: true},
+		"malformed verifier":     {Database: "bekup", CreateApp: true, AppVerifier: "SCRAM-SHA-256$4096:x'; DROP ROLE x; --"},
+		"single with passwords":  {Database: "bekup", SingleAccount: true, SetAppPassword: true},
+		"single with external":   NewSingleAccountPlan("bekup").WithExternal(""),
+		"single external grant":  {Database: "bekup", SingleAccount: true, CreateOwner: true, External: true},
+		"external without flag":  {Database: "bekup", CreateExternal: true, ExternalVerifier: ownerV},
+		"external reset no flag": {Database: "bekup", SetExternalPassword: true, ExternalVerifier: ownerV},
+		"external no verifier":   RolePlan{Database: "bekup"}.WithExternal(""),
 	} {
 		if _, err := p.Statements(); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+func TestRolePlanExternal(t *testing.T) {
+	extV := fixedVerifier(t, "external-password-0123456789", 3)
+	stmts := func(p RolePlan) string {
+		t.Helper()
+		st, err := p.Statements()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqls := make([]string, 0, len(st))
+		for _, s := range st {
+			sqls = append(sqls, s.SQL)
+			if strings.Contains(s.SQL, "SCRAM-SHA-256$") != s.Sensitive {
+				t.Errorf("sensitive flag wrong for %q", s.Action)
+			}
+		}
+		return strings.Join(sqls, "\n")
+	}
+
+	// Created with the fixed attributes and CONNECT, nothing else.
+	got := stmts(RolePlan{Database: "bekup"}.WithExternal(extV))
+	for _, want := range []string{
+		"CREATE ROLE bekup_external WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT CONNECTION LIMIT 20 PASSWORD 'SCRAM-SHA-256$4096:",
+		`GRANT CONNECT ON DATABASE "bekup" TO bekup_external;`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, "bekup_external"); n != 2 {
+		t.Errorf("bekup_external appears %d times, want 2 (create + CONNECT):\n%s", n, got)
+	}
+
+	// An existing role: only the password reset and the CONNECT grant.
+	got = stmts(RolePlan{Database: "bekup", External: true, SetExternalPassword: true, ExternalVerifier: extV})
+	if !strings.Contains(got, "ALTER ROLE bekup_external WITH PASSWORD 'SCRAM-SHA-256$4096:") || strings.Contains(got, "CREATE ROLE") {
+		t.Errorf("reset plan:\n%s", got)
+	}
+	got = stmts(RolePlan{Database: "bekup", External: true})
+	want := `REVOKE ALL ON DATABASE "bekup" FROM PUBLIC;` + "\n" + `GRANT CONNECT ON DATABASE "bekup" TO bekup_app;` + "\n" +
+		`GRANT CONNECT ON DATABASE "bekup" TO bekup_external;`
+	if got != want {
+		t.Errorf("adopted plan:\n%s", got)
+	}
+
+	// Without External nothing mentions the role.
+	if got := stmts(NewRolesSQLPlan("bekup", extV, fixedVerifier(t, "app-password-0123456789", 2), false, false)); strings.Contains(got, "bekup_external") {
+		t.Errorf("plan without the external role:\n%s", got)
+	}
+
+	// Single-account mode is refused with the dedicated error.
+	if _, err := NewSingleAccountPlan("bekup").WithExternal("").Statements(); !errors.Is(err, ErrExternalSingleAccount) {
+		t.Errorf("single account: %v", err)
 	}
 }
 
@@ -161,6 +223,14 @@ func TestBootstrapOptionsValidate(t *testing.T) {
 			o.SingleAccount, o.OwnerPassword, o.AppPassword, o.ResetPasswords = true, nil, nil, true
 		},
 		"single with pws": func(o *BootstrapOptions) { o.SingleAccount = true },
+		"single with external": func(o *BootstrapOptions) {
+			o.SingleAccount, o.OwnerPassword, o.AppPassword = true, nil, nil
+			o.ExternalPassword = []byte("external-password-0123456789")
+		},
+		"short external pw":     func(o *BootstrapOptions) { o.ExternalPassword = []byte("short") },
+		"empty external pw":     func(o *BootstrapOptions) { o.ExternalPassword = []byte{} },
+		"external equals owner": func(o *BootstrapOptions) { o.ExternalPassword = o.OwnerPassword },
+		"external equals app":   func(o *BootstrapOptions) { o.ExternalPassword = o.AppPassword },
 	} {
 		o := good()
 		mutate(&o)
@@ -177,6 +247,11 @@ func TestBootstrapOptionsValidate(t *testing.T) {
 	o.SingleAccount, o.OwnerPassword, o.AppPassword = true, nil, nil
 	if err := o.validate(); err != nil {
 		t.Errorf("single account: %v", err)
+	}
+	o = good()
+	o.ExternalPassword = []byte("external-password-0123456789")
+	if err := o.validate(); err != nil {
+		t.Errorf("with the external role: %v", err)
 	}
 }
 

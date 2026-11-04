@@ -28,6 +28,10 @@ func TestFromEnv(t *testing.T) {
 		{name: "own-proxy join", env: map[string]string{EnvListenShape: "own-proxy-join"}, want: Deployment{OwnProxyJoin: true}},
 		{name: "empty shape", env: map[string]string{EnvListenShape: ""}},
 		{name: "bad shape", env: map[string]string{EnvListenShape: "anything"}, wantErr: true},
+		{name: "external api", env: map[string]string{EnvExternalAPI: "enabled"}, want: Deployment{ExternalAPI: true}},
+		{name: "external api off", env: map[string]string{EnvExternalAPI: ""}},
+		{name: "bad external api", env: map[string]string{EnvExternalAPI: "true"}, wantErr: true},
+		{name: "external api case", env: map[string]string{EnvExternalAPI: "Enabled"}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,3 +1,132 @@
+# External API tokens (D-220, Phase 2): per-job machine credentials of the
+# CI API (`/api/v1`, served by `bekup external-api`). Admins manage tokens
+# for any jobs; backup owners (role user) for the jobs they own;
+# maintainers never. Every change needs a fresh step-up and is audited.
+
+"A job in an API token's scope."
+type ApiTokenJob {
+  id: UUID!
+  name: String!
+  "The job was deleted; the token can no longer start it."
+  deleted: Boolean!
+}
+
+"Who created an API token."
+type ApiTokenCreator {
+  id: UUID!
+  email: String!
+  displayName: String!
+  "The account was deleted."
+  deleted: Boolean!
+}
+
+"""
+An external API token as the caller may see it. The token itself is
+returned only once, by createApiToken; bekup keeps only a hash.
+"""
+type ApiToken {
+  id: UUID!
+  name: String!
+  """
+  The start of the token (`bkp_` and the first characters of its public id
+  part) to recognize it in a CI secret store. Never part of the secret.
+  """
+  prefix: String!
+  "The jobs of the token's scope the caller may see."
+  jobs: [ApiTokenJob!]!
+  """
+  Jobs of the scope the caller may not see (backup owners see only the jobs
+  they own); counted only.
+  """
+  hiddenJobCount: Int!
+  "The creator: for admins always, for others only on their own tokens."
+  createdBy: ApiTokenCreator
+  "The caller created the token."
+  createdByMe: Boolean!
+  createdAt: Time!
+  expiresAt: Time!
+  revokedAt: Time
+  """
+  The networks (canonical CIDRs) the token may be used from; empty when
+  allowAnyAddress is set (exactly one of the two).
+  """
+  allowedCidrs: [String!]!
+  "The token may be used from any address (no allowlist; a permanent warning)."
+  allowAnyAddress: Boolean!
+  "The newest run request of the token."
+  lastUsedAt: Time
+  """
+  When and from which client address the token was last seen: its newest
+  run request or its newest refused attempt (lastSeenRefused).
+  """
+  lastSeenAt: Time
+  "null when the external API passed no address."
+  lastSeenIp: String
+  """
+  The last sighting was a valid token presented from an address outside its
+  allowlist and refused (it may be stolen).
+  """
+  lastSeenRefused: Boolean!
+}
+
+input CreateApiTokenInput {
+  "1-100 characters."
+  name: String!
+  """
+  The jobs the token may start (1-100). Backup owners may list only jobs
+  they own.
+  """
+  jobIds: [UUID!]!
+  "Between 1 and 365 days from now."
+  expiresAt: Time!
+  """
+  1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
+  must be empty when allowAnyAddress is set.
+  """
+  allowedCidrs: [String!]!
+  "Explicitly allow any client address (audited and alerted)."
+  allowAnyAddress: Boolean!
+}
+
+"A new API token."
+type CreatedApiToken {
+  token: ApiToken!
+  """
+  The token (`bkp_...`), returned only here and only once. Store it as a CI
+  secret (BEKUP_TOKEN); it cannot be shown again.
+  """
+  plaintext: String!
+}
+
+extend type Query {
+  """
+  API tokens, newest first (at most 500). Without jobId: admins see every
+  token, backup owners the tokens covering a job they own. With jobId: the
+  tokens covering that job (backup owners: a job they own).
+  """
+  apiTokens(jobId: UUID): [ApiToken!]! @hasRole(roles: [ADMIN, USER])
+}
+
+extend type Mutation {
+  """
+  Creates an API token for jobs (admins, or the owner of every listed job;
+  fresh step-up; audited and alerted). The plaintext is returned once.
+  """
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Revokes an API token at once (admins, or an owner of a job in its scope;
+  fresh step-up; audited).
+  """
+  revokeApiToken(id: UUID!): ApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Replaces the client addresses of an unrevoked API token: a list of 1-32
+  networks or allowAnyAddress, exactly one (the same callers as
+  revokeApiToken; fresh step-up; audited, "any address" alerted).
+  """
+  updateApiTokenAddresses(id: UUID!, allowedCidrs: [String!]!, allowAnyAddress: Boolean!): ApiToken!
+    @hasRole(roles: [ADMIN, USER])
+    @stepUp
+}
 # Audit log (task 1.4; D-101, D-106). Admin only.
 
 extend type Query {
@@ -60,6 +189,8 @@ enum AuditActorKind {
   SYSTEM
   "A host operator running a bekup subcommand."
   CLI
+  "An external API token (details name the token and its run request)."
+  API
 }
 
 "Filters for auditLog; unset fields do not filter."
@@ -983,7 +1114,7 @@ input CertificatePinInput {
   "CA pins only: accept any leaf the CA issues for the host (no leaf binding)."
   allowLeafRotation: Boolean
 }
-# Backup destinations (task 2.12; D-106, D-131). Admins manage them; every
+# Backup destinations (task 2.12; D-106, D-131; WebDAV D-222). Admins manage them; every
 # change needs a fresh step-up and is audited. Maintainers see metadata only
 # (name, type, mode flags, readiness; `settings` is null for them) and may
 # test destinations. Credentials are write-only: inputs accept new values,
@@ -995,6 +1126,54 @@ enum DestinationType {
   DISK
   S3
   SFTP
+  "WebDAV: Nextcloud, ownCloud (TransIP STACK), NAS boxes, Apache/nginx/rclone/Caddy, hosted WebDAV (D-222)."
+  WEBDAV
+}
+
+"The dialect of a WebDAV server."
+enum WebdavFlavor {
+  "Plain WebDAV: url is the folder that holds the backups; uploads are one streaming PUT."
+  GENERIC
+  """
+  Nextcloud or ownCloud (TransIP STACK too): url is the server address;
+  files live below the user's files and large uploads use the chunked
+  upload API (64 MiB chunks).
+  """
+  NEXTCLOUD
+}
+
+"How a WebDAV server's TLS certificate is verified."
+enum WebdavTrust {
+  "Against the system roots."
+  SYSTEM
+  "Only against the destination's CA bundle."
+  CA_BUNDLE
+  "Only the pinned certificate (and its key) is accepted."
+  PINNED
+  "No TLS at all: a plain http URL, accepted in dev mode only."
+  PLAIN_HTTP
+}
+
+"What a WebDAV test recognized the server as."
+enum WebdavServerKind {
+  NEXTCLOUD
+  OWNCLOUD
+}
+
+"How a WebDAV destination uploads."
+enum WebdavUploadMode {
+  "One streaming PUT."
+  SINGLE
+  "The Nextcloud/ownCloud chunked-upload API."
+  CHUNKED
+}
+
+"The outcome of the WebDAV overwrite probe."
+enum WebdavOverwriteProbe {
+  "The server refuses to move a file onto an existing one ('Overwrite: F'): required."
+  REFUSED
+  "The server replaced the existing file: bekup never writes to it."
+  IGNORED
 }
 
 "S3 Object Lock retention modes."
@@ -1067,6 +1246,40 @@ type DestinationSettings {
   disk: DiskDestinationSettings
   s3: S3DestinationSettings
   sftp: SftpDestinationSettings
+  webdav: WebdavDestinationSettings
+}
+
+type WebdavDestinationSettings {
+  "The https folder URL (GENERIC) or the server address (NEXTCLOUD)."
+  url: String!
+  flavor: WebdavFlavor!
+  username: String!
+  "Folder below the URL (GENERIC) or below the user's files (NEXTCLOUD); empty: the base itself."
+  path: String!
+  "A custom CA bundle (PEM) that replaces the system roots (unused while a certificate is pinned)."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (null: 60)."
+  timeoutSeconds: Int
+  hasPassword: Boolean!
+  "How the server certificate is verified."
+  trust: WebdavTrust!
+  "The pinned certificate; null until pinWebdavCertificate."
+  pinnedCertificate: WebdavCertificate
+}
+
+"A WebDAV server's TLS certificate (public data)."
+type WebdavCertificate {
+  "SHA-256 of the certificate's public key (SPKI), lowercase hex: compare it, then pass it to pinWebdavCertificate."
+  spkiSha256: String!
+  "The same SPKI SHA-256 in base64."
+  spkiSha256Base64: String!
+  "SHA-256 of the whole certificate (DER, hex), as browsers and openssl x509 -fingerprint -sha256 show it."
+  fingerprintSha256: String!
+  notBefore: Time!
+  notAfter: Time!
+  selfSigned: Boolean!
+  "When it was pinned (pinned certificates only)."
+  pinnedAt: Time
 }
 
 type DiskDestinationSettings {
@@ -1134,13 +1347,34 @@ type SshHostKey {
 "The result of testDestination: normalized codes and fixed messages only."
 type DestinationTestResult {
   ok: Boolean!
-  "Steps in order: connect, write, read, delete."
+  "Steps in order: connect, (WebDAV: overwrite,) write, read, delete."
   steps: [DestinationTestStep!]!
   "The probe object's key (below the destination's prefix)."
   probeKey: String
   "True when the probe object was left behind (no-delete mode, Object Lock or a failed delete)."
   probeRemains: Boolean!
   note: String
+  "WebDAV destinations only: the certificate, server and upload findings of the test (null for other types)."
+  webdav: WebdavTestDetails
+}
+
+"What a test of a WebDAV destination saw (fixed values and public data only)."
+type WebdavTestDetails {
+  trust: WebdavTrust!
+  "The certificate passed the trust check."
+  trusted: Boolean!
+  "The certificate the server presented (null when none was seen: unreachable or plain http)."
+  certificate: WebdavCertificate
+  "The presented certificate's key is the pinned one."
+  pinMatches: Boolean!
+  "The server looks like Nextcloud or ownCloud (its status.php answered); null otherwise."
+  server: WebdavServerKind
+  "The flavor the server suggests (NEXTCLOUD when server is set)."
+  suggestedFlavor: WebdavFlavor!
+  "The upload mode the write step used; null when it did not run."
+  uploadMode: WebdavUploadMode
+  "The overwrite probe; null when it did not finish."
+  overwriteProtection: WebdavOverwriteProbe
 }
 
 type DestinationTestStep {
@@ -1300,6 +1534,26 @@ extend type Mutation {
   public key.
   """
   generateDestinationSshKeypair(id: UUID!): DestinationSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Pins the TLS certificate a WebDAV destination's server presents (D-222):
+  bekup captures it again through the SSRF guard (TLS handshake only, no
+  credentials sent) and pins it only if the SHA-256 of its public key
+  equals `fingerprint` (WebdavCertificate.spkiSha256 from a test, compared
+  out of band; hex or base64). The certificate must name the URL's host
+  and be valid now. Afterwards only this certificate is accepted (no
+  system roots, no CA bundle). CONFLICT when the server now presents
+  another certificate; CONNECTION_FAILED when it cannot be reached. Rate
+  limited; must be the only field of its operation.
+  """
+  pinWebdavCertificate(id: UUID!, fingerprint: String!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Removes the certificate pin of a WebDAV destination: its server is
+  verified against the system roots or its CA bundle again. Audited and
+  alerted.
+  """
+  clearWebdavCertificatePin(id: UUID!): Destination! @hasRole(roles: [ADMIN]) @stepUp
 }
 
 input CreateDestinationInput {
@@ -1310,6 +1564,7 @@ input CreateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 "Fields to change; unset fields stay unchanged."
@@ -1319,6 +1574,7 @@ input UpdateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 input DiskDestinationInput {
@@ -1365,6 +1621,33 @@ input SftpDestinationInput {
   privateKey: String
   "Write-only; only together with privateKey."
   privateKeyPassphrase: String
+}
+
+input WebdavDestinationInput {
+  """
+  https URL (http only in dev mode): GENERIC the existing folder that holds
+  the backups (for example https://u123.your-storagebox.de/backups);
+  NEXTCLOUD the server address (for example https://cloud.example.com or
+  https://name.stackstorage.com). Changing it removes the pinned
+  certificate.
+  """
+  url: String!
+  "Default GENERIC."
+  flavor: WebdavFlavor
+  "HTTP Basic user name (no ':')."
+  username: String!
+  """
+  Write-only (an app password for Nextcloud/ownCloud). Omit to keep the
+  stored one, except when url, flavor or username changes: it must then be
+  entered again.
+  """
+  password: String
+  "Folder below the base; created if missing."
+  path: String
+  "PEM CA certificates that replace the system roots."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (5..600; default 60)."
+  timeoutSeconds: Int
 }
 # Backup downloads (task 3.9, D-150): admins and the backup owners of the
 # artifact's job (role user), never maintainers (D-012, D-067).
@@ -2274,6 +2557,108 @@ extend type Mutation {
   """
   updateSsrfAllowlist(input: SsrfAllowlistInput!): SsrfAllowlist! @hasRole(roles: [ADMIN]) @stepUp
 }
+
+# The runner's target allowlist (D-223). Admin only, read-only.
+#
+# Database servers and SSH bastions are reached by the runner, never by
+# serve, and only as the `[targets]` section of the runner's own
+# runner.toml allows. The runner has no database access, so this list
+# cannot be changed here: edit runner.toml on the runner host and restart
+# the runner.
+
+"A startup warning of the runner's target allowlist."
+enum RunnerTargetWarning {
+  "allow_cidrs and allow_hosts are empty: the runner refuses every database server and SSH bastion."
+  EMPTY_ALLOWLIST
+  """
+  bastion_targets is empty: an allowed SSH bastion may forward to any host
+  it reaches (only deny_cidrs and deny_hosts apply behind it).
+  """
+  BASTIONS_UNRESTRICTED
+}
+
+"A class of addresses that no runner.toml entry can allow."
+enum RunnerDeniedCategory {
+  LOOPBACK
+  "This network (0.0.0.0/8) and the unspecified IPv6 address."
+  UNSPECIFIED
+  LINK_LOCAL
+  CLOUD_METADATA
+  MULTICAST_BROADCAST
+  RESERVED
+  "IPv4-compatible and IPv4-translated IPv6 forms."
+  IPV4_IN_IPV6
+  TEREDO
+  "NAT64 and 6to4 addresses that embed an always-denied IPv4 address (the ranges are not denied as a whole)."
+  EMBEDDED_DENIED_IPV4
+  "Other IPv6 addresses outside global unicast 2000::/3 (no fixed ranges)."
+  NON_GLOBAL_IPV6
+}
+
+"A key of runner.toml [targets]."
+enum RunnerTargetsKey {
+  ALLOW_CIDRS
+  ALLOW_HOSTS
+  DENY_CIDRS
+  DENY_HOSTS
+  BASTION_TARGETS
+}
+
+"One always-denied category with its ranges."
+type RunnerDeniedRange {
+  category: RunnerDeniedCategory!
+  "The ranges (empty for NON_GLOBAL_IPV6)."
+  cidrs: [String!]!
+}
+
+"What one SSH bastion may forward to (bastion_targets)."
+type RunnerBastionTargets {
+  "The bastion's host name or IP address."
+  bastion: String!
+  "CIDRs, then host names."
+  targets: [String!]!
+}
+
+"""
+The runner's target allowlist as the runner applies it. When the runner
+cannot be asked, available is false, reason says why and the lists are
+empty.
+"""
+type RunnerTargetPolicy {
+  "True when the runner answered."
+  available: Boolean!
+  "Why the allowlist is unavailable (a fixed text; null when available)."
+  reason: String
+  "CIDRs the runner may connect to (masked, in the configured order)."
+  allowCidrs: [String!]!
+  "Host names the runner may connect to (normalized, sorted)."
+  allowHosts: [String!]!
+  "CIDRs refused before the allow lists."
+  denyCidrs: [String!]!
+  "Host names refused before the allow lists."
+  denyHosts: [String!]!
+  "bastion_targets grouped by bastion."
+  bastionTargets: [RunnerBastionTargets!]!
+  "docker.run_subnet_pool: always refused (every run's own network lies inside it)."
+  runSubnetPool: String
+  "The runner's control network and container addresses: always refused."
+  controlNetworks: [String!]!
+  "False until the runner knows its container's networks (Docker not ready): controlNetworks is then incomplete."
+  controlNetworksKnown: Boolean!
+  "The always-denied categories."
+  alwaysDenied: [RunnerDeniedRange!]!
+  "The runner's startup warnings about the allowlist."
+  warnings: [RunnerTargetWarning!]!
+  "The [targets] keys set by environment variables (BEKUP_TARGETS_*) instead of runner.toml."
+  envOverrides: [RunnerTargetsKey!]!
+  "True when a list was longer than the runner reports (256 entries)."
+  truncated: Boolean!
+}
+
+extend type Query {
+  "The runner's target allowlist (runner.toml [targets]; read-only)."
+  runnerTargetPolicy: RunnerTargetPolicy! @hasRole(roles: [ADMIN])
+}
 # Notifications (task 5.3b; D-161, D-177, D-183, D-191): shared channels
 # (admin), personal channels and the preference matrix (every user for
 # themselves), and the in-app inbox with its live stream.
@@ -3051,6 +3436,8 @@ enum RunTrigger {
   MANUAL
   "startNextRunEarly: the next planned occurrence (scheduledFor) pulled forward."
   EARLY
+  "A run request of an external API token (CI)."
+  API
 }
 
 "What a run item backs up."
@@ -3126,11 +3513,22 @@ type RunJobRef {
   deleted: Boolean!
 }
 
-"The user who started a manual run."
+"""
+Who started a manual, early or API run: the user, or for an API run the
+creator of the API token (apiToken names the token).
+"""
 type RunActor {
   userId: UUID!
   displayName: String!
   email: String!
+  "API runs: the token that requested the run (null once its request was pruned after 30 days, and for other runs)."
+  apiToken: RunApiToken
+}
+
+"The API token of an API run (never any part of the token itself)."
+type RunApiToken {
+  id: UUID!
+  name: String!
 }
 
 "A warning recorded by a run or item (fixed texts)."
@@ -3327,7 +3725,7 @@ type Run {
   job: RunJobRef!
   status: RunStatus!
   trigger: RunTrigger!
-  "The user of a manual run; admins and maintainers only (null for backup owners)."
+  "The user of a manual or early run, or the API token (and its creator) of an API run; admins and maintainers only (null for backup owners)."
   triggeredBy: RunActor
   scheduledFor: Time
   attempt: Int!
@@ -3678,6 +4076,12 @@ type ServerInfo {
   insecureTransport: Boolean!
   "True when dev mode is on (never in production)."
   devMode: Boolean!
+  """
+  True when this deployment runs the opt-in external API for CI pipelines
+  (D-220; BEKUP_EXTERNAL_API=enabled, written by setup). Not a secret and
+  not a security decision: the UI shows the curl examples only then.
+  """
+  externalApiEnabled: Boolean!
 }
 # Reference list of the security.system alert kinds (D-190, D-198).
 # Admin only. The server decides what raises an alert; this list only

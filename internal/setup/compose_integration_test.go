@@ -67,6 +67,8 @@ func TestIntegrationComposeConfig(t *testing.T) {
 		// dbOnProxy: the database container is on the proxy's own network
 		// "web" (join mode, D-216).
 		dbOnProxy bool
+		// ext enables the external API (D-220 amendment 4).
+		ext bool
 	}
 	cases := map[string]tc{}
 	for name, mk := range variants {
@@ -114,6 +116,26 @@ func TestIntegrationComposeConfig(t *testing.T) {
 	cases["compose-first-own-proxy-db-on-proxy-network"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy,
 		mut: labels, db: DBExternal, dbDocker: true, tls: DBTLSRequire, dbOnProxy: true}
 	cases["setup-first-full-db-container"] = tc{answers: func() Answers { return testAnswers(t, ProxyTraefik) }, db: DBExternal, dbDocker: true}
+	// The opt-in external API (D-220 amendment 4) in every release file,
+	// with the bundled proxies, your own proxy (join, link, labels) and a
+	// database container.
+	for _, v := range ReleaseVariants {
+		for _, db := range DBModes {
+			suffix := string(v)
+			if db == DBExternal {
+				suffix += "-external-db"
+			}
+			cases["compose-first-"+suffix+"-external-api"] = tc{answers: func() Answers { return variantAnswers(v) }, variant: v, db: db, ext: true}
+		}
+	}
+	cases["setup-first-nginx-external-api"] = tc{answers: func() Answers { return testAnswers(t, ProxyNginx) }, ext: true}
+	cases["setup-first-none-external-api"] = tc{answers: func() Answers { return testAnswers(t, ProxyNone) }, ext: true}
+	cases["compose-first-own-proxy-link-labels-external-api"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy,
+		mut: func(a *Answers) { link(a); labels(a) }, ext: true}
+	cases["placeholder-own-proxy-db-container-external-api"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy, placeholder: true,
+		db: DBExternal, dbDocker: true, tls: DBTLSRequire, ext: true}
+	cases["compose-first-own-proxy-db-on-proxy-network-external-api"] = tc{answers: func() Answers { return variantAnswers(VariantOwnProxy) }, variant: VariantOwnProxy,
+		db: DBExternal, dbDocker: true, tls: DBTLSRequire, dbOnProxy: true, ext: true}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			// A deadline per case: one for the whole table runs out under
@@ -147,6 +169,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			}
 			withDB := func(o *Options) {
 				o.Answers.DB = dbAnswers
+				o.Answers.ExternalAPI = c.ext
 				if c.mut != nil {
 					c.mut(&o.Answers)
 				}
@@ -211,7 +234,9 @@ func TestIntegrationComposeConfig(t *testing.T) {
 						Aliases     []string `json:"aliases"`
 						Ipv4Address string   `json:"ipv4_address"`
 					} `json:"networks"`
-					Labels map[string]string `json:"labels"`
+					Labels   map[string]string `json:"labels"`
+					Ports    []any             `json:"ports"`
+					Profiles []string          `json:"profiles"`
 				} `json:"services"`
 				Networks map[string]struct {
 					Name     string `json:"name"`
@@ -229,7 +254,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			for name, svc := range project.Services {
 				ver, mode := svc.Environment["BEKUP_SETUP_VERSION"], svc.Environment["BEKUP_IMAGE_MODE"]
 				switch name {
-				case "migrate", "serve", "runner", "setup-web-db":
+				case "migrate", "serve", "runner", "setup-web-db", "external-api":
 					if ver == nil || *ver != "1.2.3" || mode == nil || *mode != wantMode {
 						t.Fatalf("%s: BEKUP_SETUP_VERSION %v, BEKUP_IMAGE_MODE %v (want 1.2.3, %q)", name, ver, mode, wantMode)
 					}
@@ -242,6 +267,60 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			for _, name := range []string{"migrate", "serve", "runner"} {
 				if _, ok := project.Services[name]; !ok {
 					t.Fatalf("no %s service", name)
+				}
+			}
+			// D-220 amendment 4: the external API runs only with its
+			// profile (COMPOSE_PROFILES in .env), which setup writes with
+			// BEKUP_EXTERNAL_API=enabled for the proxy route, the role and
+			// serve; never a published port.
+			extSvc, extOn := project.Services["external-api"]
+			if extOn != c.ext {
+				t.Fatalf("external-api in the default profiles: %v, enabled %v", extOn, c.ext)
+			}
+			for name, svc := range project.Services {
+				v, ok := svc.Environment["BEKUP_EXTERNAL_API"]
+				if name == "postgres" {
+					v, ok = svc.Environment["POSTGRES_BEKUP_EXTERNAL_API"]
+				}
+				switch name {
+				case "serve", "postgres", "traefik", "nginx":
+					if !ok || (*v == "enabled") != c.ext {
+						t.Fatalf("%s: BEKUP_EXTERNAL_API %v, enabled %v", name, v, c.ext)
+					}
+				default:
+					if ok && name != "external-api" {
+						t.Fatalf("%s receives BEKUP_EXTERNAL_API", name)
+					}
+				}
+			}
+			if extOn {
+				if len(extSvc.Ports) > 0 || len(extSvc.Profiles) != 1 || extSvc.Profiles[0] != "external-api" {
+					t.Fatalf("external-api ports %v profiles %v", extSvc.Ports, extSvc.Profiles)
+				}
+				st := mustState(t, dir)
+				wantNets := []string{"backend"}
+				if st.Variant.OwnProxy() {
+					p := extSvc.Networks["proxy"]
+					if p == nil || !slices.Contains(p.Aliases, "bekup-external-api") || p.Ipv4Address != "" {
+						t.Fatalf("external-api on the proxy network: %+v", p)
+					}
+					wantNets = append(wantNets, "proxy")
+				} else if f := extSvc.Networks["frontend"]; f == nil || f.Ipv4Address != "10.213.250.11" {
+					t.Fatalf("external-api on frontend: %+v", f)
+				} else {
+					wantNets = append(wantNets, "frontend")
+				}
+				if ov := st.overlays(); ov.DBNetwork && !ov.DBOnProxy {
+					wantNets = append(wantNets, "database")
+				}
+				got := make([]string, 0, len(extSvc.Networks))
+				for n := range extSvc.Networks {
+					got = append(got, n)
+				}
+				slices.Sort(got)
+				slices.Sort(wantNets)
+				if !slices.Equal(got, wantNets) {
+					t.Fatalf("external-api networks %v, want %v", got, wantNets)
 				}
 			}
 			// D-217: the browser setup publishes only its own port, from
@@ -289,7 +368,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 					// D-216: migrate and admin reach a database container
 					// on the proxy's network there.
 					shared := ov.DBOnProxy && slices.Contains(dbNetworkServices, name)
-					if _, on := svc.Networks["proxy"]; on != (name == "serve" || shared) {
+					if _, on := svc.Networks["proxy"]; on != (name == "serve" || name == "external-api" || shared) {
 						t.Fatalf("%s on the proxy network: %v", name, on)
 					}
 				}
@@ -300,7 +379,7 @@ func TestIntegrationComposeConfig(t *testing.T) {
 			if c.db == DBExternal {
 				for name, svc := range project.Services {
 					_, on := svc.Networks["database"]
-					if want := ov.DBNetwork && !ov.DBOnProxy && (name == "serve" || slices.Contains(dbNetworkServices, name)); on != want {
+					if want := ov.DBNetwork && !ov.DBOnProxy && (name == "serve" || name == "external-api" || slices.Contains(dbNetworkServices, name)); on != want {
 						t.Fatalf("%s on the database network: %v", name, on)
 					}
 				}

@@ -8,6 +8,8 @@ export const docs = {
   securityAlerts: `${DOCS_BASE}/guides/notifications.md#security-alerts`,
   audit: `${DOCS_BASE}/security/audit.md`,
   netguard: `${DOCS_BASE}/configuration.md#netguard`,
+  runnerTargets: `${DOCS_BASE}/security/target-allowlist.md#where-it-is-shown`,
   recovery: `${DOCS_BASE}/recovery.md`,
   configReload: `${DOCS_BASE}/configuration.md#reloading`,
+  externalApi: `${DOCS_BASE}/guides/external-api.md`,
 } as const;

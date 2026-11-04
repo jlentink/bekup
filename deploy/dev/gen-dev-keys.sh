@@ -15,7 +15,7 @@
 #   --force  regenerate everything (destroys the existing dev files; reset the
 #            dev volumes afterwards: docker compose ... down -v)
 #   --chown  (Linux, needs root) chown each file to the UID of the container
-#            that reads it: 65532 = bekup/minio, 70 = postgres, 999 =
+#            that reads it: 65532 = bekup/minio/webdav, 70 = postgres, 999 =
 #            mysql/mariadb. The dev TOML configs (deploy/dev/*.dev.toml)
 #            become root:root 0644, because bekup only reads config files
 #            owned by root or its own UID and not group/world-writable (edit
@@ -90,6 +90,22 @@ if [[ ! -e "$s/bekup_database_url" || $force -eq 1 ]] ||
         "postgres://bekup_owner:$(cat "$s/bekup_owner_password")@postgres:5432/bekup"
     write "$s/bekup_database_url" \
         "postgres://bekup_app:$(cat "$s/bekup_app_password")@postgres:5432/bekup"
+    force=$force_saved
+fi
+
+# The opt-in external API's role (D-220): docker-compose.yml always mounts
+# the password (postgres) and the URL (external-api), so both always exist;
+# the postgres init script creates the role bekup_external only when the
+# stack enables the API (POSTGRES_BEKUP_EXTERNAL_API, from the compose
+# variable BEKUP_EXTERNAL_API=enabled). Only missing files are written: an
+# existing dev keys directory gains them without anything else changing.
+write "$s/bekup_external_password" "$(rand32)"
+if [[ ! -e "$s/bekup_external_database_url" || $force -eq 1 ||
+    "$s/bekup_external_password" -nt "$s/bekup_external_database_url" ]]; then
+    force_saved=$force
+    force=1
+    write "$s/bekup_external_database_url" \
+        "postgres://bekup_external:$(cat "$s/bekup_external_password")@postgres:5432/bekup"
     force=$force_saved
 fi
 
@@ -177,6 +193,24 @@ if [[ ! -e "$d/sftp_host_ed25519_key" || $force -eq 1 ]]; then
     ssh-keygen -q -t ed25519 -N '' -C bekup-dev-sftp -f "$d/sftp_host_ed25519_key"
     echo "generated ${d#"$repo_root"/}/sftp_host_ed25519_key{,.pub}"
 fi
+# WebDAV destination (D-222): the password of the rclone `webdav` service
+# and a throwaway SELF-SIGNED certificate for the names it is reached by
+# (pin it from the destination test, which is what the dev service is
+# for). It is not issued by the dev CA: that CA is name-constrained to
+# bekup's own components and anchors the runner mTLS.
+write "$d/webdav_password" "$(rand32)"
+if [[ ! -e "$d/webdav_tls.crt" || ! -e "$d/webdav_tls.key" || $force -eq 1 ]]; then
+    rm -f "$d/webdav_tls.crt" "$d/webdav_tls.key"
+    openssl req -x509 -new -nodes -sha256 -days 365 \
+        -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+        -subj "/CN=webdav" \
+        -addext "subjectAltName=DNS:webdav,DNS:localhost,IP:127.0.0.1" \
+        -addext "basicConstraints=critical,CA:FALSE" \
+        -addext "keyUsage=critical,digitalSignature" \
+        -addext "extendedKeyUsage=serverAuth" \
+        -keyout "$d/webdav_tls.key" -out "$d/webdav_tls.crt" 2>/dev/null
+    echo "generated ${d#"$repo_root"/}/webdav_tls.{crt,key} (self-signed)"
+fi
 chmod 0600 "$d"/*
 
 # --- native bekup on the host (`just run`, D-114) ---------------------------------
@@ -240,14 +274,15 @@ if [[ $do_chown -eq 1 ]]; then
         exit 1
     fi
     chown 65532:65532 "$s/bekup_master_key" "$s/bekup_database_url" \
-        "$s/bekup_database_owner_url" \
-        "$d/minio_root_user" "$d/minio_root_password"
+        "$s/bekup_database_owner_url" "$s/bekup_external_database_url" \
+        "$d/minio_root_user" "$d/minio_root_password" \
+        "$d/webdav_password" "$d/webdav_tls.crt" "$d/webdav_tls.key"
     chown -R 65532:65532 "$c/serve" "$c/runner"
     # postgres/: the server key is read by the postgres container (UID 70);
     # its ca.crt is also mounted into serve/migrate, so keep it 0644.
     chown -R 70:70 "$c/postgres"
     chown 70:70 "$s/postgres_password" "$s/bekup_owner_password" \
-        "$s/bekup_app_password" "$d/pg_password"
+        "$s/bekup_app_password" "$s/bekup_external_password" "$d/pg_password"
     # The mysql/mariadb entrypoints re-read their *_FILE secrets after
     # dropping to the image's mysql user (UID 999 in both images).
     chown 999:999 "$d/mysql_root_password" "$d/mysql_password" \

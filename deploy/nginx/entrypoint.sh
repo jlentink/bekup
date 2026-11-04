@@ -12,6 +12,9 @@
 #   PROXY_TLS_MODE           acme (default; certificate from certbot) | static
 #   PROXY_HTTPS_PUBLIC_PORT  public HTTPS port for redirects (default 443)
 #   PROXY_CERT_CHECK_SECONDS how often to look for a renewed certificate (300)
+#   BEKUP_EXTERNAL_API       "enabled": also route /api/v1/ to the opt-in
+#                            external API (bekup-external-api.conf, D-220);
+#                            empty: no such route
 set -eu
 
 src=/etc/nginx/bekup
@@ -24,6 +27,7 @@ domain="${BEKUP_DOMAIN:-}"
 mode="${PROXY_TLS_MODE:-acme}"
 port="${PROXY_HTTPS_PUBLIC_PORT:-443}"
 interval="${PROXY_CERT_CHECK_SECONDS:-300}"
+external_api="${BEKUP_EXTERNAL_API:-}"
 
 if ! { printf '%s' "$domain" | grep -Eqx '([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?' &&
     [ "${#domain}" -le 253 ]; }; then
@@ -34,6 +38,10 @@ if ! { printf '%s' "$port" | grep -Eqx '[1-9][0-9]{0,4}' && [ "$port" -le 65535 
 fi
 printf '%s' "$interval" | grep -Eqx '[1-9][0-9]{0,5}' \
     || die "PROXY_CERT_CHECK_SECONDS must be a positive number"
+case "$external_api" in
+    "" | enabled) ;;
+    *) die "BEKUP_EXTERNAL_API must be 'enabled' or empty (it is written by bekup setup)" ;;
+esac
 
 case "$mode" in
     acme)
@@ -67,7 +75,12 @@ render() {
 }
 
 umask 077
-mkdir -p "$out"
+mkdir -p "$out" /tmp/nginx/bekup-api.d
+# The external API's location (included by the HTTPS server block only).
+if [ "$external_api" = enabled ]; then
+    cp "$src/bekup-external-api.conf" /tmp/nginx/bekup-api.d/external-api.conf
+    log "routing /api/v1/ to the external API"
+fi
 render
 current="$(fingerprint)"
 if have_cert; then

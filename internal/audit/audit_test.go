@@ -1,9 +1,11 @@
 package audit
 
 import (
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -126,6 +128,74 @@ func TestParams(t *testing.T) {
 		if _, err := a.params(ev); !errors.Is(err, ErrInvalidEvent) {
 			t.Errorf("bad[%d]: %v", i, err)
 		}
+	}
+}
+
+// TestAPIActor: an API actor stores kind api without a user id and adds the
+// token id, token name and request id to the details, unredacted; the
+// actor is validated and its detail names cannot be overridden.
+func TestAPIActor(t *testing.T) {
+	a := New(nil, Options{Registry: logging.NewRegistry()})
+	tok, req := uuid.New(), uuid.New()
+	in := Details{"name": "nightly"}
+	p, err := a.params(Event{Actor: APIActor(tok, "ci deploy", req), Action: ActionJobRunRequested, TargetType: "job", TargetID: "j", Details: in})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"name": "nightly", "request_id": "` + req.String() + `", "api_token_id": "` + tok.String() + `", "api_token_name": "ci deploy"}`
+	var got, exp map[string]any
+	if err := json.Unmarshal(p.Details, &got); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(want), &exp); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, exp) || p.ActorKind != "api" || p.ActorUserID != nil {
+		t.Fatalf("params: kind %s user %v details %s", p.ActorKind, p.ActorUserID, p.Details)
+	}
+	if len(in) != 1 {
+		t.Fatalf("caller's details changed: %v", in)
+	}
+	for _, k := range []string{DetailAPITokenID, DetailAPITokenName, DetailRequestID} {
+		if logging.IsSecretKey(k) {
+			t.Errorf("detail %q would be redacted", k)
+		}
+	}
+	uid := uuid.New()
+	bad := []Event{
+		{Actor: Actor{Kind: ActorAPI}, Action: ActionJobRunRequested},
+		{Actor: APIActor(uuid.Nil, "x", req), Action: ActionJobRunRequested},
+		{Actor: APIActor(tok, "x", uuid.Nil), Action: ActionJobRunRequested},
+		{Actor: APIActor(tok, "", req), Action: ActionJobRunRequested},
+		{Actor: APIActor(tok, strings.Repeat("n", 101), req), Action: ActionJobRunRequested},
+		{Actor: APIActor(tok, "\xff", req), Action: ActionJobRunRequested},
+		{Actor: Actor{Kind: ActorAPI, UserID: &uid, API: &APIRequester{TokenID: tok, TokenName: "x", RequestID: req}}, Action: ActionJobRunRequested},
+		{Actor: Actor{Kind: ActorUser, UserID: &uid, API: &APIRequester{TokenID: tok, TokenName: "x", RequestID: req}}, Action: ActionJobRunRequested},
+		{Actor: APIActor(tok, "x", req), Action: ActionJobRunRequested, Details: Details{DetailRequestID: "forged"}},
+		// An access denial concerns the token only, but its request_id is
+		// still reserved.
+		{Actor: APIActor(tok, "x", uuid.Nil), Action: ActionAPIAddressDenied, Details: Details{DetailRequestID: "forged"}},
+		{Actor: APIActor(uuid.Nil, "x", uuid.Nil), Action: ActionAPIAddressDenied},
+	}
+	// A denial without a request: token id and name only.
+	p, err = a.params(Event{Actor: APIActor(tok, "ci", uuid.Nil), Action: ActionAPIAddressDenied, TargetType: "api_token", TargetID: tok.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = nil
+	if err := json.Unmarshal(p.Details, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[DetailAPITokenID] != tok.String() || got[DetailAPITokenName] != "ci" {
+		t.Fatalf("denial details %s", p.Details)
+	}
+	for i, ev := range bad {
+		if _, err := a.params(ev); !errors.Is(err, ErrInvalidEvent) {
+			t.Errorf("bad[%d]: %v", i, err)
+		}
+	}
+	if kinds := ActorKinds(); len(kinds) != 4 || kinds[3] != ActorAPI {
+		t.Fatalf("ActorKinds() = %v", kinds)
 	}
 }
 

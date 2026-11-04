@@ -754,7 +754,7 @@ func TestDBNextStepsPSQL(t *testing.T) {
 		DBTLSRequire: "sslmode=require", DBTLSDisable: "sslmode=disable",
 	} {
 		d := Database{Mode: DBExternal, Host: "db", Port: 5432, Name: "bekup", Auth: DBAuthDBASQL, TLS: tls}
-		if got := strings.Join(dbNextSteps(&d, Layout{KeysDir: "secrets"}), "\n"); !strings.Contains(got, want) {
+		if got := strings.Join(dbNextSteps(&d, Layout{KeysDir: "secrets"}, false, false), "\n"); !strings.Contains(got, want) {
 			t.Errorf("%q: %s", tls, got)
 		}
 	}

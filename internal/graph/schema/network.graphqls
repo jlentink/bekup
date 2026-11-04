@@ -129,3 +129,105 @@ extend type Mutation {
   """
   updateSsrfAllowlist(input: SsrfAllowlistInput!): SsrfAllowlist! @hasRole(roles: [ADMIN]) @stepUp
 }
+
+# The runner's target allowlist (D-223). Admin only, read-only.
+#
+# Database servers and SSH bastions are reached by the runner, never by
+# serve, and only as the `[targets]` section of the runner's own
+# runner.toml allows. The runner has no database access, so this list
+# cannot be changed here: edit runner.toml on the runner host and restart
+# the runner.
+
+"A startup warning of the runner's target allowlist."
+enum RunnerTargetWarning {
+  "allow_cidrs and allow_hosts are empty: the runner refuses every database server and SSH bastion."
+  EMPTY_ALLOWLIST
+  """
+  bastion_targets is empty: an allowed SSH bastion may forward to any host
+  it reaches (only deny_cidrs and deny_hosts apply behind it).
+  """
+  BASTIONS_UNRESTRICTED
+}
+
+"A class of addresses that no runner.toml entry can allow."
+enum RunnerDeniedCategory {
+  LOOPBACK
+  "This network (0.0.0.0/8) and the unspecified IPv6 address."
+  UNSPECIFIED
+  LINK_LOCAL
+  CLOUD_METADATA
+  MULTICAST_BROADCAST
+  RESERVED
+  "IPv4-compatible and IPv4-translated IPv6 forms."
+  IPV4_IN_IPV6
+  TEREDO
+  "NAT64 and 6to4 addresses that embed an always-denied IPv4 address (the ranges are not denied as a whole)."
+  EMBEDDED_DENIED_IPV4
+  "Other IPv6 addresses outside global unicast 2000::/3 (no fixed ranges)."
+  NON_GLOBAL_IPV6
+}
+
+"A key of runner.toml [targets]."
+enum RunnerTargetsKey {
+  ALLOW_CIDRS
+  ALLOW_HOSTS
+  DENY_CIDRS
+  DENY_HOSTS
+  BASTION_TARGETS
+}
+
+"One always-denied category with its ranges."
+type RunnerDeniedRange {
+  category: RunnerDeniedCategory!
+  "The ranges (empty for NON_GLOBAL_IPV6)."
+  cidrs: [String!]!
+}
+
+"What one SSH bastion may forward to (bastion_targets)."
+type RunnerBastionTargets {
+  "The bastion's host name or IP address."
+  bastion: String!
+  "CIDRs, then host names."
+  targets: [String!]!
+}
+
+"""
+The runner's target allowlist as the runner applies it. When the runner
+cannot be asked, available is false, reason says why and the lists are
+empty.
+"""
+type RunnerTargetPolicy {
+  "True when the runner answered."
+  available: Boolean!
+  "Why the allowlist is unavailable (a fixed text; null when available)."
+  reason: String
+  "CIDRs the runner may connect to (masked, in the configured order)."
+  allowCidrs: [String!]!
+  "Host names the runner may connect to (normalized, sorted)."
+  allowHosts: [String!]!
+  "CIDRs refused before the allow lists."
+  denyCidrs: [String!]!
+  "Host names refused before the allow lists."
+  denyHosts: [String!]!
+  "bastion_targets grouped by bastion."
+  bastionTargets: [RunnerBastionTargets!]!
+  "docker.run_subnet_pool: always refused (every run's own network lies inside it)."
+  runSubnetPool: String
+  "The runner's control network and container addresses: always refused."
+  controlNetworks: [String!]!
+  "False until the runner knows its container's networks (Docker not ready): controlNetworks is then incomplete."
+  controlNetworksKnown: Boolean!
+  "The always-denied categories."
+  alwaysDenied: [RunnerDeniedRange!]!
+  "The runner's startup warnings about the allowlist."
+  warnings: [RunnerTargetWarning!]!
+  "The [targets] keys set by environment variables (BEKUP_TARGETS_*) instead of runner.toml."
+  envOverrides: [RunnerTargetsKey!]!
+  "True when a list was longer than the runner reports (256 entries)."
+  truncated: Boolean!
+}
+
+extend type Query {
+  "The runner's target allowlist (runner.toml [targets]; read-only)."
+  runnerTargetPolicy: RunnerTargetPolicy! @hasRole(roles: [ADMIN])
+}

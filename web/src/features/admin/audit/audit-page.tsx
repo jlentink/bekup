@@ -59,6 +59,7 @@ const T = {
     USER: "User",
     SYSTEM: "bekup (system)",
     CLI: "Host operator (CLI)",
+    API: "API token",
   } satisfies Record<AuditActorKind, string>,
   actorUserId: "Actor user ID",
   targetType: "Target type",

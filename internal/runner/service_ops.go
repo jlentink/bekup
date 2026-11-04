@@ -115,3 +115,11 @@ func (s *service) ListImages(ctx context.Context, req *runnerpb.ListImagesReques
 	}
 	return s.ops.listImages(ctx, req)
 }
+
+// GetTargetPolicy returns the target allowlist as the runner applies it.
+func (s *service) GetTargetPolicy(ctx context.Context, req *runnerpb.GetTargetPolicyRequest) (*runnerpb.GetTargetPolicyResponse, error) {
+	if s.ops == nil {
+		return nil, errOpsUnavailable
+	}
+	return s.ops.getTargetPolicy(ctx, req)
+}

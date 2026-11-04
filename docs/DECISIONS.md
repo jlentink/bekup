@@ -43,7 +43,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-015](#d-015-temporary-restore-connections) | Temporary restore connections | accepted |
 | [D-016](#d-016-key-generation) | Key generation | accepted |
 | [D-017](#d-017-admin-ui-tls-terminated-by-a-reverse-proxy) | Admin UI TLS terminated by a reverse proxy | accepted (partly superseded by D-093/D-094/D-095) |
-| [D-018](#d-018-bekups-own-tls-links-and-pinning) | bekup's own TLS links and pinning | accepted |
+| [D-018](#d-018-bekups-own-tls-links-and-pinning) | bekup's own TLS links and pinning | accepted (WebDAV certificate pinning: D-222) |
 | [D-019](#d-019-toml-configuration-and-search-path) | TOML configuration and search path | accepted |
 | [D-020](#d-020-justfile-as-the-single-task-entry-point) | justfile as the single task entry point | accepted |
 | [D-021](#d-021-web-design-with-the-frontend-design-skill) | Web design with the frontend-design skill | accepted |
@@ -153,7 +153,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-125](#d-125-runner-container-healthcheck-over-a-local-health-socket-task-24) | Runner container healthcheck over a local health socket (task 2.4) | accepted |
 | [D-126](#d-126-runner-api-proto-conventions-and-code-generation-task-24) | Runner API proto conventions and code generation (task 2.4) | accepted |
 | [D-127](#d-127-runner-grpc-transport-policy-interceptors-limits-keepalive-client-task-24) | Runner gRPC transport policy: interceptors, limits, keepalive, client (task 2.4) | accepted |
-| [D-128](#d-128-sftp-backend-host-key-pin-hard-link-finalize-symlink-checks-connection-policy-task-210) | SFTP backend: host-key pin, hard-link finalize, symlink checks, connection policy (task 2.10) | accepted (amended by D-140) |
+| [D-128](#d-128-sftp-backend-host-key-pin-hard-link-finalize-symlink-checks-connection-policy-task-210) | SFTP backend: host-key pin, hard-link finalize, symlink checks, connection policy (task 2.10) | accepted (amended by D-140, D-221) |
 | [D-129](#d-129-s3-backend-own-multipart-uploader-static-credentials-only-conditional-writes-version-exact-deletes-task-29) | S3 backend: own multipart uploader, static credentials only, conditional writes, version-exact deletes (task 2.9) | accepted |
 | [D-130](#d-130-runner-request-validation-target-allowlist-hardened-container-spec-and-the-stdin-preamble-task-25) | Runner request validation, target allowlist, hardened container spec and the stdin preamble (task 2.5) | accepted |
 | [D-131](#d-131-destinations-api-storage-of-credentials-step-up-for-every-change-and-the-sftp-host-key-flow-task-212) | Destinations API: storage of credentials, step-up for every change and the SFTP host-key flow (task 2.12) | accepted (amended by D-140) |
@@ -242,6 +242,10 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed |
 | [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
 | [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
+| [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes) |
+| [D-221](#d-221-sftp-uploads-verify-the-stored-size-by-path-after-closing-cloud-backed-gateways-drop-messages-carry-a-curated-detail) | SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail | proposed |
+| [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check) |
+| [D-223](#d-223-read-only-view-of-the-runners-target-allowlist-on-the-network-page-gettargetpolicy) | Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`) | proposed |
 
 ---
 
@@ -513,7 +517,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-018: bekup's own TLS links and pinning
 
 - **Date:** 2026-10-26
-- **Status:** accepted
+- **Status:** accepted (WebDAV destinations may pin their server certificate: D-222)
 - **Decided by:** user
 - **Context:** Apart from the UI, every TLS link is bekup's responsibility.
 - **Decision:** **Runner mTLS**: private CA pinned + SAN check. **Target
@@ -13486,3 +13490,1197 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** D-072, D-204; `cliff.toml`, `scripts/release_ci.sh`,
   `scripts/release_ci_test.sh`, `scripts/bump_test.sh`,
   `docs/development.md`.
+
+## D-220: External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views
+
+- **Date:** 2026-11-03
+- **Status:** proposed
+- **Decided by:** user (separate process with its own minimal DB role;
+  per-job tokens created by an admin or the job's owner with step-up,
+  mandatory expiry of 1–365 days, revocable, shown once, stored hashed;
+  `https://<domain>/api/v1` through the bundled proxy; only `SUCCESS`
+  counts as success) and agent (the database design, the token format and
+  hash, the caps and refusal codes, items 3–14)
+- **Context:** CI pipelines want to start a backup job, poll its run and
+  learn whether it succeeded. The only way to start a run is the
+  session-authenticated GraphQL `runJobNow`, and bekup has no machine
+  credentials. The plan reserved this as Phase 2 (D-206: "`bekup
+  external-api`, the `api.*` views, scoped API tokens"); its outline gave
+  the role "SELECT on views, INSERT on `run_requests` only". Plan:
+  `/Users/pnl1i380/.claude/plans/make-github-actions-only-jolly-spark.md`,
+  Part B.
+- **Decision:**
+  1. **Scope.** Three calls only: `POST /api/v1/jobs/{jobId}/runs`
+     (optional `Idempotency-Key`; 202 with a request id), `GET
+     /api/v1/requests/{requestId}` and `GET /api/v1/self`. No download,
+     stop, create, edit or credential access. Jobs that are unknown or
+     outside the token's scope answer 404, never 403 (no enumeration);
+     a token in the query string is a 400. Opt-in: compose profile
+     `external-api`, nothing runs or exists without it.
+  2. **Process and role.** `bekup external-api` is its own container
+     (serve's hardening, `frontend` + `backend` only, no published port,
+     0.5 CPU / 128 MB) with its own `external-api.toml`; it never loads
+     the master key, runner certificates or `bekup.toml`. It connects as
+     **`bekup_external`**: LOGIN, NOINHERIT, NOSUPERUSER, NOCREATEDB,
+     NOCREATEROLE, NOREPLICATION, NOBYPASSRLS, CONNECTION LIMIT 20, TLS
+     only (verify-full; bundled: a `hostnossl ... bekup_external ...
+     reject` pg_hba rule). Its **complete** privileges: CONNECT on the
+     database, USAGE on schema `api`, EXECUTE on the five `api`
+     functions. Nothing in `public`, not even USAGE: the schema version
+     comes from `api.schema_version()` (a definer wrapper of
+     `bekup_schema_version()`), not from EXECUTE on
+     `public.bekup_schema_version()` as the plan said. No membership of
+     any role.
+  3. **Functions instead of views (deviation from D-206 and the plan's
+     outline).** Schema `api` (owner `bekup_owner`) holds SECURITY DEFINER
+     functions with `search_path = pg_catalog, pg_temp`, every object
+     schema-qualified, EXECUTE revoked from PUBLIC (00004/00006
+     precedent): `api.authenticate(token_id, secret_hash)`,
+     `api.token_jobs(token_id, secret_hash)` (for `/self`; not in the
+     plan's list), `api.request_run(token_id, secret_hash, job_id,
+     idempotency_key, ip)`, `api.request_status(token_id, secret_hash,
+     request_id)`, `api.schema_version()`. **Every function takes the
+     token id and the secret hash and authenticates itself.** With
+     SELECT on views and INSERT on `run_requests`, a compromised
+     external-api could read every token's hash and expiry, the scope of
+     all tokens and every request, and file requests for any token and
+     job; with the functions it can only act for tokens whose secret it
+     sees in a live request. Their result row types are empty views
+     (`api.*_result`, `WHERE false`, no privileges) because sqlc reads
+     the columns of a set-returning function only from a table or view
+     row type.
+  4. **One scope rule**, `public.api_token_job_allowed(token_id, job_id)`
+     (invoker rights; EXECUTE for `bekup_app`), checked by every api
+     function and again by the consumer for every request:
+     `public.api_token_valid(token_id)` (unrevoked, unexpired, and the
+     creator is not disabled, not deleted and has role admin or user)
+     and the job is in the token's scope, not deleted, and the creator is
+     an admin or a `user` who owns the job (D-067: owner grants apply to
+     role user only). Demotion (admin → user keeps only owned jobs; →
+     maintainer ends the token), disabling, deletion and ownership loss
+     take effect on the next call. Maintainers cannot create tokens.
+  5. **`api.request_run`** runs in READ COMMITTED only (it refuses other
+     isolation levels) and, under a row lock on the token (`FOR NO KEY
+     UPDATE`; the plan said "per-token advisory lock": the row lock
+     serializes the same requests without an advisory key space and is
+     only taken after the secret matched), checks in this order and
+     returns `(request_id, created_at, refusal, replayed, retry_at)`:
+     `unauthenticated`, `invalid_request` (no job, idempotency key not
+     1–255 printable ASCII characters without spaces, a network instead
+     of a host address), `not_found`, `idempotency_mismatch` (the key
+     was used for another job within 24 h), replay (same key and job
+     within 24 h: the original request, `replayed = true`; an older
+     request releases its key), `too_many_pending` (3 undecided requests
+     of the token), `rate_limited` (30 requests of the token within an
+     hour; `retry_at` = when the oldest leaves the window),
+     `job_disabled`, `run_active` (a `backup_run` River job with the
+     job's id in one of `queue.UniqueStates`). Otherwise it inserts a
+     `pending` request and calls `pg_notify('bekup_api_requests',
+     <request id>)`; refusals write nothing.
+  6. **`api.request_status`** returns only the raw facts of one request
+     of that token, only while the job is in its scope (a lost scope is a
+     404 too, stricter than the plan's "only the token's own requests"):
+     outcome and reason, the River job id and River state (NULL once
+     River deleted the job), and the latest run of that River job by
+     attempt (id, status, attempt, queued/started/finished). The state
+     (`pending | rejected | queued | running | retrying | success |
+     partial | failed | canceled | skipped`, `done`, `success`) is
+     aggregated in Go; `success` is true only for `SUCCESS`, `done` is
+     false while River still holds a retry.
+  7. **Tables (migration 00037 `api_access`).** `api_tokens` (id = the
+     public token id, name, `secret_hash` 32 bytes unique, created_by,
+     created_at, `expires_at` > created_at and ≤ created_at + 366 days,
+     revoked_at/by; a guard trigger allows only the one-way revocation),
+     `api_token_jobs` (immutable scope), `run_requests` (token, job, ip,
+     idempotency key unique per token, outcome `pending | accepted |
+     rejected`, reason `run_active | job_disabled | job_gone |
+     token_invalid | expired`, River job id, run id, decided_at; CHECKs
+     tie the columns to the outcome; a guard allows one decision and only
+     the release of the key). `bekup_app`: SELECT/INSERT on the token
+     tables and UPDATE of `revoked_at`/`revoked_by` only (never DELETE);
+     SELECT, DELETE (pruning after 30 days) and UPDATE of the decision
+     columns of `run_requests`, never INSERT. "Last used" is the newest
+     request of a token.
+  8. **Token format and hash.** `bkp_<26 base32 id>_<52 base32 secret>`
+     (prefix for secret scanners; the id is the token's uuid, the secret
+     256 random bits from `crypto/rand`). Stored: SHA-256 over
+     `"bekup-api-token-v1\0" ‖ id ‖ secret`. No HMAC with a master key:
+     the external-api must not hold it, and a 256-bit random secret does
+     not need key stretching. Failed authentications are throttled per
+     IP (10 per 5 minutes).
+  9. **Trigger and actor kind `api`** (migration 00036, on its own because
+     a new enum value cannot be used in the transaction that adds it;
+     goose runs each file in its own transaction): `run_trigger` gains
+     `api`, the `audit_log_actor_kind_valid` CHECK gains `api`. The worker
+     consumer (`internal/apiaccess.Consumer`, wherever the River workers
+     run: serve without `--no-worker` and `bekup worker`) wakes up on
+     LISTEN `bekup_api_requests` (payload ignored; passes at least 200 ms
+     apart) and sweeps every 5 s. It claims one pending request per
+     transaction (`FOR UPDATE SKIP LOCKED`, safe with several instances;
+     at most 20 per pass, a full pass is followed by another; a request
+     whose decision fails stays pending, is skipped for the rest of the
+     pass and retried by the next sweep). Older than 10 minutes by the
+     database clock → `expired`; otherwise `jobs.Service.RunFromAPI` under
+     a savepoint: it locks the token row (a concurrent revocation waits),
+     re-checks `api_token_valid` (→ `token_invalid`), share-locks the job
+     (gone → `job_gone`), re-checks `api_token_job_allowed` (→ `job_gone`),
+     refuses a disabled job (`job_disabled`) and an active run (River's
+     unique key, `run_active`), and enqueues through the same
+     `enqueueManualTx` as `runJobNow` (trigger `api`, `triggered_by`
+     NULL). It audits `job.run_requested` with actor kind `api`
+     (`audit.APIActor`: no user id; details `api_token_id`,
+     `api_token_name`, `request_id`; the request's client address as the
+     entry's IP). The policy is not consulted: there is no principal, the
+     scope rule is the authorization. Decided requests are pruned after 30
+     days by the periodic River job `run_request_prune`; the outcomes are
+     counted in `bekup_api_run_requests_total{outcome}`.
+  10. **Grant sync and audit.** `public.bekup_sync_external_grants()`
+      (invoker; EXECUTE for nobody but the owner) takes back everything
+      `bekup_owner` ever granted the role in `public` and `api`, then
+      grants exactly the allowlist (CONNECT only when missing: the init
+      script or bootstrap granted it). It runs at the end of 00037 and
+      after every `migrate up` (`Migrator.Up` → sqlc
+      `SyncExternalGrants`), because the role may be created after the
+      migrations; without the role it does nothing. Then the privilege
+      audit (`ExternalRoleFindings`: database CREATE/TEMPORARY, any schema
+      USAGE/CREATE but USAGE on `api`, any table/view/sequence/column
+      privilege, EXECUTE on anything but the five functions (functions of
+      extensions excepted), any membership; PUBLIC grants count) fails
+      `migrate up` on anything it could not take back. The migrator's
+      role check also refuses dangerous attributes/memberships of the
+      role (e.g. membership of `bekup_app`, `pg_read_all_data`).
+      `db.CheckExternalRole` (session_user + SYSTEM_USER, attributes,
+      audit) is the external-api's startup check; `db.CheckExternalLogin`
+      (without the audit) checks a login before the first migration.
+  11. **Role lifecycle.** Bundled database:
+      `deploy/postgres/init/20-bekup-external.sh` (first start of a new
+      volume; without the `bekup_external_password` secret it creates
+      nothing; idempotent: re-applies the attributes and the password,
+      refuses a password shared with `bekup_owner`/`bekup_app`, prepends
+      its pg_hba rule once; with `--reload` it is the documented `compose
+      exec` command for existing volumes). External database:
+      `RolePlan.External`/`CreateExternal`/`SetExternalPassword`,
+      `bekup db roles-sql --external-password-file` (or `--external-role`
+      with `--passwords prompt`) and `bekup db bootstrap
+      --external-password-file` (existing roles adopted and checked like
+      the others, foreign members refused).
+  12. **Not in single-account mode** (`ErrExternalSingleAccount`): one
+      account holding every role would not isolate the external API.
+      `roles-sql`/bootstrap refuse to create the role, and the migrator
+      refuses to run while `bekup_external` exists in single-account mode.
+  13. **Forged notifications: River runs poll-only (resolves the open
+      item of the first draft; decided by agent).** PostgreSQL has no
+      privilege for `NOTIFY` or `LISTEN`: any role with CONNECT, so a
+      compromised external-api too, can send and receive notifications on
+      every channel of the database. River acts on its own channels'
+      payloads without a database check (river@v0.49.0 `producer.go`
+      `handleControlNotification`: `river_control` `cancel` cancels a
+      running job's context by id, `pause`/`resume` change a queue's state
+      in memory; `river_leadership` requests a leader's resignation).
+      Therefore **every River client of bekup (serve, `--no-worker`
+      insert-only, `bekup worker`) runs with `PollOnly: true`** and never
+      LISTENs (`internal/queue.New`; a unit test pins it). In poll-only
+      mode River reads everything from its tables: new jobs every
+      `FetchPollInterval` (River's default 1 s; tests keep their 100 ms
+      override), cancel requests of running jobs every 2 s
+      (`JobCancelTx` sets `metadata.cancel_attempted_at`, the producer
+      polls `JobGetCancelRequested` for its active jobs), queue pauses
+      every 2 s, leader elections every 5 s (a resigning leader is
+      replaced within about 5 s; periodic jobs and the job cleaner run on
+      the leader as before). Effects on bekup: a job inserted by serve
+      starts up to about 1 s later; `cancelRun` and `cancelRestore` of a
+      running job take effect within about 2 s (backup runs additionally
+      poll `cancel_requested_at`); nothing in bekup used River's
+      notifications otherwise. Cross-process cancellation of a running
+      restore still works without a new column (tested: JobCancelTx from
+      a second client cancels the worker client's restore). bekup's own
+      channels are wake-ups whose receivers re-read the database with
+      their own rights (run, restore, inbox and settings events are
+      re-loaded and authorized per event; config reload ids are checked
+      against recent recorded requests; `bekup_api_requests` only makes
+      the consumer look for pending rows). The one effect beyond a re-read:
+      a forged `bekup_session_events` rotation for a known session id ends
+      that session's event stream with `SESSION_ROTATED` (the browser
+      reopens it with its still valid cookie), and a forged revocation
+      notice makes the account stream re-check the session and the UI
+      refetch its session list. Listening reveals identifiers only (run,
+      job, restore, session, user and notification ids; payloads never
+      carry content), and the external-api's listener application name
+      no longer counts as a reload listener (`ConfigReloadListeners`
+      filters by `current_user`). Tests: a control experiment shows a
+      LISTENing River client cancels a running job on a forged NOTIFY of
+      `bekup_external`; bekup's poll-only client, a running restore and the
+      consumer ignore the same forgeries.
+  14. **Run history.** `Run.trigger` gains `API`; `Run.triggeredBy`
+      (staff only) shows, for API runs, the token (`RunActor.apiToken {id
+      name}`, found through the accepted request's `river_job_id`, unique)
+      and its creator as the user; after the request is pruned (30 days)
+      the run keeps its trigger without the token. `AuditActorKind` gains
+      `API`.
+- **Alternatives considered:** the API inside `serve` (rejected by the
+  user: a bug in a public, token-authenticated listener would sit next to
+  the master key); SELECT on `api.*` views plus INSERT on `run_requests`
+  (the plan's outline; rejected, item 3); account-wide or user-wide tokens
+  (rejected by the user: per job); tokens without expiry (rejected by the
+  user); HMAC-SHA-256 under a keyring subkey (rejected: the external-api
+  would need key material, item 8); an advisory lock per token (replaced
+  by the token row lock, item 5); GraphQL or webhooks/callbacks for CI
+  (a small REST surface is easier to call from CI and to restrict);
+  against forged notifications (item 13): a separate database for the
+  external role (rejected: the api functions read and write bekup's
+  tables, and cross-database calls need dblink or postgres_fdw, a larger
+  attack surface and another credential), a fork or patch of River that
+  verifies control payloads against the database (rejected: maintenance
+  burden on every upgrade, and poll-only mode already reads the same
+  state), a restore-specific DB-polled cancel column (not needed: River's
+  poll-only mode polls cancel requests itself), and accepting the risk
+  with only the dead-man alerts (rejected: a forged pause would silently
+  stop every backup queue until a restart, D-001).
+- **Consequences:** a new trust boundary CI client → proxy → external-api →
+  app DB (SECURITY.md B12, EA-1..EA-7). The external-api can at most
+  start runs of jobs in the scope of tokens it sees and read their status;
+  everything else stays out of its role's reach, and the privilege audit
+  fails closed on any drift. Revocation, expiry and role changes need no
+  cache invalidation (checked on every call). Every `migrate up` now
+  also touches the role's grants. Operators of single-account mode cannot
+  use the external API. River jobs start up to about 1 s and running jobs
+  stop up to about 2 s later than with LISTEN/NOTIFY, and a new River
+  leader takes over within about 5 s (item 13); forged notifications can
+  at most cause extra reads, a reconnect of an event stream or a refetch
+  in the UI.
+- **Related:** D-054, D-067, D-092, D-099, D-100, D-206, D-207; plan
+  Phase 2; `internal/db/migrations/00036_api_trigger_actor.sql`,
+  `internal/db/migrations/00037_api_access.sql`,
+  `internal/db/queries/api_access.sql`,
+  `internal/db/queries/external_api.sql`,
+  `internal/db/queries/migrate.sql`, `internal/db/external.go`,
+  `internal/apiaccess/consumer.go`, `internal/apiaccess/prune.go`,
+  `internal/jobs/service.go` (`RunFromAPI`), `internal/queue/client.go`
+  (`PollOnly`), `internal/audit/event.go` (`APIActor`),
+  `internal/db/rolesql.go`, `internal/db/bootstrap.go`,
+  `internal/dbsetup/bootstrap.go`, `cmd/bekup/db_cmd.go`,
+  `deploy/postgres/init/20-bekup-external.sh`, `SECURITY.md`.
+- **Amendment 1 (2026-11-03, user requirement: an IP allowlist per token,
+  optional, "any address" an explicit choice with a permanent warning;
+  database design by agent; proposed):**
+  1. **Data.** `api_tokens.allowed_cidrs cidr[] NOT NULL DEFAULT '{}'`
+     and `allow_any_address boolean NOT NULL` (no default: every insert
+     chooses). `public.api_cidrs_valid` (CHECK `api_tokens_allowed_cidrs`):
+     at most 32 entries, one-dimensional, no NULL, no duplicates, no `/0`
+     (`0.0.0.0/0`, `::/0`: that is `allow_any_address`) and no
+     IPv4-mapped network (`::ffff:0:0/96` and below; such an entry could
+     never match, see 3). The `cidr` type itself refuses host bits. CHECK
+     `api_tokens_addresses`: `allow_any_address = (cardinality(allowed_cidrs)
+     = 0)`, i.e. **exactly one** of the two (stricter than the plan's
+     `allow_any_address OR cardinality > 0`: a list next to "any" would be
+     silently ignored). Only these two columns may change, only while the
+     token is unrevoked (`api_tokens_guard`); `bekup_app` gets UPDATE on
+     them. Queries: `InsertAPIToken` takes both, `UpdateAPITokenAddresses`
+     (for `updateApiTokenAddresses`; its audit `api_token.addresses_changed`
+     belongs to the GraphQL step), the token reads return both, and
+     `ListAPITokenLastSeen` gives per token the later of its newest run
+     request address and its newest denial address, with the time and
+     whether it was a denial.
+  2. **Enforcement in every token function.** `api.authenticate`,
+     `api.token_jobs` and `api.request_status` gain a client address
+     parameter (`api.request_run` already had one); the signatures in the
+     grant sync and the privilege audit change accordingly (still five
+     functions). All four start with `public.api_token_admit(token_id,
+     secret_hash, ip)` (owner-only, no EXECUTE for anyone): id + secret
+     hash match, `api_token_valid`, and `public.api_client_ip_allowed`
+     (`allow_any_address`, or the normalized address `<<=` an entry). Any
+     failure gives the same answer as a wrong secret: no row, or the
+     refusal `unauthenticated`; a NULL address or a network (not /32,
+     /128) matches no list. `api.request_run` re-checks validity and the
+     address under the token's row lock (a concurrent revocation or
+     address change applies) and stores the normalized address. The
+     functions become plpgsql VOLATILE and, like `api.request_run`,
+     refuse isolation levels other than READ COMMITTED (55000).
+  3. **IPv4-mapped addresses.** `public.api_client_ip` normalizes every
+     client address the same way before it is matched or stored: an
+     IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) becomes the IPv4
+     address, so it matches IPv4 entries only; IPv4-compatible (`::a.b.c.d`)
+     and other IPv6 forms stay IPv6. `run_requests.ip` and
+     `api_access_denials.client_ip` hold normalized addresses (the alert
+     and audit entry show the unmapped form).
+  4. **Theft signal.** A *valid* token presented from a refused address
+     inserts into `api_access_denials` (`id`, `token_id`, `client_ip`
+     nullable, `denied_at`, `processed_at`; guard: only `processed_at`
+     changes, once), at most one row per token per 10 minutes: a cheap
+     check, then the token's row lock (`FOR NO KEY UPDATE`) and the check
+     again in a new READ COMMITTED snapshot, so concurrent refusals write
+     one row. It announces the row with `pg_notify('bekup_api_requests',
+     'denial:<id>')` on the existing channel: a wake-up only, the payload
+     is ignored. Wrong secrets, unknown, revoked and expired tokens write
+     nothing (no amplification for guessers). `bekup_external` still has
+     no table privilege; `bekup_app` may SELECT, DELETE and UPDATE
+     `processed_at`, never INSERT.
+  5. **Consumer.** `apiaccess.Consumer` (now with a required `Auditor`)
+     drains the denials after the requests on every wake-up and sweep:
+     `ClaimAPIAccessDenials` (`FOR UPDATE SKIP LOCKED`, one per
+     transaction, like requests) → audit `api_token.ip_denied` (actor kind
+     `api` without a request id: details `api_token_id`, `api_token_name`,
+     `denial_id`, `creator_id`, `client_ip`; the entry's IP is the client
+     address; target `api_token`) → `processed_at`. The audit observer
+     (`notify.ObserveAudit`) raises the new `api_token_ip_denied` alert
+     (severity error) as `security.system` to every admin and as
+     `security.account` to the token's creator, deduplicated per denial
+     (so at most once per token and 10 minutes). The prune job deletes
+     processed denials older than 30 days with the decided requests.
+  6. **Timing.** A refusal of a valid token from a refused address does
+     more work (and, once per 10 minutes, a write) than a wrong secret, so
+     its timing can differ: someone holding the token already knows it;
+     the external API (step 4) answers every 401 alike and throttles
+     failed authentications per IP.
+  - **Alternatives considered:** the allowlist in the external-api
+    process only (rejected: a compromised process could skip it, and the
+    database is where the token is checked); a separate NOTIFY channel for
+    denials (rejected: the payload is ignored anyway, one channel keeps the
+    consumer's single wake-up); a unique key per 10-minute bucket instead
+    of the lock (rejected: buckets allow two rows seconds apart);
+    refusing IPv4-mapped clients (rejected: dual-stack listeners report
+    IPv4 clients that way); allowing a list next to `allow_any_address`.
+  - **Consequences:** a stolen token is useless from outside its networks
+    and its use alerts the admins and the creator. Residual: tokens with
+    `allow_any_address` (permanent warning in the UI); very wide entries
+    (two `/1` networks) are allowed; the address is only as good as the
+    external API's trusted-proxy configuration (step 4: forwarded headers
+    only from the configured proxies, X-Forwarded-For from others
+    ignored), and a compromised external-api can pass any address for the
+    tokens it sees (EA-5). SECURITY.md EA-8, EA-9.
+  - **Related:** `internal/db/migrations/00037_api_access.sql`,
+    `internal/db/queries/api_access.sql`,
+    `internal/db/queries/external_api.sql`, `internal/db/external.go`,
+    `internal/apiaccess/consumer.go`, `internal/apiaccess/prune.go`,
+    `internal/audit/actions.go`, `internal/audit/auditor.go`,
+    `internal/notify/security.go`, `internal/notify/alert_types.go`,
+    `internal/notify/content.go`, `docs/guides/notifications.md`.
+
+- **Amendment 2 (2026-11-03, Phase 2 step 4: the external API process;
+  decided by agent; proposed):**
+  1. **One token implementation** (`internal/apikey`, used by the
+     external API to verify and by token management to create). Item 8's
+     "id ‖ secret" is the decoded bytes: SHA-256 over
+     `"bekup-api-token-v1\0"` ‖ the 16 uuid bytes ‖ the 32 secret bytes.
+     Both parts are unpadded **lower-case** RFC 4648 base32 (`a-z2-7`, 26
+     and 52 characters, 83 in total); only the canonical spelling parses
+     (no upper case, padding or stray trailing bits; re-encoding must give
+     the input), so a token has exactly one spelling. `Generate` takes the
+     secret and the uuid (v4) from `crypto/rand`. Fuzz test and
+     independently computed vectors.
+  2. **`external-api.toml`** (`config.LoadExternalAPI`, runner pattern:
+     strict TOML, `BEKUP_<SECTION>_<KEY>` overrides, gendocs, an annotated
+     `external-api.example.toml`): `[listen]` address (wildcards refused
+     outside dev mode unless `allow_wildcard`), `trusted_proxies`,
+     `trusted_proxy_hosts` (serve's D-215 rules) and timeouts; one of the
+     two proxy keys is **required outside dev mode** (plain HTTP behind
+     the TLS proxy). `[database]` reuses bekup.toml's struct: URL mode
+     (`url_file`, default `/run/secrets/bekup_external_database_url`) or
+     fields mode with `user` fixed to `bekup_external`; the owner keys and
+     `single_account` are refused when set; `max_conns` ≤ 20 (the role's
+     limit); TLS verify-full by default with the D-100 warnings. The
+     login in URL mode is verified after connecting (`CheckExternalRole`:
+     `session_user`). `[limits]` (per IP 5/s burst 20, per token 1/s burst
+     10, 10 failed authentications per 5 minutes per IP, bodies 16 KiB,
+     1-64 KiB) and `[logging]`. Section names shared with the other files
+     share their variables (`BEKUP_LISTEN_*` with runner.toml,
+     `BEKUP_DATABASE_*` with bekup.toml); the unknown-variable warning
+     names all three files. `bekup config validate|print --external-api`.
+  3. **`httpserver.NewAPIServer`** reuses serve's middleware and client
+     address rule unchanged (forwarding headers only from trusted peers,
+     then stripped; untrusted `X-Forwarded-For` ignored and warned with
+     the key `listen.trusted_proxies`): request ID, access log, recoverer,
+     security headers, per-IP rate limit, body limit; the handler is
+     mounted at `/api/v1`. Differences: JSON errors
+     (`{"error","message"}`, also from the middleware: an error writer
+     parameter), CSP `default-src 'none'; frame-ancestors 'none'` (the
+     plan's `default-src 'none'`; `default-src` does not cover framing),
+     HSTS always (only ever served behind TLS), 16 KiB header limit, no
+     Origin check, no cookies or sessions, no CORS, no UI. The access log
+     never logs a header or the query string (as serve), and a path
+     containing `bkp_` (any case) is logged as `[redacted]`. Trusted
+     proxy hosts are located through the external API's own network
+     alias `bekup-external-api` (the proxy-host resolver takes the alias;
+     its log messages became generic with an `alias` attribute);
+     `external-api` and `bekup-external-api` join the reserved container
+     names. The own-proxy join shape's listener filter is not used yet
+     (step 7 decides the compose shape).
+  4. **Endpoint order and codes** (`internal/externalapi`). (a) Any query
+     string is a 400 before anything else (no database call; a token in
+     the URL gets a message asking to revoke it). (b) POST syntax before
+     authentication: body empty or `{}` with `application/json` (other
+     media type 415, other JSON 400, too large 413), `Idempotency-Key`
+     `[A-Za-z0-9_-]{1,64}`, one header (400); these reveal nothing about
+     tokens. (c) Failed-authentication throttle, Bearer parsing
+     (`Authorization`, one header, scheme case-insensitive, one space),
+     per-token limit, then the database. (d) Every authentication failure
+     is the same 401 body with `WWW-Authenticate: Bearer realm="bekup"`.
+     Malformed path ids answer 404 after authentication; GET status and
+     `/self` call `api.authenticate` first because `api.request_status`
+     and `api.token_jobs` answer a refused token like an unknown request.
+     Refusals of `api.request_run`: `not_found` 404, `invalid_request`
+     400, `idempotency_mismatch` **409** (code `idempotency_mismatch`; not
+     in the plan's list), `job_disabled`/`run_active` 409,
+     `too_many_pending` 429 with `Retry-After: 5`, `rate_limited` 429 with
+     `Retry-After` until `retry_at`, an unknown code 500; database errors
+     503 with `Retry-After: 5`. A replay answers 202 with
+     `Idempotent-Replayed: true` and the original request's current state
+     (one extra status call). `statusUrl` and `Location` are the relative
+     path `/api/v1/requests/{id}`: the process has no public base URL and
+     clients reach it on bekup's own origin through the proxy.
+  5. **Throttles.** Failed authentications: a token bucket per client IP
+     (IPv4 /32, IPv6 /64) of `failed_auth_limit` tokens refilled over
+     `failed_auth_window`; a token is taken before the check and given
+     back on success (`RateLimiter.Refund`), so only failures count and
+     concurrent guesses cannot overtake the limit; a missing
+     `Authorization` header and database errors do not count; a throttled
+     address gets 429 before any database call, also with a valid token.
+     The per-token limiter is keyed by the presented secret hash, so wrong
+     secrets for a known token id never drain the real token's bucket
+     (memory bounded by the LRU).
+  6. **State aggregation** (Go, item 6): outcome `pending` → `pending`;
+     `rejected` → `rejected` (done, `reason`, `finishedAt` = decision);
+     accepted, by the latest run: `queued` → `queued` (`retrying` from
+     attempt 2; River `cancelled` → `canceled`, `discarded` → `failed`,
+     done), `running` → `running`, `failed` → `retrying` while River's job
+     is `available|pending|scheduled|retryable|running`, else `failed`;
+     `success|partial|canceled|skipped` are final whatever River's state
+     (only failures are retried); an unknown status is `failed`; without
+     a run row River's state alone decides, and with neither left the
+     request is `failed` with reason `run_missing`. `success` iff state
+     `success`; `status` is the run status upper-cased; `finishedAt` only
+     once done.
+  7. **Process.** `bekup external-api` runs the setup version guard
+     (D-212), connects (one connection builder), refuses to start unless
+     `db.CheckExternalRole` and `db.CheckExternalSchemaVersion` (through
+     `api.schema_version()`, equal to the newest embedded migration)
+     pass, logs the TLS facts, and serves until SIGINT/SIGTERM
+     (`listen.shutdown_timeout`). `/readyz`: schema version on every probe,
+     the privilege audit at most every minute; `/healthz` and
+     `bekup healthcheck external-api` (GET `/healthz` on `listen.address`).
+  - **Alternatives considered:** hashing the text form of the token
+    (needs the same canonicalization, longer input); authenticating before
+    any syntax check (a database call for every malformed request, hides
+    nothing); a sliding-window log for failed authentications (more memory
+    for the same bound); keying the per-token limit by the token id (a
+    known id would let anyone exhaust a real token's bucket); an absolute
+    `statusUrl` from a configured public base URL (one more setting to keep
+    in sync with the proxy); a 422 for `idempotency_mismatch`.
+  - **Consequences:** EA-9 is enforced and EA-2's throttle is in place
+    (SECURITY.md). The external API depends only on `external-api.toml`,
+    its database login and the CA file. Residual: the client address is
+    only as good as the trusted proxy list; many addresses multiply the
+    failed-authentication budget (256-bit secrets keep guessing
+    infeasible).
+  - **Related:** `internal/apikey`, `internal/externalapi`,
+    `internal/httpserver/api_server.go`, `internal/httpserver/proxyhosts.go`,
+    `internal/config/external_api.go`, `external-api.example.toml`,
+    `internal/db/schemaversion.go` (`CheckExternalSchemaVersion`),
+    `internal/db/pool.go` (`PoolOptionsFromDatabase`),
+    `cmd/bekup/external_api_cmd.go`, `cmd/bekup/healthcheck_cmd.go`,
+    `docs/guides/external-api.md`, `docs/configuration.md`, SECURITY.md
+    EA-2, EA-9, B12.
+
+- **Amendment 3 (2026-11-03, Phase 2 steps 5 and 6: token management in
+  GraphQL and the web UI; user requirement: ready-to-copy curl examples on
+  the job's API access panel; the rest decided by agent; proposed):**
+  1. **Operations.** `api_token.create` (admin, or OwnerJob over **every**
+     job of the new token; step-up), `api_token.list` (admin, OwnerList:
+     filtered by `JobScope`), `api_token.revoke` and `api_token.update`
+     (`updateApiTokenAddresses`; admin, or OwnerJob with **one** job of the
+     token's scope the caller owns, which `apiaccess.Service` picks; step-up).
+     Maintainers never, also when listed as owners (policy and
+     `@hasRole(roles: [ADMIN, USER])` on all four root fields).
+     `createApiToken` is a single root field and `api_token.create` a
+     credential operation (`graph.CredentialOperations`). An unknown token
+     is NOT_FOUND only for admins; others get the policy's FORBIDDEN, like a
+     token outside their jobs. `apiTokens(jobId)` of a job the owner does
+     not own is FORBIDDEN.
+  2. **Visibility.** Owners see the tokens covering a job they own, with
+     only the jobs of the scope they own (the others as `hiddenJobCount`)
+     and the creator only on their own tokens (`createdByMe`); admins see
+     everything. Revoked and expired tokens stay listed (newest first, at
+     most 500). `prefix` is `bkp_` plus the first 8 characters of the
+     public id part (`apikey.DisplayPrefix`), never anything of the secret.
+     `lastSeenAt`/`lastSeenIp`/`lastSeenRefused` come from
+     `ListAPITokenLastSeen`, `lastUsedAt` from the newest run request.
+  3. **Input rules** (`apiaccess.ParseAddresses`, mirroring the CHECKs with
+     field errors): 1–32 networks or `allowAnyAddress`, exactly one; a bare
+     address is a host network (/32, /128); host bits are refused with the
+     network meant ("did you mean 192.0.2.0/24?") rather than masked
+     silently; /0, IPv4-mapped IPv6 networks, zones and duplicates (after
+     canonicalization) are refused; the list is stored and shown canonical.
+     Expiry: `expiresAt` 1–365 days ahead with one hour of tolerance for a
+     browser clock computing a preset (the database allows 366 days). Name
+     1–100 characters without control characters; 1–100 jobs, duplicates
+     dropped, every job existing and not deleted (share-locked in the
+     insert's transaction). An unchanged address list writes and audits
+     nothing.
+  4. **Audit and alerts.** `api_token.created`, `api_token.revoked`,
+     `api_token.addresses_changed` (user actor, details without the token
+     or its hash, old values on address changes). New security.system
+     kinds: `api_token_created` (warning, every creation) and
+     `api_token_any_address` (error; on creation with any address and on a
+     change to any address from a list). Revocation raises no alert.
+  5. **Plaintext handling.** Generated only by `apikey.Generate`, returned
+     once in `CreatedApiToken.plaintext`, registered with the log scrubber
+     while the service handles it, `apiaccess.Created.String` never prints
+     it; the UI requests it with `fetchPolicy: "no-cache"`, keeps it in
+     component state and drops it when the show-once dialog is closed
+     (closing needs the acknowledgement).
+  6. **UI.** The job's API access panel (admins and the job's owners), the
+     admin page Admin → API access (nav item, `/admin/api-access`), the
+     create dialog (job preselected, jobs the caller may use, expiry presets
+     30/90/180/365, the address editor with the explicit "Allow from any
+     address" and its warning), the show-once dialog, address editing and
+     revocation (both with step-up). "Any address" is a permanent
+     `SecurityBadge` (`any-address`). The **curl examples** (start, status,
+     complete CI script; filled with `window.location.origin + "/api/v1"`
+     and the job id) are built from the same text as
+     `docs/guides/external-api.md`, which a vitest compares; the token is
+     always `$BEKUP_TOKEN`, also in the show-once dialog. The guide's script
+     now keeps the POST response before reading `requestId`, so a failed
+     start ends the script at once (POSIX `sh` has no `pipefail`), and takes
+     `BEKUP_URL`/`BEKUP_JOB_ID` defaults the UI fills in.
+  - **Alternatives considered:** `expiresInDays` instead of `expiresAt`
+    (avoids the clock tolerance; the plan named `expiresAt`); masking host
+    bits silently (hides a typo in a security setting); showing owners the
+    creator of every token on their jobs (the user directory is staff-only,
+    D-184); an alert on revocation (a revocation narrows access); embedding
+    the new token in the dialog's snippets (rejected by the user).
+  - **Consequences:** SECURITY.md EA-10. Owners can revoke or re-address a
+    token that also covers others' jobs (it covers theirs). Whether
+    `/api/v1` is reachable depends on the compose profile and proxy route
+    (step 7); the UI shows the examples regardless.
+  - **Related:** `internal/apiaccess/service.go`,
+    `internal/apiaccess/addresses.go`, `internal/apikey` (`DisplayPrefix`),
+    `internal/authz/operations.go`, `internal/graph/schema/api_access.graphqls`,
+    `internal/graph/resolvers/api_access.go`, `internal/graph/rootfields.go`,
+    `internal/graph/policy_access.go`, `internal/notify/security.go`,
+    `internal/audit/actions.go`, `internal/db/queries/api_access.sql`,
+    `web/src/features/api-access/`, `docs/guides/external-api.md`,
+    `docs/guides/notifications.md`, `docs/security/audit.md`.
+
+- **Amendment 4 (2026-11-04, Phase 2 step 7: compose, proxies and setup;
+  decided by agent; proposed):**
+  1. **Compose service.** `external-api` in `docker-compose.yml` (every
+     variant), profile `external-api`, the `x-bekup-hardening` anchor
+     (UID 65532, read-only root, `/tmp` tmpfs, `cap_drop: ALL`,
+     no-new-privileges, bounded logs), `command: [external-api]`, 0.5 CPU /
+     128 MB / 64 pids, config `external_api_toml`, the secrets
+     `bekup_external_database_url` (bundled) or
+     `bekup_external_database_password` (external database) plus the
+     database CA, the deployment facts (D-212), networks `frontend` (fixed
+     `${EXTERNAL_API_FRONTEND_IP:-10.213.250.11}`) and `backend` only, no
+     port, `bekup healthcheck external-api`, `depends_on` migrate (and the
+     bundled postgres). The lint pins it like every shipped service
+     (`bekupServices`; no operator-tunable beyond the common resource
+     limits; the profile is not tunable).
+  2. **One switch: `BEKUP_EXTERNAL_API=enabled` in `.env`**, written with
+     `external-api` in `COMPOSE_PROFILES` by `setup init|upgrade
+     --external-api`. Compose passes it to the postgres init script
+     (`POSTGRES_BEKUP_EXTERNAL_API`: `20-bekup-external.sh` creates the
+     role on a new volume, and on the documented `--reload` run, only with
+     `enabled`), to the bundled proxies (route) and to serve, which exposes
+     `ServerInfo.externalApiEnabled` (public, non-secret; the UI shows the
+     curl examples only then, otherwise "not enabled on this server"):
+     `deployguard.Deployment.ExternalAPI` (only `enabled` or empty, anything
+     else refuses like the other deployment facts; in
+     `config.NonKeyEnvVars`). An environment variable rather than a
+     `bekup.toml` key because setup never rewrites `bekup.toml` on upgrade
+     and one value then drives profile, route, role and UI alike. Values
+     other than `enabled`/empty stop the proxy entrypoints too.
+  3. **The role's secrets are always generated** (new secret group
+     `external-api`, `ManifestVersion` 3, generated by init and by the
+     first upgrade like any new group): bundled `bekup_external_password`
+     (UID 70, mounted into postgres) and `bekup_external_database_url`
+     (UID 65532), external `bekup_external_database_password` (UID 65532,
+     mounted into migrate, setup-web-db and external-api), because compose
+     refuses to start a service whose secret file is missing; the role
+     exists only once the API is enabled (point 2). `external-api.toml` is
+     an operator file required only while enabled (manifest `Optional`
+     otherwise; part of the browser setup's config zip).
+  4. **Listener and trusted proxy, one source of truth with serve.**
+     Behind the bundled proxy (and `--proxy none`) `[listen] address` is
+     the fixed frontend address (`--external-api-ip`, validated inside
+     `FRONTEND_SUBNET`, apart from serve's and the proxy's) and
+     `trusted_proxies` exactly what serve trusts (the proxy's /32, or the
+     operator's `--trusted-proxy` CIDRs). Behind the own proxy the service
+     joins the proxy network as `bekup-external-api` (no fixed address;
+     link mode: Docker assigns one from the link network's `--ip-range`)
+     with `BEKUP_LISTEN_SHAPE: own-proxy-join`, `address = "0.0.0.0:8081"`
+     (`config.ExternalAPIJoinListen`) and `allow_wildcard`; in exactly that
+     shape `httpserver.APIOptions.JoinMode` applies serve's join-mode
+     listener filter (only its own address on the proxy network, found
+     through its alias, and loopback; fail closed while unknown) and its
+     alias check (another container behind the alias fails `/readyz` and is
+     logged; the external API has no audit rights, so no alert), and the
+     wildcard warning is dropped. Join mode trusts the proxy container
+     (`trusted_proxy_hosts`), link mode its /32. `setup check` compares
+     `external-api.toml` with the state, `.env` and `bekup.toml`.
+  5. **Proxies.** Traefik: `dynamic/external-api.yml.tmpl`, rendered by the
+     entrypoint only with `BEKUP_EXTERNAL_API=enabled` (a file of its own
+     instead of a conditional block in `bekup.yml.tmpl`: nothing to cut
+     out with sed): router `bekup-api` `Host(...) && PathPrefix(/api/v1/)`,
+     priority 400 (above the stream router's 300), the shared header, rate
+     and in-flight middlewares plus a buffering limit of 16 KiB per request
+     (1 MiB per response: the API's answers are small and never stream),
+     service `http://external-api:8081`. nginx: `bekup-external-api.conf`
+     (`location ^~ /api/v1/`, `client_max_body_size 16k`) copied into an
+     include directory of the HTTPS site only when enabled. `/api/download/`
+     stays serve's. Own proxy: setup prints the route for Nginx Proxy
+     Manager, Traefik, Caddy and nginx; with `--proxy-labels` the labels
+     overlay also routes `external-api` (router `bekup-api`, priority 400,
+     16 KiB).
+  6. **Overlays (D-215).** With the API enabled the DB-network overlay
+     adds `external-api` (not when the database is on the proxy's network,
+     D-216: it is on it already) and the labels overlay its route. Setup
+     never rewrites an existing `compose.override.yaml`: compose-first init
+     refuses with the blocks to add, `setup upgrade --external-api` prints
+     the external-api block (only when the existing override lacks it) and
+     `setup check` reports it until it is there.
+  7. **Setup.** Wizard question *External API for CI pipelines* (default
+     no, after the targets; skipped and cleared in single-account mode; the
+     browser setup asks it through the wizard), `--external-api` (and
+     `--external-api-ip`), state `external_api`, `.env` lines, the report
+     names the address and your proxy's route; `setup check`: profile ⇔
+     `BEKUP_EXTERNAL_API=enabled` ⇔ `external-api.toml` (errors), the file
+     while disabled (warning); `setup upgrade --external-api` writes the
+     missing file and lines and prints the remaining steps without running
+     anything: bundled `docker compose up -d postgres`, the
+     `docker compose exec postgres sh -c 'PGPASSWORD="$(cat
+     /run/secrets/postgres_password)"
+     /docker-entrypoint-initdb.d/20-bekup-external.sh --reload'` command
+     (verified against the real service: runs as UID 70, the secret path,
+     `PGPASSWORD` for the socket login inside the container), external
+     `db bootstrap --admin-user <admin> --adopt-existing-roles
+     --external-password-file /run/secrets/bekup_external_database_password`,
+     then `docker compose run --rm migrate` (never `run --rm migrate up`:
+     the service's command is `migrate up`) and `docker compose up -d`.
+     External database at install time: the printed bootstrap carries the
+     flag, `dba-sql` writes the role into `bekup-roles.sql`, existing roles
+     get the adopt command, the browser setup's database step passes the
+     file to bootstrap. Refused in single-account mode (item 12). No
+     disable command yet (`docker compose stop external-api` pauses it).
+  - **Alternatives considered:** a `[external_api] enabled` key in
+    `bekup.toml` for serve (setup cannot add it on upgrade); the secret
+    files only while enabled (compose cannot start postgres without them);
+    an empty placeholder password file as the switch for the init script
+    (special cases in check and upgrade, and a second switch next to
+    `.env`); a fixed address for the external API on the link network
+    (needs a third reserved address in every operator's `/28`); a
+    conditional block inside `bekup.yml.tmpl` (sed surgery on YAML);
+    refusing the external API behind the own proxy's link mode.
+  - **Consequences:** nothing of the external API runs, is routed or exists
+    in the database unless the operator enables it; every deployment
+    carries an unused role password (0400, its container's UID only) until
+    then. The client address the token allowlists see is as good as the
+    proxy serve already trusts; in the own-proxy shapes the external API
+    shares serve's residual risks (B2b, RP-9: other containers on the
+    proxy network reach it directly but cannot forge client addresses).
+    SECURITY.md B12, EA-9.
+  - **Related:** `docker-compose.yml`, `internal/setup/variants/`,
+    `internal/setup/externalapi.go`, `internal/setup/overlay.go`,
+    `internal/setup/check.go`, `internal/setup/upgrade.go`,
+    `internal/setup/manifest.go`, `internal/setup/wizard/init.go`,
+    `internal/setup/web/dbstep.go`, `deploy/traefik/`, `deploy/nginx/`,
+    `deploy/postgres/init/20-bekup-external.sh`,
+    `internal/httpserver/api_server.go`, `internal/externalapi/process.go`,
+    `internal/deployguard`, `internal/graph/schema/schema.graphqls`,
+    `web/src/features/api-access/`, `docs/installation/*.md`,
+    `docs/guides/external-api.md`.
+- **Amendment 5 (2026-11-04, fixes of the milestone's security and code
+  reviews; decided by agent; proposed):**
+  1. **No near-"any address" lists (security review M1).** A list may
+     hold no IPv4 network wider than `/8` and no IPv6 network wider than
+     `/32` (amends amendment 1, which refused only `/0`): two `/1`
+     networks were "any address" without its alert and badge. The same
+     rule in `public.api_cidrs_valid` (migration 00037, unreleased, edited
+     in place), `apiaccess.ParseAddresses` (`MinPrefixV4`/`MinPrefixV6`)
+     and the UI's pre-check; an integration test compares the Go and SQL
+     verdicts. The message points to "allow from any address".
+  2. **Widening alerts (M1).** `api_token.addresses_changed` gains
+     `widened` (a network the previous list did not cover, or any address
+     newly chosen), `creator_id`, `changed_by_creator` and `actor_name`
+     (display name, never the e-mail address). A widening raises
+     `api_token_any_address` (any address) or the new
+     `api_token_addresses_widened` (warning) to the admins, and always the
+     account alert `api_token_addresses_widened` to the token's creator;
+     both name who changed it and say whether that was the creator. A
+     list that differs only in order is no change (code review 7: sets
+     are compared canonicalized and sorted).
+  3. **Logs (L1).** The bundled nginx logs `/api/v1/...` paths only in the
+     known route shapes (`/api/v1/self`, `/api/v1/jobs/<uuid>/runs`,
+     `/api/v1/requests/<uuid>`), anything else below `/api/v1` as
+     `/api/v1/[redacted]` (a token put into the path by mistake); its API
+     location logs only critical errors, because error messages quote the
+     request line (the access log keeps status and upstream status). The
+     bundled Traefik keeps no access log and logs no paths at INFO.
+  4. **Alias takeover of `bekup-external-api` (L2).** The external API
+     cannot audit (its role calls only `api.*`), and the workers are not
+     on the proxy network; serve is, and can audit. With the external API
+     enabled (`deployguard.Deployment.ExternalAPI`) in the own-proxy
+     shapes, serve resolves `bekup-external-api` with its own alias check
+     (every 20 s): the answers must be one container (at most one address
+     per family) that is not serve, else WARN, audited
+     `security.external_api_alias_conflict` and the critical
+     `external_api_alias_conflict` alert (once per set of addresses and
+     day); serve's `/readyz` is unaffected (the external API's own
+     `/readyz` already fails while another container shares its alias).
+     Neither check sees a container that holds the alias while the
+     external API is stopped: the docs recommend routing to the external
+     API's container name (`<project>-external-api-1`).
+  5. **Egress (L3).** The own-proxy compose comment and SECURITY.md no
+     longer claim "no egress": on the operator's proxy network (and on a
+     non-internal `backend` with an external database) the external API
+     can reach outward; an internal network for the proxy's backends is
+     recommended.
+  6. **State aggregation follows River (code review 5; amends amendment 2
+     item 6).** A request whose latest run is still `queued` or `running`
+     follows its River job: cancelled → `canceled`; completed, discarded
+     or deleted → `failed` with reason `run_interrupted` (the end
+     `runstate.FailAbandonedRuns` writes later); retryable, or
+     available/scheduled/pending after a running attempt was rescued →
+     `retrying`; otherwise `queued`/`running` as before.
+  7. **Replay errors (code review 6).** An idempotent replay whose current
+     state cannot be read answers 503 `unavailable` (logged) instead of
+     `pending`. A JSON `null` body is refused like every body other than
+     empty or `{}`.
+  8. **Wake gap (code review 8).** The run-request consumer spaces its
+     passes by 200 ms on every wake path, including the resync that a
+     flood of (possibly forged) notifications causes when it overflows the
+     buffer.
+  9. **Job picker.** The token dialog searches the caller's jobs on the
+     server (50 per page, "more jobs match" hint) instead of loading the
+     first 200; chosen jobs stay listed.
+  10. **Dev stack and setup (code review 1, 2, minor).** The dev key
+     generator always writes the external API role's password and URL
+     (compose always mounts them; `docker-compose.dev.yml` points them at
+     the dev keys directory); an existing dev keys directory gains only
+     those (`dev_keys_ready` requires them), and the role is still created
+     only with `BEKUP_EXTERNAL_API=enabled`. `setup upgrade
+     --external-api` on a retired variant renders the override it creates
+     with the external API blocks. The browser setup's database step names
+     `bekup-roles.sql` as the source of `bekup_external` for `dba-sql`
+     instead of asking for a bootstrap.
+  - **Alternatives considered:** a new `api.*` function through which the
+    external API reports its alias state for the workers to audit (a new
+    privilege of `bekup_external`, and a compromised process could forge
+    or suppress reports); NOTIFY payloads from the external API (forgeable
+    by anyone with a database session, and lost while nobody listens);
+    putting the worker on the proxy network (more exposure; the lint
+    keeps every other bekup service off it); refusing wide networks only
+    in the UI; alerting only widenings by someone other than the creator
+    (the creator's account may be the hijacked one).
+  - **Consequences:** wide allowlists must be chosen as "any address" and
+    are badged and alerted as such; every widening is visible to the
+    admins and the token's creator. Residual: entries up to `/8`/`/32`
+    are allowed; an alias holder while the external API is stopped is
+    undetected (route by container name); error-level nginx messages for
+    the API location are dropped. SECURITY.md EA-8, EA-10, B12, RP-9,
+    SV-16.
+  - **Related:** `internal/apiaccess/addresses.go`,
+    `internal/apiaccess/service.go`, `internal/db/migrations/00037_api_access.sql`,
+    `internal/notify/security.go`, `internal/notify/content.go`,
+    `internal/notify/alert_types.go`, `internal/audit/actions.go`,
+    `internal/httpserver/proxyhosts.go`, `internal/httpserver/server.go`,
+    `internal/app/audit.go`, `deploy/nginx/nginx.conf`,
+    `deploy/nginx/bekup-external-api.conf`,
+    `deploy/traefik/traefik.yml.tmpl`,
+    `internal/setup/variants/own-proxy/external-api-lead.yaml`,
+    `internal/externalapi/state.go`, `internal/externalapi/handler.go`,
+    `internal/apiaccess/consumer.go`, `web/src/features/api-access/`,
+    `deploy/dev/gen-dev-keys.sh`, `docker-compose.dev.yml`,
+    `internal/setup/upgrade.go`, `internal/setup/web/dbstep.go`,
+    `docs/installation/reverse-proxy.md`, `docs/guides/notifications.md`,
+    `docs/guides/external-api.md`, `docs/security/audit.md`.
+
+## D-221: SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail
+
+- **Date:** 2026-11-03
+- **Status:** proposed
+- **Decided by:** agent (production bug fix requested by the user)
+- **Context:** A backup to an SFTP destination on TransIP STACK (cloud
+  storage built on ownCloud; its SFTP access is a gateway in front of that
+  storage) failed every run with "destination ... dropped (error: the data
+  did not match the expected checksum)". D-128 item 6 checked the stored
+  size with an FSTAT on the still-open partial file and compared it with
+  the bytes written. Cloud-backed SFTP gateways report a stale or zero
+  size for an open handle (the upload is committed to the storage on
+  close, sometimes asynchronously), so the check failed although the
+  server received every byte. The run log showed only the code's fixed
+  message, which hid the cause.
+- **Decision:**
+  1. **Put closes before it checks the size (amends D-128 item 6).** The
+     order is: write with SHA-256, `fsync@openssh.com` on the open handle
+     (when advertised), close, then a **path stat** (Lstat) of the
+     partial file. While the server reports fewer bytes than written, or
+     does not show the file yet, the stat is repeated: 5 checks over about
+     3 s (waits 0.2, 0.4, 0.8, 1.6 s, ctx-aware). A size that stays
+     different, a larger size, or a partial that is no longer a regular
+     file fails with `ErrChecksumMismatch` ("the server reported X of Y
+     after closing"); the partial is removed as before. `ModTime` comes
+     from that stat. Finalize (hard link or the checked rename) is
+     unchanged. `UseFstat(true)` stays: it only affects pkg/sftp's
+     `File.WriteTo`, which bekup does not use.
+  2. **Get tolerates misreported read handles (amends D-128 item 5).**
+     Get still Lstat-checks the directories and the entry before the
+     open and accepts the handle when its FSTAT agrees (regular, size,
+     modification time). When FSTAT disagrees or fails (gateways may
+     report size 0 or another time for an open read handle too), the path
+     is checked again (directories and entry): only a regular file with
+     exactly the first Lstat's size and modification time is accepted
+     (the entry did not change across the open), and `ObjectInfo` comes
+     from the Lstat; anything else is refused as not found with a detail,
+     as before. In both cases the reader enforces the Lstat size: a
+     stream that ends early ("read X of Y") or goes past it ("more than
+     the expected Y"; extra bytes are never handed out) fails with
+     `ErrChecksumMismatch`. Callers verify the SHA-256 against the signed
+     manifest on top, so a file swapped in during the open is still
+     caught.
+  3. **Curated details for users.** `storage.WithDetail(err, detail)`
+     attaches a short detail built by bekup from fixed text and numbers
+     only (never server messages, host names, paths, keys or credentials);
+     `storage.Describe(code, err)` is the code's fixed message plus that
+     detail (control characters replaced, capped at 200 bytes). The SFTP
+     backend attaches the operation and the SFTP status code name to every
+     mapped error ("finalize object (SFTP status SSH_FX_FAILURE)") and the
+     sizes to the size check; the fan-out attaches details to lag drops,
+     short reads and size/hash mismatches. The run log's drop line uses
+     `pipeline.DestinationResult.Message()` (= `Describe`), for example
+     "database app: destination <id> dropped (error: the data did not
+     match the expected checksum: the server reported 0 B of 41.2 MiB
+     after closing)". Codes without a detail (host-key mismatch,
+     backends that attach none) read as before. Raw errors still go only
+     to the admin log through the redacting logger; run warnings keep
+     their fixed texts.
+- **Alternatives considered:** dropping the size check (a truncating
+  server would only be noticed by a restore); a longer or configurable
+  wait (3 s covers the observed commit delay without stalling runs; a
+  slower gateway fails with a clear message); keeping FSTAT and falling
+  back to a path stat only on mismatch (same result, one more request on
+  every upload); showing the raw error in the run log (may carry server
+  paths and messages; run logs are visible to job owners); for Get,
+  dropping the open-file comparison entirely (loses the symlink-swap
+  check on servers with a reliable FSTAT) or keeping it strict (every
+  restore, download and verification from such a gateway would fail).
+- **Consequences:** cloud-backed SFTP gateways such as TransIP STACK work
+  as destinations, for backups and for restores, downloads and
+  verification. A Put takes up to about 3 s longer when the server lags
+  or really stored too little. On a gateway with unreliable FSTAT the
+  symlink-swap check of Get relies on the entry being unchanged across
+  the open plus the length and SHA-256 checks; a party that swaps the
+  file and restores an identical entry within the open's window is
+  caught by the manifest digest. The size check is a plausibility
+  check, not integrity: integrity still rests on age and the signed
+  manifest, and test restores read backups back. Run logs now show a
+  bounded, secret-free detail after the fixed message; no trust boundary
+  changes.
+- **Related:** D-121, D-128; `internal/storage/errors.go`,
+  `internal/storage/sftp/sftp.go`, `internal/storage/sftp/errors.go`,
+  `internal/pipeline/fanout.go`, `internal/pipeline/pipeline.go`,
+  `internal/jobs/backup_errors.go`, `internal/jobs/backup_dump.go`,
+  `docs/guides/destinations.md`.
+
+## D-222: WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only
+
+- **Date:** 2026-11-03
+- **Status:** proposed
+- **Decided by:** user (scope, servers, TLS and authentication choices),
+  agent (the details below)
+- **Context:** Users want to store backups on WebDAV servers next to
+  disk, S3 and SFTP: Nextcloud and ownCloud (including TransIP STACK,
+  which is ownCloud-based and the user's real target), generic WebDAV
+  (Apache mod_dav, nginx-dav, rclone, Caddy), Synology/QNAP NAS boxes
+  (often with a self-signed certificate on the LAN) and hosted WebDAV
+  such as Hetzner Storage Box. The user decided: TLS against the system
+  roots plus an optional CA bundle or a pinned certificate; HTTP Basic
+  authentication over HTTPS only; plain HTTP refused. WebDAV has no
+  exclusive create that every server implements, multi-GB uploads hit PHP
+  and proxy body limits on Nextcloud/ownCloud, and NAS certificates
+  cannot be verified against public roots, so the backend needs decisions
+  beyond D-121.
+- **Decision:**
+  1. **Own client, no dependency.** `internal/storage/webdav` is a small
+     client on `net/http` and `encoding/xml` over `Guard.NewHTTPClient`
+     (SSRF guard at dial time, no proxy, redirects never followed, TLS ≥
+     1.2). It implements `storage.Destination` and `storage.DirPruner`
+     and passes `storagetest.Run` (in-process `golang.org/x/net/webdav`
+     server, the fake Nextcloud/ownCloud of the unit tests, Apache
+     mod_dav, rclone and ownCloud 10 in the integration tests).
+  2. **Transport and credentials.** `https` only; `http` only in dev
+     mode (`AllowHTTP`, like S3 under D-129, warned at open). HTTP Basic
+     authentication only (user decision), so credentials never travel
+     unencrypted outside dev mode; they are never sent to another host
+     (no redirects) or to `status.php` (requested without them). The
+     username may not contain `:` or control characters. The password is
+     the sealed credentials' password field (TLV tag 2, AAD
+     `destinations:<id>:secret`); the `Authorization` header is one Go
+     string while the destination is open (cannot be zeroed; documented
+     like the S3 SDK copy). Answers are bounded: PROPFIND bodies 16 MiB,
+     100 000 entries and an XML nesting limit (no DTDs, no external
+     entities, UTF-8 only), `status.php` 64 KiB, other bodies only
+     drained; hrefs are decoded and only direct members of the listed
+     collection are used ("." / ".." / encoded slashes refused).
+  3. **TLS trust, and pinning as a WebDAV-specific exception to D-018.**
+     Default: the system roots. Optional: a CA bundle that replaces them
+     (as S3). Optional and taking precedence: a **pinned certificate**:
+     the stored certificate is the only root (no system roots, no CA
+     bundle) and the presented leaf's SPKI SHA-256 must equal the pin
+     (constant time); host name (DNS or IP SAN) and validity are still
+     checked, so a self-signed certificate works as long as it names the
+     host in the URL. Verification is never skipped (no new
+     `InsecureSkipVerify`): an untrusted certificate is shown from the
+     failed verification (`tls.CertificateVerificationError`), captured
+     during a bare TLS handshake that sends nothing else
+     (`webdav.Inspect`). The pin flow follows the SFTP host-key flow
+     (D-122, D-140): Test shows the certificate's SPKI SHA-256 (hex and
+     base64), the certificate SHA-256 and its validity; an admin compares
+     out of band and calls `pinWebdavCertificate(id, fingerprint)` (admin
+     + step-up, single root field, rate limited), which captures the
+     certificate again through the guard and pins it only if its SPKI is
+     the confirmed one (CONFLICT otherwise) and it can serve as the only
+     root now (`CheckPinnable`). `clearWebdavCertificatePin` (admin +
+     step-up) returns to the system roots or the CA bundle and raises the
+     `destination_tls_pin_cleared` alert. A changed URL clears the pin. A
+     pinned server presenting another key is `storage.CodeTLSPinMismatch`:
+     audited `destination.tls_pin_mismatch` (fail closed, Test and
+     workers) and alerted (critical, once per destination and day); the
+     pinned key in an expired or renamed certificate is not a mismatch
+     (a curated detail asks to renew and pin again). D-018 keeps S3, SMTP
+     and webhooks unpinned.
+  4. **Put is atomic and never overwrites.** The stream goes to a hidden
+     `.<hex>.partial` beside the final key (one `PUT` with chunked
+     transfer encoding), is hashed with `storage.CopyHashed`, its stored
+     size is checked by PROPFIND (5 checks over about 3 s; catches PHP
+     setups that drop chunked request bodies) and it is published with
+     `MOVE` + `Destination` + `Overwrite: F`: 201 commits, 412 is
+     `ErrAlreadyExists`, a 204 (the server replaced an existing object)
+     marks the destination unusable and fails; 409 recreates the parent
+     once. Parents are created with `MKCOL` (405 = exists), never above
+     the configured base (generic: the URL's folder must exist;
+     Nextcloud: the user's files). A failed Put removes its partial.
+  5. **The overwrite probe.** Whether the server honours `Overwrite: F`
+     is proven at runtime before the first Put of every opened
+     destination and in Test (step `overwrite`): two hidden partials A
+     and B, `MOVE A → B` with `Overwrite: F` must answer 412 and B must be
+     unchanged (with the Nextcloud flavor the chunked upload's final
+     MOVE onto B is probed too). A server that replaced B is never written
+     to: every Put fails with `storage.CodeOverwriteIgnored`, and a
+     current (not stale) test result with that code makes the destination
+     not ready ("fix the server, then test again"; Test stays allowed).
+     `Capabilities.ExclusiveCreate` is the probe's verdict. Probe files
+     are removed (in no-delete mode too; they are not backups).
+  6. **Nextcloud/ownCloud flavor** (`flavor = nextcloud`, TransIP STACK
+     included): the URL is the server root; the user id comes from the
+     `current-user-principal` (login names may differ; the username is
+     the fallback); files live below `/remote.php/dav/files/<id>/`.
+     Uploads use the chunked-upload API shared by Nextcloud's chunking v2
+     and ownCloud's "new chunking": `MKCOL /remote.php/dav/uploads/<id>/
+     bekup-<hex>` (with `Destination`), `PUT` chunks `00001`, `00002`, ...
+     of 64 MiB with a known length (one chunk in memory per Put; chunks
+     retried on network errors and 5xx), then `MOVE .../.file` with
+     `Destination`, `OC-Total-Length` and `Overwrite: F` (Sabre refuses an
+     existing target with 412 before assembling); the published size is
+     checked again. At most 10 000 chunks (625 GiB). A server without the
+     upload endpoint (404/403/405/409/501 on the MKCOL) falls back to the
+     single PUT for the destination's lifetime; Test reports the mode
+     used. `flavor = generic` always uses the single PUT. Test suggests
+     the Nextcloud flavor when `status.php` answers like Nextcloud or
+     ownCloud or the DAV header names Nextcloud (fixed enums, never server
+     text).
+  7. **List, Get, Stat, Delete, cleanup.** List walks collections with
+     `PROPFIND Depth: 1` (Depth infinity is often disabled) in strict
+     byte-wise key order, ≤ 1000 per page. Get checks the stream length
+     against the PROPFIND size and refuses content encodings. Delete
+     removes only non-collection resources (a WebDAV DELETE of a
+     collection is recursive), with the strong ETag as `If-Match` where
+     reported (one retry without it if the object is unchanged).
+     `PruneEmptyDirs` removes only **run** collections that a fresh
+     PROPFIND shows empty and older than the cutoff (`If-Match` on the
+     collection's ETag): job collections are never removed, because a new
+     run may create its collection in them at any moment and the
+     recursive DELETE would take it along. `CleanupPartials` removes
+     stale partials and bekup's own `bekup-<hex>` upload collections
+     older than 24 h (never other clients'); `webdav` joins the hard-coded
+     cleanup lists of the daily maintenance. No immutability (like disk
+     and SFTP); no-delete mode works.
+  8. **Model, API, offline.** Destination type `webdav` (migration 00038,
+     its own migration because a new enum value cannot be used in the
+     transaction that adds it); pin columns `tls_pin_sha256` (hex),
+     `tls_pin_certificate` (PEM), `tls_pin_set_at/by` with completeness,
+     format, size and WebDAV-only CHECKs (00039). Config JSON: `url`,
+     `flavor`, `username`, `path`, `ca_bundle_pem`, `timeout_seconds`.
+     D-140: changing the URL, the flavor or the username requires the
+     password again in the same update (`reentered_for_new_endpoint`);
+     changing the URL also clears the pin. Locations (D-209): host and
+     port plus the case-folded URL path and path; Nextcloud destinations
+     and generic URLs into `remote.php` (`webdav/`, `dav/files/<user>/`)
+     share the per-user scope. GraphQL: `DestinationType.WEBDAV`,
+     `WebdavDestinationSettings` (with `trust` and `pinnedCertificate`),
+     `WebdavDestinationInput` (write-only password), `testDestination`'s
+     `webdav` details (certificate, trust, pin match, server kind,
+     suggested flavor, upload mode, overwrite probe), operations
+     `destination.tls_pin` / `destination.tls_pin_clear` (admin + step-up)
+     and the audit actions `destination.tls_pinned`,
+     `destination.tls_pin_cleared`, `destination.tls_pin_mismatch`.
+     `bekup reindex` reads `[webdav]` with `password_file` and optional
+     `ca_bundle_file` or `pinned_certificate_file`.
+- **Alternatives considered:** a WebDAV library (`studio-b12/gowebdav`,
+  `emersion/go-webdav`; a new dependency, own transports and redirect
+  handling, unbounded XML parsing); exclusive create with `LOCK` on an
+  unmapped URL (lock-null resources are deprecated and many servers
+  refuse them) or `PUT` with `If-None-Match: *` (ignored by several
+  servers, among them golang.org/x/net/webdav, and still no atomic
+  publish of a streamed upload); trusting `Overwrite: F` without the
+  probe (a server or proxy that ignores it would silently replace
+  backups); probing only in Test (a server reconfigured later would go
+  unnoticed); pinning only the SPKI (needs a verifier that skips chain
+  verification, i.e. a fourth `InsecureSkipVerify`); trusting a
+  certificate on first use without an admin (D-018/D-122 style
+  confirmation is required); pruning job collections like disk and SFTP
+  do (the recursive DELETE could race with a new run); Digest or bearer
+  authentication (not requested; Basic over HTTPS is what every listed
+  server supports); a temporary file instead of the in-memory chunk
+  (the stream is already encrypted, but it would add disk usage and a
+  cleanup duty to serve and the worker).
+- **Consequences:** bekup can store backups on the listed WebDAV servers;
+  a server that ignores `Overwrite: F` is refused before anything is
+  written. Residual trust in the server: the refusal to overwrite is the
+  server's MOVE implementation (check and rename, usually under the
+  server's own locks; bekup never writes one key twice at the same time);
+  data integrity against a malicious server still rests on age and the
+  signed manifest. A chunked Put holds 64 MiB in memory. Pins break when
+  the server's certificate is renewed (Test shows the new one; pin it
+  again) and need the URL's host in the certificate; NAS default
+  certificates for another name must be replaced first. In an account
+  without delete rights the probe's two small partials stay behind per
+  opened destination. Chunked uploads and the probe were verified
+  against ownCloud 10 (the base of TransIP STACK) and a Nextcloud-style
+  fake; a real STACK account still has to confirm the endpoint and its
+  limits. Security impact: a new outbound destination type behind the
+  same guard and TLS rules; a new optional pin (stronger than D-018's
+  default for this type); new security events (pin mismatch, pin
+  cleared).
+- **Related:** D-018, D-049, D-055, D-121, D-122, D-128, D-129, D-131,
+  D-140, D-187, D-209, D-221; `internal/storage/webdav`,
+  `internal/destinations` (`tlspin.go`, `open.go`, `service.go`,
+  `location.go`), `internal/db/migrations/00038_webdav_destination_type.sql`,
+  `internal/db/migrations/00039_webdav_tls_pin.sql`,
+  `internal/graph/schema/destinations.graphqls`,
+  `internal/offline/destconfig.go`, `docs/guides/destinations.md`.
+- **Amendment 1 (2026-11-04, fixes of the milestone's code review;
+  decided by agent; proposed):**
+  1. **Empty chunked uploads.** An empty object on a Nextcloud/ownCloud
+     destination falls back to a single PUT (the empty-source check
+     tested the wrong chunk counter, so the server was asked to assemble
+     zero chunks).
+  2. **Listings that name the folder differently.** A Depth 1 listing
+     matches the requested path exactly first, then NFC-normalized and
+     case-folded (case-insensitive servers, NFD-stored names); a single
+     entry is the folder itself. A listing that names neither the folder
+     nor a member fails (internal code, curated detail "the server's
+     listing names the folder differently than requested") instead of
+     looking empty, which would hide every object from listings, the
+     unrecorded-file scan and retention. Removing an empty folder still
+     needs an exact match.
+  3. **Location overlap by the Nextcloud user id.** Nextcloud/ownCloud
+     address files by the user id, which may differ from the login (an
+     e-mail or LDAP login). When a destination is saved (create; update
+     when the location changed or the id is unknown, also without
+     changes) bekup asks the server for the current user's principal
+     (best effort, at most 15 s, only the configuration being saved:
+     same URL, user, SSRF guard, CA bundle and pin as later runs) and
+     records the id in the stored config (`user_id`, never an input, kept
+     only while URL, flavor and user name stay the same); a newly recorded
+     id re-runs the overlap check. Locations carry the set {login, id}
+     (or the id of a `dav/files/<id>` URL) and overlap when the sets
+     intersect.
+  - **Alternatives considered:** recording the id in Test (needs a new
+    query, and a destination saved without a test would never get it);
+    comparing only case-insensitively (misses NFD/NFC); a new dependency
+    for Unicode normalization (`golang.org/x/text` was already in the
+    module graph and is now a direct requirement).
+  - **Consequences:** residual gap: while the id is unknown (server
+    offline, certificate not yet pinned, wrong password) two different
+    logins of one user are not recognized as one location, and generic
+    `remote.php/webdav` URLs compare by login only (documented in
+    `docs/guides/destinations.md`). Security impact: saving a
+    Nextcloud/ownCloud destination now sends its password to the
+    endpoint it is saved for (the same trust as every later run, D-140
+    unchanged).
+  - **Related:** `internal/storage/webdav/chunked.go`,
+    `internal/storage/webdav/propfind.go`,
+    `internal/storage/webdav/webdav.go`, `internal/destinations/config.go`,
+    `internal/destinations/service.go`,
+    `internal/destinations/location.go`, `docs/guides/destinations.md`.
+
+## D-223: Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`)
+
+- **Date:** 2026-11-04
+- **Status:** proposed
+- **Decided by:** agent (from the user's plan, "Queued → Q1")
+- **Context:** Admins confused the two allowlists. Admin → Settings →
+  Network ("Outbound allowlist") edits the SSRF allowlist
+  (`netguard.allowlist`, D-196, D-198) for serve's and the workers'
+  connections to S3, SFTP, WebDAV, SMTP and webhooks. Database servers and
+  SSH bastions are reached only by the runner, under `runner.toml`
+  `[targets]` (D-029, D-130, D-138), which nothing in the UI showed. The
+  runner has no database access, so the UI cannot change that list.
+- **Decision:**
+  1. **RPC `GetTargetPolicy`** (empty request, control class like
+     `ListImages`, validated by `validate.GetTargetPolicy`, one
+     `runner_rpc_audit` line). It answers the list as
+     `targets.Guard.Policy()` applies it: allow/deny CIDRs (masked,
+     configured order) and host names (normalized, sorted),
+     `bastion_targets` grouped by bastion, `run_subnet_pool` and the
+     other own networks (control network, the container's addresses;
+     per-run networks are inside the pool) with `control_networks_known`
+     (false until the executor knows its networks), the always-denied
+     categories as a fixed enum with their ranges
+     (`targets.AlwaysDenied()`, a test checks every range against
+     `Guard.Check`), the startup warnings as an enum
+     (`Guard.WarningCodes()`; the log text derives from the same codes)
+     and the `[targets]` keys whose value came from `BEKUP_TARGETS_*`
+     (`config.Result.Sources`, passed as `runner.Options.Sources`). Every
+     list is cut at 256 entries (`truncated`), so the answer stays far
+     below the message limit. No secrets are in it.
+  2. **GraphQL `Query.runnerTargetPolicy`**, admin only (operation
+     `runner.target_policy_view`, matrix row, root-field mapping). The
+     resolver calls the runner with a 5 s deadline. A runner error never
+     fails the field: it answers `available: false` with a fixed reason
+     chosen by the gRPC code (unreachable, outdated runner, refused,
+     busy, failed), never the error text; unknown enum values of a newer
+     runner are dropped.
+  3. **Web:** the page is titled "Network allowlists" with two numbered
+     parts: "bekup's own connections (S3, SFTP, WebDAV, SMTP, webhooks)"
+     (the existing editor, with a note that database servers and bastions
+     go through the runner) and "Database servers (runner)", read-only,
+     with explained empty states, the bastion table, the own networks,
+     the always-denied categories, the warnings and the note "Edited in
+     runner.toml [targets] on the runner host; restart the runner to
+     apply" linking `docs/security/target-allowlist.md#where-it-is-shown`.
+     An unavailable runner is a calm inline notice; the rest of the page
+     works. The settings rail entry is "Network allowlists".
+- **Alternatives considered:** editing `[targets]` from the UI (would need
+  a write path into the runner's configuration, against D-003/D-019: serve
+  must never widen what the runner may reach); reading `runner.toml` in
+  serve (serve does not have the file and would show a list the runner may
+  not apply); free-text warnings and category labels from the runner (not
+  translatable into the UI's message tables and an unbounded text channel
+  from the runner to the browser); failing the field when the runner is
+  down (would break the whole page).
+- **Consequences:** admins see which database servers the runner allows
+  next to the SSRF allowlist, clearly separated. Security impact: a new
+  read-only, admin-only operation; the runner discloses its allowlist and
+  own network ranges to serve over mTLS (both are configuration serve's
+  operators already own; no secrets); a compromised serve learns nothing
+  it could not already probe through the runner's normalized errors, and
+  can still not change the list. One more audited control-class RPC.
+- **Related:** D-003, D-019, D-029, D-120, D-126, D-127, D-130, D-132,
+  D-138, D-196, D-198; `proto/runner/v1/runner.proto`,
+  `internal/runner/targets/policy.go`, `internal/runner/ops_admin.go`,
+  `internal/runnerclient/client.go`,
+  `internal/graph/resolvers/runner_targets.go`,
+  `internal/graph/schema/network.graphqls`,
+  `web/src/features/admin/network/`, `docs/security/target-allowlist.md`.

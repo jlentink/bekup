@@ -16,14 +16,42 @@ const (
 	ActorUser   ActorKind = "user"
 	ActorSystem ActorKind = "system"
 	ActorCLI    ActorKind = "cli"
+	// ActorAPI is an external API token (D-220): the action was requested
+	// with the token, not by a signed-in user.
+	ActorAPI ActorKind = "api"
 )
 
+// ActorKinds returns every actor kind (the audit_log actor_kind CHECK).
+func ActorKinds() []ActorKind { return []ActorKind{ActorUser, ActorSystem, ActorCLI, ActorAPI} }
+
 // Actor identifies who performed an action. UserID is set for ActorUser and
-// optional for ActorCLI (a CLI action on behalf of a known account).
+// optional for ActorCLI (a CLI action on behalf of a known account); API is
+// set for ActorAPI only.
 type Actor struct {
 	Kind   ActorKind
 	UserID *uuid.UUID
+	API    *APIRequester
 }
+
+// APIRequester names the API token behind an ActorAPI entry and the run
+// request it acted on (none for api_token.ip_denied). It is stored in the
+// entry's details (DetailAPITokenID, DetailAPITokenName, DetailRequestID);
+// there is no actor column for it and never any part of the token itself.
+type APIRequester struct {
+	TokenID   uuid.UUID
+	TokenName string
+	RequestID uuid.UUID
+}
+
+// Detail keys added for ActorAPI entries.
+const (
+	DetailAPITokenID   = "api_token_id"
+	DetailAPITokenName = "api_token_name"
+	DetailRequestID    = "request_id"
+)
+
+// maxAPITokenName is the longest token name (api_tokens_name_length).
+const maxAPITokenName = 100
 
 // UserActor is an authenticated user.
 func UserActor(id uuid.UUID) Actor { return Actor{Kind: ActorUser, UserID: &id} }
@@ -33,6 +61,13 @@ func SystemActor() Actor { return Actor{Kind: ActorSystem} }
 
 // CLIActor is a host operator running a bekup subcommand (D-069).
 func CLIActor() Actor { return Actor{Kind: ActorCLI} }
+
+// APIActor is the external API token tokenID (named tokenName) acting on
+// its run request requestID (D-220). requestID is uuid.Nil only for the
+// actions that concern the token itself (api_token.ip_denied).
+func APIActor(tokenID uuid.UUID, tokenName string, requestID uuid.UUID) Actor {
+	return Actor{Kind: ActorAPI, API: &APIRequester{TokenID: tokenID, TokenName: tokenName, RequestID: requestID}}
+}
 
 // Details are free-form, non-secret context for an entry. They are redacted
 // (Redact) and stored as jsonb (at most 64 KiB).

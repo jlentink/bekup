@@ -12,8 +12,8 @@ import (
 )
 
 // WorkerListenerApplicationName prefixes the application_name of the LISTEN
-// connection of `bekup worker` (settings events only; "<prefix>:<instance
-// id>", configreload.ListenerApplicationName).
+// connection of `bekup worker` (settings events and API run requests;
+// "<prefix>:<instance id>", configreload.ListenerApplicationName).
 const WorkerListenerApplicationName = configreload.WorkerListenerPrefix
 
 // newGuard builds the SSRF guards of this process (D-120, D-196, D-198):
@@ -57,7 +57,8 @@ func (a *App) newEgress(ctx context.Context, bus *pubsub.Bus) error {
 }
 
 // newWorkerSettingsListener gives `bekup worker` its own bus and a LISTEN
-// connection for the settings events (the worker has no subscriptions).
+// connection for the settings events and the external API's run requests
+// (D-220; the worker has no subscriptions).
 func (a *App) newWorkerSettingsListener() (*pubsub.Bus, error) {
 	cfg := a.opts.Config
 	poolOpts, err := db.PoolOptionsFromConfig(cfg, configreload.ListenerApplicationName(configreload.KindWorker, a.instanceID))
@@ -75,7 +76,7 @@ func (a *App) newWorkerSettingsListener() (*pubsub.Bus, error) {
 	}
 	bus := pubsub.NewBus()
 	l, err := pubsub.NewListener(pubsub.ListenerOptions{
-		Connect: connect, Channels: []pubsub.Channel{pubsub.SettingsEvents}, Bus: bus, Logger: a.opts.Logger,
+		Connect: connect, Channels: []pubsub.Channel{pubsub.SettingsEvents, pubsub.APIRequests}, Bus: bus, Logger: a.opts.Logger,
 	})
 	if err != nil {
 		return nil, err

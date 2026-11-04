@@ -61,4 +61,10 @@ type ServerInfo {
   insecureTransport: Boolean!
   "True when dev mode is on (never in production)."
   devMode: Boolean!
+  """
+  True when this deployment runs the opt-in external API for CI pipelines
+  (D-220; BEKUP_EXTERNAL_API=enabled, written by setup). Not a secret and
+  not a security decision: the UI shows the curl examples only then.
+  """
+  externalApiEnabled: Boolean!
 }

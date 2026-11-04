@@ -2,6 +2,7 @@ package destinations
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
 	"github.com/jlentink/bekup/internal/storage/sftp"
+	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
 // s3Config builds the s3store configuration. The returned SecretAccessKey
@@ -74,6 +76,13 @@ func (s *Service) open(ctx context.Context, r *record) (storage.Destination, err
 	if !v.Ready {
 		return nil, &NotReadyError{Reason: v.NotReadyReason}
 	}
+	return s.openBackend(ctx, r, &v)
+}
+
+// openBackend builds the backend without the readiness check (Test runs
+// it for a WebDAV destination whose only problem is a failed overwrite
+// probe, so the admin can test again after fixing the server).
+func (s *Service) openBackend(ctx context.Context, r *record, v *Destination) (storage.Destination, error) {
 	switch v.Type {
 	case TypeDisk:
 		if s.o.DiskRoot == "" {
@@ -119,8 +128,56 @@ func (s *Service) open(ctx context.Context, r *record) (storage.Destination, err
 			BasePath: r.sftp.BasePath, Dir: r.sftp.Dir, NoDelete: v.NoDelete,
 			Guard: s.o.Guard, Logger: s.o.Logger,
 		})
+	case TypeWebDAV:
+		creds, err := openCredentials(s.o.Keyring, r.row.ID, r.row.SecretEnc)
+		if err != nil {
+			return nil, err
+		}
+		// webdav.Open takes ownership of the password (and destroys it).
+		pw := crypto.NewSecret(creds.Password)
+		creds.Password = nil
+		creds.Zero()
+		cfg, err := s.webdavConfig(r, pw, v.NoDelete)
+		if err != nil {
+			pw.Destroy()
+			return nil, err
+		}
+		return webdav.Open(cfg)
 	}
 	return nil, fmt.Errorf("destinations: unknown type %q", v.Type)
+}
+
+// webdavConfig builds the backend configuration of a WebDAV record; it
+// takes ownership of pw only on success.
+func (s *Service) webdavConfig(r *record, pw *crypto.Secret, noDelete bool) (webdav.Config, error) {
+	c := r.webdav
+	cfg := webdav.Config{
+		URL: c.URL, Flavor: webdav.Flavor(c.Flavor), Username: c.Username, Password: pw, Path: c.Path,
+		NoDelete: noDelete, RequestTimeout: time.Duration(c.TimeoutSeconds) * time.Second,
+		AllowHTTP: s.o.AllowHTTP, Guard: s.o.Guard, Logger: s.o.Logger,
+	}
+	if c.CABundlePEM != "" {
+		cfg.CABundlePEM = []byte(c.CABundlePEM)
+	}
+	pin, err := storedPin(&r.row)
+	if err != nil {
+		return webdav.Config{}, err
+	}
+	cfg.Pin = pin
+	return cfg, nil
+}
+
+// storedPin returns the stored certificate pin of a WebDAV row (nil:
+// none).
+func storedPin(row *sqlc.Destination) (*webdav.Pin, error) {
+	if row.TlsPinSha256 == nil || row.TlsPinCertificate == nil {
+		return nil, nil
+	}
+	spki, err := hex.DecodeString(*row.TlsPinSha256)
+	if err != nil {
+		return nil, fmt.Errorf("destinations: stored certificate pin of %s is malformed", row.ID)
+	}
+	return &webdav.Pin{CertificatePEM: []byte(*row.TlsPinCertificate), SPKISHA256: spki}, nil
 }
 
 // closeHook runs after once the wrapped destination is closed.
@@ -142,63 +199,109 @@ func (c *closeHook) Close() error {
 // be opened (connection, TLS, bucket detection).
 const StepConnect = "connect"
 
+// StepOverwrite is the WebDAV test step of the overwrite probe (D-222).
+const StepOverwrite = "overwrite"
+
+// TestResult is the outcome of Test: the storage probe's steps (connect,
+// [overwrite,] write, read, delete) plus the WebDAV findings.
+type TestResult struct {
+	storage.TestResult
+	// WebDAV is set for WebDAV destinations.
+	WebDAV *WebDAVTest
+}
+
+// WebDAVTest is what a test of a WebDAV destination saw (public data and
+// fixed enums only, never server text).
+type WebDAVTest struct {
+	// Trust is how the certificate is verified; Trusted whether it was.
+	Trust   webdav.Trust
+	Trusted bool
+	// Certificate is the leaf the server presented (nil: none seen).
+	Certificate *webdav.Certificate
+	// PinMatches: the presented key is the pinned one.
+	PinMatches bool
+	// Server is what status.php or the DAV header suggested.
+	Server webdav.ServerKind
+	// UploadMode is the mode the write step used (UploadUnknown when it
+	// did not run).
+	UploadMode webdav.UploadMode
+	// Overwrite is "refused" (required), "ignored" or "" (the probe did
+	// not finish).
+	Overwrite string
+}
+
+// Overwrite probe outcomes of WebDAVTest.
+const (
+	OverwriteRefused = "refused"
+	OverwriteIgnored = "ignored"
+)
+
 // Test opens the destination and runs the storage probe (write, read,
-// delete below the destination's prefix; D-121). The result carries only
-// normalized codes and fixed messages, so it can be shown to maintainers.
-// It is rate limited per caller and bounded in time and concurrency.
-func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (storage.TestResult, error) {
+// delete below the destination's prefix; D-121; WebDAV first inspects the
+// certificate and runs the overwrite probe, D-222). The result carries
+// only normalized codes and fixed messages (plus curated details), so it
+// can be shown to maintainers. It is rate limited per caller and bounded
+// in time and concurrency.
+func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (TestResult, error) {
 	r, err := s.load(ctx, sqlc.New(s.o.DB), id, false)
 	if err != nil {
-		return storage.TestResult{}, err
+		return TestResult{}, err
 	}
-	if v := r.view(); !v.Ready {
-		return storage.TestResult{}, &NotReadyError{Reason: v.NotReadyReason}
+	v := r.view()
+	if !v.Ready && v.NotReadyReason != overwriteIgnoredReason {
+		return TestResult{}, &NotReadyError{Reason: v.NotReadyReason}
 	}
 	release, err := s.acquire(actor)
 	if err != nil {
-		return storage.TestResult{}, err
+		return TestResult{}, err
 	}
 	defer release()
 	ctx, cancel := context.WithTimeout(ctx, s.o.OperationTimeout)
 	defer cancel()
-	d, err := s.open(ctx, r)
+	d, err := s.openBackend(ctx, r, &v)
 	if err != nil {
 		var nr *NotReadyError
 		if errors.As(err, &nr) {
-			return storage.TestResult{}, err
+			return TestResult{}, err
 		}
 		code := storage.Classify(err)
 		if errors.Is(netguard.Normalize(err), netguard.ErrNotAllowed) || errors.Is(netguard.Normalize(err), netguard.ErrUnreachable) {
 			code = storage.CodeNetwork
 		}
 		if code == storage.CodeHostKeyMismatch {
-			if err := s.hostKeyMismatch(ctx, actor, r); err != nil {
-				return storage.TestResult{}, err
+			if err := s.pinMismatch(ctx, actor, r); err != nil {
+				return TestResult{}, err
 			}
 		}
 		s.o.Logger.WarnContext(ctx, "destination test could not open the backend",
 			slog.String("destination_id", id.String()), slog.String("code", string(code)), slog.Any("error", err))
 		s.testFailed(ctx, id, code)
 		s.recordTest(ctx, r, false, code)
-		return storage.TestResult{Steps: []storage.TestStep{{Name: StepConnect, Code: code, Message: code.Message()}}}, nil
+		return TestResult{TestResult: storage.TestResult{Steps: []storage.TestStep{{Name: StepConnect, Code: code, Message: code.Message()}}}}, nil
 	}
 	defer func() {
 		if err := d.Close(); err != nil {
 			s.o.Logger.WarnContext(ctx, "closing destination after test failed", slog.String("destination_id", id.String()), slog.Any("error", err))
 		}
 	}()
-	res := d.Test(ctx, storage.Key{})
-	for _, st := range res.Steps {
-		if st.Code == storage.CodeHostKeyMismatch {
-			if err := s.hostKeyMismatch(ctx, actor, r); err != nil {
-				return storage.TestResult{}, err
+	var out TestResult
+	if wd, ok := d.(*webdav.Destination); ok {
+		out = s.testWebDAV(ctx, wd)
+	} else {
+		out.TestResult = d.Test(ctx, storage.Key{})
+		steps := make([]storage.TestStep, 0, len(out.Steps)+1)
+		steps = append(steps, storage.TestStep{Name: StepConnect, OK: true, Code: storage.CodeOK, Message: storage.CodeOK.Message()})
+		out.Steps = append(steps, out.Steps...)
+	}
+	for _, st := range out.Steps {
+		if st.Code == storage.CodeHostKeyMismatch || st.Code == storage.CodeTLSPinMismatch {
+			if err := s.pinMismatch(ctx, actor, r); err != nil {
+				return TestResult{}, err
 			}
 			break
 		}
 	}
-	steps := make([]storage.TestStep, 0, len(res.Steps)+1)
-	steps = append(steps, storage.TestStep{Name: StepConnect, OK: true, Code: storage.CodeOK, Message: storage.CodeOK.Message()})
-	res.Steps = append(steps, res.Steps...)
+	res := &out.TestResult
 	if !res.OK {
 		s.o.Logger.InfoContext(ctx, "destination test failed", slog.String("destination_id", id.String()))
 		code := storage.CodeOK
@@ -213,7 +316,41 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (storage.
 	} else {
 		s.recordTest(ctx, r, true, storage.CodeOK)
 	}
-	return res, nil
+	return out, nil
+}
+
+// testWebDAV runs the steps of a WebDAV test: connect (the TLS handshake
+// under the configured trust, the presented certificate captured either
+// way), overwrite (the probe), then the storage probe. Server hints are
+// collected even when a step failed (they explain wrong URLs or flavors).
+func (s *Service) testWebDAV(ctx context.Context, wd *webdav.Destination) TestResult {
+	info := &WebDAVTest{Trust: wd.Trust()}
+	out := TestResult{WebDAV: info}
+	rep := wd.InspectTLS(ctx)
+	info.Certificate, info.Trusted, info.PinMatches = rep.Certificate, rep.Trusted, rep.PinMatches
+	if !rep.Trusted {
+		out.Steps = []storage.TestStep{storage.FailStep(StepConnect, rep.Err)}
+		return out
+	}
+	out.Steps = []storage.TestStep{storage.OKStep(StepConnect)}
+	if err := wd.ProbeOverwrite(ctx); err != nil {
+		if storage.Classify(err) == storage.CodeOverwriteIgnored {
+			info.Overwrite = OverwriteIgnored
+		}
+		out.Steps = append(out.Steps, storage.FailStep(StepOverwrite, err))
+		info.Server = wd.DetectServer(ctx)
+		return out
+	}
+	info.Overwrite = OverwriteRefused
+	out.Steps = append(out.Steps, storage.OKStep(StepOverwrite))
+	res := wd.Test(ctx, storage.Key{})
+	res.Steps = append(out.Steps, res.Steps...)
+	out.TestResult = res
+	if len(res.Steps) > 2 && res.Steps[2].OK {
+		info.UploadMode = wd.UploadMode()
+	}
+	info.Server = wd.DetectServer(ctx)
+	return out
 }
 
 // storedCode is the syntax of a stored test code (the DB checks it too).
@@ -252,34 +389,51 @@ func (s *Service) testFailed(ctx context.Context, id uuid.UUID, code storage.Err
 	}
 }
 
-// hostKeyMismatch records a host-key pin violation seen by Test: a
-// security event (possible impersonation of the SFTP server), audited
-// (fail closed) and logged at WARN; the audit observer raises the
+// pinMismatch records a pin violation seen by Test or a worker: an SFTP
+// host key or a WebDAV certificate key other than the pinned one. A
+// security event (possible impersonation of the server), audited (fail
+// closed) and logged at WARN; the audit observer raises the
 // security.system alert (task 5.5).
-func (s *Service) hostKeyMismatch(ctx context.Context, actor Actor, r *record) error {
-	details := audit.Details{"name": r.row.Name, "host": r.sftp.Host, "port": r.sftp.Port}
-	if r.row.HostKeyFingerprint != nil {
-		details["pinned_fingerprint"] = *r.row.HostKeyFingerprint
-	}
-	s.o.Logger.WarnContext(ctx, "destination_ssh_host_key_mismatch",
-		slog.String("destination_id", r.row.ID.String()), slog.String("host", r.sftp.Host), slog.Int("port", r.sftp.Port))
+func (s *Service) pinMismatch(ctx context.Context, actor Actor, r *record) error {
 	ev := audit.UserActor(actor.UserID)
 	if actor.UserID == uuid.Nil {
 		ev = audit.SystemActor() // a worker's run (RecordRunFailure)
 	}
-	_, err := s.o.Auditor.Record(ctx, audit.Event{
-		Actor: ev, Action: audit.ActionDestinationHostKeyMismatch, TargetType: "destination",
-		TargetID: r.row.ID.String(), IP: actor.IP, Details: details,
-	})
+	event := audit.Event{Actor: ev, TargetType: "destination", TargetID: r.row.ID.String(), IP: actor.IP}
+	switch {
+	case r.sftp != nil:
+		details := audit.Details{"name": r.row.Name, "host": r.sftp.Host, "port": r.sftp.Port}
+		if r.row.HostKeyFingerprint != nil {
+			details["pinned_fingerprint"] = *r.row.HostKeyFingerprint
+		}
+		s.o.Logger.WarnContext(ctx, "destination_ssh_host_key_mismatch",
+			slog.String("destination_id", r.row.ID.String()), slog.String("host", r.sftp.Host), slog.Int("port", r.sftp.Port))
+		event.Action, event.Details = audit.ActionDestinationHostKeyMismatch, details
+	case r.webdav != nil:
+		host := ""
+		if u, err := webdav.ParseURL(r.webdav.URL, true); err == nil {
+			host = u.HostPort()
+		}
+		details := audit.Details{"name": r.row.Name, "host": host}
+		if r.row.TlsPinSha256 != nil {
+			details["pinned_spki_sha256"] = *r.row.TlsPinSha256
+		}
+		s.o.Logger.WarnContext(ctx, "destination_tls_pin_mismatch",
+			slog.String("destination_id", r.row.ID.String()), slog.String("host", host))
+		event.Action, event.Details = audit.ActionDestinationTLSPinMismatch, details
+	default:
+		return nil
+	}
+	_, err := s.o.Auditor.Record(ctx, event)
 	return err
 }
 
 // RecordRunFailure handles the security event of a destination failure a
-// worker saw (backup runs, task 3.6): an SFTP host-key mismatch is audited
-// with the system actor (fail closed) and logged, as in Test. Other codes
-// are ignored.
+// worker saw (backup runs, task 3.6): an SFTP host-key or WebDAV
+// certificate-pin mismatch is audited with the system actor (fail closed)
+// and logged, as in Test. Other codes are ignored.
 func (s *Service) RecordRunFailure(ctx context.Context, id uuid.UUID, code storage.ErrorCode) error {
-	if code != storage.CodeHostKeyMismatch {
+	if code != storage.CodeHostKeyMismatch && code != storage.CodeTLSPinMismatch {
 		return nil
 	}
 	ctx = context.WithoutCancel(ctx)
@@ -291,10 +445,10 @@ func (s *Service) RecordRunFailure(ctx context.Context, id uuid.UUID, code stora
 	if err != nil {
 		return err
 	}
-	if r.sftp == nil {
+	if (code == storage.CodeHostKeyMismatch) != (r.sftp != nil) || (code == storage.CodeTLSPinMismatch) != (r.webdav != nil) {
 		return nil
 	}
-	return s.hostKeyMismatch(ctx, Actor{}, r)
+	return s.pinMismatch(ctx, Actor{}, r)
 }
 
 // acquire applies the per-user rate limit and the concurrency bound of

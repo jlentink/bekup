@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -322,6 +323,20 @@ func TestUnimplementedRPCs(t *testing.T) {
 			t.Fatalf("image %v", im)
 		}
 	}
+
+	// GetTargetPolicy over the real mTLS client: the default runner.toml
+	// allows nothing (D-223).
+	pol, err := ts.client(t, ts.pki.clientTLS(t, certs.ComponentServe)).GetTargetPolicy(ctx)
+	if err != nil {
+		t.Fatalf("GetTargetPolicy: %v", err)
+	}
+	if pol.GetRunSubnetPool() != config.DefaultRunSubnetPool || len(pol.GetAlwaysDenied()) == 0 || pol.GetControlNetworksKnown() ||
+		!slices.Equal(pol.GetWarnings(), []runnerpb.TargetPolicyWarning{runnerpb.TargetPolicyWarning_TARGET_POLICY_WARNING_EMPTY_ALLOWLIST}) {
+		t.Fatalf("policy %v", pol)
+	}
+	if !strings.Contains(ts.logs.String(), `"rpc":"GetTargetPolicy"`) {
+		t.Error("GetTargetPolicy not audited")
+	}
 }
 
 func TestMethodTableCoversService(t *testing.T) {
@@ -333,8 +348,12 @@ func TestMethodTableCoversService(t *testing.T) {
 	for _, s := range sd.Streams {
 		want["/"+sd.ServiceName+"/"+s.StreamName] = true
 	}
-	if len(want) != 16 {
-		t.Errorf("service has %d methods, want 16", len(want))
+	if len(want) != 17 {
+		t.Errorf("service has %d methods, want 17", len(want))
+	}
+	// GetTargetPolicy is a short read like ListImages (D-223).
+	if c := methodClasses[runnerpb.RunnerService_GetTargetPolicy_FullMethodName]; c != classControl || c != methodClasses[runnerpb.RunnerService_ListImages_FullMethodName] {
+		t.Errorf("GetTargetPolicy class = %v", c)
 	}
 	for m := range want {
 		if _, ok := methodClasses[m]; !ok {

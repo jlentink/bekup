@@ -38,10 +38,24 @@ type RunView struct {
 	JobName    string
 	JobSlug    string
 	JobDeleted bool
-	// TriggeredByName and TriggeredByEmail describe the user of a manual
-	// run (empty when none or deleted); show them to staff only.
+	// ActorUserID is the user of a manual or early run, or the creator of
+	// the API token of an API run (nil when none); TriggeredByName and
+	// TriggeredByEmail describe that user. Show them to staff only.
+	ActorUserID      *uuid.UUID
 	TriggeredByName  string
 	TriggeredByEmail string
+	// APITokenID and APITokenName name the token of an API run (D-220;
+	// nil once its run request was pruned after 30 days).
+	APITokenID   *uuid.UUID
+	APITokenName string
+}
+
+// runActor is the actor columns of a run read.
+type runActor struct {
+	userID       *uuid.UUID
+	name, email  *string
+	apiTokenID   *uuid.UUID
+	apiTokenName *string
 }
 
 // ArtifactView is an artifact with the names it is shown with.
@@ -115,13 +129,12 @@ type Reader struct {
 // NewReader returns a reader on db (*pgxpool.Pool).
 func NewReader(db sqlc.DBTX) *Reader { return &Reader{db: db} }
 
-func runView(r sqlc.Run, jobName, jobSlug string, jobDeleted *time.Time, name, email *string) RunView {
-	v := RunView{Run: r, JobName: jobName, JobSlug: jobSlug, JobDeleted: jobDeleted != nil}
-	if name != nil {
-		v.TriggeredByName = *name
-	}
-	if email != nil {
-		v.TriggeredByEmail = *email
+func runView(r sqlc.Run, jobName, jobSlug string, jobDeleted *time.Time, a runActor) RunView {
+	v := RunView{Run: r, JobName: jobName, JobSlug: jobSlug, JobDeleted: jobDeleted != nil,
+		ActorUserID: a.userID, TriggeredByName: strOrEmpty(a.name), TriggeredByEmail: strOrEmpty(a.email),
+		APITokenID: a.apiTokenID, APITokenName: strOrEmpty(a.apiTokenName)}
+	if v.APITokenID == nil {
+		v.APITokenName = ""
 	}
 	return v
 }
@@ -165,7 +178,7 @@ func (r *Reader) ListRuns(ctx context.Context, s Scope, f RunFilter, cur *RunCur
 	page.Runs = make([]RunView, 0, len(rows))
 	for i := range rows {
 		x := &rows[i]
-		page.Runs = append(page.Runs, runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, x.TriggeredByName, x.TriggeredByEmail))
+		page.Runs = append(page.Runs, runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, runActor{x.ActorUserID, x.TriggeredByName, x.TriggeredByEmail, x.ApiTokenID, x.ApiTokenName}))
 	}
 	return page, nil
 }
@@ -179,7 +192,7 @@ func (r *Reader) Run(ctx context.Context, id uuid.UUID) (RunView, error) {
 	if err != nil {
 		return RunView{}, fmt.Errorf("runstate: load run: %w", err)
 	}
-	return runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, x.TriggeredByName, x.TriggeredByEmail), nil
+	return runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, runActor{x.ActorUserID, x.TriggeredByName, x.TriggeredByEmail, x.ApiTokenID, x.ApiTokenName}), nil
 }
 
 // RecentRunsForJobs returns the newest perJob runs of each job, newest
@@ -203,7 +216,7 @@ func (r *Reader) RecentRunsForJobs(ctx context.Context, jobIDs []uuid.UUID, perJ
 	}
 	for i := range rows {
 		x := &rows[i]
-		out[x.Run.JobID] = append(out[x.Run.JobID], runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, x.TriggeredByName, x.TriggeredByEmail))
+		out[x.Run.JobID] = append(out[x.Run.JobID], runView(x.Run, x.JobName, x.JobSlug, x.JobDeletedAt, runActor{x.ActorUserID, x.TriggeredByName, x.TriggeredByEmail, x.ApiTokenID, x.ApiTokenName}))
 	}
 	return out, nil
 }

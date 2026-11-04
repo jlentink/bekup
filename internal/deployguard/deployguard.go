@@ -17,7 +17,16 @@ const (
 	// EnvListenShape names serve's listener shape in the compose file
 	// (D-215): a literal in the shipped serve service, never a variable.
 	EnvListenShape = "BEKUP_LISTEN_SHAPE"
+	// EnvExternalAPI is "enabled" when the deployment runs the opt-in
+	// external API (D-220): setup writes it to .env, the same line selects
+	// the compose profile external-api and the bundled proxy's /api/v1
+	// route, and compose passes it to serve (a UI hint only, never a
+	// security decision).
+	EnvExternalAPI = "BEKUP_EXTERNAL_API"
 )
+
+// ExternalAPIEnabled is the only non-empty value of BEKUP_EXTERNAL_API.
+const ExternalAPIEnabled = "enabled"
 
 // ListenShapeOwnProxyJoin is the BEKUP_LISTEN_SHAPE of the own-proxy
 // compose files: serve joins the operator's proxy network, where Docker
@@ -47,6 +56,9 @@ type Deployment struct {
 	ImageFollowing bool
 	// OwnProxyJoin: BEKUP_LISTEN_SHAPE=own-proxy-join (D-215).
 	OwnProxyJoin bool
+	// ExternalAPI: BEKUP_EXTERNAL_API=enabled (D-220): the deployment runs
+	// the external API (serve's serverInfo.externalApiEnabled).
+	ExternalAPI bool
 }
 
 // FromEnv reads the deployment facts with lookup (os.LookupEnv). An empty
@@ -77,6 +89,15 @@ func FromEnv(lookup func(string) (string, bool)) (Deployment, error) {
 			d.OwnProxyJoin = true
 		default:
 			return Deployment{}, fmt.Errorf("%s=%q: want %s or nothing (it is set by the own-proxy compose files)", EnvListenShape, bounded(v), ListenShapeOwnProxyJoin)
+		}
+	}
+	if v, ok := lookup(EnvExternalAPI); ok {
+		switch strings.TrimSpace(v) {
+		case "":
+		case ExternalAPIEnabled:
+			d.ExternalAPI = true
+		default:
+			return Deployment{}, fmt.Errorf("%s=%q: want %s or nothing (it is written by `bekup setup --external-api`)", EnvExternalAPI, bounded(v), ExternalAPIEnabled)
 		}
 	}
 	return d, nil

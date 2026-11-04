@@ -291,7 +291,7 @@ func TestUnknownEnvWarnings(t *testing.T) {
 		"BEKUP_SECRET_SAUCE does not match any configuration key",
 		"BEKUP_BASE_URL is not a configuration key and is ignored; did you mean BEKUP_SERVER_BASE_URL?",
 		"BEKUP_RUNNER_CONTAINER is not a configuration key and is ignored; did you mean BEKUP_DOCKER_SELF_CONTAINER?",
-		"BEKUP_DOCKER_SELF_CONTAINER configures the other config file",
+		"BEKUP_DOCKER_SELF_CONTAINER configures another config file",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing warning %q in:\n%s", want, joined)
@@ -310,7 +310,7 @@ func TestUnknownEnvWarnings(t *testing.T) {
 		t.Fatal(err)
 	}
 	rj := strings.Join(rres.Warnings, "\n")
-	if strings.Contains(rj, "BEKUP_DOCKER_SELF_CONTAINER") || !strings.Contains(rj, "BEKUP_LOG_LEVEL configures the other config file") {
+	if strings.Contains(rj, "BEKUP_DOCKER_SELF_CONTAINER") || !strings.Contains(rj, "BEKUP_LOG_LEVEL configures another config file") {
 		t.Errorf("runner warnings:\n%s", rj)
 	}
 }

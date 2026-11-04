@@ -17,6 +17,7 @@ var NonKeyEnvVars = []string{
 	"BEKUP_IMAGE_MODE",     // compose/setup: "following" when the image follows a tag (D-212)
 	"BEKUP_SETUP_VERSION",  // compose/setup: the version setup prepared the deployment for (D-212)
 	"BEKUP_LISTEN_SHAPE",   // compose: the own-proxy join shape of serve's listener (D-215)
+	"BEKUP_EXTERNAL_API",   // compose/setup: "enabled" when the opt-in external API runs (D-220)
 	"BEKUP_DB_NETWORK",     // compose: the Docker network of your database container (D-215)
 	"BEKUP_PROXY_NETWORK",  // compose: your reverse proxy's Docker network (D-205, D-215)
 	"BEKUP_DOMAIN",         // compose/proxy profiles: public host name
@@ -50,9 +51,9 @@ func envWarnings(environ []string, own []Field) []string {
 	for i := range own {
 		ownEnv[own[i].Env] = true
 	}
-	b, r := DefaultBekup(), DefaultRunner()
+	b, r, x := DefaultBekup(), DefaultRunner(), DefaultExternalAPI()
 	otherEnv := make(map[string]bool)
-	all := append(fieldsOf(&b), fieldsOf(&r)...)
+	all := append(append(fieldsOf(&b), fieldsOf(&r)...), fieldsOf(&x)...)
 	for i := range all {
 		otherEnv[all[i].Env] = true
 	}
@@ -71,7 +72,7 @@ func envWarnings(environ []string, own []Field) []string {
 		case LegacyEnvNames[name] != "":
 			out = append(out, fmt.Sprintf("environment variable %s is not a configuration key and is ignored; did you mean %s?", name, LegacyEnvNames[name]))
 		case otherEnv[name]:
-			out = append(out, fmt.Sprintf("environment variable %s configures the other config file (bekup.toml vs runner.toml) and is ignored by this command", name))
+			out = append(out, fmt.Sprintf("environment variable %s configures another config file (bekup.toml, runner.toml, external-api.toml) and is ignored by this command", name))
 		default:
 			out = append(out, fmt.Sprintf("environment variable %s does not match any configuration key and is ignored (check for typos; see docs/configuration.md)", name))
 		}

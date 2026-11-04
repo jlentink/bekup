@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	pkgsftp "github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/jlentink/bekup/internal/crypto"
@@ -501,5 +502,30 @@ func TestMapErrClassification(t *testing.T) {
 	}
 	if got := storage.Classify(dialError("handshake", errors.New("ssh: handshake failed: no common algorithm"))); got != storage.CodeNetwork {
 		t.Errorf("handshake = %s", got)
+	}
+}
+
+func TestMapErrDetail(t *testing.T) {
+	cases := []struct {
+		err  error
+		code storage.ErrorCode
+		want string
+	}{
+		{&pkgsftp.StatusError{Code: 4}, storage.CodeInternal, "an unexpected storage error occurred: finalize object (SFTP status SSH_FX_FAILURE)"},
+		{&pkgsftp.StatusError{Code: 3}, storage.CodePermission, "the destination refused access (check permissions or credentials): finalize object (SFTP status SSH_FX_PERMISSION_DENIED)"},
+		{&pkgsftp.StatusError{Code: 42}, storage.CodeInternal, "an unexpected storage error occurred: finalize object (SFTP status 42)"},
+		{errors.New("/srv/secret/path: raw server text"), storage.CodeInternal, "an unexpected storage error occurred: finalize object"},
+	}
+	for _, tc := range cases {
+		err := mapErr("sftp: finalize object", tc.err)
+		if got := storage.Classify(err); got != tc.code {
+			t.Errorf("%v: code %s, want %s", tc.err, got, tc.code)
+		}
+		if got := storage.Describe(storage.Classify(err), err); got != tc.want {
+			t.Errorf("%v: message %q, want %q", tc.err, got, tc.want)
+		}
+	}
+	if mapErr("op", nil) != nil {
+		t.Error("mapErr(nil) != nil")
 	}
 }

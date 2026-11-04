@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/authz"
@@ -23,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/logging"
+	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/scheduler"
@@ -74,10 +76,18 @@ func newJobEnv(t *testing.T) *jobEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// External API tokens (D-220) on the alerting auditor, as serve.
+	tokens, err := apiaccess.NewService(apiaccess.ServiceOptions{
+		DB: e.pool, Auditor: audit.New(e.pool, audit.Options{Registry: logging.NewRegistry(), Observer: notify.ObserveAudit}),
+		Authorizer: pol, Logger: logger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	gql, err := graph.New(graph.Options{
 		Logger: logger, MaxComplexity: 2000, MaxDepth: 12, MaxBodyBytes: 1 << 16,
 		Access: graph.NewPolicyAccess(pol), Policy: pol, AuditLog: e.auditor, Auth: svc,
-		Jobs: js, JobKeys: keys, RetentionHolds: retention.HoldReader{DB: e.pool},
+		Jobs: js, JobKeys: keys, RetentionHolds: retention.HoldReader{DB: e.pool}, APITokens: tokens,
 	})
 	if err != nil {
 		t.Fatal(err)

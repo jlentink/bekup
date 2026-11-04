@@ -99,3 +99,42 @@ func TestIntegrationBootstrapMigrateVerify(t *testing.T) {
 		t.Fatalf("verify of the second database: %v\n%s", err, report.String())
 	}
 }
+
+// TestIntegrationBootstrapExternalRole: --external-password-file creates
+// bekup_external (D-220), logs in as it before and after the migrations
+// (the privilege audit once the schema is current); single-account mode
+// refuses it.
+func TestIntegrationBootstrapExternalRole(t *testing.T) {
+	ctx := t.Context()
+	s := externaltest.Start(t, externaltest.PG17, externaltest.Options{})
+	const adminPW = "admin-password-0123456789"
+	if err := s.CreateAdmin(ctx, "provider_admin", adminPW); err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.DiscardHandler)
+	cfg := externalConfig(t, s, "bekup_api")
+	extFile := writeFile(t, t.TempDir(), "external", "external-password-0123456789")
+	bootstrap := func(adopt bool) (string, error) {
+		var out, warn bytes.Buffer
+		err := Bootstrap(ctx, BootstrapRequest{
+			Config: cfg, AdminUser: "provider_admin", AdoptExisting: adopt, ExternalPasswordFile: extFile,
+			AdminPassword: func() ([]byte, error) { return []byte(adminPW), nil },
+			Out:           &out, Warn: &warn, Logger: logger,
+		})
+		return out.String(), err
+	}
+	out, err := bootstrap(false)
+	if err != nil || !strings.Contains(out, "done: create role bekup_external") || !strings.Contains(out, "bekup_external logs in and passes the role checks") {
+		t.Fatalf("bootstrap: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "external-password") || strings.Contains(out, "SCRAM-SHA-256$") {
+		t.Fatal("a password or verifier in the report")
+	}
+	var report bytes.Buffer
+	if _, err := MigrateUp(ctx, cfg, logger, &report); err != nil {
+		t.Fatalf("migrate up: %v\n%s", err, report.String())
+	}
+	if out, err = bootstrap(true); err != nil || !strings.Contains(out, "bekup_external logs in") || !strings.Contains(out, "nothing changed") {
+		t.Fatalf("second bootstrap (audit on the migrated schema): %v\n%s", err, out)
+	}
+}

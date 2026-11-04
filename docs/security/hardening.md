@@ -193,7 +193,8 @@ values (D-073, D-107).
       `serve` direct egress (the `egress` network) to its destinations.
 - [ ] Redirects are never followed; point webhooks and S3 endpoints at
       their final URL.
-- [ ] Prefer the **admin allowlist** (Admin → Settings → Network) over
+- [ ] Prefer the **admin allowlist** (Admin → Settings → Network, part
+      "bekup's own connections") over
       `[netguard]` for entries that change: it is validated with exactly
       the same rules, needs an admin with a fresh step-up, is audited
       (`setting.changed` with the added and removed entries) and every

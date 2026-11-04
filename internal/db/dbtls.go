@@ -118,7 +118,12 @@ func (o TLSOptions) LogSystemBundle(ctx context.Context, logger *slog.Logger) {
 // client key is read with the secret-file rules and never retained beyond
 // the parsed tls.Certificate.
 func LoadTLSOptions(c *config.Bekup) (TLSOptions, error) {
-	d := &c.Database
+	return LoadDatabaseTLSOptions(&c.Database)
+}
+
+// LoadDatabaseTLSOptions is LoadTLSOptions for one [database] section
+// (bekup.toml or external-api.toml).
+func LoadDatabaseTLSOptions(d *config.Database) (TLSOptions, error) {
 	o := TLSOptions{Mode: d.TLSMode, ServerName: d.TLSServerName}
 	if d.TLSMode == config.DBTLSDisable {
 		return o, nil
@@ -149,7 +154,7 @@ func LoadTLSOptions(c *config.Bekup) (TLSOptions, error) {
 		if err != nil {
 			return TLSOptions{}, fmt.Errorf("database.tls_client_cert_file: %w", err)
 		}
-		keyPEM, err := c.DatabaseTLSClientKey()
+		keyPEM, err := d.TLSClientKey()
 		if err != nil {
 			return TLSOptions{}, fmt.Errorf("database.tls_client_key_file: %w", err)
 		}

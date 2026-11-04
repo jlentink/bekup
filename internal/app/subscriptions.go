@@ -44,9 +44,15 @@ func (a *App) newSubscriptions() error {
 	if err != nil {
 		return err
 	}
+	channels := []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents, pubsub.RestoreEvents, pubsub.NotificationEvents, pubsub.SettingsEvents}
+	if !a.opts.NoWorker {
+		// The external API's run requests are decided where the workers
+		// run (D-220).
+		channels = append(channels, pubsub.APIRequests)
+	}
 	a.subs.listener, err = pubsub.NewListener(pubsub.ListenerOptions{
 		Connect:  connect,
-		Channels: []pubsub.Channel{pubsub.SessionEvents, pubsub.RunEvents, pubsub.RestoreEvents, pubsub.NotificationEvents, pubsub.SettingsEvents},
+		Channels: channels,
 		Bus:      a.subs.bus,
 		Logger:   a.opts.Logger,
 	})

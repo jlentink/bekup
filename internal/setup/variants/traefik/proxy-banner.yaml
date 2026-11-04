@@ -10,6 +10,9 @@
   #                   proxy-tls/, mounted by compose.override.yaml)
   #   PROXY_FRONTEND_IP  Traefik's fixed address on `frontend`
   #                   (default 10.213.250.5); bekup.toml [server]
-  #                   trusted_proxies must name exactly this address (/32).
+  #                   trusted_proxies must name exactly this address (/32),
+  #                   and external-api.toml [listen] trusted_proxies too.
+  #   BEKUP_EXTERNAL_API  "enabled" routes /api/v1/ to the external API
+  #                   (opt-in profile external-api, D-220)
   # Docs: docs/installation/reverse-proxy.md
   # =========================================================================

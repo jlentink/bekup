@@ -25,6 +25,7 @@ var methodClasses = map[string]methodClass{
 	runnerpb.RunnerService_FetchHostKey_FullMethodName:               classControl,
 	runnerpb.RunnerService_PrePull_FullMethodName:                    classControl,
 	runnerpb.RunnerService_ListImages_FullMethodName:                 classControl,
+	runnerpb.RunnerService_GetTargetPolicy_FullMethodName:            classControl,
 	runnerpb.RunnerService_Dump_FullMethodName:                       classRun,
 	runnerpb.RunnerService_DumpGlobals_FullMethodName:                classRun,
 	runnerpb.RunnerService_VerifyDump_FullMethodName:                 classRun,

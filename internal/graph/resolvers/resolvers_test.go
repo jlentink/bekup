@@ -7,7 +7,7 @@ import (
 )
 
 func TestServerInfo(t *testing.T) {
-	want := model.ServerInfo{Version: "1.2.3", InsecureTransport: true, DevMode: false}
+	want := model.ServerInfo{Version: "1.2.3", InsecureTransport: true, DevMode: false, ExternalAPIEnabled: true}
 	r := &Resolver{ServerInfo: want}
 	got, err := r.Query().ServerInfo(t.Context())
 	if err != nil || got == nil || *got != want {

@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
+	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/configreload"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/engine"
@@ -42,7 +43,7 @@ var (
 	}
 	runTriggers = []string{
 		string(sqlc.RunTriggerSchedule), string(sqlc.RunTriggerCatchUp), string(sqlc.RunTriggerManual),
-		string(sqlc.RunTriggerEarly),
+		string(sqlc.RunTriggerEarly), string(sqlc.RunTriggerApi),
 	}
 	engines         = append(kindsOf(engine.Kinds()), UnknownLabel)
 	restoreStatuses = []string{string(restore.StatusSucceeded), string(restore.StatusFailed), string(restore.StatusCanceled)}
@@ -56,6 +57,8 @@ var (
 	enqueueTriggers = []string{string(queue.TriggerSchedule), string(queue.TriggerCatchUp)}
 	// reloadStatuses are the outcomes of a runtime config reload (D-200).
 	reloadStatuses = statusesOf(configreload.Statuses())
+	// apiOutcomes are the decisions of external API run requests (D-220).
+	apiOutcomes = apiaccess.Outcomes()
 )
 
 func statusesOf(in []configreload.Status) []string {
@@ -98,8 +101,8 @@ type Options struct {
 
 // Metrics owns bekup's dedicated Prometheus registry and the event
 // counters. It implements the hook interfaces of runstate
-// (FinishObserver), restore (Metrics), retention (Metrics) and scheduler
-// (Metrics); every method is safe for concurrent use and never fails.
+// (FinishObserver), restore (Metrics), retention (Metrics), scheduler
+// (Metrics) and apiaccess (Metrics); every method is safe for concurrent use and never fails.
 type Metrics struct {
 	reg *prometheus.Registry
 	db  sqlc.DBTX
@@ -118,6 +121,7 @@ type Metrics struct {
 	skips         *prometheus.CounterVec
 	enqueued      *prometheus.CounterVec
 	reloads       *prometheus.CounterVec
+	apiRequests   *prometheus.CounterVec
 	lastTickNanos atomic.Int64
 }
 
@@ -200,6 +204,10 @@ func New(o Options) *Metrics {
 		Namespace: Namespace, Name: "config_reloads_total",
 		Help: "Runtime config reloads of this process, by outcome (D-200).",
 	}, []string{"status"})
+	m.apiRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: Namespace, Name: "api_run_requests_total",
+		Help: "External API run requests decided by this process, by outcome (accepted or the rejection reason; D-220).",
+	}, []string{"outcome"})
 	lastTick := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Namespace: Namespace, Name: "scheduler_last_tick_timestamp_seconds",
 		Help: "Unix time of the last completed scheduler tick in this process (0: none yet or scheduler off).",
@@ -211,7 +219,7 @@ func New(o Options) *Metrics {
 		return float64(n) / 1e9
 	})
 	m.reg.MustRegister(build, m.runs, m.runDuration, m.bytesStored, m.bytesRaw, m.restores, m.testRestores,
-		m.retDeleted, m.retMissing, m.ticks, m.tickErrors, m.skips, m.enqueued, m.reloads, lastTick)
+		m.retDeleted, m.retMissing, m.ticks, m.tickErrors, m.skips, m.enqueued, m.reloads, m.apiRequests, lastTick)
 	m.preinit()
 	return m
 }
@@ -244,6 +252,14 @@ func (m *Metrics) preinit() {
 	for _, s := range withOther(reloadStatuses) {
 		m.reloads.WithLabelValues(s)
 	}
+	for _, o := range withOther(apiOutcomes) {
+		m.apiRequests.WithLabelValues(o)
+	}
+}
+
+// RunRequestDecided implements apiaccess.Metrics.
+func (m *Metrics) RunRequestDecided(outcome string) {
+	m.apiRequests.WithLabelValues(bound(outcome, apiOutcomes)).Inc()
 }
 
 // ConfigReloadFinished implements configreload.Metrics.

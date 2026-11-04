@@ -592,6 +592,46 @@ const JR_IDS = {
   art: "0b6c3f7e-0000-4000-8000-0000000000b5",
 };
 const jrSoon = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+const API_TOKEN_BASE = {
+  __typename: "ApiToken",
+  prefix: "bkp_aaisem2e",
+  jobs: [{ __typename: "ApiTokenJob", id: JR_IDS.job, name: "Billing DB", deleted: false }],
+  hiddenJobCount: 0,
+  createdBy: {
+    __typename: "ApiTokenCreator",
+    id: "0b6c3f7e-0000-4000-8000-0000000000e9",
+    email: "olive@example.com",
+    displayName: "Olive Owner",
+    deleted: false,
+  },
+  createdByMe: false,
+  createdAt: jrSoon(-24 * 30),
+  revokedAt: null,
+  lastUsedAt: jrSoon(-2),
+  lastSeenAt: jrSoon(-2),
+  lastSeenRefused: false,
+};
+const API_TOKENS = [
+  {
+    ...API_TOKEN_BASE,
+    id: "0b6c3f7e-0000-4000-8000-0000000000e1",
+    name: "deploy pipeline",
+    expiresAt: jrSoon(24 * 3),
+    allowedCidrs: [],
+    allowAnyAddress: true,
+    lastSeenIp: "198.51.100.9",
+    lastSeenRefused: true,
+  },
+  {
+    ...API_TOKEN_BASE,
+    id: "0b6c3f7e-0000-4000-8000-0000000000e3",
+    name: "nightly check",
+    expiresAt: jrSoon(24 * 80),
+    allowedCidrs: ["192.0.2.0/24", "2001:db8::/48"],
+    allowAnyAddress: false,
+    lastSeenIp: "192.0.2.10",
+  },
+];
 const JR_SCHEDULE = {
   __typename: "Schedule",
   kind: "INTERVAL",
@@ -923,6 +963,33 @@ const JOBS_RUNS_OPERATIONS = {
     },
   }),
   JobDetail: () => ({ data: { job: JR_JOB } }),
+  // External API tokens (D-220): the job's API access panel, the admin
+  // page, the create dialog and the show-once dialog.
+  ApiTokens: () => ({ data: { apiTokens: API_TOKENS } }),
+  ApiAccessJobs: () => ({
+    data: {
+      jobs: {
+        __typename: "JobConnection",
+        edges: [
+          {
+            __typename: "JobEdge",
+            node: { __typename: "Job", id: JR_IDS.job, name: "Billing DB" },
+          },
+        ],
+        pageInfo: { __typename: "PageInfo", hasNextPage: false },
+      },
+    },
+  }),
+  CreateApiToken: () => ({
+    data: {
+      createApiToken: {
+        __typename: "CreatedApiToken",
+        plaintext:
+          "bkp_aaisem2ekvthpcezvk54zxpo74_aaaqeayeaudaocajbifqydiob4ibceqtcqkrmfyydenbwha5dypq",
+        token: { ...API_TOKENS[0], id: "0b6c3f7e-0000-4000-8000-0000000000e2", name: "release" },
+      },
+    },
+  }),
   JobSharedChannelAttachments: () => ({
     data: {
       job: {
@@ -2056,6 +2123,40 @@ const ADMIN_OPERATIONS = {
       },
     },
   }),
+  AdminRunnerTargetPolicy: () => ({
+    data: {
+      runnerTargetPolicy: {
+        __typename: "RunnerTargetPolicy",
+        available: true,
+        reason: null,
+        allowCidrs: ["10.20.0.0/16", "2001:db8:20::/48"],
+        allowHosts: ["bastion.example.com", "db.internal.example.com"],
+        denyCidrs: [],
+        denyHosts: ["legacy-db.internal.example.com"],
+        bastionTargets: [
+          {
+            __typename: "RunnerBastionTargets",
+            bastion: "bastion.example.com",
+            targets: ["10.30.0.0/24", "db.internal"],
+          },
+        ],
+        runSubnetPool: "10.214.0.0/16",
+        controlNetworks: ["172.30.0.0/24", "172.30.0.2/32"],
+        controlNetworksKnown: true,
+        alwaysDenied: [
+          {
+            __typename: "RunnerDeniedRange",
+            category: "LOOPBACK",
+            cidrs: ["127.0.0.0/8", "::1/128"],
+          },
+          { __typename: "RunnerDeniedRange", category: "NON_GLOBAL_IPV6", cidrs: [] },
+        ],
+        warnings: [],
+        envOverrides: ["ALLOW_CIDRS"],
+        truncated: false,
+      },
+    },
+  }),
   AdminAuditLog: () => ({
     data: {
       auditLog: {
@@ -2123,6 +2224,7 @@ const OPERATIONS = {
         version: "0.0.0",
         insecureTransport: true,
         devMode: true,
+        externalApiEnabled: true,
       },
     },
   }),
@@ -2448,6 +2550,28 @@ async function exercise(page, base, colorScheme) {
   await page.getByRole("link", { name: "All test restores" }).click();
   await page.getByRole("link", { name: /^Details:/ }).click();
   await page.getByTestId("test-restore-db").first().waitFor();
+  // The job's API access panel (D-220): tokens with the any-address
+  // badge, the curl examples, the create dialog and the show-once dialog.
+  await page.goto(`${base}/jobs/${JR_IDS.job}`);
+  await page.getByTestId("api-access-panel").getByText("Any address").first().waitFor();
+  await page.getByRole("region", { name: "curl examples" }).first().waitFor();
+  await page.getByRole("button", { name: "Copy: 1. Start a backup" }).first().waitFor();
+  await page.getByRole("button", { name: "Create API token" }).click();
+  const createToken = page.getByRole("dialog", { name: "Create an API token" });
+  await createToken.getByLabel("Name").fill("release");
+  await createToken.getByRole("checkbox", { name: "Allow from any address" }).check();
+  await createToken.getByText(/anyone who obtains the token/).waitFor();
+  await createToken.getByRole("button", { name: "Create token" }).click();
+  const shownToken = page.getByRole("dialog", { name: "Save the API token" });
+  await shownToken.getByLabel("API token").waitFor();
+  await shownToken.getByRole("checkbox", { name: /I stored the token/ }).check();
+  await shownToken.getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Edit addresses: nightly check" }).click();
+  await page.getByRole("dialog", { name: "Addresses of nightly check" }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Revoke: nightly check" }).click();
+  await page.getByRole("dialog", { name: "Revoke nightly check?" }).waitFor();
+  await page.keyboard.press("Escape");
   await page.goto(`${base}/jobs/${JR_IDS.job}/edit`);
   // The job's schedule builder comes first; the test-restore settings
   // have their own (cron) builder further down.
@@ -2513,8 +2637,12 @@ async function exercise(page, base, colorScheme) {
   await page.getByTestId("smtp-test-result").waitFor();
   await page.getByRole("link", { name: /Security alerts/ }).click();
   await page.getByTestId("security-alert").waitFor();
-  await page.getByRole("link", { name: /Outbound allowlist/ }).click();
+  await page.getByRole("link", { name: /Network allowlists/ }).click();
   await page.getByTestId("allowlist-config-cidrs").waitFor();
+  // The runner's target allowlist, read-only (D-223).
+  await page.getByTestId("runner-bastions").waitFor();
+  await page.getByTestId("runner-always-denied").waitFor();
+  await page.getByTestId("runner-targets-env").waitFor();
   await page.getByRole("button", { name: "Add CIDR" }).click();
   await page.getByLabel("CIDR 2").fill("10.30.0.0/16");
   await page.getByTestId("allowlist-widening").waitFor();
@@ -2548,6 +2676,9 @@ async function exercise(page, base, colorScheme) {
   await page.getByRole("button", { name: "New channel" }).click();
   await page.getByRole("dialog", { name: "New shared channel" }).waitFor();
   await page.keyboard.press("Escape");
+  await page.goto(`${base}/admin/api-access`);
+  await page.getByRole("heading", { name: "API access" }).waitFor();
+  await page.getByTestId("api-token").first().waitFor();
   await page.goto(`${base}/admin/audit`);
   await page.getByTestId("audit-chain-finding").waitFor();
   await page.getByRole("button", { name: /Details of user\.created/ }).click();

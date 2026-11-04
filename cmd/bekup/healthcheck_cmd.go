@@ -37,7 +37,28 @@ func newHealthcheckCmd(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("invalid configuration:\n%w", err)
 			}
-			u, err := healthzURL(res.Config.Server.Listen)
+			u, err := healthzURL("server.listen", res.Config.Server.Listen)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(c.Context(), healthcheckTimeout)
+			defer cancel()
+			if err := probe(ctx, u); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(c.OutOrStdout(), "ok")
+			return err
+		},
+	}, &cobra.Command{
+		Use:   "external-api",
+		Short: "GET /healthz on the address from external-api.toml listen.address",
+		Args:  cobra.NoArgs,
+		RunE: func(c *cobra.Command, _ []string) error {
+			res, err := config.LoadExternalAPI(config.Options{ConfigPath: g.configPath, Dev: g.dev})
+			if err != nil {
+				return fmt.Errorf("invalid external API configuration:\n%w", err)
+			}
+			u, err := healthzURL("listen.address", res.Config.Listen.Address)
 			if err != nil {
 				return err
 			}
@@ -74,12 +95,13 @@ func newHealthcheckCmd(g *globalFlags) *cobra.Command {
 	return cmd
 }
 
-// healthzURL derives the local /healthz URL from server.listen. A wildcard
-// or empty host is probed on loopback (IPv6 loopback for "::").
-func healthzURL(listen string) (string, error) {
+// healthzURL derives the local /healthz URL from a listen address (key
+// names it in errors). A wildcard or empty host is probed on loopback
+// (IPv6 loopback for "::").
+func healthzURL(key, listen string) (string, error) {
 	host, port, err := net.SplitHostPort(listen)
 	if err != nil || port == "" {
-		return "", fmt.Errorf("server.listen %q is not host:port", listen)
+		return "", fmt.Errorf("%s %q is not host:port", key, listen)
 	}
 	switch host {
 	case "", "0.0.0.0":

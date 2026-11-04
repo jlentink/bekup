@@ -23,8 +23,11 @@ log:
   format: common
   noColor: true
 
-# No access log: bekup logs requests itself, and the download ticket is part
-# of the URL path (/api/download/{ticket}, single-use, D-056).
+# No access log: bekup logs requests itself, the download ticket is part of
+# the URL path (/api/download/{ticket}, single-use, D-056), and an external
+# API path (/api/v1/..., D-220) may carry a token a client put there by
+# mistake. Traefik logs no request paths at level INFO; keep it that way
+# (no accessLog section, no DEBUG level in production).
 
 api:
   dashboard: false

@@ -135,9 +135,11 @@ WHERE x.finished_at < now() - interval '30 days'
 -- that can receive a reload broadcast: the LISTEN connections of serve and
 -- worker in this database (all run as bekup_app, so their rows are
 -- visible), "<prefix>:<instance id>". Display and progress only: any
--- client can claim such a name (D-200).
+-- client of the same role can claim such a name (D-200); sessions of other
+-- roles (bekup_external, D-220) never count.
 -- name: ConfigReloadListeners :many
 SELECT application_name::text AS application_name FROM pg_catalog.pg_stat_activity
 WHERE datname = pg_catalog.current_database()
+  AND usename = current_user
   AND (application_name LIKE 'bekup-serve-listen%' OR application_name LIKE 'bekup-worker-listen%')
 LIMIT 1000;

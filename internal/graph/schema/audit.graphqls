@@ -60,6 +60,8 @@ enum AuditActorKind {
   SYSTEM
   "A host operator running a bekup subcommand."
   CLI
+  "An external API token (details name the token and its run request)."
+  API
 }
 
 "Filters for auditLog; unset fields do not filter."

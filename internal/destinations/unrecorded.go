@@ -420,12 +420,12 @@ func (s *Service) DeleteUnrecordedFile(ctx context.Context, actor Actor, destID,
 }
 
 // deleteFailed logs a storage failure of DeleteUnrecordedFile and records a
-// host-key mismatch as the security event it is.
+// host-key or certificate-pin mismatch as the security event it is.
 func (s *Service) deleteFailed(ctx context.Context, actor Actor, r *record, code storage.ErrorCode) (storage.ErrorCode, error) {
 	s.o.Logger.WarnContext(ctx, "deleting an unrecorded file failed",
 		slog.String("destination_id", r.row.ID.String()), slog.String("code", string(code)))
-	if code == storage.CodeHostKeyMismatch {
-		if err := s.hostKeyMismatch(ctx, actor, r); err != nil {
+	if code == storage.CodeHostKeyMismatch || code == storage.CodeTLSPinMismatch {
+		if err := s.pinMismatch(ctx, actor, r); err != nil {
 			return "", err
 		}
 	}
@@ -434,11 +434,11 @@ func (s *Service) deleteFailed(ctx context.Context, actor Actor, r *record, code
 
 // storageCode normalizes a failure to open the backend like Test does (a
 // blocked or unreachable endpoint is a network error) and records a
-// host-key mismatch as the security event it is.
+// host-key or certificate-pin mismatch as the security event it is.
 func (s *Service) storageCode(ctx context.Context, actor Actor, r *record, err error) (storage.ErrorCode, error) {
 	code := classify(err)
-	if code == storage.CodeHostKeyMismatch {
-		if err := s.hostKeyMismatch(ctx, actor, r); err != nil {
+	if code == storage.CodeHostKeyMismatch || code == storage.CodeTLSPinMismatch {
+		if err := s.pinMismatch(ctx, actor, r); err != nil {
 			return "", err
 		}
 	}

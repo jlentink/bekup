@@ -74,6 +74,7 @@ const T = {
     duration: "Duration",
     trigger: "Trigger",
     by: "Started by",
+    byToken: (creator: string) => `API token created by ${creator}`,
   },
   attempt: (n: number) => `attempt ${String(n)}`,
   error: "Error",
@@ -214,9 +215,19 @@ function RunDetail({ run }: { run: Run }) {
           </Stat>
           {run.triggeredBy ? (
             <Stat label={T.stats.by}>
-              <span title={run.triggeredBy.email}>
-                {run.triggeredBy.displayName || run.triggeredBy.email}
-              </span>
+              {run.triggeredBy.apiToken ? (
+                <span
+                  title={T.stats.byToken(
+                    run.triggeredBy.displayName || run.triggeredBy.email,
+                  )}
+                >
+                  {run.triggeredBy.apiToken.name}
+                </span>
+              ) : (
+                <span title={run.triggeredBy.email}>
+                  {run.triggeredBy.displayName || run.triggeredBy.email}
+                </span>
+              )}
             </Stat>
           ) : null}
         </dl>

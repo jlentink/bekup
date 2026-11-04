@@ -61,7 +61,10 @@ const (
 	KindTLSPinMismatch             = "tls_pin_mismatch"
 	KindSSHHostKeyMismatch         = "ssh_host_key_mismatch"
 	KindDestinationHostKeyMismatch = "destination_host_key_mismatch"
-	KindRestoreVerificationFailed  = "restore_verification_failed"
+	// KindDestinationTLSPinMismatch: a pinned WebDAV destination presented
+	// another certificate key (D-222).
+	KindDestinationTLSPinMismatch = "destination_tls_pin_mismatch"
+	KindRestoreVerificationFailed = "restore_verification_failed"
 )
 
 var accountKinds = map[audit.Action]string{
@@ -86,6 +89,7 @@ var systemKinds = map[audit.Action]string{
 	audit.ActionConnectionPinMismatch:      KindTLSPinMismatch,
 	audit.ActionConnectionHostKeyMismatch:  KindSSHHostKeyMismatch,
 	audit.ActionDestinationHostKeyMismatch: KindDestinationHostKeyMismatch,
+	audit.ActionDestinationTLSPinMismatch:  KindDestinationTLSPinMismatch,
 	audit.ActionRestoreVerificationFailed:  KindRestoreVerificationFailed,
 }
 

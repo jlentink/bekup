@@ -50,11 +50,16 @@ type PoolOptions struct {
 // PoolOptionsFromConfig maps the [database] config section to PoolOptions,
 // reading the database.tls_* files (LoadTLSOptions).
 func PoolOptionsFromConfig(cfg *config.Bekup, applicationName string) (PoolOptions, error) {
-	tlsOpts, err := LoadTLSOptions(cfg)
+	return PoolOptionsFromDatabase(&cfg.Database, applicationName)
+}
+
+// PoolOptionsFromDatabase maps one [database] section (bekup.toml or
+// external-api.toml) to PoolOptions.
+func PoolOptionsFromDatabase(c *config.Database, applicationName string) (PoolOptions, error) {
+	tlsOpts, err := LoadDatabaseTLSOptions(c)
 	if err != nil {
 		return PoolOptions{}, err
 	}
-	c := &cfg.Database
 	return PoolOptions{
 		MaxConns:         clampInt32(c.MaxConns),
 		MinConns:         clampInt32(c.MinConns),

@@ -1,0 +1,19 @@
+  # -------------------------------------------------------------------------
+  # external-api: the token-authenticated REST API for CI pipelines (D-220),
+  # OPT-IN: it runs only with the compose profile external-api, which
+  # `setup init|upgrade --external-api` adds to COMPOSE_PROFILES in .env
+  # (with BEKUP_EXTERNAL_API=enabled). serve's hardening, plain HTTP on YOUR
+  # proxy's Docker network as http://bekup-external-api:8081 (route
+  # https://<domain>/api/v1/ there, preferably to this container's name;
+  # setup prints the settings) and the `backend` network to the database,
+  # nothing else: no egress network, no runner, no metrics, no published
+  # port. YOUR proxy's network usually routes outward, so the external API
+  # can reach the internet (and every container on that network) through
+  # it: put your proxy's backends on an internal network (`docker network
+  # create --internal`; the proxy keeps its published ports on another
+  # one) to take that away. It reads only external-api.toml and its
+  # database login: never bekup.toml, the master key or a certificate, and
+  # it connects only as bekup_external, which may do nothing but call the
+  # api.* functions. It refuses to start until that role exists and
+  # `migrate up` granted it the api schema (docs/guides/external-api.md).
+  # -------------------------------------------------------------------------

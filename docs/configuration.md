@@ -4,15 +4,23 @@ bekup reads its infrastructure configuration from TOML files:
 
 - **`bekup.toml`** for `bekup serve` and `bekup worker`;
 - **`runner.toml`** for `bekup runner`. It is a separate file so that serve's
-  configuration can never change the runner's image and target allowlists.
+  configuration can never change the runner's image and target allowlists;
+  admins see the effective `[targets]` allowlist read-only on Admin →
+  Settings → Network ("Database servers (runner)", D-223) and change it
+  only here, followed by a runner restart;
+- **`external-api.toml`** for `bekup external-api`, the optional REST API
+  for CI pipelines ([guide](guides/external-api.md), D-220). It never reads
+  `bekup.toml`, the master key or the runner certificates and connects
+  only as `bekup_external`.
 
 Annotated examples ship in the repository root:
-[`bekup.example.toml`](../bekup.example.toml) and
-[`runner.example.toml`](../runner.example.toml). Settings that admins change
+[`bekup.example.toml`](../bekup.example.toml),
+[`runner.example.toml`](../runner.example.toml) and
+[`external-api.example.toml`](../external-api.example.toml). Settings that admins change
 in the UI (SMTP, 2FA policy, SSRF allowlist) live in the database, not in
 TOML. A small set of `bekup.toml` keys can be applied at runtime (see
 [Reloading](#reloading)); every other change needs a restart. `runner.toml`
-is never reloaded.
+and `external-api.toml` are never reloaded.
 
 Decisions: D-019, D-041, D-060, the proposed D-073 to D-075 and D-200 in
 [`DECISIONS.md`](DECISIONS.md).
@@ -24,8 +32,10 @@ The first match wins; files are **never merged**.
 1. `--config <path>` or the `BEKUP_CONFIG` environment variable. If it is set
    and the file does not exist, bekup stops with an error. It never falls
    back to the other locations.
-2. The working directory: `./bekup.toml` (or `./runner.toml`).
-3. `/etc/bekup/bekup.toml` (or `/etc/bekup/runner.toml`).
+2. The working directory: `./bekup.toml` (or `./runner.toml`,
+   `./external-api.toml`).
+3. `/etc/bekup/bekup.toml` (or `/etc/bekup/runner.toml`,
+   `/etc/bekup/external-api.toml`).
 
 If no file is found, startup fails, except in dev mode, which runs on the
 built-in defaults. The loaded path is logged at startup and shown by
@@ -81,8 +91,13 @@ Two more variables are read by bekup but are not tied to a key:
 | `BEKUP_CONFIG` | Config file path, like `--config`. |
 | `BEKUP_DEV` | `1`/`true` enables dev mode, like `--dev`. Enable-only: `0`/`false` does not turn off `[dev] enabled = true` from the file (use `BEKUP_DEV_ENABLED=false`, see [Dev mode](#dev-mode)). |
 
-The two files use the same `BEKUP_` prefix; each process only reads the keys
-of its own file.
+The three files use the same `BEKUP_` prefix; each process only reads the
+keys of its own file. Sections with the same name share their variables
+(`BEKUP_LISTEN_ADDRESS` is `[listen] address` of runner.toml and of
+external-api.toml; `BEKUP_DATABASE_*` is `[database]` of bekup.toml and of
+external-api.toml), so set them only in the environment of the one process
+they are meant for: the external API refuses to start when its database
+login is not `bekup_external`.
 
 ### Unknown variables
 
@@ -95,7 +110,7 @@ read by the compose files, the dev tooling or the tests, not by bekup:
 | Variable | Used by |
 |---|---|
 | `BEKUP_IMAGE` | compose: image reference |
-| `BEKUP_SETUP_VERSION` | compose (written by `bekup setup` to `.env`): the version setup prepared the deployment for; `migrate up`, `db bootstrap`, `serve`, `worker` and `runner` refuse to start with another version (D-212) |
+| `BEKUP_SETUP_VERSION` | compose (written by `bekup setup` to `.env`): the version setup prepared the deployment for; `migrate up`, `db bootstrap`, `serve`, `worker`, `runner` and `external-api` refuse to start with another version (D-212) |
 | `BEKUP_IMAGE_MODE` | compose (written by `bekup setup`): `following` when the bekup image follows a tag; serve and worker warn, audit and alert, and outside dev mode every guarded command refuses it without `BEKUP_SETUP_VERSION` (D-212). serve and worker also treat the image as following when the runner reports an unpinned own image |
 | `BEKUP_DOMAIN` | compose proxy profiles: public host name |
 | `BEKUP_SETUP_WEB_HOST`, `BEKUP_SETUP_WEB_PORT` | compose: the host name/address the browser setup is opened with and its published port (D-217) |
@@ -103,7 +118,7 @@ read by the compose files, the dev tooling or the tests, not by bekup:
 | `BEKUP_DEV_BACKEND`, `BEKUP_WEB_BUILD`, `BEKUP_WEB_OUT_DIR` | web dev server and build |
 | `BEKUP_UPDATE_SCHEMA` | tests (`just db-schema`) |
 
-A key of the *other* file (for example `BEKUP_DOCKER_SELF_CONTAINER` in the
+A key of another file (for example `BEKUP_DOCKER_SELF_CONTAINER` in the
 environment of `serve`) gets a warning that it is ignored by this command.
 
 ### Canonical names and older shorthand
@@ -304,6 +319,7 @@ operator runbook is in [operations.md](operations.md#reloading-the-configuration
 ```sh
 bekup config validate            # load and validate bekup.toml, list every error
 bekup config validate --runner   # the same for runner.toml
+bekup config validate --external-api  # the same for external-api.toml
 bekup config print               # effective config, source per key, secrets redacted
 bekup --config /etc/bekup/bekup.toml config print --redacted
 ```
@@ -564,5 +580,69 @@ Generated from the config structs; regenerate with
 | `max_run_duration` | `BEKUP_LIMITS_MAX_RUN_DURATION` | duration | `'12h0m0s'` | Hard upper bound for a single container run. |
 | `max_log_lines` | `BEKUP_LIMITS_MAX_LOG_LINES` | int | `10000` | Maximum log lines kept per run. |
 | `max_log_line_bytes` | `BEKUP_LIMITS_MAX_LOG_LINE_BYTES` | int | `4096` | Maximum length of a single log line in bytes (longer lines are truncated). |
+
+### `external-api.toml`
+
+#### `[listen]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `address` | `BEKUP_LISTEN_ADDRESS` | string | `':8081'` | Address the plain-HTTP API listens on (host:port), behind the TLS reverse proxy; never publish it. Outside dev mode a wildcard address (:port, 0.0.0.0, [::]) is refused unless allow_wildcard is set; bind the internal network address instead. |
+| `allow_wildcard` | `BEKUP_LISTEN_ALLOW_WILDCARD` | bool | `false` | Allow a wildcard/unspecified listen.address outside dev mode (logs a startup warning). Prefer binding the internal network address. |
+| `trusted_proxies` | `BEKUP_LISTEN_TRUSTED_PROXIES` | list of strings | `[]` | CIDRs of the reverse proxies whose X-Forwarded-For header is trusted (the bundled proxy's fixed address as a /32). X-Forwarded-For from every other peer is ignored and the peer address is the client address, which the per-token address allowlists are checked against (D-220 amendment 1). Required outside dev mode (or trusted_proxy_hosts). |
+| `trusted_proxy_hosts` | `BEKUP_LISTEN_TRUSTED_PROXY_HOSTS` | list of strings | `[]` | Container names of your own reverse proxy on a Docker network the external API shares (as server.trusted_proxy_hosts of bekup.toml, D-215): each name is resolved through Docker's embedded DNS and its private addresses inside the subnet of the external API's own interface on that network (found through its alias bekup-external-api) are trusted, at most one per address family; re-resolved every 20 seconds, untrusted when older than 30 seconds, an unresolvable or colliding name trusts nothing. At most 8 names; no IP addresses (use trusted_proxies), no wildcards, no dots and none of bekup's own service names. Counts as the required trusted proxy outside dev mode. |
+| `read_header_timeout` | `BEKUP_LISTEN_READ_HEADER_TIMEOUT` | duration | `'5s'` | Maximum time to read request headers (1s to 1m). |
+| `read_timeout` | `BEKUP_LISTEN_READ_TIMEOUT` | duration | `'10s'` | Maximum time to read a whole request, body included (at least read_header_timeout, at most 5m). |
+| `write_timeout` | `BEKUP_LISTEN_WRITE_TIMEOUT` | duration | `'15s'` | Maximum time to write a response (1s to 5m). |
+| `idle_timeout` | `BEKUP_LISTEN_IDLE_TIMEOUT` | duration | `'1m0s'` | Maximum keep-alive idle time between requests (1s to 10m). |
+| `shutdown_timeout` | `BEKUP_LISTEN_SHUTDOWN_TIMEOUT` | duration | `'15s'` | Grace period for in-flight requests on shutdown (1s to 5m). |
+
+#### `[database]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `url_file` | `BEKUP_DATABASE_URL_FILE` | string | `'/run/secrets/bekup_external_database_url'` | **Secret file.** URL mode: path to a file containing the connection URL of the bekup_external role (Docker secret). The file must not be group/world-writable or world-readable. Cannot be combined with database.host (fields mode). |
+| `url` | `BEKUP_DATABASE_URL` | string | `(empty)` | **Dev mode only.** Inline connection URL. Dev mode only; rejected otherwise. Use url_file instead. |
+| `owner_url_file` | `BEKUP_DATABASE_OWNER_URL_FILE` | string | `(empty)` | **Secret file.** Not used: the external API never migrates. Must stay unset. |
+| `owner_url` | `BEKUP_DATABASE_OWNER_URL` | string | `(empty)` | **Dev mode only.** Not used: the external API never migrates. Must stay unset. |
+| `host` | `BEKUP_DATABASE_HOST` | string | `(empty)` | Fields mode (D-207): host name or IP address of an external Postgres (15 to 17). Setting it selects fields mode, which builds the connection from the database.* keys only (never from a URL or the PG* environment); url_file, owner_url_file, url and owner_url must then be unset. Connect directly to Postgres: poolers that terminate TLS break the required SCRAM channel binding. |
+| `port` | `BEKUP_DATABASE_PORT` | int | `5432` | Fields mode: TCP port of the Postgres server (1 to 65535; default 5432). |
+| `name` | `BEKUP_DATABASE_NAME` | string | `'bekup'` | Fields mode: name of bekup's own database (default bekup; letters, digits, _, - and $, at most 63 characters; never postgres or a template database). |
+| `user` | `BEKUP_DATABASE_USER` | string | `(empty)` | Fields mode: the login role; must be bekup_external (the default). |
+| `password_file` | `BEKUP_DATABASE_PASSWORD_FILE` | string | `(empty)` | **Secret file.** Fields mode: path to a file holding the bekup_external password (required in fields mode; surrounding whitespace is trimmed). Same file rules as url_file. |
+| `owner_user` | `BEKUP_DATABASE_OWNER_USER` | string | `(empty)` | Not used: the external API never migrates. Must stay unset. |
+| `owner_password_file` | `BEKUP_DATABASE_OWNER_PASSWORD_FILE` | string | `(empty)` | **Secret file.** Not used: the external API never migrates. Must stay unset. |
+| `single_account` | `BEKUP_DATABASE_SINGLE_ACCOUNT` | bool | `false` | Not supported: single-account mode cannot isolate the external API (D-220). Must stay false. |
+| `max_conns` | `BEKUP_DATABASE_MAX_CONNS` | int | `10` | Maximum number of pooled connections (1 to 20, the role's connection limit). |
+| `min_conns` | `BEKUP_DATABASE_MIN_CONNS` | int | `0` | Minimum number of idle pooled connections. |
+| `conn_max_lifetime` | `BEKUP_DATABASE_CONN_MAX_LIFETIME` | duration | `'1h0m0s'` | Maximum lifetime of a pooled connection. |
+| `conn_max_idle_time` | `BEKUP_DATABASE_CONN_MAX_IDLE_TIME` | duration | `'10m0s'` | Maximum idle time of a pooled connection. |
+| `connect_timeout` | `BEKUP_DATABASE_CONNECT_TIMEOUT` | duration | `'10s'` | Timeout for establishing a connection (1s to 1m). |
+| `statement_timeout` | `BEKUP_DATABASE_STATEMENT_TIMEOUT` | duration | `'10s'` | Server-side statement_timeout of the external API's connections (1s to 1m). |
+| `tls_mode` | `BEKUP_DATABASE_TLS_MODE` | string | `'verify-full'` | TLS for the connection (D-100): verify-full (default; server certificate verified against tls_ca_file and the host name), require or disable (both log a warning at every startup). SCRAM-SHA-256 only, with channel binding under TLS; the bundled database refuses bekup_external without TLS. |
+| `tls_ca_file` | `BEKUP_DATABASE_TLS_CA_FILE` | string | `'/run/secrets/bekup_db_ca.crt'` | Path to the CA certificate bundle (PEM) that signs the Postgres server certificate (bekup certs: <dir>/postgres/ca.crt). Only the certificates in this file are trusted (never the built-in system roots); for a managed Postgres name the provider's CA bundle, or the system bundle file only if the provider uses a public CA (D-207). Required for verify-full. |
+| `tls_client_cert_file` | `BEKUP_DATABASE_TLS_CLIENT_CERT_FILE` | string | `(empty)` | Optional client certificate (PEM) presented to Postgres. Set together with tls_client_key_file. |
+| `tls_client_key_file` | `BEKUP_DATABASE_TLS_CLIENT_KEY_FILE` | string | `(empty)` | **Secret file.** Optional client private key (PEM) for tls_client_cert_file. Same file rules as url_file. |
+| `tls_server_name` | `BEKUP_DATABASE_TLS_SERVER_NAME` | string | `(empty)` | Optional host name the Postgres server certificate is verified against instead of the connection host (verify-full only), e.g. when database.host is an IP address but the certificate names a DNS name. Also sent as SNI. |
+
+#### `[limits]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `rate_limit_per_second` | `BEKUP_LIMITS_RATE_LIMIT_PER_SECOND` | float | `5.0` | Per-client-IP request rate (token bucket refill per second) for every request; exceeding it returns 429 with Retry-After. |
+| `rate_limit_burst` | `BEKUP_LIMITS_RATE_LIMIT_BURST` | int | `20` | Per-client-IP burst size (bucket capacity). |
+| `token_rate_limit_per_second` | `BEKUP_LIMITS_TOKEN_RATE_LIMIT_PER_SECOND` | float | `1.0` | Per-API-token request rate (token bucket refill per second) on top of the per-IP limit; exceeding it returns 429 with Retry-After. A CI job polling every 15 seconds needs far less than the default. |
+| `token_rate_limit_burst` | `BEKUP_LIMITS_TOKEN_RATE_LIMIT_BURST` | int | `10` | Per-API-token burst size (bucket capacity). |
+| `rate_limit_max_clients` | `BEKUP_LIMITS_RATE_LIMIT_MAX_CLIENTS` | int | `10000` | Maximum number of client IPs (and, separately, API tokens) tracked by each limiter; the least recently seen entries are evicted beyond it (memory bound). |
+| `failed_auth_limit` | `BEKUP_LIMITS_FAILED_AUTH_LIMIT` | int | `10` | Failed authentications (malformed, unknown, wrong, revoked or expired tokens and refused client addresses) one client IP may have within failed_auth_window; further requests of that IP get 429 with Retry-After until the window frees up (1 to 100). |
+| `failed_auth_window` | `BEKUP_LIMITS_FAILED_AUTH_WINDOW` | duration | `'5m0s'` | Window of failed_auth_limit (1m to 1h). |
+| `max_body_bytes` | `BEKUP_LIMITS_MAX_BODY_BYTES` | int | `16384` | Maximum request body size in bytes (1024 to 65536); larger requests get 413. The API accepts only an empty body or an empty JSON object. |
+
+#### `[logging]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `level` | `BEKUP_LOGGING_LEVEL` | string | `'info'` | Log level: debug, info, warn or error (--log-level overrides it). |
+| `format` | `BEKUP_LOGGING_FORMAT` | string | `'json'` | Log format: json or text (text is the default in dev mode). |
 
 <!-- END GENERATED KEY REFERENCE -->

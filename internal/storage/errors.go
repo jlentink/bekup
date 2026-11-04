@@ -3,10 +3,14 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"os"
+	"strings"
 	"syscall"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Sentinel errors returned (wrapped) by every backend. Compare with
@@ -27,7 +31,8 @@ var (
 	// by an active object lock (retention or legal hold).
 	ErrDeleteNotPermitted = errors.New("storage: delete not permitted")
 	// ErrChecksumMismatch reports that the streamed bytes did not match
-	// PutOptions.ExpectedSHA256; the object was not finalized.
+	// PutOptions.ExpectedSHA256 or that the server stored a different
+	// number of bytes than were written; the object was not finalized.
 	ErrChecksumMismatch = errors.New("storage: checksum mismatch")
 	// ErrUnsupported reports an option the backend cannot honor (for
 	// example a retention date on a backend without object lock). Backends
@@ -43,7 +48,8 @@ var (
 
 // ErrorCode is a normalized, user-presentable error class. Raw backend
 // errors may contain host names, paths or provider messages; only the code
-// and its fixed message are shown in the UI (Test results, run logs).
+// and its fixed message are shown in the UI (Test results, run logs), in
+// run logs followed by a curated detail (WithDetail, Describe).
 type ErrorCode string
 
 // Error codes.
@@ -62,15 +68,24 @@ const (
 	// the pinned one (or does not offer the pinned key type). A security
 	// event (possible impersonation), never an ordinary failure.
 	CodeHostKeyMismatch ErrorCode = "host_key_mismatch"
-	CodeTimeout         ErrorCode = "timeout"
-	CodeCanceled        ErrorCode = "canceled"
-	CodeNetwork         ErrorCode = "network"
-	CodeClosed          ErrorCode = "closed"
-	CodeInternal        ErrorCode = "internal"
+	// CodeTLSPinMismatch: a WebDAV server presented another TLS
+	// certificate than the pinned one (D-222). A security event, like
+	// CodeHostKeyMismatch.
+	CodeTLSPinMismatch ErrorCode = "tls_pin_mismatch"
+	// CodeOverwriteIgnored: the server ignored "Overwrite: F" and replaced
+	// an existing file (WebDAV, D-222). bekup never overwrites, so the
+	// destination cannot be used until the server is fixed.
+	CodeOverwriteIgnored ErrorCode = "overwrite_ignored"
+	CodeTimeout          ErrorCode = "timeout"
+	CodeCanceled         ErrorCode = "canceled"
+	CodeNetwork          ErrorCode = "network"
+	CodeClosed           ErrorCode = "closed"
+	CodeInternal         ErrorCode = "internal"
 )
 
-// codeError lets backends (S3 auth/TLS failures, SFTP host-key mismatch)
-// attach a code to an error without inventing a new sentinel for each.
+// codeError lets backends (S3 auth/TLS failures, SFTP host-key and WebDAV
+// certificate-pin mismatches) attach a code to an error without inventing
+// a new sentinel for each.
 type codeError struct {
 	code ErrorCode
 	err  error
@@ -156,6 +171,10 @@ func (c ErrorCode) Message() string {
 		return "the destination refused access (check permissions or credentials)"
 	case CodeHostKeyMismatch:
 		return "the server's SSH host key does not match the pinned key (possible impersonation); verify the new key out of band before confirming it"
+	case CodeTLSPinMismatch:
+		return "the server's TLS certificate does not match the pinned certificate (possible impersonation); verify the new certificate out of band before pinning it"
+	case CodeOverwriteIgnored:
+		return "the server ignores 'Overwrite: F' and replaced an existing file; bekup never overwrites backups, so it cannot use this server until the server refuses such moves"
 	case CodeTimeout:
 		return "the operation timed out"
 	case CodeCanceled:
@@ -169,4 +188,90 @@ func (c ErrorCode) Message() string {
 	default:
 		return "an unexpected storage error occurred"
 	}
+}
+
+// maxDetailLen bounds a user-presentable detail (bytes).
+const maxDetailLen = 200
+
+// detailError attaches a user-presentable detail to an error.
+type detailError struct {
+	detail string
+	err    error
+}
+
+func (e *detailError) Error() string { return e.err.Error() }
+func (e *detailError) Unwrap() error { return e.err }
+
+// WithDetail wraps err with a short, user-presentable detail that may be
+// shown next to the code's fixed message (run logs, see Describe). The
+// detail must be built by bekup from fixed text and numbers only: never
+// server messages, host names, paths, keys or credentials. It does not
+// change err's text (admin logs keep the raw chain) or its class.
+func WithDetail(err error, detail string) error {
+	if err == nil {
+		return nil
+	}
+	return &detailError{detail: detail, err: err}
+}
+
+// Detail returns the outermost detail attached with WithDetail, with
+// control characters replaced and the length capped, or "".
+func Detail(err error) string {
+	var de *detailError
+	if !errors.As(err, &de) {
+		return ""
+	}
+	return sanitizeDetail(de.detail)
+}
+
+func sanitizeDetail(s string) string {
+	b := make([]rune, 0, len(s))
+	size := 0
+	for _, r := range s {
+		if unicode.IsControl(r) || r == utf8.RuneError {
+			r = ' '
+		}
+		if size+utf8.RuneLen(r) > maxDetailLen {
+			b = append(b, '…')
+			break
+		}
+		size += utf8.RuneLen(r)
+		b = append(b, r)
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// Describe returns the code's fixed message followed by err's detail (if
+// any), for user-facing texts such as run logs.
+func Describe(code ErrorCode, err error) string {
+	msg := code.Message()
+	if d := Detail(err); d != "" {
+		msg += ": " + d
+	}
+	return msg
+}
+
+// FormatSize formats a byte count for messages (binary units, one
+// decimal).
+func FormatSize(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for m := n / unit; m >= unit && exp < 5; m /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+// FormatSizes formats "got of want" for messages; when both round to the
+// same text the exact byte counts are used.
+func FormatSizes(got, want int64) string {
+	g, w := FormatSize(got), FormatSize(want)
+	if g == w {
+		return fmt.Sprintf("%d of %d bytes", got, want)
+	}
+	return g + " of " + w
 }

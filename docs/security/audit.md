@@ -19,7 +19,7 @@ signed chain head is exported, and the archival policy.
 | `id` | `bigint` PK | assigned by the trigger from `audit_log_id_seq` **under the chain lock**, so id order is chain order |
 | `ts` | `timestamptz` | set by the trigger to `clock_timestamp()` |
 | `actor_user_id` | `uuid` NULL | no foreign key (rows outlive users) |
-| `actor_kind` | `text` | `user`, `system` or `cli` |
+| `actor_kind` | `text` | `user`, `system`, `cli` or `api` (an external API token, D-220) |
 | `action` | `text` | 1–128 chars |
 | `target_type`, `target_id` | `text` NULL | |
 | `ip` | `inet` NULL | host addresses only (/32, /128) |
@@ -93,7 +93,8 @@ supplies `id`, `ts` or hashes: the trigger computes them.
 
 - **Fail closed.** Any write failure returns an error wrapping
   `audit.ErrRecordFailed`; the audited operation must fail with it.
-- **Actor:** `UserActor(id)`, `SystemActor()` or `CLIActor()`.
+- **Actor:** `UserActor(id)`, `SystemActor()`, `CLIActor()` or
+  `APIActor(token, name, request)` (D-220).
   `audit.CLIEvent(...)` builds break-glass CLI events (D-069) with the OS
   user (`os_user`, `os_uid`) and `hostname` in the details.
 - **Actions** come from a typed catalog (`internal/audit/actions.go`);
@@ -101,7 +102,7 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `secret.changed`, `setting.changed`, `security.*`, `system.*`,
   `cli.admin.*`, `keys.*` (incl. `keys.check_value_stored`), `certs.rotated`, `audit.*`,
   `download.*`, `connection.*`, `destination.*`, `job.*`, `mfa_policy.*`,
-  `config.*`.
+  `config.*`, `api_token.*`.
 - Job encryption (task 3.2, D-142; target type `job`, target id the job
   id): `job.encryption_passphrase_set` (`version`, `previous_version`,
   `generated`, `via` set/generate/create; also `secret.changed` with
@@ -129,6 +130,28 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `river_state` of its River job; `retry_canceled` when the run had
   finished and its pending retry was canceled, D-155). The run history itself (statuses,
   items, artifacts, logs) lives in the run tables, not in the audit log.
+- External API tokens (D-220; target type `api_token`, target id the
+  token id; actor kind `api`, which adds `api_token_id` and
+  `api_token_name`): `api_token.ip_denied` (a valid token presented from
+  an address outside its allowlist, recorded by the workers' consumer at
+  most once per token and 10 minutes; `denial_id`, `creator_id`,
+  `client_ip`, the entry's IP is the client address; raises the
+  `api_token_ip_denied` security alert to admins and the token's
+  creator). API run requests are `job.run_requested` with actor kind
+  `api` (`request_id` added). Token management (D-220 amendment 3; the
+  user actor, step-up; details `api_token_id`, `api_token_name`,
+  `job_ids`, never the token or its hash): `api_token.created`
+  (`expires_at`, `allowed_cidrs`, `allow_any_address`; raises the
+  `api_token_created` alert, and `api_token_any_address` with any
+  address), `api_token.revoked` (`expires_at`) and
+  `api_token.addresses_changed` (`allowed_cidrs`, `allow_any_address` and
+  their `previous_` values, `widened` (the token may now be used from an
+  address it could not be used from before), `creator_id`,
+  `changed_by_creator` and `actor_name` (the actor's display name);
+  raises `api_token_any_address` when any address is newly chosen, else
+  `api_token_addresses_widened` when widened, and on every widening the
+  account alert `api_token_addresses_widened` to the token's creator; an
+  unchanged list, in any order, records nothing).
 - Downloads (task 3.9, D-150; target type `artifact`, target id the
   artifact id; details `ticket_id`, `mode`, `job_id`, `run_id`,
   `destination_id`, `encryption`, `kind`, never the ticket value or an age
@@ -222,9 +245,15 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   fingerprint, `previous_fingerprint`) and `destination.ssh_key_generated`
   (public key fingerprint), and the security event
   `destination.ssh_host_key_mismatch` (host, port, pinned fingerprint;
-  recorded when a test meets another host key, D-140). An update that
-  moves an SFTP destination lists the re-entered password in
-  `reentered_for_new_endpoint`. Credential changes are listed by name only and
+  recorded when a test meets another host key, D-140). WebDAV (D-222):
+  `destination.tls_pinned` (name, host, `spki_sha256`,
+  `certificate_sha256`, `not_after`, `previous_spki_sha256`),
+  `destination.tls_pin_cleared` (name, host, `previous_spki_sha256`;
+  alerted) and the security event `destination.tls_pin_mismatch` (name,
+  host, `pinned_spki_sha256`; recorded by a test or a run that meets
+  another certificate key; alerted); an update that changes the URL lists
+  `tls_pin_cleared`. An update that moves an SFTP or WebDAV destination
+  lists the re-entered password in `reentered_for_new_endpoint`. Credential changes are listed by name only and
   additionally recorded as `secret.changed` (`fields`, `via`). No-op
   updates record nothing. `destination.unrecorded_file_deleted` (D-209):
   an admin deleted an unrecorded file (`name`, `object` (the object key), `size`);
@@ -343,6 +372,16 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   and `process`; once per new set of addresses (a failed write is retried
   at the next check, every 20 s). It raises the critical
   `serve_alias_conflict` security alert.
+- `security.external_api_alias_conflict` (actor `system`, target
+  `server`) is recorded by `serve` in the own-proxy compose shapes with the
+  external API enabled when the external API's network alias
+  `bekup-external-api` resolves to more than one container (more than one
+  address of a family) or to one of serve's own addresses (D-220; the
+  external API itself cannot audit), with `alias`, `addresses` (every
+  answer) and `process`; once per new set of addresses (retried like the
+  entry above). It raises the critical `external_api_alias_conflict`
+  security alert; serve's `/readyz` is not affected (the external API's own
+  `/readyz` fails while another container holds its alias).
 - `security.unpinned_image` (actor `system`, target `server`) is recorded
   at every `serve` and `worker` startup outside dev mode when the bekup
   image follows a tag instead of a digest (`BEKUP_IMAGE_MODE=following`, or

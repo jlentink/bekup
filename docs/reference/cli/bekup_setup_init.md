@@ -56,6 +56,12 @@ prints the one `docker compose run --rm migrate db bootstrap` command), existing
 (--db-user: one account for everything; an explicit weakening). setup has no
 network: it never connects to the database.
 
+The opt-in external API for CI pipelines (--external-api, D-220): the compose
+profile external-api, https://<domain>/api/v1/ through the bundled proxy (your
+own proxy: setup prints the route), external-api.toml and the bekup_external
+database role (bundled: created with the new volume; your PostgreSQL: the
+printed bootstrap command). Not with --db-auth single-account.
+
 On a terminal, missing answers are prompted; --non-interactive requires the
 flags instead. Existing files are never overwritten without --force (non-secret
 files only) or --regenerate-secrets (terminal + typed confirmation). An
@@ -91,6 +97,8 @@ bekup setup init [flags]
       --dir string                      deployment directory (must exist) (default "/deploy")
       --docker-gid int                  group ID of the Docker socket on the host: stat -c %g /var/run/docker.sock (default: $DOCKER_GID)
       --domain string                   public host name of the UI (base_url https://<domain>)
+      --external-api                    enable the opt-in external API for CI pipelines (D-220): the compose profile external-api, https://<domain>/api/v1/ through the proxy, external-api.toml; not with --db-auth single-account
+      --external-api-ip string          advanced, --external-api: EXTERNAL_API_FRONTEND_IP, the external API's fixed address on the frontend network (default 10.213.250.11; not own-proxy)
       --force                           rewrite existing NON-SECRET files (deploy, reference, .env, TOMLs; compose.yaml only with --write-compose)
       --frontend-subnet string          advanced: FRONTEND_SUBNET (default 10.213.250.0/24; not own-proxy)
       --generate-ca-passphrase          generate a passphrase and show it ONCE on stderr (only when stderr is a terminal; run with --log-driver none)

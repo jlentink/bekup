@@ -12,18 +12,28 @@ const (
 	ReferenceEnd   = "<!-- END GENERATED KEY REFERENCE -->"
 )
 
-// WriteReference writes the Markdown key reference for bekup.toml and
-// runner.toml: every key with its env override, type, default and
-// description; bekup.toml keys also say whether a runtime reload applies
-// them (D-200).
+// WriteReference writes the Markdown key reference for bekup.toml,
+// runner.toml and external-api.toml: every key with its env override,
+// type, default and description; bekup.toml keys also say whether a
+// runtime reload applies them (D-200).
 func WriteReference(w io.Writer) error {
 	var b strings.Builder
 	bekup := DefaultBekup()
 	runner := DefaultRunner()
+	ext := DefaultExternalAPI()
 	if err := writeReferenceFor(&b, "bekup.toml", fieldsOf(&bekup), true); err != nil {
 		return err
 	}
 	if err := writeReferenceFor(&b, "runner.toml", fieldsOf(&runner), false); err != nil {
+		return err
+	}
+	extFields := fieldsOf(&ext)
+	for i := range extFields {
+		if d, ok := externalAPIDocs[extFields[i].Path]; ok {
+			extFields[i].Doc = d
+		}
+	}
+	if err := writeReferenceFor(&b, ExternalAPIFileName, extFields, false); err != nil {
 		return err
 	}
 	_, err := io.WriteString(w, b.String())

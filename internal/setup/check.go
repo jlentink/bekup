@@ -530,7 +530,7 @@ func overlayFinding(findings []Finding) bool {
 		if f.Severity != SeverityError {
 			continue
 		}
-		for _, s := range []string{`service "serve"`, `service "migrate"`, `service "admin"`, `service "setup-web-db"`, `network "`} {
+		for _, s := range []string{`service "serve"`, `service "migrate"`, `service "admin"`, `service "setup-web-db"`, `service "external-api"`, `network "`} {
 			if strings.Contains(f.Msg, s) {
 				return true
 			}
@@ -620,21 +620,40 @@ func (c *checker) dotenv() map[string]string {
 		c.add(SeverityWarning, EnvFile, "%s has no effect: the image is pinned in %s", ImageEnvVar, ComposeFile)
 	}
 	c.deploymentEnv(env)
-	want := ""
-	if c.st.Variant == VariantFull && c.st.Proxy != ProxyNone {
-		want = string(c.st.Proxy)
-	}
-	if got := env["COMPOSE_PROFILES"]; got != want {
-		if c.st.Variant == VariantFull {
-			c.add(SeverityWarning, EnvFile, "COMPOSE_PROFILES=%q, but setup configured proxy %q", got, c.st.Proxy)
-		} else {
-			c.add(SeverityWarning, EnvFile, "COMPOSE_PROFILES=%q: the %s variant uses no profiles (`docker compose up` would start the one-shot services of that profile)", got, c.st.Variant)
-		}
-	}
+	c.profiles(env)
 	if got := env["BEKUP_KEYS_DIR"]; got != "./"+c.st.KeysDir && got != c.st.KeysDir {
 		c.add(SeverityError, EnvFile, "BEKUP_KEYS_DIR=%q, but the secrets are in ./%s", got, c.st.KeysDir)
 	}
 	return env
+}
+
+// profiles checks COMPOSE_PROFILES (the full variant's proxy and the
+// external API's profile) and BEKUP_EXTERNAL_API against the recorded
+// deployment (D-220: profile on <=> BEKUP_EXTERNAL_API=enabled, which
+// routes /api/v1/ in the bundled proxy).
+func (c *checker) profiles(env map[string]string) {
+	want := composeProfiles(c.st.Variant, c.st.Proxy, c.st.ExternalAPI)
+	got := env["COMPOSE_PROFILES"]
+	gotList := profileList(got)
+	hasExt := slices.Contains(gotList, ExternalAPIProfile)
+	switch {
+	case c.st.ExternalAPI && !hasExt:
+		c.add(SeverityError, EnvFile, "COMPOSE_PROFILES=%q lacks %s: the external API is enabled (D-220), but `docker compose up -d` does not start it; set COMPOSE_PROFILES=%s", got, ExternalAPIProfile, want)
+	case !c.st.ExternalAPI && hasExt:
+		c.add(SeverityError, EnvFile, "COMPOSE_PROFILES=%q starts the external API, which setup has not enabled (no %s, no database role): enable it with `docker compose run --rm setup upgrade --external-api`, or remove the profile", got, ExternalAPITOML)
+	case !slices.Equal(gotList, profileList(want)):
+		if c.st.Variant == VariantFull {
+			c.add(SeverityWarning, EnvFile, "COMPOSE_PROFILES=%q, but setup configured proxy %q (want %q)", got, c.st.Proxy, want)
+		} else {
+			c.add(SeverityWarning, EnvFile, "COMPOSE_PROFILES=%q: the %s variant uses no profiles but %q (`docker compose up` would start the one-shot services of that profile)", got, c.st.Variant, want)
+		}
+	}
+	switch v := env[ExternalAPIEnvVar]; {
+	case c.st.ExternalAPI && v != ExternalAPIEnabled:
+		c.add(SeverityError, EnvFile, "%s=%q, but the external API is enabled (D-220): the bundled proxy does not route /api/v1/ to it, a new database volume would not create its role and the UI hides the curl examples; set %s=%s", ExternalAPIEnvVar, bounded(v), ExternalAPIEnvVar, ExternalAPIEnabled)
+	case !c.st.ExternalAPI && v != "":
+		c.add(SeverityError, EnvFile, "%s=%q, but setup has not enabled the external API: the proxy would route /api/v1/ to a service that does not run (and serve refuses any value but %q); remove the line, or enable it with `docker compose run --rm setup upgrade --external-api`", ExternalAPIEnvVar, bounded(v), ExternalAPIEnabled)
+	}
 }
 
 func envOr(env map[string]string, key, def string) string {
@@ -705,6 +724,11 @@ func (c *checker) configs(env map[string]string) {
 		}
 		c.database(&b.Database)
 	}
+	var bcfg *config.Bekup
+	if bres != nil {
+		bcfg = bres.Config
+	}
+	c.externalAPI(env, bcfg)
 	if rres != nil {
 		r := rres.Config
 		c.wideCIDRs(RunnerTOML, "targets.allow_cidrs", r.Targets.AllowCIDRs)
@@ -888,7 +912,7 @@ func (c *checker) shellOverrides(env map[string]string) {
 	netVars := (&Network{}).vars()
 	more := make([]string, 0, 12+len(netVars))
 	more = append(more, "BEKUP_PROXY_NETWORK", "SERVE_PROXY_IP", "BEKUP_DB_NETWORK", "TRAEFIK_ENTRYPOINT", "TRAEFIK_CERTRESOLVER", "BEKUP_DOMAIN", "DOCKER_GID", "BEKUP_KEYS_DIR",
-		deployguard.EnvSetupVersion, deployguard.EnvImageMode)
+		deployguard.EnvSetupVersion, deployguard.EnvImageMode, ExternalAPIEnvVar, "COMPOSE_PROFILES")
 	for _, v := range netVars {
 		more = append(more, v.name)
 	}

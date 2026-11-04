@@ -4,6 +4,7 @@ package db_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"slices"
 	"strconv"
@@ -16,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/externaltest"
+	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/logging"
 )
 
@@ -25,11 +27,12 @@ import (
 // fields-mode credentials.
 
 const (
-	extAdmin    = "ext_admin"
-	extAdminPW  = "admin-password-0123456789"
-	extOwnerPW  = `owner-p@ss'w"o\rd;--0123`
-	extAppPW    = `app-p@ss:/?#%&= x-0123456`
-	extDatabase = "bekup"
+	extAdmin      = "ext_admin"
+	extAdminPW    = "admin-password-0123456789"
+	extOwnerPW    = `owner-p@ss'w"o\rd;--0123`
+	extAppPW      = `app-p@ss:/?#%&= x-0123456`
+	extExternalPW = "external-p@ss-0123456789"
+	extDatabase   = "bekup"
 )
 
 type extEnv struct {
@@ -517,6 +520,87 @@ func singleAccount(t *testing.T, image string) {
 	})
 	if err != nil || res.Changed || hasAction(res, "grant bekup_owner") || hasAction(res, "grant bekup_app to") {
 		t.Fatalf("re-run without CREATEROLE: %v %+v", err, res)
+	}
+
+	// The external API role is refused in single-account mode (D-220):
+	// by bootstrap and, when someone created it anyway, by the migrator.
+	if _, err := db.Bootstrap(ctx, db.BootstrapOptions{
+		Admin: e.creds(acct, acctPW, "postgres"), TLS: e.tls, Database: extDatabase, SingleAccount: true, AdoptExistingRoles: true,
+		ExternalPassword: []byte(extExternalPW), Registry: logging.NewRegistry(),
+	}); !errors.Is(err, db.ErrExternalSingleAccount) {
+		t.Fatalf("bootstrap with the external role: %v", err)
+	}
+	if err := e.s.SuperExec(ctx, "postgres", "CREATE ROLE bekup_external LOGIN NOINHERIT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.migrator(ctx, t, owner, e.tls); !errors.Is(err, db.ErrExternalSingleAccount) {
+		t.Fatalf("migrator with bekup_external: %v", err)
+	}
+	if _, err := db.Bootstrap(ctx, db.BootstrapOptions{
+		Admin: e.creds(acct, acctPW, "postgres"), TLS: e.tls, Database: extDatabase, SingleAccount: true, AdoptExistingRoles: true, Registry: logging.NewRegistry(),
+	}); !errors.Is(err, db.ErrExternalSingleAccount) {
+		t.Fatalf("bootstrap with an existing bekup_external: %v", err)
+	}
+}
+
+// TestExternalBootstrapExternalRole: bootstrap creates bekup_external with
+// CONNECT only (D-220), migrate up grants the api functions, the role
+// logs in and passes CheckExternalRole, and a second bootstrap adopts it.
+func TestExternalBootstrapExternalRole(t *testing.T) {
+	ctx := t.Context()
+	e := newExtEnv(t, externaltest.PG16, false)
+	if err := e.s.CreateAdmin(ctx, extAdmin, extAdminPW); err != nil {
+		t.Fatal(err)
+	}
+	withExternal := func(o *db.BootstrapOptions) { o.ExternalPassword = []byte(extExternalPW) }
+	res, err := e.bootstrap(ctx, t, withExternal)
+	if err != nil || !hasAction(res, "create role bekup_external") || !hasAction(res, "grant CONNECT on database bekup to bekup_external") {
+		t.Fatalf("bootstrap: %v %+v", err, res)
+	}
+	var limit int
+	var inherit bool
+	if err := superQueryRow(t, e, "SELECT rolconnlimit FROM pg_roles WHERE rolname = 'bekup_external'", &limit); err != nil || limit != 20 {
+		t.Fatalf("connection limit: %d %v", limit, err)
+	}
+	if err := superQueryRow(t, e, "SELECT rolinherit FROM pg_roles WHERE rolname = 'bekup_external'", &inherit); err != nil || inherit {
+		t.Fatalf("inherit: %v %v", inherit, err)
+	}
+	ext := e.creds(db.ExternalRole, extExternalPW, extDatabase)
+	p, err := e.pool(ctx, t, ext, e.tls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Before the migrations: the login works, PUBLIC still has its
+	// default USAGE on schema public (migration 00001 revokes it).
+	if err := db.CheckExternalLogin(ctx, p); err != nil {
+		t.Fatalf("before the migrations: %v", err)
+	}
+	if err := db.CheckExternalRole(ctx, p); err == nil || !strings.Contains(err.Error(), "schema public") {
+		t.Fatalf("audit before the migrations: %v", err)
+	}
+	e.migrateAndCheck(t, extDatabase)
+	if err := db.CheckExternalRole(ctx, p); err != nil {
+		t.Fatalf("after the migrations: %v", err)
+	}
+	if v, err := sqlc.New(p).ExternalSchemaVersion(ctx); err != nil || v == 0 {
+		t.Fatalf("schema version: %d %v", v, err)
+	}
+	// Idempotent; the existing role is adopted, never re-created.
+	res, err = e.bootstrap(ctx, t, func(o *db.BootstrapOptions) { adopt(o); withExternal(o) })
+	if err != nil || res.Changed || hasAction(res, "create role") || !hasAction(res, "role bekup_external exists") {
+		t.Fatalf("second run: %v %+v", err, res)
+	}
+	// A shared password is refused.
+	if _, err := e.bootstrap(ctx, t, func(o *db.BootstrapOptions) { adopt(o); o.ExternalPassword = []byte(extAppPW) }); err == nil ||
+		!strings.Contains(err.Error(), "own password") {
+		t.Fatalf("shared password: %v", err)
+	}
+	// A foreign member of bekup_external is refused like for the other roles.
+	if err := e.s.SuperExec(ctx, "postgres", "CREATE ROLE ext_sneaky NOLOGIN", "GRANT bekup_external TO ext_sneaky"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.bootstrap(ctx, t, adopt); err == nil || !strings.Contains(err.Error(), "ext_sneaky is a member of bekup_external") {
+		t.Fatalf("foreign member: %v", err)
 	}
 }
 

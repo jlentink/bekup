@@ -1,5 +1,6 @@
 // Package storage defines the backup destination interface and its Disk
-// (os.Root confined), S3 and SFTP backends.
+// (os.Root confined) backend; the S3, SFTP and WebDAV backends live in
+// the subpackages s3store, sftp and webdav.
 //
 // Every backend implements [Destination]. Object keys are [Key] values:
 // validated, slash-separated relative paths built with [BuildKey] (layout
@@ -16,8 +17,9 @@
 // object lock. [Capabilities] tells retention (task 3.8) and the pipeline
 // (task 3.1) what a backend supports.
 //
-// [ParseLayoutKey] recognizes keys of bekup's layout; [DirPruner] (disk and
-// SFTP) removes empty run and job directories of it (D-209).
+// [ParseLayoutKey] recognizes keys of bekup's layout; [DirPruner] (disk,
+// SFTP and WebDAV) removes empty run and job directories of it (D-209;
+// WebDAV only run directories, D-222).
 //
 // The conformance suite in package storagetest is run against every backend.
 // See D-121 in docs/DECISIONS.md.

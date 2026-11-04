@@ -43,8 +43,11 @@ const PGImage = "postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1
 const (
 	ownerPassword = "owner-test-password"
 	appPassword   = "app-test-password"
-	superUser     = "bekup_test_super"
-	superPassword = "super-test-password"
+	// The external API role (deploy/postgres/init/20-bekup-external.sh,
+	// D-220): tests act as `bekup external-api` (or as a compromised one).
+	externalPassword = "external-test-password"
+	superUser        = "bekup_test_super"
+	superPassword    = "super-test-password"
 )
 
 var (
@@ -82,6 +85,7 @@ func Main(m *testing.M) int {
 	files = append(files,
 		secretFile("/run/secrets/bekup_owner_password", ownerPassword),
 		secretFile("/run/secrets/bekup_app_password", appPassword),
+		secretFile("/run/secrets/bekup_external_password", externalPassword),
 		testcontainers.ContainerFile{HostFilePath: filepath.Join(root, "deploy", "postgres", "entrypoint.sh"),
 			ContainerFilePath: "/usr/local/bin/bekup-entrypoint.sh", FileMode: 0o555},
 	)
@@ -92,8 +96,12 @@ func Main(m *testing.M) int {
 		postgres.WithInitScripts(scripts...),
 		testcontainers.WithFiles(files...),
 		testcontainers.WithEnv(map[string]string{
-			"POSTGRES_BEKUP_OWNER_PASSWORD_FILE": "/run/secrets/bekup_owner_password",
-			"POSTGRES_BEKUP_APP_PASSWORD_FILE":   "/run/secrets/bekup_app_password",
+			"POSTGRES_BEKUP_OWNER_PASSWORD_FILE":    "/run/secrets/bekup_owner_password",
+			"POSTGRES_BEKUP_APP_PASSWORD_FILE":      "/run/secrets/bekup_app_password",
+			"POSTGRES_BEKUP_EXTERNAL_PASSWORD_FILE": "/run/secrets/bekup_external_password",
+			// The external API is enabled (20-bekup-external.sh creates the role
+			// only then, D-220 amendment 4).
+			"POSTGRES_BEKUP_EXTERNAL_API": "enabled",
 		}),
 		// As in docker-compose.yml: the image's postgres user and the
 		// wrapper entrypoint that enables TLS.
@@ -188,7 +196,9 @@ type DB struct {
 	Name     string
 	OwnerURL string
 	AppURL   string
-	SuperURL string
+	// ExternalURL logs in as bekup_external (TLS only; ExternalPool).
+	ExternalURL string
+	SuperURL    string
 }
 
 // Migrated returns a new database cloned from the init script's bekup
@@ -198,10 +208,11 @@ func Migrated(t testing.TB) DB {
 	ctx := t.Context()
 	name := fmt.Sprintf("bekup_dbt%d", dbCounter.Add(1))
 	d := DB{
-		Name:     name,
-		OwnerURL: urlFor("bekup_owner", ownerPassword, name),
-		AppURL:   urlFor("bekup_app", appPassword, name),
-		SuperURL: urlFor(superUser, superPassword, name),
+		Name:        name,
+		OwnerURL:    urlFor("bekup_owner", ownerPassword, name),
+		AppURL:      urlFor("bekup_app", appPassword, name),
+		ExternalURL: urlFor("bekup_external", externalPassword, name),
+		SuperURL:    urlFor(superUser, superPassword, name),
 	}
 	if err := exec(ctx, urlFor(superUser, superPassword, "postgres"),
 		"CREATE DATABASE "+name+" OWNER bekup_owner TEMPLATE bekup",
@@ -227,7 +238,19 @@ func Migrated(t testing.TB) DB {
 // AppPool returns a pool connected as bekup_app (closed on cleanup).
 func (d DB) AppPool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
-	p, err := db.NewPool(t.Context(), config.DBCredentials{URL: []byte(d.AppURL)}, db.PoolOptions{
+	return d.pool(t, d.AppURL)
+}
+
+// ExternalPool returns a pool connected as bekup_external, the external
+// API's role (closed on cleanup).
+func (d DB) ExternalPool(t testing.TB) *pgxpool.Pool {
+	t.Helper()
+	return d.pool(t, d.ExternalURL)
+}
+
+func (d DB) pool(t testing.TB, url string) *pgxpool.Pool {
+	t.Helper()
+	p, err := db.NewPool(t.Context(), config.DBCredentials{URL: []byte(url)}, db.PoolOptions{
 		MaxConns: 20, ApplicationName: "bekup-test", Registry: logging.NewRegistry(), TLS: tlsVerify,
 	})
 	if err != nil {

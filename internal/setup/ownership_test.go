@@ -263,12 +263,12 @@ func TestPrintChownGolden(t *testing.T) {
 	}
 	const want = `Run as root in the deployment directory on the host:
   chown -h 0:0 -- . compose.yaml bekup-setup.json .env bekup.toml runner.toml
-  chown -h 0:0 -- compose.override.yaml reference reference/bekup.example.toml reference/runner.example.toml deploy deploy/postgres
-  chown -h 0:0 -- deploy/postgres/entrypoint.sh secrets secrets/certs secrets/certs/serve secrets/certs/serve/serve.crt secrets/certs/serve/ca.crt
-  chown -h 0:0 -- secrets/certs/runner secrets/certs/runner/runner.crt secrets/certs/runner/ca.crt secrets/certs/postgres secrets/certs/postgres/postgres.crt secrets/certs/postgres/ca.crt
-  chown -h 0:0 -- secrets/certs/ca secrets/certs/ca/ca.crt secrets/certs/ca/ca.key
-  chown -h 65532:65532 -- secrets/bekup_master_key secrets/bekup_database_url secrets/bekup_database_owner_url secrets/certs/serve/serve.key secrets/certs/runner/runner.key
-  chown -h 70:70 -- secrets/postgres_password secrets/bekup_owner_password secrets/bekup_app_password secrets/certs/postgres/postgres.key
+  chown -h 0:0 -- external-api.toml compose.override.yaml reference reference/bekup.example.toml reference/external-api.example.toml reference/runner.example.toml
+  chown -h 0:0 -- deploy deploy/postgres deploy/postgres/entrypoint.sh secrets secrets/certs secrets/certs/serve
+  chown -h 0:0 -- secrets/certs/serve/serve.crt secrets/certs/serve/ca.crt secrets/certs/runner secrets/certs/runner/runner.crt secrets/certs/runner/ca.crt secrets/certs/postgres
+  chown -h 0:0 -- secrets/certs/postgres/postgres.crt secrets/certs/postgres/ca.crt secrets/certs/ca secrets/certs/ca/ca.crt secrets/certs/ca/ca.key
+  chown -h 65532:65532 -- secrets/bekup_master_key secrets/bekup_database_url secrets/bekup_database_owner_url secrets/bekup_external_database_url secrets/certs/serve/serve.key secrets/certs/runner/runner.key
+  chown -h 70:70 -- secrets/postgres_password secrets/bekup_owner_password secrets/bekup_app_password secrets/bekup_external_password secrets/certs/postgres/postgres.key
 `
 	if b.String() != want {
 		t.Fatalf("got:\n%s", b.String())

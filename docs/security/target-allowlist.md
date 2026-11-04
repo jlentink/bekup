@@ -41,6 +41,26 @@ invalid list):
   validation (`bekup config check`, runner start) rejects IP addresses and
   all-numeric names in `allow_hosts` and `deny_hosts`.
 
+## Where it is shown
+
+Admins see the allowlist as the runner applies it on **Admin → Settings →
+Network**, in the part "Database servers (runner)" (D-223). serve asks the
+runner for it (`GetTargetPolicy`, an mTLS call like every other) and shows
+the allowed and refused networks and host names, the `bastion_targets` per
+bastion, the runner's own networks (the control network and
+`run_subnet_pool`), the always-denied categories below, the startup
+warnings (for example an empty allowlist) and which `[targets]` keys came
+from `BEKUP_TARGETS_*` environment variables instead of `runner.toml`.
+
+The view is **read-only**: the runner has no access to bekup's database,
+so nothing in the UI can change this list. Edit `runner.toml` `[targets]`
+on the runner host and restart the runner to apply it. The other part of
+the same page, "bekup's own connections", is a different list: the SSRF
+allowlist for serve's and the workers' connections to S3, SFTP, WebDAV,
+SMTP and webhooks ([configuration](../configuration.md), D-196). When
+the runner cannot be reached, the page says so and the rest of it keeps
+working.
+
 ## How a connection is decided
 
 For every address `A` of host name `H` (empty for an IP literal), in order:

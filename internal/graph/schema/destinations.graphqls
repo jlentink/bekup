@@ -1,4 +1,4 @@
-# Backup destinations (task 2.12; D-106, D-131). Admins manage them; every
+# Backup destinations (task 2.12; D-106, D-131; WebDAV D-222). Admins manage them; every
 # change needs a fresh step-up and is audited. Maintainers see metadata only
 # (name, type, mode flags, readiness; `settings` is null for them) and may
 # test destinations. Credentials are write-only: inputs accept new values,
@@ -10,6 +10,54 @@ enum DestinationType {
   DISK
   S3
   SFTP
+  "WebDAV: Nextcloud, ownCloud (TransIP STACK), NAS boxes, Apache/nginx/rclone/Caddy, hosted WebDAV (D-222)."
+  WEBDAV
+}
+
+"The dialect of a WebDAV server."
+enum WebdavFlavor {
+  "Plain WebDAV: url is the folder that holds the backups; uploads are one streaming PUT."
+  GENERIC
+  """
+  Nextcloud or ownCloud (TransIP STACK too): url is the server address;
+  files live below the user's files and large uploads use the chunked
+  upload API (64 MiB chunks).
+  """
+  NEXTCLOUD
+}
+
+"How a WebDAV server's TLS certificate is verified."
+enum WebdavTrust {
+  "Against the system roots."
+  SYSTEM
+  "Only against the destination's CA bundle."
+  CA_BUNDLE
+  "Only the pinned certificate (and its key) is accepted."
+  PINNED
+  "No TLS at all: a plain http URL, accepted in dev mode only."
+  PLAIN_HTTP
+}
+
+"What a WebDAV test recognized the server as."
+enum WebdavServerKind {
+  NEXTCLOUD
+  OWNCLOUD
+}
+
+"How a WebDAV destination uploads."
+enum WebdavUploadMode {
+  "One streaming PUT."
+  SINGLE
+  "The Nextcloud/ownCloud chunked-upload API."
+  CHUNKED
+}
+
+"The outcome of the WebDAV overwrite probe."
+enum WebdavOverwriteProbe {
+  "The server refuses to move a file onto an existing one ('Overwrite: F'): required."
+  REFUSED
+  "The server replaced the existing file: bekup never writes to it."
+  IGNORED
 }
 
 "S3 Object Lock retention modes."
@@ -82,6 +130,40 @@ type DestinationSettings {
   disk: DiskDestinationSettings
   s3: S3DestinationSettings
   sftp: SftpDestinationSettings
+  webdav: WebdavDestinationSettings
+}
+
+type WebdavDestinationSettings {
+  "The https folder URL (GENERIC) or the server address (NEXTCLOUD)."
+  url: String!
+  flavor: WebdavFlavor!
+  username: String!
+  "Folder below the URL (GENERIC) or below the user's files (NEXTCLOUD); empty: the base itself."
+  path: String!
+  "A custom CA bundle (PEM) that replaces the system roots (unused while a certificate is pinned)."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (null: 60)."
+  timeoutSeconds: Int
+  hasPassword: Boolean!
+  "How the server certificate is verified."
+  trust: WebdavTrust!
+  "The pinned certificate; null until pinWebdavCertificate."
+  pinnedCertificate: WebdavCertificate
+}
+
+"A WebDAV server's TLS certificate (public data)."
+type WebdavCertificate {
+  "SHA-256 of the certificate's public key (SPKI), lowercase hex: compare it, then pass it to pinWebdavCertificate."
+  spkiSha256: String!
+  "The same SPKI SHA-256 in base64."
+  spkiSha256Base64: String!
+  "SHA-256 of the whole certificate (DER, hex), as browsers and openssl x509 -fingerprint -sha256 show it."
+  fingerprintSha256: String!
+  notBefore: Time!
+  notAfter: Time!
+  selfSigned: Boolean!
+  "When it was pinned (pinned certificates only)."
+  pinnedAt: Time
 }
 
 type DiskDestinationSettings {
@@ -149,13 +231,34 @@ type SshHostKey {
 "The result of testDestination: normalized codes and fixed messages only."
 type DestinationTestResult {
   ok: Boolean!
-  "Steps in order: connect, write, read, delete."
+  "Steps in order: connect, (WebDAV: overwrite,) write, read, delete."
   steps: [DestinationTestStep!]!
   "The probe object's key (below the destination's prefix)."
   probeKey: String
   "True when the probe object was left behind (no-delete mode, Object Lock or a failed delete)."
   probeRemains: Boolean!
   note: String
+  "WebDAV destinations only: the certificate, server and upload findings of the test (null for other types)."
+  webdav: WebdavTestDetails
+}
+
+"What a test of a WebDAV destination saw (fixed values and public data only)."
+type WebdavTestDetails {
+  trust: WebdavTrust!
+  "The certificate passed the trust check."
+  trusted: Boolean!
+  "The certificate the server presented (null when none was seen: unreachable or plain http)."
+  certificate: WebdavCertificate
+  "The presented certificate's key is the pinned one."
+  pinMatches: Boolean!
+  "The server looks like Nextcloud or ownCloud (its status.php answered); null otherwise."
+  server: WebdavServerKind
+  "The flavor the server suggests (NEXTCLOUD when server is set)."
+  suggestedFlavor: WebdavFlavor!
+  "The upload mode the write step used; null when it did not run."
+  uploadMode: WebdavUploadMode
+  "The overwrite probe; null when it did not finish."
+  overwriteProtection: WebdavOverwriteProbe
 }
 
 type DestinationTestStep {
@@ -315,6 +418,26 @@ extend type Mutation {
   public key.
   """
   generateDestinationSshKeypair(id: UUID!): DestinationSshKeypair! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Pins the TLS certificate a WebDAV destination's server presents (D-222):
+  bekup captures it again through the SSRF guard (TLS handshake only, no
+  credentials sent) and pins it only if the SHA-256 of its public key
+  equals `fingerprint` (WebdavCertificate.spkiSha256 from a test, compared
+  out of band; hex or base64). The certificate must name the URL's host
+  and be valid now. Afterwards only this certificate is accepted (no
+  system roots, no CA bundle). CONFLICT when the server now presents
+  another certificate; CONNECTION_FAILED when it cannot be reached. Rate
+  limited; must be the only field of its operation.
+  """
+  pinWebdavCertificate(id: UUID!, fingerprint: String!): Destination! @hasRole(roles: [ADMIN]) @stepUp
+
+  """
+  Removes the certificate pin of a WebDAV destination: its server is
+  verified against the system roots or its CA bundle again. Audited and
+  alerted.
+  """
+  clearWebdavCertificatePin(id: UUID!): Destination! @hasRole(roles: [ADMIN]) @stepUp
 }
 
 input CreateDestinationInput {
@@ -325,6 +448,7 @@ input CreateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 "Fields to change; unset fields stay unchanged."
@@ -334,6 +458,7 @@ input UpdateDestinationInput {
   disk: DiskDestinationInput
   s3: S3DestinationInput
   sftp: SftpDestinationInput
+  webdav: WebdavDestinationInput
 }
 
 input DiskDestinationInput {
@@ -380,4 +505,31 @@ input SftpDestinationInput {
   privateKey: String
   "Write-only; only together with privateKey."
   privateKeyPassphrase: String
+}
+
+input WebdavDestinationInput {
+  """
+  https URL (http only in dev mode): GENERIC the existing folder that holds
+  the backups (for example https://u123.your-storagebox.de/backups);
+  NEXTCLOUD the server address (for example https://cloud.example.com or
+  https://name.stackstorage.com). Changing it removes the pinned
+  certificate.
+  """
+  url: String!
+  "Default GENERIC."
+  flavor: WebdavFlavor
+  "HTTP Basic user name (no ':')."
+  username: String!
+  """
+  Write-only (an app password for Nextcloud/ownCloud). Omit to keep the
+  stored one, except when url, flavor or username changes: it must then be
+  entered again.
+  """
+  password: String
+  "Folder below the base; created if missing."
+  path: String
+  "PEM CA certificates that replace the system roots."
+  caBundlePem: String
+  "Timeout of one metadata request in seconds (5..600; default 60)."
+  timeoutSeconds: Int
 }

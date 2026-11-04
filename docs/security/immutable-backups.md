@@ -17,12 +17,17 @@ destroy the backups that already exist.
 | S3 Object Lock, governance mode | Everyone without `s3:BypassGovernanceRetention` | The S3 service | bekup or lifecycle rules |
 | No-delete mode + key without delete permission | bekup and its key | IAM policy + bekup | Bucket lifecycle rules |
 | Versioning only | Accidental overwrite/delete markers | The S3 service | Lifecycle rules for noncurrent versions |
-| Disk / SFTP | Nothing beyond file permissions | — | bekup |
+| Disk / SFTP / WebDAV | Nothing beyond file permissions | — | bekup |
 
 Use more than one destination (fan-out) and keep at least one off the
-bekup host. Disk and SFTP destinations are never immutable from bekup's
-point of view; use the SFTP server's permissions (see the destinations
-guide) or an S3 copy for ransomware resistance.
+bekup host. Disk, SFTP and WebDAV destinations are never immutable from
+bekup's point of view; use the server's permissions (an SFTP or WebDAV
+account without delete rights plus no-delete mode, see the destinations
+guide; Nextcloud/ownCloud versioning and trash bin keep earlier copies
+for a while) or an S3 copy for ransomware resistance. A WebDAV server
+must refuse `MOVE` with `Overwrite: F` onto an existing file; bekup
+checks this before every run and never writes to a server that ignores
+it (D-222).
 
 ## S3 Object Lock
 

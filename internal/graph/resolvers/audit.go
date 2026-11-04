@@ -75,6 +75,7 @@ var actorKinds = map[model.AuditActorKind]audit.ActorKind{
 	model.AuditActorKindUser:   audit.ActorUser,
 	model.AuditActorKindSystem: audit.ActorSystem,
 	model.AuditActorKindCli:    audit.ActorCLI,
+	model.AuditActorKindAPI:    audit.ActorAPI,
 }
 
 func optString(field string, s *string, maxLen int) (string, error) {
@@ -132,7 +133,7 @@ func modelActorKind(k audit.ActorKind) model.AuditActorKind {
 			return m
 		}
 	}
-	// The audit_log CHECK allows only the three kinds; anything else is
+	// The audit_log CHECK allows only the known kinds; anything else is
 	// shown as SYSTEM rather than failing the whole page.
 	return model.AuditActorKindSystem
 }

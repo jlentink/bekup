@@ -106,6 +106,10 @@ type Network struct {
 	RunnerCtlIP     string
 	MetricsSubnet   string
 	ServeMetricsIP  string
+	// ExternalAPIFrontendIP is the opt-in external API's fixed address on
+	// the frontend network (EXTERNAL_API_FRONTEND_IP, D-220); checked only
+	// with the external API enabled.
+	ExternalAPIFrontendIP string
 }
 
 // DefaultNetwork returns the compose defaults.
@@ -118,6 +122,8 @@ func DefaultNetwork() Network {
 		RunnerCtlIP:     "10.213.251.10",
 		MetricsSubnet:   "10.213.252.0/24",
 		ServeMetricsIP:  "10.213.252.10",
+
+		ExternalAPIFrontendIP: "10.213.250.11",
 	}
 }
 
@@ -137,6 +143,7 @@ func (n *Network) vars() []struct {
 		{"RUNNER_CTL_IP", &n.RunnerCtlIP},
 		{"METRICS_SUBNET", &n.MetricsSubnet},
 		{"SERVE_METRICS_IP", &n.ServeMetricsIP},
+		{"EXTERNAL_API_FRONTEND_IP", &n.ExternalAPIFrontendIP},
 	}
 }
 
@@ -284,6 +291,12 @@ type Answers struct {
 	// DB is the app database: the bundled postgres service (zero value) or
 	// the operator's PostgreSQL (D-208).
 	DB Database
+	// ExternalAPI enables the opt-in external API for CI pipelines (D-220):
+	// the compose profile external-api, BEKUP_EXTERNAL_API=enabled (the
+	// bundled proxy's /api/v1/ route, the role on a new bundled volume, the
+	// UI's curl examples) and external-api.toml. Not with single-account
+	// mode.
+	ExternalAPI bool
 }
 
 var (
@@ -731,6 +744,49 @@ func (a *Answers) Validate() error {
 			return fieldErr("db-network", "%v", err)
 		}
 	}
+	return a.validateExternalAPI()
+}
+
+// validateExternalAPI checks the external API answers (D-220): never with
+// single-account mode, and its fixed frontend address (not own-proxy)
+// inside the frontend subnet, apart from serve's and the proxy's.
+func (a *Answers) validateExternalAPI() error {
+	def := DefaultNetwork().ExternalAPIFrontendIP
+	if !a.ExternalAPI {
+		if a.Network.ExternalAPIFrontendIP != def {
+			return fieldErr("external-api-ip", "applies to --external-api only")
+		}
+		return nil
+	}
+	if a.DB.External() && a.DB.Auth == DBAuthSingleAccount {
+		return fieldErr("external-api", "single-account mode does not support the external API (D-220): one account holding every role would not isolate it; use --db-auth bootstrap, existing-roles or dba-sql")
+	}
+	if a.Variant.OwnProxy() {
+		if a.Network.ExternalAPIFrontendIP != def {
+			return fieldErr("external-api-ip", "the own-proxy variant has no frontend network (the external API joins your proxy's network as bekup-external-api)")
+		}
+		return nil
+	}
+	return checkExternalAPIIP(a.Network)
+}
+
+// checkExternalAPIIP checks EXTERNAL_API_FRONTEND_IP against the frontend
+// network of n (serve's and the proxy's addresses are taken).
+func checkExternalAPIIP(n Network) error {
+	p, err := netip.ParsePrefix(n.FrontendSubnet)
+	if err != nil {
+		return fieldErr("frontend-subnet", "is not a CIDR")
+	}
+	if err := checkHostIP("external-api-ip", n.ExternalAPIFrontendIP, p.Masked()); err != nil {
+		msg := err.Error()
+		if fe := (*FieldError)(nil); errors.As(err, &fe) {
+			msg = fe.Msg
+		}
+		return fieldErr("external-api-ip", "%s (EXTERNAL_API_FRONTEND_IP: pick a free address inside FRONTEND_SUBNET %s)", msg, p.Masked())
+	}
+	if n.ExternalAPIFrontendIP == n.ServeFrontendIP || n.ExternalAPIFrontendIP == n.ProxyFrontendIP {
+		return fieldErr("external-api-ip", "must differ from serve-ip and proxy-ip")
+	}
 	return nil
 }
 
@@ -843,6 +899,7 @@ func (a *Answers) overlays() Overlays {
 		ProxyLink:   a.Variant.OwnProxy() && a.ProxyMode == ProxyLink,
 		DBNetwork:   a.DB.External() && a.DB.Location == DBDocker,
 		DBOnProxy:   a.dbOnProxy(),
+		ExternalAPI: a.ExternalAPI,
 	}
 }
 

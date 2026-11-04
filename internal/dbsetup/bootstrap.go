@@ -34,6 +34,10 @@ type BootstrapRequest struct {
 	AdminDatabase string
 	AdminHost     string
 	AdminPort     int
+	// ExternalPasswordFile (--external-password-file, two roles only) also
+	// creates the external API role bekup_external with the password in
+	// this file (D-220).
+	ExternalPasswordFile string
 	// AdoptExisting, ResetPasswords, DryRun and AllowInsecure are the
 	// flags of the same names.
 	AdoptExisting, ResetPasswords, DryRun, AllowInsecure bool
@@ -88,6 +92,9 @@ func Bootstrap(ctx context.Context, req BootstrapRequest) error {
 		if req.AdminPasswordFileSet || req.ResetPasswords {
 			return errors.New("single-account mode uses database.user with database.password_file; --admin-password-file and --reset-passwords do not apply")
 		}
+		if req.ExternalPasswordFile != "" {
+			return fmt.Errorf("--external-password-file: %w", db.ErrExternalSingleAccount)
+		}
 		admin.User = d.User
 		if admin.Password, err = config.ReadSecretFile(d.PasswordFile); err != nil {
 			return fmt.Errorf("database.password_file: %w", err)
@@ -128,6 +135,12 @@ func Bootstrap(ctx context.Context, req BootstrapRequest) error {
 			return err
 		}
 		defer config.Zero(bopts.AppPassword)
+		if req.ExternalPasswordFile != "" {
+			if bopts.ExternalPassword, err = readRolePassword("--external-password-file", req.ExternalPasswordFile); err != nil {
+				return err
+			}
+			defer config.Zero(bopts.ExternalPassword)
+		}
 	}
 
 	br, err := db.Bootstrap(ctx, bopts)
@@ -240,6 +253,14 @@ func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.Boo
 		return err
 	}
 	schemaErr := db.CheckSchemaVersion(ctx, pool)
+	if req.ExternalPasswordFile != "" {
+		if err := checkExternalLogin(ctx, cfg, req.ExternalPasswordFile, schemaErr == nil); err != nil {
+			return fmt.Errorf("%w (%s)", err, hint)
+		}
+		if _, err := fmt.Fprintf(out, "roles:   %s logs in and passes the role checks (bekup migrate up grants and audits its api functions)\n", db.ExternalRole); err != nil {
+			return err
+		}
+	}
 	if schemaErr != nil {
 		if !errors.Is(schemaErr, db.ErrSchemaBehind) {
 			return schemaErr
@@ -287,6 +308,42 @@ func openAppPool(ctx context.Context, cfg *config.Bekup, appName string) (*pgxpo
 		return nil, fmt.Errorf("role check of %s failed: %w", db.AppRole, err)
 	}
 	return pool, nil
+}
+
+// checkExternalLogin logs in as bekup_external (fields mode, the
+// configured TLS policy) and runs db.CheckExternalRole on a migrated
+// schema, db.CheckExternalLogin otherwise (D-220).
+func checkExternalLogin(ctx context.Context, cfg *config.Bekup, pwFile string, migrated bool) error {
+	poolOpts, err := db.PoolOptionsFromConfig(cfg, "bekup-bootstrap")
+	if err != nil {
+		return fmt.Errorf("database TLS: %w", err)
+	}
+	poolOpts.MaxConns, poolOpts.MinConns = 1, 0
+	pw, err := readRolePassword("--external-password-file", pwFile)
+	if err != nil {
+		return err
+	}
+	d := &cfg.Database
+	creds := config.DBCredentials{
+		Host: d.Host, Port: uint16(d.Port), //nolint:gosec // G115: validated to 1..65535
+		Database: d.Name, User: db.ExternalRole, Password: pw,
+	}
+	cctx, cancel := context.WithTimeout(ctx, d.ConnectTimeout.D())
+	pool, err := db.NewPool(cctx, creds, poolOpts)
+	cancel()
+	creds.Zero()
+	if err != nil {
+		return fmt.Errorf("log in as %s failed: %w", db.ExternalRole, err)
+	}
+	defer pool.Close()
+	check := db.CheckExternalLogin
+	if migrated {
+		check = db.CheckExternalRole
+	}
+	if err := check(ctx, pool); err != nil {
+		return fmt.Errorf("role check of %s failed: %w", db.ExternalRole, err)
+	}
+	return nil
 }
 
 // Verify is the check after the migrations (the browser setup's last

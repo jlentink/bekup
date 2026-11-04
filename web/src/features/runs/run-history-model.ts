@@ -14,4 +14,5 @@ export const TRIGGERS: Record<RunTrigger, string> = {
   CATCH_UP: "Catch-up",
   MANUAL: "Manual (extra run)",
   EARLY: "Started early",
+  API: "API",
 };

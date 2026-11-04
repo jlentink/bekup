@@ -71,15 +71,16 @@ var matrix = map[authz.Operation]expect{
 	authz.OpMFAPolicyView:   {"YFFFFU", "-"},
 	authz.OpMFAPolicyUpdate: {"YFFFFU", "S"},
 
-	authz.OpSettingsView:        {"YFFFFU", "-"},
-	authz.OpSettingsUpdate:      {"YFFFFU", "S"},
-	authz.OpSMTPView:            {"YFFFFU", "-"},
-	authz.OpSMTPUpdate:          {"YFFFFU", "S"},
-	authz.OpSMTPTest:            {"YFFFFU", "-"},
-	authz.OpSSRFAllowlistView:   {"YFFFFU", "-"},
-	authz.OpSSRFAllowlistUpdate: {"YFFFFU", "S"},
-	authz.OpConfigStatusView:    {"YFFFFU", "-"},
-	authz.OpConfigReload:        {"YFFFFU", "S"},
+	authz.OpSettingsView:           {"YFFFFU", "-"},
+	authz.OpSettingsUpdate:         {"YFFFFU", "S"},
+	authz.OpSMTPView:               {"YFFFFU", "-"},
+	authz.OpSMTPUpdate:             {"YFFFFU", "S"},
+	authz.OpSMTPTest:               {"YFFFFU", "-"},
+	authz.OpSSRFAllowlistView:      {"YFFFFU", "-"},
+	authz.OpSSRFAllowlistUpdate:    {"YFFFFU", "S"},
+	authz.OpRunnerTargetPolicyView: {"YFFFFU", "-"},
+	authz.OpConfigStatusView:       {"YFFFFU", "-"},
+	authz.OpConfigReload:           {"YFFFFU", "S"},
 
 	authz.OpConnectionList:            {"YYYFFU", "-"},
 	authz.OpConnectionView:            {"YYYFFU", "-"},
@@ -111,6 +112,8 @@ var matrix = map[authz.Operation]expect{
 	authz.OpDestinationHostKeyFetch:     {"YFFFFU", "-"},
 	authz.OpDestinationHostKeyConfirm:   {"YFFFFU", "S"},
 	authz.OpDestinationSSHKeyGenerate:   {"YFFFFU", "S"},
+	authz.OpDestinationTLSPin:           {"YFFFFU", "S"},
+	authz.OpDestinationTLSPinClear:      {"YFFFFU", "S"},
 	authz.OpStorageUsageView:            {"YYYFFU", "-"},
 	authz.OpDestinationUnrecordedView:   {"YFFFFU", "-"},
 	authz.OpDestinationUnrecordedDelete: {"YFFFFU", "S"},
@@ -139,6 +142,13 @@ var matrix = map[authz.Operation]expect{
 	authz.OpRunStartEarly: {"YYYYFU", "-"},
 	authz.OpRunCancel:     {"YYYFFU", "-"},
 	authz.OpRunActorView:  {"YYYFFU", "-"},
+
+	// D-220: admins and backup owners, never maintainers; the list is
+	// filtered to the owner's jobs.
+	authz.OpAPITokenCreate: {"YFFYFU", "S"},
+	authz.OpAPITokenList:   {"YFFYYU", "-"},
+	authz.OpAPITokenRevoke: {"YFFYFU", "S"},
+	authz.OpAPITokenUpdate: {"YFFYFU", "S"},
 
 	authz.OpCalendarView: {"YYYYYU", "-"},
 
@@ -399,5 +409,10 @@ func TestMatrixInvariants(t *testing.T) {
 	}
 	if matrix[authz.OpArtifactDownload].who[1] != 'F' || matrix[authz.OpArtifactDownloadRedeem].who[1] != 'F' {
 		t.Error("maintainers must never download (D-012, D-067)")
+	}
+	for _, op := range []authz.Operation{authz.OpAPITokenCreate, authz.OpAPITokenList, authz.OpAPITokenRevoke, authz.OpAPITokenUpdate} {
+		if matrix[op].who[1] != 'F' {
+			t.Errorf("%s: maintainers must never manage API tokens (D-220)", op)
+		}
 	}
 }

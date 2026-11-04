@@ -15,8 +15,10 @@ changed (--reset-passwords sets their passwords); existing roles are only accept
 --adopt-existing-roles, and other members or ADMIN OPTION holders of them are refused. Then it
 runs the role checks and the migrate preflight. With database.single_account = true it uses the
 single account itself (weakened). The admin connection needs tls_mode verify-full unless
---allow-insecure-admin-connection is given. Like migrate up it refuses to run on another
-version than BEKUP_SETUP_VERSION (D-212).
+--allow-insecure-admin-connection is given. With --external-password-file it also creates
+bekup_external, the login role of the optional external API (D-220; two roles only), logs in as it
+and audits its privileges. Like migrate up it refuses to run on another version than
+BEKUP_SETUP_VERSION (D-212).
 
 ```
 bekup db bootstrap [flags]
@@ -33,6 +35,7 @@ bekup db bootstrap [flags]
       --adopt-existing-roles              accept bekup_owner/bekup_app roles that already exist (an earlier bootstrap, a DBA); they are checked, never changed silently
       --allow-insecure-admin-connection   allow the admin connection with tls_mode require or disable (the admin password then crosses an unverified or unencrypted connection)
       --dry-run                           only show what would be done
+      --external-password-file string     also create bekup_external (external API, D-220) with the password in this file
   -h, --help                              help for bootstrap
       --reset-passwords                   set the passwords of existing bekup_owner/bekup_app roles to the configured ones (needs --adopt-existing-roles)
       --tls-ca-file string                override database.tls_ca_file

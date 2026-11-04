@@ -7,6 +7,7 @@ export const ServerInfoQuery = graphql(`
       version
       insecureTransport
       devMode
+      externalApiEnabled
     }
   }
 `);

@@ -1,0 +1,129 @@
+# External API tokens (D-220, Phase 2): per-job machine credentials of the
+# CI API (`/api/v1`, served by `bekup external-api`). Admins manage tokens
+# for any jobs; backup owners (role user) for the jobs they own;
+# maintainers never. Every change needs a fresh step-up and is audited.
+
+"A job in an API token's scope."
+type ApiTokenJob {
+  id: UUID!
+  name: String!
+  "The job was deleted; the token can no longer start it."
+  deleted: Boolean!
+}
+
+"Who created an API token."
+type ApiTokenCreator {
+  id: UUID!
+  email: String!
+  displayName: String!
+  "The account was deleted."
+  deleted: Boolean!
+}
+
+"""
+An external API token as the caller may see it. The token itself is
+returned only once, by createApiToken; bekup keeps only a hash.
+"""
+type ApiToken {
+  id: UUID!
+  name: String!
+  """
+  The start of the token (`bkp_` and the first characters of its public id
+  part) to recognize it in a CI secret store. Never part of the secret.
+  """
+  prefix: String!
+  "The jobs of the token's scope the caller may see."
+  jobs: [ApiTokenJob!]!
+  """
+  Jobs of the scope the caller may not see (backup owners see only the jobs
+  they own); counted only.
+  """
+  hiddenJobCount: Int!
+  "The creator: for admins always, for others only on their own tokens."
+  createdBy: ApiTokenCreator
+  "The caller created the token."
+  createdByMe: Boolean!
+  createdAt: Time!
+  expiresAt: Time!
+  revokedAt: Time
+  """
+  The networks (canonical CIDRs) the token may be used from; empty when
+  allowAnyAddress is set (exactly one of the two).
+  """
+  allowedCidrs: [String!]!
+  "The token may be used from any address (no allowlist; a permanent warning)."
+  allowAnyAddress: Boolean!
+  "The newest run request of the token."
+  lastUsedAt: Time
+  """
+  When and from which client address the token was last seen: its newest
+  run request or its newest refused attempt (lastSeenRefused).
+  """
+  lastSeenAt: Time
+  "null when the external API passed no address."
+  lastSeenIp: String
+  """
+  The last sighting was a valid token presented from an address outside its
+  allowlist and refused (it may be stolen).
+  """
+  lastSeenRefused: Boolean!
+}
+
+input CreateApiTokenInput {
+  "1-100 characters."
+  name: String!
+  """
+  The jobs the token may start (1-100). Backup owners may list only jobs
+  they own.
+  """
+  jobIds: [UUID!]!
+  "Between 1 and 365 days from now."
+  expiresAt: Time!
+  """
+  1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
+  must be empty when allowAnyAddress is set.
+  """
+  allowedCidrs: [String!]!
+  "Explicitly allow any client address (audited and alerted)."
+  allowAnyAddress: Boolean!
+}
+
+"A new API token."
+type CreatedApiToken {
+  token: ApiToken!
+  """
+  The token (`bkp_...`), returned only here and only once. Store it as a CI
+  secret (BEKUP_TOKEN); it cannot be shown again.
+  """
+  plaintext: String!
+}
+
+extend type Query {
+  """
+  API tokens, newest first (at most 500). Without jobId: admins see every
+  token, backup owners the tokens covering a job they own. With jobId: the
+  tokens covering that job (backup owners: a job they own).
+  """
+  apiTokens(jobId: UUID): [ApiToken!]! @hasRole(roles: [ADMIN, USER])
+}
+
+extend type Mutation {
+  """
+  Creates an API token for jobs (admins, or the owner of every listed job;
+  fresh step-up; audited and alerted). The plaintext is returned once.
+  """
+  createApiToken(input: CreateApiTokenInput!): CreatedApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Revokes an API token at once (admins, or an owner of a job in its scope;
+  fresh step-up; audited).
+  """
+  revokeApiToken(id: UUID!): ApiToken! @hasRole(roles: [ADMIN, USER]) @stepUp
+  """
+  Replaces the client addresses of an unrevoked API token: a list of 1-32
+  networks or allowAnyAddress, exactly one (the same callers as
+  revokeApiToken; fresh step-up; audited, "any address" alerted).
+  """
+  updateApiTokenAddresses(id: UUID!, allowedCidrs: [String!]!, allowAnyAddress: Boolean!): ApiToken!
+    @hasRole(roles: [ADMIN, USER])
+    @stepUp
+}

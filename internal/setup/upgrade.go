@@ -39,8 +39,14 @@ type UpgradeOptions struct {
 	AllowDowngrade bool
 	// Force replaces locally edited generated files (each is first copied
 	// to <path>.bak-<timestamp>).
-	Force     bool
-	Ownership OwnershipMode
+	Force bool
+	// ExternalAPI enables the opt-in external API (D-220 amendment 4):
+	// external-api.toml (when missing), BEKUP_EXTERNAL_API=enabled and the
+	// external-api profile in .env, the state; the steps that remain (the
+	// database role, migrate, the override block, your proxy's route) are
+	// printed, never run or written into an existing override.
+	ExternalAPI bool
+	Ownership   OwnershipMode
 	// CAPassphrase is called only if a new manifest adds certificates.
 	CAPassphrase func() ([]byte, error)
 	// Confirm is called with the summary of the upgrade before anything is
@@ -85,6 +91,8 @@ type UpgradeSummary struct {
 	// Notices explain changes of the deployment's form (D-215: a retired
 	// variant mapped to own-proxy).
 	Notices []string
+	// ExternalAPI: this upgrade enables the external API (D-220).
+	ExternalAPI bool
 }
 
 // CheckVersionTag refuses an image tag that names another version than the
@@ -158,6 +166,10 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	if err := refuseShadowFiles(root); err != nil {
 		return err
 	}
+	if opts.ExternalAPI && st.DatabaseAuth == DBAuthSingleAccount {
+		return errors.New("--external-api: single-account mode does not support the external API (D-220): one account holding every role would not isolate it; create the two roles (bekup db bootstrap) and set the deployment up again")
+	}
+	enableAPI := opts.ExternalAPI && !st.ExternalAPI
 	// A retired variant (D-215) maps to own-proxy in link mode: the link
 	// overlay (and the Traefik labels) go into a new compose.override.yaml;
 	// an existing one must carry them already.
@@ -267,7 +279,15 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		return err
 	}
 	layout := Layout{KeysDir: st.KeysDir}
-	entries := Manifest(layout, assets, st.manifestOptions())
+	// The external API (D-220): enabled by this run, or enabled before
+	// with its external-api.toml missing (restored).
+	ext, err := planExternalAPI(root, st, enableAPI, opts, gen, compose, hasOverride != nil)
+	if err != nil {
+		return err
+	}
+	nextOpts := st.manifestOptions()
+	nextOpts.ExternalAPI = st.ExternalAPI || enableAPI
+	entries := Manifest(layout, assets, nextOpts)
 
 	// Local edits: compare every recorded file with its recorded hash.
 	stamp := opts.Now().UTC().Format("20060102T150405Z")
@@ -344,7 +364,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		sum := &UpgradeSummary{
 			Root: root, OldImage: st.Image, NewImage: opts.Image.String(), OldVersion: st.BekupVersion, NewVersion: opts.Version,
 			ComposeMode: st.ComposeMode, Variant: st.Variant, DB: st.dbMode(), BackedUp: backups, NewSecretGroups: newGroups,
-			Notices: notices,
+			Notices: notices, ExternalAPI: enableAPI,
 		}
 		for _, p := range sortedKeys(gen) {
 			cur, err := readManaged(root, p)
@@ -376,7 +396,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 				sum.EnvImage = true
 			}
 		}
-		cur, nextEnv, err := envWithLines(root, deploymentEnv(opts.Version, imageModeOf(opts.Image)))
+		cur, nextEnv, err := envWithLines(root, append(deploymentEnv(opts.Version, imageModeOf(opts.Image)), ext.env...))
 		if err != nil {
 			return err
 		}
@@ -431,11 +451,21 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		changed++
 	}
 	if needOverride {
-		data := []byte(overlayHeader + overlayDoc(ov, ""))
+		// The override is created in this run: with the external API
+		// enabled now or before (its DB-network and label blocks), not the
+		// recorded state's flag.
+		newOv := ov
+		newOv.ExternalAPI = st.ExternalAPI || enableAPI
+		data := []byte(overlayHeader + overlayDoc(newOv, ""))
 		if err := w.create(OverrideFile, data, 0o644); err != nil {
 			return err
 		}
 		changed++
+	}
+	if ext.toml != nil {
+		if err := w.create(ExternalAPITOML, ext.toml, 0o644); err != nil {
+			return err
+		}
 	}
 	// Stale assets: recorded before, not shipped any more.
 	var stale []string
@@ -469,6 +499,10 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	if err != nil {
 		return err
 	}
+	extEnvChanged, err := syncEnv(w, ext.env)
+	if err != nil {
+		return err
+	}
 
 	for _, g := range newGroups {
 		if err := generateGroup(w, layout, entries, g, st, opts); err != nil {
@@ -494,6 +528,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		next.Assets[p] = hashOf(data)
 	}
 	next.SecretGroups = secretGroups(entries)
+	next.ExternalAPI = st.ExternalAPI || enableAPI
 	mode, why := resolveOwnership(opts.Ownership, root, *opts.sys)
 	next.Ownership = mode
 	newState, err := next.Marshal()
@@ -523,7 +558,7 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 	for _, msg := range warnings {
 		fmt.Fprintf(&b, "  WARNING: %s\n", msg)
 	}
-	if changed == 0 && !envChanged && !deployChanged && bytes.Equal(newState, oldState) {
+	if changed == 0 && !envChanged && !deployChanged && !extEnvChanged && ext.toml == nil && bytes.Equal(newState, oldState) {
 		b.WriteString("  no changes\n")
 	} else {
 		fmt.Fprintf(&b, "  %d generated file(s) changed, %d removed, %d backed up\n", changed-len(stale)-len(newGroups), len(stale), len(backups))
@@ -561,6 +596,15 @@ func Upgrade(opts UpgradeOptions) (retErr error) {
 		for _, f := range compose.Findings {
 			fmt.Fprintf(&b, "  %s\n", f)
 		}
+	}
+	if ext.toml != nil {
+		fmt.Fprintf(&b, "  wrote %s (the external API trusts the proxy serve trusts)\n", ExternalAPITOML)
+	}
+	if extEnvChanged {
+		fmt.Fprintf(&b, "  %s: %s=%s, COMPOSE_PROFILES=%s (the external API's profile and proxy route)\n", EnvFile, ExternalAPIEnvVar, ExternalAPIEnabled, ext.profiles)
+	}
+	if enableAPI {
+		b.WriteString(ext.steps)
 	}
 	if opts.Image.IsMutable() {
 		b.WriteString(followingWarning)
@@ -605,6 +649,11 @@ func generateGroup(w *writer, l Layout, entries []Entry, group string, st *State
 		// Never new for an existing deployment (the database mode cannot
 		// change); the passwords belong to roles on the operator's server.
 		return errors.New("the external database password files are missing: restore them from your escrow (setup never invents passwords for existing roles)")
+	case groupExternalAPI:
+		// New with manifest version 3 (D-220): the external API's login,
+		// generated whether the API is enabled or not (compose mounts it;
+		// the role exists only once it is enabled).
+		return generateExternalAPI(w, l, st.dbMode(), nil)
 	case groupCerts:
 		if opts.CAPassphrase == nil {
 			return errors.New("new certificates need a CA key passphrase")

@@ -383,9 +383,10 @@ func (d *destWriter) result(ctx context.Context) DestinationResult {
 	case d.putErr != nil:
 		err = d.putErr
 	case !d.sawEOF.Load():
-		err = errShortRead
+		err = storage.WithDetail(errShortRead, "the destination reported success without reading the whole backup")
 	case d.info.Size != d.fo.storedSize || !bytes.Equal(d.info.SHA256, d.fo.storedSum):
-		err = fmt.Errorf("%w: stored object differs from the streamed bytes", storage.ErrChecksumMismatch)
+		err = storage.WithDetail(fmt.Errorf("%w: stored object differs from the streamed bytes", storage.ErrChecksumMismatch),
+			"the destination reported "+storage.FormatSizes(d.info.Size, d.fo.storedSize)+" or a different SHA-256 than was streamed")
 	}
 	if err == nil {
 		// Complete and verified, even if a lag drop raced with the
@@ -407,7 +408,7 @@ func (d *destWriter) result(ctx context.Context) DestinationResult {
 	}
 	switch r.Reason {
 	case ReasonLag:
-		r.Err, r.Code = errLag, storage.CodeTimeout
+		r.Err, r.Code = storage.WithDetail(errLag, "the destination fell behind the backup stream for longer than the lag timeout"), storage.CodeTimeout
 	case ReasonAborted:
 		r.Err, r.Code = d.dropErr, storage.Classify(d.dropErr)
 		if r.Code == storage.CodeInternal {

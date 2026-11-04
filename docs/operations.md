@@ -141,7 +141,7 @@ queries or runner calls).
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `bekup_backup_runs_total` | counter | `status` (success, partial, failed, canceled, skipped), `trigger` (schedule, catch_up, manual, early), `engine` (postgres, mysql, mariadb, unknown) | Backup runs that reached a terminal status. Runs canceled before a worker picked them up are not counted. |
+| `bekup_backup_runs_total` | counter | `status` (success, partial, failed, canceled, skipped), `trigger` (schedule, catch_up, manual, early, api), `engine` (postgres, mysql, mariadb, unknown) | Backup runs that reached a terminal status. Runs canceled before a worker picked them up are not counted. |
 | `bekup_backup_run_duration_seconds` | histogram | `engine` | Start to terminal status of started runs (buckets 10 s … 12 h). |
 | `bekup_backup_bytes_stored_total` | counter | | Bytes written to destinations (compressed and encrypted, every copy). |
 | `bekup_backup_bytes_raw_total` | counter | | Uncompressed dump bytes. |
@@ -153,6 +153,7 @@ queries or runner calls).
 | `bekup_scheduler_enqueued_total` | counter | `trigger` (schedule, catch_up) | Runs the scheduler enqueued. |
 | `bekup_scheduler_skips_total` | counter | `reason` (still_running, unschedulable) | Occurrences not enqueued. |
 | `bekup_scheduler_last_tick_timestamp_seconds` | gauge | | Unix time of this process's last tick (0: none / scheduler off). |
+| `bekup_api_run_requests_total` | counter | `outcome` (accepted, run_active, job_disabled, job_gone, token_invalid, expired) | External API run requests decided by this process's consumer (D-220); only processes that run the River workers decide them. |
 | `bekup_config_reloads_total` | counter | `status` (applied, unchanged, restart_required, rejected, failed) | Runtime config reloads of this process (D-200); a `rejected` or `failed` increase means a process kept its old configuration. |
 | `bekup_queue_jobs` | gauge (*serve*) | `queue` (backup, restore, retention, notify, maintenance), `state` (River states) | River jobs; finished rows are pruned by River. |
 | `bekup_runner_up` | gauge (*serve*) | | 1 when the runner answered its Health RPC over mTLS. |

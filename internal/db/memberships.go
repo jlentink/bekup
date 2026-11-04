@@ -12,18 +12,19 @@ import (
 
 // Memberships of bekup's roles (D-207). A member of bekup_owner can act as
 // the schema owner (and so rewrite the audit log), a member of bekup_app
-// can read and change every row the app can, and a holder of ADMIN OPTION
-// on either can grant itself that membership at any time. bekup expects
-// none of them except the account that ran `bekup db bootstrap`
+// can read and change every row the app can, a member of the optional
+// bekup_external (D-220) can call the api functions, and a holder of ADMIN
+// OPTION on any of them can grant itself that membership at any time. bekup
+// expects none of them except the account that ran `bekup db bootstrap`
 // (PostgreSQL 16+ gives the creator of a role ADMIN OPTION on it) and, in
 // single-account mode, the single account.
 
-// roleMemberships returns every direct membership in bekup_owner and
-// bekup_app.
+// roleMemberships returns every direct membership in bekup_owner,
+// bekup_app and (when it exists) bekup_external.
 func roleMemberships(ctx context.Context, q *sqlc.Queries) ([]sqlc.RoleMembershipsRow, error) {
-	ms, err := q.RoleMemberships(ctx, []string{OwnerRole, AppRole})
+	ms, err := q.RoleMemberships(ctx, []string{OwnerRole, AppRole, ExternalRole})
 	if err != nil {
-		return nil, fmt.Errorf("read the memberships of %s and %s: %w", OwnerRole, AppRole, err)
+		return nil, fmt.Errorf("read the memberships of %s, %s and %s: %w", OwnerRole, AppRole, ExternalRole, err)
 	}
 	return ms, nil
 }

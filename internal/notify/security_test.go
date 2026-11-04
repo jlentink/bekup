@@ -43,6 +43,10 @@ func TestSecurityAlertsFromAudit(t *testing.T) {
 			[]want{{SecuritySystem, KindSSHHostKeyMismatch, SeverityCritical, Subject{ConnectionID: conn}, true}}},
 		{"sftp host key mismatch", audit.Event{Actor: aa, Action: audit.ActionDestinationHostKeyMismatch, TargetType: "destination", TargetID: dest.String()},
 			[]want{{SecuritySystem, KindDestinationHostKeyMismatch, SeverityCritical, Subject{DestinationID: dest}, true}}},
+		{"webdav certificate pin mismatch", audit.Event{Actor: sys, Action: audit.ActionDestinationTLSPinMismatch, TargetType: "destination", TargetID: dest.String()},
+			[]want{{SecuritySystem, KindDestinationTLSPinMismatch, SeverityCritical, Subject{DestinationID: dest}, true}}},
+		{"webdav certificate pin cleared", audit.Event{Actor: aa, Action: audit.ActionDestinationTLSPinCleared, TargetType: "destination", TargetID: dest.String()},
+			[]want{{SecuritySystem, KindDestinationTLSPinCleared, SeverityWarning, Subject{DestinationID: dest}, false}}},
 		{"owner added", audit.Event{Actor: aa, Action: audit.ActionJobOwnerAdded, TargetType: "job", TargetID: job.String()},
 			[]want{{SecuritySystem, KindJobOwnerAdded, SeverityWarning, Subject{JobID: job}, false}}},
 		{"owner removed", audit.Event{Actor: aa, Action: audit.ActionJobOwnerRemoved, TargetType: "job", TargetID: job.String()},
@@ -119,6 +123,34 @@ func TestSecurityAlertsFromAudit(t *testing.T) {
 			[]want{{SecurityAccount, KindSecondFactorsReset, "", Subject{UserID: user}, false}}},
 		{"new admin", audit.Event{Actor: aa, Action: audit.ActionUserRoleChanged, TargetType: "user", TargetID: user.String(), Details: audit.Details{"role": "admin"}},
 			[]want{{SecurityAccount, KindRoleChanged, "", Subject{UserID: user}, false}, {SecuritySystem, KindAdminGranted, SeverityWarning, Subject{UserID: user}, false}}},
+		{"api token ip denied", audit.Event{Actor: audit.APIActor(art, "ci", uuid.Nil), Action: audit.ActionAPIAddressDenied, TargetType: "api_token", TargetID: art.String(), IP: ip,
+			Details: audit.Details{"denial_id": rst.String(), "creator_id": user.String(), "client_ip": ip.String()}},
+			[]want{{SecurityAccount, KindAPIAddressDenied, SeverityError, Subject{UserID: user}, true}, {SecuritySystem, KindAPIAddressDenied, SeverityError, Subject{}, true}}},
+		{"api token created", audit.Event{Actor: ua, Action: audit.ActionAPITokenCreated, TargetType: "api_token", TargetID: art.String(), IP: ip,
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "job_ids": []string{job.String()}, "expires_at": "2027-01-01T00:00:00Z", "allowed_cidrs": []string{"192.0.2.0/24"}, "allow_any_address": false}},
+			[]want{{SecuritySystem, KindAPITokenCreated, SeverityWarning, Subject{}, false}}},
+		{"api token created for any address", audit.Event{Actor: ua, Action: audit.ActionAPITokenCreated, TargetType: "api_token", TargetID: art.String(), IP: ip,
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "job_ids": []string{job.String()}, "expires_at": "2027-01-01T00:00:00Z", "allowed_cidrs": []string{}, "allow_any_address": true}},
+			[]want{{SecuritySystem, KindAPITokenAnyAddress, SeverityError, Subject{}, false}, {SecuritySystem, KindAPITokenCreated, SeverityWarning, Subject{}, false}}},
+		{"api token addresses opened to any", audit.Event{Actor: aa, Action: audit.ActionAPITokenAddressesChanged, TargetType: "api_token", TargetID: art.String(),
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "allowed_cidrs": []string{}, "allow_any_address": true, "previous_allowed_cidrs": []string{"192.0.2.0/24"}, "previous_allow_any_address": false,
+				"widened": true, "creator_id": user.String(), "changed_by_creator": false, "actor_name": "Ada Admin"}},
+			[]want{{SecuritySystem, KindAPITokenAnyAddress, SeverityError, Subject{}, false}, {SecurityAccount, KindAPITokenAddressesWidened, SeverityError, Subject{UserID: user}, false}}},
+		// M1: a wider list alerts the admins and the creator.
+		{"api token addresses widened", audit.Event{Actor: aa, Action: audit.ActionAPITokenAddressesChanged, TargetType: "api_token", TargetID: art.String(),
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "allowed_cidrs": []string{"192.0.2.0/24", "198.51.100.0/24"}, "allow_any_address": false, "previous_allowed_cidrs": []string{"192.0.2.0/24"}, "previous_allow_any_address": false,
+				"widened": true, "creator_id": user.String(), "changed_by_creator": false, "actor_name": "Ada Admin"}},
+			[]want{{SecuritySystem, KindAPITokenAddressesWidened, SeverityWarning, Subject{}, false}, {SecurityAccount, KindAPITokenAddressesWidened, SeverityError, Subject{UserID: user}, false}}},
+		{"api token addresses changed within the old list", audit.Event{Actor: ua, Action: audit.ActionAPITokenAddressesChanged, TargetType: "api_token", TargetID: art.String(),
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "allowed_cidrs": []string{"192.0.2.0/25"}, "allow_any_address": false, "previous_allowed_cidrs": []string{"192.0.2.0/24"}, "previous_allow_any_address": false,
+				"widened": false, "creator_id": user.String(), "changed_by_creator": true, "actor_name": "Una User"}},
+			nil},
+		{"api token addresses narrowed", audit.Event{Actor: aa, Action: audit.ActionAPITokenAddressesChanged, TargetType: "api_token", TargetID: art.String(),
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci", "allowed_cidrs": []string{"192.0.2.0/24"}, "allow_any_address": false, "previous_allowed_cidrs": []string{}, "previous_allow_any_address": true}},
+			nil},
+		{"api token revoked", audit.Event{Actor: aa, Action: audit.ActionAPITokenRevoked, TargetType: "api_token", TargetID: art.String(),
+			Details: audit.Details{"api_token_id": art.String(), "api_token_name": "ci"}},
+			nil},
 		// Break-glass CLI (D-069).
 		{"cli reset-password", cli(audit.ActionCLIAdminPasswordReset, "user", user.String(), nil),
 			[]want{{SecurityAccount, KindPasswordReset, SeverityError, Subject{UserID: user}, false}, {SecuritySystem, KindCLIAction, SeverityWarning, Subject{UserID: user}, false}}},
@@ -236,6 +268,16 @@ func TestSystemBody(t *testing.T) {
 		"failed sign-ins":                 {"kind": KindLoginBurstAccount, "failures": float64(10), "window_minutes": float64(15)},
 		"Personal webhooks of every user": {"kind": KindSSRFAllowlistWidened, "personal_webhooks": true},
 		"Changed: server.trusted_proxies": {"kind": KindConfigReloadWeakened, "settings": "server.trusted_proxies"},
+		`token "deploy" was presented from the address 198.51.100.4`: {"kind": KindAPIAddressDenied, "api_name": "deploy", "ip": "198.51.100.4"},
+		`token "deploy" was created; it can start backups of 2 job(s) from 1 allowed network(s), valid until 2027-01-01`: {
+			"kind": KindAPITokenCreated, "api_name": "deploy", "jobs": float64(2), "networks": float64(1), "any_address": false, "expires": "2027-01-01"},
+		"of 1 job(s) from any address":                    {"kind": KindAPITokenCreated, "api_name": "x", "jobs": float64(1), "any_address": true},
+		`token "deploy" may now be used from any address`: {"kind": KindAPITokenAnyAddress, "api_name": "deploy"},
+		`token "deploy" may now be used from any address (changed by Ada, not its creator)`: {
+			"kind": KindAPITokenAnyAddress, "api_name": "deploy", "changed_by": "Ada", "by_creator": false},
+		`token "deploy" were widened (changed by Ada, not its creator): it may now be used from more addresses (now 2 allowed network(s))`: {
+			"kind": KindAPITokenAddressesWidened, "api_name": "deploy", "networks": float64(2), "changed_by": "Ada", "by_creator": false},
+		`widened (changed by Una, its creator)`: {"kind": KindAPITokenAddressesWidened, "api_name": "x", "changed_by": "Una", "by_creator": true},
 	}
 	for want, d := range cases {
 		if got := systemBody(d); !strings.Contains(got, want) {
@@ -367,5 +409,89 @@ func TestConfigReloadWeakenedAlert(t *testing.T) {
 	}
 	if _, err := ValidateDetail(mk(req, many...).Detail); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAPITokenIPDeniedAlert: the denial alert goes to the admins and the
+// token's creator, names the token (display-safe) and the refused address
+// ("unknown" without one), and is deduplicated per recorded denial only
+// (D-220 amendment 1).
+func TestAPITokenIPDeniedAlert(t *testing.T) {
+	tok, creator, denial := uuid.New(), uuid.New(), uuid.New()
+	mk := func(ip netip.Addr, name string, details audit.Details) []Event {
+		ev := audit.Event{Actor: audit.APIActor(tok, name, uuid.Nil), Action: audit.ActionAPIAddressDenied,
+			TargetType: "api_token", TargetID: tok.String(), IP: ip, Details: details}
+		return eventsFromAudit(ev, time.Now())
+	}
+	got := mk(netip.MustParseAddr("::ffff:192.0.2.7"), "deploy\x1b[31m", audit.Details{"denial_id": denial.String(), "creator_id": creator.String()})
+	if len(got) != 2 || got[0].Type != SecurityAccount || got[1].Type != SecuritySystem || got[0].Subject.UserID != creator {
+		t.Fatalf("events %+v", got)
+	}
+	for _, g := range got {
+		if g.Detail["ip"] != "192.0.2.7" || g.Detail["api_id"] != tok.String() || g.Detail["api_name"] != "deploy [31m" {
+			t.Errorf("detail %+v", g.Detail)
+		}
+		if !strings.Contains(g.DedupKey, denial.String()) {
+			t.Errorf("dedup key %q", g.DedupKey)
+		}
+		if _, err := ValidateDetail(g.Detail); err != nil {
+			t.Error(err)
+		}
+		if b := apiDenialBody(g.Detail); !strings.Contains(b, `"deploy [31m"`) || !strings.Contains(b, "192.0.2.7") || !strings.Contains(b, "revoke") {
+			t.Errorf("body %q", b)
+		}
+	}
+	if got[0].DedupKey == got[1].DedupKey {
+		t.Error("account and system alerts share a dedup key")
+	}
+	// Another denial alerts again; no address is "unknown"; without a
+	// creator only the admins are alerted.
+	other := mk(netip.Addr{}, "deploy", audit.Details{"denial_id": uuid.NewString()})
+	if len(other) != 1 || other[0].Type != SecuritySystem || other[0].Detail["ip"] != "unknown" || other[0].DedupKey == got[1].DedupKey {
+		t.Fatalf("events %+v", other)
+	}
+}
+
+// The API token alerts carry only bounded, valid details (never the
+// token) and name the token.
+func TestAPITokenAlertDetail(t *testing.T) {
+	id := uuid.New()
+	ev := audit.Event{Actor: audit.UserActor(uuid.New()), Action: audit.ActionAPITokenCreated, TargetType: "api_token", TargetID: id.String(),
+		Details: audit.Details{"api_token_id": id.String(), "api_token_name": "deploy\npipeline", "job_ids": []any{"a", "b"},
+			"expires_at": "2027-01-01T10:00:00Z", "allowed_cidrs": []string{}, "allow_any_address": true}}
+	events := eventsFromAudit(ev, time.Now())
+	if len(events) != 2 {
+		t.Fatalf("events: %+v", events)
+	}
+	for _, e := range events {
+		if _, err := ValidateDetail(e.Detail); err != nil {
+			t.Fatalf("detail %v: %v", e.Detail, err)
+		}
+		if e.Detail["api_id"] != id.String() || e.Detail["api_name"] != "deploy pipeline" || e.Detail["jobs"] != 2 ||
+			e.Detail["any_address"] != true || e.Detail["expires"] != "2027-01-01" {
+			t.Fatalf("detail %v", e.Detail)
+		}
+	}
+}
+
+// TestAPIWidenedNamesActor: the widening alerts (admins and creator)
+// name who changed the token and whether it was the creator (M1).
+func TestAPIWidenedNamesActor(t *testing.T) {
+	admin, creator, tok := uuid.New(), uuid.New(), uuid.New()
+	ev := audit.Event{Actor: audit.UserActor(admin), Action: audit.ActionAPITokenAddressesChanged, TargetType: "api_token", TargetID: tok.String(),
+		Details: audit.Details{"api_token_id": tok.String(), "api_token_name": "ci", "allowed_cidrs": []string{"10.0.0.0/8"}, "allow_any_address": false,
+			"previous_allowed_cidrs": []string{"10.1.0.0/16"}, "previous_allow_any_address": false,
+			"widened": true, "creator_id": creator.String(), "changed_by_creator": false, "actor_name": "Ada Admin"}}
+	got := eventsFromAudit(ev, time.Now())
+	if len(got) != 2 {
+		t.Fatalf("%d events: %+v", len(got), got)
+	}
+	for _, g := range got {
+		if g.Detail["changed_by"] != "Ada Admin" || g.Detail["by_creator"] != false {
+			t.Errorf("%s: actor facts missing: %+v", g.Type, g.Detail)
+		}
+	}
+	if got[1].Type != SecurityAccount || got[1].Subject.UserID != creator {
+		t.Errorf("creator not alerted: %+v", got[1])
 	}
 }

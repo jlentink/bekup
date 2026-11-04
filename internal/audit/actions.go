@@ -98,6 +98,14 @@ const (
 	// http://bekup-serve:8080 may reach it). Details: the alias and the
 	// foreign addresses.
 	ActionSecurityServeAliasConflict Action = "security.serve_alias_conflict"
+	// ActionSecurityExternalAPIAliasConflict: the opt-in external API's
+	// network alias bekup-external-api on the own reverse proxy's network
+	// resolves to more than one container, or to serve (checked by serve,
+	// which shares that network and can audit; the external API cannot;
+	// L2 of the D-220 review: requests with API tokens the proxy sends to
+	// http://bekup-external-api:8081 may reach another container).
+	// Details: the alias, every address it resolves to.
+	ActionSecurityExternalAPIAliasConflict Action = "security.external_api_alias_conflict"
 
 	// bekup itself (startup posture, D-095).
 	ActionSystemInsecureTransportStarted Action = "system.insecure_transport_started"
@@ -182,6 +190,16 @@ const (
 	// host key than the pinned one during a test (security event, D-140;
 	// alerted in task 5.5).
 	ActionDestinationHostKeyMismatch Action = "destination.ssh_host_key_mismatch"
+	// ActionDestinationTLSPinned / ActionDestinationTLSPinCleared: an admin
+	// pinned (after a fresh capture compared with the confirmed
+	// fingerprint) or removed a WebDAV destination's server certificate
+	// (D-222). Details: the name, the host, the SPKI and certificate
+	// SHA-256 (public data) and the previous pin's SPKI.
+	ActionDestinationTLSPinned     Action = "destination.tls_pinned"
+	ActionDestinationTLSPinCleared Action = "destination.tls_pin_cleared"
+	// ActionDestinationTLSPinMismatch: a pinned WebDAV server presented
+	// another certificate key (security event, alerted; D-222).
+	ActionDestinationTLSPinMismatch Action = "destination.tls_pin_mismatch"
 	// ActionDestinationUnrecordedFileDeleted: an admin deleted a file in
 	// bekup's layout that no artifact row referenced (D-209). Details: the
 	// destination name, the object key and its size.
@@ -219,6 +237,39 @@ const (
 	// ActionJobRunStartedEarly: startNextRunEarly (task 3.12, D-156) with
 	// the pulled-forward and the new next_run_at.
 	ActionJobRunStartedEarly Action = "job.run_started_early"
+)
+
+// External API token actions (D-220; target type api_token, target id the
+// token id).
+const (
+	// ActionAPIAddressDenied: a valid API token was presented from a
+	// client address outside its allowlist (a theft signal; D-220
+	// amendment 1). Actor kind api without a request; details:
+	// api_token_id, api_token_name (added by the actor), denial_id,
+	// creator_id, client_ip ("" when the external API passed none); the
+	// entry's IP is the client address. Raises the api_token_ip_denied
+	// security alert to admins and the token's creator.
+	ActionAPIAddressDenied Action = "api_token.ip_denied"
+	// ActionAPITokenCreated: createApiToken (user actor; step-up).
+	// Details: api_token_id, api_token_name, job_ids, expires_at,
+	// allowed_cidrs, allow_any_address; never the token or its hash.
+	// Raises the api_token_created security alert, and
+	// api_token_any_address when allow_any_address is set.
+	ActionAPITokenCreated Action = "api_token.created"
+	// ActionAPITokenRevoked: revokeApiToken (user actor; step-up).
+	// Details: api_token_id, api_token_name, job_ids, expires_at.
+	ActionAPITokenRevoked Action = "api_token.revoked"
+	// ActionAPITokenAddressesChanged: updateApiTokenAddresses (user
+	// actor; step-up). Details: api_token_id, api_token_name, job_ids,
+	// allowed_cidrs, allow_any_address and the previous values
+	// previous_allowed_cidrs, previous_allow_any_address; widened (the
+	// token may now be used from an address it could not be before),
+	// creator_id, changed_by_creator and actor_name (the actor's display
+	// name). Raises api_token_any_address when "any address" is newly
+	// chosen, else api_token_addresses_widened when widened, and the
+	// security.account alert api_token_addresses_widened to the creator
+	// on every widening.
+	ActionAPITokenAddressesChanged Action = "api_token.addresses_changed" //nolint:gosec // G101: an action name, not a credential
 )
 
 // Run actions (task 3.6, D-147; target type run, target id the run id).
@@ -376,7 +427,7 @@ var catalog = []Action{
 	ActionSessionRevoked, ActionSessionsRevoked,
 	ActionSecretChanged, ActionSettingChanged,
 	ActionSecurityOptOut, ActionSecurityInsecureHTTP, ActionSecurityInsecureDBTLS, ActionSecurityInsecureDBRoles,
-	ActionSecurityUnpinnedImage, ActionSecurityServeAliasConflict,
+	ActionSecurityUnpinnedImage, ActionSecurityServeAliasConflict, ActionSecurityExternalAPIAliasConflict,
 	ActionSystemInsecureTransportStarted,
 	ActionCLIAdminCreated, ActionCLIAdminPasswordReset, ActionCLIAdminMFAReset, ActionCLIAdminUnlocked,
 	ActionCLIAdminDisabled, ActionCLIRunImported, ActionCLIDBBootstrap,
@@ -391,12 +442,14 @@ var catalog = []Action{
 	ActionConnectionTemporaryExpired,
 	ActionDestinationCreated, ActionDestinationUpdated, ActionDestinationDeleted,
 	ActionDestinationHostKeyConfirmed, ActionDestinationSSHKeyGenerated, ActionDestinationHostKeyMismatch,
+	ActionDestinationTLSPinned, ActionDestinationTLSPinCleared, ActionDestinationTLSPinMismatch,
 	ActionDestinationUnrecordedFileDeleted,
 	ActionJobEncryptionPassphraseSet, ActionJobEncryptionRecipientSet, ActionJobEncryptionOptedOut,
 	ActionJobEncryptionOptedIn, ActionJobPassphrasesExported,
 	ActionJobCreated, ActionJobUpdated, ActionJobDeleted, ActionJobEnabled, ActionJobDisabled,
 	ActionJobOwnerAdded, ActionJobOwnerRemoved, ActionJobRunRequested, ActionJobRunStartedEarly,
 	ActionRunCancelRequested,
+	ActionAPIAddressDenied, ActionAPITokenCreated, ActionAPITokenRevoked, ActionAPITokenAddressesChanged,
 	ActionRetentionDeletionPlanned, ActionRetentionSwept, ActionRetentionAborted, ActionRetentionArtifactMissing,
 	ActionRestoreVerificationFailed, ActionRestoreStarted, ActionRestoreFinished,
 	ActionRestoreRequested, ActionRestoreCancelRequested, ActionRestoreAbandoned,

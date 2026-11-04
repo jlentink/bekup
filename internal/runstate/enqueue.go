@@ -36,6 +36,8 @@ func TriggerOf(t queue.Trigger) (sqlc.RunTrigger, error) {
 		return sqlc.RunTriggerManual, nil
 	case queue.TriggerEarly:
 		return sqlc.RunTriggerEarly, nil
+	case queue.TriggerAPI:
+		return sqlc.RunTriggerApi, nil
 	default:
 		return "", fmt.Errorf("runstate: unknown trigger %q", t)
 	}
@@ -44,7 +46,7 @@ func TriggerOf(t queue.Trigger) (sqlc.RunTrigger, error) {
 // EnqueueTx inserts a backup_run River job and, unless River refused it as
 // a duplicate (the job already has an active run), its queued run row, both
 // in tx, and publishes the run event. Every backup run is enqueued here
-// (scheduler, runJobNow, startNextRunEarly), so a queued run is visible and cancelable before
+// (scheduler, runJobNow, startNextRunEarly, the external API's consumer), so a queued run is visible and cancelable before
 // a worker picks it up.
 func EnqueueTx(ctx context.Context, tx pgx.Tx, ins Inserter, pub *pubsub.Publisher, args queue.BackupRunArgs) (Enqueued, error) {
 	trigger, err := TriggerOf(args.Trigger)
