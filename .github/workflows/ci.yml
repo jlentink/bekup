@@ -546,9 +546,11 @@ jobs:
           # ignored and logged.
           docker exec other curl -sS -o /dev/null -H 'Host: bekup.test' -H 'X-Forwarded-For: 198.51.100.7' \
             http://bekup-serve:8080/ || true
-          docker compose logs serve | grep -q 'trusted proxy host resolved'
-          docker compose logs serve | grep -q 'not in server.trusted_proxies'
-          if docker compose logs serve | grep -q 'listens on every interface'; then
+          docker compose logs --no-color serve > "$RUNNER_TEMP/own-proxy-serve.log"
+          for want in 'trusted proxy host resolved' 'not in the trusted proxy list'; do
+            grep -qF "$want" "$RUNNER_TEMP/own-proxy-serve.log" || { echo "::error::serve did not log: $want"; tail -n 50 "$RUNNER_TEMP/own-proxy-serve.log"; exit 1; }
+          done
+          if grep -qF 'listens on every interface' "$RUNNER_TEMP/own-proxy-serve.log"; then
             echo "::error::the wildcard warning of the own-proxy shape was not suppressed"; exit 1
           fi
           docker compose -f compose.yaml run --rm -T setup check
