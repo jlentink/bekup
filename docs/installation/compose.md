@@ -443,11 +443,20 @@ sudo docker compose run --rm admin create --email you@example.com --display-name
   warns about the certificate: open its details and **continue only if
   the SHA-256 fingerprint is exactly the one on the terminal**. The code
   works once and opens the only session; a wrong code is delayed and the
-  10th stops setup. Keep the terminal private: whoever sees the code
-  first gets the session. The services log nothing (`logging: none`).
+  10th stops setup. Once the code was used, further sign-ins are refused
+  at once and no longer count, so nobody can stop a running setup by
+  guessing. Every refused sign-in is shown on the terminal with the
+  sender's address as the container sees it (never the code; through
+  Docker's port publishing this can be Docker's gateway address): watch
+  for attempts that are not yours. Keep the terminal private: whoever sees the code first gets the
+  session. The services log nothing (`logging: none`). With
+  `BEKUP_SETUP_WEB_HOST` (or `--host`) set, requests for any other host
+  name are refused (`localhost` and the loopback addresses keep working
+  for an SSH tunnel).
 - **Lifetime.** Setup stops when you press Finish, after 30 minutes
-  without activity, after 2 hours, or with Ctrl+C. The browser session
-  ends with it.
+  without activity, after 2 hours, or with Ctrl+C. Only your answers,
+  downloads and other actions count as activity: an open tab alone does
+  not keep setup running. The browser session ends with it.
 - **Run 1, `setup-web`.** The `setup` service's hardening (root with only
   `CAP_CHOWN` for the files' owners, read-only root, no-new-privileges)
   plus its own network for the published port; no database, no secrets.
@@ -455,26 +464,36 @@ sudo docker compose run --rm admin create --email you@example.com --display-name
   (Back goes back; the equivalent flags are in the report), writes the
   deployment like `bekup setup init`, runs `setup check` and offers the
   zip. A generated CA passphrase is shown once on its own screen: reveal
-  it, store it offline, confirm. In a directory that already holds a
+  it, store it offline, confirm (if the page lost it, go Back and continue
+  again to show it once more). In a directory that already holds a
   deployment it writes nothing and only checks it.
 - **Run 2, `setup-web-db`.** migrate's user (65532), configuration and
   database secrets, the `backend` network (and your database container's
-  network through the override), the directory mounted read-only (it
-  does not repeat `setup check`, which needs root to see every file). With
+  network through the override). Of the deployment directory it mounts
+  only `bekup-setup.json` (read-only): never the directory itself or the
+  keys directory, whose master key and mTLS keys belong to the same UID.
+  So it does not repeat `setup check` and offers no zip (run 1 did both). With
   your own PostgreSQL whose roles come from `db bootstrap` (or
   single-account mode) it asks the administrator role and password (used
   for this connection only, never stored) and runs bootstrap
   ([external-database.md](external-database.md#browser-setup)); a TLS mode
   below verify-full needs an explicit confirmation, like
   `--allow-insecure-admin-connection`. Then `migrate up` (with the bundled
-  database it waits up to 3 minutes for postgres) and the final check:
+  database it waits up to 3 minutes while postgres cannot be reached or is
+  starting; a refused login or a failed preflight is reported at once)
+  and the final check:
   the migrate preflight, both roles' logins and role checks, the schema
   version. Every failure can be retried after you fixed its cause.
-- **The zip** (`Download configuration`) holds only `compose.yaml`,
-  `compose.override.yaml`, `.env`, `bekup.toml`, `runner.toml` and
-  `bekup-setup.json`: no keys, passwords, certificates or the CA. Those
-  stay on the server; the zip is a reviewable copy, not a backup (escrow
-  the master key and the CA separately,
+- **The zip** (`Download configuration`, run 1 only) holds only
+  `compose.yaml`, `bekup.toml`, `runner.toml`, `external-api.toml` (with
+  the external API; paths only, no secrets), `bekup-setup.json`, the
+  variables of `.env` that setup manages (your own lines, for example a
+  DNS provider's API key, stay on the server) and `compose.override.yaml`
+  only while it is exactly what setup wrote for your overlays (a changed
+  override may hold credentials of your own: it is left out, and the
+  results screen says so). No keys, passwords, certificates or the CA.
+  Those stay on the server; the zip is a reviewable copy, not a backup
+  (escrow the master key and the CA separately,
   [key-management.md](../security/key-management.md)).
 - **Not in the browser:** the first admin (`bekup admin create` on the
   host, D-113), `setup upgrade` and `setup renew` (terminal wizard).
@@ -748,8 +767,9 @@ Errors:
   network, no logs), and neither have the [browser setup](#browser-setup)'s
   `setup-web` and `setup-web-db` (the only services that may publish a
   port besides the bundled proxy: TCP 8443 in the container; only
-  `setup-web` runs as root; `setup-web-db` mounts the directory
-  read-only). The shipped networks (`internal`, driver, subnets,
+  `setup-web` runs as root; `setup-web-db` binds only `bekup-setup.json`
+  read-only and may never mount the deployment directory or anything in
+  the keys directory). The shipped networks (`internal`, driver, subnets,
   name, the external `proxy` and `database` networks), volumes, secrets,
   configs and the project name are pinned too (the name also as written:
   no variables in `name:`). Only `serve` is on `proxy`, and only

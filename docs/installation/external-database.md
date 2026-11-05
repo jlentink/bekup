@@ -85,7 +85,9 @@ bundle into the directory as above, run `docker compose run --rm
 run --rm --service-ports setup-web-db`. That second run is the `migrate`
 container's twin (UID 65532, its configuration and password files, the
 `backend` network, your database container's network through the
-override; it publishes the setup port too). For the role choices
+override; it publishes the setup port too, and of the deployment directory
+it sees only `bekup-setup.json`, never the keys directory). Single-account
+mode asks no administrator password: bootstrap logs in as `database.user`. For the role choices
 bootstrap and single account it runs [`db bootstrap`](#with-an-admin-account-bekup-db-bootstrap-recommended)
 with the administrator role and password you enter there (the password
 travels once over the setup's TLS 1.3 connection, is used for this one

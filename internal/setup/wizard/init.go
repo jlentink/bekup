@@ -1156,11 +1156,20 @@ func (st *initState) summary() error {
 }
 
 func (st *initState) showPassphrase() error {
-	return st.ui.Sensitive("CA key passphrase (shown ONCE)", st.pass, `Store it now, offline (password manager), next to the CA media. It is
+	body := `Store it now, offline (password manager), next to the CA media. It is
 needed to renew certificates. It is not shown again and not logged.
 WARNING: Docker keeps container output in its logs unless the setup
 container runs with --log-driver none (docker run --rm -it --log-driver
-none ...); if it did not, delete this container's log.`)
+none ...); if it did not, delete this container's log.`
+	if st.env.Browser {
+		// The browser fetches it once; it never reaches the terminal or a
+		// log (D-217).
+		body = `Store it now, offline (password manager), next to the CA media. It is
+needed to renew certificates. It is shown once, on this page only: never
+on the terminal, in a log or in the browser's storage. Close this tab
+once setup is finished.`
+	}
+	return st.ui.Sensitive("CA key passphrase (shown ONCE)", st.pass, body)
 }
 
 // flags is the equivalent `bekup setup init` command line.

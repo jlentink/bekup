@@ -100,9 +100,11 @@ func TestIntegrationRetentionHolds(t *testing.T) {
 	if len(hs) != 1 || !ok || h.reason != HoldNewerThanNewestComplete || h.held != 2 || h.newest == nil {
 		t.Fatalf("holds = %+v", hs)
 	}
-	// The oldest held run is the one at 4 days (the newest is inside keep-last).
-	if d := now.Add(-4 * day).Sub(h.since); d < -2*time.Second || d > 2*time.Second {
-		t.Errorf("held since %v", h.since)
+	// The oldest held run is the one at 4 days (the newest is inside
+	// keep-last). Compared with that run's own timestamp, not with a
+	// second clock reading: a busy machine can take seconds between them.
+	if !h.since.Equal(held[0].at) {
+		t.Errorf("held since %v, want %v (the run at 4 days)", h.since, held[0].at)
 	}
 	// On disk the complete run is the newest complete one (kept); on
 	// other the newer runs are complete, so it went there.

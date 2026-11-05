@@ -185,6 +185,7 @@ type obj struct {
 
 type runInfo struct {
 	id      uuid.UUID
+	at      time.Time // started_at = finished_at = storage_timestamp
 	objects []obj
 }
 
@@ -203,7 +204,7 @@ func (e *env) run(j jobInfo, age time.Duration, n int, places ...on) runInfo {
 	e.t.Helper()
 	ctx := e.t.Context()
 	ts := time.Now().Add(-age).UTC().Truncate(time.Second)
-	ri := runInfo{id: uuid.New()}
+	ri := runInfo{id: uuid.New(), at: ts}
 	if _, err := e.pool.Exec(ctx, `INSERT INTO runs (id, job_id, trigger, status, started_at, finished_at, storage_timestamp)
 		VALUES ($1, $2, 'schedule', 'success', $3, $3, $3)`, ri.id, j.id, ts); err != nil {
 		e.t.Fatal(err)

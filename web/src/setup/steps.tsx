@@ -329,12 +329,17 @@ function SecretStep({ step, onAnswered, onBack, canGoBack }: StepProps) {
   );
 }
 
-/** SensitiveStep is the sealed slip: the passphrase is revealed once. */
-function SensitiveStep({ step, onAnswered }: StepProps) {
+/**
+ * SensitiveStep is the sealed slip: the passphrase is revealed once per
+ * screen. Back leaves it (a lost reveal response: continue again to get a
+ * fresh screen).
+ */
+function SensitiveStep({ step, onAnswered, onBack, canGoBack }: StepProps) {
   const [secret, setSecret] = useState<string | null>(null);
   const [gone, setGone] = useState(false);
   const [copied, setCopied] = useState(false);
   const { pending, error, send } = useSend();
+  const { pending: backPending, error: backError, send: sendBack } = useSend();
   const [revealing, setRevealing] = useState(false);
 
   // Drop the passphrase from memory when the step is left.
@@ -409,16 +414,32 @@ function SensitiveStep({ step, onAnswered }: StepProps) {
           )}
         </div>
       </div>
-      {error && (
+      {(error ?? backError) && (
         <p role="alert" className="mt-3 text-sm text-destructive">
-          {error}
+          {error ?? backError}
         </p>
       )}
-      <div className="mt-8 flex">
+      <div className="mt-8 flex items-center gap-3">
+        {canGoBack && (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={pending || backPending}
+            onClick={() =>
+              void sendBack(() => back(step.id)).then((ok) => {
+                if (!ok) return;
+                setSecret(null);
+                onBack();
+              })
+            }
+          >
+            <ArrowLeft aria-hidden /> {T.back}
+          </Button>
+        )}
         <Button
           type="button"
           className="ml-auto"
-          disabled={pending || (!secret && !gone)}
+          disabled={pending || backPending || (!secret && !gone)}
           onClick={confirm}
         >
           <Check aria-hidden /> {T.slipConfirm}

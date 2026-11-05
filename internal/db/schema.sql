@@ -340,6 +340,20 @@ CREATE TYPE public.shared_channel_type AS ENUM (
 ALTER TYPE public.shared_channel_type OWNER TO bekup_owner;
 
 --
+-- Name: summary_frequency; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.summary_frequency AS ENUM (
+    'daily',
+    'every_other_day',
+    'weekly',
+    'monthly',
+    'never'
+);
+
+ALTER TYPE public.summary_frequency OWNER TO bekup_owner;
+
+--
 -- Name: test_restore_status; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -2735,6 +2749,36 @@ CREATE TABLE public.user_notification_prefs (
 ALTER TABLE public.user_notification_prefs OWNER TO bekup_owner;
 
 --
+-- Name: user_summary_settings; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.user_summary_settings (
+    user_id uuid NOT NULL,
+    frequency public.summary_frequency,
+    hour smallint,
+    weekday smallint,
+    month_day smallint,
+    timezone text,
+    due_basis text,
+    next_due_at timestamp with time zone,
+    last_period_end timestamp with time zone,
+    last_sent_at timestamp with time zone,
+    last_outcome text,
+    last_outcome_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_summary_settings_basis CHECK (((due_basis IS NULL) OR (char_length(due_basis) <= 200))),
+    CONSTRAINT user_summary_settings_explicit CHECK ((((frequency IS NULL) = (hour IS NULL)) AND ((frequency IS NULL) = (weekday IS NULL)) AND ((frequency IS NULL) = (month_day IS NULL)) AND ((frequency IS NULL) = (timezone IS NULL)))),
+    CONSTRAINT user_summary_settings_hour CHECK (((hour IS NULL) OR ((hour >= 0) AND (hour <= 23)))),
+    CONSTRAINT user_summary_settings_month_day CHECK (((month_day IS NULL) OR ((month_day >= 1) AND (month_day <= 28)))),
+    CONSTRAINT user_summary_settings_outcome CHECK ((((last_outcome IS NULL) OR (last_outcome = ANY (ARRAY['sent'::text, 'no_jobs'::text]))) AND ((last_outcome IS NULL) = (last_outcome_at IS NULL)))),
+    CONSTRAINT user_summary_settings_timezone CHECK (((timezone IS NULL) OR (((char_length(timezone) >= 1) AND (char_length(timezone) <= 64)) AND (timezone ~ '^[A-Za-z0-9/_+-]+$'::text)))),
+    CONSTRAINT user_summary_settings_weekday CHECK (((weekday IS NULL) OR ((weekday >= 1) AND (weekday <= 7))))
+);
+
+ALTER TABLE public.user_summary_settings OWNER TO bekup_owner;
+
+--
 -- Name: users; Type: TABLE; Schema: public; Owner: bekup_owner
 --
 
@@ -3254,6 +3298,13 @@ ALTER TABLE ONLY public.unrecorded_files
 
 ALTER TABLE ONLY public.user_channels
     ADD CONSTRAINT user_channels_pkey PRIMARY KEY (id);
+
+--
+-- Name: user_summary_settings user_summary_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_summary_settings
+    ADD CONSTRAINT user_summary_settings_pkey PRIMARY KEY (user_id);
 
 --
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -3783,6 +3834,12 @@ CREATE INDEX run_slots_connection_idx ON public.run_slots USING btree (connectio
 CREATE INDEX runs_active_idx ON public.runs USING btree (status) WHERE (status = ANY (ARRAY['queued'::public.run_status, 'running'::public.run_status]));
 
 --
+-- Name: runs_finished_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_finished_at_idx ON public.runs USING btree (finished_at) WHERE (finished_at IS NOT NULL);
+
+--
 -- Name: runs_job_early_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -3883,6 +3940,12 @@ CREATE INDEX user_channels_user_idx ON public.user_channels USING btree (user_id
 --
 
 CREATE UNIQUE INDEX user_notification_prefs_key ON public.user_notification_prefs USING btree (user_id, event, job_id, channel) NULLS NOT DISTINCT;
+
+--
+-- Name: user_summary_settings_due_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX user_summary_settings_due_idx ON public.user_summary_settings USING btree (next_due_at) WHERE (next_due_at IS NOT NULL);
 
 --
 -- Name: users_active_admins_idx; Type: INDEX; Schema: public; Owner: bekup_owner
@@ -4081,6 +4144,12 @@ CREATE TRIGGER user_channels_limit BEFORE INSERT ON public.user_channels FOR EAC
 --
 
 CREATE TRIGGER user_channels_set_updated_at BEFORE UPDATE ON public.user_channels FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: user_summary_settings user_summary_settings_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER user_summary_settings_set_updated_at BEFORE UPDATE ON public.user_summary_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 --
 -- Name: users users_email_change_unverify; Type: TRIGGER; Schema: public; Owner: bekup_owner
@@ -4723,6 +4792,13 @@ ALTER TABLE ONLY public.user_notification_prefs
 
 ALTER TABLE ONLY public.user_notification_prefs
     ADD CONSTRAINT user_notification_prefs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: user_summary_settings user_summary_settings_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.user_summary_settings
+    ADD CONSTRAINT user_summary_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 --
 -- Name: webauthn_ceremonies webauthn_ceremonies_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
@@ -5959,6 +6035,84 @@ GRANT UPDATE(enabled) ON TABLE public.user_notification_prefs TO bekup_app;
 --
 
 GRANT UPDATE(updated_at) ON TABLE public.user_notification_prefs TO bekup_app;
+
+--
+-- Name: TABLE user_summary_settings; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.frequency; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(frequency) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.hour; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(hour) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.weekday; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(weekday) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.month_day; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(month_day) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.timezone; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(timezone) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.due_basis; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(due_basis) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.next_due_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(next_due_at) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.last_period_end; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_period_end) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.last_sent_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_sent_at) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.last_outcome; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_outcome) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.last_outcome_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(last_outcome_at) ON TABLE public.user_summary_settings TO bekup_app;
+
+--
+-- Name: COLUMN user_summary_settings.updated_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(updated_at) ON TABLE public.user_summary_settings TO bekup_app;
 
 --
 -- Name: TABLE users; Type: ACL; Schema: public; Owner: bekup_owner

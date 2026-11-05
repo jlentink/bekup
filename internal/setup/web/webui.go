@@ -77,6 +77,9 @@ type pending struct {
 	// valid only while the step waits); revealed marks it fetched.
 	sensitive []byte
 	revealed  bool
+	// taken marks the screen answered: the one answer sits in answers
+	// (or was taken), and later deliveries are stale.
+	taken bool
 }
 
 // UI is a wizard.UI driven by HTTP: every screen becomes the current
@@ -91,6 +94,8 @@ type UI struct {
 	// (long polling).
 	changed chan struct{}
 	out     boundedBuffer
+	// outRev counts the writes to Out (live report polling).
+	outRev uint64
 }
 
 // NewUI returns a UI whose screens are aborted when ctx ends.
@@ -111,11 +116,19 @@ func (u *UI) Current() (Step, bool, <-chan struct{}) {
 	return u.cur.step, true, u.changed
 }
 
-// Report returns the text written to Out so far.
-func (u *UI) Report() string {
+// Report returns the text written to Out so far and its revision (the
+// number of writes).
+func (u *UI) Report() (string, uint64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.out.String()
+	return u.out.String(), u.outRev
+}
+
+// ReportRev returns the revision of the report.
+func (u *UI) ReportRev() uint64 {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.outRev
 }
 
 // Answer delivers a non-secret answer to the current step.
@@ -142,13 +155,16 @@ func (u *UI) deliver(a Answer, secret bool) error {
 		return fail(ErrNoStep)
 	case u.cur.step.ID != a.Step:
 		return fail(ErrStale)
+	case u.cur.taken:
+		return fail(ErrStale) // answered already (validation may be running)
 	case !a.Back && secret != (u.cur.step.Kind == KindSecret):
 		return fail(ErrWrongKind)
 	}
 	select {
 	case u.cur.answers <- a:
+		u.cur.taken = true
 	default:
-		return fail(ErrStale) // answered already, not yet taken
+		return fail(ErrStale) // cannot happen: taken guards the one slot
 	}
 	return nil
 }
@@ -178,7 +194,12 @@ func (u *UI) Reveal(step uint64, w io.Writer) error {
 func (u *UI) ask(step Step, sensitive []byte, check func(Answer) string) (Answer, error) {
 	p := &pending{step: step, answers: make(chan Answer, 1), sensitive: sensitive}
 	u.publish(p)
-	defer u.publish(nil)
+	defer func() {
+		// No delivery reaches p once it is not current (deliver sends under
+		// the lock); an answer still buffered (ctx ended) is zeroed.
+		u.publish(nil)
+		drain(p)
+	}()
 	for {
 		select {
 		case <-u.ctx.Done():
@@ -198,9 +219,21 @@ func (u *UI) ask(step Step, sensitive []byte, check func(Answer) string) (Answer
 			crypto.Zero(a.secret)
 			next := p.step
 			next.Error = msg
+			old := p
 			p = &pending{step: next, answers: make(chan Answer, 1), sensitive: sensitive}
 			u.publish(p)
+			drain(old)
 		}
+	}
+}
+
+// drain zeroes an answer left in p's buffer. Call it only once p is no
+// longer current.
+func drain(p *pending) {
+	select {
+	case a := <-p.answers:
+		crypto.Zero(a.secret)
+	default:
 	}
 }
 
@@ -318,6 +351,10 @@ func (w outWriter) Write(p []byte) (int, error) {
 	w.u.mu.Lock()
 	defer w.u.mu.Unlock()
 	w.u.out.Write(p)
+	w.u.outRev++
+	// Wake the long polls that follow the report.
+	close(w.u.changed)
+	w.u.changed = make(chan struct{})
 	return len(p), nil
 }
 

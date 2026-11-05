@@ -48,6 +48,11 @@ type harness struct {
 	mu      sync.Mutex
 	initOps []setup.Options
 	pass    []byte
+	// sensitive are the bodies of the sensitive steps drive saw.
+	sensitive []string
+	// dbPass are the role passwords Init got (copies: the plan is
+	// destroyed after Init).
+	dbPass map[string][]byte
 }
 
 func testEnv(t *testing.T) wizard.Env {
@@ -80,6 +85,14 @@ func start(t *testing.T, mut func(*Options)) *harness {
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			h.initOps, h.pass = append(h.initOps, o), pass
+			if o.DBPassword != nil {
+				h.dbPass = map[string][]byte{}
+				for _, role := range []string{"bekup_app", "bekup_owner"} {
+					if pw, perr := o.DBPassword(role); perr == nil {
+						h.dbPass[role] = bytes.Clone(pw)
+					}
+				}
+			}
 			return err
 		},
 		Check: func(setup.CheckOptions) ([]setup.Finding, error) { return nil, nil },
@@ -244,6 +257,9 @@ func (h *harness) drive(answers []wizard.Answer) (Status, [][]byte) {
 		case step.Kind == KindSecret:
 			resp, body = h.do(http.MethodPost, fmt.Sprintf("/api/setup/secret?step=%d", step.ID), "application/octet-stream", []byte(a.Value), nil)
 		case step.Kind == KindSensitive:
+			h.mu.Lock()
+			h.sensitive = append(h.sensitive, step.Body)
+			h.mu.Unlock()
 			r, secret := h.postJSON("/api/setup/reveal", map[string]uint64{"step": step.ID}, nil)
 			if r.StatusCode != http.StatusOK || r.Header.Get("Cache-Control") != "no-store" {
 				h.t.Fatalf("reveal: %d %q %s", r.StatusCode, r.Header.Get("Cache-Control"), secret)
@@ -328,6 +344,96 @@ func TestBrowserFlowMatchesWizard(t *testing.T) {
 	}
 	if strings.Contains(st.Report, genPass) {
 		t.Fatal("the passphrase leaked into the report")
+	}
+	// The browser's passphrase screen does not talk about Docker logs
+	// (the passphrase never reaches the terminal there).
+	if len(h.sensitive) != 1 || strings.Contains(h.sensitive[0], "log-driver") || !strings.Contains(h.sensitive[0], "on this page only") {
+		t.Fatalf("passphrase screen %q", h.sensitive)
+	}
+}
+
+// ownProxyDBAnswers is a complete init with your own proxy (join mode) and
+// a database container on this host whose roles exist (passwords as
+// secret answers).
+func ownProxyDBAnswers() []wizard.Answer {
+	return []wizard.Answer{
+		{Title: "bekup setup"},
+		{Title: "Reverse proxy", Value: "own"},
+		{Title: "Your proxy's Docker network", Value: "web"},
+		{Title: "Your proxy's container name", Value: "caddy"},
+		{Title: "Traefik Docker labels?", Value: "yes"},
+		{Title: "Traefik entrypoint"},
+		{Title: "Traefik certificate resolver"},
+		{Title: "Domain", Value: "backup.example.com"},
+		{Title: "Database", Value: "external"},
+		{Title: "Where does your PostgreSQL run?", Value: "docker"},
+		{Title: "The database's Docker network", Value: "dbnet"},
+		{Title: "The database's container name", Value: "postgres"},
+		{Title: "PostgreSQL port"},
+		{Title: "Database name"},
+		{Title: "TLS to your PostgreSQL", Value: "require"},
+		{Title: "An explicit weakening", Value: "yes"},
+		{Title: "Roles and database", Value: "existing-roles"},
+		{Title: "Password of bekup_app", Value: "app-password-0123456789-abcdef"},
+		{Title: "Repeat the password of bekup_app", Value: "app-password-0123456789-abcdef"},
+		{Title: "Password of bekup_owner", Value: "owner-password-0123456789-abcdef"},
+		{Title: "Repeat the password of bekup_owner", Value: "owner-password-0123456789-abcdef"},
+		{Title: "Master encryption key", Value: "generate"},
+		{Title: "Internal CA", Value: "generate"},
+		{Title: "CA key passphrase", Value: "generate"},
+		{Title: "Docker socket group", Value: "998"},
+		{Title: "Target database networks", Value: "10.20.0.0/16"},
+		{Title: "Target database host names"},
+		{Title: "External API for CI pipelines", Value: "no"},
+		{Title: "Summary"},
+		{Title: "Write the deployment now?", Value: "yes"},
+		{Title: "CA key passphrase (shown ONCE)"},
+	}
+}
+
+// TestBrowserFlowMatchesWizardOwnProxyDB: the same parity for your own
+// proxy with the Traefik labels and an external database container whose
+// role passwords are secret answers.
+func TestBrowserFlowMatchesWizardOwnProxyDB(t *testing.T) {
+	answers := ownProxyDBAnswers()
+	script := &wizard.Script{Answers: slices.Clone(answers)}
+	env := testEnv(t)
+	env.Dir, env.UI = t.TempDir(), script
+	want, err := wizard.RunInit(env)
+	if err != nil {
+		t.Fatalf("script: %v\n%v", err, script.Screens)
+	}
+	defer want.Destroy()
+
+	h := start(t, nil)
+	h.login()
+	st, _ := h.drive(answers)
+	if st.Phase != PhaseDone {
+		t.Fatalf("status %+v", st)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.initOps) != 1 {
+		t.Fatalf("Init ran %d times", len(h.initOps))
+	}
+	got := h.initOps[0]
+	if !equalAnswers(got.Answers, want.Options.Answers) || got.WriteCompose != want.Options.WriteCompose {
+		t.Fatalf("answers differ:\n got %+v\nwant %+v", got.Answers, want.Options.Answers)
+	}
+	if got.Answers.DB.Location != setup.DBDocker || !got.Answers.ProxyLabels {
+		t.Fatalf("not the own-proxy + database container shape: %+v", got.Answers)
+	}
+	for _, role := range []string{"bekup_app", "bekup_owner"} {
+		w, werr := want.Options.DBPassword(role)
+		if werr != nil || len(w) == 0 || !bytes.Equal(h.dbPass[role], w) {
+			t.Fatalf("%s password differs: %v", role, werr)
+		}
+	}
+	if !strings.Contains(regexp.MustCompile(`--dir \S+ `).ReplaceAllString(st.Report, ""), strings.Join(withoutDir(want.Flags), " ")) {
+		t.Fatalf("report lacks the equivalent flags:\n%s", st.Report)
+	}
+	if strings.Contains(st.Report, "password-0123456789") {
+		t.Fatal("a role password in the report")
 	}
 }
 
@@ -429,7 +535,7 @@ func TestBrowserAccess(t *testing.T) {
 	}
 	// Body limit.
 	big := bytes.Repeat([]byte("a"), MaxBody+1)
-	if r, _ := h.do(http.MethodPost, "/api/setup/secret?step=1", "application/octet-stream", big, nil); r.StatusCode < 400 {
+	if r, _ := h.do(http.MethodPost, "/api/setup/secret?step=1", "application/octet-stream", big, nil); r.StatusCode != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized body: %d", r.StatusCode)
 	}
 	// No zip before the files are written.
@@ -626,5 +732,332 @@ func TestBrowserDatabaseRunSkipsCheck(t *testing.T) {
 	st, _ := h.drive(nil)
 	if st.Phase != PhaseDone || checks != 0 || steps != 1 || !strings.Contains(st.Report, "run --rm setup check") {
 		t.Fatalf("phase %s, %d checks, %d database steps\n%s", st.Phase, checks, steps, st.Report)
+	}
+}
+
+// TestBrowserUsedCodeCannotStopSetup: once the code was used, wrong codes
+// neither count nor wait (nobody reaching the port can exhaust the
+// attempts and stop a running setup); every refused sign-in is shown on
+// the terminal with the peer's address, never the code.
+func TestBrowserUsedCodeCannotStopSetup(t *testing.T) {
+	var term syncBuffer
+	var slept int
+	var sleptMu sync.Mutex
+	h := start(t, func(o *Options) {
+		o.Out = &term
+		o.gateSleep = func(time.Duration) { sleptMu.Lock(); slept++; sleptMu.Unlock() }
+	})
+	if r, _ := h.postJSON("/api/setup/session", map[string]string{"code": "WRONG"}, nil); r.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong code: %d", r.StatusCode)
+	}
+	if !strings.Contains(term.String(), "wrong access code from 127.0.0.1:") || !strings.Contains(term.String(), "(1 of 10)") {
+		t.Fatalf("terminal:\n%s", term.String())
+	}
+	h.login()
+	for i := range 2 * MaxFailures {
+		r, b := h.postJSON("/api/setup/session", map[string]string{"code": fmt.Sprintf("WRONG%d", i)}, nil)
+		if r.StatusCode != http.StatusUnauthorized || !strings.Contains(string(b), "already open") {
+			t.Fatalf("attempt %d after use: %d %s", i, r.StatusCode, b)
+		}
+	}
+	select {
+	case err := <-h.done:
+		t.Fatalf("setup stopped: %v", err)
+	default:
+	}
+	if st := h.status(0); st.Phase != PhaseQuestions {
+		t.Fatalf("status %+v", st)
+	}
+	sleptMu.Lock()
+	defer sleptMu.Unlock()
+	if slept != 1 {
+		t.Fatalf("%d delays (only the wrong code before the sign-in waits)", slept)
+	}
+	out := term.String()
+	if n := strings.Count(out, "refused: the access code was used already"); n != maxRefusalLines {
+		t.Fatalf("%d refusal lines, want %d:\n%s", n, maxRefusalLines, out)
+	}
+	if strings.Contains(strings.ToUpper(out), "WRONG0") || strings.Count(out, h.code) != 2 {
+		t.Fatalf("a typed code on the terminal:\n%s", out)
+	}
+}
+
+// TestBrowserStopWithOpenPoll: a pending long poll ends with the server,
+// so Run returns nil at once instead of waiting for the poll.
+func TestBrowserStopWithOpenPoll(t *testing.T) {
+	h := start(t, nil)
+	h.login()
+	st := h.status(0)
+	for st.Step == nil {
+		st = h.status(0)
+	}
+	polled := make(chan int, 1)
+	go func() {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("%s/api/setup/status?after=%d", h.base, st.Step.ID), http.NoBody)
+		if err != nil {
+			polled <- -1
+			return
+		}
+		resp, err := h.client.Do(req)
+		if err != nil {
+			polled <- -1
+			return
+		}
+		closeBody(t, resp)
+		polled <- resp.StatusCode
+	}()
+	time.Sleep(200 * time.Millisecond) // the poll waits
+	begin := time.Now()
+	h.cancel()
+	select {
+	case err := <-h.done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		h.done <- nil // for the cleanup
+	case <-time.After(4 * time.Second):
+		t.Fatal("Run waited for the open poll")
+	}
+	if d := time.Since(begin); d > 3*time.Second {
+		t.Fatalf("stopping took %v", d)
+	}
+	select {
+	case <-polled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the poll did not end")
+	}
+}
+
+// TestBrowserPollsAreNotActivity: an open tab's status polls do not keep
+// setup alive; answers do.
+func TestBrowserPollsAreNotActivity(t *testing.T) {
+	h := start(t, func(o *Options) { o.Idle = 600 * time.Millisecond })
+	h.login()
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case <-h.done:
+			h.done <- nil
+			return
+		case <-deadline:
+			t.Fatal("status polls kept the idle setup running")
+		case <-time.After(100 * time.Millisecond):
+		}
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, h.base+"/api/setup/status", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp, err := h.client.Do(req); err == nil {
+			closeBody(t, resp)
+		}
+	}
+}
+
+// TestBrowserAnswersAreActivity: answering keeps setup alive past Idle.
+func TestBrowserAnswersAreActivity(t *testing.T) {
+	h := start(t, func(o *Options) { o.Idle = 700 * time.Millisecond })
+	h.login()
+	end := time.Now().Add(1500 * time.Millisecond)
+	for time.Now().Before(end) {
+		st := h.status(0)
+		if st.Step != nil {
+			// A stale answer still counts as a request of the session.
+			h.postJSON("/api/setup/answer", Answer{Step: st.Step.ID + 1000}, nil)
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	select {
+	case <-h.done:
+		t.Fatal("setup stopped while answers came in")
+	default:
+	}
+}
+
+// TestBrowserSecondAnswerDuringValidation: once a screen has an answer,
+// later answers are stale (a secret one is zeroed), also while the first
+// is still being validated.
+func TestBrowserSecondAnswerDuringValidation(t *testing.T) {
+	ui := NewUI(context.Background())
+	entered, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := ui.Secret("pw", "", func([]byte) error {
+			close(entered)
+			<-release
+			return nil
+		})
+		done <- err
+	}()
+	var step Step
+	for {
+		s, ok, ch := ui.Current()
+		if ok {
+			step = s
+			break
+		}
+		<-ch
+	}
+	if err := ui.AnswerSecret(step.ID, []byte("first-secret")); err != nil {
+		t.Fatal(err)
+	}
+	<-entered
+	second := []byte("second-secret")
+	if err := ui.AnswerSecret(step.ID, second); !errors.Is(err, ErrStale) {
+		t.Fatalf("second answer: %v", err)
+	}
+	if !bytes.Equal(second, make([]byte, len(second))) {
+		t.Fatal("the refused second secret was not zeroed")
+	}
+	if err := ui.Answer(Answer{Step: step.ID, Back: true}); !errors.Is(err, ErrStale) {
+		t.Fatalf("back after the answer: %v", err)
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestBrowserBufferedAnswerZeroed: an answer still buffered when its
+// screen goes away (the server stops) is zeroed.
+func TestBrowserBufferedAnswerZeroed(t *testing.T) {
+	p := &pending{answers: make(chan Answer, 1)}
+	secret := []byte("buffered-secret")
+	p.answers <- Answer{secret: secret}
+	drain(p)
+	if !bytes.Equal(secret, make([]byte, len(secret))) {
+		t.Fatal("the buffered secret was not zeroed")
+	}
+	drain(p) // empty: no block
+}
+
+// TestBrowserTLS12Refused: the setup server speaks TLS 1.3 only.
+func TestBrowserTLS12Refused(t *testing.T) {
+	h := start(t, nil)
+	tr, ok := h.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("transport")
+	}
+	cfg := tr.TLSClientConfig.Clone()
+	cfg.MinVersion, cfg.MaxVersion = tls.VersionTLS12, tls.VersionTLS12
+	c := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: cfg}}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, h.base+"/", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.Do(req)
+	if err == nil {
+		closeBody(t, resp)
+		t.Fatal("a TLS 1.2 connection was accepted")
+	}
+}
+
+// TestBrowserHostCheck: with named addresses, a request for another Host
+// (DNS rebinding) is refused; the names and loopback work.
+func TestBrowserHostCheck(t *testing.T) {
+	h := start(t, func(o *Options) { o.Hosts = []string{"setup.example.com"} })
+	if r, _ := h.do(http.MethodGet, "/", "", nil, nil); r.StatusCode != http.StatusOK {
+		t.Fatalf("localhost: %d", r.StatusCode)
+	}
+	for host, want := range map[string]int{"evil.example": http.StatusMisdirectedRequest, "setup.example.com:8443": http.StatusOK, "SETUP.example.com": http.StatusOK, "127.0.0.1:8443": http.StatusOK} {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, h.base+"/", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = host
+		resp, err := h.client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		closeBody(t, resp)
+		if resp.StatusCode != want {
+			t.Errorf("Host %s: %d, want %d", host, resp.StatusCode, want)
+		}
+	}
+	// Without names every Host is accepted (the operator did not name one).
+	h2 := start(t, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, h2.base+"/", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "anything.example"
+	resp, err := h2.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("no names: %d", resp.StatusCode)
+	}
+}
+
+// TestBrowserNoDirectoryListing: the SPA's files are served, directories
+// never listed.
+func TestBrowserNoDirectoryListing(t *testing.T) {
+	h := start(t, func(o *Options) {
+		o.Assets = fstest.MapFS{
+			"index.html":    {Data: []byte("<!doctype html><title>setup</title>")},
+			"assets/app.js": {Data: []byte("console.log(1)")},
+		}
+	})
+	for p, want := range map[string]int{"/": http.StatusOK, "/assets/app.js": http.StatusOK, "/assets/": http.StatusNotFound, "/assets": http.StatusNotFound, "/missing.js": http.StatusNotFound} {
+		if r, _ := h.do(http.MethodGet, p, "", nil, nil); r.StatusCode != want {
+			t.Errorf("%s: %d, want %d", p, r.StatusCode, want)
+		}
+	}
+}
+
+// TestBrowserReportPoll: a poll that follows the report returns when the
+// report changes (a live report while setup works); without ?report= it
+// waits for a step only.
+func TestBrowserReportPoll(t *testing.T) {
+	proceed := make(chan struct{})
+	h := start(t, func(o *Options) {
+		o.Mode, o.Init = ModeDatabase, nil
+		o.Database = func(ctx context.Context, ui wizard.UI, _ string) error {
+			<-proceed
+			_, _ = fmt.Fprintln(ui.Out(), "migrations running")
+			select {
+			case <-ctx.Done():
+			case <-time.After(30 * time.Second):
+			}
+			return nil
+		}
+		if err := os.WriteFile(filepath.Join(o.Dir, setup.StateFileName), []byte("{}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+	h.login()
+	st := h.status(0)
+	for !strings.Contains(st.Report, "== database ==") {
+		time.Sleep(20 * time.Millisecond)
+		st = h.status(0)
+	}
+	if st.Zip {
+		t.Fatal("the database run offers the zip")
+	}
+	if r, _ := h.do(http.MethodGet, "/api/setup/config.zip", "", nil, nil); r.StatusCode != http.StatusConflict {
+		t.Fatalf("zip in the database run: %d", r.StatusCode)
+	}
+	got := make(chan Status, 1)
+	go func() {
+		got <- h.statusPath(fmt.Sprintf("/api/setup/status?after=0&report=%d", st.ReportRev), false, 0)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	close(proceed)
+	select {
+	case next := <-got:
+		if next.ReportRev == st.ReportRev || !strings.Contains(next.Report, "migrations running") {
+			t.Fatalf("report poll: %+v", next)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the report poll did not return on the change")
+	}
+}
+
+// closeBody closes a response body read by a test.
+func closeBody(t *testing.T, resp *http.Response) {
+	t.Helper()
+	if err := resp.Body.Close(); err != nil {
+		t.Errorf("close body: %v", err)
 	}
 }

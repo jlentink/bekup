@@ -35,14 +35,16 @@ export const T = {
   slipCopy: "Copy",
   slipCopied: "Copied",
   slipConfirm: "I have stored it offline",
-  slipGone: "The passphrase was revealed already and cannot be shown again.",
+  slipGone:
+    "The passphrase was revealed already on this screen. If you could not store it, go Back and continue again: the next screen shows it once more.",
   // Results
   doneTitle: "Setup finished",
   failedTitle: "Setup stopped",
   reportHeading: "Report",
   zip: "Download configuration (zip)",
   zipHint:
-    "compose.yaml, .env, bekup.toml, runner.toml and the state file. No keys, passwords or certificates: those stay on the server.",
+    "compose.yaml, the variables bekup setup manages from .env, bekup.toml, runner.toml, external-api.toml (when enabled), the state file and compose.override.yaml while it is exactly what setup wrote. No keys, passwords or certificates: those stay on the server.",
+  zipNotesHeading: "Left out of the zip",
   finish: "Finish and stop setup",
   finished: "Setup has stopped. You can close this tab.",
   // Errors

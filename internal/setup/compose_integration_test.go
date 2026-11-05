@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -337,6 +338,12 @@ func TestIntegrationComposeConfig(t *testing.T) {
 						Target    int    `json:"target"`
 						Published string `json:"published"`
 					} `json:"ports"`
+					Volumes []struct {
+						Type     string `json:"type"`
+						Source   string `json:"source"`
+						Target   string `json:"target"`
+						ReadOnly bool   `json:"read_only"`
+					} `json:"volumes"`
 				} `json:"services"`
 			}
 			if err := json.Unmarshal(out, &web); err != nil {
@@ -347,6 +354,17 @@ func TestIntegrationComposeConfig(t *testing.T) {
 				if len(ports) != 1 || ports[0].Target != 8443 || ports[0].Published != "8443" {
 					t.Fatalf("%s ports %+v", name, ports)
 				}
+			}
+			// D-217 amendment 1: the database run binds only the state
+			// file, read-only (never the directory or the keys directory).
+			vols := web.Services["setup-web-db"].Volumes
+			realDir, err := filepath.EvalSymlinks(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(vols) != 1 || vols[0].Type != "bind" || !vols[0].ReadOnly || vols[0].Target != "/deploy/"+StateFileName ||
+				(vols[0].Source != filepath.Join(dir, StateFileName) && vols[0].Source != filepath.Join(realDir, StateFileName)) {
+				t.Fatalf("setup-web-db volumes %+v", vols)
 			}
 			// D-215: the own-proxy shapes and the database container's
 			// network as docker compose resolves them (with the override).

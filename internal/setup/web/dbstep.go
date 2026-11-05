@@ -22,8 +22,9 @@ import (
 const DefaultWaitForDatabase = 3 * time.Minute
 
 // DatabaseOptions configure the database step of the setup-web-db service
-// (D-217). It runs as UID 65532 with the migrate service's mounts, so the
-// configuration loads exactly as for `bekup migrate up`.
+// (D-217). It runs as UID 65532 with migrate's configuration and secrets
+// (so the configuration loads exactly as for `bekup migrate up`) and, of
+// the deployment directory, only the state file.
 type DatabaseOptions struct {
 	// Load loads bekup.toml (config.LoadBekup with the service's
 	// defaults).
@@ -151,11 +152,21 @@ func (o *DatabaseOptions) roles(ctx context.Context, ui wizard.UI, st *setup.Sta
 		// An unknown value (a newer state file): bootstrap, which
 		// validates the configuration itself.
 	}
+	title, body := "Create bekup's roles and database", "db bootstrap connects with an administrator account and creates the roles bekup_owner and\nbekup_app and bekup's database (D-207). The administrator password is used for this\nconnection only, never stored."
+	opts := []wizard.Option{
+		{Value: dbChoiceBootstrap, Label: "create them now (db bootstrap)"},
+		{Value: dbChoiceSkip, Label: "they exist already: only migrate"},
+	}
+	if st.DatabaseAuth == setup.DBAuthSingleAccount {
+		// Single-account mode (D-207): one login, no administrator.
+		title, body = "Create bekup's database", "db bootstrap logs in as database.user with database.password_file (single-account mode,\nD-207: one account acts as bekup_owner and bekup_app) and creates bekup's database\nand the NOLOGIN roles bekup_owner and bekup_app the account keeps and switches to.\nNo other password is asked."
+		opts = []wizard.Option{
+			{Value: dbChoiceBootstrap, Label: "create it now (db bootstrap)"},
+			{Value: dbChoiceSkip, Label: "it exists already: only migrate"},
+		}
+	}
 	for {
-		choice, err := ui.Select("Create bekup's roles and database", "db bootstrap connects with an administrator account and creates the roles bekup_owner and\nbekup_app and bekup's database (D-207). The administrator password is used for this\nconnection only, never stored.", []wizard.Option{
-			{Value: dbChoiceBootstrap, Label: "create them now (db bootstrap)"},
-			{Value: dbChoiceSkip, Label: "they exist already: only migrate"},
-		}, dbChoiceBootstrap)
+		choice, err := ui.Select(title, body, opts, dbChoiceBootstrap)
 		if errors.Is(err, wizard.ErrBack) {
 			continue // the first screen of this run stays (as in the wizard)
 		}
@@ -173,7 +184,9 @@ func (o *DatabaseOptions) roles(ctx context.Context, ui wizard.UI, st *setup.Sta
 			return err
 		}
 		_, _ = fmt.Fprintln(out, "\n-- db bootstrap --")
-		err = o.bootstrap(ctx, req)
+		// The error text is formatted while the password is still
+		// registered with the log redaction.
+		err = dbsetup.Scrubbed(o.bootstrap(ctx, req))
 		release()
 		if err == nil {
 			return nil
@@ -193,11 +206,15 @@ func (o *DatabaseOptions) bootstrapRequest(ui wizard.UI, st *setup.State, cfg *c
 	req := dbsetup.BootstrapRequest{Config: cfg, Out: ui.Out(), Warn: ui.Out(), Logger: o.Logger}
 	nothing := func() {}
 	if mode := cfg.Database.TLSMode; mode != config.DBTLSVerifyFull {
-		ok, err := ui.Confirm("Insecure administrator connection", fmt.Sprintf(
-			"database.tls_mode is %s: the administrator account would connect without a verified\n"+
+		account := "the administrator account"
+		if st.DatabaseAuth == setup.DBAuthSingleAccount {
+			account = "database.user (the single account)"
+		}
+		ok, err := ui.Confirm("Insecure database connection for bootstrap", fmt.Sprintf(
+			"database.tls_mode is %s: %s would connect without a verified\n"+
 				"certificate (require) or without encryption (disable). A machine in the middle could\n"+
 				"impersonate the server or alter what bootstrap sends. This is the flag\n"+
-				"--allow-insecure-admin-connection. Use it anyway?", mode), false)
+				"--allow-insecure-admin-connection. Use it anyway?", mode, account), false)
 		if err != nil {
 			return req, nothing, err
 		}
@@ -269,7 +286,10 @@ func (o *DatabaseOptions) migrateWithRetry(ctx context.Context, ui wizard.UI, bu
 				_, _ = fmt.Fprintln(out, "migrations done")
 				return nil
 			}
-			if !bundled || time.Now().After(deadline) || ctx.Err() != nil {
+			// Only a server that cannot be reached yet is waited for; a
+			// refused login, certificate or preflight is the operator's
+			// to fix.
+			if !bundled || !dbsetup.Retryable(err) || time.Now().After(deadline) || ctx.Err() != nil {
 				break
 			}
 			_, _ = fmt.Fprintf(out, "waiting for the database (is `docker compose up -d postgres` running?): %v\n", err)

@@ -2,17 +2,22 @@ package dbsetup
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/deployguard"
+	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/notify"
 )
 
@@ -64,8 +69,14 @@ func Auditor(q sqlc.DBTX) *audit.Auditor {
 
 // OpenMigrator connects as bekup_owner (or the single account acting as
 // bekup_owner, D-207) with the configured TLS policy and runs the role
-// checks.
+// checks. The login stays registered with the log redaction for the
+// process (the CLI commands are short-lived).
 func OpenMigrator(ctx context.Context, cfg *config.Bekup) (*db.Migrator, error) {
+	return openMigrator(ctx, cfg, logging.DefaultRegistry)
+}
+
+// openMigrator is OpenMigrator registering the login with reg.
+func openMigrator(ctx context.Context, cfg *config.Bekup, reg *logging.Registry) (*db.Migrator, error) {
 	creds, err := cfg.OwnerDBCredentials()
 	if err != nil {
 		return nil, fmt.Errorf("read database owner credentials: %w", err)
@@ -76,7 +87,7 @@ func OpenMigrator(ctx context.Context, cfg *config.Bekup) (*db.Migrator, error) 
 		return nil, fmt.Errorf("database TLS: %w", err)
 	}
 	connectCtx, cancel := context.WithTimeout(ctx, cfg.Database.ConnectTimeout.D())
-	m, err := db.NewMigrator(connectCtx, creds, tlsOpts, nil)
+	m, err := db.NewMigrator(connectCtx, creds, tlsOpts, reg)
 	cancel()
 	creds.Zero()
 	return m, err
@@ -84,9 +95,13 @@ func OpenMigrator(ctx context.Context, cfg *config.Bekup) (*db.Migrator, error) 
 
 // MigrateUp runs the preflight and, when it passes, applies the pending
 // migrations; the preflight report goes to report on a failure. It returns
-// the applied migrations.
-func MigrateUp(ctx context.Context, cfg *config.Bekup, logger *slog.Logger, report io.Writer) ([]db.MigrationResult, error) {
-	m, err := OpenMigrator(ctx, cfg)
+// the applied migrations. The login is registered with the log redaction
+// only while it runs (the browser setup retries it in one long-lived
+// process, D-217 amendment 1).
+func MigrateUp(ctx context.Context, cfg *config.Bekup, logger *slog.Logger, report io.Writer) (_ []db.MigrationResult, err error) {
+	reg := logging.DefaultRegistry.Scope()
+	defer func() { err = endScope(reg, err) }()
+	m, err := openMigrator(ctx, cfg, reg)
 	if err != nil {
 		return nil, err
 	}
@@ -183,4 +198,39 @@ func SplitErrors(err error) []string {
 		return out
 	}
 	return []string{err.Error()}
+}
+
+// pgCannotConnectNow is SQLSTATE 57P03 ("the database system is starting
+// up").
+const pgCannotConnectNow = "57P03"
+
+// Retryable reports a failure to reach the database server at all: the
+// connection refused or timed out, the host name not (yet) resolvable, or
+// a server that is still starting (57P03). Everything else (a refused
+// login, a certificate, a role check, the preflight, a migration) is
+// permanent: retrying it would only repeat the same failure.
+func Retryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == pgCannotConnectNow
+	}
+	var certErr *tls.CertificateVerificationError
+	if errors.As(err, &certErr) {
+		return false
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// Scrubbed returns err with its text scrubbed by the log redaction now
+// (errors.Is/As still see the cause): format an error before the secrets
+// it may mention are unregistered.
+func Scrubbed(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &scrubbedError{msg: logging.DefaultRegistry.Scrub(err.Error()), err: err}
 }

@@ -17,6 +17,10 @@ type Registry struct {
 	next    uint64
 	secrets map[uint64][]byte
 	ordered [][]byte // longest first, so overlapping secrets are fully removed
+	// parent is set on a scope (Scope): it registers into parent and
+	// remembers the registrations in owned until Close.
+	parent *Registry
+	owned  []func()
 }
 
 // DefaultRegistry is the process-wide registry used by New when no registry
@@ -32,6 +36,13 @@ func NewRegistry() *Registry {
 // caller may zero its slice. The returned function removes and zeroes the
 // copy; call it when the secret is no longer in use.
 func (r *Registry) Register(secret []byte) (unregister func()) {
+	if r.parent != nil {
+		u := r.parent.Register(secret)
+		r.mu.Lock()
+		r.owned = append(r.owned, u)
+		r.mu.Unlock()
+		return u
+	}
 	s := bytes.TrimSpace(secret)
 	if len(s) < MinSecretLen {
 		return func() {}
@@ -55,8 +66,34 @@ func (r *Registry) Register(secret []byte) (unregister func()) {
 	}
 }
 
+// Scope returns a registry for one bounded operation of a long-lived
+// process: it registers into r (so r's log handlers scrub the values) and
+// remembers every registration until Close ends them all. Scrub and Len
+// are r's.
+func (r *Registry) Scope() *Registry {
+	return &Registry{parent: r}
+}
+
+// Close ends the registrations made through the scope (a no-op on a
+// registry that is not a scope). The scope stays usable.
+func (r *Registry) Close() {
+	if r.parent == nil {
+		return
+	}
+	r.mu.Lock()
+	owned := r.owned
+	r.owned = nil
+	r.mu.Unlock()
+	for _, u := range owned {
+		u()
+	}
+}
+
 // Len returns the number of registered secrets.
 func (r *Registry) Len() int {
+	if r.parent != nil {
+		return r.parent.Len()
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.secrets)
@@ -66,6 +103,9 @@ func (r *Registry) Len() int {
 func (r *Registry) Scrub(s string) string {
 	if r == nil || s == "" {
 		return s
+	}
+	if r.parent != nil {
+		return r.parent.Scrub(s)
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()

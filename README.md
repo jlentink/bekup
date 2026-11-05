@@ -196,8 +196,9 @@ browser only if the certificate's SHA-256 fingerprint matches the
 terminal. The code opens a single session; ten wrong codes stop setup.
 Port 8443 is open on every host address while a run is active, and setup
 stops when you press Finish, after 30 idle minutes or after 2 hours. You
-can download the written configuration as a zip, which holds only the
-non-secret files; keys, passwords and the CA stay on the server. The first
+can download the written configuration from the first run as a zip, which
+holds only the non-secret files (of `.env` only the variables setup manages);
+keys, passwords and the CA stay on the server. The first
 admin is still created on the host with `admin create`. Details:
 [docs/installation/compose.md](docs/installation/compose.md#browser-setup).
 

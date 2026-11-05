@@ -178,8 +178,9 @@ func TestLintBypasses(t *testing.T) {
 
 // TestLintBrowserSetupServices: the browser setup's services (D-217) are
 // pinned exactly as shipped; only setup-web runs as root, both publish only
-// the setup port 8443, and setup-web-db reads the deployment directory
-// only. Nothing else may publish a port or run as root with one.
+// the setup port 8443, and setup-web-db binds only the state file, never
+// the deployment directory or the keys directory (D-217 amendment 1).
+// Nothing else may publish a port or run as root with one.
 func TestLintBrowserSetupServices(t *testing.T) {
 	t.Parallel()
 	if fs := lintWith(t, nil, []byte("services: {}\n"), VariantOwnProxy, nil); hasErrors(fs) {
@@ -196,7 +197,13 @@ func TestLintBrowserSetupServices(t *testing.T) {
 		{"setup-web-db root", "services:\n  setup-web-db:\n    user: \"0:0\"\n", `user "0:0" is not a numeric non-root`},
 		{"setup-web-db chown", "services:\n  setup-web-db:\n    cap_add: [CHOWN]\n", "capability CHOWN"},
 		{"setup-web-db other port", "services:\n  setup-web-db:\n    ports: !override [\"5432:5432\"]\n", "may publish only TCP port 8443"},
-		{"setup-web-db writable deployment", "services:\n  setup-web-db:\n    volumes: !override\n      - type: bind\n        source: .\n        target: /deploy\n        bind:\n          create_host_path: false\n", "mount the deployment directory read-only"},
+		// D-217 amendment 1: never the deployment directory (the master key
+		// and the mTLS keys of its UID are below it) or the keys directory.
+		{"setup-web-db deployment root", "services:\n  setup-web-db:\n    volumes: !override\n      - type: bind\n        source: .\n        target: /deploy\n        read_only: true\n        bind:\n          create_host_path: false\n", "may not mount the deployment directory or anything in the keys directory"},
+		{"setup-web-db deployment root added", "services:\n  setup-web-db:\n    volumes: [\".:/d:ro\"]\n", "may not mount the deployment directory or anything in the keys directory"},
+		{"setup-web-db keys dir", "services:\n  setup-web-db:\n    volumes: [\"./secrets:/k:ro\"]\n", "may not mount the deployment directory or anything in the keys directory"},
+		{"setup-web-db master key", "services:\n  setup-web-db:\n    volumes: [\"./secrets/bekup_master_key:/k:ro\"]\n", "may not mount the deployment directory or anything in the keys directory"},
+		{"setup-web-db keys dir other case", "services:\n  setup-web-db:\n    volumes: [\"./Secrets/certs/serve:/k:ro\"]\n", "may not mount the deployment directory or anything in the keys directory"},
 		{"setup-web-db pinned", "services:\n  setup-web-db:\n    deploy: !override {resources: {limits: {memory: 1G}}}\n", `the override changes bekup's service "setup-web-db"`},
 		{"setup-web-db restart", "services:\n  setup-web-db:\n    restart: always\n", `the override changes bekup's service "setup-web-db"`},
 		{"migrate publishes", "services:\n  migrate:\n    ports: [\"8443:8443\"]\n", `service "migrate" publishes ports`},
@@ -208,6 +215,10 @@ func TestLintBrowserSetupServices(t *testing.T) {
 				t.Fatalf("no error %q in %v", tc.want, fs)
 			}
 		})
+	}
+	// The keys directory from BEKUP_KEYS_DIR too.
+	if fs := lintWith(t, nil, []byte("services:\n  setup-web-db:\n    volumes: [\"./vault/certs:/k:ro\"]\n"), VariantOwnProxy, map[string]string{"BEKUP_KEYS_DIR": "./vault"}); !hasFinding(fs, SeverityError, "may not mount the deployment directory or anything in the keys directory") {
+		t.Fatalf("custom keys directory: %v", fs)
 	}
 	// A new service may not copy setup-web's exemptions.
 	evil := evilService + "    ports: [\"8443:8443\"]\n"

@@ -273,8 +273,9 @@ services:
   # -------------------------------------------------------------------------
   # setup-web-db: the browser setup (D-217), run 2 of 2: db bootstrap (your
   # own PostgreSQL) and migrate up, asked in the browser. migrate's user,
-  # configuration, secrets and networks plus the published port; reads
-  # the deployment directory only. Run it after setup-web with
+  # configuration, secrets and networks plus the published port; of the
+  # deployment directory it sees only the state file (read-only), never the
+  # directory or the keys directory. Run it after setup-web with
   #   docker compose run --rm --service-ports setup-web-db
   # -------------------------------------------------------------------------
   setup-web-db:
@@ -312,9 +313,11 @@ services:
     stdin_open: true
     tty: true
     volumes:
+      # Only bekup-setup.json (the deployment's mode, D-217 amendment 1):
+      # bekup.toml and the database secrets arrive as configs and secrets.
       - type: bind
-        source: .
-        target: /deploy
+        source: ./bekup-setup.json
+        target: /deploy/bekup-setup.json
         read_only: true
         bind:
           create_host_path: false

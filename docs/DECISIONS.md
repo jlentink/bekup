@@ -239,7 +239,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-214](#d-214-ci-docker-hub-pulls-through-mirrorgcrio-and-one-retry-policy-for-test-image-pulls) | CI: Docker Hub pulls through mirror.gcr.io and one retry policy for test image pulls | proposed |
 | [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name; amended by D-216) |
 | [D-216](#d-216-a-database-container-may-share-the-own-proxys-network-join-mode) | A database container may share the own proxy's network (join mode) | proposed |
-| [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed |
+| [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed (amendment 1: review findings) |
 | [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
 | [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
 | [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes) |
@@ -13260,9 +13260,10 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      directory (its `os.Root` writer, ownership, rollback), then
      `setup.Check`. A directory that already holds a deployment
      (`bekup-setup.json`) is never written in the browser: the first run
-     only checks it. `wizard.Env.Browser` changes only the wording of
-     the intro (Back instead of Esc / Ctrl+C, a listener instead of "no
-     network"), never a question. In the database run, Back on its first
+     only checks it. `wizard.Env.Browser` changes only wording, never a
+     question: the intro (Back instead of Esc / Ctrl+C, a listener
+     instead of "no network") and the passphrase screen (shown on the page
+     only, no Docker-log warning). In the database run, Back on its first
      screen stays there (as the wizard's first step does) instead of
      ending the run.
   2. **Access.** HTTPS on `:8443` inside the container (all its
@@ -13280,17 +13281,31 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      for a 256-bit session in the cookie `__Host-bekup-setup` (Secure,
      HttpOnly, SameSite=Strict, path `/`); it is then burned: one session
      only, a second login is refused. Each wrong code is delayed (0.5 s
-     per failure so far, at most 5 s); the 10th ends the server.
+     per failure so far, at most 5 s); the 10th ends the server. Once the
+     code was used, every sign-in is answered "already open" at once,
+     without counting or delay (nobody reaching the port can stop a
+     running setup). Every refused sign-in is printed on the terminal
+     with the peer address (never the code; after the code was used only
+     the first 20). With named hosts (`--host` / `BEKUP_SETUP_WEB_HOST`)
+     a request whose `Host` is neither one of them nor `localhost` / a
+     loopback address is refused (421), a cheap DNS-rebinding defense.
      State-changing requests need POST, a JSON (or, for secrets,
      octet-stream) body, `X-Bekup-Setup: 1`, exactly one `Sec-Fetch-Site`
      header and an `Origin` equal to the request's own `https://` origin
      (`httpserver.OriginAllowed`), and the session; reads need the
      session. Every response carries bekup's CSP and security headers
      (`httpserver.SecurityHeaders`, D-082, `Cache-Control: no-store`), the
-     body limit is 64 KiB, and the server serves only the setup API and
-     the setup SPA. It exits on Finish, after 30 minutes without session
-     activity, after 2 hours, after the 10th wrong code or on SIGINT /
-     SIGTERM. A build without the setup UI (`web/dist-setup` empty;
+     body limit is 64 KiB (an oversized secret is refused with 413, never
+     truncated), and the server serves only the setup API and the setup
+     SPA's files (no directory listings). It exits on Finish, after 30
+     minutes without session activity (session POSTs and the zip
+     download; status polls never count, so an open tab does not keep it
+     alive), after 2 hours, after the 10th wrong code or on SIGINT /
+     SIGTERM; open long polls end with the server (`BaseContext`), so it
+     stops at once. Status long polls wait for another step (`after`, 0
+     while none waits) and, with `report=<revision>`, for a report
+     change (a live report while setup works); the SPA always sends both
+     and paces polls that bring no new step to one per second. A build without the setup UI (`web/dist-setup` empty;
      the Dockerfile's `WEB_BUILD=skip` writes only `.gitkeep` there, no
      placeholder page) refuses to start instead of printing a code for a
      missing page.
@@ -13299,18 +13314,30 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      `application/octet-stream` bodies (never inside JSON), are read into
      one fixed buffer, handed to the waiting `UI.Secret` call as `[]byte`,
      registered with the log redaction while validated, and zeroed on
-     every path (a refused or misplaced secret too). The generated CA
+     every path (a refused or misplaced secret too, a second answer
+     while the first is validated, an answer still buffered when the
+     server stops). The generated CA
      passphrase (`UI.Sensitive`) is never part of a step: the browser
      fetches it once from `/api/setup/reveal` (`no-store`, written as
      bytes) and acknowledges it; a second fetch is refused, and the bytes
      stay the caller's (setup zeroes them). This is the browser
      counterpart of the TUI's alternate screen and amends D-203's
-     "terminal only" for web mode. The config zip (`/api/setup/config.zip`,
-     only after the files exist) holds only `compose.yaml`,
-     `compose.override.yaml`, `.env`, `bekup.toml`, `runner.toml` and
-     `bekup-setup.json`, read through an `os.Root` with `O_NOFOLLOW` per
-     component (`setup.WriteConfigZip`); `TestConfigFilesHoldNoSecrets`
-     refuses any file of a secret group or below the keys directory.
+     "terminal only" for web mode. A lost reveal is recovered with Back
+     and Continue (a new screen reveals once more). The config zip
+     (`/api/setup/config.zip`, first run only, after the files exist)
+     holds only `compose.yaml`, `bekup.toml`, `runner.toml`,
+     `external-api.toml` (with the external API; paths only),
+     `bekup-setup.json`, the `.env` lines of the variables setup itself
+     writes (`managedEnvKeys`: the operator's own lines, for example a DNS
+     provider's API key, stay on the server) and `compose.override.yaml`
+     only while it is byte-identical to what setup writes for the
+     recorded overlays (`expectedOverride`; otherwise it is left out),
+     read through an `os.Root` with `O_NOFOLLOW` per component
+     (`setup.WriteConfigZip`); what it leaves out is named on the results
+     screen (`ConfigZipNotes`). `TestConfigFilesHoldNoSecrets` refuses
+     any file of a secret group or below the keys directory and checks
+     the contents (no value of a keys-directory file, no private key, no
+     database URL with a password, only managed `.env` variables).
   4. **Database.** `db bootstrap` and `migrate up` moved into
      `internal/dbsetup`, which the CLI commands and the browser setup call
      alike: the same deployment guard (`CheckDeployment`, D-212, before
@@ -13322,10 +13349,16 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      database whose roles come from bootstrap or single-account mode,
      `dbsetup.Bootstrap` with the administrator login asked in the browser
      (role name, adopt existing roles, the password as a secret answer,
-     used for this connection only and zeroed); existing roles and the
-     DBA's roles SQL skip it. Then `dbsetup.MigrateUp` (with the bundled
-     database it retries with backoff for 3 minutes while postgres
-     starts), then `dbsetup.Verify`: the migrate preflight as
+     used for this connection only and zeroed; single-account mode asks
+     no password and says so); existing roles and the DBA's roles SQL
+     skip it. `Bootstrap`, `MigrateUp` and `Verify` register every
+     password they handle with the log redaction only for their run (a
+     `logging.Registry` scope; the error text is scrubbed before the
+     scope ends), so the long-lived browser process keeps no copies. Then
+     `dbsetup.MigrateUp` (with the bundled database it retries with
+     backoff for 3 minutes, only while the server cannot be reached or is
+     starting: `dbsetup.Retryable`; a refused login, certificate or
+     preflight goes to the operator at once), then `dbsetup.Verify`: the migrate preflight as
      `bekup_owner`, the login and role checks of `bekup_app` and the
      schema version. Each failure can be retried after fixing its cause.
      The UI ends with `bekup admin create` (D-113 unchanged).
@@ -13350,12 +13383,18 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
        owner's login outranks anyway, and the bundled CA; with an external
        database the password files and the operator's CA,
        `variants/external-db/`), the networks
-       `backend` and `setup-web`, the deployment directory mounted
-       **read-only** (it reads the state and offers the zip; it never
-       writes, and it does not run `setup check`: as UID 65532 it cannot
-       see the root-only key directories, so the check would report them
-       as errors; the first run checked them as root), `depends_on` the
-       bundled postgres, `logging: none`,
+       `backend` and `setup-web`, of the deployment directory **only
+       `bekup-setup.json`**, bound read-only at
+       `/deploy/bekup-setup.json` (the database step reads the
+       deployment's mode from it; `bekup.toml` and the database secrets
+       arrive as configs and secrets). Never the directory itself or the
+       keys directory: the master key and the serve/runner mTLS keys are
+       0400 files of UID 65532 in traversable 0711 directories, so a
+       directory mount would hand them to this network-facing process.
+       It never writes, does not run `setup check` (it cannot see the
+       deployment; the first run checked it as root) and offers no zip
+       (the first run did), `depends_on` the bundled postgres,
+       `logging: none`,
        0.5 CPU / 256 MiB / 64 pids. The setup-only DB-network overlay
        (D-215, D-216) puts it next to migrate and admin on the database
        container's network (`dbNetworkServices`).
@@ -13368,8 +13407,10 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
        tunables, like `setup`); only `setup` and `setup-web` may run as
        root (with `CHOWN` only), only the two browser-setup services may
        publish a port and only TCP 8443 in the container, and
-       `setup-web-db` must mount the deployment directory read-only
-       (`TestLintBrowserSetupServices`, `TestLintBypasses`). The `setup`
+       `setup-web-db` may not bind the deployment directory, the keys
+       directory (the default or `BEKUP_KEYS_DIR`, case-insensitive), a
+       parent of it or anything below it (`browserDBForbidden`,
+       `TestLintBrowserSetupServices`). The `setup`
        service stays without a network.
   6. **Deployments from earlier releases.** An existing
      `compose.override.yaml` with the DB-network overlay lacks the
@@ -13419,11 +13460,40 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   their audit records; writing the files stays unaudited (no database
   yet). Operators cannot restrict the published address (the services
   are pinned); they choose whether and when to start the services.
+- **Amendment 1 (review findings, 2026-11-05; folded into the items
+  above):**
+  1. `setup-web-db` binds only `bekup-setup.json` instead of the whole
+     deployment directory (read-only), which exposed the master key and
+     the mTLS keys owned by its UID; the lint refuses binds of the
+     deployment or keys directory for it; its zip is gone (item 5).
+  2. A used code answers "already open" without counting or delay; the
+     terminal shows every refused sign-in with the peer address (item 2).
+  3. Long polls end with the server (no 5 s shutdown timeout and exit 1
+     with an open tab); the SPA always sends `after` (no busy loop while
+     setup works), follows the report by revision and paces polls
+     without a new step (item 2).
+  4. Status polls no longer count as activity (item 2).
+  5. `dbsetup` registers passwords with the log redaction only for each
+     run (`logging.Registry.Scope`), scrubbing the error text first; the
+     browser formats a bootstrap error before the password's
+     registration ends (item 4).
+  6. An answered step is taken (later answers are stale, a secret one
+     zeroed); answers still buffered are zeroed (item 3).
+  7. Oversized secret bodies are refused with 413 (item 2).
+  8. The bundled-database wait retries only connection-level failures
+     (item 4).
+  9. The passphrase screen has Back (item 3) and its browser wording
+     drops the Docker-log warning (item 1).
+  10. The zip carries only setup's `.env` variables and an unchanged
+      override, names what it left out, and lists `external-api.toml`
+      (item 3).
+  11. No directory listings; with named hosts other `Host` headers are
+      refused (item 2); single-account wording in the database step.
 - **Related:** D-055, D-082, D-100, D-113, D-203 (amended: network,
   listener and the show-once passphrase in web mode), D-205 and D-208
   (amended: two shipped services, the DB-network overlay member, the
   lint), D-207, D-212, D-215, D-216; `internal/setup/web`,
-  `internal/dbsetup`, `internal/setup/{configzip,overlay,composelint,
+  `internal/dbsetup`, `internal/logging` (`Registry.Scope`), `internal/setup/{configzip,overlay,composelint,
   composepin,variants}.go`, `internal/setup/variants/external-db/`,
   `cmd/bekup/setup_web_cmd.go`, `web/src/setup/`,
   `web/vite.setup.config.ts`, `web/embed.go`, `Dockerfile`,

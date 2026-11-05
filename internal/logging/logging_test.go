@@ -44,3 +44,31 @@ func TestNewLevelVar(t *testing.T) {
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// TestRegistryScope: a scope registers into its parent (the parent's
+// handlers scrub the value) and Close ends exactly its own registrations.
+func TestRegistryScope(t *testing.T) {
+	t.Parallel()
+	parent := NewRegistry()
+	keep := parent.Register([]byte("long-lived-secret"))
+	defer keep()
+	scope := parent.Scope()
+	scope.Register([]byte("scoped-secret-1"))
+	u := scope.Register([]byte("scoped-secret-2"))
+	u() // an early unregister stays harmless at Close
+	if parent.Len() != 2 || scope.Len() != 2 {
+		t.Fatalf("len parent %d scope %d", parent.Len(), scope.Len())
+	}
+	if got := scope.Scrub("a scoped-secret-1 b"); got != "a "+Redacted+" b" {
+		t.Fatalf("scope scrub %q", got)
+	}
+	if got := parent.Scrub("scoped-secret-1"); got != Redacted {
+		t.Fatalf("parent scrub %q", got)
+	}
+	scope.Close()
+	if parent.Len() != 1 || parent.Scrub("scoped-secret-1") != "scoped-secret-1" || parent.Scrub("long-lived-secret") != Redacted {
+		t.Fatalf("after Close: len %d", parent.Len())
+	}
+	scope.Close()
+	NewRegistry().Close() // not a scope: no-op
+}

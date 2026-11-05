@@ -17,9 +17,11 @@ Two runs, from the compose file:
   docker compose run --rm --service-ports setup-web-db   # roles and migrations
 
 The first run writes the deployment like `bekup setup` and offers the
-non-secret files (compose, .env, TOML, state) as a zip; secrets never leave
-the server. The second (--database) runs as the bekup user with the migrate
-service's mounts: db bootstrap for your own PostgreSQL, then migrate up.
+non-secret files (compose, setup's .env variables, TOML, state) as a zip;
+secrets never leave the server. The second (--database) runs as the bekup
+user with migrate's configuration and secrets and, of the deployment
+directory, only the state file: db bootstrap for your own PostgreSQL, then
+migrate up.
 The first admin is still created on the host (bekup admin create, D-113).
 
 ```

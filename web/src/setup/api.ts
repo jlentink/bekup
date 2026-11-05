@@ -27,8 +27,12 @@ export interface Status {
   phase: Phase;
   step?: Step;
   report: string;
+  /** reportRev counts the report's changes (long polls follow it). */
+  reportRev: number;
   error?: string;
   zip: boolean;
+  /** zipNotes say what the zip leaves out (operator files of your own). */
+  zipNotes?: string[];
 }
 
 export class SetupApiError extends Error {
@@ -67,9 +71,21 @@ export async function signIn(code: string): Promise<void> {
   await post("/api/setup/session", JSON.stringify({ code }), "application/json");
 }
 
-/** status waits (long poll) for a step other than `after`. */
-export async function status(after?: number, signal?: AbortSignal): Promise<Status> {
-  const q = after ? `?after=${after}` : "";
+/**
+ * status answers at once without `after`; with it (0: no step yet) it waits
+ * (long poll) for a step other than `after`, the end of the flow or, with
+ * `report`, a report other than that revision.
+ */
+export async function status(
+  after?: number,
+  report?: number,
+  signal?: AbortSignal,
+): Promise<Status> {
+  const params = new URLSearchParams();
+  if (after !== undefined) params.set("after", String(after));
+  if (report !== undefined) params.set("report", String(report));
+  const query = params.toString();
+  const q = query ? `?${query}` : "";
   const res = await fetch(`/api/setup/status${q}`, {
     credentials: "same-origin",
     signal: signal ?? null,

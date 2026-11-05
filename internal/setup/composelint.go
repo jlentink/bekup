@@ -359,11 +359,11 @@ func lintVolume(svc *types.ServiceConfig, v types.ServiceVolumeConfig, o lintOpt
 		case strings.Contains(src, "docker.sock") || strings.Contains(src, "podman.sock"):
 			add(SeverityError, "service %q mounts the container engine socket %q (root on the host); only the runner may, at %s", shown, bounded(src), runnerSocketTarget)
 		case slices.Contains(setupServices, svc.Name) && src == filepath.Clean(o.root):
-		case svc.Name == "setup-web-db" && src == filepath.Clean(o.root):
-			// The database run reads the deployment (D-217).
-			if !v.ReadOnly {
-				add(SeverityError, "service %q: mount the deployment directory read-only", shown)
-			}
+		case svc.Name == browserDBService && o.browserDBForbidden(src):
+			// The database run (UID 65532, network-facing) would reach the
+			// master key and the mTLS keys owned by its UID (D-217
+			// amendment 1): it binds only the state file.
+			add(SeverityError, "service %q may not mount the deployment directory or anything in the keys directory (it binds only %s)", shown, StateFileName)
 		case rootAllowed && !slices.Contains(setupServices, svc.Name):
 			add(SeverityError, "service %q runs as root and may only mount named volumes (bind %q)", shown, bounded(src))
 		case !insideDir(o.root, src):
@@ -379,6 +379,27 @@ func lintVolume(svc *types.ServiceConfig, v types.ServiceVolumeConfig, o lintOpt
 	default:
 		add(SeverityError, "service %q: a %q mount is not allowed (only binds inside the deployment directory, named volumes and tmpfs)", shown, bounded(v.Type))
 	}
+}
+
+// browserDBForbidden reports a bind source of setup-web-db that is the
+// deployment directory, the keys directory (the default one or
+// BEKUP_KEYS_DIR), a parent of it or anything below it. File systems may
+// be case-insensitive (Docker Desktop), so the comparison is.
+func (o lintOptions) browserDBForbidden(src string) bool {
+	rel, err := filepath.Rel(filepath.Clean(o.root), src)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false // outside: the general rule refuses it
+	}
+	rel = strings.ToLower(filepath.ToSlash(rel))
+	if rel == "." {
+		return true
+	}
+	for _, k := range []string{DefaultKeysDir, o.keysDir} {
+		if k = strings.ToLower(k); k != "" && (rel == k || strings.HasPrefix(rel, k+"/") || strings.HasPrefix(k, rel+"/")) {
+			return true
+		}
+	}
+	return false
 }
 
 func lintTopLevel(p *types.Project, o lintOptions, add func(Severity, string, ...any)) {

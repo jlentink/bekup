@@ -35,6 +35,11 @@ class FakeSetup {
   signedIn = false;
   revealed = false;
   finished = false;
+  /** working: setup works (no step waits) until finishWork(). */
+  working = false;
+  report = "";
+  reportRev = 0;
+  zipNotes: string[] | undefined = undefined;
   private index = 0;
   private id = 1;
   private error = "";
@@ -47,8 +52,18 @@ class FakeSetup {
   }
 
   status(): Status {
+    if (this.working) {
+      return { phase: "questions", report: this.report, reportRev: this.reportRev, zip: false };
+    }
     if (this.index >= this.screens.length) {
-      return { phase: "done", report: "== setup check ==\nOK\n", zip: true };
+      const done: Status = {
+        phase: "done",
+        report: "== setup check ==\nOK\n",
+        reportRev: this.reportRev,
+        zip: true,
+      };
+      if (this.zipNotes) done.zipNotes = this.zipNotes;
+      return done;
     }
     const s = this.screens[this.index];
     if (!s) throw new Error("no screen");
@@ -56,7 +71,15 @@ class FakeSetup {
     if (s.options) step.options = s.options;
     if (s.default) step.default = s.default;
     if (this.error) step.error = this.error;
-    return { phase: "questions", step, report: "", zip: false };
+    return { phase: "questions", step, report: this.report, reportRev: this.reportRev, zip: false };
+  }
+
+  private wake() {
+    const w = this.waiters;
+    this.waiters = [];
+    w.forEach((f) => {
+      f();
+    });
   }
 
   private move(next: number, error = "") {
@@ -64,11 +87,26 @@ class FakeSetup {
     this.error = error;
     this.id++;
     this.revealed = false;
-    const w = this.waiters;
-    this.waiters = [];
-    w.forEach((f) => {
-      f();
-    });
+    this.wake();
+  }
+
+  /** write appends to the report (wakes the polls that follow it). */
+  write(text: string) {
+    this.report += text;
+    this.reportRev++;
+    this.wake();
+  }
+
+  /** finishWork publishes the first screen. */
+  finishWork() {
+    this.working = false;
+    this.id++;
+    this.wake();
+  }
+
+  /** statusCalls counts the status requests. */
+  statusCalls(): Call[] {
+    return this.calls.filter((c) => c.path.startsWith("/api/setup/status"));
   }
 
   private json(status: number, body?: unknown): Response {
@@ -96,7 +134,7 @@ class FakeSetup {
     if (url.pathname === "/api/setup/session") {
       const { code } = JSON.parse(body) as { code: string };
       if (code.replace(/[\s-]/g, "").toUpperCase() !== CODE || this.signedIn) {
-        return this.json(401, { error: "wrong or used access code" });
+        return this.json(401, { error: "wrong access code" });
       }
       this.signedIn = true;
       return this.json(204);
@@ -105,9 +143,17 @@ class FakeSetup {
     const cur = this.screens[this.index];
     switch (url.pathname) {
       case "/api/setup/status": {
+        // Like the server: wait while the step is still `after` (0: none)
+        // and, with ?report=, the report is still that revision.
         const after = url.searchParams.get("after");
+        const report = url.searchParams.get("report");
         const st = this.status();
-        if (after !== null && st.phase === "questions" && Number(after) === st.step?.id) {
+        if (
+          after !== null &&
+          st.phase === "questions" &&
+          Number(after) === (st.step?.id ?? 0) &&
+          (report === null || Number(report) === st.reportRev)
+        ) {
           await new Promise<void>((ok, fail) => {
             this.waiters.push(ok);
             init?.signal?.addEventListener("abort", () => {
@@ -208,7 +254,7 @@ describe("browser setup", () => {
     expect(screen.getByRole("button", { name: T.signIn })).toBeDisabled();
     await user.type(input, "WRONGCODE");
     await user.click(screen.getByRole("button", { name: T.signIn }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("wrong or used access code");
+    expect(await screen.findByRole("alert")).toHaveTextContent("wrong access code");
     expect(input).toHaveAttribute("aria-invalid", "true");
   });
 
@@ -329,6 +375,60 @@ describe("browser setup", () => {
     await waitFor(() => {
       expect(screen.queryByRole("link", { name: T.zip })).not.toBeInTheDocument();
     });
+  });
+
+  it("waits while setup works instead of polling in a loop, and shows the report live", async () => {
+    const fake = new FakeSetup([{ kind: "note", title: "Database ready" }]);
+    fake.signedIn = true;
+    fake.working = true;
+    await renderSetup(fake);
+    await waitFor(() => {
+      expect(fake.statusCalls().length).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByRole("heading", { name: T.working })).toBeInTheDocument();
+    // The poll waits on the server (after=0: no step yet), never a loop.
+    await new Promise((r) => setTimeout(r, 300));
+    const calls = fake.statusCalls();
+    expect(calls.length).toBeLessThanOrEqual(2);
+    expect(calls.at(-1)?.path).toMatch(/[?&]after=0(&|$)/);
+    expect(calls.at(-1)?.path).toMatch(/[?&]report=0(&|$)/);
+    // A report change wakes the poll: the working screen shows it.
+    fake.write("-- migrate up --\napplied: 00001 init\n");
+    expect(await screen.findByText(/applied: 00001 init/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 300));
+    // The next poll is paced: at most one more request after the change.
+    expect(fake.statusCalls().length).toBeLessThanOrEqual(calls.length + 2);
+    fake.finishWork();
+    expect(
+      await screen.findByRole("heading", { name: "Database ready" }, { timeout: 3000 }),
+    ).toBeInTheDocument();
+  });
+
+  it("goes Back from the passphrase screen (a lost reveal)", async () => {
+    const fake = new FakeSetup([
+      { kind: "note", title: "Summary" },
+      { kind: "sensitive", title: "CA key passphrase (shown ONCE)" },
+    ]);
+    fake.signedIn = true;
+    const user = await renderSetup(fake);
+    await user.click(await screen.findByRole("button", { name: T.continue }));
+    expect(
+      await screen.findByRole("heading", { name: "CA key passphrase (shown ONCE)" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: T.back }));
+    expect(await screen.findByRole("heading", { name: "Summary" })).toBeInTheDocument();
+    expect(
+      fake.posted("/api/setup/answer").filter((c) => c.body.includes('"back":true')),
+    ).toHaveLength(1);
+  });
+
+  it("names what the zip leaves out", async () => {
+    const fake = new FakeSetup([]);
+    fake.signedIn = true;
+    fake.zipNotes = ["compose.override.yaml: left out, it holds changes of your own"];
+    await renderSetup(fake);
+    expect(await screen.findByText(T.zipNotesHeading)).toBeInTheDocument();
+    expect(screen.getByText(/compose.override.yaml: left out/)).toBeInTheDocument();
   });
 
   it("tells when the setup server is gone", async () => {

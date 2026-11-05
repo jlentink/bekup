@@ -51,8 +51,38 @@ type BootstrapRequest struct {
 // account (db.Bootstrap), then logs in as the configured roles, runs the
 // role checks and the migrate preflight, and records cli.db.bootstrap when
 // the installation already has its audit log. The caller ran
-// CheckDeployment.
-func Bootstrap(ctx context.Context, req BootstrapRequest) error {
+// CheckDeployment. Every password, verifier and connection secret it
+// handles is registered with the log redaction only while it runs (a
+// logging.Registry scope): the returned error's text is scrubbed before
+// the registrations end (the browser setup is a long-lived process,
+// D-217 amendment 1).
+func Bootstrap(ctx context.Context, req BootstrapRequest) (err error) {
+	reg := logging.DefaultRegistry.Scope()
+	defer func() { err = endScope(reg, err) }()
+	return bootstrap(ctx, req, reg)
+}
+
+// endScope scrubs err's text while the scope's secrets are still
+// registered, then ends the scope.
+func endScope(reg *logging.Registry, err error) error {
+	if err != nil {
+		err = &scrubbedError{msg: reg.Scrub(err.Error()), err: err}
+	}
+	reg.Close()
+	return err
+}
+
+// scrubbedError is an error whose text was scrubbed while the secrets of
+// its run were registered; errors.Is/As still see the cause.
+type scrubbedError struct {
+	msg string
+	err error
+}
+
+func (e *scrubbedError) Error() string { return e.msg }
+func (e *scrubbedError) Unwrap() error { return e.err }
+
+func bootstrap(ctx context.Context, req BootstrapRequest, reg *logging.Registry) error {
 	cfg := req.Config
 	d := &cfg.Database
 	if !d.FieldsMode() {
@@ -96,7 +126,9 @@ func Bootstrap(ctx context.Context, req BootstrapRequest) error {
 			return fmt.Errorf("--external-password-file: %w", db.ErrExternalSingleAccount)
 		}
 		admin.User = d.User
-		if admin.Password, err = config.ReadSecretFile(d.PasswordFile); err != nil {
+		admin.Password, err = config.ReadSecretFile(d.PasswordFile)
+		defer admin.Zero()
+		if err != nil {
 			return fmt.Errorf("database.password_file: %w", err)
 		}
 	} else {
@@ -113,30 +145,31 @@ func Bootstrap(ctx context.Context, req BootstrapRequest) error {
 		if req.AdminPassword == nil {
 			return errors.New("no administrator password")
 		}
-		if admin.Password, err = req.AdminPassword(); err != nil {
+		admin.Password, err = req.AdminPassword()
+		defer admin.Zero()
+		if err != nil {
 			return err
 		}
 		if len(admin.Password) == 0 {
 			return errors.New("empty administrator password")
 		}
 	}
-	defer admin.Zero()
-	logging.DefaultRegistry.Register(admin.Password)
-	bopts.Admin = admin
+	reg.Register(admin.Password)
+	bopts.Admin, bopts.Registry = admin, reg
 	if bopts.TLS, err = db.LoadTLSOptions(cfg); err != nil {
 		return fmt.Errorf("database TLS: %w", err)
 	}
 	if !d.SingleAccount {
-		if bopts.OwnerPassword, err = readRolePassword("database.owner_password_file", d.OwnerPasswordFile); err != nil {
+		if bopts.OwnerPassword, err = readRolePassword(reg, "database.owner_password_file", d.OwnerPasswordFile); err != nil {
 			return err
 		}
 		defer config.Zero(bopts.OwnerPassword)
-		if bopts.AppPassword, err = readRolePassword("database.password_file", d.PasswordFile); err != nil {
+		if bopts.AppPassword, err = readRolePassword(reg, "database.password_file", d.PasswordFile); err != nil {
 			return err
 		}
 		defer config.Zero(bopts.AppPassword)
 		if req.ExternalPasswordFile != "" {
-			if bopts.ExternalPassword, err = readRolePassword("--external-password-file", req.ExternalPasswordFile); err != nil {
+			if bopts.ExternalPassword, err = readRolePassword(reg, "--external-password-file", req.ExternalPasswordFile); err != nil {
 				return err
 			}
 			defer config.Zero(bopts.ExternalPassword)
@@ -153,7 +186,7 @@ func Bootstrap(ctx context.Context, req BootstrapRequest) error {
 	if req.DryRun {
 		return nil
 	}
-	return verifyAfterBootstrap(ctx, &req, br)
+	return verifyAfterBootstrap(ctx, &req, br, reg)
 }
 
 // CheckAdminTLS refuses an admin connection weaker than verify-full unless
@@ -178,15 +211,18 @@ func CheckAdminTLS(stderr io.Writer, mode string, allow bool) error {
 	return err
 }
 
-func readRolePassword(key, path string) ([]byte, error) {
+// readRolePassword reads a role password file and registers it with the
+// run's scope reg.
+func readRolePassword(reg *logging.Registry, key, path string) ([]byte, error) {
 	if path == "" {
 		return nil, fmt.Errorf("%s is not set: bootstrap sets the role passwords from the configured files", key)
 	}
 	pw, err := config.ReadSecretFile(path)
 	if err != nil {
+		config.Zero(pw)
 		return nil, fmt.Errorf("%s: %w", key, err)
 	}
-	logging.DefaultRegistry.Register(pw)
+	reg.Register(pw)
 	return pw, nil
 }
 
@@ -224,10 +260,10 @@ func WriteBootstrap(w io.Writer, r *db.BootstrapResult, dryRun bool) error {
 // checks and the migrate preflight, and records cli.db.bootstrap when the
 // installation already has its audit log (D-207: before the first
 // migration there is no audit log; the printed report is the evidence).
-func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.BootstrapResult) error {
+func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.BootstrapResult, reg *logging.Registry) error {
 	cfg, out, logger := req.Config, req.Out, req.Logger
 	hint := "if the role's stored password differs from the configured file or is an MD5 hash, run bootstrap again with --adopt-existing-roles --reset-passwords"
-	m, err := OpenMigrator(ctx, cfg)
+	m, err := openMigrator(ctx, cfg, reg)
 	if err != nil {
 		return fmt.Errorf("check as %s failed (%s): %w", db.OwnerRole, hint, err)
 	}
@@ -244,7 +280,7 @@ func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.Boo
 		return errors.New("bootstrap finished, but the migrate preflight failed (see above)")
 	}
 
-	pool, err := openAppPool(ctx, cfg, "bekup-bootstrap")
+	pool, err := openAppPool(ctx, cfg, "bekup-bootstrap", reg)
 	if err != nil {
 		return fmt.Errorf("%w (%s)", err, hint)
 	}
@@ -254,7 +290,7 @@ func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.Boo
 	}
 	schemaErr := db.CheckSchemaVersion(ctx, pool)
 	if req.ExternalPasswordFile != "" {
-		if err := checkExternalLogin(ctx, cfg, req.ExternalPasswordFile, schemaErr == nil); err != nil {
+		if err := checkExternalLogin(ctx, cfg, reg, req.ExternalPasswordFile, schemaErr == nil); err != nil {
 			return fmt.Errorf("%w (%s)", err, hint)
 		}
 		if _, err := fmt.Fprintf(out, "roles:   %s logs in and passes the role checks (bekup migrate up grants and audits its api functions)\n", db.ExternalRole); err != nil {
@@ -281,13 +317,13 @@ func verifyAfterBootstrap(ctx context.Context, req *BootstrapRequest, br *db.Boo
 }
 
 // openAppPool logs in as bekup_app (or the single account acting as it)
-// and runs the D-099 role checks.
-func openAppPool(ctx context.Context, cfg *config.Bekup, appName string) (*pgxpool.Pool, error) {
+// and runs the D-099 role checks; the login is registered with reg.
+func openAppPool(ctx context.Context, cfg *config.Bekup, appName string, reg *logging.Registry) (*pgxpool.Pool, error) {
 	poolOpts, err := db.PoolOptionsFromConfig(cfg, appName)
 	if err != nil {
 		return nil, fmt.Errorf("database TLS: %w", err)
 	}
-	poolOpts.MaxConns = 2
+	poolOpts.MaxConns, poolOpts.Registry = 2, reg
 	creds, err := cfg.AppDBCredentials()
 	if err != nil {
 		return nil, fmt.Errorf("read database credentials: %w", err)
@@ -313,13 +349,13 @@ func openAppPool(ctx context.Context, cfg *config.Bekup, appName string) (*pgxpo
 // checkExternalLogin logs in as bekup_external (fields mode, the
 // configured TLS policy) and runs db.CheckExternalRole on a migrated
 // schema, db.CheckExternalLogin otherwise (D-220).
-func checkExternalLogin(ctx context.Context, cfg *config.Bekup, pwFile string, migrated bool) error {
+func checkExternalLogin(ctx context.Context, cfg *config.Bekup, reg *logging.Registry, pwFile string, migrated bool) error {
 	poolOpts, err := db.PoolOptionsFromConfig(cfg, "bekup-bootstrap")
 	if err != nil {
 		return fmt.Errorf("database TLS: %w", err)
 	}
-	poolOpts.MaxConns, poolOpts.MinConns = 1, 0
-	pw, err := readRolePassword("--external-password-file", pwFile)
+	poolOpts.MaxConns, poolOpts.MinConns, poolOpts.Registry = 1, 0, reg
+	pw, err := readRolePassword(reg, "--external-password-file", pwFile)
 	if err != nil {
 		return err
 	}
@@ -349,9 +385,12 @@ func checkExternalLogin(ctx context.Context, cfg *config.Bekup, pwFile string, m
 // Verify is the check after the migrations (the browser setup's last
 // database step, D-217): the migrate preflight as bekup_owner, the login
 // and role checks of bekup_app, and the schema version (current). It
-// changes nothing.
-func Verify(ctx context.Context, cfg *config.Bekup, out io.Writer, logger *slog.Logger) error {
-	m, err := OpenMigrator(ctx, cfg)
+// changes nothing. The logins are registered with the log redaction only
+// while it runs.
+func Verify(ctx context.Context, cfg *config.Bekup, out io.Writer, logger *slog.Logger) (err error) {
+	reg := logging.DefaultRegistry.Scope()
+	defer func() { err = endScope(reg, err) }()
+	m, err := openMigrator(ctx, cfg, reg)
 	if err != nil {
 		return fmt.Errorf("check as %s failed: %w", db.OwnerRole, err)
 	}
@@ -365,7 +404,7 @@ func Verify(ctx context.Context, cfg *config.Bekup, out io.Writer, logger *slog.
 	if checkErr != nil {
 		return errors.New("the migrate preflight failed (see above)")
 	}
-	pool, err := openAppPool(ctx, cfg, "bekup-setup-check")
+	pool, err := openAppPool(ctx, cfg, "bekup-setup-check", reg)
 	if err != nil {
 		return err
 	}

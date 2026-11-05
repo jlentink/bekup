@@ -3,15 +3,21 @@ package web
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/dbsetup"
+	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/setup"
 	"github.com/jlentink/bekup/internal/setup/wizard"
 )
@@ -144,9 +150,9 @@ func TestDatabaseStepInsecureAdmin(t *testing.T) {
 	h := &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthBootstrap}, tlsMode: config.DBTLSRequire}
 	_, err := runStep(t, h, []wizard.Answer{
 		{Title: "Create bekup's roles", Value: dbChoiceBootstrap},
-		{Title: "Insecure administrator connection", Value: "no"},
+		{Title: "Insecure database connection", Value: "no"},
 		{Title: "Create bekup's roles", Value: dbChoiceBootstrap},
-		{Title: "Insecure administrator connection", Value: "yes"},
+		{Title: "Insecure database connection", Value: "yes"},
 		{Title: "Administrator role", Value: "dbadmin"},
 		{Title: "Existing bekup roles", Value: "yes"},
 		{Title: "Administrator password", Value: "admin-pass-123"},
@@ -160,7 +166,7 @@ func TestDatabaseStepInsecureAdmin(t *testing.T) {
 // stopped.
 func TestDatabaseStepBootstrapRetry(t *testing.T) {
 	h := &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthBootstrap}, tlsMode: config.DBTLSVerifyFull,
-		bootErr: []error{errors.New("login failed"), errors.New("still failing")}}
+		bootErr: []error{errors.New("login failed: admin-pass-123"), errors.New("still failing: admin-pass-123")}}
 	login := []wizard.Answer{
 		{Title: "Create bekup's roles", Value: dbChoiceBootstrap},
 		{Title: "Administrator role", Value: "dbadmin"},
@@ -169,8 +175,18 @@ func TestDatabaseStepBootstrapRetry(t *testing.T) {
 	}
 	answers := append(append(append([]wizard.Answer{}, login...), wizard.Answer{Title: "db bootstrap failed", Value: dbChoiceRetry}), login...)
 	answers = append(answers, wizard.Answer{Title: "db bootstrap failed", Value: dbChoiceStop})
-	if _, err := runStep(t, h, answers); err == nil || !strings.Contains(err.Error(), "still failing") || h.migrations != 0 || len(h.bootReqs) != 2 {
+	s, err := runStep(t, h, answers)
+	if err == nil || !strings.Contains(err.Error(), "still failing") || h.migrations != 0 || len(h.bootReqs) != 2 {
 		t.Fatalf("%v, %d bootstraps, %d migrations", err, len(h.bootReqs), h.migrations)
+	}
+	// The error text was formatted while the password was registered (the
+	// report, the retry screen and the final error), and the registration
+	// ended with the attempt.
+	if strings.Contains(err.Error()+s.Output.String()+s.Text.String(), "admin-pass-123") {
+		t.Fatalf("the administrator password in the error or report: %v\n%s", err, s.Output.String())
+	}
+	if logging.DefaultRegistry.Scrub("admin-pass-123") != "admin-pass-123" {
+		t.Fatal("the administrator password is still registered")
 	}
 }
 
@@ -204,7 +220,7 @@ func TestDatabaseStepBackStays(t *testing.T) {
 // skip the bootstrap.
 func TestDatabaseStepRoleModes(t *testing.T) {
 	h := &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthSingleAccount}, tlsMode: config.DBTLSVerifyFull}
-	if _, err := runStep(t, h, []wizard.Answer{{Title: "Create bekup's roles", Value: dbChoiceBootstrap}}); err != nil || len(h.bootReqs) != 1 || h.bootReqs[0].AdminPassword != nil {
+	if _, err := runStep(t, h, []wizard.Answer{{Title: "Create bekup's database", Value: dbChoiceBootstrap}}); err != nil || len(h.bootReqs) != 1 || h.bootReqs[0].AdminPassword != nil {
 		t.Fatalf("single account: %v %+v", err, h.bootReqs)
 	}
 	h = &dbHarness{st: setup.State{DatabaseMode: setup.DBExternal, DatabaseAuth: setup.DBAuthExistingRoles}, tlsMode: config.DBTLSVerifyFull}
@@ -217,12 +233,32 @@ func TestDatabaseStepRoleModes(t *testing.T) {
 	}
 }
 
-// The bundled database: migrate retries while postgres starts.
+// The bundled database: migrate retries while postgres cannot be reached
+// or is starting up.
 func TestDatabaseStepBundledWaits(t *testing.T) {
-	h := &dbHarness{st: setup.State{}, migrateErr: []error{errors.New("connection refused"), errors.New("connection refused")}}
+	refused := fmt.Errorf("connect to database as bekup_owner: %w", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED})
+	starting := fmt.Errorf("connect: %w", &pgconn.PgError{Code: "57P03", Message: "the database system is starting up"})
+	h := &dbHarness{st: setup.State{}, migrateErr: []error{refused, starting}}
 	s, err := runStep(t, h, nil)
 	if err != nil || h.migrations != 3 || h.slept == 0 || !strings.Contains(s.Output.String(), "waiting for the database") {
 		t.Fatalf("%v, %d migrations, slept %v\n%s", err, h.migrations, h.slept, s.Output.String())
+	}
+}
+
+// A permanent failure (a refused login, the preflight) is never retried
+// under "waiting for the database": the operator decides at once.
+func TestDatabaseStepBundledPermanent(t *testing.T) {
+	for name, cause := range map[string]error{
+		"login":     fmt.Errorf("connect: %w", &pgconn.PgError{Code: "28P01", Message: "password authentication failed"}),
+		"preflight": errors.New("preflight failed; nothing was migrated"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := &dbHarness{st: setup.State{}, migrateErr: []error{cause}}
+			s, err := runStep(t, h, []wizard.Answer{{Title: "migrate up failed", Value: dbChoiceStop}})
+			if err == nil || h.migrations != 1 || h.slept != 0 || strings.Contains(s.Output.String(), "waiting for the database") {
+				t.Fatalf("%v, %d migrations, slept %v\n%s", err, h.migrations, h.slept, s.Output.String())
+			}
+		})
 	}
 }
 

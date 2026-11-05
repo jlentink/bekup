@@ -56,8 +56,9 @@ Components (one Go binary, several subcommands; D-025):
   HTTPS to one browser session (one-time code, fingerprinted in-memory
   certificate), writes the deployment and offers the non-secret files as
   a zip; it never reaches a database. `setup-web-db` (`--database`;
-  migrate's UID, config and secrets, `backend` + `setup-web`, read-only
-  deployment directory) runs db bootstrap, `migrate up` and the final
+  migrate's UID, config and secrets, `backend` + `setup-web`, of the
+  deployment directory only the state file, read-only; never the keys
+  directory) runs db bootstrap, `migrate up` and the final
   check through `internal/dbsetup`, the code `bekup db bootstrap` and
   `bekup migrate up` share.
 - **Dump containers**: short-lived, alone on a per-run `internal` network,
@@ -84,7 +85,7 @@ Trust boundaries:
 | Prometheus → `serve`/`worker` metrics | separate internal listener (`metrics.listen`, wildcards refused), only `/metrics` + `/healthz`, optional bearer file, bounded labels, no secrets (D-176) |
 | Own reverse proxy (variant `own-proxy`) → `serve` | join mode (default): `serve` the only bekup member of the proxy's own Docker network (alias `bekup-serve`, no published port, listen `0.0.0.0:8080` only in this shape), the wildcard listener serves only serve's own address on the proxy network (alias `bekup-serve` matched with its interfaces) and loopback, fail closed while unknown; an alias held by another container is alerted (`serve_alias_conflict`) and fails `/readyz`; forwarding headers only from the proxy's container name resolved through Docker DNS (`trusted_proxy_hosts`: private addresses inside serve's proxy-network subnet, one per family, /32 per address, re-resolved in parallel every 20 s / on untrusted XFF / while active, untrusted when older than 30 s, unresolvable or colliding = no trust; D-215); link mode: the internal `bekup-proxy` /28 with fixed addresses and the proxy's /32 (D-205); untrusted `X-Forwarded-For` ignored and logged; `setup check` errors on anything else |
 | Operator → one-shot `bekup setup` container → deployment directory | root with only `CAP_CHOWN`, no network, `--log-driver none`, read-only root, digest-pinned image (or, opt-in, the official `:latest` tag with the setup version guard, D-212); writes only through an `os.Root` on the bind mount, symlinks refused; chmod only when needed (foreign files taken over, chmod'ed, handed back); existing CA never touched; `setup check` refuses unpinned overrides and compose-file switches (D-203) |
-| Operator browser → `setup-web` / `setup-web-db` (browser setup, D-217) | only while run on request; published `${BEKUP_SETUP_WEB_PORT:-8443}` on every host address; TLS 1.3 with an in-memory self-signed certificate whose SHA-256 fingerprint the terminal shows; 128-bit one-time code (terminal only, URL fragment, `logging: none`) exchanged once for the only `__Host-` session, delay per failure, exit after 10; POST + JSON/octet-stream + `X-Bekup-Setup` + `Sec-Fetch-Site` + own `Origin`; 64 KiB bodies; bekup's CSP/headers; exit on Finish, 30 min idle, 2 h; `setup-web`: setup's hardening, own network only, no database or secrets; `setup-web-db`: UID 65532, migrate's config/secrets, read-only deployment dir; secrets as raw bodies, zeroed; CA passphrase revealed once; zip without key material; both pinned exactly by the lint |
+| Operator browser → `setup-web` / `setup-web-db` (browser setup, D-217) | only while run on request; published `${BEKUP_SETUP_WEB_PORT:-8443}` on every host address; TLS 1.3 with an in-memory self-signed certificate whose SHA-256 fingerprint the terminal shows; 128-bit one-time code (terminal only, URL fragment, `logging: none`) exchanged once for the only `__Host-` session, delay per failure, exit after 10, refused at once and not counted once used, every refused sign-in shown on the terminal with the peer address; with named hosts other `Host`s refused; POST + JSON/octet-stream + `X-Bekup-Setup` + `Sec-Fetch-Site` + own `Origin`; 64 KiB bodies; bekup's CSP/headers; exit on Finish, 30 min idle (status polls are not activity), 2 h; `setup-web`: setup's hardening, own network only, no database or secrets; `setup-web-db`: UID 65532, migrate's config/secrets, of the deployment dir only `bekup-setup.json` (read-only; never the dir or the keys dir), no zip; secrets as raw bodies, zeroed; CA passphrase revealed once; zip without key material, of `.env` only setup's variables, `compose.override.yaml` only as setup wrote it; both pinned exactly by the lint |
 
 `serve` can **never** reach target DBs or Docker.
 
@@ -1750,8 +1751,22 @@ loader (`internal/db/cabundlecheck`) on the runtime image's bundle. Retired vari
   `Step` or the report: secret answers only as raw octet-stream bodies
   into one fixed buffer, zeroed; `UI.Sensitive` only through the one-time
   `Reveal`. The zip lists files only in `setup.configFiles` (never a
-  secret group or the keys directory, `TestConfigFilesHoldNoSecrets`).
-  The certificate stays in memory. Database work runs only in the
+  secret group or the keys directory, `TestConfigFilesHoldNoSecrets`
+  checks names and contents); `.env` only with the variables setup
+  writes (a new one goes into `managedEnvKeys`, `TestManagedEnvKeys`),
+  `compose.override.yaml` only while it equals `expectedOverride`, the
+  rest is named in `ConfigZipNotes`; only the first run offers it. A
+  used code answers `ErrSessionTaken` without counting or delay; refused
+  sign-ins go to the terminal (bounded); only session POSTs and the zip
+  count as activity, never status polls; long polls end with the server
+  ctx (`BaseContext`). An answered step is `taken` (later deliveries are
+  stale); answers left in a screen's buffer are zeroed (`drain`).
+  Passwords `internal/dbsetup` handles are registered only through a
+  `logging.Registry` scope (`Scope`/`Close`, error text scrubbed first:
+  `endScope`, `Scrubbed`): never `DefaultRegistry.Register` without its
+  unregister in that long-lived process. The bundled-database wait
+  retries only `dbsetup.Retryable` errors. The certificate stays in
+  memory. Database work runs only in the
   `setup-web-db` service (never give `setup-web` a database network,
   secrets or a database step) and only through `internal/dbsetup`
   (`CheckDeployment` before anything connects, `Bootstrap`, `MigrateUp`,
@@ -1759,7 +1774,11 @@ loader (`internal/db/cabundlecheck`) on the runtime image's bundle. Retired vari
   change the shared code there, never a copy. A weak `tls_mode` is a
   Confirm screen setting `AllowInsecure` (never implicit). Both compose
   services stay pinned exactly (no `operatorTunable`), only they publish
-  (TCP 8443) and only `setup-web` runs as root; a new member of the
+  (TCP 8443) and only `setup-web` runs as root; `setup-web-db` binds
+  only the state file and the lint refuses any bind of it on the
+  deployment directory or the keys directory (`browserDBForbidden`):
+  never give it the deployment root back (UID 65532 owns the master key
+  and the mTLS keys); a new member of the
   DB-network overlay goes into `dbNetworkServices`, and an older override
   without it must stay a warning (`lintWithOverlays`). `pnpm build`
   builds both SPAs; the Dockerfile copies `web/dist-setup` (only `.gitkeep`

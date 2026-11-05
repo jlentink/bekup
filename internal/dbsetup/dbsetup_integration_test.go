@@ -10,6 +10,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db/externaltest"
+	"github.com/jlentink/bekup/internal/logging"
 )
 
 // externalConfig is a fields-mode configuration for the test server s.
@@ -50,9 +51,15 @@ func TestIntegrationBootstrapMigrateVerify(t *testing.T) {
 		}
 		return out.String(), err
 	}
+	registered := logging.DefaultRegistry.Len()
 	out, err := bootstrap(cfg, false, false)
 	if err != nil {
 		t.Fatalf("bootstrap: %v\n%s", err, out)
+	}
+	// D-217 amendment 1: a successful run ends its redaction registrations
+	// too (the browser setup is one long-lived process).
+	if n := logging.DefaultRegistry.Len(); n != registered {
+		t.Fatalf("%d secrets registered after bootstrap, %d before", n, registered)
 	}
 	for _, want := range []string{"done: create role bekup_owner", "done: create database bekup_ext owned by bekup_owner",
 		"host verified: true", "preflight OK", "log in and pass the role checks", "next:    bekup migrate up"} {
@@ -78,6 +85,9 @@ func TestIntegrationBootstrapMigrateVerify(t *testing.T) {
 	report.Reset()
 	if err := Verify(ctx, cfg, &report, logger); err != nil || !strings.Contains(report.String(), "preflight OK") || !strings.Contains(report.String(), "schema:  current") {
 		t.Fatalf("verify: %v\n%s", err, report.String())
+	}
+	if n := logging.DefaultRegistry.Len(); n != registered {
+		t.Fatalf("%d secrets registered after migrate up and verify, %d before", n, registered)
 	}
 	if out, err = bootstrap(cfg, true, true); err != nil || !strings.Contains(out, "recorded in the audit log (cli.db.bootstrap)") {
 		t.Fatalf("password reset: %v\n%s", err, out)

@@ -3,12 +3,19 @@ package dbsetup
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jlentink/bekup/internal/config"
 	"github.com/jlentink/bekup/internal/db"
@@ -276,5 +283,86 @@ func TestSplitErrors(t *testing.T) {
 	got := SplitErrors(errors.Join(errors.New("a"), errors.Join(errors.New("b"), errors.New("c"))))
 	if strings.Join(got, ",") != "a,b,c" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+// TestBootstrapRegistryScoped: the passwords Bootstrap registers with the
+// log redaction are unregistered when it returns (on every path), its
+// error text was scrubbed before, and the administrator password buffer is
+// zeroed on every path after it was read. Not parallel: it counts the
+// process-wide registry.
+func TestBootstrapRegistryScoped(t *testing.T) {
+	const adminPW = "admin-s3cret-password"
+	before := logging.DefaultRegistry.Len()
+	for name, tc := range map[string]struct {
+		mut     func(*config.Database)
+		readErr error
+		want    string
+	}{
+		// The connection fails after every password was read (port 1).
+		"unreachable": {want: "bootstrap failed"},
+		// The callback hands back a buffer and an error.
+		"callback error": {readErr: errors.New("no terminal"), want: "no terminal"},
+		// A role password file is missing after the admin password was read.
+		"owner file": {mut: func(d *config.Database) { d.OwnerPasswordFile = filepath.Join(t.TempDir(), "missing") }, want: "database.owner_password_file"},
+		// The server's error names the password: the text is scrubbed.
+		"echoed": {mut: func(d *config.Database) { d.Host = adminPW }, want: "bootstrap failed"},
+	} {
+		pw := []byte(adminPW)
+		req := BootstrapRequest{Config: fieldsConfig(t, tc.mut), AdminUser: "admin", AllowInsecure: true,
+			Out: &bytes.Buffer{}, Warn: &bytes.Buffer{}, Logger: slog.New(slog.DiscardHandler),
+			AdminPassword: func() ([]byte, error) { return pw, tc.readErr }}
+		err := Bootstrap(context.Background(), req)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: %v, want %q", name, err, tc.want)
+		}
+		if strings.Contains(err.Error(), adminPW) {
+			t.Fatalf("%s: the password in the error: %v", name, err)
+		}
+		if !bytes.Equal(pw, make([]byte, len(pw))) {
+			t.Fatalf("%s: the administrator password was not zeroed", name)
+		}
+		if n := logging.DefaultRegistry.Len(); n != before {
+			t.Fatalf("%s: %d secrets registered after Bootstrap, %d before", name, n, before)
+		}
+	}
+}
+
+// TestMigrateVerifyRegistryScoped: MigrateUp and Verify end their
+// registrations too (the browser setup retries them in one process).
+func TestMigrateVerifyRegistryScoped(t *testing.T) {
+	before := logging.DefaultRegistry.Len()
+	cfg := fieldsConfig(t, func(d *config.Database) { d.TLSMode = config.DBTLSDisable })
+	if _, err := MigrateUp(context.Background(), cfg, slog.New(slog.DiscardHandler), io.Discard); err == nil {
+		t.Fatal("migrate up against port 1 succeeded")
+	}
+	if err := Verify(context.Background(), cfg, io.Discard, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("verify against port 1 succeeded")
+	}
+	if n := logging.DefaultRegistry.Len(); n != before {
+		t.Fatalf("%d secrets registered after MigrateUp/Verify, %d before", n, before)
+	}
+}
+
+func TestRetryable(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		err  error
+		want bool
+	}{
+		"nil":       {nil, false},
+		"refused":   {fmt.Errorf("connect: %w", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}), true},
+		"dns":       {fmt.Errorf("connect: %w", &net.DNSError{Err: "no such host", Name: "postgres", IsNotFound: true}), true},
+		"timeout":   {fmt.Errorf("connect: %w", context.DeadlineExceeded), true},
+		"starting":  {fmt.Errorf("connect: %w", &pgconn.PgError{Code: "57P03"}), true},
+		"login":     {fmt.Errorf("connect: %w", &pgconn.PgError{Code: "28P01"}), false},
+		"no db":     {fmt.Errorf("connect: %w", &pgconn.PgError{Code: "3D000"}), false},
+		"cert":      {fmt.Errorf("connect: %w", &tls.CertificateVerificationError{Err: errors.New("unknown authority")}), false},
+		"preflight": {errors.New("preflight failed; nothing was migrated"), false},
+		"scrubbed":  {Scrubbed(&net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}), true},
+	} {
+		if got := Retryable(tc.err); got != tc.want {
+			t.Errorf("%s: Retryable = %v", name, got)
+		}
 	}
 }

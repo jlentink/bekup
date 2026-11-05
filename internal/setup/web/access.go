@@ -32,7 +32,7 @@ var codeEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 // Errors of the gate.
 var (
-	ErrBadCode      = errors.New("wrong or used access code")
+	ErrBadCode      = errors.New("wrong access code")
 	ErrSessionTaken = errors.New("setup is already open in another browser session")
 	ErrExhausted    = errors.New("too many wrong access codes: setup stopped")
 )
@@ -66,21 +66,26 @@ func hashCode(code string) [32]byte {
 	return sha256.Sum256([]byte(c))
 }
 
-// Login exchanges the code for the session value (returned once). A wrong
-// code is delayed; the MaxFailures-th failure ends setup.
-func (g *Gate) Login(code string) (string, error) {
+// Login exchanges the code for the session value (returned once) and
+// reports the wrong codes so far. A wrong code is delayed; the
+// MaxFailures-th failure ends setup. Once the code was used, every
+// attempt is answered ErrSessionTaken at once: it neither counts nor
+// waits, so nobody reaching the port can stop a running setup by
+// exhausting the attempts.
+func (g *Gate) Login(code string) (string, int, error) {
 	h := hashCode(code)
 	g.mu.Lock()
+	if g.used {
+		n := g.failures
+		g.mu.Unlock()
+		return "", n, ErrSessionTaken
+	}
 	if g.failures >= MaxFailures {
+		n := g.failures
 		g.mu.Unlock()
-		return "", ErrExhausted
+		return "", n, ErrExhausted
 	}
-	ok := subtle.ConstantTimeCompare(h[:], g.codeHash[:]) == 1
-	if ok && g.used {
-		g.mu.Unlock()
-		return "", ErrSessionTaken
-	}
-	if !ok {
+	if subtle.ConstantTimeCompare(h[:], g.codeHash[:]) != 1 {
 		g.failures++
 		n := g.failures
 		exhausted := n >= MaxFailures
@@ -90,20 +95,22 @@ func (g *Gate) Login(code string) (string, error) {
 			if g.onExhausted != nil {
 				g.onExhausted()
 			}
-			return "", ErrExhausted
+			return "", n, ErrExhausted
 		}
-		return "", ErrBadCode
+		return "", n, ErrBadCode
 	}
 	raw := make([]byte, sessionBytes)
 	if _, err := rand.Read(raw); err != nil {
+		n := g.failures
 		g.mu.Unlock()
-		return "", err
+		return "", n, err
 	}
 	session := base64.RawURLEncoding.EncodeToString(raw)
 	g.sessionHash = sha256.Sum256([]byte(session))
 	g.used = true
+	n := g.failures
 	g.mu.Unlock()
-	return session, nil
+	return session, n, nil
 }
 
 // Valid reports whether session is the gate's session.

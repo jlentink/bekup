@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -37,6 +38,9 @@ const (
 	DefaultLifetime = 2 * time.Hour
 	// pollWait is the longest a status request waits for a change.
 	pollWait = 25 * time.Second
+	// maxRefusalLines bounds the refused sign-ins printed to the terminal
+	// once the code was used (those are neither delayed nor counted).
+	maxRefusalLines = 20
 	// ListenPort is the port inside the container.
 	ListenPort = 8443
 	// HeaderMarker must be on every state-changing request.
@@ -51,7 +55,8 @@ const (
 )
 
 // Modes of a run (D-217): the setup-web service writes the deployment,
-// the setup-web-db service (UID 65532, migrate's mounts) prepares the
+// the setup-web-db service (UID 65532, migrate's configuration and
+// secrets, only the state file of the deployment directory) prepares the
 // database.
 const (
 	ModeInit     = "init"
@@ -104,7 +109,10 @@ type server struct {
 	opts   Options
 	ui     *UI
 	gate   *Gate
+	ctx    context.Context
 	cancel context.CancelFunc
+	// hosts are the allowed Host names (nil: any; D-217 amendment 1).
+	hosts map[string]bool
 
 	mu       sync.Mutex
 	phase    string
@@ -112,6 +120,10 @@ type server struct {
 	written  bool // setup.Init succeeded (the zip is available)
 	finished bool
 	activity chan struct{}
+	// refusals counts the refused sign-ins after the code was used.
+	refusals int
+	// zipNotes say what the zip leaves out (setup.ConfigZipNotes).
+	zipNotes []string
 }
 
 // Status is the browser's view of the flow.
@@ -119,8 +131,13 @@ type Status struct {
 	Phase  string `json:"phase"`
 	Step   *Step  `json:"step,omitempty"`
 	Report string `json:"report"`
-	Error  string `json:"error,omitempty"`
-	Zip    bool   `json:"zip"`
+	// ReportRev is the report's revision (?report= of a long poll).
+	ReportRev uint64 `json:"reportRev"`
+	Error     string `json:"error,omitempty"`
+	Zip       bool   `json:"zip"`
+	// ZipNotes say what the zip leaves out (the operator's own .env lines,
+	// a changed compose.override.yaml).
+	ZipNotes []string `json:"zipNotes,omitempty"`
 }
 
 // Run serves the browser setup until it is finished, idle, out of time,
@@ -159,7 +176,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, opts.Lifetime)
 	defer cancel()
-	s := &server{opts: opts, cancel: cancel, phase: PhaseQuestions, activity: make(chan struct{}, 1)}
+	s := &server{opts: opts, ctx: ctx, cancel: cancel, phase: PhaseQuestions, activity: make(chan struct{}, 1), hosts: allowedHosts(opts.Hosts)}
 	s.ui = NewUI(ctx)
 	gate, code, err := NewGate(cancel)
 	if err != nil {
@@ -189,6 +206,9 @@ func Run(ctx context.Context, opts Options) error {
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    16 << 10,
 		ErrorLog:          slog.NewLogLogger(opts.Logger.Handler(), slog.LevelDebug),
+		// Requests end with the server: a long poll never holds up the
+		// shutdown.
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 	s.printAccess(code, cert.Fingerprint)
 	if opts.ready != nil {
@@ -315,13 +335,19 @@ func (s *server) flow(ctx context.Context) {
 			return
 		}
 	} else {
-		// The database run is UID 65532 with a read-only directory: it
-		// cannot see the root-only key directories, so its check would
-		// report them as errors. The first run (root) checked them.
-		_, _ = fmt.Fprintln(out, "\nsetup check ran in the first run (it needs root to see every file); after changes run:\n"+
+		// The database run (UID 65532) sees only the state file of the
+		// deployment directory (D-217 amendment 1: never the keys
+		// directory), so it cannot check the deployment. The first run
+		// (root) checked it.
+		_, _ = fmt.Fprintln(out, "\nsetup check ran in the first run (this run sees only the state file of the deployment directory); after changes run:\n"+
 			"    docker compose -f compose.yaml run --rm setup check")
 	}
 	if s.opts.Mode == ModeInit {
+		if notes, err := setup.ConfigZipNotes(s.opts.Dir); err == nil {
+			s.mu.Lock()
+			s.zipNotes = notes
+			s.mu.Unlock()
+		}
 		_, _ = fmt.Fprintln(out, "\nNext: prepare the database in the browser. Stop this setup (Finish), then run\n"+
 			"    docker compose up -d postgres            (only with the bundled database)\n"+
 			"    docker compose run --rm --service-ports setup-web-db")
@@ -375,14 +401,25 @@ func (s *server) fail(err error) {
 }
 
 func (s *server) status() Status {
-	st := Status{Report: s.ui.Report()}
+	var st Status
+	st.Report, st.ReportRev = s.ui.Report()
 	if step, ok, _ := s.ui.Current(); ok {
 		st.Step = &step
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	st.Phase, st.Error, st.Zip = s.phase, s.errMsg, s.written
+	st.Phase, st.Error, st.Zip = s.phase, s.errMsg, s.zipAvailable()
+	if st.Zip {
+		st.ZipNotes = s.zipNotes
+	}
 	return st
+}
+
+// zipAvailable: the first run offers the zip once the files exist. The
+// database run never does (it sees only the state file; D-217 amendment
+// 1). Call with s.mu held.
+func (s *server) zipAvailable() bool {
+	return s.written && s.opts.Mode == ModeInit
 }
 
 // handler builds the routes behind bekup's security headers and the body
@@ -390,23 +427,65 @@ func (s *server) status() Status {
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/setup/session", s.post(false, s.handleSession))
-	mux.HandleFunc("GET /api/setup/status", s.get(s.handleStatus))
+	// Status polls are not activity: an open tab must not keep the
+	// server alive forever.
+	mux.HandleFunc("GET /api/setup/status", s.get(false, s.handleStatus))
 	mux.HandleFunc("POST /api/setup/answer", s.post(true, s.handleAnswer))
 	mux.HandleFunc("POST /api/setup/secret", s.post(true, s.handleSecret))
 	mux.HandleFunc("POST /api/setup/reveal", s.post(true, s.handleReveal))
-	mux.HandleFunc("GET /api/setup/config.zip", s.get(s.handleZip))
+	mux.HandleFunc("GET /api/setup/config.zip", s.get(true, s.handleZip))
 	mux.HandleFunc("POST /api/setup/finish", s.post(true, s.handleFinish))
 	mux.Handle("GET /", s.static())
-	return httpserver.SecurityHeaders(true)(http.MaxBytesHandler(mux, MaxBody))
+	return httpserver.SecurityHeaders(true)(s.checkHost(http.MaxBytesHandler(mux, MaxBody)))
 }
 
-// static serves the SPA: files that exist, index.html for "/".
+// allowedHosts are the Host names a request may carry when the operator
+// named the setup's addresses: those and the certificate's loopback names
+// (an SSH tunnel). Without names every Host is accepted.
+func allowedHosts(hosts []string) map[string]bool {
+	if len(hosts) == 0 {
+		return nil
+	}
+	m := map[string]bool{"localhost": true, "127.0.0.1": true, "::1": true}
+	for _, h := range hosts {
+		m[strings.ToLower(strings.Trim(h, "[]"))] = true
+	}
+	return m
+}
+
+// checkHost refuses a request whose Host is not one of the named
+// addresses (a cheap defense against DNS rebinding).
+func (s *server) checkHost(next http.Handler) http.Handler {
+	if s.hosts == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		if !s.hosts[strings.ToLower(strings.Trim(host, "[]"))] {
+			writeJSONError(w, http.StatusMisdirectedRequest, "open setup with one of the addresses the terminal shows")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// static serves the SPA: files that exist, index.html for "/"; never a
+// directory listing.
 func (s *server) static() http.Handler {
 	files := http.FileServerFS(s.opts.Assets)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
+		}
+		if name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/"); name != "" {
+			if fi, err := fs.Stat(s.opts.Assets, name); err != nil || fi.IsDir() {
+				http.NotFound(w, r)
+				return
+			}
 		}
 		files.ServeHTTP(w, r)
 	})
@@ -418,14 +497,17 @@ func (s *server) sessionOK(r *http.Request) bool {
 	return err == nil && s.gate.Valid(c.Value)
 }
 
-// get guards a read: the session only.
-func (s *server) get(h http.HandlerFunc) http.HandlerFunc {
+// get guards a read: the session only. activity: the read counts against
+// the idle timeout (the zip download, never a status poll).
+func (s *server) get(activity bool, h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.sessionOK(r) {
 			writeJSONError(w, http.StatusUnauthorized, "sign in with the access code")
 			return
 		}
-		s.touch()
+		if activity {
+			s.touch()
+		}
 		h(w, r)
 	}
 }
@@ -480,9 +562,10 @@ func (s *server) handleSession(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	session, err := s.gate.Login(in.Code)
+	session, failures, err := s.gate.Login(in.Code)
 	switch {
 	case errors.Is(err, ErrBadCode), errors.Is(err, ErrSessionTaken), errors.Is(err, ErrExhausted):
+		s.printRefusal(r, err, failures)
 		writeJSONError(w, http.StatusUnauthorized, err.Error())
 		return
 	case err != nil:
@@ -494,37 +577,75 @@ func (s *server) handleSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// printRefusal shows a refused sign-in on the terminal with the peer's
+// address (never the code), so the operator sees probing. After the code
+// was used the refusals are neither delayed nor counted: only the first
+// maxRefusalLines are printed.
+func (s *server) printRefusal(r *http.Request, err error, failures int) {
+	peer := r.RemoteAddr
+	if errors.Is(err, ErrSessionTaken) {
+		s.mu.Lock()
+		s.refusals++
+		n := s.refusals
+		s.mu.Unlock()
+		switch {
+		case n < maxRefusalLines:
+			_, _ = fmt.Fprintf(s.opts.Out, "setup web: sign-in from %s refused: the access code was used already\n", peer)
+		case n == maxRefusalLines:
+			_, _ = fmt.Fprintf(s.opts.Out, "setup web: sign-in from %s refused: the access code was used already (further refusals are not shown)\n", peer)
+		}
+		return
+	}
+	_, _ = fmt.Fprintf(s.opts.Out, "setup web: wrong access code from %s (%d of %d)\n", peer, failures, MaxFailures)
+}
+
 // handleStatus answers at once, or with ?after=<step id> waits (at most
-// pollWait) until the current step differs.
+// pollWait) until another step waits (after=0: until a step waits), the
+// flow ended, the server stops or, with ?report=<revision>, the report
+// changed.
 func (s *server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	if after := r.URL.Query().Get("after"); after != "" {
+	q := r.URL.Query()
+	if after := q.Get("after"); after != "" {
 		id, err := strconv.ParseUint(after, 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid request")
 			return
 		}
+		followReport := q.Has("report")
+		var rev uint64
+		if followReport {
+			if rev, err = strconv.ParseUint(q.Get("report"), 10, 64); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid request")
+				return
+			}
+		}
 		timer := time.NewTimer(pollWait)
 		defer timer.Stop()
+	wait:
 		for {
 			step, ok, changed := s.ui.Current()
-			if ok && step.ID != id || s.ended() {
+			if ok && step.ID != id || s.ended() || followReport && s.ui.ReportRev() != rev {
 				break
 			}
 			select {
 			case <-changed:
-				continue
 			case <-timer.C:
+				break wait
+			case <-s.ctx.Done():
+				break wait
 			case <-r.Context().Done():
-				return
+				break wait
 			}
-			break
 		}
 	}
 	writeJSON(w, s.status())
 }
 
-// ended reports a flow that no longer asks.
+// ended reports a flow that no longer asks (or a server that stops).
 func (s *server) ended() bool {
+	if s.ctx.Err() != nil {
+		return true
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.phase != PhaseQuestions
@@ -555,10 +676,17 @@ func (s *server) handleSecret(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-	// One fixed buffer (the body is limited to MaxBody): growing would
-	// leave copies of the secret behind.
-	buf := make([]byte, MaxBody)
+	// One fixed buffer, one byte over the limit to tell an oversized body
+	// (refused, never truncated): growing would leave copies of the secret
+	// behind.
+	buf := make([]byte, MaxBody+1)
 	n, err := io.ReadFull(r.Body, buf)
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) || n > MaxBody {
+		clear(buf)
+		writeJSONError(w, http.StatusRequestEntityTooLarge, "the answer is too long")
+		return
+	}
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		clear(buf)
 		writeJSONError(w, http.StatusBadRequest, "invalid request")
@@ -594,10 +722,10 @@ func (s *server) handleReveal(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleZip(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	written := s.written
+	available := s.zipAvailable()
 	s.mu.Unlock()
-	if !written {
-		writeJSONError(w, http.StatusConflict, "the files are not written yet")
+	if !available {
+		writeJSONError(w, http.StatusConflict, "the zip is offered by the first run (setup-web) once the files are written")
 		return
 	}
 	var buf bytes.Buffer

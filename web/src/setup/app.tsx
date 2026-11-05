@@ -162,6 +162,16 @@ function Flow({
               </a>
             </Button>
             <p className="mt-2 max-w-md text-xs text-muted-foreground">{T.zipHint}</p>
+            {status.zipNotes && status.zipNotes.length > 0 && (
+              <div className="mt-3 max-w-md">
+                <p className="text-xs font-semibold">{T.zipNotesHeading}</p>
+                <ul className="mt-1 list-disc pl-4 text-xs text-muted-foreground">
+                  {status.zipNotes.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
         <FinishButton onFinished={onFinished} />

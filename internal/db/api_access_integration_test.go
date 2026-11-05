@@ -27,8 +27,6 @@ import (
 // deploy/postgres/init/20-bekup-external.sh, the grant sync and privilege
 // audit, and the api functions of migration 00037.
 
-const latestMigration = 39
-
 func (d testDB) externalPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	return d.pool(t, d.externalURL)
@@ -43,8 +41,12 @@ func TestExternalRoleAllowlist(t *testing.T) {
 	if err := db.CheckExternalRole(ctx, ext); err != nil {
 		t.Fatalf("CheckExternalRole: %v", err)
 	}
-	if v, err := sqlc.New(ext).ExternalSchemaVersion(ctx); err != nil || v != latestMigration {
-		t.Fatalf("api.schema_version() = %d, %v", v, err)
+	latest, err := db.LatestMigrationVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, err := sqlc.New(ext).ExternalSchemaVersion(ctx); err != nil || int64(v) != latest {
+		t.Fatalf("api.schema_version() = %d, %v; want %d", v, err, latest)
 	}
 	// Other roles' sessions are refused.
 	for name, p := range map[string]*pgxpool.Pool{"app": d.appPool(t), "owner": d.ownerPool(t)} {
