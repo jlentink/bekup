@@ -80,6 +80,7 @@ export const NotificationEventPreferenceFields = graphql(`
       priority
       severity
       perJob
+      offeredChannels
     }
     channels {
       channel
@@ -257,6 +258,60 @@ export const VerifyEmailMutation = graphql(`
       id
       emailVerified
       emailVerifiedAt
+    }
+  }
+`);
+
+/* ---- Periodic summary (D-226) ---- */
+
+export const SummarySettingsFields = graphql(`
+  fragment SummarySettingsFields on MySummarySettings {
+    settings {
+      frequency
+      hour
+      weekday
+      monthDay
+      timezone
+    }
+    custom
+    defaults {
+      frequency
+      hour
+      weekday
+      monthDay
+      timezone
+    }
+    nextSummaryAt
+    lastSentAt
+    lastOutcome
+    lastOutcomeAt
+    emailVerified
+    visibleJobs
+  }
+`);
+
+export const MySummarySettingsQuery = graphql(`
+  query MySummarySettings {
+    mySummarySettings {
+      ...SummarySettingsFields
+    }
+  }
+`);
+
+export const SetSummarySettingsMutation = graphql(`
+  mutation SetSummarySettings($input: SummarySettingsInput!) {
+    setSummarySettings(input: $input) {
+      ...SummarySettingsFields
+    }
+  }
+`);
+
+export const SendSummaryPreviewMutation = graphql(`
+  mutation SendSummaryPreview {
+    sendSummaryPreview {
+      periodStart
+      periodEnd
+      emailVerified
     }
   }
 `);

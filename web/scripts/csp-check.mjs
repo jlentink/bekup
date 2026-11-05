@@ -291,6 +291,36 @@ const INFRA_OPERATIONS = {
     },
   }),
   DestinationsList: () => ({ data: { destinations: [] } }),
+  // Stored bytes and the reported space (D-225), with the low-space warning.
+  DestinationStored: () => ({
+    data: {
+      destinationUsage: [
+        {
+          __typename: "DestinationUsage",
+          destinationId: INFRA_DEST_ID,
+          storedBytes: 8.1e10,
+          artifactCount: 96,
+          backupCount: 48,
+        },
+      ],
+    },
+  }),
+  DestinationSpace: () => ({
+    data: {
+      destinationSpace: {
+        __typename: "DestinationSpace",
+        destinationId: INFRA_DEST_ID,
+        status: "AVAILABLE",
+        reason: null,
+        totalBytes: 5e11,
+        freeBytes: 3e10,
+        usedBytes: 4.7e11,
+        newestSetBytes: 1.7e9,
+        low: true,
+        checkedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    },
+  }),
   // Destination detail with unrecorded files (D-209): banner, list, delete.
   DestinationDetail: () => ({
     data: {
@@ -655,6 +685,7 @@ const JR_JOB = {
   id: JR_IDS.job,
   name: "Billing DB",
   slug: "billing-db",
+  storage: { __typename: "JobStorage", totalBytes: 3.2e9, backupCount: 12 },
   description: "Nightly backup of the billing cluster.",
   enabled: true,
   nextRunAt: jrSoon(6),
@@ -963,6 +994,48 @@ const JOBS_RUNS_OPERATIONS = {
     },
   }),
   JobDetail: () => ({ data: { job: JR_JOB } }),
+  // Storage of the job (D-225): totals, per destination, newest, trend.
+  JobStorage: () => ({
+    data: {
+      job: {
+        __typename: "Job",
+        id: JR_IDS.job,
+        storage: {
+          __typename: "JobStorage",
+          totalBytes: 3.2e9,
+          artifactCount: 24,
+          backupCount: 12,
+          perDestination: [
+            ["d1", "vault-disk", "DISK", false, 1.6e9],
+            ["d2", "old-nas", "SFTP", true, 1.6e9],
+          ].map(([destinationId, name, type, deleted, storedBytes]) => ({
+            __typename: "JobStorageDestination",
+            destinationId,
+            name,
+            type,
+            deleted,
+            storedBytes,
+            artifactCount: 12,
+            backupCount: 6,
+          })),
+          newestRun: {
+            __typename: "JobStorageRun",
+            runId: JR_IDS.run,
+            status: "SUCCESS",
+            at: jrSoon(-18),
+            bytes: 2.7e8,
+          },
+          trend: Array.from({ length: 12 }, (_, i) => ({
+            __typename: "JobStorageRun",
+            runId: `0b6c3f7e-0000-4000-8000-0000000003${String(i).padStart(2, "0")}`,
+            status: i === 5 ? "PARTIAL" : "SUCCESS",
+            at: jrSoon(-18 - 24 * (11 - i)),
+            bytes: 2.2e8 + i * 4e6,
+          })),
+        },
+      },
+    },
+  }),
   // External API tokens (D-220): the job's API access panel, the admin
   // page, the create dialog and the show-once dialog.
   ApiTokens: () => ({ data: { apiTokens: API_TOKENS } }),
@@ -1703,7 +1776,8 @@ function ntInbox() {
   };
 }
 
-function ntRow(type, label, group, mandatory) {
+function ntRow(type, label, group, mandatory, offered = ["INBOX", "EMAIL", "WEBHOOK"]) {
+  const summary = group === "SUMMARY";
   return {
     __typename: "NotificationEventPreference",
     event: {
@@ -1715,27 +1789,30 @@ function ntRow(type, label, group, mandatory) {
       mandatory,
       priority: type.endsWith("started") ? "LOW" : "NORMAL",
       severity: mandatory ? "CRITICAL" : "ERROR",
-      perJob: !mandatory,
+      perJob: !mandatory && !summary,
+      offeredChannels: offered,
     },
-    channels: ["INBOX", "EMAIL", "WEBHOOK"].map((channel) => ({
+    channels: offered.map((channel) => ({
       __typename: "NotificationChannelPreference",
       channel,
       enabled:
-        channel === "INBOX" || (channel === "EMAIL" && (mandatory || type.endsWith("failed"))),
+        channel === "INBOX" ||
+        (channel === "EMAIL" && (mandatory || summary || type.endsWith("failed"))),
       source: mandatory && channel !== "WEBHOOK" ? "MANDATORY" : "DEFAULT",
       locked: mandatory && channel !== "WEBHOOK",
     })),
-    jobOverrides: mandatory
-      ? []
-      : [
-          {
-            __typename: "NotificationJobOverride",
-            jobId: NT_IDS.job,
-            jobName: "Billing DB",
-            channel: "WEBHOOK",
-            enabled: true,
-          },
-        ],
+    jobOverrides:
+      mandatory || summary
+        ? []
+        : [
+            {
+              __typename: "NotificationJobOverride",
+              jobId: NT_IDS.job,
+              jobName: "Billing DB",
+              channel: "WEBHOOK",
+              enabled: true,
+            },
+          ],
   };
 }
 
@@ -1755,10 +1832,37 @@ function ntPrefs() {
         ntRow("backup.started", "Backup started", "BACKUP", false),
         ntRow("backup.failed", "Backup failed", "BACKUP", false),
       ]),
+      group("SUMMARY", "Summary", [
+        ntRow("summary.periodic", "Periodic summary", "SUMMARY", false, ["INBOX", "EMAIL"]),
+      ]),
       group("SECURITY", "Security", [
         ntRow("security.account", "Security alert", "SECURITY", true),
       ]),
     ],
+  };
+}
+
+const NT_SUMMARY_SETTINGS = {
+  __typename: "SummarySettings",
+  frequency: "WEEKLY",
+  hour: 8,
+  weekday: 1,
+  monthDay: 1,
+  timezone: "UTC",
+};
+
+function ntSummary() {
+  return {
+    __typename: "MySummarySettings",
+    settings: NT_SUMMARY_SETTINGS,
+    custom: false,
+    defaults: NT_SUMMARY_SETTINGS,
+    nextSummaryAt: "2026-11-09T08:00:00Z",
+    lastSentAt: "2026-11-02T08:00:00Z",
+    lastOutcome: "sent",
+    lastOutcomeAt: "2026-11-02T08:00:00Z",
+    emailVerified: false,
+    visibleJobs: 2,
   };
 }
 
@@ -1785,6 +1889,18 @@ const NOTIFICATIONS_OPERATIONS = {
   NotificationBell: () => ({ data: ntInbox() }),
   NotificationsInbox: () => ({ data: ntInbox() }),
   MyNotificationPreferences: () => ({ data: { myNotificationPreferences: ntPrefs() } }),
+  MySummarySettings: () => ({ data: { mySummarySettings: ntSummary() } }),
+  SetSummarySettings: () => ({ data: { setSummarySettings: { ...ntSummary(), custom: true } } }),
+  SendSummaryPreview: () => ({
+    data: {
+      sendSummaryPreview: {
+        __typename: "SummaryPreviewResult",
+        periodStart: "2026-11-02T08:00:00Z",
+        periodEnd: "2026-11-05T10:00:00Z",
+        emailVerified: false,
+      },
+    },
+  }),
   MyNotificationChannels: () => ({
     data: {
       myNotificationChannels: {
@@ -2488,6 +2604,8 @@ async function exercise(page, base, colorScheme) {
   await page.getByRole("switch", { name: "Lock every upload" }).click();
   await page.getByLabel("Retention (days)").waitFor();
   await page.goto(`${base}/destinations/${INFRA_DEST_ID}`);
+  await page.getByTestId("space-bar").waitFor();
+  await page.getByTestId("space-low").waitFor();
   await page.getByTestId("unrecorded-banner").waitFor();
   await page.getByTestId("unrecorded-file").first().waitFor();
   await page.getByRole("button", { name: /^Delete billing-db\// }).click();
@@ -2553,6 +2671,8 @@ async function exercise(page, base, colorScheme) {
   // The job's API access panel (D-220): tokens with the any-address
   // badge, the curl examples, the create dialog and the show-once dialog.
   await page.goto(`${base}/jobs/${JR_IDS.job}`);
+  await page.getByTestId("storage-trend").waitFor();
+  await page.getByTestId("storage-destination").first().waitFor();
   await page.getByTestId("api-access-panel").getByText("Any address").first().waitFor();
   await page.getByRole("region", { name: "curl examples" }).first().waitFor();
   await page.getByRole("button", { name: "Copy: 1. Start a backup" }).first().waitFor();
@@ -2602,6 +2722,13 @@ async function exercise(page, base, colorScheme) {
   await page.keyboard.press("Escape");
   await page.goto(`${base}/profile/notifications`);
   await page.getByRole("switch", { name: "Backup failed: E-mail", exact: true }).waitFor();
+  // The periodic summary section (D-226).
+  const summary = page.getByRole("region", { name: "Summary e-mail" });
+  await summary.getByText("Monthly", { exact: true }).click();
+  await summary.getByLabel("Day of the month").selectOption("15");
+  await summary.getByRole("button", { name: "Save" }).click();
+  await summary.getByRole("button", { name: "Send a preview now" }).click();
+  await page.getByText(/Preview sent to your inbox/).waitFor();
   await page.getByText("Disabled after 5 permanent failures.").waitFor();
   await page.getByRole("button", { name: "Send test" }).click();
   await page.getByTestId("webhook-test-result").waitFor();

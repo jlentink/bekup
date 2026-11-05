@@ -90,3 +90,13 @@ max_run_duration = "12h"
 max_log_lines = 10000
 # Longer log lines are truncated.
 max_log_line_bytes = 4096
+
+[log]
+# debug | info | warn | error. --log-level overrides it (but the compose
+# lint does not allow changing the runner's command: set it here and
+# recreate the runner). debug also logs every refused target address with
+# the reason (runner_target_denied: Docker network and subnet, runner
+# network, deny list, not in the allowlist, always-denied category).
+level = "info"
+# json | text (text is the default in dev mode)
+format = "json"

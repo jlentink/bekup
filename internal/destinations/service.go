@@ -87,6 +87,11 @@ type Options struct {
 	MaxConcurrent int
 	// OperationTimeout bounds one test or host-key fetch (default 60s).
 	OperationTimeout time.Duration
+	// SpaceTimeout bounds one space check (default DefaultSpaceTimeout);
+	// SpaceCacheTTL is how long its answer is reused (default
+	// DefaultSpaceCacheTTL; failures at most DefaultSpaceFailureTTL).
+	SpaceTimeout  time.Duration
+	SpaceCacheTTL time.Duration
 	// Logger receives operational events (never secrets).
 	Logger *slog.Logger
 	// TestFailed is told about every failed destination test (the
@@ -107,6 +112,7 @@ type Actor struct {
 type Service struct {
 	o       Options
 	limiter *serviceutil.Limiter
+	space   spaceCache
 }
 
 // New validates o and returns the service.
@@ -119,6 +125,12 @@ func New(o Options) (*Service, error) {
 	}
 	if o.OperationTimeout <= 0 {
 		o.OperationTimeout = 60 * time.Second
+	}
+	if o.SpaceTimeout <= 0 {
+		o.SpaceTimeout = DefaultSpaceTimeout
+	}
+	if o.SpaceCacheTTL <= 0 {
+		o.SpaceCacheTTL = DefaultSpaceCacheTTL
 	}
 	if o.Logger == nil {
 		o.Logger = slog.Default()
@@ -1122,10 +1134,13 @@ type Usage struct {
 	Type          Type
 	StoredBytes   int64
 	ArtifactCount int64
+	// BackupCount is the number of backups (runs) with present files.
+	BackupCount int64
 }
 
 // Usage returns, per destination that is not deleted, the bytes and
-// number of its present artifacts (one aggregate query). The caller is
+// number of its present artifacts and the number of backups they belong
+// to (one aggregate query). The caller is
 // authorized by the GraphQL layer (staff).
 func (s *Service) Usage(ctx context.Context) ([]Usage, error) {
 	rows, err := sqlc.New(s.o.DB).DestinationUsage(ctx)
@@ -1134,7 +1149,7 @@ func (s *Service) Usage(ctx context.Context) ([]Usage, error) {
 	}
 	out := make([]Usage, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, Usage{ID: r.ID, Name: r.Name, Type: Type(r.Type), StoredBytes: r.StoredBytes, ArtifactCount: r.ArtifactCount})
+		out = append(out, Usage{ID: r.ID, Name: r.Name, Type: Type(r.Type), StoredBytes: r.StoredBytes, ArtifactCount: r.ArtifactCount, BackupCount: r.BackupCount})
 	}
 	return out, nil
 }

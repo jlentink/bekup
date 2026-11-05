@@ -39,6 +39,11 @@ const propfindBody = `<?xml version="1.0" encoding="utf-8"?>` +
 	`<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/>` +
 	`<d:getlastmodified/><d:getetag/></d:prop></d:propfind>`
 
+// quotaBody asks for the RFC 4331 quota properties (D-225).
+const quotaBody = `<?xml version="1.0" encoding="utf-8"?>` +
+	`<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:quota-available-bytes/>` +
+	`<d:quota-used-bytes/></d:prop></d:propfind>`
+
 // principalBody asks for the current user's principal (Nextcloud user id).
 const principalBody = `<?xml version="1.0" encoding="utf-8"?>` +
 	`<d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`
@@ -52,6 +57,11 @@ type entry struct {
 	mod   time.Time
 	etag  string
 	princ string // current-user-principal href
+	// quotaFree and quotaUsed are the RFC 4331 quota properties (-1 when
+	// not reported or not a byte count: Nextcloud reports negative values
+	// for "unlimited" and "unknown").
+	quotaFree int64
+	quotaUsed int64
 }
 
 func (e *entry) name() string {
@@ -71,6 +81,8 @@ type xmlProp struct {
 	Principal     struct {
 		Href string `xml:"DAV: href"`
 	} `xml:"DAV: current-user-principal"`
+	QuotaAvailable string `xml:"DAV: quota-available-bytes"`
+	QuotaUsed      string `xml:"DAV: quota-used-bytes"`
 }
 
 type xmlResponse struct {
@@ -168,7 +180,7 @@ func toEntry(x *xmlResponse) (entry, bool) {
 	if !ok {
 		return entry{}, false
 	}
-	e := entry{segs: segs, size: -1}
+	e := entry{segs: segs, size: -1, quotaFree: -1, quotaUsed: -1}
 	for i := range x.Propstat {
 		ps := &x.Propstat[i]
 		if !statusOK(ps.Status) {
@@ -194,8 +206,29 @@ func toEntry(x *xmlResponse) (entry, bool) {
 		if v := strings.TrimSpace(p.Principal.Href); v != "" {
 			e.princ = v
 		}
+		if n, ok := quotaBytes(p.QuotaAvailable); ok {
+			e.quotaFree = n
+		}
+		if n, ok := quotaBytes(p.QuotaUsed); ok {
+			e.quotaUsed = n
+		}
 	}
 	return e, true
+}
+
+// quotaBytes parses an RFC 4331 quota value: a non-negative decimal byte
+// count. Negative values (Nextcloud: -1 not computed, -2 unknown, -3
+// unlimited), fractions and anything else are not a count.
+func quotaBytes(v string) (int64, bool) {
+	v = strings.TrimSpace(v)
+	if v == "" || len(v) > 20 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // hrefSegments decodes an href (absolute URL or absolute path) into path
@@ -299,10 +332,16 @@ func foldSegment(s string) string {
 // propfind runs PROPFIND with depth on segs. A missing resource returns
 // storage.ErrNotFound.
 func (d *Destination) propfind(ctx context.Context, op string, segs []string, coll bool, depth string) ([]entry, error) {
+	return d.propfindProps(ctx, op, segs, coll, depth, propfindBody)
+}
+
+// propfindProps is propfind with another request body (the properties
+// asked for).
+func (d *Destination) propfindProps(ctx context.Context, op string, segs []string, coll bool, depth, body string) ([]entry, error) {
 	for i := 0; ; i++ {
 		resp, err := d.send(ctx, op, request{
 			method: "PROPFIND", segs: segs, coll: coll, depth: depth, bounded: true,
-			body: strings.NewReader(propfindBody), length: int64(len(propfindBody)),
+			body: strings.NewReader(body), length: int64(len(body)),
 			header: http.Header{"Content-Type": {"application/xml; charset=utf-8"}},
 		})
 		if err != nil {

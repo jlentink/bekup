@@ -32,10 +32,15 @@ type Content struct {
 type names struct {
 	job, connection, destination string
 	jobDeleted                   bool
+	// summary is the content of a summary.periodic event (D-226), built
+	// for its recipient; nil when it cannot be built.
+	summary *SummaryContent
 }
 
-// displayName makes an admin-entered name safe for every channel: no
+// DisplayName makes an admin-entered name safe for every channel: no
 // control characters, at most 100 characters.
+func DisplayName(s string) string { return displayName(s) }
+
 func displayName(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
@@ -79,6 +84,13 @@ func (s *Service) loadNames(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notif
 			return n, fmt.Errorf("notify: load destination: %w", err)
 		}
 		n.destination = displayName(name)
+	}
+	if EventType(ev.Type) == SummaryPeriodic && s.o.Summaries != nil {
+		c, err := s.o.Summaries.Render(ctx, q, ev)
+		if err != nil {
+			return n, fmt.Errorf("notify: summary content: %w", err)
+		}
+		n.summary = c
 	}
 	return n, nil
 }
@@ -269,6 +281,12 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 				path = "/jobs"
 			}
 		}
+	case GroupSummary:
+		path = "/"
+		body = "Your periodic summary could not be put together; open the dashboard for the current state."
+		if n.summary != nil {
+			body = n.summary.Body
+		}
 	case GroupSecurity:
 		if EventType(ev.Type) == SecurityAccount {
 			path = "/profile/security"
@@ -291,6 +309,9 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 	title := m.Label
 	if job != "" && m.Subject == SubjectJob {
 		title = m.Label + ": " + job
+	}
+	if n.summary != nil {
+		title = n.summary.Title
 	}
 	if code := str(d, "error_code"); code != "" {
 		body += " Reason: " + code + "."
@@ -353,6 +374,10 @@ func (s *Service) data(ev *sqlc.NotificationEvent, m Meta, n names, d Detail, c 
 
 // emailFor renders the e-mail of c (the 5.1 layout).
 func emailFor(ev *sqlc.NotificationEvent, c Content, n names) (email.Content, error) {
+	if n.summary != nil {
+		// The periodic summary has its own layout (D-226).
+		return email.Render(n.summary.Notice)
+	}
 	details := []email.Detail{{Label: "Event", Value: ev.Type}}
 	if n.job != "" {
 		details = append(details, email.Detail{Label: "Job", Value: n.job})

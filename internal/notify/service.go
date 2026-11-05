@@ -90,12 +90,31 @@ type Options struct {
 	MaxPerUserPerHour int
 	// FailurePolicy auto-disables failing webhooks (D-177).
 	FailurePolicy webhook.FailurePolicy
+	// Summaries builds the content of summary.periodic events for their
+	// recipient (internal/notify/summary, D-226); nil: such events show a
+	// fixed text.
+	Summaries SummaryRenderer
 	// Publisher announces new inbox rows on pubsub.NotificationEvents
 	// (IDs only, in the inserting transaction) for the
 	// accountEvents stream (task 5.3b); nil: no live inbox.
 	Publisher *pubsub.Publisher
 	Logger    *slog.Logger
 	Now       func() time.Time
+}
+
+// SummaryRenderer builds the content of a summary.periodic event for its
+// recipient (D-226; *summary.Service). It reads with q (the caller's
+// transaction or the pool) and returns nil when there is nothing to show.
+type SummaryRenderer interface {
+	Render(ctx context.Context, q *sqlc.Queries, ev *sqlc.NotificationEvent) (*SummaryContent, error)
+}
+
+// SummaryContent is a rendered periodic summary: the inbox title and body
+// (counts only) and the e-mail (email.Render layout).
+type SummaryContent struct {
+	Title  string
+	Body   string
+	Notice email.Notice
 }
 
 // Service is the notification core: fan-out, deliveries, the dispatcher,
@@ -211,6 +230,7 @@ func Register(ws *queue.Workers, s *Service) error {
 	if err := queue.Register(ws, &CleanupWorker{s: s}); err != nil {
 		return err
 	}
+
 	if err := ws.AddPeriodic(24*time.Hour, queue.NotifyRetentionDigestArgs{}); err != nil {
 		return err
 	}

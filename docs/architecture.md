@@ -156,7 +156,10 @@ Summaries; the step-by-step flows are in
   webhooks through the SSRF guard, retries, webhook auto-disable). Daily
   `notify_retention_digest` and `notify_cleanup` on the maintenance queue;
   `missed_backup_check` every 5 minutes emits `backup.missed` (dead-man,
-  `internal/notify/missed`, D-188). Security alerts (task 5.5, D-190):
+  `internal/notify/missed`, D-188); `notify_summary_tick` every 5 minutes
+  emits each user's due periodic summary (`summary.periodic`, content built
+  at delivery from the recipient's access, `internal/notify/summary`,
+  D-226). Security alerts (task 5.5, D-190):
   audited security actions map to the mandatory `security.system` /
   `security.account` events in the audit entry's transaction (also for
   `bekup admin|certs|…` CLI entries, which only write the outbox); the

@@ -161,6 +161,31 @@ and the key operations `setJobPassphrase`, `generateJobPassphrase`,
 `disableJobEncryption` and `exportJobPassphrases` (see
 [Encryption](encryption.md) and `docs/reference/schema.graphql`).
 
+### Storage
+
+The job page's **Storage** section shows what the job's backups occupy
+(D-225; everyone who may view the job):
+
+- **Stored in total**: the size of the job's backup files bekup tracks as
+  present, on every destination (each destination holds its own copy, so
+  every copy counts), with the number of backups and files;
+- **Newest backup**: the size of one copy of the newest successful backup
+  that is still stored;
+- **Per destination**: the same totals per destination, including deleted
+  destinations that still hold files;
+- **Backup size**: a small bar chart of the newest 30 successful or partial
+  backups, oldest first (one copy each; partial backups in the partial
+  color; hover a bar for its date and size).
+
+The jobs list has a **Stored** column with the total. In GraphQL this is
+`Job.storage { totalBytes artifactCount backupCount perDestination {...}
+newestRun {...} trend {...} }`; the totals are one aggregate per page of
+jobs, the details are read per job. Backup owners see their own jobs'
+numbers, including the names of the destinations that hold the files
+(their runs' backup files already show them). The free space of a
+destination is on its page (see
+[Destinations](destinations.md#storage-and-free-space)).
+
 ### Test restores
 
 A job can regularly prove that its backups restore completely (task 4.6,

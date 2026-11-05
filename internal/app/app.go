@@ -41,6 +41,7 @@ import (
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/email"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
@@ -187,6 +188,9 @@ type App struct {
 	// notifier is the notification core (task 5.3): outbox dispatcher,
 	// fan-out and delivery workers, post-commit emit hooks.
 	notifier *notify.Service
+	// summary is the periodic summary (D-226): tick, content, settings
+	// API.
+	summary *summary.Service
 	// notifyAPI backs the notification GraphQL fields (task 5.3b, serve
 	// only).
 	notifyAPI *notify.API
@@ -724,6 +728,7 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		Email:         a.email,
 		SystemHealth:  a.health,
 		Notifications: a.notifyAPI,
+		Summary:       a.summary,
 		Egress:        a.egress,
 		AuditChain:    a.auditor,
 		ConfigReload:  a.reloadAPI,

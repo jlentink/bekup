@@ -58,7 +58,9 @@ describe("connections list", () => {
     );
     expect(within(table).getByText("Pin valid")).toBeInTheDocument();
     expect(within(table).getByText("Insecure transport")).toBeInTheDocument();
-    expect(within(table).getByText("Tunnel")).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Connection" })).toBeInTheDocument();
+    expect(within(table).getByText("SSH tunnel")).toBeInTheDocument();
+    expect(within(table).getByText("Direct")).toBeInTheDocument();
     expect(within(table).getByText("set 1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New connection" })).toBeInTheDocument();
   });

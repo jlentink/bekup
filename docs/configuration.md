@@ -95,7 +95,8 @@ The three files use the same `BEKUP_` prefix; each process only reads the
 keys of its own file. Sections with the same name share their variables
 (`BEKUP_LISTEN_ADDRESS` is `[listen] address` of runner.toml and of
 external-api.toml; `BEKUP_DATABASE_*` is `[database]` of bekup.toml and of
-external-api.toml), so set them only in the environment of the one process
+external-api.toml; `BEKUP_LOG_LEVEL` is `[log] level` of bekup.toml and of
+runner.toml), so set them only in the environment of the one process
 they are meant for: the external API refuses to start when its database
 login is not `bekup_external`.
 
@@ -493,6 +494,9 @@ Generated from the config structs; regenerate with
 | `max_per_user_per_hour` | `BEKUP_NOTIFICATIONS_MAX_PER_USER_PER_HOUR` | int | `30` | live | Per-user flood rule: e-mail (or webhook) notifications one user gets within an hour; the next one becomes a single summary and further ones stay in the in-app inbox until the rate drops. Security alerts are exempt (1-10000). |
 | `collapse_window` | `BEKUP_NOTIFICATIONS_COLLAPSE_WINDOW` | duration | `'15m0s'` | live | Low-priority *.started events (backup.started, restore.started) of the same job within this window collapse into the first one (1s-24h). |
 | `webhook_failure_threshold` | `BEKUP_NOTIFICATIONS_WEBHOOK_FAILURE_THRESHOLD` | int | `5` | live | Permanent webhook failures (redirect, 4xx, refused address, TLS error) since the last success after which a webhook (personal or shared) is auto-disabled; 10 consecutive failures spanning at least 24 hours also disable it (1-1000). |
+| `summary_default_frequency` | `BEKUP_NOTIFICATIONS_SUMMARY_DEFAULT_FREQUENCY` | string | `'weekly'` | restart | How often users who did not choose their own summary settings get the periodic summary (in-app inbox and e-mail): daily, every_other_day, weekly, monthly or never. Weekly summaries go out on Mondays, monthly ones on the 1st. |
+| `summary_default_hour` | `BEKUP_NOTIFICATIONS_SUMMARY_DEFAULT_HOUR` | int | `8` | restart | The local hour (0-23) of the default summary, in summary_default_timezone. |
+| `summary_default_timezone` | `BEKUP_NOTIFICATIONS_SUMMARY_DEFAULT_TIMEZONE` | string | `'UTC'` | restart | The IANA time zone (such as UTC or Europe/Amsterdam) of the default summary time and of its times. A user's own settings use the zone saved with them (their browser's zone). |
 
 #### `[netguard]`
 
@@ -580,6 +584,13 @@ Generated from the config structs; regenerate with
 | `max_run_duration` | `BEKUP_LIMITS_MAX_RUN_DURATION` | duration | `'12h0m0s'` | Hard upper bound for a single container run. |
 | `max_log_lines` | `BEKUP_LIMITS_MAX_LOG_LINES` | int | `10000` | Maximum log lines kept per run. |
 | `max_log_line_bytes` | `BEKUP_LIMITS_MAX_LOG_LINE_BYTES` | int | `4096` | Maximum length of a single log line in bytes (longer lines are truncated). |
+
+#### `[log]`
+
+| Key | Env override | Type | Default | Description |
+|---|---|---|---|---|
+| `level` | `BEKUP_LOG_LEVEL` | string | `'info'` | Log level: debug, info, warn or error (--log-level overrides it). debug also logs every refused target address with the reason (Docker network and subnet, runner network, deny list, not in the allowlist, always-denied category); restart the runner after a change. |
+| `format` | `BEKUP_LOG_FORMAT` | string | `'json'` | Log format: json or text (text is the default in dev mode). |
 
 ### `external-api.toml`
 

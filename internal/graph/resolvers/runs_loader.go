@@ -47,6 +47,9 @@ type runLoader struct {
 	// holds are the retention holds of a page of jobs
 	// (Job.retentionHolds, D-209).
 	holds map[uuid.UUID][]retention.HoldView
+	// storage are the storage totals of a page of jobs (Job.storage,
+	// D-225).
+	storage map[uuid.UUID]runstate.JobStorageTotals
 }
 
 type runLoaderKey struct{}
@@ -63,6 +66,7 @@ func WithRunLoader(ctx context.Context) context.Context {
 		activity:  map[uuid.UUID]auth.UserActivity{},
 		channels:  map[uuid.UUID][]notify.JobAttachment{},
 		holds:     map[uuid.UUID][]retention.HoldView{},
+		storage:   map[uuid.UUID]runstate.JobStorageTotals{},
 	})
 }
 

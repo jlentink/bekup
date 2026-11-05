@@ -2,9 +2,17 @@ import type {
   NotificationChannelType,
   NotificationGroup,
   NotificationSeverity,
+  SummaryFrequency,
 } from "@/graphql/gen/graphql";
 
 import type { SubjectKind, WebhookUrlProblem } from "./model";
+
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${String(n)}th`;
+  const suffix = ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${String(n)}${suffix}`;
+}
 
 /**
  * Strings of the notification center and the personal notification
@@ -43,6 +51,7 @@ export const notificationsMessages = {
     unreadMark: "Unread",
   },
   subject: {
+    dashboard: "Open the dashboard",
     run: "Open the run",
     job: "Open the job",
     restore: "Open the restore",
@@ -62,6 +71,7 @@ export const notificationsMessages = {
     RESTORE: "Restores",
     RETENTION: "Retention & storage",
     CONFIG: "Jobs & configuration",
+    SUMMARY: "Summary",
     SECURITY: "Security",
   } satisfies Record<NotificationGroup, string>,
   channels: {
@@ -93,6 +103,46 @@ export const notificationsMessages = {
       "Your e-mail address is not verified yet: e-mail notifications are skipped until you verify it.",
     noWebhooks: "You have no active webhook: the webhook column has no effect until you add one.",
     loadFailed: "Your notification preferences could not be loaded.",
+    notOffered: "Not available for this event",
+  },
+  summary: {
+    heading: "Summary e-mail",
+    lead: "A regular overview of the backups you can see: what ran, what failed and what needs attention. It goes to your inbox and, with a verified address, by e-mail.",
+    off: "Off",
+    frequency: "How often",
+    frequencies: {
+      DAILY: { label: "Daily", hint: "Every day" },
+      EVERY_OTHER_DAY: { label: "Every other day", hint: "Counted from the last one" },
+      WEEKLY: { label: "Weekly", hint: "On one weekday" },
+      MONTHLY: { label: "Monthly", hint: "On one day, 1 to 28" },
+      NEVER: { label: "Never", hint: "No summary" },
+    } satisfies Record<SummaryFrequency, { label: string; hint: string }>,
+    hour: "Time",
+    weekday: "Weekday",
+    monthDay: "Day of the month",
+    monthDayOption: (d: number) => `The ${ordinal(d)}`,
+    timezone: "Time zone",
+    timezoneHint: "IANA name, e.g. Europe/Amsterdam. Daylight saving is handled.",
+    weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    next: "Next summary",
+    nextNever: "None: the summary is off",
+    nextAfterSave: "Save to schedule the next summary with these settings.",
+    last: (when: string) => `Last summary ${when}`,
+    lastNoJobs: (when: string) => `Skipped ${when}: you could see no backup jobs`,
+    defaults: (desc: string) =>
+      `You have not chosen yet, so the server's default applies: ${desc}. Saving keeps your choice with the time zone shown here.`,
+    describe: (f: string, at: string, zone: string) => `${f}, ${at} (${zone})`,
+    emailUnverified:
+      "Your e-mail address is not verified: summaries reach only your inbox until you verify it.",
+    noJobs: "You can see no backup jobs, so no summary is sent.",
+    save: "Save",
+    saved: "Summary settings saved.",
+    preview: "Send a preview now",
+    previewSent: (email: boolean) =>
+      email
+        ? "Preview sent to your inbox and by e-mail."
+        : "Preview sent to your inbox (your address is not verified).",
+    loadFailed: "Your summary settings could not be loaded.",
   },
   overrides: {
     heading: "Per-job overrides",

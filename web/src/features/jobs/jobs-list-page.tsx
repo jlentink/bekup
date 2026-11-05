@@ -19,7 +19,7 @@ import {
 import { RunStatusBadge } from "@/features/runs/run-status";
 import type { JobFilter, JobsListQuery as JobsListResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
-import { formatDateTime, formatRelative } from "@/lib/format";
+import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
 
 import { EncryptionBadge } from "./encryption-badge";
 import { NativeSelect } from "./fields";
@@ -57,9 +57,13 @@ const T = {
     next: "Next run",
     last: "Last run",
     encryption: "Encryption",
+    stored: "Stored",
     owners: "Owners",
     enabled: "Enabled",
   },
+  storedTitle: (n: number) =>
+    `Present backup files on all destinations (every copy counts) · ${n === 1 ? "1 backup" : `${String(n)} backups`}`,
+  storedNone: "None",
   never: "Never run",
   noNext: "Not planned",
   paused: "Disabled",
@@ -195,6 +199,7 @@ export function JobsListPage() {
               <TableHead>{T.cols.next}</TableHead>
               <TableHead>{T.cols.last}</TableHead>
               <TableHead>{T.cols.encryption}</TableHead>
+              <TableHead className="text-right">{T.cols.stored}</TableHead>
               {flags.staff ? <TableHead>{T.cols.owners}</TableHead> : null}
               <TableHead className="text-right">{T.cols.enabled}</TableHead>
             </TableRow>
@@ -203,7 +208,7 @@ export function JobsListPage() {
             {loading && rows.length === 0
               ? Array.from({ length: 4 }, (_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={flags.staff ? 8 : 7}>
+                    <TableCell colSpan={flags.staff ? 9 : 8}>
                       <Skeleton className="h-5 w-full" />
                     </TableCell>
                   </TableRow>
@@ -289,6 +294,15 @@ function JobListRow({ job, staff }: { job: JobRow; staff: boolean }) {
       </TableCell>
       <TableCell>
         <EncryptionBadge encryption={job.encryption} />
+      </TableCell>
+      <TableCell className="text-right whitespace-nowrap" data-testid="job-stored">
+        {job.storage.totalBytes > 0 ? (
+          <span className="font-mono text-xs" title={T.storedTitle(job.storage.backupCount)}>
+            {formatBytes(job.storage.totalBytes)}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">{T.storedNone}</span>
+        )}
       </TableCell>
       {staff ? (
         <TableCell>

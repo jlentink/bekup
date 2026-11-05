@@ -22,8 +22,11 @@ import type { DestinationsListQuery as ListResult } from "@/graphql/gen/graphql"
 import { userMessage } from "@/lib/api-error";
 import { formatRelative } from "@/lib/format";
 
+import { StoredCell } from "./destination-storage";
 import { LOCK_LABEL, TYPE_LABEL } from "./labels";
 import { DestinationsListQuery } from "./operations";
+import { ST } from "./storage-text";
+import { useStoredByDestination } from "./use-stored";
 
 type Row = ListResult["destinations"][number];
 
@@ -57,6 +60,7 @@ export function DestinationsPage() {
     fetchPolicy: "cache-and-network",
   });
   const list = data?.destinations;
+  const stored = useStoredByDestination();
 
   return (
     <div className="flex flex-col gap-8">
@@ -117,6 +121,7 @@ export function DestinationsPage() {
                 <TableHead>Type</TableHead>
                 <TableHead>Protection</TableHead>
                 <TableHead>Last test</TableHead>
+                <TableHead className="text-right">{ST.column}</TableHead>
                 <TableHead className="text-right">Updated</TableHead>
               </TableRow>
             </TableHeader>
@@ -148,6 +153,11 @@ export function DestinationsPage() {
                   </TableCell>
                   <TableCell>
                     <LastTestCell test={d.lastTest} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {stored.failed ? null : (
+                      <StoredCell row={stored.byId.get(d.id)} loaded={stored.loaded} />
+                    )}
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
                     {formatRelative(d.updatedAt)}

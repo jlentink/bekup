@@ -32,6 +32,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
@@ -106,6 +107,10 @@ type Resolver struct {
 	// (task 5.3b, D-197; nil: those fields fail with an internal error,
 	// accountEvents delivers session events only).
 	Notifications *notify.API
+	// Summary backs mySummarySettings, setSummarySettings and
+	// sendSummaryPreview (D-226; nil: those fields fail with an internal
+	// error).
+	Summary *summary.Service
 	// Egress backs ssrfAllowlist and updateSsrfAllowlist (D-196; nil:
 	// those fields fail with an internal error).
 	Egress *egress.Service

@@ -66,21 +66,20 @@ func newRunnerCmd(g *globalFlags) *cobra.Command {
 	}
 }
 
-// loadRunnerConfig loads runner.toml and builds the redacting logger.
-// runner.toml has no [log] section: --log-level sets the level, the format
-// is json (text in dev mode). Load warnings are logged.
+// loadRunnerConfig loads runner.toml and builds the redacting logger
+// (--log-level overrides log.level; text is the default format in dev
+// mode). Load warnings are logged.
 func loadRunnerConfig(c *cobra.Command, g *globalFlags) (*config.Result[config.Runner], *slog.Logger, error) {
 	opts := g.options(c)
-	opts.Flags = nil
 	res, err := config.LoadRunner(opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid runner configuration:\n%w", err)
 	}
-	format := "json"
-	if res.Dev {
+	format := res.Config.Log.Format
+	if res.Dev && res.Sources["log.format"] == config.SourceDefault {
 		format = "text"
 	}
-	logger, err := logging.New(c.ErrOrStderr(), logging.Options{Level: g.logLevel, Format: format})
+	logger, err := logging.New(c.ErrOrStderr(), logging.Options{Level: res.Config.Log.Level, Format: format})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -223,6 +223,11 @@ type Notifications struct {
 	MaxPerUserPerHour       int      `toml:"max_per_user_per_hour" reload:"live" doc:"Per-user flood rule: e-mail (or webhook) notifications one user gets within an hour; the next one becomes a single summary and further ones stay in the in-app inbox until the rate drops. Security alerts are exempt (1-10000)."`
 	CollapseWindow          Duration `toml:"collapse_window" reload:"live" doc:"Low-priority *.started events (backup.started, restore.started) of the same job within this window collapse into the first one (1s-24h)."`
 	WebhookFailureThreshold int      `toml:"webhook_failure_threshold" reload:"live" doc:"Permanent webhook failures (redirect, 4xx, refused address, TLS error) since the last success after which a webhook (personal or shared) is auto-disabled; 10 consecutive failures spanning at least 24 hours also disable it (1-1000)."`
+	// The periodic summary e-mail (D-226): the defaults of accounts that
+	// did not choose their own summary settings.
+	SummaryDefaultFrequency string `toml:"summary_default_frequency" doc:"How often users who did not choose their own summary settings get the periodic summary (in-app inbox and e-mail): daily, every_other_day, weekly, monthly or never. Weekly summaries go out on Mondays, monthly ones on the 1st."`
+	SummaryDefaultHour      int    `toml:"summary_default_hour" doc:"The local hour (0-23) of the default summary, in summary_default_timezone."`
+	SummaryDefaultTimezone  string `toml:"summary_default_timezone" doc:"The IANA time zone (such as UTC or Europe/Amsterdam) of the default summary time and of its times. A user's own settings use the zone saved with them (their browser's zone)."`
 }
 
 // Netguard holds the bootstrap SSRF allowlist (the admin allowlist lives in
@@ -376,6 +381,9 @@ func DefaultBekup() Bekup {
 			MaxPerUserPerHour:       30,
 			CollapseWindow:          Duration(15 * time.Minute),
 			WebhookFailureThreshold: 5,
+			SummaryDefaultFrequency: "weekly",
+			SummaryDefaultHour:      8,
+			SummaryDefaultTimezone:  "UTC",
 		},
 		Netguard: Netguard{
 			AllowCIDRs: []string{},

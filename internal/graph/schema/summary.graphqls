@@ -1,0 +1,88 @@
+# The periodic summary e-mail (D-226): every user chooses how often (and
+# when, in their own time zone) bekup sends them a summary of the backups
+# they may see, to the in-app inbox and, with a verified address, by
+# e-mail. Without own settings the server's defaults apply
+# (notifications.summary_default_*: weekly, Monday 08:00 UTC).
+
+"How often the periodic summary goes out."
+enum SummaryFrequency {
+  DAILY
+  EVERY_OTHER_DAY
+  "On the weekday of the settings."
+  WEEKLY
+  "On the day of the month of the settings (1-28)."
+  MONTHLY
+  NEVER
+}
+
+"Periodic summary settings."
+type SummarySettings {
+  frequency: SummaryFrequency!
+  "The local hour of the summary (0-23)."
+  hour: Int!
+  "The ISO weekday of weekly summaries (1 = Monday ... 7 = Sunday)."
+  weekday: Int!
+  "The day of monthly summaries (1-28, which every month has)."
+  monthDay: Int!
+  "The IANA time zone of the hour and of the times in the summary."
+  timezone: String!
+}
+
+"Your periodic summary settings and when the next summary goes out."
+type MySummarySettings {
+  "The settings in effect."
+  settings: SummarySettings!
+  "False: you have not saved your own settings; the server's defaults apply."
+  custom: Boolean!
+  "The server's defaults."
+  defaults: SummarySettings!
+  "When the next summary goes out (null: never)."
+  nextSummaryAt: Time
+  "When the last summary went out."
+  lastSentAt: Time
+  "What happened at the last due time: sent, or no_jobs (you could see no backup job, so none was sent)."
+  lastOutcome: String
+  lastOutcomeAt: Time
+  "False: summaries reach only your inbox until you verify your e-mail address."
+  emailVerified: Boolean!
+  "The backup jobs you can see; with none, no summary is sent."
+  visibleJobs: Int!
+}
+
+"Your summary settings (all fields; weekday and monthDay are kept for the other frequencies)."
+input SummarySettingsInput {
+  frequency: SummaryFrequency!
+  "0..23"
+  hour: Int!
+  "1 (Monday) .. 7 (Sunday)"
+  weekday: Int!
+  "1..28"
+  monthDay: Int!
+  "An IANA time zone such as Europe/Amsterdam (the browser's zone by default)."
+  timezone: String!
+}
+
+"The result of sendSummaryPreview."
+type SummaryPreviewResult {
+  periodStart: Time!
+  periodEnd: Time!
+  "False: the preview reaches only your inbox."
+  emailVerified: Boolean!
+}
+
+extend type Query {
+  "Your periodic summary settings."
+  mySummarySettings: MySummarySettings! @authenticated
+}
+
+extend type Mutation {
+  "Saves your periodic summary settings."
+  setSummarySettings(input: SummarySettingsInput!): MySummarySettings! @authenticated
+
+  """
+  Sends your summary of the current period so far now, marked as a
+  preview (inbox and e-mail; rate limited). VALIDATION when you can see no
+  backup job.
+  """
+  sendSummaryPreview: SummaryPreviewResult! @authenticated
+}

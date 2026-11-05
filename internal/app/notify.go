@@ -10,6 +10,7 @@ import (
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/email"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/notify/webhook"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
@@ -60,6 +61,23 @@ func (a *App) newNotify() error {
 	}
 	policy := webhook.DefaultFailurePolicy()
 	policy.MaxPermanent = cfg.Notifications.WebhookFailureThreshold
+	// The periodic summary (D-226): its tick runs where the workers run,
+	// its content is built by the fan-out and delivery workers, its
+	// settings API is served by serve.
+	sumOpts := summary.Options{
+		DB: a.pool, Policy: a.policy, BaseURL: cfg.Server.BaseURL, Logger: a.opts.Logger,
+		Defaults: summary.Defaults{
+			Frequency: summary.Frequency(cfg.Notifications.SummaryDefaultFrequency),
+			Hour:      cfg.Notifications.SummaryDefaultHour,
+			Timezone:  cfg.Notifications.SummaryDefaultTimezone,
+		},
+	}
+	if a.destinations != nil {
+		sumOpts.CachedFreeSpace = a.destinations.CachedFreeSpace
+	}
+	if a.summary, err = summary.New(sumOpts); err != nil {
+		return err
+	}
 	svc, err := notify.New(notify.Options{
 		DB: a.pool, Policy: a.policy, Keyring: a.keyring, Mailer: mailer, Webhooks: hooks, PersonalWebhooks: personalHooks,
 		Queue: func() notify.Inserter {
@@ -75,6 +93,7 @@ func (a *App) newNotify() error {
 		// New inbox rows reach the accountEvents streams (task
 		// 5.3b): NOTIFY to every serve instance, plus the local bus here.
 		Publisher: a.publisher(),
+		Summaries: a.summary,
 		Logger:    a.opts.Logger,
 	})
 	if err != nil {

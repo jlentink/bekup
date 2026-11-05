@@ -229,6 +229,10 @@ internal/
                   api_prefs.go, api_inbox.go)
                 notify/missed (5.4: dead-man detector, evaluate.go pure
                   outage logic, detector.go periodic missed_backup_check)
+                notify/summary (D-226: periodic summary e-mail; schedule.go
+                  due times on scheduler.Plan, tick.go notify_summary_tick,
+                  content.go Render (notify.SummaryRenderer), api.go settings
+                  and preview)
                 schemaversion (D-210: preset catalog presets.go, custom
                   query rules custom.go, statuses, value check; pure, used
                   by jobs, graph and the runner)
@@ -974,13 +978,34 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `notify.SecurityAlertTypes` backs `securityAlertTypes`: add a new
   `security.system` kind to `systemSeverity` (and `alertRepeat` when it
   is deduplicated).
+- Periodic summary (`internal/notify/summary`, D-226, proposed): only
+  the package touches `user_summary_settings` (preference columns NULL =
+  the `notifications.summary_default_*` defaults; `due_basis` names the
+  schedule `next_due_at` came from). Due times only through `NextDue` /
+  `decide` on `scheduler.Plan` (never wall-clock math of its own); missed
+  due times collapse into one summary from `last_period_end`. A summary is
+  a `summary.periodic` event (dedup `summary:<user>:<period end unix>`;
+  inbox + e-mail by default, `Meta.Channels` offers no webhook) whose
+  content `Render` builds at fan-out and delivery from the recipient's
+  current access (`authz.JobScope`, `destination.usage_view`,
+  `monitor.alert_list`), from bekup's own tables only (free space only via
+  `destinations.Service.CachedFreeSpace`, never a backend call); the inbox
+  row carries counts, never names. Accounts that see no job get none
+  (`no_jobs`). `sendSummaryPreview` is single-root and rate limited.
 - Dashboard aggregates (D-196): `Job.missed`/`missedSince` read
   `job_missed_state`, written only by the missed-backup detector
   (`internal/notify/missed`, upsert/clear per batch, prune of unwatched
   jobs) and batch-loaded per page (`runstate.Reader.MissedForJobs`, run
   loader); a success after `checked_at` ends the outage for readers.
   `destinationUsage` is one grouped query (`destinations.Service.Usage`,
-  operation `destination.usage_view`). `restoresUpdated` coalesces
+  operation `destination.usage_view`). Storage views (D-225, proposed):
+  space only through the optional `storage.SpaceReporter` (disk statfs,
+  SFTP `statvfs@openssh.com`, WebDAV RFC 4331 quota; never S3; missing
+  support is `ErrUnsupported`), asked only by `destinations.Service.Space`
+  (`destinationSpace`, `destination.space_view`, staff: on demand via
+  `open`, test rate limit, timeout, shared call, 5-minute cache, fixed
+  reasons); `Job.storage` totals are batch-loaded per page
+  (`runstate.Reader.StorageForJobs`), its details scoped like run reads. `restoresUpdated` coalesces
   restore ids (`pumpCoalescedIDs`), resyncs with
   `restore.API.IDsUpdatedSince` (scoped like `restores`) and re-loads and
   re-authorizes every event. The audit chain status comes from

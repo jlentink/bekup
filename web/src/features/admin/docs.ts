@@ -2,6 +2,8 @@
 export const DOCS_BASE = "https://github.com/jlentink/bekup/blob/main/docs";
 
 export const docs = {
+  home: `${DOCS_BASE}/README.md`,
+  changelog: "https://github.com/jlentink/bekup/blob/main/CHANGELOG.md",
   smtp: `${DOCS_BASE}/guides/notifications.md#e-mail-smtp`,
   sharedChannels: `${DOCS_BASE}/guides/notifications.md#shared-channels-admins`,
   webhookSignature: `${DOCS_BASE}/guides/notifications.md#verifying-the-signature`,

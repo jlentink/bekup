@@ -59,6 +59,7 @@ export function jobListNode(overrides: Record<string, unknown> = {}) {
       queuedAt: "2026-10-28T03:00:00Z",
       warnings: [],
     },
+    storage: { __typename: "JobStorage", totalBytes: 3 * 1024 * 1024, backupCount: 2 },
     ...overrides,
   };
 }

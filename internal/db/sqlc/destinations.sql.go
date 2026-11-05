@@ -111,13 +111,39 @@ func (q *Queries) DestinationNameTaken(ctx context.Context, arg DestinationNameT
 	return column_1, err
 }
 
+const destinationNewestSetBytes = `-- name: DestinationNewestSetBytes :one
+SELECT COALESCE(sum(a.size), 0)::bigint AS newest_set_bytes
+FROM artifacts a
+JOIN (
+    SELECT DISTINCT ON (x.job_id) x.run_id
+    FROM artifacts x
+    WHERE x.destination_id = $1 AND x.state = 'present'
+    ORDER BY x.job_id, x.created_at DESC, x.id DESC
+) n ON n.run_id = a.run_id
+WHERE a.destination_id = $1 AND a.state = 'present'
+`
+
+// DestinationNewestSetBytes returns the bytes of the newest full set of
+// backups on a destination (D-225): for every job with present artifacts
+// there, the present artifacts of its newest run there. The low-space
+// warning compares the free space with it (the next set needs about as
+// much).
+func (q *Queries) DestinationNewestSetBytes(ctx context.Context, destinationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, destinationNewestSetBytes, destinationID)
+	var newest_set_bytes int64
+	err := row.Scan(&newest_set_bytes)
+	return newest_set_bytes, err
+}
+
 const destinationUsage = `-- name: DestinationUsage :many
 SELECT d.id, d.name, d.type,
        COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,
-       COALESCE(u.artifact_count, 0)::bigint AS artifact_count
+       COALESCE(u.artifact_count, 0)::bigint AS artifact_count,
+       COALESCE(u.backup_count, 0)::bigint AS backup_count
 FROM destinations d
 LEFT JOIN (
-    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count
+    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count,
+           count(DISTINCT a.run_id)::bigint AS backup_count
     FROM artifacts a
     WHERE a.state = 'present'
     GROUP BY a.destination_id
@@ -132,11 +158,12 @@ type DestinationUsageRow struct {
 	Type          DestinationType `json:"type"`
 	StoredBytes   int64           `json:"storedBytes"`
 	ArtifactCount int64           `json:"artifactCount"`
+	BackupCount   int64           `json:"backupCount"`
 }
 
 // DestinationUsage returns, per destination that is not deleted, the
-// bytes and number of the present artifacts stored on it (one grouped
-// query; D-196).
+// bytes and number of the present artifacts stored on it and the number
+// of backups (runs) they belong to (one grouped query; D-196, D-225).
 func (q *Queries) DestinationUsage(ctx context.Context) ([]DestinationUsageRow, error) {
 	rows, err := q.db.Query(ctx, destinationUsage)
 	if err != nil {
@@ -152,6 +179,7 @@ func (q *Queries) DestinationUsage(ctx context.Context) ([]DestinationUsageRow, 
 			&i.Type,
 			&i.StoredBytes,
 			&i.ArtifactCount,
+			&i.BackupCount,
 		); err != nil {
 			return nil, err
 		}

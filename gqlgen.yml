@@ -62,6 +62,9 @@ models:
         resolver: true
       owners:
         resolver: true
+      # Storage totals, batch-loaded per page (D-225).
+      storage:
+        resolver: true
       # Run history of the job, batch-loaded per page (task 3.7).
       lastRun:
         resolver: true
@@ -97,6 +100,19 @@ models:
       - github.com/jlentink/bekup/internal/graph/model.JobSchemaVersion
     fields:
       customSql:
+        resolver: true
+  # Storage of a job (D-225): totals batch-loaded per page of jobs; the
+  # details are field resolvers reading the job id of the hand-written
+  # model.
+  JobStorage:
+    model:
+      - github.com/jlentink/bekup/internal/graph/model.JobStorage
+    fields:
+      perDestination:
+        resolver: true
+      newestRun:
+        resolver: true
+      trend:
         resolver: true
   RunItem:
     fields:

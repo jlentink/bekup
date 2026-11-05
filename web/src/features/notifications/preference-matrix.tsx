@@ -6,7 +6,14 @@ import type { NotificationChannelType } from "@/graphql/gen/graphql";
 import { cn } from "@/lib/utils";
 
 import { notificationsMessages as M } from "./messages";
-import { CHANNEL_COLUMNS, cellOf, effectiveFor, overrideOf, type PreferenceRow } from "./model";
+import {
+  CHANNEL_COLUMNS,
+  cellOf,
+  effectiveFor,
+  offers,
+  overrideOf,
+  type PreferenceRow,
+} from "./model";
 
 export type ToggleHandler = (
   row: PreferenceRow,
@@ -98,6 +105,18 @@ export function GroupMatrix({
                   <EventLabel row={row} />
                 </th>
                 {CHANNEL_COLUMNS.map((channel) => {
+                  if (!offers(row, channel)) {
+                    return (
+                      <td key={channel} className="px-2 py-2.5 text-center">
+                        <span aria-hidden="true" className="font-mono text-muted-foreground/70">
+                          –
+                        </span>
+                        <span className="sr-only">
+                          {M.prefs.cell(row.event.label, M.channels[channel])}: {M.prefs.notOffered}
+                        </span>
+                      </td>
+                    );
+                  }
                   const cell = cellOf(row, channel);
                   const key = `${row.event.type}|${channel}|`;
                   const name = M.prefs.cell(row.event.label, M.channels[channel]);

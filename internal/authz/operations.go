@@ -122,6 +122,10 @@ const (
 	OpDestinationTLSPin      Operation = "destination.tls_pin"
 	OpDestinationTLSPinClear Operation = "destination.tls_pin_clear"
 	OpStorageUsageView       Operation = "destination.usage_view"
+	// OpDestinationSpaceView asks a destination's backend for its total
+	// and free space (D-225): a network operation like a test, so staff
+	// only, rate limited and cached.
+	OpDestinationSpaceView Operation = "destination.space_view"
 	// Unrecorded files (D-209): files in bekup's layout without a backup
 	// record, found by the daily scan. Admins only; a delete needs
 	// step-up (it removes data from the destination).
@@ -243,6 +247,15 @@ const (
 	OpNotificationPrefsView Operation = "notification.prefs_view"
 	OpNotificationPrefsEdit Operation = "notification.prefs_edit" // own preference matrix
 	OpNotificationInbox     Operation = "notification.inbox"      // own inbox, unread, mark read, accountEvents
+	// OpSummaryView reads the own periodic summary settings
+	// (mySummarySettings) and is the delivery check of summary.periodic
+	// (D-226): every role, for the own account.
+	OpSummaryView Operation = "notification.summary_view"
+	// OpSummaryEdit changes the own summary settings (setSummarySettings).
+	OpSummaryEdit Operation = "notification.summary_edit"
+	// OpSummaryPreview sends the own summary of the current period now
+	// (sendSummaryPreview; rate limited like test sends).
+	OpSummaryPreview Operation = "notification.summary_preview"
 
 	// Monitoring (tasks 5.5, 5.6, 6.2).
 	OpDashboardView    Operation = "monitor.dashboard_view" // scoped to visible jobs
@@ -383,6 +396,7 @@ var policy = map[Operation]Rule{
 	OpDestinationTLSPin:           {Roles: adminOnly, Fresh: FreshStepUp},
 	OpDestinationTLSPinClear:      {Roles: adminOnly, Fresh: FreshStepUp},
 	OpStorageUsageView:            {Roles: staff},
+	OpDestinationSpaceView:        {Roles: staff},
 	OpDestinationUnrecordedView:   {Roles: adminOnly},
 	OpDestinationUnrecordedDelete: {Roles: adminOnly, Fresh: FreshStepUp},
 
@@ -456,6 +470,9 @@ var policy = map[Operation]Rule{
 	OpNotificationPrefsView:       {Roles: everyone},
 	OpNotificationPrefsEdit:       {Roles: everyone},
 	OpNotificationInbox:           {Roles: everyone},
+	OpSummaryView:                 {Roles: everyone},
+	OpSummaryEdit:                 {Roles: everyone},
+	OpSummaryPreview:              {Roles: everyone},
 
 	OpDashboardView:    {Roles: staff, Owner: OwnerList},
 	OpAlertList:        {Roles: adminOnly},

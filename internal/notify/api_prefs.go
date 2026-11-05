@@ -50,6 +50,8 @@ func GroupLabel(g Group) string {
 		return "Retention & storage"
 	case GroupConfig:
 		return "Jobs & configuration"
+	case GroupSummary:
+		return "Summary"
 	case GroupSecurity:
 		return "Security"
 	default:
@@ -88,6 +90,18 @@ func DefaultChannels(m Meta) []Channel {
 	var out []Channel
 	for _, ch := range MatrixChannels() {
 		if (m.Mandatory && (ch == ChannelInbox || ch == ChannelEmail)) || Default(m, ch) {
+			out = append(out, ch)
+		}
+	}
+	return out
+}
+
+// OfferedChannels are the matrix channels m can use (the matrix shows no
+// switch for the others).
+func OfferedChannels(m Meta) []Channel {
+	var out []Channel
+	for _, ch := range MatrixChannels() {
+		if m.Offers(ch) {
 			out = append(out, ch)
 		}
 	}
@@ -157,7 +171,7 @@ type userPrefs map[EventType][]Pref
 // only; per-job overrides are listed separately).
 func cells(m Meta, prefs []Pref) []ChannelPref {
 	out := make([]ChannelPref, 0, len(MatrixChannels()))
-	for _, ch := range MatrixChannels() {
+	for _, ch := range OfferedChannels(m) {
 		c := ChannelPref{Channel: ch, Enabled: Enabled(m, ch, nil, prefs), Source: SourceDefault}
 		if m.Mandatory && (ch == ChannelInbox || ch == ChannelEmail) {
 			c.Source, c.Locked = SourceMandatory, true
@@ -275,6 +289,9 @@ func (a *API) SetPreference(ctx context.Context, event EventType, ch Channel, en
 	}
 	if !slices.Contains(MatrixChannels(), ch) {
 		return EventPrefs{}, fieldErr("channel", "unknown channel")
+	}
+	if !m.Offers(ch) {
+		return EventPrefs{}, fieldErr("channel", "this event is not sent through this channel")
 	}
 	if m.Mandatory && (ch == ChannelInbox || ch == ChannelEmail) {
 		return EventPrefs{}, fieldErr("enabled", "security alerts always go to the inbox and by e-mail")

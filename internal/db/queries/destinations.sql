@@ -106,21 +106,39 @@ SET last_tested_at = now(),
 WHERE id = @id AND deleted_at IS NULL AND updated_at = @settings_at;
 
 -- DestinationUsage returns, per destination that is not deleted, the
--- bytes and number of the present artifacts stored on it (one grouped
--- query; D-196).
+-- bytes and number of the present artifacts stored on it and the number
+-- of backups (runs) they belong to (one grouped query; D-196, D-225).
 -- name: DestinationUsage :many
 SELECT d.id, d.name, d.type,
        COALESCE(u.stored_bytes, 0)::bigint AS stored_bytes,
-       COALESCE(u.artifact_count, 0)::bigint AS artifact_count
+       COALESCE(u.artifact_count, 0)::bigint AS artifact_count,
+       COALESCE(u.backup_count, 0)::bigint AS backup_count
 FROM destinations d
 LEFT JOIN (
-    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count
+    SELECT a.destination_id, sum(a.size)::bigint AS stored_bytes, count(*)::bigint AS artifact_count,
+           count(DISTINCT a.run_id)::bigint AS backup_count
     FROM artifacts a
     WHERE a.state = 'present'
     GROUP BY a.destination_id
 ) u ON u.destination_id = d.id
 WHERE d.deleted_at IS NULL
 ORDER BY lower(d.name), d.id;
+
+-- DestinationNewestSetBytes returns the bytes of the newest full set of
+-- backups on a destination (D-225): for every job with present artifacts
+-- there, the present artifacts of its newest run there. The low-space
+-- warning compares the free space with it (the next set needs about as
+-- much).
+-- name: DestinationNewestSetBytes :one
+SELECT COALESCE(sum(a.size), 0)::bigint AS newest_set_bytes
+FROM artifacts a
+JOIN (
+    SELECT DISTINCT ON (x.job_id) x.run_id
+    FROM artifacts x
+    WHERE x.destination_id = @destination_id AND x.state = 'present'
+    ORDER BY x.job_id, x.created_at DESC, x.id DESC
+) n ON n.run_id = a.run_id
+WHERE a.destination_id = @destination_id AND a.state = 'present';
 
 -- DestinationHasPresentArtifacts reports whether backup files are recorded as
 -- present on the destination (its location must not change then, D-209).

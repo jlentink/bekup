@@ -150,6 +150,9 @@ func New(opts Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Refused targets are logged at debug level with the reason
+	// (runner_target_denied; runner.toml [log] level = "debug").
+	val.Guard().SetLogger(opts.Logger)
 	for _, w := range val.Guard().Warnings() {
 		opts.Logger.Warn("runner startup warning", slog.String("warning", w))
 	}

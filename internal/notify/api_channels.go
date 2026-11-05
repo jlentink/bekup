@@ -579,7 +579,7 @@ func checkFilter(groups []Group, events []EventType) ([]string, []string, error)
 	}
 	gs := []string{}
 	for _, g := range groups {
-		if g == GroupSecurity || !slices.Contains(Groups(), g) {
+		if g == GroupSecurity || g == GroupSummary || !slices.Contains(Groups(), g) {
 			return nil, nil, fieldErr("filter.groups", "unknown or not allowed group %q", string(g))
 		}
 		if !slices.Contains(gs, string(g)) {

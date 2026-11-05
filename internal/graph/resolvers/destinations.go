@@ -653,6 +653,7 @@ func (r *Resolver) destinationUsage(ctx context.Context) ([]model.DestinationUsa
 		out = append(out, model.DestinationUsage{
 			DestinationID: u.ID, Name: u.Name, Type: destinationTypeModel(u.Type),
 			StoredBytes: float64(u.StoredBytes), ArtifactCount: int(min(u.ArtifactCount, math.MaxInt32)),
+			BackupCount: int(min(u.BackupCount, math.MaxInt32)),
 		})
 	}
 	return out, nil

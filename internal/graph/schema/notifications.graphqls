@@ -20,6 +20,8 @@ enum NotificationGroup {
   RESTORE
   RETENTION
   CONFIG
+  "The periodic summary (D-226)."
+  SUMMARY
   SECURITY
 }
 
@@ -75,6 +77,8 @@ type NotificationEventInfo {
   perJob: Boolean!
   "The channels on by default."
   defaultChannels: [NotificationChannelType!]!
+  "The channels the event can use (the periodic summary has no webhook)."
+  offeredChannels: [NotificationChannelType!]!
 }
 
 "A group of the catalog with the events your role can receive."

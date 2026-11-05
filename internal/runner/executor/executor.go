@@ -468,13 +468,11 @@ func (e *Executor) refreshDockerNetworks(ctx context.Context) error {
 }
 
 func (e *Executor) setDockerNetworks(nets []NetworkInfo) {
-	var subnets []netip.Prefix
-	var gateways []netip.Addr
+	list := make([]targets.DockerNetwork, 0, len(nets))
 	for i := range nets {
-		subnets = append(subnets, nets[i].Subnets...)
-		gateways = append(gateways, nets[i].Gateways...)
+		list = append(list, targets.DockerNetwork{Name: nets[i].Name, Subnets: nets[i].Subnets, Gateways: nets[i].Gateways})
 	}
-	e.guard.SetDockerNetworks(subnets, gateways)
+	e.guard.SetDockerNetworkList(list)
 }
 
 // Start initializes the executor (retrying while Docker is unavailable)

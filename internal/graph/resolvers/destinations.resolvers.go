@@ -64,6 +64,10 @@ func (r *queryResolver) DestinationUsage(ctx context.Context) ([]model.Destinati
 	return r.destinationUsage(ctx)
 }
 
+func (r *queryResolver) DestinationSpace(ctx context.Context, id uuid.UUID) (*model.DestinationSpace, error) {
+	return r.destinationSpace(ctx, id)
+}
+
 func (r *queryResolver) DestinationUnrecordedFiles(ctx context.Context, destinationID uuid.UUID, first *int, after *string) (*model.UnrecordedFiles, error) {
 	return r.destinationUnrecordedFiles(ctx, destinationID, first, after)
 }

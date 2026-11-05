@@ -84,10 +84,15 @@ For every address `A` of host name `H` (empty for an IP literal), in order:
    lies **inside** that Docker subnet and contains `A`; a gateway needs an
    entry of exactly its address (`172.18.0.1/32`). Broad entries such as
    `172.16.0.0/12` or `10.0.0.0/8` do not open Docker networks, and
-   `allow_hosts` never does. To back up a database container on the same
-   Docker host, list its network's subnet (`docker network inspect`) or the
-   container's `/32` in `allow_cidrs`. The runner refreshes the list at
-   startup, before every run and every minute.
+   `allow_hosts` never does. The runner refreshes the list at startup,
+   before every run and every minute. To back up a database container on
+   the same Docker host, attach that container to bekup's network
+   `bekup_targets` (the runner joins no other network; the compose lint
+   refuses it) and list the `bekup_targets` subnet or the container's
+   `/32` in `allow_cidrs`; see
+   [Database on the same Docker host](../guides/connections.md#database-on-the-same-docker-host).
+   With `[log] level = "debug"` the runner logs each refusal
+   (`runner_target_denied`) with the Docker network's name and subnet.
 4. `H` in `deny_hosts` or `A` in `deny_cidrs`: denied. A denied name is
    refused before any DNS query.
 5. `A` in `allow_cidrs` or `H` in `allow_hosts`: allowed.

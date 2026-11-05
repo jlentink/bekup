@@ -278,7 +278,26 @@ and refuses older daemons at startup (they forwarded DNS queries from
 internal networks to the host's resolvers, CVE-2024-29018). Docker networks
 on the same daemon (their subnets and gateways) are denied as targets unless
 `[targets] allow_cidrs` lists a CIDR inside them
-([target-allowlist.md](../security/target-allowlist.md)).
+([target-allowlist.md](../security/target-allowlist.md)). For a database
+container of another application on this host see
+[Database on the same Docker host](../guides/connections.md#database-on-the-same-docker-host).
+
+**Why is a target refused?** Set `[log] level = "debug"` in `runner.toml`
+and recreate the runner (`docker compose up -d --force-recreate runner`;
+the hardening lint does not allow adding `--log-level` to the runner's
+command). The runner then logs every refused address with the reason
+(`docker compose logs runner | grep runner_target_denied`):
+
+```json
+{"level":"DEBUG","msg":"runner_target_denied","reason":"docker network","address":"172.21.0.5","host":"otherapp-db-1","docker_network":"bekup_targets","docker_subnet":"172.21.0.0/16","gateway":false}
+```
+
+The reasons are `docker network` (with the network's name and subnet, or
+its gateway), `runner network` (`own_network`), `deny_cidrs` /
+`deny_hosts`, `not in the target allowlist`, `not in the bastion's target
+list` and `always denied: <category>` (loopback, link-local, ...). The line
+carries the host name and address only, never credentials. Set the level
+back to `info` afterwards.
 
 Bind the runner's listener to its `runner-ctl` address
 (`[listen] address = "10.213.251.10:7443"`) and `serve` to its `frontend`

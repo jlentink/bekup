@@ -45,7 +45,8 @@ the URL); bekup only shows scheme, host and port.
 ### The event catalog
 
 Defaults for a new account: **every event you may see goes to the inbox;
-problem events (✱) also go to e-mail; webhooks are opt-in.**
+problem events (✱) and the [periodic summary](#summary-e-mail) also go to
+e-mail; webhooks are opt-in.**
 
 | Group | Event | Who may receive it |
 |---|---|---|
@@ -55,6 +56,7 @@ problem events (✱) also go to e-mail; webhooks are opt-in.**
 | | `destination.test_failed` ✱ | admins, maintainers |
 | Job & configuration | `job.created`, `job.updated`, `job.disabled`, `job.enabled`, `job.deleted`, `job.encryption_changed` ✱ | admins, maintainers, the job's owners |
 | | `connection.pin_changed` ✱, `connection.tls_downgraded` ✱, `connection.host_key_changed` ✱ | admins, maintainers |
+| Summary | `summary.periodic`: the [summary e-mail](#summary-e-mail) at the frequency you choose (inbox and e-mail by default; never sent to webhooks or shared channels) | only you, about the jobs you may see |
 | Security (mandatory) | `security.account` ✱: a new sign-in (at most one per address and day), password changed or reset (also by `bekup admin reset-password`), a second factor added, removed or reset (also by `bekup admin reset-2fa`), a recovery code used or regenerated, the account or its second factor locked, your role changed, a passkey with a backwards signature counter (possible clone), an external API token you created presented from an address outside its allowlist | only you |
 | | `security.system` ✱: see [Security alerts](#security-alerts) | admins |
 
@@ -205,7 +207,7 @@ last failure code, and why a webhook was disabled).
 ### Preferences
 
 `notificationCatalog` lists the events you can receive, grouped (backup,
-restore, retention & storage, job & configuration, security), with their
+restore, retention & storage, job & configuration, summary, security), with their
 audience, whether they are problem events, mandatory, low priority, and
 their default channels. Maintainers do not see `security.system`; backup
 owners also not the connection and destination events.
@@ -223,7 +225,71 @@ overrides for jobs you can still see.
 - `resetNotificationPreferences` goes back to the defaults;
   with `jobId` it removes only that job's overrides.
 
-The webhook column applies to all your enabled webhooks.
+The webhook column applies to all your enabled webhooks. Events that do
+not use a channel show no switch there (`NotificationEventInfo.offeredChannels`):
+the periodic summary has no webhook column.
+
+### Summary e-mail
+
+With the default settings bekup is quiet while everything works: e-mail
+goes out only for problems. So that you can tell "all fine" from "bekup
+stopped", every user also gets a **periodic summary** (`summary.periodic`,
+D-226) of the backups they may see: admins and maintainers all jobs, a
+backup owner the jobs they own.
+
+| Setting | Choices | Default |
+|---|---|---|
+| How often | daily, every other day, weekly, monthly, never | weekly |
+| Time | the local hour (00:00–23:00) | 08:00 |
+| Weekday (weekly) | Monday … Sunday | Monday |
+| Day of the month (monthly) | 1–28 (every month has it) | the 1st |
+| Time zone | an IANA zone, e.g. `Europe/Amsterdam` | the server's default (`UTC`) until you save; the form starts with your browser's zone |
+
+Change them under **Profile → Notifications → Summary e-mail**
+(`mySummarySettings`, `setSummarySettings(input)`). Until you save, the
+server's defaults from `bekup.toml` apply
+([`[notifications] summary_default_frequency`, `summary_default_hour`,
+`summary_default_timezone`](../configuration.md)). The page shows when the
+next summary goes out, in your zone. Every other day counts from your last
+summary (or from the first one). Daylight saving is handled like job
+schedules: a time that does not exist on the day the clocks go forward
+moves forward by the gap, a time that occurs twice uses the first one.
+
+A summary covers the time since the previous one and shows:
+
+- the headline: **All N backup jobs ran fine** or **Needs attention: X of
+  N jobs**;
+- the backups that finished in the period by status (succeeded, partially
+  failed, failed, canceled, skipped) and the test restores by result;
+- the jobs that need attention (at most 20 by name, the rest counted):
+  failed or partially failed backups, missed backups, no successful backup
+  although the job was scheduled in the period, retention keeping
+  incomplete backups, failed test restores;
+- admins and maintainers: the storage bekup keeps on each destination
+  (free space only when bekup checked it in the last few minutes; the
+  summary never contacts a destination); admins: the number of security
+  alerts in the period;
+- the times in your zone and a link to the dashboard.
+
+It reaches your inbox and, with a [verified address](#verifying-your-e-mail-address),
+your e-mail (both can be turned off in the preference matrix, row
+**Periodic summary**; there is no webhook). The inbox entry shows the
+counts only; the e-mail names the jobs. The content is put together when
+it is sent, from what you may see at that moment.
+
+- If bekup was down when a summary was due, the next run sends **one**
+  summary covering the whole gap, never one per missed date.
+- If you can see no backup job, no summary is sent (an empty one would say
+  nothing); the page tells you.
+- **Send a preview now** (`sendSummaryPreview`) sends the summary of the
+  current period so far, marked as a preview, to your inbox and e-mail. It
+  is rate limited (one a minute, three at once) and does not move the
+  schedule.
+- **Never** turns it off. Turning it on again starts afresh: the first
+  summary covers one period, not the time it was off.
+
+The worker `notify_summary_tick` checks every 5 minutes for due summaries
+(so one can arrive up to 5 minutes late); it needs a process with workers.
 
 ### The in-app inbox
 

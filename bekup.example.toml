@@ -272,6 +272,12 @@ collapse_window = "15m"
 # Permanent webhook failures (redirect, 4xx, refused address, TLS) before a
 # webhook is auto-disabled (10 failures over >= 24h also disable it).
 webhook_failure_threshold = 5
+# The periodic summary (inbox + e-mail) of users who did not choose their
+# own settings (Profile -> Notifications): daily, every_other_day, weekly
+# (Mondays), monthly (the 1st) or never, at this local hour in this zone.
+summary_default_frequency = "weekly"
+summary_default_hour = 8
+summary_default_timezone = "UTC"
 
 [netguard]
 # Bootstrap SSRF allowlist for private destinations (S3/SFTP/SMTP/shared

@@ -1,4 +1,4 @@
-import { LogOut, Menu, UserRound } from "lucide-react";
+import { Info, LogOut, Menu, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -25,9 +25,10 @@ import { useSignOut } from "@/features/auth/use-sign-out";
 import { NotificationBell } from "@/features/notifications/bell";
 import { messages } from "@/lib/messages";
 
+import { AboutDialog } from "./about-dialog";
 import { SidebarNav } from "./sidebar";
 
-function MobileNav({ user }: { user: SessionUser }) {
+function MobileNav({ user, onAbout }: { user: SessionUser; onAbout: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -41,7 +42,7 @@ function MobileNav({ user }: { user: SessionUser }) {
           <Menu aria-hidden="true" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="top-0 left-0 h-dvh max-w-72 translate-x-0 translate-y-0 content-start gap-6 rounded-none border-y-0 border-l-0 bg-sidebar p-5 sm:max-w-72">
+      <DialogContent className="top-0 left-0 flex h-dvh max-w-72 translate-x-0 translate-y-0 flex-col gap-6 overflow-y-auto rounded-none border-y-0 border-l-0 bg-sidebar p-5 sm:max-w-72">
         <DialogTitle asChild>
           <div>
             <Wordmark />
@@ -54,6 +55,22 @@ function MobileNav({ user }: { user: SessionUser }) {
             setOpen(false);
           }}
         />
+        <div className="mt-auto border-t border-sidebar-border pt-3">
+          <button
+            type="button"
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-3 text-[0.8125rem] font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={() => {
+              setOpen(false);
+              onAbout();
+            }}
+          >
+            <Info aria-hidden="true" className="size-4 shrink-0 opacity-80" />
+            {messages.about.openDrawer}
+          </button>
+          <p className="mt-1 px-3 font-mono text-xs text-sidebar-muted-foreground">
+            v{__BEKUP_VERSION__}
+          </p>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -70,7 +87,7 @@ function initials(name: string): string {
   );
 }
 
-function UserMenu({ user }: { user: SessionUser }) {
+function UserMenu({ user, onAbout }: { user: SessionUser; onAbout: () => void }) {
   const signOut = useSignOut();
   return (
     <DropdownMenu>
@@ -99,6 +116,9 @@ function UserMenu({ user }: { user: SessionUser }) {
             <UserRound aria-hidden="true" /> {messages.shell.profile}
           </Link>
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onAbout}>
+          <Info aria-hidden="true" /> {messages.about.open}
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
             void signOut();
@@ -112,15 +132,20 @@ function UserMenu({ user }: { user: SessionUser }) {
 }
 
 export function TopBar({ user, title }: { user: SessionUser; title: string }) {
+  const [about, setAbout] = useState(false);
+  const openAbout = () => {
+    setAbout(true);
+  };
   return (
     <header className="sticky top-0 z-30 flex h-(--shell-topbar-height) items-center gap-3 border-b bg-background/90 px-4 backdrop-blur-sm sm:px-6">
-      <MobileNav user={user} />
+      <MobileNav user={user} onAbout={openAbout} />
       <p className="truncate text-[0.8125rem] font-medium text-muted-foreground">{title}</p>
       <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle className="mr-1.5 hidden sm:inline-flex" />
         <NotificationBell />
-        <UserMenu user={user} />
+        <UserMenu user={user} onAbout={openAbout} />
       </div>
+      <AboutDialog open={about} onOpenChange={setAbout} role={user.role} />
     </header>
   );
 }

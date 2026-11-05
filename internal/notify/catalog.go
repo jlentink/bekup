@@ -61,6 +61,12 @@ const (
 	SecurityAccount EventType = "security.account"
 	// SecuritySystem goes to every admin.
 	SecuritySystem EventType = "security.system"
+
+	// SummaryPeriodic is the periodic summary of one user (D-226): emitted
+	// by the notify_summary_tick worker (or sendSummaryPreview), its
+	// content is built at fan-out and delivery time, scoped to the
+	// recipient's current access.
+	SummaryPeriodic EventType = "summary.periodic"
 )
 
 // Notice types: inbox rows that are not catalog events (no preferences).
@@ -79,12 +85,13 @@ const (
 	GroupRestore   Group = "restore"
 	GroupRetention Group = "retention"
 	GroupConfig    Group = "config"
+	GroupSummary   Group = "summary"
 	GroupSecurity  Group = "security"
 )
 
 // Groups returns the groups in display order.
 func Groups() []Group {
-	return []Group{GroupBackup, GroupRestore, GroupRetention, GroupConfig, GroupSecurity}
+	return []Group{GroupBackup, GroupRestore, GroupRetention, GroupConfig, GroupSummary, GroupSecurity}
 }
 
 // Audience is who may receive an event by default (before preferences).
@@ -166,6 +173,18 @@ type Meta struct {
 	Op authz.Operation
 	// Label is the short human name ("Backup failed").
 	Label string
+	// EmailByDefault turns e-mail on by default for an event that is no
+	// problem event (the periodic summary).
+	EmailByDefault bool
+	// Channels limits the matrix channels the event can use (nil: every
+	// matrix channel). The periodic summary has no webhook.
+	Channels []Channel
+}
+
+// Offers reports whether ch is a channel of m (preferences of other
+// channels are refused, delivery never uses them).
+func (m Meta) Offers(ch Channel) bool {
+	return m.Channels == nil || slices.Contains(m.Channels, ch)
 }
 
 func jobEvent(t EventType, g Group, op authz.Operation, problem bool, sev Severity, label string) Meta {
@@ -222,6 +241,12 @@ var catalog = func() map[EventType]Meta {
 			Type: SecurityAccount, Group: GroupSecurity, Audience: AudienceOwnAccount, Problem: true,
 			Priority: PriorityNormal, Mandatory: true, Severity: SeverityWarning, Subject: SubjectUser,
 			Op: authz.OpAccountView, Label: "Account security",
+		},
+		{
+			Type: SummaryPeriodic, Group: GroupSummary, Audience: AudienceOwnAccount, Problem: false,
+			Priority: PriorityNormal, Severity: SeverityInfo, Subject: SubjectUser,
+			Op: authz.OpSummaryView, Label: "Periodic summary", EmailByDefault: true,
+			Channels: []Channel{ChannelInbox, ChannelEmail},
 		},
 		{
 			Type: SecuritySystem, Group: GroupSecurity, Audience: AudienceAdmins, Problem: true,

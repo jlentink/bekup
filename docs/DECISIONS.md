@@ -246,6 +246,9 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-221](#d-221-sftp-uploads-verify-the-stored-size-by-path-after-closing-cloud-backed-gateways-drop-messages-carry-a-curated-detail) | SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail | proposed |
 | [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check) |
 | [D-223](#d-223-read-only-view-of-the-runners-target-allowlist-on-the-network-page-gettargetpolicy) | Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`) | proposed |
+| [D-224](#d-224-runnertoml-log-and-a-debug-line-for-every-refused-target) | `runner.toml` `[log]` and a debug line for every refused target | proposed |
+| [D-225](#d-225-storage-views-bekups-stored-bytes-per-destination-and-job-total-and-free-space-reported-on-demand-by-disk-sftp-and-webdav) | Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV | proposed |
+| [D-226](#d-226-periodic-summary-e-mail-per-user-frequency-and-local-time-one-summary-per-period-built-at-delivery-from-the-recipients-access) | Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access | proposed |
 
 ---
 
@@ -14684,3 +14687,210 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/graph/resolvers/runner_targets.go`,
   `internal/graph/schema/network.graphqls`,
   `web/src/features/admin/network/`, `docs/security/target-allowlist.md`.
+
+## D-224: `runner.toml` `[log]` and a debug line for every refused target
+
+- **Date:** 2026-11-05
+- **Status:** proposed
+- **Decided by:** agent (from the user's plan, Part C)
+- **Context:** The runner's log level came only from the global
+  `--log-level` flag, and the compose hardening lint refuses a changed
+  runner command, so operators could not turn on debug logging in a
+  compose deployment. A refused target was visible only as
+  `PermissionDenied` in `runner_rpc_audit`, without the reason (Docker
+  network, runner network, deny list, not allowed, always denied), which
+  made a database container on the same Docker host (D-138) hard to set
+  up.
+- **Decision:**
+  1. `runner.toml` gets `[log] level` (debug, info, warn, error; default
+     info) and `[log] format` (json, text; text by default in dev mode),
+     modelled on `bekup.toml` `[log]`, with the usual overrides
+     `BEKUP_LOG_LEVEL` / `BEKUP_LOG_FORMAT`; `--log-level` still wins.
+     The env variables are shared with `bekup.toml` (same section name).
+     `bekup setup` does not write the section (its runner.toml is
+     minimal); the example and the reference document it.
+  2. `targets.Guard` logs every refusal at debug level as
+     `runner_target_denied` (`Guard.Deny`, also used by the validator for
+     an always-denied literal behind a bastion) with `reason`,
+     `address`, `host`, and what decided: `docker_network` +
+     `docker_subnet` + `gateway` (the executor hands the network names
+     to the guard with `SetDockerNetworkList`), `own_network`,
+     `deny_cidr`, `category` (always denied) or `bastion`. Nothing is
+     logged for allowed targets or above debug.
+- **Alternatives considered:** allowing `command`/`environment` overrides
+  for the runner in the lint (widens what an override file can change on
+  the only component with Docker access); returning the reason to serve
+  (it would let serve and its users map the runner's network
+  surroundings; D-130 keeps the error normalized); logging refusals at
+  info (noisy for hosts that are refused on purpose).
+- **Consequences:** operators can debug the allowlist with one key and a
+  runner recreate. Security impact: at debug level the runner's own log
+  holds the host names and addresses that were refused and the names and
+  subnets of Docker networks on the host; no credentials, connection
+  strings or request payloads. The answer to serve is unchanged.
+- **Related:** D-075, D-130, D-134, D-138, D-203, D-223;
+  `internal/config/runner.go`, `cmd/bekup/runner_cmd.go`,
+  `internal/runner/targets/targets.go`,
+  `internal/runner/executor/executor.go`, `runner.example.toml`,
+  `docs/installation/compose.md`, `docs/guides/connections.md`.
+
+## D-225: Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV
+
+- **Date:** 2026-11-05
+- **Status:** proposed
+- **Decided by:** agent (from the user's requests; the user decided "bekup's
+  backups + free space" per destination and "total + per destination" per
+  job)
+- **Context:** What bekup stores per destination was only on the
+  dashboard (D-196), and nothing showed how much space is left on a
+  destination or what a job's backups occupy.
+- **Decision:**
+  1. **Stored bytes** come from the artifacts table only (present files):
+     `destinationUsage` gains `backupCount` (distinct runs) and is shown as
+     the destinations list's "Stored" column and on the destination page;
+     `Job.storage` (`JobStorage`) has the total, file and backup counts
+     (one aggregate per page of jobs, batch-loaded like `Job.missed`; the
+     jobs list's "Stored" column), and as field resolvers the same per
+     destination, the newest successful backup's size and the sizes of the
+     newest 30 successful or partial backups (a trend). A backup's size is
+     one copy: the largest per-destination sum of its files. The job
+     queries are scoped like the run reads (`scope_all` + `job_owners`)
+     and run under the job's view rules. Backup owners see the names and
+     types of the destinations holding their jobs' files, which the
+     artifacts of their runs already show (`Artifact.destination`).
+  2. **Space** is reported through the optional `storage.SpaceReporter`
+     (`Space{Total, Free, Used}` with a known flag each): disk = statfs on
+     the destination directory (unix build tag: Linux, macOS, BSD; other
+     platforms unknown); SFTP = `statvfs@openssh.com` when the server
+     advertises it (blocks in `f_frsize` units; free = `f_bavail`);
+     WebDAV = RFC 4331 `quota-available-bytes` / `quota-used-bytes` with
+     one PROPFIND Depth 0 on the destination folder (its base before the
+     first upload; negative Nextcloud values mean unknown/unlimited; total
+     = used + available); S3 never (a bucket has no size). Missing support
+     is `ErrUnsupported`, never an error.
+  3. `destinationSpace(id)` (operation `destination.space_view`, admins
+     and maintainers, like `destination.test`) asks the backend **on
+     demand** (the destination page), through `Service.open` (SSRF guard,
+     host-key and certificate pins, readiness), with a 15 s timeout, the
+     per-user limit and concurrency bound of tests (a refusal becomes the
+     reason "too many space checks", not an error) and one shared call
+     per destination; answers are cached per destination for 5 minutes
+     (failures 1 minute, a settings change asks again, at most 1024
+     entries). Results carry fixed reasons (`storage.Classify(err)`
+     messages), never server text. A host-key or certificate-pin
+     mismatch is audited like a failed test.
+  4. **Low space** (shown as a warning on the destination page): the free
+     space is known and below a tenth of the total, or below the newest
+     full set of backups there (per job, its newest run's present files on
+     that destination).
+- **Alternatives considered:** polling space in the background (load on
+  every server even when nobody looks; stale numbers); showing space in
+  the list (one network call per destination per page view); S3 bucket
+  size by listing (expensive, and not "free space"); counting per-job
+  storage client-side from artifact pages (unbounded).
+- **Consequences:** staff can trigger a cheap metadata request to a
+  destination server at most every few minutes per destination. Security
+  impact: no new data to backup owners; maintainers see total/free space
+  numbers of destinations they can already test; the calls use the same
+  guarded, pinned paths as tests and never expose server text.
+- **Related:** D-121, D-128, D-131, D-196, D-221, D-222;
+  `internal/storage/space.go`, `internal/storage/sftp/space.go`,
+  `internal/storage/webdav/space.go`, `internal/destinations/space.go`,
+  `internal/db/queries/job_storage.sql`, `internal/runstate/storage.go`,
+  `internal/graph/resolvers/storage.go`,
+  `web/src/features/destinations/destination-storage.tsx`,
+  `web/src/features/jobs/job-storage.tsx`,
+  `docs/guides/destinations.md`, `docs/guides/jobs-and-schedules.md`.
+
+---
+## D-226: Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access
+
+- **Date:** 2026-11-05
+- **Status:** proposed
+- **Decided by:** user (frequency daily / every other day / weekly /
+  monthly / never, default weekly; the user's own hour and weekday or day
+  of month, default 08:00, Monday / the 1st, in their time zone; scope =
+  what the user may see; channels inbox + e-mail, no webhooks); agent
+  (the rest, below)
+- **Context:** With the D-161 defaults bekup only e-mails problems, so a
+  silent bekup cannot be told from a stopped one. Users want a regular
+  "all is well" overview they configure themselves.
+- **Decision:**
+  1. **Settings** live in `user_summary_settings` (migration 00040): the
+     user's frequency, hour (0–23), ISO weekday, month day (1–28, so every
+     month has it) and IANA zone (checked with the scheduler's zone rule),
+     all or nothing; NULL preferences mean the configured defaults
+     `[notifications] summary_default_frequency` (weekly),
+     `summary_default_hour` (8), `summary_default_timezone` (UTC),
+     Monday / the 1st (restart-only keys). The row also holds the
+     schedule state (`due_basis`, `next_due_at`, `last_period_end`,
+     `last_sent_at`, `last_outcome`); the tick writes state-only rows for
+     accounts without one. The web form prefills the browser's zone, so
+     the first save stores it. `bekup_app` has no DELETE on the table.
+  2. **Scheduling:** River `notify_summary_tick` every 5 minutes (leader,
+     maintenance queue) adds the missing rows, (re)computes due times of
+     new rows and of rows following changed defaults (`due_basis`), then
+     claims due rows of active accounts one by one `FOR UPDATE SKIP
+     LOCKED` (an account that fails is skipped for the rest of the tick
+     and retried at the next). Due times are occurrences of a
+     `scheduler.Plan` (interval days / 2 days / weeks / months in the
+     user's zone), so the scheduler's DST rules apply; every other day is
+     anchored at the last period end, or the first due time. Period =
+     (last period end, or one occurrence earlier for a first summary, due]
+     capped at one year; after downtime the period ends at the newest
+     missed due time, so one summary covers the gap. Leaving "never"
+     drops the old period end.
+  3. **Delivery** is a catalog event `summary.periodic` (group `summary`,
+     audience own account, subject the user, operation
+     `notification.summary_view`, not a problem event, not mandatory,
+     dedup key `summary:<user>:<period end unix>`): the fan-out gives the
+     authz re-check, preferences, verified e-mail only and the flood rule.
+     `Meta.EmailByDefault` turns e-mail on by default, `Meta.Channels`
+     limits it to inbox and e-mail (no webhook cell in the matrix, stored
+     webhook preferences ignored, refused by `setNotificationPreference`;
+     no shared channels: no job subject, and the group is refused in
+     shared-channel filters).
+  4. **Content** is built by `summary.Service.Render`
+     (`notify.SummaryRenderer`) at fan-out and again at e-mail delivery,
+     from the recipient's current role: `authz.JobScope` for the jobs
+     (new sqlc queries with `scope_all` + the `job_owners` EXISTS rule),
+     destination usage with `destination.usage_view`, the security alert
+     count (`security.system` events in the period) with
+     `monitor.alert_list`. Headline, run totals by status, test restores
+     by result, up to 20 jobs needing attention (failed/partial runs,
+     `job_missed_state`, no success/partial although an occurrence fell
+     into the period more than 15 minutes before its end and no run is
+     active, retention holds, failed test restores), times in the user's
+     zone, a dashboard link from `server.base_url`, `email.Render` only.
+     Free space only when this process has a fresh cached answer
+     (`destinations.Service.CachedFreeSpace`); the summary never calls a
+     backend. The inbox row carries counts only (no job or destination
+     names: read-time visibility, D-198, cannot hide parts of a row).
+     Accounts that can see no job get no summary (`last_outcome =
+     no_jobs`).
+  5. **API:** `mySummarySettings` / `setSummarySettings(input)` /
+     `sendSummaryPreview` (`notification.summary_view|edit|preview`, every
+     role, own account only). The preview emits a summary of the current
+     period so far marked `preview` (no dedup key, schedule untouched),
+     is single-root and rate limited per user (1 per minute, burst 3), and
+     is refused without visible jobs. Settings changes are not audited
+     (like notification preferences).
+- **Alternatives considered:** wall-clock scheduling in River (not
+  supported); a cron per user in the job scheduler (mixes backups and
+  notifications); building the content at emit time and storing it (stale
+  access, large outbox rows); sending a burst of missed summaries after
+  downtime; per-user time zone on the account (no other feature needs it
+  yet).
+- **Consequences:** one more periodic job and a few aggregate queries per
+  summary (an index on `runs.finished_at`). Security impact: the summary
+  shows a user only what the policy lets them see at delivery time; no new
+  data leaves bekup beyond the existing e-mail channel (no webhooks, no
+  shared channels); preview sends are bounded per user and go only to the
+  caller's own verified address.
+- **Related:** D-143, D-161, D-178, D-183, D-188, D-191, D-196, D-198,
+  D-209, D-225; `internal/notify/summary/`, `internal/notify/catalog.go`,
+  `internal/db/queries/summary.sql`,
+  `internal/db/migrations/00040_user_summary_settings.sql`,
+  `internal/graph/schema/summary.graphqls`,
+  `web/src/features/notifications/summary-section.tsx`,
+  `docs/guides/notifications.md#summary-e-mail`.

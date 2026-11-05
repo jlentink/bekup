@@ -9,6 +9,7 @@ import (
 	"github.com/jlentink/bekup/internal/connections"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/missed"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
@@ -100,6 +101,10 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	// Notifications (task 5.3): fan-out, deliveries, the daily retention
 	// digest and cleanup.
 	if err := notify.Register(ws, a.notifier); err != nil {
+		return err
+	}
+	// The periodic summary e-mail (D-226): due summaries every 5 minutes.
+	if err := summary.Register(ws, a.summary); err != nil {
 		return err
 	}
 	// Missed-backup (dead-man) alerts (task 5.4).

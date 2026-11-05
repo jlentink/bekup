@@ -31,6 +31,7 @@ import (
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/notify/webhook"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/queue"
@@ -133,9 +134,13 @@ func newNotifEnv(t *testing.T) *notifEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sum, err := summary.New(summary.Options{DB: e.pool, Policy: pol, BaseURL: testBaseURL, Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
 	core, err := notify.New(notify.Options{
 		DB: e.pool, Policy: pol, Keyring: kr, Queue: func() notify.Inserter { return nopQueue{} },
-		BaseURL: testBaseURL, Publisher: &pubsub.Publisher{Bus: bus}, Logger: logger,
+		BaseURL: testBaseURL, Publisher: &pubsub.Publisher{Bus: bus}, Summaries: sum, Logger: logger,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -150,6 +155,7 @@ func newNotifEnv(t *testing.T) *notifEnv {
 		Access: graph.NewPolicyAccess(pol), Policy: pol, AuditLog: e.auditor, Auth: svc, Bus: bus,
 		Streams:       &graph.StreamOptions{Hub: hub, AllowedOrigins: []string{testBaseURL}},
 		Notifications: api,
+		Summary:       sum,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -55,10 +55,15 @@ func newDashEnv(t *testing.T) (*runEnv, *netguard.Set) {
 }
 
 const (
-	ssrfQuery  = `{ ssrfAllowlist { cidrs hosts configCidrs configHosts loopbackAllowed ignoredEntries maxEntries updatedAt updatedBy } }`
-	ssrfUpdate = `mutation($in: SsrfAllowlistInput!) { updateSsrfAllowlist(input: $in) { cidrs hosts updatedAt } }`
-	chainQuery = `{ auditChainStatus { lastVerification { checkedAt ok full finding verifiedThroughId } headId headHash headAt latestSignedHead { chainId } } }`
-	usageQuery = `{ destinationUsage { destinationId name type storedBytes artifactCount } }`
+	ssrfQuery   = `{ ssrfAllowlist { cidrs hosts configCidrs configHosts loopbackAllowed ignoredEntries maxEntries updatedAt updatedBy } }`
+	ssrfUpdate  = `mutation($in: SsrfAllowlistInput!) { updateSsrfAllowlist(input: $in) { cidrs hosts updatedAt } }`
+	chainQuery  = `{ auditChainStatus { lastVerification { checkedAt ok full finding verifiedThroughId } headId headHash headAt latestSignedHead { chainId } } }`
+	usageQuery  = `{ destinationUsage { destinationId name type storedBytes artifactCount backupCount } }`
+	spaceQuery  = `query($id: UUID!) { destinationSpace(id: $id) { destinationId status reason totalBytes freeBytes usedBytes newestSetBytes low checkedAt } }`
+	storageJobs = `{ jobs(first: 50) { edges { node { id storage { totalBytes artifactCount backupCount } } } } }`
+	storageJob  = `query($id: UUID!) { job(id: $id) { storage { totalBytes artifactCount backupCount
+		perDestination { destinationId name type deleted storedBytes artifactCount backupCount }
+		newestRun { runId status at bytes } trend { runId status at bytes } } } }`
 	missedJobs = `{ jobs(first: 50) { edges { node { id missed missedSince } } } }`
 )
 
@@ -239,12 +244,145 @@ func TestDestinationUsageGraphQL(t *testing.T) {
 		DestinationID, Name, Type string
 		StoredBytes               float64
 		ArtifactCount             int
+		BackupCount               int
 	}
 	var got []usage
 	e.mustGQL(maintC, usageQuery, nil).field(t, "destinationUsage", &got)
 	if len(got) != 2 || got[0].DestinationID != empty.String() || got[0].ArtifactCount != 0 || got[0].StoredBytes != 0 ||
-		got[1].DestinationID != e.dest.String() || got[1].ArtifactCount != 3 || got[1].StoredBytes != 40+40+900 || got[1].Type != "DISK" {
+		got[1].DestinationID != e.dest.String() || got[1].ArtifactCount != 3 || got[1].StoredBytes != 40+40+900 || got[1].Type != "DISK" ||
+		got[0].BackupCount != 0 || got[1].BackupCount != 2 {
 		t.Fatalf("usage %+v", got)
+	}
+}
+
+// TestDestinationSpaceGraphQL (D-225): staff only; the disk backend
+// reports its file system; the answer is cached; the newest set of
+// backups is the newest run's present files.
+func TestDestinationSpaceGraphQL(t *testing.T) {
+	e, _ := newDashEnv(t)
+	e.user("maint@example.com", sqlc.UserRoleMaintainer)
+	owner := e.user("owner@example.com", sqlc.UserRoleUser)
+	e.own(e.jobA, owner.ID)
+	maintC, ownerC := e.mustLogin("maint@example.com"), e.mustLogin("owner@example.com")
+	vars := map[string]any{"id": e.dest.String()}
+	if r := e.gql(ownerC, spaceQuery, vars); r.code() != "FORBIDDEN" {
+		t.Fatalf("owner: %+v", r.Errors)
+	}
+	e.completeRun(e.newRun(e.jobA, nil))
+	e.completeRun(e.newRun(e.jobA, nil))
+	type space struct {
+		DestinationID, Status string
+		Reason                *string
+		TotalBytes, FreeBytes *float64
+		UsedBytes             *float64
+		NewestSetBytes        float64
+		Low                   bool
+		CheckedAt             *time.Time
+	}
+	var first, second space
+	e.mustGQL(maintC, spaceQuery, vars).field(t, "destinationSpace", &first)
+	if first.Status != "AVAILABLE" || first.Reason != nil || first.TotalBytes == nil || first.FreeBytes == nil ||
+		*first.TotalBytes <= 0 || first.NewestSetBytes != 40+900 || first.CheckedAt == nil {
+		t.Fatalf("first %+v", first)
+	}
+	e.mustGQL(maintC, spaceQuery, vars).field(t, "destinationSpace", &second)
+	if second.CheckedAt == nil || !second.CheckedAt.Equal(*first.CheckedAt) {
+		t.Fatalf("not cached: %v then %v", first.CheckedAt, second.CheckedAt)
+	}
+	if r := e.gql(maintC, spaceQuery, map[string]any{"id": uuid.NewString()}); r.code() != "NOT_FOUND" {
+		t.Fatalf("unknown destination: %+v", r.Errors)
+	}
+	s3 := uuid.New()
+	if _, err := e.pool.Exec(t.Context(), `INSERT INTO destinations (id, name, type, config) VALUES ($1, 'Bucket', 's3',
+		'{"region":"eu-west-1","bucket":"b","accessKeyId":"AKIAEXAMPLE"}')`, s3); err != nil {
+		t.Fatal(err)
+	}
+	var s3s space
+	e.mustGQL(maintC, spaceQuery, map[string]any{"id": s3.String()}).field(t, "destinationSpace", &s3s)
+	if s3s.Status != "UNSUPPORTED" || s3s.Reason == nil || s3s.TotalBytes != nil || s3s.CheckedAt != nil {
+		t.Fatalf("s3 %+v", s3s)
+	}
+}
+
+// TestJobStorageGraphQL (D-225): totals in one aggregate per page, the
+// details per job, scoped to the owner's jobs.
+func TestJobStorageGraphQL(t *testing.T) {
+	e, _ := newDashEnv(t)
+	owner := e.user("owner@example.com", sqlc.UserRoleUser)
+	e.user("admin@example.com", sqlc.UserRoleAdmin)
+	e.own(e.jobA, owner.ID)
+	adminC, ownerC := e.mustLogin("admin@example.com"), e.mustLogin("owner@example.com")
+	first := e.newRun(e.jobA, nil)
+	e.completeRun(first)
+	second := e.newRun(e.jobA, nil)
+	e.completeRun(second)
+	// The first run's manifest was deleted by retention.
+	if _, err := e.pool.Exec(t.Context(), `UPDATE artifacts SET state = 'deleted', deleted_at = now()
+		WHERE run_id = $1 AND kind = 'manifest'`, first.RunID); err != nil {
+		t.Fatal(err)
+	}
+	type totals struct {
+		TotalBytes                 float64
+		ArtifactCount, BackupCount int
+	}
+	type page struct {
+		Edges []struct {
+			Node struct {
+				ID      string
+				Storage totals
+			}
+		}
+	}
+	var p page
+	before := e.counter.n.Load()
+	e.mustGQL(adminC, storageJobs, nil).field(t, "jobs", &p)
+	if n := e.counter.n.Load() - before; n != 1 {
+		t.Fatalf("%d run reader queries for Job.storage of a page, want 1", n)
+	}
+	got := map[string]totals{}
+	for _, ed := range p.Edges {
+		got[ed.Node.ID] = ed.Node.Storage
+	}
+	if got[e.jobA.String()] != (totals{TotalBytes: 40 + 40 + 900, ArtifactCount: 3, BackupCount: 2}) || got[e.jobB.String()] != (totals{}) {
+		t.Fatalf("totals %+v", got)
+	}
+	e.mustGQL(ownerC, storageJobs, nil).field(t, "jobs", &p)
+	if len(p.Edges) != 1 || p.Edges[0].Node.ID != e.jobA.String() {
+		t.Fatalf("owner page %+v", p)
+	}
+	type run struct {
+		RunID, Status string
+		At            time.Time
+		Bytes         float64
+	}
+	var detail struct {
+		Storage struct {
+			totals
+			PerDestination []struct {
+				DestinationID, Name, Type  string
+				Deleted                    bool
+				StoredBytes                float64
+				ArtifactCount, BackupCount int
+			}
+			NewestRun *run
+			Trend     []run
+		}
+	}
+	e.mustGQL(ownerC, storageJob, map[string]any{"id": e.jobA.String()}).field(t, "job", &detail)
+	st := detail.Storage
+	if len(st.PerDestination) != 1 || st.PerDestination[0].DestinationID != e.dest.String() || st.PerDestination[0].Name != "Local disk" ||
+		st.PerDestination[0].StoredBytes != 980 || st.PerDestination[0].BackupCount != 2 {
+		t.Fatalf("per destination %+v", st.PerDestination)
+	}
+	if st.NewestRun == nil || st.NewestRun.RunID != second.RunID.String() || st.NewestRun.Bytes != 940 || st.NewestRun.Status != "SUCCESS" {
+		t.Fatalf("newest %+v", st.NewestRun)
+	}
+	if len(st.Trend) != 2 || st.Trend[0].RunID != first.RunID.String() || st.Trend[1].RunID != second.RunID.String() ||
+		st.Trend[0].Bytes != 940 || st.Trend[1].Bytes != 940 {
+		t.Fatalf("trend %+v", st.Trend)
+	}
+	if r := e.gql(ownerC, storageJob, map[string]any{"id": e.jobB.String()}); r.code() != "FORBIDDEN" {
+		t.Fatalf("other job: %+v", r.Errors)
 	}
 }
 

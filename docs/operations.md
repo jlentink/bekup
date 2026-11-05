@@ -239,7 +239,11 @@ Besides `systemHealth`, the dashboard reads three aggregates (D-196):
   backup files bekup tracks as present on each destination, one grouped
   query. Files deleted by retention or found missing do not count; the
   numbers are what bekup wrote, not what the bucket reports (versions,
-  lifecycle copies and foreign objects are not included).
+  lifecycle copies and foreign objects are not included). It also counts
+  the backups (runs) the files belong to (`backupCount`, D-225); the
+  destinations list and page show it, and the destination page adds the
+  server-reported free space (`destinationSpace`, see
+  [Destinations](guides/destinations.md#storage-and-free-space)).
 - `Job.missed` / `missedSince` (see above).
 - `restoresUpdated`: one live stream of every restore the caller may view
   (staff: all, owners: their jobs'), so no page polls for restores.
@@ -445,6 +449,7 @@ runs on any worker of its queue.
 | `notify_deliver` | `notify` queue, per delivery | on demand, up to 10 attempts | re-checks access, sends the e-mail or signed webhook, records the status, applies the webhook auto-disable policy |
 | `missed_backup_check` | leader, `maintenance` queue | 5 min | emits `backup.missed` once per outage (reminder every 24 h) and records `Job.missed` (D-188, D-196) |
 | `security_check` | leader, `maintenance` queue | 1 h | certificate and pin expiry alerts, audit chain verification (new entries hourly, the whole chain once a day per process; stored for `auditChainStatus`), posture reminders (D-190) |
+| `notify_summary_tick` | leader, `maintenance` queue | 5 min | emits the due periodic summaries (`summary.periodic`, one per user and period; a gap after downtime gives one summary) and records accounts that can see no job (D-226) |
 | `notify_retention_digest` | leader, `maintenance` queue | 24 h | one `retention.summary` per job and UTC day with deletions (the last 3 complete days) |
 | `notify_cleanup` | leader, `maintenance` queue | 24 h | deletes notification events and deliveries older than 90 days, inbox entries older than 180 days |
 | `retention_sweep` (daily) | leader, `retention` queue | 24 h | marks runs no worker will finish as `interrupted`, a sweep for every job that has backups, the partial-file cleanup, empty-folder pruning and the unrecorded-file scan per destination ([Retention](guides/retention.md)) |

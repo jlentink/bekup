@@ -478,6 +478,14 @@ func validateBekup(c *Bekup, dev bool) []error {
 	if c.Notifications.WebhookFailureThreshold > 1000 {
 		v.addf("notifications.webhook_failure_threshold", "must be at most 1000")
 	}
+	v.oneOf("notifications.summary_default_frequency", c.Notifications.SummaryDefaultFrequency,
+		"daily", "every_other_day", "weekly", "monthly", "never")
+	if h := c.Notifications.SummaryDefaultHour; h < 0 || h > 23 {
+		v.addf("notifications.summary_default_hour", "must be 0..23 (got %d)", h)
+	}
+	if !ValidTimezone(c.Notifications.SummaryDefaultTimezone) {
+		v.addf("notifications.summary_default_timezone", "must be an IANA time zone such as UTC or Europe/Amsterdam")
+	}
 
 	// [netguard]
 	v.cidrs("netguard.allow_cidrs", c.Netguard.AllowCIDRs)
@@ -663,6 +671,9 @@ func validateRunner(c *Runner, dev bool) []error {
 	v.duration("limits.max_run_duration", c.Limits.MaxRunDuration, time.Minute, 0)
 	v.positive("limits.max_log_lines", int64(c.Limits.MaxLogLines))
 	v.atLeast("limits.max_log_line_bytes", int64(c.Limits.MaxLogLineBytes), 256)
+
+	v.oneOf("log.level", c.Log.Level, "debug", "info", "warn", "error")
+	v.oneOf("log.format", c.Log.Format, "json", "text")
 
 	return v.errs
 }

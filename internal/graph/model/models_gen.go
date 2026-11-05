@@ -746,6 +746,26 @@ type DestinationSettings struct {
 	Webdav *WebdavDestinationSettings `json:"webdav,omitempty"`
 }
 
+// The space behind a destination (D-225).
+type DestinationSpace struct {
+	DestinationID uuid.UUID              `json:"destinationId"`
+	Status        DestinationSpaceStatus `json:"status"`
+	// A fixed explanation when status is not AVAILABLE.
+	Reason *string `json:"reason,omitempty"`
+	// The file system's (disk, SFTP) or the quota's (WebDAV) size in bytes; null when not reported.
+	TotalBytes *float64 `json:"totalBytes,omitempty"`
+	// Bytes available to bekup; null when not reported.
+	FreeBytes *float64 `json:"freeBytes,omitempty"`
+	// Bytes in use by anything (not only bekup); null when not reported.
+	UsedBytes *float64 `json:"usedBytes,omitempty"`
+	// The newest full set of backups here: per job, its newest run's present files (bytes).
+	NewestSetBytes float64 `json:"newestSetBytes"`
+	// The free space is below a tenth of the total or below newestSetBytes.
+	Low bool `json:"low"`
+	// When the backend was asked (null: not asked, e.g. S3 or not ready).
+	CheckedAt *time.Time `json:"checkedAt,omitempty"`
+}
+
 // The public half of a generated SSH keypair; the private key is stored encrypted and never returned.
 type DestinationSSHKeypair struct {
 	Destination *Destination `json:"destination"`
@@ -785,6 +805,8 @@ type DestinationUsage struct {
 	StoredBytes float64 `json:"storedBytes"`
 	// Number of present backup files (dumps and manifests).
 	ArtifactCount int `json:"artifactCount"`
+	// Number of backups (runs) with present files here.
+	BackupCount int `json:"backupCount"`
 }
 
 type DiskDestinationInput struct {
@@ -912,9 +934,12 @@ type Job struct {
 	Destinations   []JobDestinationRef `json:"destinations"`
 	Encryption     *JobEncryption      `json:"encryption"`
 	// Admins and maintainers only (null for backup owners).
-	Owners    []JobOwner `json:"owners,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
+	Owners []JobOwner `json:"owners,omitempty"`
+	// What the job's backups occupy on its destinations (D-225): present
+	// backup files only. The totals are one aggregate per page of jobs.
+	Storage   *JobStorage `json:"storage"`
+	CreatedAt time.Time   `json:"createdAt"`
+	UpdatedAt time.Time   `json:"updatedAt"`
 	// The shared channels attached to this job. Admins and maintainers only (null for backup owners).
 	SharedChannelAttachments []JobSharedChannelAttachment `json:"sharedChannelAttachments,omitempty"`
 	// The newest run of the job.
@@ -1073,6 +1098,26 @@ type JobSharedChannelAttachment struct {
 	Events []string            `json:"events"`
 }
 
+// A job's present backup files on one destination.
+type JobStorageDestination struct {
+	DestinationID uuid.UUID       `json:"destinationId"`
+	Name          string          `json:"name"`
+	Type          DestinationType `json:"type"`
+	Deleted       bool            `json:"deleted"`
+	StoredBytes   float64         `json:"storedBytes"`
+	ArtifactCount int             `json:"artifactCount"`
+	BackupCount   int             `json:"backupCount"`
+}
+
+// The size of one backup (one copy: the largest per-destination sum of its files).
+type JobStorageRun struct {
+	RunID  uuid.UUID `json:"runId"`
+	Status RunStatus `json:"status"`
+	// When the run finished (its queue time when unknown).
+	At    time.Time `json:"at"`
+	Bytes float64   `json:"bytes"`
+}
+
 // The test-restore settings of a job.
 type JobTestRestore struct {
 	// Scheduled test restores are on.
@@ -1146,6 +1191,27 @@ type MyNotificationChannels struct {
 	Webhooks        []PersonalWebhook `json:"webhooks"`
 	// The most personal webhooks you may have (5).
 	MaxWebhooks int `json:"maxWebhooks"`
+}
+
+// Your periodic summary settings and when the next summary goes out.
+type MySummarySettings struct {
+	// The settings in effect.
+	Settings *SummarySettings `json:"settings"`
+	// False: you have not saved your own settings; the server's defaults apply.
+	Custom bool `json:"custom"`
+	// The server's defaults.
+	Defaults *SummarySettings `json:"defaults"`
+	// When the next summary goes out (null: never).
+	NextSummaryAt *time.Time `json:"nextSummaryAt,omitempty"`
+	// When the last summary went out.
+	LastSentAt *time.Time `json:"lastSentAt,omitempty"`
+	// What happened at the last due time: sent, or no_jobs (you could see no backup job, so none was sent).
+	LastOutcome   *string    `json:"lastOutcome,omitempty"`
+	LastOutcomeAt *time.Time `json:"lastOutcomeAt,omitempty"`
+	// False: summaries reach only your inbox until you verify your e-mail address.
+	EmailVerified bool `json:"emailVerified"`
+	// The backup jobs you can see; with none, no summary is sent.
+	VisibleJobs int `json:"visibleJobs"`
 }
 
 // One notification of your in-app inbox.
@@ -1225,6 +1291,8 @@ type NotificationEventInfo struct {
 	PerJob bool `json:"perJob"`
 	// The channels on by default.
 	DefaultChannels []NotificationChannelType `json:"defaultChannels"`
+	// The channels the event can use (the periodic summary has no webhook).
+	OfferedChannels []NotificationChannelType `json:"offeredChannels"`
 }
 
 // One row of the preference matrix.
@@ -2279,6 +2347,40 @@ type StepUpResult struct {
 }
 
 type Subscription struct {
+}
+
+// The result of sendSummaryPreview.
+type SummaryPreviewResult struct {
+	PeriodStart time.Time `json:"periodStart"`
+	PeriodEnd   time.Time `json:"periodEnd"`
+	// False: the preview reaches only your inbox.
+	EmailVerified bool `json:"emailVerified"`
+}
+
+// Periodic summary settings.
+type SummarySettings struct {
+	Frequency SummaryFrequency `json:"frequency"`
+	// The local hour of the summary (0-23).
+	Hour int `json:"hour"`
+	// The ISO weekday of weekly summaries (1 = Monday ... 7 = Sunday).
+	Weekday int `json:"weekday"`
+	// The day of monthly summaries (1-28, which every month has).
+	MonthDay int `json:"monthDay"`
+	// The IANA time zone of the hour and of the times in the summary.
+	Timezone string `json:"timezone"`
+}
+
+// Your summary settings (all fields; weekday and monthDay are kept for the other frequencies).
+type SummarySettingsInput struct {
+	Frequency SummaryFrequency `json:"frequency"`
+	// 0..23
+	Hour int `json:"hour"`
+	// 1 (Monday) .. 7 (Sunday)
+	Weekday int `json:"weekday"`
+	// 1..28
+	MonthDay int `json:"monthDay"`
+	// An IANA time zone such as Europe/Amsterdam (the browser's zone by default).
+	Timezone string `json:"timezone"`
 }
 
 // Operational health of this bekup instance (for the dashboard).
@@ -3511,6 +3613,67 @@ func (e DatabaseEngine) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Whether a destination's backend reported its space.
+type DestinationSpaceStatus string
+
+const (
+	// At least one of total, free and used is known.
+	DestinationSpaceStatusAvailable DestinationSpaceStatus = "AVAILABLE"
+	// The backend type (S3) or this server reports no space.
+	DestinationSpaceStatusUnsupported DestinationSpaceStatus = "UNSUPPORTED"
+	// The space could not be checked now (not ready, unreachable, too many checks).
+	DestinationSpaceStatusUnavailable DestinationSpaceStatus = "UNAVAILABLE"
+)
+
+var AllDestinationSpaceStatus = []DestinationSpaceStatus{
+	DestinationSpaceStatusAvailable,
+	DestinationSpaceStatusUnsupported,
+	DestinationSpaceStatusUnavailable,
+}
+
+func (e DestinationSpaceStatus) IsValid() bool {
+	switch e {
+	case DestinationSpaceStatusAvailable, DestinationSpaceStatusUnsupported, DestinationSpaceStatusUnavailable:
+		return true
+	}
+	return false
+}
+
+func (e DestinationSpaceStatus) String() string {
+	return string(e)
+}
+
+func (e *DestinationSpaceStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = DestinationSpaceStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid DestinationSpaceStatus", str)
+	}
+	return nil
+}
+
+func (e DestinationSpaceStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *DestinationSpaceStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e DestinationSpaceStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // Destination types.
 type DestinationType string
 
@@ -3994,7 +4157,9 @@ const (
 	NotificationGroupRestore   NotificationGroup = "RESTORE"
 	NotificationGroupRetention NotificationGroup = "RETENTION"
 	NotificationGroupConfig    NotificationGroup = "CONFIG"
-	NotificationGroupSecurity  NotificationGroup = "SECURITY"
+	// The periodic summary (D-226).
+	NotificationGroupSummary  NotificationGroup = "SUMMARY"
+	NotificationGroupSecurity NotificationGroup = "SECURITY"
 )
 
 var AllNotificationGroup = []NotificationGroup{
@@ -4002,12 +4167,13 @@ var AllNotificationGroup = []NotificationGroup{
 	NotificationGroupRestore,
 	NotificationGroupRetention,
 	NotificationGroupConfig,
+	NotificationGroupSummary,
 	NotificationGroupSecurity,
 }
 
 func (e NotificationGroup) IsValid() bool {
 	switch e {
-	case NotificationGroupBackup, NotificationGroupRestore, NotificationGroupRetention, NotificationGroupConfig, NotificationGroupSecurity:
+	case NotificationGroupBackup, NotificationGroupRestore, NotificationGroupRetention, NotificationGroupConfig, NotificationGroupSummary, NotificationGroupSecurity:
 		return true
 	}
 	return false
@@ -6060,6 +6226,70 @@ func (e *StepUpMethod) UnmarshalJSON(b []byte) error {
 }
 
 func (e StepUpMethod) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// How often the periodic summary goes out.
+type SummaryFrequency string
+
+const (
+	SummaryFrequencyDaily         SummaryFrequency = "DAILY"
+	SummaryFrequencyEveryOtherDay SummaryFrequency = "EVERY_OTHER_DAY"
+	// On the weekday of the settings.
+	SummaryFrequencyWeekly SummaryFrequency = "WEEKLY"
+	// On the day of the month of the settings (1-28).
+	SummaryFrequencyMonthly SummaryFrequency = "MONTHLY"
+	SummaryFrequencyNever   SummaryFrequency = "NEVER"
+)
+
+var AllSummaryFrequency = []SummaryFrequency{
+	SummaryFrequencyDaily,
+	SummaryFrequencyEveryOtherDay,
+	SummaryFrequencyWeekly,
+	SummaryFrequencyMonthly,
+	SummaryFrequencyNever,
+}
+
+func (e SummaryFrequency) IsValid() bool {
+	switch e {
+	case SummaryFrequencyDaily, SummaryFrequencyEveryOtherDay, SummaryFrequencyWeekly, SummaryFrequencyMonthly, SummaryFrequencyNever:
+		return true
+	}
+	return false
+}
+
+func (e SummaryFrequency) String() string {
+	return string(e)
+}
+
+func (e *SummaryFrequency) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SummaryFrequency(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SummaryFrequency", str)
+	}
+	return nil
+}
+
+func (e SummaryFrequency) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SummaryFrequency) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SummaryFrequency) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

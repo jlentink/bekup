@@ -17,6 +17,7 @@ type Runner struct {
 	Images  RunnerImages  `toml:"images"`
 	Targets RunnerTargets `toml:"targets"`
 	Limits  RunnerLimits  `toml:"limits"`
+	Log     RunnerLog     `toml:"log"`
 }
 
 // RunnerListen configures the mTLS gRPC listener.
@@ -72,6 +73,12 @@ type RunnerLimits struct {
 	MaxLogLineBytes   int      `toml:"max_log_line_bytes" doc:"Maximum length of a single log line in bytes (longer lines are truncated)."`
 }
 
+// RunnerLog configures the runner's logging.
+type RunnerLog struct {
+	Level  string `toml:"level" doc:"Log level: debug, info, warn or error (--log-level overrides it). debug also logs every refused target address with the reason (Docker network and subnet, runner network, deny list, not in the allowlist, always-denied category); restart the runner after a change."`
+	Format string `toml:"format" doc:"Log format: json or text (text is the default in dev mode)."`
+}
+
 func (c *Runner) warnings(dev bool) []string {
 	if !dev && c.Listen.AllowWildcard && isWildcardListen(c.Listen.Address) {
 		return []string{fmt.Sprintf("listen.address %q listens on every interface (listen.allow_wildcard = true); bind the internal network address instead", c.Listen.Address)}
@@ -115,6 +122,7 @@ func DefaultRunner() Runner {
 			MaxLogLines:       10000,
 			MaxLogLineBytes:   4096,
 		},
+		Log: RunnerLog{Level: "info", Format: "json"},
 	}
 }
 

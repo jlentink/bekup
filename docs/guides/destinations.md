@@ -547,6 +547,38 @@ Like S3 and SFTP, the server's host must resolve to an address the
 network allowlist permits; a NAS on the LAN needs an allowlist entry
 (*Administration → Network*).
 
+## Storage and free space
+
+The destinations list shows a **Stored** column: the size of the backup
+files bekup tracks as present on each destination and the number of
+backups (runs) they belong to (one aggregate, `destinationUsage`; admins
+and maintainers). The destination page has a **Storage** section with the
+same numbers and, where the server reports it, the space behind the
+destination: "x used by bekup · y free of z" with a bar (bekup's backups,
+other files, free).
+
+| Type | What is reported |
+|---|---|
+| Local disk | total, free and used of the file system holding the destination directory (statfs; Linux, macOS, BSD) |
+| SFTP | total, free and used of the server's file system, if the server offers the `statvfs@openssh.com` extension (OpenSSH does); otherwise "not reported" |
+| WebDAV | the RFC 4331 quota (`quota-available-bytes`, `quota-used-bytes`) of the destination folder: Nextcloud and ownCloud report the account quota; total = used + available. Plain servers without the properties, and an unlimited Nextcloud quota (no free value), show what is known or "not reported" |
+| S3 | never: a bucket has no fixed size |
+
+"Free" is the space available to the account bekup uses (for SFTP and
+disk the blocks available to unprivileged users); "used" counts every file
+there, not only bekup's. The space is asked only when the destination page
+is opened (`destinationSpace`, admins and maintainers), through the same
+guarded, pinned connection as a test, with a 15 second timeout and the
+test rate limit; the answer is cached for 5 minutes per destination (1
+minute after a failure; changing the destination's settings asks again).
+Failures show a fixed reason such as "could not be reached", never the
+server's text.
+
+The page warns that **free space is low** when less than a tenth of the
+total is free, or when the free space is smaller than the newest full set
+of backups on the destination (per job, the files of its newest backup
+there): the next backups may then not fit (D-225).
+
 ## Testing a destination
 
 The destination test writes a small probe object under

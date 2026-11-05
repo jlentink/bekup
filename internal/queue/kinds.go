@@ -53,6 +53,9 @@ const (
 	// KindNotifyCleanup prunes old notification events, deliveries and
 	// inbox rows (task 5.3; periodic, maintenance queue).
 	KindNotifyCleanup = "notify_cleanup"
+	// KindNotifySummaryTick emits the due periodic summaries of users
+	// (D-226; periodic every 5 minutes, maintenance queue).
+	KindNotifySummaryTick = "notify_summary_tick"
 	// KindSecurityCheck runs the periodic security checks: certificate
 	// and pinned-certificate expiry, incremental audit chain verification
 	// and weakened-posture reminders (internal/monitor, task 5.5;
@@ -206,6 +209,12 @@ type NotifyCleanupArgs struct{}
 // Kind implements river.JobArgs.
 func (NotifyCleanupArgs) Kind() string { return KindNotifyCleanup }
 
+// NotifySummaryTickArgs are the (empty) args of KindNotifySummaryTick.
+type NotifySummaryTickArgs struct{}
+
+// Kind implements river.JobArgs.
+func (NotifySummaryTickArgs) Kind() string { return KindNotifySummaryTick }
+
 // SecurityCheckArgs are the (empty) args of KindSecurityCheck.
 type SecurityCheckArgs struct{}
 
@@ -260,6 +269,9 @@ var catalog = map[string]KindSpec{
 		Queue: QueueMaintenance, Unique: true, Args: NotifyRetentionDigestArgs{},
 	},
 	KindNotifyCleanup: {Queue: QueueMaintenance, Unique: true, Args: NotifyCleanupArgs{}},
+	KindNotifySummaryTick: {
+		Queue: QueueMaintenance, Unique: true, Args: NotifySummaryTickArgs{},
+	},
 	KindSecurityCheck: {Queue: QueueMaintenance, Unique: true, Args: SecurityCheckArgs{}},
 	KindMissedBackupCheck: {
 		Queue: QueueMaintenance, Unique: true, Args: MissedBackupCheckArgs{},

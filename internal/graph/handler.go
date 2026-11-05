@@ -37,6 +37,7 @@ import (
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/runstate"
@@ -130,6 +131,9 @@ type Options struct {
 	// fields fail). The inbox part of accountEvents also needs Bus
 	// (pubsub.NotificationEvents).
 	Notifications *notify.API
+	// Summary backs the periodic summary settings (D-226; nil: those
+	// fields fail with an internal error).
+	Summary *summary.Service
 	// Egress backs the SSRF allowlist fields (D-196; nil: those fields
 	// fail with an internal error).
 	Egress *egress.Service
@@ -202,6 +206,7 @@ func New(opts Options) (*Handler, error) {
 			Email:           opts.Email,
 			SystemHealth:    opts.SystemHealth,
 			Notifications:   opts.Notifications,
+			Summary:         opts.Summary,
 			Egress:          opts.Egress,
 			AuditChain:      opts.AuditChain,
 			ConfigReload:    opts.ConfigReload,

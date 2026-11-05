@@ -35,6 +35,7 @@ import {
   FetchDestinationHostKeyMutation,
   GenerateDestinationSshKeypairMutation,
 } from "./operations";
+import { DestinationStorageSection } from "./destination-storage";
 import { DestinationTest } from "./test-panel";
 import { UnrecordedFilesBanner, UnrecordedFilesSection } from "./unrecorded-files";
 import { WebdavTlsSection } from "./webdav-certificate";
@@ -334,6 +335,8 @@ export function DestinationDetailPage() {
             viewer={{ isAdmin, flavor: s?.webdav?.flavor }}
           />
         </LedgerSection>
+
+        <DestinationStorageSection id={d.id} />
 
         <LedgerSection
           title="Retention"

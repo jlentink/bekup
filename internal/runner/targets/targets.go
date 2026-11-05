@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
@@ -52,14 +53,33 @@ const (
 	ReasonDockerNetwork = "docker network"
 	// ReasonBastionTarget: not in the bastion's bastion_targets list.
 	ReasonBastionTarget = "not in the bastion's target list"
+	// ReasonAlwaysDenied prefixes the always-denied category (netguard's
+	// reason), e.g. "always denied: loopback".
+	ReasonAlwaysDenied = "always denied"
 )
 
 // DeniedError says why an address was denied. Its Error() contains the
 // address and is meant for the runner's own logs; the gRPC layer returns
 // only ErrDenied's message.
+//
+// The other fields are context for the runner's debug log line
+// (runner_target_denied); they never hold credentials.
 type DeniedError struct {
 	IP     netip.Addr
 	Reason string
+	// Host is the host name that was asked for ("" for an IP literal).
+	Host string
+	// Prefix is the range that decided: the Docker subnet, the runner's
+	// own network or the deny_cidrs entry.
+	Prefix netip.Prefix
+	// DockerNetwork is the name of the Docker network (ReasonDockerNetwork;
+	// "" when unknown); Gateway marks its gateway address.
+	DockerNetwork string
+	Gateway       bool
+	// Category is the always-denied category (netguard's reason).
+	Category string
+	// Bastion is the SSH bastion a target behind it was checked for.
+	Bastion string
 }
 
 func (e *DeniedError) Error() string {
@@ -93,6 +113,7 @@ type Options struct {
 
 // Guard enforces the target allowlist. It is safe for concurrent use.
 type Guard struct {
+	log         atomic.Pointer[slog.Logger]
 	allowCIDRs  []netip.Prefix
 	denyCIDRs   []netip.Prefix
 	allowHosts  map[string]struct{}
@@ -257,6 +278,55 @@ func (g *Guard) SetOwnNetworks(prefixes []netip.Prefix) error {
 	return nil
 }
 
+// SetLogger sets the logger of the debug line runner_target_denied, which
+// records every refused address with the reason (nil = no logging).
+func (g *Guard) SetLogger(l *slog.Logger) { g.log.Store(l) }
+
+// Deny logs a refusal at debug level (runner_target_denied) and returns
+// e. The guard calls it for each of its own refusals; callers use it for
+// a refusal they decide themselves.
+func (g *Guard) Deny(e *DeniedError) error {
+	l := g.log.Load()
+	if l == nil {
+		return e
+	}
+	attrs := make([]any, 0, 8)
+	attrs = append(attrs, slog.String("reason", e.Reason))
+	if e.IP.IsValid() {
+		attrs = append(attrs, slog.String("address", e.IP.String()))
+	}
+	if e.Host != "" {
+		attrs = append(attrs, slog.String("host", e.Host))
+	}
+	if e.Bastion != "" {
+		attrs = append(attrs, slog.String("bastion", e.Bastion))
+	}
+	if e.Category != "" {
+		attrs = append(attrs, slog.String("category", e.Category))
+	}
+	switch e.Reason {
+	case ReasonDockerNetwork:
+		if e.DockerNetwork != "" {
+			attrs = append(attrs, slog.String("docker_network", e.DockerNetwork))
+		}
+		if e.Prefix.IsValid() {
+			attrs = append(attrs, slog.String("docker_subnet", e.Prefix.String()))
+		}
+		attrs = append(attrs, slog.Bool("gateway", e.Gateway))
+	case ReasonOwnNetwork:
+		if e.Prefix.IsValid() {
+			attrs = append(attrs, slog.String("own_network", e.Prefix.String()))
+		}
+	case ReasonDenyCIDR:
+		if e.Prefix.IsValid() {
+			attrs = append(attrs, slog.String("deny_cidr", e.Prefix.String()))
+		}
+	}
+	// Refusals are rare; Debug drops the line cheaply above debug level.
+	l.Debug("runner_target_denied", attrs...)
+	return e
+}
+
 // OwnNetworks returns a copy of the runner's own networks.
 func (g *Guard) OwnNetworks() []netip.Prefix { return slices.Clone(*g.own.Load()) }
 
@@ -264,30 +334,30 @@ func (g *Guard) OwnNetworks() []netip.Prefix { return slices.Clone(*g.own.Load()
 // the caller asked for ("" for an IP literal); it only matters for the host
 // lists. A denial is a *DeniedError.
 func (g *Guard) Check(addr netip.Addr, host string) error {
+	h := normalizeHost(host)
 	if !addr.IsValid() {
-		return &DeniedError{IP: addr, Reason: string(netguard.ReasonInvalid)}
+		return g.Deny(&DeniedError{IP: addr, Host: h, Reason: string(netguard.ReasonInvalid)})
 	}
 	ip := addr.WithZone("").Unmap()
 	if c := netguard.Classify(ip); c.Blocked && c.Hard {
-		return &DeniedError{IP: ip, Reason: "always denied: " + string(c.Reason)}
+		return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonAlwaysDenied + ": " + string(c.Reason), Category: string(c.Reason)})
 	}
 	for _, p := range *g.own.Load() {
 		if p.Contains(ip) {
-			return &DeniedError{IP: ip, Reason: ReasonOwnNetwork}
+			return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonOwnNetwork, Prefix: p})
 		}
 	}
-	if g.dockerDenied(ip) {
-		return &DeniedError{IP: ip, Reason: ReasonDockerNetwork}
+	if d, ok := g.dockerDenied(ip); ok {
+		return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonDockerNetwork, Prefix: d.prefix, DockerNetwork: d.name, Gateway: d.gateway})
 	}
-	h := normalizeHost(host)
 	if h != "" {
 		if _, ok := g.denyHosts[h]; ok {
-			return &DeniedError{IP: ip, Reason: ReasonDenyHost}
+			return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonDenyHost})
 		}
 	}
 	for _, p := range g.denyCIDRs {
 		if p.Contains(ip) {
-			return &DeniedError{IP: ip, Reason: ReasonDenyCIDR}
+			return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonDenyCIDR, Prefix: p})
 		}
 	}
 	for _, p := range g.allowCIDRs {
@@ -300,23 +370,24 @@ func (g *Guard) Check(addr netip.Addr, host string) error {
 			return nil
 		}
 	}
-	return &DeniedError{IP: ip, Reason: ReasonNotAllowed}
+	return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonNotAllowed})
 }
 
 // CheckDenyLists applies only deny_hosts (host != "") and deny_cidrs (a
 // valid addr). It is for hosts the runner never dials itself, such as a
 // database behind an SSH bastion (the bastion is checked with Resolve).
 func (g *Guard) CheckDenyLists(addr netip.Addr, host string) error {
-	if h := normalizeHost(host); h != "" {
+	h := normalizeHost(host)
+	if h != "" {
 		if _, ok := g.denyHosts[h]; ok {
-			return &DeniedError{IP: addr, Reason: ReasonDenyHost}
+			return g.Deny(&DeniedError{IP: addr, Host: h, Reason: ReasonDenyHost})
 		}
 	}
 	if addr.IsValid() {
 		ip := addr.WithZone("").Unmap()
 		for _, p := range g.denyCIDRs {
 			if p.Contains(ip) {
-				return &DeniedError{IP: ip, Reason: ReasonDenyCIDR}
+				return g.Deny(&DeniedError{IP: ip, Host: h, Reason: ReasonDenyCIDR, Prefix: p})
 			}
 		}
 	}
@@ -393,7 +464,7 @@ func (g *Guard) control(name string) func(network, address string, c syscall.Raw
 	return func(_, address string, _ syscall.RawConn) error {
 		ap, err := netip.ParseAddrPort(address)
 		if err != nil {
-			return &DeniedError{Reason: "unparsable socket address"}
+			return g.Deny(&DeniedError{Host: name, Reason: "unparsable socket address"})
 		}
 		return g.Check(ap.Addr(), name)
 	}
@@ -418,7 +489,7 @@ func (g *Guard) resolve(ctx context.Context, ipNet, host string) ([]netip.Addr, 
 	}
 	// A denied name is refused before any DNS query is made.
 	if _, ok := g.denyHosts[name]; ok {
-		return nil, "", &DeniedError{Reason: ReasonDenyHost}
+		return nil, "", g.Deny(&DeniedError{Host: name, Reason: ReasonDenyHost})
 	}
 	addrs, err := g.lookup(ctx, ipNet, name)
 	if err != nil || len(addrs) == 0 {
@@ -534,59 +605,85 @@ func parseHost(s string) (string, error) {
 // dockerNets are the subnets and gateways of every Docker network on the
 // daemon (the executor refreshes them).
 type dockerNets struct {
-	subnets  []netip.Prefix
-	gateways []netip.Addr
+	subnets  []dockerRange
+	gateways []dockerRange
+}
+
+// dockerRange is one Docker subnet or gateway (a single-address prefix)
+// with its network's name.
+type dockerRange struct {
+	name    string
+	prefix  netip.Prefix
+	gateway bool
+}
+
+// DockerNetwork is one Docker network as SetDockerNetworkList takes it.
+type DockerNetwork struct {
+	// Name is only used in the debug log of a refusal.
+	Name     string
+	Subnets  []netip.Prefix
+	Gateways []netip.Addr
 }
 
 // SetDockerNetworks replaces the Docker networks' subnets and gateways
-// (D-138). An address inside one is denied unless an allow_cidrs entry
-// that lies inside that subnet contains it; a gateway (the host's side of
-// the bridge) needs an allow_cidrs entry of exactly its address (/32,
-// /128). allow_hosts never allows such an address, and broad entries like
-// 172.16.0.0/12 do not open Docker networks.
+// (D-138), without network names. See SetDockerNetworkList.
 func (g *Guard) SetDockerNetworks(subnets []netip.Prefix, gateways []netip.Addr) {
+	g.SetDockerNetworkList([]DockerNetwork{{Subnets: subnets, Gateways: gateways}})
+}
+
+// SetDockerNetworkList replaces the Docker networks (D-138). An address
+// inside one of their subnets is denied unless an allow_cidrs entry that
+// lies inside that subnet contains it; a gateway (the host's side of the
+// bridge) needs an allow_cidrs entry of exactly its address (/32, /128).
+// allow_hosts never allows such an address, and broad entries like
+// 172.16.0.0/12 do not open Docker networks.
+func (g *Guard) SetDockerNetworkList(nets []DockerNetwork) {
 	d := &dockerNets{}
-	for _, p := range subnets {
-		if p.IsValid() {
-			d.subnets = append(d.subnets, unmapPrefix(p.Masked()))
+	for i := range nets {
+		n := &nets[i]
+		for _, p := range n.Subnets {
+			if p.IsValid() {
+				d.subnets = append(d.subnets, dockerRange{name: n.Name, prefix: unmapPrefix(p.Masked())})
+			}
 		}
-	}
-	for _, a := range gateways {
-		if a.IsValid() {
-			d.gateways = append(d.gateways, a.WithZone("").Unmap())
+		for _, a := range n.Gateways {
+			if a.IsValid() {
+				a = a.WithZone("").Unmap()
+				d.gateways = append(d.gateways, dockerRange{name: n.Name, prefix: netip.PrefixFrom(a, a.BitLen()), gateway: true})
+			}
 		}
 	}
 	g.docker.Store(d)
 }
 
 // dockerDenied reports whether ip is a Docker subnet address or gateway
-// without an exact allow_cidrs entry.
-func (g *Guard) dockerDenied(ip netip.Addr) bool {
+// without an exact allow_cidrs entry, and which range denied it.
+func (g *Guard) dockerDenied(ip netip.Addr) (dockerRange, bool) {
 	d := g.docker.Load()
 	for _, gw := range d.gateways {
-		if gw != ip {
+		if gw.prefix.Addr() != ip {
 			continue
 		}
-		if !slices.Contains(g.allowCIDRs, netip.PrefixFrom(ip, ip.BitLen())) {
-			return true
+		if !slices.Contains(g.allowCIDRs, gw.prefix) {
+			return gw, true
 		}
 	}
 	for _, s := range d.subnets {
-		if !s.Contains(ip) {
+		if !s.prefix.Contains(ip) {
 			continue
 		}
 		ok := false
 		for _, p := range g.allowCIDRs {
-			if p.Contains(ip) && p.Bits() >= s.Bits() && s.Contains(p.Addr()) {
+			if p.Contains(ip) && p.Bits() >= s.prefix.Bits() && s.prefix.Contains(p.Addr()) {
 				ok = true
 				break
 			}
 		}
 		if !ok {
-			return true
+			return s, true
 		}
 	}
-	return false
+	return dockerRange{}, false
 }
 
 // bastionRule is the target list of one bastion (bastion_targets).
@@ -701,7 +798,7 @@ func (g *Guard) CheckBehindBastion(bastion string, addrs []netip.Addr, target st
 			ok = true
 		}
 		if !ok {
-			return &DeniedError{IP: ip, Reason: ReasonBastionTarget}
+			return g.Deny(&DeniedError{IP: ip, Host: name, Bastion: normalizeHost(bastion), Reason: ReasonBastionTarget})
 		}
 	}
 	return nil

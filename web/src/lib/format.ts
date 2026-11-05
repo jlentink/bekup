@@ -19,6 +19,29 @@ export function formatDateTime(iso: string | null | undefined): string {
   return d ? dateTime.format(d) : "";
 }
 
+/**
+ * "Mon 10 Nov, 08:00" in an IANA zone (the zone a setting refers to, not
+ * the browser's); empty for a missing or invalid value, the browser's zone
+ * for an unknown one.
+ */
+export function formatZonedDateTime(iso: string | null | undefined, timeZone: string): string {
+  const d = parse(iso);
+  if (!d) return "";
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  };
+  try {
+    return new Intl.DateTimeFormat(undefined, { ...opts, timeZone }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat(undefined, opts).format(d);
+  }
+}
+
 const UNITS: readonly [Intl.RelativeTimeFormatUnit, number][] = [
   ["year", 365 * 24 * 3600],
   ["month", 30 * 24 * 3600],

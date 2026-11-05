@@ -34,6 +34,7 @@ type session struct {
 	root     string
 	hardlink bool
 	fsync    bool
+	statvfs  bool
 	done     chan struct{} // closed when the SSH connection ended
 	wg       sync.WaitGroup
 	once     sync.Once
@@ -157,6 +158,8 @@ func (d *Destination) handshake(ctx context.Context, conn net.Conn) (*session, e
 	if v, ok := sc2.HasExtension(extFsync); ok && v == "1" {
 		sess.fsync = true
 	}
+	_, sess.statvfs = sc2.HasExtension(extStatVFS)
+	sess.statvfs = sess.statvfs && !d.testNoStatVFS
 	if err := d.resolveRoot(sess); err != nil {
 		discard(sc2.Close())
 		discard(client.Close())

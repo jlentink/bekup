@@ -139,6 +139,39 @@ func TestConfigPrint(t *testing.T) {
 	}
 }
 
+// TestRunnerLogLevelPrecedence: runner.toml [log] level < BEKUP_LOG_LEVEL
+// < --log-level.
+func TestRunnerLogLevelPrecedence(t *testing.T) {
+	p := writeConfig(t, "runner.toml", "[listen]\naddress = \"10.0.0.11:7443\"\n[log]\nlevel = \"warn\"\n")
+	for _, tc := range []struct {
+		env  string
+		args []string
+		want string
+	}{
+		{"", nil, "level = 'warn'  # file"},
+		{"error", nil, "level = 'error'  # env"},
+		{"error", []string{"--log-level", "debug"}, "level = 'debug'  # flag"},
+	} {
+		t.Setenv("BEKUP_LOG_LEVEL", tc.env)
+		if tc.env == "" {
+			if err := os.Unsetenv("BEKUP_LOG_LEVEL"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		args := append(append([]string{"--config", p}, tc.args...), "config", "print", "--runner")
+		out, _, err := run(t, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, tc.want) {
+			t.Errorf("%v (env %q): missing %q in:\n%s", tc.args, tc.env, tc.want, out)
+		}
+	}
+	if _, _, err := run(t, "--config", p, "--log-level", "loud", "config", "print", "--runner"); err == nil || !strings.Contains(err.Error(), "log.level") {
+		t.Fatalf("invalid --log-level: %v", err)
+	}
+}
+
 func TestConfigPrintRunner(t *testing.T) {
 	p := writeConfig(t, "runner.toml", "[listen]\naddress = \"10.0.0.11:7443\"\n[targets]\nallow_cidrs = [\"10.0.0.0/8\"]\n")
 	out, _, err := run(t, "--config", p, "config", "print", "--runner")

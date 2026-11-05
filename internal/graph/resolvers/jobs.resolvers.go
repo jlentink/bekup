@@ -39,6 +39,22 @@ func (r *jobResolver) Owners(ctx context.Context, obj *model.Job) ([]model.JobOw
 	return r.jobOwners(ctx, obj)
 }
 
+func (r *jobResolver) Storage(ctx context.Context, obj *model.Job) (*model.JobStorage, error) {
+	return r.jobStorage(ctx, obj)
+}
+
+func (r *jobStorageResolver) PerDestination(ctx context.Context, obj *model.JobStorage) ([]model.JobStorageDestination, error) {
+	return r.jobStoragePerDestination(ctx, obj)
+}
+
+func (r *jobStorageResolver) NewestRun(ctx context.Context, obj *model.JobStorage) (*model.JobStorageRun, error) {
+	return r.jobStorageNewestRun(ctx, obj)
+}
+
+func (r *jobStorageResolver) Trend(ctx context.Context, obj *model.JobStorage) ([]model.JobStorageRun, error) {
+	return r.jobStorageTrend(ctx, obj)
+}
+
 func (r *mutationResolver) CreateJob(ctx context.Context, input model.CreateJobInput) (*model.CreateJobResult, error) {
 	return r.createJob(ctx, input)
 }
@@ -117,4 +133,9 @@ func (r *queryResolver) PreviewSchedule(ctx context.Context, input model.Schedul
 
 func (r *Resolver) Job() generated.JobResolver { return &jobResolver{r} }
 
-type jobResolver struct{ *Resolver }
+func (r *Resolver) JobStorage() generated.JobStorageResolver { return &jobStorageResolver{r} }
+
+type (
+	jobResolver        struct{ *Resolver }
+	jobStorageResolver struct{ *Resolver }
+)

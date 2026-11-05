@@ -57,6 +57,7 @@ func TestCatalogMetadata(t *testing.T) {
 		ConnectionHostKeyChanged:    {GroupConfig, AudienceStaff, true, false, false, authz.OpConnectionView},
 		SecurityAccount:             {GroupSecurity, AudienceOwnAccount, true, false, true, authz.OpAccountView},
 		SecuritySystem:              {GroupSecurity, AudienceAdmins, true, false, true, authz.OpAlertList},
+		SummaryPeriodic:             {GroupSummary, AudienceOwnAccount, false, false, false, authz.OpSummaryView},
 	}
 	if len(Catalog()) != len(want) {
 		t.Fatalf("catalog has %d events, want %d", len(Catalog()), len(want))
@@ -83,7 +84,7 @@ func TestCatalogMetadata(t *testing.T) {
 	// Catalog order: groups in display order.
 	last := -1
 	for _, m := range Catalog() {
-		idx := map[Group]int{GroupBackup: 0, GroupRestore: 1, GroupRetention: 2, GroupConfig: 3, GroupSecurity: 4}[m.Group]
+		idx := map[Group]int{GroupBackup: 0, GroupRestore: 1, GroupRetention: 2, GroupConfig: 3, GroupSummary: 4, GroupSecurity: 5}[m.Group]
 		if idx < last {
 			t.Fatalf("catalog not grouped: %s", m.Type)
 		}
@@ -112,6 +113,42 @@ func TestDefaults(t *testing.T) {
 	} {
 		if got := Enabled(c.m, c.ch, nil, nil); got != c.want {
 			t.Errorf("%s/%s = %v, want %v", c.m.Type, c.ch, got, c.want)
+		}
+	}
+}
+
+// TestSummaryChannels: the periodic summary (D-226) goes to the inbox and
+// by e-mail by default although it is no problem event, and never to a
+// webhook, whatever the preferences say.
+func TestSummaryChannels(t *testing.T) {
+	m, ok := Lookup(SummaryPeriodic)
+	if !ok || m.Subject != SubjectUser || m.Mandatory || m.Problem {
+		t.Fatalf("summary.periodic = %+v", m)
+	}
+	if !Enabled(m, ChannelInbox, nil, nil) || !Enabled(m, ChannelEmail, nil, nil) || Enabled(m, ChannelWebhook, nil, nil) {
+		t.Fatal("defaults must be inbox + e-mail, no webhook")
+	}
+	if Enabled(m, ChannelWebhook, nil, []Pref{{Channel: ChannelWebhook, Enabled: true}}) {
+		t.Fatal("a stored webhook preference must not enable the webhook")
+	}
+	if Enabled(m, ChannelEmail, nil, []Pref{{Channel: ChannelEmail, Enabled: false}}) {
+		t.Fatal("the e-mail can be turned off")
+	}
+	if got := OfferedChannels(m); len(got) != 2 || got[0] != ChannelInbox || got[1] != ChannelEmail {
+		t.Fatalf("offered = %v", got)
+	}
+	if got := DefaultChannels(m); len(got) != 2 {
+		t.Fatalf("default channels = %v", got)
+	}
+	if c := cells(m, nil); len(c) != 2 {
+		t.Fatalf("matrix cells = %+v", c)
+	}
+	if _, _, err := checkFilter([]Group{GroupSummary}, nil); err == nil {
+		t.Fatal("shared channels must not take the summary group")
+	}
+	for _, other := range Catalog() {
+		if other.Type != SummaryPeriodic && len(OfferedChannels(other)) != len(MatrixChannels()) {
+			t.Errorf("%s offers %v", other.Type, OfferedChannels(other))
 		}
 	}
 }

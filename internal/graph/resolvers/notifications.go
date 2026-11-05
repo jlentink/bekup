@@ -88,6 +88,8 @@ func groupModel(g notify.Group) model.NotificationGroup {
 		return model.NotificationGroupRetention
 	case notify.GroupConfig:
 		return model.NotificationGroupConfig
+	case notify.GroupSummary:
+		return model.NotificationGroupSummary
 	default:
 		return model.NotificationGroupSecurity
 	}
@@ -103,6 +105,8 @@ func groupFromModel(g model.NotificationGroup) notify.Group {
 		return notify.GroupRetention
 	case model.NotificationGroupConfig:
 		return notify.GroupConfig
+	case model.NotificationGroupSummary:
+		return notify.GroupSummary
 	case model.NotificationGroupSecurity:
 		return notify.GroupSecurity
 	default:
@@ -178,13 +182,16 @@ func eventInfoModel(m notify.Meta) *model.NotificationEventInfo {
 		Type: string(m.Type), Label: m.Label, Group: groupModel(m.Group), Audience: audienceModel(m.Audience),
 		Problem: m.Problem, Mandatory: m.Mandatory, Priority: model.NotificationPriorityNormal,
 		Severity: severityModel(string(m.Severity)), PerJob: m.Subject == notify.SubjectJob,
-		DefaultChannels: []model.NotificationChannelType{},
+		DefaultChannels: []model.NotificationChannelType{}, OfferedChannels: []model.NotificationChannelType{},
 	}
 	if m.Priority == notify.PriorityLow {
 		out.Priority = model.NotificationPriorityLow
 	}
 	for _, c := range notify.DefaultChannels(m) {
 		out.DefaultChannels = append(out.DefaultChannels, channelModel(c))
+	}
+	for _, c := range notify.OfferedChannels(m) {
+		out.OfferedChannels = append(out.OfferedChannels, channelModel(c))
 	}
 	return out
 }

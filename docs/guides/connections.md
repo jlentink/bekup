@@ -291,3 +291,84 @@ Prefer a DNS name that the server certificate covers. With pinned TLS
 SSH tunnel (the certificate then needs that IP address as a SAN); a direct
 connection to an IP address with pinned TLS is refused. See
 [the target allowlist](../security/target-allowlist.md#ip-literal-targets-and-tls-verification).
+
+## Database on the same Docker host
+
+To back up the database container of another application on the host
+where bekup runs, attach that **database container** to bekup's network
+`bekup_targets`. That network is the `targets` network of the compose
+project `bekup`, and the runner reaches nothing else. Don't try it the
+other way round: the hardening lint of `bekup setup check` refuses a
+runner attached to any other network
+([override lint](../installation/compose.md#the-override-file-and-the-hardening-lint)).
+
+1. **Attach the database container**, in the *other* application's
+   compose file:
+
+   ```yaml
+   services:
+     db:
+       networks: [default, bekup_targets]
+   networks:
+     bekup_targets:
+       external: true
+   ```
+
+   Then run `docker compose up -d db` there. Only the database service
+   joins, not the application itself.
+
+2. **Find its address and the network's subnet:**
+
+   ```sh
+   docker network inspect bekup_targets --format '{{(index .IPAM.Config 0).Subnet}}'
+   docker inspect otherapp-db-1 --format '{{(index .NetworkSettings.Networks "bekup_targets").IPAddress}}'
+   ```
+
+   A fixed address (`ipv4_address`) is **not** possible on
+   `bekup_targets`. Docker accepts a fixed address only on networks with a
+   configured subnet, and bekup ships `targets` without one; the lint
+   keeps networks as shipped.
+
+3. **Allow it in `runner.toml`.** Every Docker network is refused unless
+   an `allow_cidrs` entry lies inside its subnet (D-138), and
+   `allow_hosts` never opens one. Pick one of these:
+
+   - **The `bekup_targets` subnet** (for example `172.21.0.0/16`). This is
+     the stable choice: only containers you attach are on this network,
+     and the runner's own address and the network's gateway (the host)
+     stay denied. Check it again when the network is recreated
+     (`docker compose down`), because Docker may then pick another subnet.
+   - **The container's `/32`** (for example `172.21.0.5/32`). This is
+     narrower, but the address can change when the database container is
+     recreated or other containers join first.
+
+   ```toml
+   [targets]
+   allow_cidrs = ["172.21.0.0/16"]
+   ```
+
+4. **Recreate the runner** so it reads the file again:
+   `docker compose up -d --force-recreate runner` (in bekup's directory).
+
+5. **Create the connection** with the container name as the host (for
+   example `otherapp-db-1`). The runner resolves it through Docker's DNS on
+   `bekup_targets`. Docker also registers the service name (`db`) there,
+   which collides as soon as two applications attach a `db`, so use the
+   container name, or a unique network alias without underscores (bekup's
+   host rule, see [above](#database-host-names-and-ip-addresses)).
+   Containers like this usually have no TLS. Then create the connection
+   with TLS mode `DISABLED`: that is an audited opt-out with a security
+   alert and the `insecureTransport` badge (see [Downgrades](#downgrades)).
+   The traffic stays on the Docker host's bridge. If the server has a
+   certificate whose SAN is the container name, keep `PINNED`.
+
+If the connection test answers that the target is not allowed, set
+`[log] level = "debug"` in `runner.toml` and recreate the runner. The
+runner then logs each refused address as `runner_target_denied`, with the
+reason and, for a Docker network, its name and subnet
+([compose](../installation/compose.md#the-runner-and-the-docker-socket)).
+
+bekup's **own bundled PostgreSQL** can't be backed up this way, and
+that's by design. It sits only on the internal `backend` network, which
+the runner never joins, and bekup's roles can't read everything. A planned
+opt-in "self-backup" will cover it.

@@ -39,6 +39,10 @@ export const JobsListQuery = graphql(`
               code
             }
           }
+          storage {
+            totalBytes
+            backupCount
+          }
         }
       }
       pageInfo {
@@ -56,6 +60,45 @@ export const JobFilterConnectionsQuery = graphql(`
       name
       engine
       temporary
+    }
+  }
+`);
+
+/**
+ * What a job's backups occupy (D-225): totals, per destination, the newest
+ * backup's size and a size trend. Its own request, so the job page renders
+ * before these aggregates arrive.
+ */
+export const JobStorageQuery = graphql(`
+  query JobStorage($id: UUID!) {
+    job(id: $id) {
+      id
+      storage {
+        totalBytes
+        artifactCount
+        backupCount
+        perDestination {
+          destinationId
+          name
+          type
+          deleted
+          storedBytes
+          artifactCount
+          backupCount
+        }
+        newestRun {
+          runId
+          status
+          at
+          bytes
+        }
+        trend {
+          runId
+          status
+          at
+          bytes
+        }
+      }
     }
   }
 `);

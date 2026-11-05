@@ -305,12 +305,12 @@ func TestUnknownEnvWarnings(t *testing.T) {
 
 	// The runner accepts its own keys and flags bekup.toml keys.
 	rp := writeFile(t, dir, RunnerFileName, "[listen]\naddress = \"10.0.0.11:7443\"\n", 0o600)
-	rres, err := LoadRunner(opts([]string{rp}, map[string]string{"BEKUP_DOCKER_SELF_CONTAINER": "c", "BEKUP_LOG_LEVEL": "x"}))
+	rres, err := LoadRunner(opts([]string{rp}, map[string]string{"BEKUP_DOCKER_SELF_CONTAINER": "c", "BEKUP_SERVER_BASE_URL": "x"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	rj := strings.Join(rres.Warnings, "\n")
-	if strings.Contains(rj, "BEKUP_DOCKER_SELF_CONTAINER") || !strings.Contains(rj, "BEKUP_LOG_LEVEL configures another config file") {
+	if strings.Contains(rj, "BEKUP_DOCKER_SELF_CONTAINER") || !strings.Contains(rj, "BEKUP_SERVER_BASE_URL configures another config file") {
 		t.Errorf("runner warnings:\n%s", rj)
 	}
 }

@@ -79,10 +79,10 @@ function ConnectionRow({ c }: { c: Row }) {
       <TableCell>
         {c.sshEnabled ? (
           <span className="inline-flex items-center gap-1.5 text-sm">
-            <Network aria-hidden="true" className="size-3.5 text-muted-foreground" /> Tunnel
+            <Network aria-hidden="true" className="size-3.5 text-muted-foreground" /> SSH tunnel
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">Direct</span>
+          <span className="text-sm">Direct</span>
         )}
       </TableCell>
       <TableCell>
@@ -170,7 +170,7 @@ export function ConnectionsPage() {
                 <TableHead>Engine</TableHead>
                 <TableHead>Host</TableHead>
                 <TableHead>Transport</TableHead>
-                <TableHead>SSH</TableHead>
+                <TableHead>Connection</TableHead>
                 <TableHead>Last test</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead className="text-right">Runs</TableHead>

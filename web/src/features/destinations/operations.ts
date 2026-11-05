@@ -270,3 +270,38 @@ export const DeleteUnrecordedFileMutation = graphql(`
     }
   }
 `);
+
+/**
+ * What bekup stores per destination (destinationUsage, staff; one
+ * aggregate): the list's "Stored" column and the detail page.
+ */
+export const DestinationStoredQuery = graphql(`
+  query DestinationStored {
+    destinationUsage {
+      destinationId
+      storedBytes
+      artifactCount
+      backupCount
+    }
+  }
+`);
+
+/**
+ * The total and free space behind a destination (D-225, staff): asked on
+ * demand, rate limited and cached by the server; fixed reasons only.
+ */
+export const DestinationSpaceQuery = graphql(`
+  query DestinationSpace($id: UUID!) {
+    destinationSpace(id: $id) {
+      destinationId
+      status
+      reason
+      totalBytes
+      freeBytes
+      usedBytes
+      newestSetBytes
+      low
+      checkedAt
+    }
+  }
+`);

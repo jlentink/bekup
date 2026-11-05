@@ -396,6 +396,11 @@ export function createCache(): InMemoryCache {
       ServerInfo: { keyFields: [] },
       TwoFactorStatus: { keyFields: [] },
       WebAuthnStatus: { keyFields: [] },
+      // Per-destination aggregates (D-196, D-225): normalized by their
+      // destination so the dashboard's and the destination pages'
+      // selections merge instead of replacing each other.
+      DestinationUsage: { keyFields: ["destinationId"] },
+      DestinationSpace: { keyFields: ["destinationId"] },
     },
   });
 }

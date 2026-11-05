@@ -271,8 +271,49 @@ type Job {
   encryption: JobEncryption!
   "Admins and maintainers only (null for backup owners)."
   owners: [JobOwner!]
+  """
+  What the job's backups occupy on its destinations (D-225): present
+  backup files only. The totals are one aggregate per page of jobs.
+  """
+  storage: JobStorage!
   createdAt: Time!
   updatedAt: Time!
+}
+
+"What a job's present backup files occupy (D-225)."
+type JobStorage {
+  "Sum of the sizes of the present backup files on every destination (each copy counts)."
+  totalBytes: Float!
+  "Number of present backup files (dumps and manifests)."
+  artifactCount: Int!
+  "Number of backups (runs) with present files."
+  backupCount: Int!
+  "The same per destination (also deleted destinations that still hold files), ordered by name."
+  perDestination: [JobStorageDestination!]!
+  "The newest successful backup with present files: the size of one copy (null: none)."
+  newestRun: JobStorageRun
+  "The newest 30 successful or partial backups, oldest first: the size of one copy each."
+  trend: [JobStorageRun!]!
+}
+
+"A job's present backup files on one destination."
+type JobStorageDestination {
+  destinationId: UUID!
+  name: String!
+  type: DestinationType!
+  deleted: Boolean!
+  storedBytes: Float!
+  artifactCount: Int!
+  backupCount: Int!
+}
+
+"The size of one backup (one copy: the largest per-destination sum of its files)."
+type JobStorageRun {
+  runId: UUID!
+  status: RunStatus!
+  "When the run finished (its queue time when unknown)."
+  at: Time!
+  bytes: Float!
 }
 
 "A page of jobs."

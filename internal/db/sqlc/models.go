@@ -1521,6 +1521,73 @@ func AllSharedChannelTypeValues() []SharedChannelType {
 	}
 }
 
+type SummaryFrequency string
+
+const (
+	SummaryFrequencyDaily         SummaryFrequency = "daily"
+	SummaryFrequencyEveryOtherDay SummaryFrequency = "every_other_day"
+	SummaryFrequencyWeekly        SummaryFrequency = "weekly"
+	SummaryFrequencyMonthly       SummaryFrequency = "monthly"
+	SummaryFrequencyNever         SummaryFrequency = "never"
+)
+
+func (e *SummaryFrequency) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SummaryFrequency(s)
+	case string:
+		*e = SummaryFrequency(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SummaryFrequency: %T", src)
+	}
+	return nil
+}
+
+type NullSummaryFrequency struct {
+	SummaryFrequency SummaryFrequency `json:"summaryFrequency"`
+	Valid            bool             `json:"valid"` // Valid is true if SummaryFrequency is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSummaryFrequency) Scan(value interface{}) error {
+	if value == nil {
+		ns.SummaryFrequency, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SummaryFrequency.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSummaryFrequency) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SummaryFrequency), nil
+}
+
+func (e SummaryFrequency) Valid() bool {
+	switch e {
+	case SummaryFrequencyDaily,
+		SummaryFrequencyEveryOtherDay,
+		SummaryFrequencyWeekly,
+		SummaryFrequencyMonthly,
+		SummaryFrequencyNever:
+		return true
+	}
+	return false
+}
+
+func AllSummaryFrequencyValues() []SummaryFrequency {
+	return []SummaryFrequency{
+		SummaryFrequencyDaily,
+		SummaryFrequencyEveryOtherDay,
+		SummaryFrequencyWeekly,
+		SummaryFrequencyMonthly,
+		SummaryFrequencyNever,
+	}
+}
+
 type TestRestoreStatus string
 
 const (
@@ -2530,6 +2597,23 @@ type UserNotificationPref struct {
 	Channel   NotificationChannel `json:"channel"`
 	Enabled   bool                `json:"enabled"`
 	UpdatedAt time.Time           `json:"updatedAt"`
+}
+
+type UserSummarySetting struct {
+	UserID        uuid.UUID         `json:"userId"`
+	Frequency     *SummaryFrequency `json:"frequency"`
+	Hour          *int16            `json:"hour"`
+	Weekday       *int16            `json:"weekday"`
+	MonthDay      *int16            `json:"monthDay"`
+	Timezone      *string           `json:"timezone"`
+	DueBasis      *string           `json:"dueBasis"`
+	NextDueAt     *time.Time        `json:"nextDueAt"`
+	LastPeriodEnd *time.Time        `json:"lastPeriodEnd"`
+	LastSentAt    *time.Time        `json:"lastSentAt"`
+	LastOutcome   *string           `json:"lastOutcome"`
+	LastOutcomeAt *time.Time        `json:"lastOutcomeAt"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
 }
 
 type WebauthnCeremony struct {

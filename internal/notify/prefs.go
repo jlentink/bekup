@@ -26,14 +26,18 @@ type Pref struct {
 }
 
 // Default is the D-161 default of a channel for an event: the inbox for
-// every visible event, e-mail for problem events, webhooks only when the
-// user opts in.
+// every visible event, e-mail for problem events (and the periodic
+// summary, D-226), webhooks only when the user opts in. A channel the
+// event does not offer is never on.
 func Default(m Meta, ch Channel) bool {
+	if !m.Offers(ch) {
+		return false
+	}
 	switch ch {
 	case ChannelInbox:
 		return true
 	case ChannelEmail:
-		return m.Problem
+		return m.Problem || m.EmailByDefault
 	default:
 		return false
 	}
@@ -44,6 +48,9 @@ func Default(m Meta, ch Channel) bool {
 // preference, which beats Default. Mandatory events always keep the
 // inbox and e-mail; preferences can only add channels to them.
 func Enabled(m Meta, ch Channel, jobID *uuid.UUID, prefs []Pref) bool {
+	if !m.Offers(ch) {
+		return false
+	}
 	if m.Mandatory && (ch == ChannelInbox || ch == ChannelEmail) {
 		return true
 	}

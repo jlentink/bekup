@@ -77,6 +77,10 @@ type Querier interface {
 	// no other consumer holds (process them in the same transaction),
 	// skipping @exclude, with the token's name and creator.
 	ClaimAPIAccessDenials(ctx context.Context, arg ClaimAPIAccessDenialsParams) ([]ClaimAPIAccessDenialsRow, error)
+	// ClaimDueSummary locks the most overdue summary of an active account
+	// (other ticks skip it); @skip_ids are the accounts that failed in this
+	// tick (retried at the next one).
+	ClaimDueSummary(ctx context.Context, arg ClaimDueSummaryParams) (ClaimDueSummaryRow, error)
 	// ClaimPendingRunRequests locks the oldest undecided requests that no other
 	// consumer holds (one consumer per request; decide them in the same
 	// transaction), skipping @exclude (requests this consumer failed to decide
@@ -130,6 +134,12 @@ type Querier interface {
 	// event types: the per-user flood rule.
 	CountRecentUserDeliveries(ctx context.Context, arg CountRecentUserDeliveriesParams) (int64, error)
 	CountRunSlots(ctx context.Context) (int64, error)
+	// CountSecurityAlertsBetween counts the security.system alerts raised in
+	// (@period_from, @period_until] (admins' summaries only).
+	CountSecurityAlertsBetween(ctx context.Context, arg CountSecurityAlertsBetweenParams) (int64, error)
+	// --- content (scoped to the recipient) -----------------------------------------
+	// CountSummaryJobs counts the jobs the recipient may see (not deleted).
+	CountSummaryJobs(ctx context.Context, arg CountSummaryJobsParams) (int64, error)
 	CountUnreadNotifications(ctx context.Context, arg CountUnreadNotificationsParams) (int64, error)
 	CountUnusedRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountWebAuthnCredentials(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -204,9 +214,15 @@ type Querier interface {
 	// Checked before the location so that a duplicate name is reported as
 	// such; the unique index stays the authority under concurrency.
 	DestinationNameTaken(ctx context.Context, arg DestinationNameTakenParams) (bool, error)
+	// DestinationNewestSetBytes returns the bytes of the newest full set of
+	// backups on a destination (D-225): for every job with present artifacts
+	// there, the present artifacts of its newest run there. The low-space
+	// warning compares the free space with it (the next set needs about as
+	// much).
+	DestinationNewestSetBytes(ctx context.Context, destinationID uuid.UUID) (int64, error)
 	// DestinationUsage returns, per destination that is not deleted, the
-	// bytes and number of the present artifacts stored on it (one grouped
-	// query; D-196).
+	// bytes and number of the present artifacts stored on it and the number
+	// of backups (runs) they belong to (one grouped query; D-196, D-225).
 	DestinationUsage(ctx context.Context) ([]DestinationUsageRow, error)
 	DetachSharedChannel(ctx context.Context, arg DetachSharedChannelParams) (int64, error)
 	DisableSharedChannel(ctx context.Context, arg DisableSharedChannelParams) (SharedChannel, error)
@@ -407,6 +423,8 @@ type Querier interface {
 	GetSettingForUpdate(ctx context.Context, key string) (Setting, error)
 	GetSharedChannel(ctx context.Context, id uuid.UUID) (SharedChannel, error)
 	GetSharedChannelForUpdate(ctx context.Context, id uuid.UUID) (SharedChannel, error)
+	GetSummarySettings(ctx context.Context, userID uuid.UUID) (UserSummarySetting, error)
+	GetSummarySettingsForUpdate(ctx context.Context, userID uuid.UUID) (UserSummarySetting, error)
 	// GetTemporaryConnectionCleanupState re-reads the state of one candidate
 	// of ListTemporaryConnectionCleanup under the connection's row lock.
 	GetTemporaryConnectionCleanupState(ctx context.Context, id uuid.UUID) (GetTemporaryConnectionCleanupStateRow, error)
@@ -494,6 +512,16 @@ type Querier interface {
 	InsertJobOwner(ctx context.Context, arg InsertJobOwnerParams) (int64, error)
 	InsertJobPassphrase(ctx context.Context, arg InsertJobPassphraseParams) (JobPassphrase, error)
 	InsertJobRecipient(ctx context.Context, arg InsertJobRecipientParams) (JobRecipient, error)
+	// Periodic summary e-mail (D-226): the per-user settings and schedule
+	// state (user_summary_settings, written only by internal/notify) and the
+	// scoped reads of the summary content. Content reads take scope_all =
+	// false to limit rows to the jobs @user_id owns (authz.JobScope, the same
+	// rule as run_reads.sql: deleted users own nothing).
+	// --- settings and schedule state ---------------------------------------------
+	// InsertMissingSummarySettings adds a state-only row (the configured
+	// defaults apply) for active accounts without one, so the tick can keep
+	// their schedule state.
+	InsertMissingSummarySettings(ctx context.Context, maxRows int32) (int64, error)
 	// InsertNotificationDelivery adds a delivery; an existing idempotency key
 	// makes it a no-op (no row returned).
 	InsertNotificationDelivery(ctx context.Context, arg InsertNotificationDeliveryParams) ([]uuid.UUID, error)
@@ -550,6 +578,30 @@ type Querier interface {
 	// row lock.
 	IsTestRestoreStuck(ctx context.Context, arg IsTestRestoreStuckParams) (bool, error)
 	JobSlugTaken(ctx context.Context, slug string) (bool, error)
+	// JobStorageByDestination returns a job's present artifacts per
+	// destination (also deleted destinations that still hold them), ordered
+	// by name.
+	JobStorageByDestination(ctx context.Context, arg JobStorageByDestinationParams) ([]JobStorageByDestinationRow, error)
+	// JobStorageNewestSuccess returns the newest successful run of a job that
+	// still has present artifacts, with the size of one copy of them (the
+	// largest per-destination sum of its present artifacts).
+	JobStorageNewestSuccess(ctx context.Context, arg JobStorageNewestSuccessParams) (JobStorageNewestSuccessRow, error)
+	// JobStorageRuns returns the size of the newest @max_rows successful or
+	// partial runs of a job that wrote artifacts, newest first. A run's size
+	// is one copy: the largest per-destination sum of its artifacts in any
+	// state (fan-out writes the same files to every destination; retention
+	// may have deleted them since). present_bytes is what is still present
+	// (all copies).
+	JobStorageRuns(ctx context.Context, arg JobStorageRunsParams) ([]JobStorageRunsRow, error)
+	// Storage per job (D-225): what a job's backups occupy on its
+	// destinations, read only. Like the run history reads, every query takes
+	// scope_all = false to limit rows to the jobs @user_id owns (authz.JobScope,
+	// the same rule as IsJobOwner: deleted users own nothing); the API also
+	// authorizes the job itself first.
+	// JobStorageTotals returns, per job of @job_ids that has present
+	// artifacts, their bytes and number and the number of backups (runs)
+	// they belong to (Job.storage on a page of jobs: one aggregate).
+	JobStorageTotals(ctx context.Context, arg JobStorageTotalsParams) ([]JobStorageTotalsRow, error)
 	// JobsUsingConnection lists (up to 5) non-deleted jobs that back up the
 	// connection or use it as their test-restore scratch target (delete-in-use
 	// check).
@@ -596,6 +648,9 @@ type Querier interface {
 	// ListActiveRunDirs returns the directories of queued and running runs:
 	// their files may not have artifact rows yet.
 	ListActiveRunDirs(ctx context.Context) ([]ListActiveRunDirsRow, error)
+	// ListActiveRunJobs returns the jobs of @job_ids with a queued or running
+	// run (not judged "no success" while a run is under way).
+	ListActiveRunJobs(ctx context.Context, jobIds []uuid.UUID) ([]uuid.UUID, error)
 	// ListActiveUserSessions returns the user's sessions that are neither
 	// revoked nor expired, most recently used first.
 	ListActiveUserSessions(ctx context.Context, userID uuid.UUID) ([]Session, error)
@@ -788,6 +843,13 @@ type Querier interface {
 	// finish: started before @started_before, or idle since @idle_before while
 	// their River job is gone or finalized.
 	ListStuckTestRestores(ctx context.Context, arg ListStuckTestRestoresParams) ([]uuid.UUID, error)
+	// ListSummaryJobs returns the jobs the recipient may see (not deleted),
+	// by name.
+	ListSummaryJobs(ctx context.Context, arg ListSummaryJobsParams) ([]ListSummaryJobsRow, error)
+	// ListSummarySettingsToPlan locks rows of active accounts whose next due
+	// time was never computed, or that follow the defaults and were computed
+	// from other defaults than @default_basis.
+	ListSummarySettingsToPlan(ctx context.Context, arg ListSummarySettingsToPlanParams) ([]UserSummarySetting, error)
 	// ListTemporaryConnectionCleanup returns the temporary connections the
 	// cleanup worker has to look at: expired ones and those a restore
 	// (task 4.1, restores.target_connection_id) has used, with the number of
@@ -1025,6 +1087,9 @@ type Querier interface {
 	RecordDestinationTest(ctx context.Context, arg RecordDestinationTestParams) (int64, error)
 	RecordEmailVerificationFailure(ctx context.Context, userID uuid.UUID) (int32, error)
 	RecordSharedChannelResult(ctx context.Context, arg RecordSharedChannelResultParams) error
+	// RecordSummaryHandled stores the outcome of one due summary and the next
+	// due time.
+	RecordSummaryHandled(ctx context.Context, arg RecordSummaryHandledParams) error
 	// RecordUserChannelResult persists the failure counters of a personal
 	// webhook and, when the policy says so, disables it.
 	RecordUserChannelResult(ctx context.Context, arg RecordUserChannelResultParams) error
@@ -1169,6 +1234,7 @@ type Querier interface {
 	SetRestoreRiverJob(ctx context.Context, arg SetRestoreRiverJobParams) (int64, error)
 	SetRestoreStagedBytes(ctx context.Context, arg SetRestoreStagedBytesParams) (int64, error)
 	SetRunLogCounts(ctx context.Context, arg SetRunLogCountsParams) error
+	SetSummaryPlan(ctx context.Context, arg SetSummaryPlanParams) error
 	// SetTOTPPending stores a new pending secret, replacing an older pending
 	// one; refused (0 rows) once TOTP is enabled.
 	SetTOTPPending(ctx context.Context, arg SetTOTPPendingParams) (int64, error)
@@ -1201,6 +1267,12 @@ type Querier interface {
 	StartRun(ctx context.Context, arg StartRunParams) (Run, error)
 	// StartTestRestore moves a queued test restore to running.
 	StartTestRestore(ctx context.Context, id uuid.UUID) (int64, error)
+	// SummaryRunCounts counts the runs of visible jobs that finished in
+	// (@period_from, @period_until], per job and status.
+	SummaryRunCounts(ctx context.Context, arg SummaryRunCountsParams) ([]SummaryRunCountsRow, error)
+	// SummaryTestRestoreCounts counts the test restores of visible jobs that
+	// finished in (@period_from, @period_until], per job and status.
+	SummaryTestRestoreCounts(ctx context.Context, arg SummaryTestRestoreCountsParams) ([]SummaryTestRestoreCountsRow, error)
 	// SyncExternalGrants re-applies the privileges of the external API role
 	// bekup_external after the migrations (D-220): see migration 00037. false:
 	// the role does not exist (nothing to do).
@@ -1264,6 +1336,9 @@ type Querier interface {
 	// runs of a job on a destination that no keep rule would keep (D-209).
 	// first_seen_at is kept from the first sighting.
 	UpsertRetentionHold(ctx context.Context, arg UpsertRetentionHoldParams) (time.Time, error)
+	// UpsertSummarySettings stores a user's own settings with the schedule
+	// computed from them.
+	UpsertSummarySettings(ctx context.Context, arg UpsertSummarySettingsParams) error
 	// UpsertUnrecordedFile records a file found by the scan (first_seen_at is
 	// kept from the first sighting).
 	UpsertUnrecordedFile(ctx context.Context, arg UpsertUnrecordedFileParams) error

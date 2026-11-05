@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatClock, formatDuration, formatRelative } from "./format";
+import {
+  formatBytes,
+  formatClock,
+  formatDuration,
+  formatRelative,
+  formatZonedDateTime,
+} from "./format";
 
 describe("formatBytes", () => {
   it.each([
@@ -48,5 +54,19 @@ describe("formatClock / formatRelative", () => {
     const now = Date.parse("2026-10-28T12:00:00Z");
     expect(formatRelative("2026-10-28T09:00:00Z", now)).toMatch(/3 hours ago/);
     expect(formatRelative(undefined, now)).toBe("");
+  });
+});
+
+describe("formatZonedDateTime", () => {
+  it("formats in the given zone, across daylight saving", () => {
+    // 07:00Z is 08:00 in Amsterdam in winter, 09:00 in summer.
+    expect(formatZonedDateTime("2026-11-09T07:00:00Z", "Europe/Amsterdam")).toMatch(/08:00/);
+    expect(formatZonedDateTime("2026-06-08T07:00:00Z", "Europe/Amsterdam")).toMatch(/09:00/);
+    expect(formatZonedDateTime("2026-11-09T13:00:00Z", "America/New_York")).toMatch(/08:00/);
+    expect(formatZonedDateTime("2026-11-09T07:00:00Z", "UTC")).toMatch(/9.*Nov|Nov.*9/);
+  });
+  it("is empty for missing values and survives an unknown zone", () => {
+    expect(formatZonedDateTime(null, "UTC")).toBe("");
+    expect(formatZonedDateTime("2026-11-09T07:00:00Z", "Mars/Base")).not.toBe("");
   });
 });

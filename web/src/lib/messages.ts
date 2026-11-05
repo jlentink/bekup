@@ -47,6 +47,23 @@ export const messages = {
     streamLimit:
       "Live updates are paused in this tab: your session has too many live views open. Close other bekup tabs; updates resume on their own.",
   },
+  about: {
+    open: "About",
+    openDrawer: "About bekup",
+    title: "About bekup",
+    description: "Version and license of this bekup instance.",
+    uiVersion: "Web interface",
+    serverVersion: "Server",
+    version: (v: string) => `v${v}`,
+    product: (v: string) => `bekup v${v}`,
+    serverLoading: "Loading",
+    serverUnavailable: "Not available",
+    license: "License",
+    licenseName: "MIT",
+    docs: "Documentation",
+    changelog: "Release notes",
+    newTab: "(opens in a new tab)",
+  },
   roles: { ADMIN: "Admin", MAINTAINER: "Maintainer", USER: "User" },
   access: {
     admin: {

@@ -11,13 +11,14 @@ import { NotificationEventPreferenceFields, NotificationPreferencesFields } from
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const SUBJECT_PATHS: readonly RegExp[] = [
+  /^\/$/,
   new RegExp(`^/(runs|jobs|restores|connections|destinations)(/${UUID})?$`),
   /^\/profile(\/[a-z-]+)?$/,
   /^\/admin\/[a-z-]+$/,
 ];
 
 export type SubjectKind =
-  "run" | "job" | "restore" | "connection" | "destination" | "account" | "admin";
+  "dashboard" | "run" | "job" | "restore" | "connection" | "destination" | "account" | "admin";
 
 /**
  * The in-app path of a notification's link (the server sends an absolute
@@ -41,6 +42,8 @@ export function subjectPath(link: string | null | undefined): string | null {
 export function subjectKind(path: string): SubjectKind {
   const first = path.split("/")[1] ?? "";
   switch (first) {
+    case "":
+      return "dashboard";
     case "runs":
       return "run";
     case "jobs":
@@ -97,8 +100,14 @@ export const GROUP_ORDER: readonly NotificationGroup[] = [
   "RESTORE",
   "RETENTION",
   "CONFIG",
+  "SUMMARY",
   "SECURITY",
 ];
+
+/** Whether the event can use channel (the periodic summary has no webhook). */
+export function offers(row: PreferenceRow, channel: NotificationChannelType): boolean {
+  return row.event.offeredChannels.includes(channel);
+}
 
 export function cellOf(row: PreferenceRow, channel: NotificationChannelType): PreferenceCell {
   return (

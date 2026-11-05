@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 
 import { EncryptionBadge } from "./encryption-badge";
 import { OwnerChips } from "./jobs-list-page";
+import { JobStorageSection } from "./job-storage";
 import { JobEnabledToggle } from "./job-toggle";
 import {
   DeleteJobMutation,
@@ -315,6 +316,8 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
           ) : null}
         </dl>
       </header>
+
+      <JobStorageSection jobId={job.id} />
 
       <section aria-labelledby="job-history" className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-4">

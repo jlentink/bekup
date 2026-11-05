@@ -53,6 +53,8 @@ type Destination struct {
 	exclusive atomic.Bool
 	// testNoHardlink disables hardlink@openssh.com (tests only).
 	testNoHardlink bool
+	// testNoStatVFS hides statvfs@openssh.com (tests only).
+	testNoStatVFS bool
 	// sizeDelays are the waits between Put's stored-size checks
 	// (sizeRetryDelays; shorter in tests).
 	sizeDelays []time.Duration

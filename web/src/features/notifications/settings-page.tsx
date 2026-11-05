@@ -32,6 +32,7 @@ import {
   SetNotificationPreferenceMutation,
 } from "./operations";
 import { GroupMatrix, JobOverrideMatrix, type ToggleHandler } from "./preference-matrix";
+import { SummarySection } from "./summary-section";
 
 interface Job {
   jobId: string;
@@ -369,6 +370,7 @@ export function NotificationSettingsPage() {
   return (
     <div className="flex flex-col">
       <ChannelsSection />
+      <SummarySection />
       <section
         aria-labelledby="notification-prefs-heading"
         className="flex flex-col gap-5 border-b border-rule py-8"

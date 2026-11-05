@@ -99,6 +99,9 @@ var RootFieldOperations = map[string]authz.Operation{
 	"Query.unreadNotificationCount":         authz.OpNotificationInbox,
 	"Mutation.markNotificationsRead":        authz.OpNotificationInbox,
 	"Mutation.deleteNotification":           authz.OpNotificationInbox,
+	"Query.mySummarySettings":               authz.OpSummaryView,
+	"Mutation.setSummarySettings":           authz.OpSummaryEdit,
+	"Mutation.sendSummaryPreview":           authz.OpSummaryPreview,
 
 	// User administration (task 1.6).
 	"Query.users":                     authz.OpUserList,
@@ -119,6 +122,7 @@ var RootFieldOperations = map[string]authz.Operation{
 	// maintainers see metadata and may test.
 	"Query.destinations":                     authz.OpDestinationList,
 	"Query.destinationUsage":                 authz.OpStorageUsageView,
+	"Query.destinationSpace":                 authz.OpDestinationSpaceView,
 	"Query.destinationUnrecordedFiles":       authz.OpDestinationUnrecordedView,
 	"Mutation.deleteUnrecordedFile":          authz.OpDestinationUnrecordedDelete,
 	"Query.destination":                      authz.OpDestinationView,

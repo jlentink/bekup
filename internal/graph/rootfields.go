@@ -96,6 +96,9 @@ var SingleRootFields = []string{
 	// or sends an e-mail (one per request past the per-user limiter).
 	"Mutation.testSharedChannel",
 	"Mutation.testMyWebhook",
+	// The summary preview (D-226) sends an e-mail: one per request past
+	// the per-user limiter.
+	"Mutation.sendSummaryPreview",
 }
 
 // CredentialOperations are the authz operations whose root fields verify,

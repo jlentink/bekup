@@ -115,6 +115,7 @@ var matrix = map[authz.Operation]expect{
 	authz.OpDestinationTLSPin:           {"YFFFFU", "S"},
 	authz.OpDestinationTLSPinClear:      {"YFFFFU", "S"},
 	authz.OpStorageUsageView:            {"YYYFFU", "-"},
+	authz.OpDestinationSpaceView:        {"YYYFFU", "-"},
 	authz.OpDestinationUnrecordedView:   {"YFFFFU", "-"},
 	authz.OpDestinationUnrecordedDelete: {"YFFFFU", "S"},
 
@@ -180,6 +181,9 @@ var matrix = map[authz.Operation]expect{
 	authz.OpNotificationPrefsView:       {"YYYYYU", "-"},
 	authz.OpNotificationPrefsEdit:       {"YYYYYU", "-"},
 	authz.OpNotificationInbox:           {"YYYYYU", "-"},
+	authz.OpSummaryView:                 {"YYYYYU", "-"},
+	authz.OpSummaryEdit:                 {"YYYYYU", "-"},
+	authz.OpSummaryPreview:              {"YYYYYU", "-"},
 
 	authz.OpDashboardView:    {"YYYYYU", "-"},
 	authz.OpAlertList:        {"YFFFFU", "-"},

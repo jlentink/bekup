@@ -22,6 +22,8 @@ import {
   webhookUrlProblem,
   type PreferenceRow,
 } from "./model";
+import { localTimezone } from "@/features/jobs/schedule";
+
 import { resetPendingVerification } from "./pending-verification";
 
 beforeAll(stubResizeObserver);
@@ -256,14 +258,16 @@ function prefRow(
   group: string,
   opts: {
     mandatory?: boolean;
+    offered?: Channel[];
     cells?: Partial<Record<Channel, { enabled: boolean; source?: string }>>;
     jobOverrides?: { jobId: string; jobName: string; channel: Channel; enabled: boolean }[];
   } = {},
 ): PreferenceRow {
   const mandatory = opts.mandatory ?? false;
+  const offered = opts.offered ?? (["INBOX", "EMAIL", "WEBHOOK"] as Channel[]);
   const defaults: Record<Channel, boolean> = {
     INBOX: true,
-    EMAIL: mandatory || type.endsWith("failed"),
+    EMAIL: mandatory || type.endsWith("failed") || group === "SUMMARY",
     WEBHOOK: false,
   };
   return {
@@ -277,9 +281,10 @@ function prefRow(
       mandatory,
       priority: "NORMAL",
       severity: mandatory ? "CRITICAL" : "ERROR",
-      perJob: group !== "SECURITY",
+      perJob: group !== "SECURITY" && group !== "SUMMARY",
+      offeredChannels: offered,
     },
-    channels: (["INBOX", "EMAIL", "WEBHOOK"] as const).map((channel) => {
+    channels: offered.map((channel) => {
       const c = opts.cells?.[channel];
       const locked = mandatory && channel !== "WEBHOOK";
       return {
@@ -310,6 +315,16 @@ function prefsFixture(rows: { backupFailed?: PreferenceRow } = {}) {
         events: [
           rows.backupFailed ?? prefRow("backup.failed", "Backup failed", "BACKUP"),
           prefRow("backup.succeeded", "Backup succeeded", "BACKUP"),
+        ],
+      },
+      {
+        __typename: "NotificationPreferenceGroup",
+        group: "SUMMARY",
+        label: "Summary",
+        events: [
+          prefRow("summary.periodic", "Periodic summary", "SUMMARY", {
+            offered: ["INBOX", "EMAIL"],
+          }),
         ],
       },
       {
@@ -357,12 +372,41 @@ function webhookFixture(over: Record<string, unknown> = {}) {
   };
 }
 
+function summarySettings(over: Record<string, unknown> = {}) {
+  return {
+    __typename: "SummarySettings",
+    frequency: "WEEKLY",
+    hour: 8,
+    weekday: 1,
+    monthDay: 1,
+    timezone: "UTC",
+    ...over,
+  };
+}
+
+function summaryFixture(over: Record<string, unknown> = {}) {
+  return {
+    __typename: "MySummarySettings",
+    settings: summarySettings(),
+    custom: false,
+    defaults: summarySettings(),
+    nextSummaryAt: "2026-11-09T08:00:00Z",
+    lastSentAt: null,
+    lastOutcome: null,
+    lastOutcomeAt: null,
+    emailVerified: false,
+    visibleJobs: 3,
+    ...over,
+  };
+}
+
 function settingsHandlers(extra: Record<string, Handler> = {}): Record<string, Handler> {
   return {
     ...baseHandlers(),
     ServerInfo: () => ok(serverInfoFixture(false)),
     MyNotificationChannels: () => ok(channelsFixture()),
     MyNotificationPreferences: () => ok({ myNotificationPreferences: prefsFixture() }),
+    MySummarySettings: () => ok({ mySummarySettings: summaryFixture() }),
     NotificationJobOptions: () =>
       ok({
         jobs: {
@@ -507,6 +551,115 @@ describe("preference matrix", () => {
 });
 
 /* ---- Personal channels ---- */
+
+describe("summary e-mail", () => {
+  it("prefills the browser's zone, shows the next summary and saves the choice", async () => {
+    const saved = summaryFixture({
+      custom: true,
+      settings: summarySettings({
+        frequency: "MONTHLY",
+        hour: 7,
+        monthDay: 15,
+        timezone: "Europe/Amsterdam",
+      }),
+      nextSummaryAt: "2026-11-15T06:00:00Z",
+    });
+    const { callsOf, user } = renderApp(
+      "/profile/notifications",
+      settingsHandlers({
+        SetSummarySettings: () => ok({ setSummarySettings: saved }),
+      }),
+    );
+    const region = await screen.findByRole("region", { name: "Summary e-mail" });
+    const zone = within(region).getByLabelText("Time zone");
+    expect(zone).toHaveValue(localTimezone());
+    expect(within(region).getByRole("radio", { name: /Weekly/ })).toBeChecked();
+    expect(within(region).getByText(/Next summary/)).toBeInTheDocument();
+    expect(within(region).getByText("(UTC)")).toBeInTheDocument();
+    expect(
+      within(region).getByText(/server's default applies: Weekly, Monday 08:00 \(UTC\)/),
+    ).toBeInTheDocument();
+    expect(within(region).getByText(/summaries reach only your inbox/)).toBeInTheDocument();
+    // Weekly: a weekday select, no day of the month.
+    expect(within(region).getByLabelText("Weekday")).toHaveValue("1");
+    expect(within(region).queryByLabelText("Day of the month")).toBeNull();
+
+    await user.click(within(region).getByRole("radio", { name: /Monthly/ }));
+    await user.selectOptions(within(region).getByLabelText("Day of the month"), "15");
+    await user.selectOptions(within(region).getByLabelText("Time"), "7");
+    await user.clear(zone);
+    await user.type(zone, "Europe/Amsterdam");
+    await user.click(within(region).getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(callsOf("SetSummarySettings")).toHaveLength(1);
+    });
+    expect(callsOf("SetSummarySettings")[0]?.variables).toEqual({
+      input: {
+        frequency: "MONTHLY",
+        hour: 7,
+        weekday: 1,
+        monthDay: 15,
+        timezone: "Europe/Amsterdam",
+      },
+    });
+    await waitFor(() => {
+      expect(within(region).getByText("(Europe/Amsterdam)")).toBeInTheDocument();
+    });
+    expect(within(region).getByRole("button", { name: "Save" })).toBeDisabled();
+    expect(within(region).queryByText(/server's default applies/)).toBeNull();
+  });
+
+  it("hides the time for never and sends a preview", async () => {
+    const { callsOf, user } = renderApp(
+      "/profile/notifications",
+      settingsHandlers({
+        SendSummaryPreview: () =>
+          ok({
+            sendSummaryPreview: {
+              __typename: "SummaryPreviewResult",
+              periodStart: "2026-11-02T08:00:00Z",
+              periodEnd: "2026-11-05T10:00:00Z",
+              emailVerified: false,
+            },
+          }),
+      }),
+    );
+    const region = await screen.findByRole("region", { name: "Summary e-mail" });
+    await user.click(within(region).getByRole("radio", { name: /Never/ }));
+    expect(within(region).queryByLabelText("Time")).toBeNull();
+    await user.click(within(region).getByRole("button", { name: "Send a preview now" }));
+    await waitFor(() => {
+      expect(callsOf("SendSummaryPreview")).toHaveLength(1);
+    });
+    expect(
+      await screen.findByText(/Preview sent to your inbox \(your address/),
+    ).toBeInTheDocument();
+  });
+
+  it("says why nothing is sent without jobs", async () => {
+    renderApp(
+      "/profile/notifications",
+      settingsHandlers({
+        MySummarySettings: () =>
+          ok({ mySummarySettings: summaryFixture({ visibleJobs: 0, emailVerified: true }) }),
+      }),
+    );
+    const region = await screen.findByRole("region", { name: "Summary e-mail" });
+    expect(within(region).getByText(/You can see no backup jobs/)).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Send a preview now" })).toBeDisabled();
+    expect(within(region).queryByText(/reach only your inbox/)).toBeNull();
+  });
+
+  it("offers inbox and e-mail only in the preference matrix", async () => {
+    renderApp("/profile/notifications", settingsHandlers());
+    expect(await screen.findByRole("switch", { name: "Periodic summary: E-mail" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Periodic summary: In-app" })).toBeChecked();
+    expect(screen.queryByRole("switch", { name: "Periodic summary: Webhooks" })).toBeNull();
+    expect(
+      screen.getByText("Periodic summary: Webhooks: Not available for this event"),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("personal webhooks", () => {
   const KEY = "bkwh_9Qx3kLm2Vt7Rz1Np5Hs8Fd4Gc6Bj0Aw";

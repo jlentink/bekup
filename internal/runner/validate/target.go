@@ -137,7 +137,10 @@ func (v *Validator) behindBastion(field, host string, s *SSH) error {
 		ip := a.Unmap()
 		c := netguard.Classify(ip)
 		if c.Blocked && c.Hard && c.Reason != netguard.ReasonLoopback {
-			return allowlistError(field, &behindBastionError{})
+			return allowlistError(field, v.guard.Deny(&targets.DeniedError{
+				IP: ip, Bastion: s.Bastion.Host, Category: string(c.Reason),
+				Reason: targets.ReasonAlwaysDenied + " behind the bastion: " + string(c.Reason),
+			}))
 		}
 		if err := v.guard.CheckDenyLists(ip, ""); err != nil {
 			return allowlistError(field, err)
@@ -381,9 +384,3 @@ func checkSSHKey(key []byte) error {
 	}
 	return nil
 }
-
-// behindBastionError marks an always-denied literal behind a bastion.
-type behindBastionError struct{}
-
-func (*behindBastionError) Error() string { return "always-denied address behind the bastion" }
-func (*behindBastionError) Unwrap() error { return targets.ErrDenied }

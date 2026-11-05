@@ -292,6 +292,17 @@ extend type Query {
   destinationUsage: [DestinationUsage!]! @hasRole(roles: [ADMIN, MAINTAINER])
 
   """
+  The total and free space behind a destination, where its backend reports
+  it (D-225): disk (statfs), SFTP (statvfs@openssh.com), WebDAV (RFC 4331
+  quota; Nextcloud/ownCloud report the account quota); never S3. Asked on
+  demand through the SSRF guard and the pins, bounded in time, rate
+  limited like tests and cached per destination for 5 minutes (failures 1
+  minute; a settings change asks again). Fixed reasons only, never server
+  text. NOT_FOUND for an unknown or deleted destination.
+  """
+  destinationSpace(id: UUID!): DestinationSpace! @hasRole(roles: [ADMIN, MAINTAINER])
+
+  """
   The unrecorded files of a destination (D-209): files in bekup's layout
   (`{job slug}/{timestamp}/{file}`, older than 24 hours) that no backup
   record references, found by the daily scan. `first` is 1..200 (default
@@ -355,6 +366,38 @@ type DestinationUsage {
   storedBytes: Float!
   "Number of present backup files (dumps and manifests)."
   artifactCount: Int!
+  "Number of backups (runs) with present files here."
+  backupCount: Int!
+}
+
+"Whether a destination's backend reported its space."
+enum DestinationSpaceStatus {
+  "At least one of total, free and used is known."
+  AVAILABLE
+  "The backend type (S3) or this server reports no space."
+  UNSUPPORTED
+  "The space could not be checked now (not ready, unreachable, too many checks)."
+  UNAVAILABLE
+}
+
+"The space behind a destination (D-225)."
+type DestinationSpace {
+  destinationId: UUID!
+  status: DestinationSpaceStatus!
+  "A fixed explanation when status is not AVAILABLE."
+  reason: String
+  "The file system's (disk, SFTP) or the quota's (WebDAV) size in bytes; null when not reported."
+  totalBytes: Float
+  "Bytes available to bekup; null when not reported."
+  freeBytes: Float
+  "Bytes in use by anything (not only bekup); null when not reported."
+  usedBytes: Float
+  "The newest full set of backups here: per job, its newest run's present files (bytes)."
+  newestSetBytes: Float!
+  "The free space is below a tenth of the total or below newestSetBytes."
+  low: Boolean!
+  "When the backend was asked (null: not asked, e.g. S3 or not ready)."
+  checkedAt: Time
 }
 
 extend type Mutation {
