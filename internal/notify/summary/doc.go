@@ -17,8 +17,8 @@
 // again at e-mail delivery, scoped to the recipient's current access:
 // authz.JobScope for the jobs, destination.usage_view for the destination
 // usage and monitor.alert_list for the security alert count. It reads
-// only bekup's own tables (free space only when destinations has a
-// recent answer cached); the inbox row carries counts only, the e-mail
+// only bekup's own tables (free space only from the stored answer of the
+// hourly space check, D-227); the inbox row carries counts only, the e-mail
 // (email.Render) a status banner, key figures and one row per job with its
 // status (worst first, at most 100 rows), the restores, the storage
 // (staff) and the security alerts (admins). A period is at least one

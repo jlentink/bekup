@@ -6,7 +6,7 @@ import {
   destinationFixture,
   stubResizeObserver,
 } from "@/features/connections/test-fixtures";
-import { baseHandlers, meFixture, ok, renderApp } from "@/test/mock-api";
+import { baseHandlers, gqlError, meFixture, ok, renderApp } from "@/test/mock-api";
 
 beforeAll(stubResizeObserver);
 
@@ -41,7 +41,35 @@ function space(overrides: Record<string, unknown> = {}) {
         newestSetBytes: 2 * GiB,
         low: false,
         checkedAt: "2026-11-05T08:00:00Z",
+        stale: false,
         ...overrides,
+      },
+    });
+}
+
+function spaceCheck(overrides: Record<string, unknown> | null = {}) {
+  return () =>
+    ok({
+      destination: {
+        __typename: "Destination",
+        id: DEST_ID,
+        spaceCheck:
+          overrides === null
+            ? null
+            : {
+                __typename: "DestinationSpace",
+                destinationId: DEST_ID,
+                status: "AVAILABLE",
+                reason: null,
+                totalBytes: 100 * GiB,
+                freeBytes: 30 * GiB,
+                usedBytes: 70 * GiB,
+                newestSetBytes: 2 * GiB,
+                low: false,
+                checkedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+                stale: false,
+                ...overrides,
+              },
       },
     });
 }
@@ -49,6 +77,8 @@ function space(overrides: Record<string, unknown> = {}) {
 const detail = (handlers: Record<string, unknown>) => ({
   ...baseHandlers(meFixture({}, "MAINTAINER")),
   DestinationDetail: () => ok({ destination: destinationFixture("DISK") }),
+  // Nothing stored for the current settings: the page asks live.
+  DestinationSpaceCheck: spaceCheck(null),
   ...handlers,
 });
 
@@ -138,5 +168,111 @@ describe("destination storage (D-225)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("space-line")).toHaveTextContent("60.0 GiB free of 100 GiB");
     });
+  });
+
+  it("shows the stored check with its age and asks live only on request (D-227)", async () => {
+    const { user, callsOf } = renderApp(`/destinations/${DEST_ID}`, {
+      ...detail({
+        DestinationStored: stored(10 * GiB, 4),
+        DestinationSpaceCheck: spaceCheck(),
+        DestinationSpace: space(),
+      }),
+    });
+    expect(await screen.findByTestId("space-line")).toHaveTextContent(
+      "10.0 GiB used by bekup · 30.0 GiB free of 100 GiB",
+    );
+    expect(screen.getByTestId("space-checked")).toHaveTextContent(/^Last checked .*every hour\.$/);
+    expect(screen.queryByTestId("space-stale")).toBeNull();
+    expect(callsOf("DestinationSpace")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Check now" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("space-line")).toHaveTextContent("60.0 GiB free of 100 GiB");
+    });
+    expect(callsOf("DestinationSpace")).toHaveLength(1);
+    expect(screen.getByTestId("space-checked")).toHaveTextContent("cached for up to 5 minutes");
+  });
+
+  it("warns when the stored check is stale", async () => {
+    renderApp(`/destinations/${DEST_ID}`, {
+      ...detail({
+        DestinationStored: stored(10 * GiB, 4),
+        DestinationSpaceCheck: spaceCheck({
+          stale: true,
+          checkedAt: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),
+        }),
+      }),
+    });
+    const stale = await screen.findByTestId("space-stale");
+    expect(stale).toHaveTextContent(/^Last checked .* more than 3 hours/);
+    expect(screen.queryByTestId("space-checked")).toBeNull();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeInTheDocument();
+  });
+
+  it("shows a stored failed check with a new check", async () => {
+    renderApp(`/destinations/${DEST_ID}`, {
+      ...detail({
+        DestinationStored: stored(0, 0),
+        DestinationSpaceCheck: spaceCheck({
+          status: "UNAVAILABLE",
+          reason: "the destination could not be reached",
+          totalBytes: null,
+          freeBytes: null,
+          usedBytes: null,
+        }),
+      }),
+    });
+    expect(await screen.findByTestId("space-reason")).toHaveTextContent(
+      "the destination could not be reached",
+    );
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
+  it("shows a failed Check now next to the stored check instead of hiding it", async () => {
+    let n = 0;
+    const { user, callsOf } = renderApp(`/destinations/${DEST_ID}`, {
+      ...detail({
+        DestinationStored: stored(10 * GiB, 4),
+        DestinationSpaceCheck: spaceCheck(),
+        DestinationSpace: () => {
+          n++;
+          if (n === 1) return gqlError("RATE_LIMITED", "Too many space checks; try again in a minute.");
+          if (n === 2)
+            return space({
+              status: "UNAVAILABLE",
+              reason: "Too many space checks right now; try again in a minute.",
+              totalBytes: null,
+              freeBytes: null,
+              usedBytes: null,
+              checkedAt: null,
+            })();
+          return space()();
+        },
+      }),
+    });
+    expect(await screen.findByTestId("space-line")).toHaveTextContent("30.0 GiB free of 100 GiB");
+    // An API error (rate limit): the stored answer stays, the error is shown.
+    await user.click(screen.getByRole("button", { name: "Check now" }));
+    const failed = await screen.findByTestId("space-live-failed");
+    expect(failed).toHaveTextContent(
+      "Check now failed: Too many space checks; try again in a minute. Shown is the last stored check.",
+    );
+    expect(screen.getByTestId("space-line")).toHaveTextContent("30.0 GiB free of 100 GiB");
+    expect(screen.getByTestId("space-checked")).toHaveTextContent(/every hour\.$/);
+    // An unavailable answer (the server's busy answer): the same.
+    await user.click(screen.getByRole("button", { name: "Check now" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("space-live-failed")).toHaveTextContent(
+        "Check now failed: Too many space checks right now; try again in a minute. Shown is the last stored check.",
+      );
+    });
+    expect(screen.getByTestId("space-line")).toHaveTextContent("30.0 GiB free of 100 GiB");
+    // A live answer replaces the stored one, with the cache explanation.
+    await user.click(screen.getByRole("button", { name: "Check now" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("space-line")).toHaveTextContent("60.0 GiB free of 100 GiB");
+    });
+    expect(screen.queryByTestId("space-live-failed")).toBeNull();
+    expect(screen.getByTestId("space-checked")).toHaveTextContent("cached for up to 5 minutes");
+    expect(callsOf("DestinationSpace")).toHaveLength(3);
   });
 });

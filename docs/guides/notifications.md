@@ -53,7 +53,7 @@ e-mail; webhooks are opt-in.**
 | Backup | `backup.started` (low priority), `backup.started_early`, `backup.succeeded`, `backup.succeeded_with_warnings` ✱, `backup.partial` ✱, `backup.failed` ✱, `backup.canceled`, `backup.missed` ✱ | admins, maintainers, the job's owners |
 | Restore | `restore.started` (low priority), `restore.completed`, `restore.failed` ✱, `test_restore.passed`, `test_restore.warnings` ✱, `test_restore.failed` ✱ | admins, maintainers, the job's owners |
 | Retention & storage | `retention.summary` (daily digest), `retention.blocked` ✱, `artifact.missing` ✱ | admins, maintainers, the job's owners |
-| | `destination.test_failed` ✱ | admins, maintainers |
+| | `destination.test_failed` ✱, `destination.low_space` ✱ (a space check found less than 10% free, or less free than the newest set of backups needs; once per episode and at most one new episode a day, then a daily reminder while it stays low; an episode ends after 3 hours with enough space) | admins, maintainers |
 | Job & configuration | `job.created`, `job.updated`, `job.disabled`, `job.enabled`, `job.deleted`, `job.encryption_changed` ✱ | admins, maintainers, the job's owners |
 | | `connection.pin_changed` ✱, `connection.tls_downgraded` ✱, `connection.host_key_changed` ✱ | admins, maintainers |
 | Summary | `summary.periodic`: the [summary e-mail](#summary-e-mail) at the frequency you choose (inbox and e-mail by default; never sent to webhooks or shared channels) | only you, about the jobs you may see |
@@ -289,9 +289,14 @@ shows, top to bottom:
 - **restores** (only when there were any): restores and test restores in
   the period by result;
 - admins and maintainers: **storage** per destination (stored, free,
-  backups). Free space shows only when bekup checked it in the last few
-  minutes (the summary never contacts a destination); "Low space" uses the
-  rule of the storage page: less than 10% free, or less free than the
+  backups). The free space comes from the hourly space check (the summary
+  never contacts a destination): **OK** or **Low space** with the time of
+  the check; **Stale** (a warning) when the newest check is more than 3
+  hours old when the summary is rendered, whatever it reported (the check
+  stopped); **Check failed** (a warning) with a fixed reason; **No limit**
+  for S3 and servers without a quota (the note says why); **Not checked**
+  for a new destination or one whose settings changed since. "Low space" uses
+  the rule of the storage page: less than 10% free, or less free than the
   newest set of backups needs;
 - admins: **security** alerts raised in the period (above the jobs table
   when there were any, at the end when there were none);

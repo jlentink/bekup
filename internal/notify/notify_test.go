@@ -46,6 +46,7 @@ func TestCatalogMetadata(t *testing.T) {
 		RetentionBlocked:            {GroupRetention, AudienceJob, true, false, false, authz.OpArtifactView},
 		ArtifactMissing:             {GroupRetention, AudienceJob, true, false, false, authz.OpArtifactView},
 		DestinationTestFailed:       {GroupRetention, AudienceStaff, true, false, false, authz.OpDestinationView},
+		DestinationLowSpace:         {GroupRetention, AudienceStaff, true, false, false, authz.OpDestinationView},
 		JobCreated:                  {GroupConfig, AudienceJob, false, false, false, authz.OpJobView},
 		JobUpdated:                  {GroupConfig, AudienceJob, false, false, false, authz.OpJobView},
 		JobDisabled:                 {GroupConfig, AudienceJob, false, false, false, authz.OpJobView},
@@ -490,6 +491,41 @@ func TestRenderRetentionBlocked(t *testing.T) {
 			}
 		}
 		if got.Link != "https://bekup.example.com/app/jobs/"+job.String() {
+			t.Errorf("link %q", got.Link)
+		}
+	}
+}
+
+// TestRenderDestinationLowSpace: destination.low_space names the
+// destination, the free space, the part of the D-225 rule that holds and,
+// for a reminder, the start of the episode (D-227).
+func TestRenderDestinationLowSpace(t *testing.T) {
+	s := testService(t)
+	dest := uuid.New()
+	m, _ := Lookup(DestinationLowSpace)
+	for _, c := range []struct {
+		detail     string
+		want, deny []string
+	}{
+		{`{"cause":"fraction","free_bytes":1073741824,"total_bytes":21474836480,"newest_set_bytes":0,"low_since":"2026-11-05T10:00:00Z","reminder":0}`,
+			[]string{`"offsite"`, "1.0 GiB of 20.0 GiB free", "less than 10%"}, []string{"since"}},
+		{`{"cause":"below_newest_set","free_bytes":1073741824,"newest_set_bytes":2147483648,"low_since":"2026-11-05T10:00:00Z","reminder":2}`,
+			[]string{"1.0 GiB free", "newest set of backups there needs (2.0 GiB)", "low since 5 Nov 2026 10:00 UTC"}, []string{"free of"}},
+	} {
+		ev := &sqlc.NotificationEvent{ID: uuid.New(), Type: string(DestinationLowSpace), Severity: "warning",
+			DestinationID: &dest, Detail: json.RawMessage(c.detail), CreatedAt: time.Now()}
+		got := s.render(ev, m, names{destination: "offsite"})
+		for _, w := range c.want {
+			if !strings.Contains(got.Body, w) {
+				t.Errorf("body %q lacks %q", got.Body, w)
+			}
+		}
+		for _, w := range c.deny {
+			if strings.Contains(got.Body, w) {
+				t.Errorf("body %q contains %q", got.Body, w)
+			}
+		}
+		if got.Link != "https://bekup.example.com/app/destinations/"+dest.String() {
 			t.Errorf("link %q", got.Link)
 		}
 	}

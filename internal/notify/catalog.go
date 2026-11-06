@@ -44,6 +44,11 @@ const (
 	RetentionBlocked      EventType = "retention.blocked"
 	ArtifactMissing       EventType = "artifact.missing"
 	DestinationTestFailed EventType = "destination.test_failed"
+	// DestinationLowSpace: a space check found a destination low on space
+	// (the D-225 rule; D-227). Once per low episode (dedup key: the
+	// destination and the episode start) plus a daily reminder while it
+	// stays low; a check that is not low ends the episode.
+	DestinationLowSpace EventType = "destination.low_space"
 
 	// Job & configuration changes.
 	JobCreated               EventType = "job.created"
@@ -225,6 +230,11 @@ var catalog = func() map[EventType]Meta {
 			Type: DestinationTestFailed, Group: GroupRetention, Audience: AudienceStaff, Problem: true,
 			Priority: PriorityNormal, Severity: SeverityWarning, Subject: SubjectDestination,
 			Op: authz.OpDestinationView, Label: "Destination test failed",
+		},
+		{
+			Type: DestinationLowSpace, Group: GroupRetention, Audience: AudienceStaff, Problem: true,
+			Priority: PriorityNormal, Severity: SeverityWarning, Subject: SubjectDestination,
+			Op: authz.OpDestinationView, Label: "Destination low on space",
 		},
 
 		jobEvent(JobCreated, GroupConfig, authz.OpJobView, false, SeverityInfo, "Job created"),

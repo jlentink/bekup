@@ -26,8 +26,8 @@ import (
 // access (authz.JobScope: staff see every job, backup owners their own;
 // destination usage and the security alert count only with their view
 // operations). Everything comes from bekup's own tables: the summary never
-// asks a destination or the runner anything (free space only when a
-// recent answer is cached in this process).
+// asks a destination or the runner anything (free space only from the
+// stored answer of the hourly space check, D-227).
 
 // Bounds of the summary content.
 const (
@@ -168,17 +168,21 @@ type jobRow struct {
 // destinationUsage is one destination's stored backups (staff).
 type destinationUsage struct {
 	Name    string
+	Type    destinations.Type
 	Bytes   int64
 	Backups int64
-	// Free is the free space when a recent answer is cached (nil: not
-	// known here); Low is the D-225 low-space rule on that answer.
-	Free *int64
-	Low  destinations.LowCause
+	// Space is the stored answer of the newest space check (D-227; not
+	// Checked when never checked or when the settings changed since);
+	// Space.Low is the D-225 low-space verdict of that check.
+	Space destinations.StoredSpace
 }
 
 // summaryData is everything a summary shows (pure input of buildSummary).
 type summaryData struct {
 	Period summaryPeriod
+	// Now is the render time: stored space answers are read when the
+	// summary is rendered and judged against it (zero: the period end).
+	Now time.Time
 	// Jobs is the number of jobs the recipient may see.
 	Jobs int
 	// Runs, TestRestores and Restores count by status in the period.
@@ -275,7 +279,7 @@ func (s *Service) Render(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notifica
 	if err != nil {
 		return nil, err
 	}
-	d, err := s.summaryData(ctx, q, sc, p)
+	d, err := s.summaryData(ctx, q, sc, p, s.o.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -283,9 +287,9 @@ func (s *Service) Render(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notifica
 	return &c, nil
 }
 
-// summaryData reads the summary of scope sc for period p.
-func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summaryScope, p summaryPeriod) (*summaryData, error) {
-	d := &summaryData{Period: p, Runs: map[string]int64{}, TestRestores: map[string]int64{}, Restores: map[string]int64{}}
+// summaryData reads the summary of scope sc for period p, rendered at now.
+func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summaryScope, p summaryPeriod, now time.Time) (*summaryData, error) {
+	d := &summaryData{Period: p, Now: now, Runs: map[string]int64{}, TestRestores: map[string]int64{}, Restores: map[string]int64{}}
 	if !sc.any {
 		return d, nil
 	}
@@ -330,8 +334,8 @@ func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summarySc
 			return nil, fmt.Errorf("notify: summary destination usage: %w", err)
 		}
 		d.ShowUsage = true
-		if in.space, err = s.cachedSpace(ctx, q, in.usage); err != nil {
-			return nil, err
+		if in.space, err = destinations.StoredSpaces(ctx, q); err != nil {
+			return nil, fmt.Errorf("notify: summary destination space: %w", err)
 		}
 	}
 	if sc.alerts {
@@ -342,35 +346,6 @@ func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summarySc
 	}
 	in.fill(d)
 	return d, nil
-}
-
-// spaceInfo is a destination's cached free space and its low-space
-// verdict.
-type spaceInfo struct {
-	free int64
-	low  destinations.LowCause
-}
-
-// cachedSpace returns the cached free space of the listed destinations
-// (the first maxSummaryDestinations) with the D-225 low-space rule, which
-// also compares with the newest full set of backups there.
-func (s *Service) cachedSpace(ctx context.Context, q *sqlc.Queries, usage []sqlc.DestinationUsageRow) (map[uuid.UUID]spaceInfo, error) {
-	out := map[uuid.UUID]spaceInfo{}
-	if s.o.CachedSpace == nil {
-		return out, nil
-	}
-	for i := range min(len(usage), maxSummaryDestinations) {
-		sp, ok := s.o.CachedSpace(usage[i].ID)
-		if !ok {
-			continue
-		}
-		newest, err := q.DestinationNewestSetBytes(ctx, usage[i].ID)
-		if err != nil {
-			return nil, fmt.Errorf("notify: summary newest backup set: %w", err)
-		}
-		out[usage[i].ID] = spaceInfo{free: sp.Free, low: destinations.LowSpaceCause(sp, newest)}
-	}
-	return out, nil
 }
 
 // summaryInput are the rows of one summary.
@@ -384,7 +359,7 @@ type summaryInput struct {
 	holds    []sqlc.ListRetentionHoldsForJobsRow
 	active   []uuid.UUID
 	usage    []sqlc.DestinationUsageRow
-	space    map[uuid.UUID]spaceInfo
+	space    map[uuid.UUID]destinations.StoredSpace
 }
 
 // fill computes the totals and the job rows (pure).
@@ -461,10 +436,9 @@ func (in *summaryInput) fill(d *summaryData) {
 	// Worst first, then by name (ListSummaryJobs is ordered by name).
 	slices.SortStableFunc(d.JobRows, func(a, b jobRow) int { return int(a.Status) - int(b.Status) })
 	for _, u := range in.usage {
-		du := destinationUsage{Name: notify.DisplayName(u.Name), Bytes: u.StoredBytes, Backups: u.BackupCount}
-		if sp, ok := in.space[u.ID]; ok {
-			free := sp.free
-			du.Free, du.Low = &free, sp.low
+		du := destinationUsage{
+			Name: notify.DisplayName(u.Name), Type: destinations.Type(u.Type), Bytes: u.StoredBytes, Backups: u.BackupCount,
+			Space: in.space[u.ID],
 		}
 		d.Destinations = append(d.Destinations, du)
 	}
@@ -531,7 +505,7 @@ func (c counts) problems() int {
 func (d *summaryData) lowDestinations() int {
 	n := 0
 	for i := range d.Destinations[:min(len(d.Destinations), maxSummaryDestinations)] {
-		if d.Destinations[i].Low != destinations.LowNone {
+		if sp := d.Destinations[i].Space; sp.Checked() && sp.Low != destinations.LowNone {
 			n++
 		}
 	}

@@ -542,7 +542,14 @@ vite-plugins/         csp-strict-styles (build-time CSP hardening)
   enrollment, the dashboard, connections, destinations, jobs, runs, the
   restore wizard and history, the calendar, the notification center and
   `/verify-email`, the admin settings, channels and audit log, and the
-  404 page. Extend it when you add a page or an overlay.
+  404 page. Extend it when you add a page or an overlay. It then runs
+  `scripts/email-width-check.mjs` (D-227 amendment 1): every golden e-mail
+  (`internal/notify/summary/testdata/*.html`,
+  `internal/notify/email/testdata/*.html`) is loaded at a real 375 px
+  viewport in light and dark mode and fails when
+  `document.documentElement.scrollWidth` exceeds 375. Add a golden for
+  every new e-mail state; `node scripts/email-width-check.mjs --shots <dir>`
+  writes review screenshots (375 px light/dark, 600 px).
 
 **GraphQL server (`internal/graph`, D-105).** Add or change types in
 `internal/graph/schema/<area>.graphqls` (extend `Query`/`Mutation` with

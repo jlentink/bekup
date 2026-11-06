@@ -12,6 +12,7 @@ import (
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/runstate"
+	"github.com/jlentink/bekup/internal/storage"
 )
 
 // Storage resolvers (D-225): the space behind a destination
@@ -38,21 +39,53 @@ func (r *Resolver) destinationSpace(ctx context.Context, id uuid.UUID) (*model.D
 
 func destinationSpaceModel(rep *destinations.SpaceReport) *model.DestinationSpace {
 	m := &model.DestinationSpace{
-		DestinationID: rep.DestinationID, Status: model.DestinationSpaceStatusUnavailable,
+		DestinationID: rep.DestinationID, Status: spaceStatusModel(rep.Status),
 		NewestSetBytes: float64(rep.NewestSetBytes), Low: rep.Low,
-	}
-	switch rep.Status {
-	case destinations.SpaceAvailable:
-		m.Status = model.DestinationSpaceStatusAvailable
-	case destinations.SpaceUnsupported:
-		m.Status = model.DestinationSpaceStatusUnsupported
-	case destinations.SpaceUnavailable:
 	}
 	if rep.Reason != "" {
 		reason := rep.Reason
 		m.Reason = &reason
 	}
-	sp := rep.Space
+	setSpaceValues(m, rep.Space)
+	if !rep.CheckedAt.IsZero() {
+		at := rep.CheckedAt
+		m.CheckedAt = &at
+	}
+	return m
+}
+
+// storedSpaceModel converts the stored answer of the newest space check
+// (Destination.spaceCheck, D-227; nil when there is none for the current
+// settings).
+func storedSpaceModel(id uuid.UUID, sp *destinations.StoredSpace, now time.Time) *model.DestinationSpace {
+	if !sp.Checked() {
+		return nil
+	}
+	at := sp.CheckedAt
+	m := &model.DestinationSpace{
+		DestinationID: id, Status: spaceStatusModel(sp.Status), NewestSetBytes: float64(sp.NewestSetBytes),
+		Low: sp.Low != destinations.LowNone, CheckedAt: &at, Stale: sp.Stale(now),
+	}
+	if sp.Reason != "" {
+		reason := sp.Reason
+		m.Reason = &reason
+	}
+	setSpaceValues(m, sp.Space)
+	return m
+}
+
+func spaceStatusModel(s destinations.SpaceStatus) model.DestinationSpaceStatus {
+	switch s {
+	case destinations.SpaceAvailable:
+		return model.DestinationSpaceStatusAvailable
+	case destinations.SpaceUnsupported:
+		return model.DestinationSpaceStatusUnsupported
+	default:
+		return model.DestinationSpaceStatusUnavailable
+	}
+}
+
+func setSpaceValues(m *model.DestinationSpace, sp storage.Space) {
 	if sp.TotalKnown {
 		v := float64(sp.Total)
 		m.TotalBytes = &v
@@ -65,11 +98,6 @@ func destinationSpaceModel(rep *destinations.SpaceReport) *model.DestinationSpac
 		v := float64(sp.Used)
 		m.UsedBytes = &v
 	}
-	if !rep.CheckedAt.IsZero() {
-		at := rep.CheckedAt
-		m.CheckedAt = &at
-	}
-	return m
 }
 
 func clampInt(n int64) int { return int(min(max(n, 0), math.MaxInt32)) }

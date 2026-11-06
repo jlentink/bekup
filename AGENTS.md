@@ -147,7 +147,10 @@ internal/
                 pubsub (LISTEN/NOTIFY bridge + in-process bus: 1.10)
                 destinations (destination CRUD, Open/Test, host keys: 2.12; WebDAV
                   certificate pins tlspin.go: D-222;
-                  unrecorded-file scan/list/delete unrecorded.go: D-209)
+                  unrecorded-file scan/list/delete unrecorded.go: D-209;
+                  space.go on-demand space: D-225; spacecheck.go hourly
+                  destination_space_check worker, stored space, low-space
+                  episode: D-227)
                 connections (connection CRUD, pins, host keys, runner request builder: 2.11)
                 netguard (dial-time SSRF guard: 2.3)
                 egress (admin SSRF allowlist in settings with scopes + per-process sync: D-196, D-198)
@@ -1009,9 +1012,10 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   inbox + e-mail by default, `Meta.Channels` offers no webhook) whose
   content `Render` builds at fan-out and delivery from the recipient's
   current access (`authz.JobScope`, `destination.usage_view`,
-  `monitor.alert_list`), from bekup's own tables only (free space only via
-  `destinations.Service.CachedSpace` + the D-225 `destinations.LowSpace`
-  rule, never a backend call); the stored inbox row carries the job and
+  `monitor.alert_list`), from bekup's own tables only (free space only
+  from the stored space checks via `destinations.StoredSpaces`, with the
+  D-225 low verdict stored at the check (D-227), never a backend call);
+  the stored inbox row carries the job and
   run counts only (no names, no storage or security part).
   Accounts that see no job get none (`no_jobs`). `sendSummaryPreview` is
   single-root and rate limited. A period is at least one calendar period
@@ -1037,7 +1041,28 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   support is `ErrUnsupported`), asked only by `destinations.Service.Space`
   (`destinationSpace`, `destination.space_view`, staff: on demand via
   `open`, test rate limit, timeout, shared call, 5-minute cache, fixed
-  reasons); `Job.storage` totals are batch-loaded per page
+  reasons) and `destinations.Service.CheckSpace` (the hourly River kind
+  `destination_space_check`, D-227: system actor, no per-user token, ≤ 2
+  at once, targets oldest answer first (`ListDestinationSpaceCheckTargets`),
+  no new destination after `SpaceCheckBudget`, a partial run returns nil;
+  S3 recorded `unsupported` and not-ready `unavailable`/`not_ready` on
+  every run without a network call; a pin mismatch already stored for the
+  same settings is not audited again). Every backend answer is stored on
+  the row (`space_*` columns) only by `destinations.Service.recordSpace`
+  (`RecordDestinationSpace`: conditional on `updated_at = settings_at`,
+  not deleted, newer than the stored one; check times on the database
+  clock from `LockDestinationSpace` (never a process clock); codes, never
+  text, tied to the status by CHECK constraints; the `set_updated_at`
+  trigger skips these columns); readers use `Destination.Space` /
+  `destinations.StoredSpaces` (hidden after a settings change, `Stale`
+  after 3 h whatever the status; the summary judges against its render
+  time) and never ask a backend. The low episode (`space_low_since`, ended
+  only after `SpaceRecoveryAfter` of not-low checks via `space_ok_since`)
+  and `destination.low_space` (dedup `LowSpaceDedupKey`, per destination
+  and UTC day of the episode start, + `:r<n>` daily reminders) are emitted
+  only in that recording transaction; log space failures with the
+  normalized code only, never the raw error. E-mail goldens must fit
+  375 px (`web/scripts/email-width-check.mjs`, run by `pnpm csp-check`); `Job.storage` totals are batch-loaded per page
   (`runstate.Reader.StorageForJobs`), its details scoped like run reads. `restoresUpdated` coalesces
   restore ids (`pumpCoalescedIDs`), resyncs with
   `restore.API.IDsUpdatedSince` (scoped like `restores`) and re-loads and
@@ -1063,7 +1088,9 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   bounded privilege verdict) via the conditional `Record*Test` queries;
   never store messages or raw errors there, and never write the
   `last_test_*` columns elsewhere (the `set_updated_at` triggers skip
-  updates of only those columns). `RunItem.stats` parses `backup_stats`
+  updates of only those columns; on `destinations` also of the D-227
+  `space_*` columns: keep both lists in the trigger when adding columns of
+  this kind). `RunItem.stats` parses `backup_stats`
   with `runstate.ParseItemStats` (bounded) and loads through the run
   loader; RunItem stays reachable only through an authorized Run.
 - Audit: record through `internal/audit` only (`Record`, or `RecordTx` inside

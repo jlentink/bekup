@@ -716,6 +716,16 @@ type Querier interface {
 	// new or moved destination must not overlap: every non-deleted one and the
 	// soft-deleted ones that still hold present backups (D-209).
 	ListDestinationLocations(ctx context.Context, id uuid.UUID) ([]ListDestinationLocationsRow, error)
+	// ListDestinationSpace returns the stored space checks of the
+	// destinations that are not deleted (D-227; readers such as the periodic
+	// summary; no configuration or secrets).
+	ListDestinationSpace(ctx context.Context) ([]ListDestinationSpaceRow, error)
+	// ListDestinationSpaceCheckTargets returns the destinations the scheduled
+	// space check visits (D-227), the longest unchecked first: never checked
+	// or checked under older settings first, then by the oldest stored
+	// answer, so a run cut short by its time budget continues next hour with
+	// the ones it did not reach.
+	ListDestinationSpaceCheckTargets(ctx context.Context) ([]uuid.UUID, error)
 	// Backup destinations (task 2.12, D-131; WebDAV D-222). Only internal/destinations uses
 	// these queries; secret_enc is sealed under AAD destinations:<id>:secret.
 	ListDestinations(ctx context.Context) ([]Destination, error)
@@ -921,6 +931,14 @@ type Querier interface {
 	// LockDestinationLocations serializes the location checks of creates and
 	// location changes (transaction-scoped advisory lock, D-209).
 	LockDestinationLocations(ctx context.Context) error
+	// LockDestinationSpace locks a destination that is not deleted while a
+	// space check result is recorded (D-227) and returns the previous result's
+	// low-space episode and the check time on the database clock: now minus
+	// how long ago the backend answered (age_seconds, measured by the process with
+	// its monotonic clock), so answers of different processes compare on one
+	// clock. FOR NO KEY UPDATE: job saves (FOR SHARE) wait only for the few
+	// statements of the recording.
+	LockDestinationSpace(ctx context.Context, arg LockDestinationSpaceParams) (LockDestinationSpaceRow, error)
 	// LockDestinationsForJob locks the destinations a job is saved with.
 	LockDestinationsForJob(ctx context.Context, ids []uuid.UUID) ([]LockDestinationsForJobRow, error)
 	// Scheduler loop (internal/scheduler, task 3.4, D-145). Explicit column
@@ -1080,6 +1098,13 @@ type Querier interface {
 	// rows: changed or deleted meanwhile, the result is not stored. The
 	// trigger leaves updated_at alone for this update.
 	RecordConnectionTest(ctx context.Context, arg RecordConnectionTestParams) (int64, error)
+	// RecordDestinationSpace stores the outcome of a space check (D-227) when
+	// the row is unchanged since the check loaded it (settings_at = its
+	// updated_at) and no newer check was stored meanwhile (checked_at is the
+	// database time from LockDestinationSpace); 0 rows: changed,
+	// deleted or superseded, the result is not stored. The trigger leaves
+	// updated_at alone for this update.
+	RecordDestinationSpace(ctx context.Context, arg RecordDestinationSpaceParams) (int64, error)
 	// RecordDestinationTest stores the outcome of a test (D-187) when the row
 	// is unchanged since the test loaded it (settings_at = its updated_at); 0
 	// rows: changed or deleted meanwhile, the result is not stored. The

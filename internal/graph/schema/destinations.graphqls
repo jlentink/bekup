@@ -113,6 +113,13 @@ type Destination {
   tested. Normalized codes only.
   """
   lastTest: DestinationLastTest
+  """
+  The stored answer of the newest space check (D-227: the hourly check,
+  or a destinationSpace call that asked the backend); null when the
+  destination was never checked or its settings changed since. Reading it
+  never asks the backend.
+  """
+  spaceCheck: DestinationSpace
 }
 
 "The stored outcome of the newest testDestination (D-187)."
@@ -398,6 +405,12 @@ type DestinationSpace {
   low: Boolean!
   "When the backend was asked (null: not asked, e.g. S3 or not ready)."
   checkedAt: Time
+  """
+  The answer is older than 3 hours: the hourly space check has not
+  refreshed it (stored answers only; any status, since the check refreshes
+  every answer, including UNSUPPORTED and not-ready ones).
+  """
+  stale: Boolean!
 }
 
 extend type Mutation {

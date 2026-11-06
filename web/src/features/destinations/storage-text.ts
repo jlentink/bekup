@@ -16,6 +16,12 @@ export const ST = {
     `${stored} used by bekup · ${used} in use in total; the free space is not reported (unlimited quota?)`,
   checking: "Checking the free space",
   checked: (when: string) => `Checked ${when}; cached for up to 5 minutes.`,
+  checkedStored: (when: string) => `Last checked ${when}; bekup checks every hour.`,
+  stale: (when: string) =>
+    `Last checked ${when}: the hourly space check has not refreshed this for more than 3 hours, so it may be out of date.`,
+  checkNow: "Check now",
+  liveFailed: (reason: string) =>
+    `Check now failed: ${reason.replace(/\.$/, "")}. Shown is the last stored check.`,
   barLabel: (stored: string, others: string, free: string, total: string) =>
     `Of ${total}: ${stored} bekup's backups, ${others} other files, ${free} free.`,
   legendBekup: "bekup's backups",

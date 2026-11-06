@@ -1728,6 +1728,17 @@ CREATE TABLE public.destinations (
     tls_pin_certificate text,
     tls_pin_set_at timestamp with time zone,
     tls_pin_set_by uuid,
+    space_checked_at timestamp with time zone,
+    space_status text,
+    space_code text,
+    space_total_bytes bigint,
+    space_free_bytes bigint,
+    space_used_bytes bigint,
+    space_newest_set_bytes bigint,
+    space_low_cause text,
+    space_low_since timestamp with time zone,
+    space_settings_at timestamp with time zone,
+    space_ok_since timestamp with time zone,
     CONSTRAINT destinations_config_object CHECK ((jsonb_typeof(config) = 'object'::text)),
     CONSTRAINT destinations_config_size CHECK ((octet_length((config)::text) <= 524288)),
     CONSTRAINT destinations_host_key_complete CHECK ((((host_key_type IS NULL) = (host_key_fingerprint IS NULL)) AND ((host_key_type IS NULL) = (host_key_authorized_key IS NULL)) AND ((host_key_type IS NULL) = (host_key_confirmed_at IS NULL)))),
@@ -1741,6 +1752,18 @@ CREATE TABLE public.destinations (
     CONSTRAINT destinations_object_lock_mode CHECK (((object_lock_mode IS NULL) OR (object_lock_mode = ANY (ARRAY['governance'::text, 'compliance'::text])))),
     CONSTRAINT destinations_object_lock_s3_only CHECK (((object_lock_mode IS NULL) OR (type = 's3'::public.destination_type))),
     CONSTRAINT destinations_secret_size CHECK ((octet_length(secret_enc) <= 131072)),
+    CONSTRAINT destinations_space_code_format CHECK (((space_code IS NULL) OR (space_code ~ '^[a-z][a-z0-9_]{0,63}$'::text))),
+    CONSTRAINT destinations_space_code_status CHECK (((space_status IS NULL) OR ((space_status = 'available'::text) AND (space_code IS NULL)) OR ((space_status = 'unsupported'::text) AND (space_code = 'unsupported'::text)) OR ((space_status = 'unavailable'::text) AND (space_code IS NOT NULL) AND (space_code <> 'unsupported'::text)))),
+    CONSTRAINT destinations_space_complete CHECK (
+CASE
+    WHEN (space_checked_at IS NULL) THEN ((space_status IS NULL) AND (space_code IS NULL) AND (space_total_bytes IS NULL) AND (space_free_bytes IS NULL) AND (space_used_bytes IS NULL) AND (space_newest_set_bytes IS NULL) AND (space_low_cause IS NULL) AND (space_low_since IS NULL) AND (space_settings_at IS NULL) AND (space_ok_since IS NULL))
+    ELSE ((space_status IS NOT NULL) AND (space_settings_at IS NOT NULL))
+END),
+    CONSTRAINT destinations_space_low_cause_value CHECK (((space_low_cause IS NULL) OR ((space_low_cause = ANY (ARRAY['fraction'::text, 'below_newest_set'::text])) AND (space_free_bytes IS NOT NULL)))),
+    CONSTRAINT destinations_space_ok_since CHECK (((space_ok_since IS NULL) OR ((space_low_since IS NOT NULL) AND (space_low_cause IS NULL)))),
+    CONSTRAINT destinations_space_sizes CHECK ((((space_total_bytes IS NULL) OR (space_total_bytes >= 0)) AND ((space_free_bytes IS NULL) OR (space_free_bytes >= 0)) AND ((space_used_bytes IS NULL) OR (space_used_bytes >= 0)) AND ((space_newest_set_bytes IS NULL) OR (space_newest_set_bytes >= 0)))),
+    CONSTRAINT destinations_space_status_value CHECK (((space_status IS NULL) OR (space_status = ANY (ARRAY['available'::text, 'unsupported'::text, 'unavailable'::text])))),
+    CONSTRAINT destinations_space_values_available CHECK (((NOT (space_status IS DISTINCT FROM 'available'::text)) OR ((space_total_bytes IS NULL) AND (space_free_bytes IS NULL) AND (space_used_bytes IS NULL) AND (space_newest_set_bytes IS NULL) AND (space_low_cause IS NULL)))),
     CONSTRAINT destinations_tls_pin_certificate_size CHECK (((tls_pin_certificate IS NULL) OR ((octet_length(tls_pin_certificate) <= 16384) AND (tls_pin_certificate ~~ '-----BEGIN CERTIFICATE-----%'::text)))),
     CONSTRAINT destinations_tls_pin_complete CHECK ((((tls_pin_sha256 IS NULL) = (tls_pin_certificate IS NULL)) AND ((tls_pin_sha256 IS NULL) = (tls_pin_set_at IS NULL)))),
     CONSTRAINT destinations_tls_pin_format CHECK (((tls_pin_sha256 IS NULL) OR (tls_pin_sha256 ~ '^[0-9a-f]{64}$'::text))),
@@ -4047,7 +4070,7 @@ CREATE TRIGGER connections_set_updated_at BEFORE UPDATE ON public.connections FO
 -- Name: destinations destinations_set_updated_at; Type: TRIGGER; Schema: public; Owner: bekup_owner
 --
 
-CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW WHEN (((NOT (new.last_tested_at IS DISTINCT FROM old.last_tested_at)) OR ((to_jsonb(new.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text]) IS DISTINCT FROM (to_jsonb(old.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text])))) EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER destinations_set_updated_at BEFORE UPDATE ON public.destinations FOR EACH ROW WHEN ((((NOT (new.last_tested_at IS DISTINCT FROM old.last_tested_at)) AND (NOT (new.space_checked_at IS DISTINCT FROM old.space_checked_at))) OR ((to_jsonb(new.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text, 'space_checked_at'::text, 'space_status'::text, 'space_code'::text, 'space_total_bytes'::text, 'space_free_bytes'::text, 'space_used_bytes'::text, 'space_newest_set_bytes'::text, 'space_low_cause'::text, 'space_low_since'::text, 'space_settings_at'::text, 'space_ok_since'::text]) IS DISTINCT FROM (to_jsonb(old.*) - ARRAY['last_tested_at'::text, 'last_test_ok'::text, 'last_test_code'::text, 'last_test_settings_at'::text, 'space_checked_at'::text, 'space_status'::text, 'space_code'::text, 'space_total_bytes'::text, 'space_free_bytes'::text, 'space_used_bytes'::text, 'space_newest_set_bytes'::text, 'space_low_cause'::text, 'space_low_since'::text, 'space_settings_at'::text, 'space_ok_since'::text])))) EXECUTE FUNCTION public.set_updated_at();
 
 --
 -- Name: download_tickets download_tickets_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner

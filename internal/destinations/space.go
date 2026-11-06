@@ -18,9 +18,12 @@ import (
 // Space reporting (D-225): the total and free space behind a destination,
 // where its backend can report it (disk: statfs; SFTP:
 // statvfs@openssh.com; WebDAV: RFC 4331 quota; S3: never). Asked on
-// demand (the destination page), through Open (SSRF guard, pins), bounded
-// by Options.SpaceTimeout, shared by concurrent callers and cached per
-// destination; results carry fixed reasons only, never server text.
+// demand (the destination page) or by the hourly space check (D-227,
+// spacecheck.go), through Open (SSRF guard, pins), bounded by
+// Options.SpaceTimeout, shared by concurrent callers and cached per
+// destination; results carry fixed reasons and codes only, never server
+// text. Every answer of a backend is stored (recordSpace) for the readers
+// that never ask a backend (the periodic summary, the storage page).
 
 // SpaceStatus is the outcome of a space report.
 type SpaceStatus string
@@ -76,8 +79,12 @@ type SpaceReport struct {
 
 // spaceResult is the cached part of a report (the backend's answer).
 type spaceResult struct {
-	status    SpaceStatus
-	reason    string
+	status SpaceStatus
+	reason string
+	// code is the stable code of reason (stored, D-227): SpaceCodeUnsupported,
+	// SpaceCodeNotReady, SpaceCodeFailed or a storage.ErrorCode; empty
+	// when available.
+	code      string
 	space     storage.Space
 	checkedAt time.Time
 }
@@ -162,22 +169,6 @@ func (s *Service) Space(ctx context.Context, actor Actor, id uuid.UUID) (SpaceRe
 	return rep, nil
 }
 
-// CachedSpace returns the space report of a destination when this
-// process holds a fresh answer with a known free space (from an earlier
-// Space call); it never asks the backend (the answer may predate a
-// settings change by up to the cache lifetime). The periodic summary
-// (D-226) shows free space only this way.
-func (s *Service) CachedSpace(id uuid.UUID) (storage.Space, bool) {
-	now := s.now()
-	s.space.mu.Lock()
-	defer s.space.mu.Unlock()
-	e, ok := s.space.entries[id]
-	if !ok || !now.Before(e.expires) || e.res.status != SpaceAvailable || !e.res.space.FreeKnown {
-		return storage.Space{}, false
-	}
-	return e.res.space, true
-}
-
 // LowCause is why LowSpace reports low space.
 type LowCause int
 
@@ -216,10 +207,10 @@ func LowSpaceCause(sp storage.Space, newestSet int64) LowCause {
 func (s *Service) spaceResult(ctx context.Context, actor Actor, r *record) (spaceResult, error) {
 	v := r.view()
 	if v.Type == TypeS3 {
-		return spaceResult{status: SpaceUnsupported, reason: spaceReasonS3}, nil
+		return spaceResult{status: SpaceUnsupported, reason: spaceReasonS3, code: SpaceCodeUnsupported}, nil
 	}
 	if !v.Ready {
-		return spaceResult{status: SpaceUnavailable, reason: spaceReasonNotReady + v.NotReadyReason}, nil
+		return spaceResult{status: SpaceUnavailable, reason: spaceReasonNotReady + v.NotReadyReason, code: SpaceCodeNotReady}, nil
 	}
 	id, settingsAt := r.row.ID, r.row.UpdatedAt
 	if res, ok := s.space.get(id, settingsAt, s.now()); ok {
@@ -252,9 +243,9 @@ func (s *Service) spaceResult(ctx context.Context, actor Actor, r *record) (spac
 
 // askSpace opens the backend and asks it (rate limited, bounded by
 // SpaceTimeout; the call is detached from the caller's cancellation so
-// that callers sharing it are not cut off).
+// that callers sharing it are not cut off), caches and stores the answer
+// (a storing failure is logged: the caller still gets the answer).
 func (s *Service) askSpace(ctx context.Context, actor Actor, r *record) (spaceResult, error) {
-	id := r.row.ID
 	release, err := s.acquire(actor)
 	if err != nil {
 		var rl *RateLimitedError
@@ -264,10 +255,31 @@ func (s *Service) askSpace(ctx context.Context, actor Actor, r *record) (spaceRe
 		return spaceResult{}, err
 	}
 	defer release()
+	res, err := s.askBackend(ctx, actor, r, "")
+	if err != nil {
+		return spaceResult{}, err
+	}
+	if s.storeSpace != nil {
+		if _, err := s.storeSpace(ctx, r, res); err != nil {
+			s.o.Logger.WarnContext(ctx, "storing the destination space check failed",
+				slog.String("destination_id", r.row.ID.String()), slog.Any("error", err))
+		}
+	}
+	return res, nil
+}
+
+// askBackend asks the backend for its space (bounded by SpaceTimeout,
+// detached from the caller's cancellation), audits a pin violation (fail
+// closed: the answer is then neither cached nor stored) and caches the
+// answer. audited is the mismatch code already stored (and so audited)
+// for these settings: the same violation found again is not audited again
+// (the scheduled check; amendment 1 of D-227), the answer is still stored.
+// The caller has taken care of the limits.
+func (s *Service) askBackend(ctx context.Context, actor Actor, r *record, audited string) (spaceResult, error) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.o.SpaceTimeout)
 	defer cancel()
 	res, mismatch := s.querySpace(ctx, r)
-	if mismatch {
+	if mismatch && (audited == "" || res.code != audited) {
 		if err := s.pinMismatch(ctx, actor, r); err != nil {
 			return spaceResult{}, err
 		}
@@ -278,7 +290,7 @@ func (s *Service) askSpace(ctx context.Context, actor Actor, r *record) (spaceRe
 	}
 	now := s.now()
 	res.checkedAt = now
-	s.space.put(id, spaceEntry{res: res, settingsAt: r.row.UpdatedAt, expires: now.Add(ttl)}, now)
+	s.space.put(r.row.ID, spaceEntry{res: res, settingsAt: r.row.UpdatedAt, expires: now.Add(ttl)}, now)
 	return res, nil
 }
 
@@ -292,40 +304,50 @@ func (s *Service) querySpace(ctx context.Context, r *record) (res spaceResult, m
 		defer func() {
 			if cerr := d.Close(); cerr != nil {
 				s.o.Logger.WarnContext(ctx, "closing destination after space check failed",
-					slog.String("destination_id", id.String()), slog.Any("error", cerr))
+					slog.String("destination_id", id.String()), slog.String("code", string(storage.Classify(cerr))))
 			}
 		}()
 		rep, ok := d.(storage.SpaceReporter)
 		if !ok {
-			return spaceResult{status: SpaceUnsupported, reason: unsupportedSpaceReason(v.Type)}, false
+			return unsupportedSpace(v.Type), false
 		}
 		var sp storage.Space
 		if sp, err = rep.Space(ctx); err == nil {
 			if !sp.Known() {
-				return spaceResult{status: SpaceUnsupported, reason: unsupportedSpaceReason(v.Type)}, false
+				return unsupportedSpace(v.Type), false
 			}
 			return spaceResult{status: SpaceAvailable, space: sp}, false
 		}
 	}
 	var nr *NotReadyError
 	if errors.As(err, &nr) {
-		return spaceResult{status: SpaceUnavailable, reason: spaceReasonNotReady + nr.Reason}, false
+		return spaceResult{status: SpaceUnavailable, reason: spaceReasonNotReady + nr.Reason, code: SpaceCodeNotReady}, false
 	}
 	if errors.Is(err, storage.ErrUnsupported) {
-		return spaceResult{status: SpaceUnsupported, reason: unsupportedSpaceReason(v.Type)}, false
+		return unsupportedSpace(v.Type), false
 	}
 	code := storage.Classify(err)
 	if errors.Is(netguard.Normalize(err), netguard.ErrNotAllowed) || errors.Is(netguard.Normalize(err), netguard.ErrUnreachable) {
 		code = storage.CodeNetwork
 	}
+	// Only the normalized code: a backend error may carry server text.
 	s.o.Logger.WarnContext(ctx, "destination space check failed",
-		slog.String("destination_id", id.String()), slog.String("code", string(code)), slog.Any("error", err))
-	reason := code.Message()
-	if reason == "" {
-		reason = spaceReasonUnchecked
+		slog.String("destination_id", id.String()), slog.String("code", string(code)))
+	reason, stored := code.Message(), string(code)
+	if reason == "" || !storedSpaceCode.MatchString(stored) {
+		reason, stored = spaceReasonUnchecked, SpaceCodeFailed
 	}
-	return spaceResult{status: SpaceUnavailable, reason: reason},
-		code == storage.CodeHostKeyMismatch || code == storage.CodeTLSPinMismatch
+	return spaceResult{status: SpaceUnavailable, reason: reason, code: stored}, isMismatchCode(string(code))
+}
+
+// isMismatchCode reports the stored codes of an SFTP host-key or WebDAV
+// certificate-pin violation.
+func isMismatchCode(code string) bool {
+	return code == string(storage.CodeHostKeyMismatch) || code == string(storage.CodeTLSPinMismatch)
+}
+
+func unsupportedSpace(t Type) spaceResult {
+	return spaceResult{status: SpaceUnsupported, reason: unsupportedSpaceReason(t), code: SpaceCodeUnsupported}
 }
 
 func unsupportedSpaceReason(t Type) string {

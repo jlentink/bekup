@@ -193,6 +193,9 @@ type Destination struct {
 	// LastTest is the stored outcome of the newest Test (D-187); nil when
 	// never tested.
 	LastTest *LastTest
+	// Space is the stored outcome of the newest space check (D-227; not
+	// Checked when never checked or when the settings changed since).
+	Space StoredSpace
 }
 
 // LastTest is the stored outcome of a Test (D-187): normalized codes only.

@@ -113,6 +113,9 @@ type Service struct {
 	o       Options
 	limiter *serviceutil.Limiter
 	space   spaceCache
+	// storeSpace stores a backend's space answer (recordSpace, D-227; nil
+	// in unit tests without a database).
+	storeSpace func(ctx context.Context, r *record, res spaceResult) (SpaceCheckOutcome, error)
 }
 
 // New validates o and returns the service.
@@ -142,7 +145,9 @@ func New(o Options) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("destinations: %w", err)
 	}
-	return &Service{o: o, limiter: lim}, nil
+	s := &Service{o: o, limiter: lim}
+	s.storeSpace = s.recordSpace
+	return s, nil
 }
 
 func (s *Service) now() time.Time { return s.o.Now() }
@@ -227,6 +232,7 @@ func (r *record) view() Destination {
 			d.LastTest.Code = *row.LastTestCode
 		}
 	}
+	d.Space = spaceColumnsOf(&row).stored(d.Type)
 	d.NotReadyReason = notReadyReason(&d)
 	d.Ready = d.NotReadyReason == ""
 	return d

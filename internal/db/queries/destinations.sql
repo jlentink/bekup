@@ -105,6 +105,64 @@ SET last_tested_at = now(),
     last_test_settings_at = updated_at
 WHERE id = @id AND deleted_at IS NULL AND updated_at = @settings_at;
 
+-- LockDestinationSpace locks a destination that is not deleted while a
+-- space check result is recorded (D-227) and returns the previous result's
+-- low-space episode and the check time on the database clock: now minus
+-- how long ago the backend answered (age_seconds, measured by the process with
+-- its monotonic clock), so answers of different processes compare on one
+-- clock. FOR NO KEY UPDATE: job saves (FOR SHARE) wait only for the few
+-- statements of the recording.
+-- name: LockDestinationSpace :one
+SELECT updated_at, space_checked_at, space_status, space_low_since, space_ok_since, space_settings_at,
+       CAST(clock_timestamp() - make_interval(0, 0, 0, 0, 0, 0, sqlc.arg(age_seconds)::double precision) AS timestamptz) AS checked_at
+FROM destinations
+WHERE id = @id AND deleted_at IS NULL
+FOR NO KEY UPDATE;
+
+-- RecordDestinationSpace stores the outcome of a space check (D-227) when
+-- the row is unchanged since the check loaded it (settings_at = its
+-- updated_at) and no newer check was stored meanwhile (checked_at is the
+-- database time from LockDestinationSpace); 0 rows: changed,
+-- deleted or superseded, the result is not stored. The trigger leaves
+-- updated_at alone for this update.
+-- name: RecordDestinationSpace :execrows
+UPDATE destinations
+SET space_checked_at = @checked_at::timestamptz,
+    space_status = @status::text,
+    space_code = sqlc.narg(code),
+    space_total_bytes = sqlc.narg(total_bytes),
+    space_free_bytes = sqlc.narg(free_bytes),
+    space_used_bytes = sqlc.narg(used_bytes),
+    space_newest_set_bytes = sqlc.narg(newest_set_bytes),
+    space_low_cause = sqlc.narg(low_cause),
+    space_low_since = sqlc.narg(low_since),
+    space_ok_since = sqlc.narg(ok_since),
+    space_settings_at = updated_at
+WHERE id = @id AND deleted_at IS NULL AND updated_at = @settings_at
+  AND (space_checked_at IS NULL OR space_checked_at < @checked_at::timestamptz);
+
+-- ListDestinationSpace returns the stored space checks of the
+-- destinations that are not deleted (D-227; readers such as the periodic
+-- summary; no configuration or secrets).
+-- name: ListDestinationSpace :many
+SELECT id, type, updated_at, space_checked_at, space_status, space_code,
+       space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes,
+       space_low_cause, space_low_since, space_settings_at
+FROM destinations
+WHERE deleted_at IS NULL
+ORDER BY lower(name), id;
+
+-- ListDestinationSpaceCheckTargets returns the destinations the scheduled
+-- space check visits (D-227), the longest unchecked first: never checked
+-- or checked under older settings first, then by the oldest stored
+-- answer, so a run cut short by its time budget continues next hour with
+-- the ones it did not reach.
+-- name: ListDestinationSpaceCheckTargets :many
+SELECT id
+FROM destinations
+WHERE deleted_at IS NULL
+ORDER BY CASE WHEN space_settings_at = updated_at THEN space_checked_at END ASC NULLS FIRST, id;
+
 -- DestinationUsage returns, per destination that is not deleted, the
 -- bytes and number of the present artifacts stored on it and the number
 -- of backups (runs) they belong to (one grouped query; D-196, D-225).

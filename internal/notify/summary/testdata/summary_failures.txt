@@ -47,12 +47,16 @@ Restores
 >> Could not run  Test restores      1
 
 Storage
-   Status       Destination        Stored      Free  Backups
-   -----------  ----------------  -------  --------  -------
->> Low space    nas-01            2.4 TiB  96.0 GiB      412
-                less than 10% free
-   Not checked  offsite s3        3.0 TiB         –      512
-   OK           sftp backup host  3.0 TiB   4.0 TiB      380
+   Status        Destination          Stored      Free  Backups
+   ------------  ----------------  ---------  --------  -------
+>> Low space     nas-01              2.4 TiB  96.0 GiB      412
+                 less than 10% free; checked 07:25
+>> Stale         offsite s3          3.0 TiB         –      512
+                 no limit reported: S3 buckets have no fixed size; last checked 5 Nov 08:00, more than 3 hours ago
+   OK            sftp backup host    3.0 TiB   4.0 TiB      380
+                 checked 07:25
+>> Check failed  webdav archive    320.0 GiB         –       61
+                 the destination could not be reached; checked 07:25
 
 Open the dashboard:
 https://bekup.example.com/

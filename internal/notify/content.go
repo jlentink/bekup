@@ -15,6 +15,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/notify/email"
+	"github.com/jlentink/bekup/internal/storage"
 )
 
 // Content is what every channel shows of an event: a title, one short
@@ -140,6 +141,27 @@ func num(d Detail, k string) int64 {
 	return 0
 }
 
+// lowSpaceBody is the sentence of destination.low_space (D-227): the
+// free space, the part of the D-225 rule that holds and, for a reminder,
+// since when.
+func lowSpaceBody(dest string, d Detail) string {
+	free := storage.FormatSize(num(d, "free_bytes"))
+	if _, ok := d["total_bytes"]; ok {
+		free += " of " + storage.FormatSize(num(d, "total_bytes"))
+	}
+	cause := "less than 10% of it is free"
+	if str(d, "cause") == "below_newest_set" {
+		cause = "less is free than the newest set of backups there needs (" + storage.FormatSize(num(d, "newest_set_bytes")) + ")"
+	}
+	body := fmt.Sprintf("Destination %q is low on space: %s free; %s.", dest, free, cause)
+	if num(d, "reminder") > 0 {
+		if since, err := time.Parse(time.RFC3339, str(d, "low_since")); err == nil {
+			body += " It has been low since " + since.UTC().Format("2 Jan 2006 15:04") + " UTC."
+		}
+	}
+	return body
+}
+
 var accountMessages = map[string]string{
 	KindSignIn:                   "Someone signed in to your account. If this was not you, change your password and review your sessions.",
 	KindPasswordChanged:          "The password of your account was changed. If this was not you, contact an administrator at once.",
@@ -260,6 +282,8 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 		case DestinationTestFailed:
 			body = fmt.Sprintf("The test of destination %q failed.", n.destination)
 			path = idPath("/destinations", ev.DestinationID)
+		case DestinationLowSpace:
+			body, path = lowSpaceBody(n.destination, d), idPath("/destinations", ev.DestinationID)
 		default:
 		}
 	case GroupConfig:

@@ -18,7 +18,7 @@
     "gen": "graphql-codegen --config codegen.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "csp-check": "node scripts/csp-check.mjs"
+    "csp-check": "node scripts/csp-check.mjs && node scripts/email-width-check.mjs"
   },
   "dependencies": {
     "@apollo/client": "4.3.5",

@@ -247,8 +247,9 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check; amendment 2: same-key Puts serialized per process) |
 | [D-223](#d-223-read-only-view-of-the-runners-target-allowlist-on-the-network-page-gettargetpolicy) | Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`) | proposed |
 | [D-224](#d-224-runnertoml-log-and-a-debug-line-for-every-refused-target) | `runner.toml` `[log]` and a debug line for every refused target | proposed |
-| [D-225](#d-225-storage-views-bekups-stored-bytes-per-destination-and-job-total-and-free-space-reported-on-demand-by-disk-sftp-and-webdav) | Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV | proposed |
-| [D-226](#d-226-periodic-summary-e-mail-per-user-frequency-and-local-time-one-summary-per-period-built-at-delivery-from-the-recipients-access) | Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access | proposed |
+| [D-225](#d-225-storage-views-bekups-stored-bytes-per-destination-and-job-total-and-free-space-reported-on-demand-by-disk-sftp-and-webdav) | Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV | proposed (amended by D-227) |
+| [D-226](#d-226-periodic-summary-e-mail-per-user-frequency-and-local-time-one-summary-per-period-built-at-delivery-from-the-recipients-access) | Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access | proposed (amended by D-227) |
+| [D-227](#d-227-scheduled-destination-space-check-stored-on-the-destination-row-low-space-notification) | Scheduled destination space check, stored on the destination row; low-space notification | proposed (amendment 1: review findings) |
 
 ---
 
@@ -14838,7 +14839,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-225: Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV
 
 - **Date:** 2026-11-05
-- **Status:** proposed
+- **Status:** proposed (amended by D-227: space checked hourly and stored)
 - **Decided by:** agent (from the user's requests; the user decided "bekup's
   backups + free space" per destination and "total + per destination" per
   job)
@@ -14907,7 +14908,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-226: Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access
 
 - **Date:** 2026-11-05
-- **Status:** proposed
+- **Status:** proposed (amended by D-227: space checked hourly and stored)
 - **Decided by:** user (frequency daily / every other day / weekly /
   monthly / never, default weekly; the user's own hour and weekday or day
   of month, default 08:00, Monday / the 1st, in their time zone; scope =
@@ -15119,3 +15120,209 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
     `internal/destinations/space.go`,
     `internal/db/migrations/00041_summary_indexes.sql`,
     `docs/guides/notifications.md#summary-e-mail`.
+
+---
+
+## D-227: Scheduled destination space check, stored on the destination row; low-space notification
+
+- **Date:** 2026-11-06
+- **Status:** proposed (amendment 1: review findings)
+- **Decided by:** user (an hourly scheduled check stored in the database,
+  readers use the stored value, a low-space notification); agent (the
+  details below)
+- **Context:** D-225 asked a destination for its space only on demand
+  (the destination page) and cached the answer in the process for five
+  minutes; the periodic summary (D-226) showed free space only from that
+  cache. At send time the cache was almost never warm, so nearly every
+  destination showed "Not checked" and the low-space warning practically
+  never appeared; S3 (which never reports space) also showed "Not
+  checked". D-225 had rejected background polling for load reasons; one
+  small metadata request per destination per hour is cheap, and the
+  summary and alerts need it.
+- **Decision:**
+  1. **Scheduled check.** A River kind `destination_space_check`
+     (maintenance queue, unique, periodic every hour, also at start) asks
+     every destination that is not deleted through
+     `destinations.Service.CheckSpace`: the same path as
+     `destinationSpace` (`Service.open`: SSRF guard of the destinations
+     scope, host-key and certificate pins, readiness; `SpaceTimeout`
+     15 s; fixed reasons; a pin mismatch audited with the system actor,
+     fail closed) but without the per-user rate limit, which is for API
+     callers: the worker bounds itself (at most 2 destinations at once,
+     each with its own deadline of the space timeout plus the database
+     work; one failure never stops the others; failures are logged and
+     retried next hour; only a failed listing fails the job). S3 is
+     recorded as `unsupported` without any network call, once per
+     settings; destinations that are not ready are skipped (their stored
+     answer stays, hidden once their settings change). The worker asks
+     afresh (no cache read) and fills the in-process cache.
+  2. **Stored result.** New columns on `destinations`
+     (`00042_destination_space.sql`): `space_checked_at`, `space_status`
+     (`available` / `unsupported` / `unavailable`), `space_code` (stable
+     codes only: `unsupported`, `not_ready`, `failed` or a
+     `storage.ErrorCode`; never text), `space_total_bytes`,
+     `space_free_bytes`, `space_used_bytes`, `space_newest_set_bytes`,
+     `space_low_cause` (`fraction` / `below_newest_set`),
+     `space_low_since` and `space_settings_at`, with CHECK constraints
+     (complete, value sets, code syntax, sizes ≥ 0, values only on
+     available answers). They are written only by
+     `destinations.Service.recordSpace` (`RecordDestinationSpace`,
+     conditional like D-187: the row must be the one the check loaded,
+     `updated_at = settings_at`, not deleted, and no newer answer stored)
+     under a `FOR NO KEY UPDATE` row lock (`LockDestinationSpace`). Every
+     answer a backend gives is stored: the scheduled check and an
+     on-demand `destinationSpace` call that really asked (never a busy
+     answer or a cached one). The `set_updated_at` trigger skips updates
+     that change only these and the `last_test_*` columns, so a check does
+     not bump `updated_at`. **Invalidation:** readers ignore an answer
+     whose `space_settings_at` differs from `updated_at` (any settings
+     change, like the stored test result).
+  3. **Readers.** `destinations.StoredSpaces` (`ListDestinationSpace`,
+     no configuration or secrets) and `Destination.Space`
+     (`StoredSpace`: status, code with its fixed reason by type, values,
+     the low verdict, `Stale` after 3 hours, `SettingsChanged`). The
+     periodic summary's storage table reads only these and never calls a
+     backend: available with a known free space = "OK" / "Low space" with
+     the free value and "checked HH:MM"; older than 3 hours = warning
+     ("Stale", or the low row) with "last checked …"; `unavailable` =
+     warning "Check failed" with the fixed reason of its code;
+     `unsupported` (S3, servers without quota) and an available answer
+     without a free value = neutral "No limit reported"; never checked
+     or hidden by a settings change = neutral "Not checked yet". The low
+     verdict is the stored one (taken at the check, against the newest
+     backup set then). GraphQL: `Destination.spaceCheck: DestinationSpace`
+     (staff, like the destination) and `DestinationSpace.stale`; the
+     destination page shows the stored answer with its age and a stale
+     warning by default, "Check now" runs `destinationSpace` (rate limited
+     as before), and the live check runs by itself only when nothing is
+     stored for the current settings.
+  4. **Low-space notification.** A new catalog event
+     `destination.low_space` (group retention & storage, audience staff,
+     problem, warning, subject destination, delivery re-checks
+     `destination.view`). A stored available answer that is low (the
+     D-225 rule) opens an episode (`space_low_since`) and emits the event
+     in the recording transaction with the dedup key
+     `destination.low_space:<id>:<episode start, unix seconds>`; while it
+     stays low, the first answer in each further day of the episode emits
+     a reminder (`…:r<n>`, n = whole days since the start); a failed
+     check keeps the episode, an answer that is not low (or reports no
+     free space, or is unsupported) ends it, and the next low answer
+     opens a new one. The episode outlives a settings change (a move to
+     another full disk does not alert again). Detail: `cause`,
+     `free_bytes`, `total_bytes` (when known), `newest_set_bytes`,
+     `low_since`, `reminder` (bounded scalars only).
+  5. No new configuration keys and no new metric (interval, stale age,
+     concurrency and reminder period are constants).
+- **Alternatives considered:** a separate `destination_space_checks`
+  table (the D-187 pattern on the row keeps one reader rule and the
+  trigger exemption in one place); keeping the in-process cache for the
+  summary (cold in practice, and per process); the per-user limiter for
+  the scheduled check (its token bucket would throttle more than five
+  destinations per hour); clearing the stored answer in `Update` (a
+  second writer; comparing `settings_at` with `updated_at` needs none);
+  computing the low verdict at read time against the current newest set
+  (one query per destination per summary; the notification needs the
+  check-time verdict anyway); deduplicating reminders with a column (the
+  episode start and day number make the key deterministic).
+- **Consequences:** serve/worker (where the workers run) now contact
+  every ready SFTP and WebDAV destination once an hour on their own (and
+  run statfs on disk destinations), even when nobody looks. Security
+  impact: the requests go through the same destinations-scope SSRF guard,
+  stored credentials, host-key and certificate pins as backups and tests,
+  so no new reachability; a pin mismatch found by the check is audited
+  and alerted like one found by a backup; failures are stored as codes
+  only, never server text; the stored values (sizes, codes, times) are
+  shown only to staff (`Destination` and the summary's storage part)
+  and the event goes to staff only. A destination's space numbers leave
+  the process only as these bounded integers.
+- **Amendment 1 (review findings, 2026-11-06; decided by agent;
+  proposed; replaces the statements of items 1-4 it names):**
+  1. **Large fleets.** The worker visits the destinations longest
+     unchecked first (`ListDestinationSpaceCheckTargets`: never checked or
+     checked under older settings, then the oldest `space_checked_at`),
+     starts no further destination after `SpaceCheckBudget` (10 minutes,
+     or earlier when the job deadline is closer than one destination's
+     timeout; the maintenance queue's timeout is 15 minutes) and then ends
+     **without an error**, logging how many it did not reach
+     (`not_reached`). A cut-short run no longer fails and is no longer
+     retried from the same first name: the rest come first next hour, and
+     unreachable destinations early in the alphabet are contacted once an
+     hour, not up to three times. Only a failed listing fails the job.
+  2. **Low-space hysteresis.** A new column `space_ok_since` holds, inside
+     an episode, the first of the consecutive answers that were not low
+     (available and not low, unsupported, no free value). The episode ends
+     only once that streak is `SpaceRecoveryAfter` (3 hours) long; a low
+     answer resets the streak, a failed answer (also not ready) keeps both.
+     In addition the opening event's dedup key is per destination and UTC
+     day of the episode start (`destination.low_space:<id>:<YYYYMMDD>`,
+     reminders `…:r<n>`), so at most one episode a day notifies. A server
+     alternating between low and not low stays in one episode.
+  3. **Database clock.** `space_checked_at` (and so the episode times and
+     the "newer answer" comparison) is the database clock:
+     `LockDestinationSpace` returns `clock_timestamp()` minus the answer's
+     age (measured by the process with its monotonic clock) and
+     `recordSpace` stores and returns it (`SpaceCheckOutcome.CheckedAt`).
+     Process clocks are no longer compared across processes.
+  4. **Exact constraints.** An unchecked row has every `space_*` column
+     NULL; a checked row has a status and `space_settings_at`; the code is
+     NULL exactly for `available`, exactly `unsupported` for
+     `unsupported` and any other stable code for `unavailable`
+     (`destinations_space_code_status`; `recordSpace` normalizes the same
+     way); sizes, `space_newest_set_bytes` and the low cause only on
+     `available` answers (the old check passed when the status was NULL);
+     `space_ok_since` only inside an episode and while not low.
+  5. **Not ready is stored.** Replacing "destinations that are not ready
+     are skipped": the scheduled check stores `unavailable` with the code
+     `not_ready` (no backend call), so the old answer does not linger as a
+     permanent "Stale" warning; per item 2 it keeps the episode.
+  6. **Pin mismatch audited once per settings.** The scheduled check does
+     not audit an SFTP host-key or WebDAV certificate-pin mismatch again
+     when the stored answer for the same settings already carries the same
+     mismatch code (that answer was only stored after its audit entry was
+     written, fail closed). The new answer is still stored and refreshed,
+     the destination is still never used; a settings change (new pin, new
+     host) audits again; on-demand checks (`destinationSpace`) and backups
+     audit as before. This avoids 24 audit rows a day per destination; the
+     security alert was deduplicated daily already.
+  7. **Logs.** Space check failures log only the normalized
+     `storage.Classify` code (`code`), never the raw error (it may carry
+     server text); the same for a failed close after a space check.
+  8. **Render clock.** The summary reads the stored answers when it is
+     rendered, so `summaryData.Now` (the render time) and not the period
+     end decides `Stale` and the "checked HH:MM" / same-day formatting.
+  9. **Stale for every status.** Replacing "an unsupported answer never
+     goes stale": the hourly check refreshes every answer (S3's
+     `unsupported` is now recorded on every run, no network call, instead
+     of once per settings), so any stored answer older than 3 hours is
+     stale: the summary shows "Stale" as a warning for unsupported and
+     no-free-value answers too (a stopped worker is visible for every
+     destination), and `DestinationSpace.stale` is set for every status.
+  10. **Failure text fallback.** The summary's failure text falls back to
+      the fixed "the space could not be checked" for unknown or empty
+      codes (`storage.ErrorCode.Message` already has a default text).
+  11. **Web.** A failed "Check now" (an API error such as RATE_LIMITED, or
+      an `unavailable` answer such as the busy one) no longer hides or
+      replaces a stored answer: the stored answer stays with "Check now
+      failed: …" next to it; a live answer that succeeds replaces it as
+      before ("cached for up to 5 minutes"). `DestinationSpace` is no
+      longer normalized in the Apollo cache (`keyFields: false, merge:
+      true`): the stored answer (`Destination.spaceCheck`) and the live one
+      (`destinationSpace`) were one cache entity and overwrote each other.
+  12. **Phone width.** The summary's storage status words are short
+      ("No limit", "Not checked"; the note explains them: "no limit
+      reported: …", "the hourly space check has not run yet", "not checked
+      since the settings changed"), and status pills may wrap on narrow
+      screens (`.dt tr td.pl` `white-space:normal` below 520 px; the shared
+      layout, D-226 amendment 1). A golden `summary_storage_states` holds
+      every storage state; `web/scripts/email-width-check.mjs` (run by
+      `pnpm csp-check`, also in CI) loads every e-mail golden at a real
+      375 px viewport in light and dark mode and fails when the document
+      is wider (it was 404 px).
+- **Related:** D-131, D-187, D-225, D-226; `internal/destinations/`
+  (`spacecheck.go`, `space.go`), `internal/queue/kinds.go`,
+  `internal/notify/catalog.go`, `internal/notify/content.go`,
+  `internal/notify/summary/build.go`, `internal/db/queries/destinations.sql`,
+  `internal/db/migrations/00042_destination_space.sql`,
+  `internal/graph/resolvers/storage.go`,
+  `web/src/features/destinations/destination-storage.tsx`,
+  `docs/guides/destinations.md`, `docs/guides/notifications.md`.

@@ -730,3 +730,74 @@ func TestSummaryQueryBounds(t *testing.T) {
 		}
 	}
 }
+
+// TestSummaryStoredSpace: the storage table shows the stored answers of
+// the space check (D-227) and never asks a backend: free space with the
+// check time, low space, a stale answer, a failed check with its fixed
+// reason, S3 without a limit, an old answer without a limit (stale), an
+// answer hidden by a settings change and a destination never checked; the
+// banner counts the low one.
+func TestSummaryStoredSpace(t *testing.T) {
+	e := newEnv(t, nil)
+	admin, adminMail := e.user("admin", true)
+	e.job("Billing")
+	now := e.clock() // 2026-11-04T10:00:00Z
+	dest := func(name, typ string) uuid.UUID {
+		id := uuid.New()
+		e.exec(`INSERT INTO destinations (id, name, type, config) VALUES ($1, $2, $3, '{}')`, id, name, typ)
+		return id
+	}
+	check := func(id uuid.UUID, status string, code *string, free, total *int64, low *string, ago time.Duration) {
+		e.exec(`UPDATE destinations SET space_checked_at = $2, space_status = $3, space_code = $4, space_free_bytes = $5,
+			space_total_bytes = $6, space_low_cause = $7, space_settings_at = updated_at WHERE id = $1`,
+			id, now.Add(-ago), status, code, free, total, low)
+	}
+	i64 := func(v int64) *int64 { return &v }
+	s := func(v string) *string { return &v }
+	check(dest("a-nas", "disk"), "available", nil, i64(500<<30), i64(1<<40), nil, 20*time.Minute)
+	check(dest("b-full", "sftp"), "available", nil, i64(1<<30), i64(1<<40), s("fraction"), 30*time.Minute)
+	check(dest("c-old", "webdav"), "available", nil, i64(200<<30), nil, nil, 5*time.Hour)
+	check(dest("d-down", "sftp"), "unavailable", s("network"), nil, nil, nil, 10*time.Minute)
+	check(dest("e-bucket", "s3"), "unsupported", s("unsupported"), nil, nil, nil, 15*time.Minute)
+	check(dest("h-quota", "webdav"), "unsupported", s("unsupported"), nil, nil, nil, 48*time.Hour)
+	moved := dest("f-moved", "disk")
+	check(moved, "available", nil, i64(9<<30), i64(10<<30), nil, time.Hour)
+	e.exec(`UPDATE destinations SET config = '{"path":"elsewhere"}' WHERE id = $1`, moved)
+	dest("g-new", "disk")
+
+	if _, err := e.sum.SendPreview(e.as(admin, auth.RoleAdmin)); err != nil {
+		t.Fatal(err)
+	}
+	ev := e.events(admin)
+	if len(ev) != 1 {
+		t.Fatalf("events = %d", len(ev))
+	}
+	e.deliver(ev[0])
+	m := e.mail.to(adminMail)
+	if len(m) != 1 {
+		t.Fatalf("mail = %+v", m)
+	}
+	for _, re := range []string{
+		`(?m)^   OK +a-nas +0 B +500\.0 GiB +0$`,
+		`(?m)^ +checked 09:40$`,
+		`(?m)^>> Low space +b-full +0 B +1\.0 GiB +0$`,
+		`(?m)^ +less than 10% free; checked 09:30$`,
+		`(?m)^>> Stale +c-old +0 B +200\.0 GiB +0$`,
+		`(?m)^ +last checked 4 Nov 05:00, more than 3 hours ago$`,
+		`(?m)^>> Check failed +d-down +0 B +– +0$`,
+		`(?m)^ +the destination could not be reached; checked 09:50$`,
+		`(?m)^   No limit +e-bucket +0 B +– +0$`,
+		`(?m)^ +no limit reported: S3 buckets have no fixed size; checked 09:45$`,
+		`(?m)^   Not checked +f-moved +0 B +– +0$`,
+		`(?m)^ +not checked since the settings changed$`,
+		`(?m)^   Not checked +g-new +0 B +– +0$`,
+		`(?m)^ +the hourly space check has not run yet$`,
+		`(?m)^>> Stale +h-quota +0 B +– +0$`,
+		`(?m)^ +no limit reported: the server reports no free space or quota; last checked 2 Nov 10:00, more than 3 hours ago$`,
+		`1 destination is low on space`,
+	} {
+		if !regexp.MustCompile(re).MatchString(m[0].Text) {
+			t.Errorf("mail lacks %s:\n%s", re, m[0].Text)
+		}
+	}
+}

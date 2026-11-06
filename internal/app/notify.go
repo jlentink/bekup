@@ -72,9 +72,6 @@ func (a *App) newNotify() error {
 			Timezone:  cfg.Notifications.SummaryDefaultTimezone,
 		},
 	}
-	if a.destinations != nil {
-		sumOpts.CachedSpace = a.destinations.CachedSpace
-	}
 	if a.summary, err = summary.New(sumOpts); err != nil {
 		return err
 	}

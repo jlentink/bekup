@@ -401,6 +401,7 @@ type ComplexityRoot struct {
 		ObjectLockRetentionDays func(childComplexity int) int
 		Ready                   func(childComplexity int) int
 		Settings                func(childComplexity int) int
+		SpaceCheck              func(childComplexity int) int
 		Type                    func(childComplexity int) int
 		UpdatedAt               func(childComplexity int) int
 	}
@@ -426,6 +427,7 @@ type ComplexityRoot struct {
 		Low            func(childComplexity int) int
 		NewestSetBytes func(childComplexity int) int
 		Reason         func(childComplexity int) int
+		Stale          func(childComplexity int) int
 		Status         func(childComplexity int) int
 		TotalBytes     func(childComplexity int) int
 		UsedBytes      func(childComplexity int) int
@@ -3503,6 +3505,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Destination.Settings(childComplexity), true
+	case "Destination.spaceCheck":
+		if e.ComplexityRoot.Destination.SpaceCheck == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Destination.SpaceCheck(childComplexity), true
 	case "Destination.type":
 		if e.ComplexityRoot.Destination.Type == nil {
 			break
@@ -3602,6 +3610,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DestinationSpace.Reason(childComplexity), true
+	case "DestinationSpace.stale":
+		if e.ComplexityRoot.DestinationSpace.Stale == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DestinationSpace.Stale(childComplexity), true
 	case "DestinationSpace.status":
 		if e.ComplexityRoot.DestinationSpace.Status == nil {
 			break
@@ -11434,6 +11448,13 @@ type Destination {
   tested. Normalized codes only.
   """
   lastTest: DestinationLastTest
+  """
+  The stored answer of the newest space check (D-227: the hourly check,
+  or a destinationSpace call that asked the backend); null when the
+  destination was never checked or its settings changed since. Reading it
+  never asks the backend.
+  """
+  spaceCheck: DestinationSpace
 }
 
 "The stored outcome of the newest testDestination (D-187)."
@@ -11719,6 +11740,12 @@ type DestinationSpace {
   low: Boolean!
   "When the backend was asked (null: not asked, e.g. S3 or not ready)."
   checkedAt: Time
+  """
+  The answer is older than 3 hours: the hourly space check has not
+  refreshed it (stored answers only; any status, since the check refreshes
+  every answer, including UNSUPPORTED and not-ready ones).
+  """
+  stale: Boolean!
 }
 
 extend type Mutation {
@@ -15987,6 +16014,8 @@ func (ec *executionContext) childFields_Destination(ctx context.Context, field g
 		return ec.fieldContext_Destination_settings(ctx, field)
 	case "lastTest":
 		return ec.fieldContext_Destination_lastTest(ctx, field)
+	case "spaceCheck":
+		return ec.fieldContext_Destination_spaceCheck(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type Destination", field.Name)
 }
@@ -16039,6 +16068,8 @@ func (ec *executionContext) childFields_DestinationSpace(ctx context.Context, fi
 		return ec.fieldContext_DestinationSpace_low(ctx, field)
 	case "checkedAt":
 		return ec.fieldContext_DestinationSpace_checkedAt(ctx, field)
+	case "stale":
+		return ec.fieldContext_DestinationSpace_stale(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type DestinationSpace", field.Name)
 }
@@ -27044,6 +27075,38 @@ func (ec *executionContext) fieldContext_Destination_lastTest(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Destination_spaceCheck(ctx context.Context, field graphql.CollectedField, obj *model.Destination) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Destination_spaceCheck(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SpaceCheck, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.DestinationSpace) graphql.Marshaler {
+			return ec.marshalODestinationSpace2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSpace(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_Destination_spaceCheck(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Destination",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_DestinationSpace(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DestinationLastTest_at(ctx context.Context, field graphql.CollectedField, obj *model.DestinationLastTest) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -27469,6 +27532,29 @@ func (ec *executionContext) _DestinationSpace_checkedAt(ctx context.Context, fie
 }
 func (ec *executionContext) fieldContext_DestinationSpace_checkedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("DestinationSpace", field, false, false, "Time")
+}
+
+func (ec *executionContext) _DestinationSpace_stale(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSpace) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_DestinationSpace_stale(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Stale, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_DestinationSpace_stale(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("DestinationSpace", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _DestinationSshKeypair_destination(ctx context.Context, field graphql.CollectedField, obj *model.DestinationSSHKeypair) (ret graphql.Marshaler) {
@@ -62781,6 +62867,11 @@ func (ec *executionContext) _Destination(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.RequiredNull {
 				out.Invalids++
 			}
+		case "spaceCheck":
+			out.Values[i] = ec._Destination_spaceCheck(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -62948,6 +63039,11 @@ func (ec *executionContext) _DestinationSpace(ctx context.Context, sel ast.Selec
 		case "checkedAt":
 			out.Values[i] = ec._DestinationSpace_checkedAt(ctx, field, obj)
 			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "stale":
+			out.Values[i] = ec._DestinationSpace_stale(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		default:
@@ -75729,6 +75825,13 @@ func (ec *executionContext) marshalODestinationSettings2ᚖgithubᚗcomᚋjlenti
 		return graphql.Null
 	}
 	return ec._DestinationSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalODestinationSpace2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDestinationSpace(ctx context.Context, sel ast.SelectionSet, v *model.DestinationSpace) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._DestinationSpace(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalODiskDestinationInput2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐDiskDestinationInput(ctx context.Context, v any) (*model.DiskDestinationInput, error) {

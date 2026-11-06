@@ -302,6 +302,31 @@ export const DestinationSpaceQuery = graphql(`
       newestSetBytes
       low
       checkedAt
+      stale
+    }
+  }
+`);
+
+/**
+ * The stored answer of the newest space check (D-227, staff): the hourly
+ * check or the last on-demand check; reading it never asks the backend.
+ */
+export const DestinationSpaceCheckQuery = graphql(`
+  query DestinationSpaceCheck($id: UUID!) {
+    destination(id: $id) {
+      id
+      spaceCheck {
+        destinationId
+        status
+        reason
+        totalBytes
+        freeBytes
+        usedBytes
+        newestSetBytes
+        low
+        checkedAt
+        stale
+      }
     }
   }
 `);

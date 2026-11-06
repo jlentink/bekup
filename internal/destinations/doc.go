@@ -26,4 +26,13 @@
 // unrecorded files; UnrecordedFiles lists them and DeleteUnrecordedFile
 // removes one (admin + step-up, re-checked, audited, never in no-delete
 // mode).
+//
+// D-225/D-227: Space asks a destination for its total and free space on
+// demand; CheckSpace does so hourly for every destination (River kind
+// destination_space_check, SpaceCheckWorker: oldest answer first, within
+// a time budget; S3 and not-ready destinations without a backend call).
+// Every backend answer
+// is stored on the row (space_* columns, recordSpace only) with the
+// low-space episode and its destination.low_space event; readers use
+// Destination.Space or StoredSpaces and never ask a backend.
 package destinations

@@ -69,6 +69,10 @@ const (
 	// than 30 days (internal/apiaccess, D-220; periodic, maintenance
 	// queue).
 	KindRunRequestPrune = "run_request_prune"
+	// KindDestinationSpaceCheck asks every ready destination for its space
+	// and stores the answer (internal/destinations, D-227; periodic every
+	// hour, maintenance queue).
+	KindDestinationSpaceCheck = "destination_space_check"
 )
 
 // Trigger says why a backup run was enqueued.
@@ -233,6 +237,13 @@ type RunRequestPruneArgs struct{}
 // Kind implements river.JobArgs.
 func (RunRequestPruneArgs) Kind() string { return KindRunRequestPrune }
 
+// DestinationSpaceCheckArgs are the (empty) args of
+// KindDestinationSpaceCheck.
+type DestinationSpaceCheckArgs struct{}
+
+// Kind implements river.JobArgs.
+func (DestinationSpaceCheckArgs) Kind() string { return KindDestinationSpaceCheck }
+
 // KindSpec declares how a kind is inserted and worked.
 type KindSpec struct {
 	// Queue the kind runs in; its timeout bounds every attempt.
@@ -277,6 +288,9 @@ var catalog = map[string]KindSpec{
 		Queue: QueueMaintenance, Unique: true, Args: MissedBackupCheckArgs{},
 	},
 	KindRunRequestPrune: {Queue: QueueMaintenance, Unique: true, Args: RunRequestPruneArgs{}},
+	KindDestinationSpaceCheck: {
+		Queue: QueueMaintenance, Unique: true, Args: DestinationSpaceCheckArgs{},
+	},
 }
 
 // Kinds returns the catalog's kinds in sorted order.

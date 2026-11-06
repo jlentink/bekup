@@ -446,7 +446,11 @@ func (d *summaryData) restoresTable() *email.Table {
 }
 
 // storageTable is the destination usage (staff): free space only from
-// the cache, low space as a warning row (the D-225 rule).
+// the stored answer of the hourly space check (D-227), low space as a
+// warning row (the D-225 rule), a failed or stale check as a warning row,
+// a backend that reports no space and a destination not checked yet as
+// neutral rows. Status words stay short (the column must fit a phone
+// screen); the note explains them.
 func (d *summaryData) storageTable() email.Table {
 	t := email.Table{
 		Title: "Storage", Status: true, Columns: []string{"Status", "Destination", "Stored", "Free", "Backups"},
@@ -454,26 +458,114 @@ func (d *summaryData) storageTable() email.Table {
 	}
 	n := min(len(d.Destinations), maxSummaryDestinations)
 	for i := range n {
-		du := &d.Destinations[i]
-		row := email.Row{
-			Cells: []string{"Not checked", clampRunes(du.Name, maxJobNameCell), storage.FormatSize(du.Bytes), "–", strconv.FormatInt(du.Backups, 10)},
-		}
-		if du.Free != nil {
-			row.Cells[0], row.Cells[3], row.Level = "OK", storage.FormatSize(*du.Free), email.LevelOK
-			switch du.Low {
-			case destinations.LowFraction:
-				row.Cells[0], row.Level, row.Note = "Low space", email.LevelWarning, "less than 10% free"
-			case destinations.LowBelowNewestSet:
-				row.Cells[0], row.Level, row.Note = "Low space", email.LevelWarning, "less free than the newest backup set needs"
-			default:
-			}
-		}
-		t.Rows = append(t.Rows, row)
+		t.Rows = append(t.Rows, d.storageRow(&d.Destinations[i]))
 	}
 	if more := len(d.Destinations) - n; more > 0 {
 		t.Rows = append(t.Rows, email.Row{Cells: []string{"More", fmt.Sprintf("+%d more %s", more, pick(more == 1, "destination", "destinations")), "", "", ""}})
 	}
 	return t
+}
+
+// Status words of the storage rows.
+const (
+	storageOK         = "OK"
+	storageLow        = "Low space"
+	storageStale      = "Stale"
+	storageFailed     = "Check failed"
+	storageNoLimit    = "No limit"
+	storageNotChecked = "Not checked"
+)
+
+// checkedTime is when a space check ran: the time of day when it was on
+// the day of now (the render time), else the short date and time.
+func checkedTime(at, now time.Time, loc *time.Location) string {
+	a, n := at.In(loc), now.In(loc)
+	if a.Year() == n.Year() && a.YearDay() == n.YearDay() {
+		return a.Format("15:04")
+	}
+	return cellTime(at, loc)
+}
+
+// spaceFailureText is the short reason of a failed space check (fixed
+// texts per stored code, never server text).
+func spaceFailureText(code string) string {
+	switch code {
+	case destinations.SpaceCodeNotReady:
+		return "the destination was not ready"
+	case destinations.SpaceCodeFailed, "":
+	default:
+		if m := storage.ErrorCode(code).Message(); m != "" {
+			return m
+		}
+	}
+	return "the space could not be checked"
+}
+
+// renderNow is the time stored space answers are judged against: the
+// render time (the summary reads them when it is rendered, possibly hours
+// after the period ended), else the end of the period.
+func (d *summaryData) renderNow() time.Time {
+	if d.Now.IsZero() {
+		return d.Period.until
+	}
+	return d.Now
+}
+
+// storageRow is one destination's row.
+func (d *summaryData) storageRow(du *destinationUsage) email.Row {
+	sp := du.Space
+	row := email.Row{
+		Cells: []string{"", clampRunes(du.Name, maxJobNameCell), storage.FormatSize(du.Bytes), "–", strconv.FormatInt(du.Backups, 10)},
+	}
+	now := d.renderNow()
+	stale := sp.Stale(now)
+	when := "checked " + checkedTime(sp.CheckedAt, now, d.Period.loc)
+	if stale {
+		when = fmt.Sprintf("last checked %s, more than %d hours ago", cellTime(sp.CheckedAt, d.Period.loc), int(destinations.SpaceStaleAfter/time.Hour))
+	}
+	// staleWarns turns a neutral or OK row of an old answer into a warning:
+	// the hourly check stopped (for every destination, whatever it reports).
+	staleWarns := func() {
+		if stale {
+			row.Cells[0], row.Level = storageStale, email.LevelWarning
+		}
+	}
+	var notes []string
+	switch {
+	case !sp.Checked():
+		row.Cells[0] = storageNotChecked
+		notes = append(notes, pick(sp.SettingsChanged, "not checked since the settings changed", "the hourly space check has not run yet"))
+	case sp.Status == destinations.SpaceUnsupported:
+		row.Cells[0] = storageNoLimit
+		notes = append(notes, pick(du.Type == destinations.TypeS3, "no limit reported: S3 buckets have no fixed size",
+			"no limit reported: the server reports no free space or quota"))
+		staleWarns()
+		notes = append(notes, when)
+	case sp.Status == destinations.SpaceUnavailable:
+		row.Cells[0], row.Level = storageFailed, email.LevelWarning
+		notes = append(notes, spaceFailureText(sp.Code), when)
+	case !sp.Space.FreeKnown:
+		row.Cells[0] = storageNoLimit
+		notes = append(notes, "no limit reported: the destination reports no free space")
+		staleWarns()
+		notes = append(notes, when)
+	default:
+		row.Cells[3] = storage.FormatSize(sp.Space.Free)
+		row.Cells[0], row.Level = storageOK, email.LevelOK
+		switch sp.Low {
+		case destinations.LowFraction:
+			row.Cells[0], row.Level = storageLow, email.LevelWarning
+			notes = append(notes, "less than 10% free")
+		case destinations.LowBelowNewestSet:
+			row.Cells[0], row.Level = storageLow, email.LevelWarning
+			notes = append(notes, "less free than the newest backup set needs")
+		default:
+			staleWarns()
+		}
+		notes = append(notes, when)
+	}
+	row.Note = strings.Join(notes, "; ")
+	return row
 }
 
 // securityTable is the admins' security alert count.

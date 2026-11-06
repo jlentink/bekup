@@ -20,7 +20,7 @@ SET tls_pin_sha256 = NULL,
     tls_pin_set_at = NULL,
     tls_pin_set_by = NULL
 WHERE id = $1 AND deleted_at IS NULL AND type = 'webdav'
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 // ClearDestinationTLSPin removes a WebDAV destination's certificate pin.
@@ -53,6 +53,17 @@ func (q *Queries) ClearDestinationTLSPin(ctx context.Context, id uuid.UUID) (Des
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -192,7 +203,7 @@ func (q *Queries) DestinationUsage(ctx context.Context) ([]DestinationUsageRow, 
 }
 
 const getDestination = `-- name: GetDestination :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1 AND deleted_at IS NULL
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since FROM destinations WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination, error) {
@@ -224,12 +235,23 @@ func (q *Queries) GetDestination(ctx context.Context, id uuid.UUID) (Destination
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
 
 const getDestinationForUpdate = `-- name: GetDestinationForUpdate :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since FROM destinations WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetDestinationForUpdate locks a destination that is not deleted.
@@ -262,12 +284,23 @@ func (q *Queries) GetDestinationForUpdate(ctx context.Context, id uuid.UUID) (De
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
 
 const getDestinationIncludingDeleted = `-- name: GetDestinationIncludingDeleted :one
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations WHERE id = $1
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since FROM destinations WHERE id = $1
 `
 
 // GetDestinationIncludingDeleted is for the workers only (backup,
@@ -303,6 +336,17 @@ func (q *Queries) GetDestinationIncludingDeleted(ctx context.Context, id uuid.UU
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -312,7 +356,7 @@ INSERT INTO destinations (id, name, type, config, secret_enc, no_delete,
                           object_lock_mode, object_lock_retention_days, created_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9)
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 type InsertDestinationParams struct {
@@ -368,6 +412,17 @@ func (q *Queries) InsertDestination(ctx context.Context, arg InsertDestinationPa
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -415,9 +470,103 @@ func (q *Queries) ListDestinationLocations(ctx context.Context, id uuid.UUID) ([
 	return items, nil
 }
 
+const listDestinationSpace = `-- name: ListDestinationSpace :many
+SELECT id, type, updated_at, space_checked_at, space_status, space_code,
+       space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes,
+       space_low_cause, space_low_since, space_settings_at
+FROM destinations
+WHERE deleted_at IS NULL
+ORDER BY lower(name), id
+`
+
+type ListDestinationSpaceRow struct {
+	ID                  uuid.UUID       `json:"id"`
+	Type                DestinationType `json:"type"`
+	UpdatedAt           time.Time       `json:"updatedAt"`
+	SpaceCheckedAt      *time.Time      `json:"spaceCheckedAt"`
+	SpaceStatus         *string         `json:"spaceStatus"`
+	SpaceCode           *string         `json:"spaceCode"`
+	SpaceTotalBytes     *int64          `json:"spaceTotalBytes"`
+	SpaceFreeBytes      *int64          `json:"spaceFreeBytes"`
+	SpaceUsedBytes      *int64          `json:"spaceUsedBytes"`
+	SpaceNewestSetBytes *int64          `json:"spaceNewestSetBytes"`
+	SpaceLowCause       *string         `json:"spaceLowCause"`
+	SpaceLowSince       *time.Time      `json:"spaceLowSince"`
+	SpaceSettingsAt     *time.Time      `json:"spaceSettingsAt"`
+}
+
+// ListDestinationSpace returns the stored space checks of the
+// destinations that are not deleted (D-227; readers such as the periodic
+// summary; no configuration or secrets).
+func (q *Queries) ListDestinationSpace(ctx context.Context) ([]ListDestinationSpaceRow, error) {
+	rows, err := q.db.Query(ctx, listDestinationSpace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDestinationSpaceRow
+	for rows.Next() {
+		var i ListDestinationSpaceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.UpdatedAt,
+			&i.SpaceCheckedAt,
+			&i.SpaceStatus,
+			&i.SpaceCode,
+			&i.SpaceTotalBytes,
+			&i.SpaceFreeBytes,
+			&i.SpaceUsedBytes,
+			&i.SpaceNewestSetBytes,
+			&i.SpaceLowCause,
+			&i.SpaceLowSince,
+			&i.SpaceSettingsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDestinationSpaceCheckTargets = `-- name: ListDestinationSpaceCheckTargets :many
+SELECT id
+FROM destinations
+WHERE deleted_at IS NULL
+ORDER BY CASE WHEN space_settings_at = updated_at THEN space_checked_at END ASC NULLS FIRST, id
+`
+
+// ListDestinationSpaceCheckTargets returns the destinations the scheduled
+// space check visits (D-227), the longest unchecked first: never checked
+// or checked under older settings first, then by the oldest stored
+// answer, so a run cut short by its time budget continues next hour with
+// the ones it did not reach.
+func (q *Queries) ListDestinationSpaceCheckTargets(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listDestinationSpaceCheckTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDestinations = `-- name: ListDestinations :many
 
-SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by FROM destinations
+SELECT id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since FROM destinations
 WHERE deleted_at IS NULL
 ORDER BY lower(name), id
 `
@@ -459,6 +608,17 @@ func (q *Queries) ListDestinations(ctx context.Context) ([]Destination, error) {
 			&i.TlsPinCertificate,
 			&i.TlsPinSetAt,
 			&i.TlsPinSetBy,
+			&i.SpaceCheckedAt,
+			&i.SpaceStatus,
+			&i.SpaceCode,
+			&i.SpaceTotalBytes,
+			&i.SpaceFreeBytes,
+			&i.SpaceUsedBytes,
+			&i.SpaceNewestSetBytes,
+			&i.SpaceLowCause,
+			&i.SpaceLowSince,
+			&i.SpaceSettingsAt,
+			&i.SpaceOkSince,
 		); err != nil {
 			return nil, err
 		}
@@ -479,6 +639,110 @@ SELECT pg_advisory_xact_lock(7142023363)
 func (q *Queries) LockDestinationLocations(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockDestinationLocations)
 	return err
+}
+
+const lockDestinationSpace = `-- name: LockDestinationSpace :one
+SELECT updated_at, space_checked_at, space_status, space_low_since, space_ok_since, space_settings_at,
+       CAST(clock_timestamp() - make_interval(0, 0, 0, 0, 0, 0, $1::double precision) AS timestamptz) AS checked_at
+FROM destinations
+WHERE id = $2 AND deleted_at IS NULL
+FOR NO KEY UPDATE
+`
+
+type LockDestinationSpaceParams struct {
+	AgeSeconds float64   `json:"ageSeconds"`
+	ID         uuid.UUID `json:"id"`
+}
+
+type LockDestinationSpaceRow struct {
+	UpdatedAt       time.Time  `json:"updatedAt"`
+	SpaceCheckedAt  *time.Time `json:"spaceCheckedAt"`
+	SpaceStatus     *string    `json:"spaceStatus"`
+	SpaceLowSince   *time.Time `json:"spaceLowSince"`
+	SpaceOkSince    *time.Time `json:"spaceOkSince"`
+	SpaceSettingsAt *time.Time `json:"spaceSettingsAt"`
+	CheckedAt       time.Time  `json:"checkedAt"`
+}
+
+// LockDestinationSpace locks a destination that is not deleted while a
+// space check result is recorded (D-227) and returns the previous result's
+// low-space episode and the check time on the database clock: now minus
+// how long ago the backend answered (age_seconds, measured by the process with
+// its monotonic clock), so answers of different processes compare on one
+// clock. FOR NO KEY UPDATE: job saves (FOR SHARE) wait only for the few
+// statements of the recording.
+func (q *Queries) LockDestinationSpace(ctx context.Context, arg LockDestinationSpaceParams) (LockDestinationSpaceRow, error) {
+	row := q.db.QueryRow(ctx, lockDestinationSpace, arg.AgeSeconds, arg.ID)
+	var i LockDestinationSpaceRow
+	err := row.Scan(
+		&i.UpdatedAt,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceLowSince,
+		&i.SpaceOkSince,
+		&i.SpaceSettingsAt,
+		&i.CheckedAt,
+	)
+	return i, err
+}
+
+const recordDestinationSpace = `-- name: RecordDestinationSpace :execrows
+UPDATE destinations
+SET space_checked_at = $1::timestamptz,
+    space_status = $2::text,
+    space_code = $3,
+    space_total_bytes = $4,
+    space_free_bytes = $5,
+    space_used_bytes = $6,
+    space_newest_set_bytes = $7,
+    space_low_cause = $8,
+    space_low_since = $9,
+    space_ok_since = $10,
+    space_settings_at = updated_at
+WHERE id = $11 AND deleted_at IS NULL AND updated_at = $12
+  AND (space_checked_at IS NULL OR space_checked_at < $1::timestamptz)
+`
+
+type RecordDestinationSpaceParams struct {
+	CheckedAt      time.Time  `json:"checkedAt"`
+	Status         string     `json:"status"`
+	Code           *string    `json:"code"`
+	TotalBytes     *int64     `json:"totalBytes"`
+	FreeBytes      *int64     `json:"freeBytes"`
+	UsedBytes      *int64     `json:"usedBytes"`
+	NewestSetBytes *int64     `json:"newestSetBytes"`
+	LowCause       *string    `json:"lowCause"`
+	LowSince       *time.Time `json:"lowSince"`
+	OkSince        *time.Time `json:"okSince"`
+	ID             uuid.UUID  `json:"id"`
+	SettingsAt     time.Time  `json:"settingsAt"`
+}
+
+// RecordDestinationSpace stores the outcome of a space check (D-227) when
+// the row is unchanged since the check loaded it (settings_at = its
+// updated_at) and no newer check was stored meanwhile (checked_at is the
+// database time from LockDestinationSpace); 0 rows: changed,
+// deleted or superseded, the result is not stored. The trigger leaves
+// updated_at alone for this update.
+func (q *Queries) RecordDestinationSpace(ctx context.Context, arg RecordDestinationSpaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordDestinationSpace,
+		arg.CheckedAt,
+		arg.Status,
+		arg.Code,
+		arg.TotalBytes,
+		arg.FreeBytes,
+		arg.UsedBytes,
+		arg.NewestSetBytes,
+		arg.LowCause,
+		arg.LowSince,
+		arg.OkSince,
+		arg.ID,
+		arg.SettingsAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordDestinationTest = `-- name: RecordDestinationTest :execrows
@@ -519,7 +783,7 @@ UPDATE destinations
 SET config = $1,
     secret_enc = $2
 WHERE id = $3 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 type SetDestinationAuthParams struct {
@@ -557,6 +821,17 @@ func (q *Queries) SetDestinationAuth(ctx context.Context, arg SetDestinationAuth
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -569,7 +844,7 @@ SET host_key_type = $1,
     host_key_confirmed_at = now(),
     host_key_confirmed_by = $4
 WHERE id = $5 AND deleted_at IS NULL AND type = 'sftp'
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 type SetDestinationHostKeyParams struct {
@@ -615,6 +890,17 @@ func (q *Queries) SetDestinationHostKey(ctx context.Context, arg SetDestinationH
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -626,7 +912,7 @@ SET tls_pin_sha256 = $1,
     tls_pin_set_at = now(),
     tls_pin_set_by = $3
 WHERE id = $4 AND deleted_at IS NULL AND type = 'webdav'
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 type SetDestinationTLSPinParams struct {
@@ -672,6 +958,17 @@ func (q *Queries) SetDestinationTLSPin(ctx context.Context, arg SetDestinationTL
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }
@@ -706,7 +1003,7 @@ SET name = $1,
     tls_pin_set_at = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_set_at END,
     tls_pin_set_by = CASE WHEN $8::boolean THEN NULL ELSE tls_pin_set_by END
 WHERE id = $9 AND deleted_at IS NULL
-RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by
+RETURNING id, name, type, config, secret_enc, no_delete, object_lock_mode, object_lock_retention_days, host_key_type, host_key_fingerprint, host_key_authorized_key, host_key_confirmed_at, host_key_confirmed_by, created_by, created_at, updated_at, deleted_at, last_tested_at, last_test_ok, last_test_code, last_test_settings_at, tls_pin_sha256, tls_pin_certificate, tls_pin_set_at, tls_pin_set_by, space_checked_at, space_status, space_code, space_total_bytes, space_free_bytes, space_used_bytes, space_newest_set_bytes, space_low_cause, space_low_since, space_settings_at, space_ok_since
 `
 
 type UpdateDestinationParams struct {
@@ -763,6 +1060,17 @@ func (q *Queries) UpdateDestination(ctx context.Context, arg UpdateDestinationPa
 		&i.TlsPinCertificate,
 		&i.TlsPinSetAt,
 		&i.TlsPinSetBy,
+		&i.SpaceCheckedAt,
+		&i.SpaceStatus,
+		&i.SpaceCode,
+		&i.SpaceTotalBytes,
+		&i.SpaceFreeBytes,
+		&i.SpaceUsedBytes,
+		&i.SpaceNewestSetBytes,
+		&i.SpaceLowCause,
+		&i.SpaceLowSince,
+		&i.SpaceSettingsAt,
+		&i.SpaceOkSince,
 	)
 	return i, err
 }

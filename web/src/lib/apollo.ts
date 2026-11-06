@@ -400,7 +400,11 @@ export function createCache(): InMemoryCache {
       // destination so the dashboard's and the destination pages'
       // selections merge instead of replacing each other.
       DestinationUsage: { keyFields: ["destinationId"] },
-      DestinationSpace: { keyFields: ["destinationId"] },
+      // Space answers are not normalized (D-227 amendment 1): the stored
+      // answer (Destination.spaceCheck) and the live one
+      // (Query.destinationSpace) of one destination are different answers
+      // and must not overwrite each other; each merges field-wise in place.
+      DestinationSpace: { keyFields: false, merge: true },
     },
   });
 }

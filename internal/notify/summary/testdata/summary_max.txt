@@ -125,17 +125,25 @@ Jobs
    OK      +41 more jobs without problems
 
 Storage
-   Status       Destination              Stored  Free  Backups
-   -----------  --------------------  ---------  ----  -------
-   Not checked  destination-00              0 B     –        0
-   Not checked  destination-01        256.0 GiB     –       40
-   Not checked  destination-02        512.0 GiB     –       80
-   Not checked  destination-03        768.0 GiB     –      120
-   Not checked  destination-04          1.0 TiB     –      160
-   Not checked  destination-05          1.2 TiB     –      200
-   Not checked  destination-06          1.5 TiB     –      240
-   Not checked  destination-07          1.8 TiB     –      280
-   More         +2 more destinations
+   Status  Destination              Stored     Free  Backups
+   ------  --------------------  ---------  -------  -------
+   OK      destination-00              0 B  1.0 TiB        0
+           checked 08:00
+   OK      destination-01        256.0 GiB  2.0 TiB       40
+           checked 07:00
+   OK      destination-02        512.0 GiB  3.0 TiB       80
+           checked 06:00
+   OK      destination-03        768.0 GiB  4.0 TiB      120
+           checked 05:00
+>> Stale   destination-04          1.0 TiB  5.0 TiB      160
+           last checked 8 Nov 04:00, more than 3 hours ago
+>> Stale   destination-05          1.2 TiB  6.0 TiB      200
+           last checked 8 Nov 03:00, more than 3 hours ago
+>> Stale   destination-06          1.5 TiB  7.0 TiB      240
+           last checked 8 Nov 02:00, more than 3 hours ago
+>> Stale   destination-07          1.8 TiB  8.0 TiB      280
+           last checked 8 Nov 01:00, more than 3 hours ago
+   More    +2 more destinations
 
 Security
    Status  Security alerts

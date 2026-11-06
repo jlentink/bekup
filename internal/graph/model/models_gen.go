@@ -726,6 +726,11 @@ type Destination struct {
 	// The newest stored testDestination result (D-187); null when never
 	// tested. Normalized codes only.
 	LastTest *DestinationLastTest `json:"lastTest,omitempty"`
+	// The stored answer of the newest space check (D-227: the hourly check,
+	// or a destinationSpace call that asked the backend); null when the
+	// destination was never checked or its settings changed since. Reading it
+	// never asks the backend.
+	SpaceCheck *DestinationSpace `json:"spaceCheck,omitempty"`
 }
 
 // The stored outcome of the newest testDestination (D-187).
@@ -764,6 +769,10 @@ type DestinationSpace struct {
 	Low bool `json:"low"`
 	// When the backend was asked (null: not asked, e.g. S3 or not ready).
 	CheckedAt *time.Time `json:"checkedAt,omitempty"`
+	// The answer is older than 3 hours: the hourly space check has not
+	// refreshed it (stored answers only; any status, since the check refreshes
+	// every answer, including UNSUPPORTED and not-ready ones).
+	Stale bool `json:"stale"`
 }
 
 // The public half of a generated SSH keypair; the private key is stored encrypted and never returned.

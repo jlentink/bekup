@@ -547,6 +547,7 @@ func destinationModel(d *destinations.Destination, full bool) *model.Destination
 	if lt := d.LastTest; lt != nil {
 		m.LastTest = &model.DestinationLastTest{At: lt.At, Ok: lt.OK, Code: nonEmpty(lt.Code), Stale: lt.Stale}
 	}
+	m.SpaceCheck = storedSpaceModel(d.ID, &d.Space, time.Now())
 	if m.ObjectLockMode != nil {
 		days := d.ObjectLockRetentionDays
 		m.ObjectLockRetentionDays = &days

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/apiaccess"
 	"github.com/jlentink/bekup/internal/connections"
+	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/missed"
 	"github.com/jlentink/bekup/internal/notify/summary"
@@ -125,6 +126,11 @@ func (a *App) registerWorkers(ws *queue.Workers) error {
 	// External API run requests and access denials (D-220): decided
 	// requests and processed denials are pruned after 30 days.
 	if err := apiaccess.RegisterPrune(ws, a.pool); err != nil {
+		return err
+	}
+	// Destination space (D-227): every ready destination asked hourly,
+	// the answer stored for the summary and the storage page.
+	if err := destinations.RegisterSpaceCheck(ws, a.destinations); err != nil {
 		return err
 	}
 	// Temporary restore connections (task 4.4): expiry / after-restore

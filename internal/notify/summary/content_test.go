@@ -24,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/email"
+	"github.com/jlentink/bekup/internal/storage"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden summary e-mails in testdata/")
@@ -42,6 +43,14 @@ func dailyPeriod(t *testing.T) summaryPeriod {
 	return summaryPeriod{
 		from: at(t, "2026-11-07T07:00:00Z"), until: at(t, "2026-11-08T07:00:00Z"),
 		loc: mustZone(t, "Europe/Amsterdam"), zone: "Europe/Amsterdam", frequency: Daily,
+	}
+}
+
+// checkedSpace is a stored available answer with a known free space,
+// checked at at.
+func checkedSpace(free int64, low destinations.LowCause, at time.Time) destinations.StoredSpace {
+	return destinations.StoredSpace{
+		Status: destinations.SpaceAvailable, Space: storage.Space{Free: free, FreeKnown: true}, Low: low, CheckedAt: at,
 	}
 }
 
@@ -242,8 +251,11 @@ func TestSummaryWarningLevels(t *testing.T) {
 	t.Parallel()
 	d := allOK(t, dailyPeriod(t))
 	d.ShowUsage, d.ShowAlerts, d.SecurityAlerts = true, true, 2
-	free := int64(10 << 30)
-	d.Destinations = []destinationUsage{{Name: "nas", Bytes: 1 << 40, Backups: 9, Free: &free, Low: destinations.LowFraction}, {Name: "s3", Bytes: 5, Backups: 1}}
+	checked := d.Period.until.Add(-20 * time.Minute)
+	d.Destinations = []destinationUsage{
+		{Name: "nas", Bytes: 1 << 40, Backups: 9, Space: checkedSpace(10<<30, destinations.LowFraction, checked)},
+		{Name: "s3", Type: destinations.TypeS3, Bytes: 5, Backups: 1},
+	}
 	c := buildSummary(d, "https://bekup.example/")
 	o := d.overall()
 	if o.level != levelWarning || o.word != "Attention" ||
@@ -256,7 +268,7 @@ func TestSummaryWarningLevels(t *testing.T) {
 	out := render(t, c)
 	for _, s := range []string{
 		">> Low space    nas",
-		"less than 10% free\n",
+		"less than 10% free; checked 07:40\n",
 		"   Not checked  s3",
 		">> Review  2 security alerts in this period\n           review them in bekup\n",
 	} {
@@ -265,7 +277,7 @@ func TestSummaryWarningLevels(t *testing.T) {
 		}
 	}
 	d.SecurityAlerts = 0
-	d.Destinations[0].Low = destinations.LowNone
+	d.Destinations[0].Space.Low = destinations.LowNone
 	if o := d.overall(); o.level != levelOK {
 		t.Fatalf("overall = %+v", o)
 	}
@@ -370,8 +382,7 @@ func TestSummaryScopeParts(t *testing.T) {
 		return strings.Join(titles, ",")
 	}
 	d.Restores["succeeded"] = 1
-	free := int64(1 << 40)
-	dests := []destinationUsage{{Name: "nas", Bytes: 1 << 30, Backups: 3, Free: &free}}
+	dests := []destinationUsage{{Name: "nas", Bytes: 1 << 30, Backups: 3, Space: checkedSpace(1<<40, destinations.LowNone, d.Period.until)}}
 	for _, c := range []struct {
 		name          string
 		usage, alerts bool
@@ -646,21 +657,51 @@ func goldenSummaries(t *testing.T) map[string]*summaryData {
 	ok := allOK(t, p)
 	mixed := newData(p, mixedInput(t, p))
 	mixed.ShowUsage, mixed.ShowAlerts, mixed.SecurityAlerts = true, true, 1
-	free := int64(96 << 30)
-	free2 := int64(4 << 40)
+	checked := p.until.Add(-35 * time.Minute)
 	mixed.Destinations = []destinationUsage{
-		{Name: "nas-01", Bytes: 19 << 37, Backups: 412, Free: &free, Low: destinations.LowFraction},
-		{Name: "offsite s3", Bytes: 24 << 37, Backups: 512},
-		{Name: "sftp backup host", Bytes: 3 << 40, Backups: 380, Free: &free2},
+		{Name: "nas-01", Type: destinations.TypeDisk, Bytes: 19 << 37, Backups: 412, Space: checkedSpace(96<<30, destinations.LowFraction, checked)},
+		{Name: "offsite s3", Type: destinations.TypeS3, Bytes: 24 << 37, Backups: 512, Space: destinations.StoredSpace{
+			Status: destinations.SpaceUnsupported, Code: destinations.SpaceCodeUnsupported, CheckedAt: p.until.Add(-72 * time.Hour),
+		}},
+		{Name: "sftp backup host", Type: destinations.TypeSFTP, Bytes: 3 << 40, Backups: 380, Space: checkedSpace(4<<40, destinations.LowNone, checked)},
+		{Name: "webdav archive", Type: destinations.TypeWebDAV, Bytes: 5 << 36, Backups: 61, Space: destinations.StoredSpace{
+			Status: destinations.SpaceUnavailable, Code: string(storage.CodeNetwork), CheckedAt: checked,
+		}},
 	}
 	maxed := newData(p, bigInput(t, p, 140, 12, func(i int) string {
 		return fmt.Sprintf("postgres-production-cluster-%03d", i)
 	}))
 	maxed.ShowUsage, maxed.ShowAlerts = true, true
 	for i := range 10 {
-		maxed.Destinations = append(maxed.Destinations, destinationUsage{Name: fmt.Sprintf("destination-%02d", i), Bytes: int64(i) << 38, Backups: int64(i * 40)})
+		maxed.Destinations = append(maxed.Destinations, destinationUsage{
+			Name: fmt.Sprintf("destination-%02d", i), Type: destinations.TypeDisk, Bytes: int64(i) << 38, Backups: int64(i * 40),
+			Space: checkedSpace(int64(i+1)<<40, destinations.LowNone, p.until.Add(-time.Duration(i)*time.Hour)),
+		})
 	}
-	return map[string]*summaryData{"summary_all_ok": ok, "summary_failures": mixed, "summary_max": maxed}
+	// Every storage state in one table (the phone-width check of the web
+	// recipe loads it at 375 px; the status words must fit).
+	states := allOK(t, p)
+	states.ShowUsage = true
+	stale := p.until.Add(-5 * time.Hour)
+	states.Destinations = []destinationUsage{
+		{Name: "nas-01", Type: destinations.TypeDisk, Bytes: 19 << 37, Backups: 412, Space: checkedSpace(96<<30, destinations.LowFraction, checked)},
+		{Name: "nas-02", Type: destinations.TypeDisk, Bytes: 3 << 40, Backups: 380, Space: checkedSpace(4<<40, destinations.LowNone, checked)},
+		{Name: "nas-03 (stopped check)", Type: destinations.TypeDisk, Bytes: 7 << 38, Backups: 40, Space: checkedSpace(2<<40, destinations.LowNone, stale)},
+		{Name: "offsite s3", Type: destinations.TypeS3, Bytes: 24 << 37, Backups: 512, Space: destinations.StoredSpace{
+			Status: destinations.SpaceUnsupported, Code: destinations.SpaceCodeUnsupported, CheckedAt: checked,
+		}},
+		{Name: "webdav without quota", Type: destinations.TypeWebDAV, Bytes: 5 << 36, Backups: 61, Space: destinations.StoredSpace{
+			Status: destinations.SpaceUnsupported, Code: destinations.SpaceCodeUnsupported, CheckedAt: stale,
+		}},
+		{Name: "sftp archive", Type: destinations.TypeSFTP, Bytes: 5 << 36, Backups: 61, Space: destinations.StoredSpace{
+			Status: destinations.SpaceUnavailable, Code: string(storage.CodeNetwork), CheckedAt: checked,
+		}},
+		{Name: "new destination", Type: destinations.TypeSFTP, Bytes: 0, Backups: 0},
+		{Name: "moved destination", Type: destinations.TypeDisk, Bytes: 1 << 30, Backups: 1, Space: destinations.StoredSpace{SettingsChanged: true}},
+	}
+	return map[string]*summaryData{
+		"summary_all_ok": ok, "summary_failures": mixed, "summary_max": maxed, "summary_storage_states": states,
+	}
 }
 
 // TestSummaryGolden pins the rendered summaries (go test -update, then
@@ -722,8 +763,10 @@ func TestSummaryWorstCaseSize(t *testing.T) {
 			d.Restores["failed"], d.TestRestores["error"] = 3, 2
 			big := int64(1) << 50
 			for i := range 12 {
+				// The longest storage note: low, stale.
 				d.Destinations = append(d.Destinations, destinationUsage{
-					Name: name(i), Bytes: 1 << 40, Backups: 999, Free: &big, Low: destinations.LowBelowNewestSet,
+					Name: name(i), Bytes: 1 << 40, Backups: 999,
+					Space: checkedSpace(big, destinations.LowBelowNewestSet, p.until.Add(-30*time.Hour)),
 				})
 			}
 			sc := buildSummary(d, "https://bekup.example.com/")
@@ -788,5 +831,103 @@ func TestSummaryFitDropsOKRowsFirst(t *testing.T) {
 	d = newData(p, bigInput(t, p, 100, 10, func(i int) string { return fmt.Sprintf("job-%03d", i) }))
 	if rows := buildSummary(d, "https://bekup.example.com/").Notice.Tables[0].Rows; len(rows) != 100 || rows[99].Cells[1] == "" || strings.HasPrefix(rows[99].Cells[1], "+") {
 		t.Fatalf("%d rows, last %v", len(rows), rows[len(rows)-1].Cells)
+	}
+}
+
+// TestSummaryStorageRows: every stored space state (D-227) has its words,
+// level and note; stale answers warn whatever they report, unsupported and
+// unchecked ones are neutral while fresh, low space counts towards the
+// banner.
+func TestSummaryStorageRows(t *testing.T) {
+	t.Parallel()
+	p := dailyPeriod(t)
+	now := p.until
+	fresh, yesterday, stale := now.Add(-20*time.Minute), now.Add(-20*time.Hour), now.Add(-4*time.Hour)
+	failed := func(code string, at time.Time) destinations.StoredSpace {
+		return destinations.StoredSpace{Status: destinations.SpaceUnavailable, Code: code, CheckedAt: at}
+	}
+	for _, c := range []struct {
+		name       string
+		typ        destinations.Type
+		space      destinations.StoredSpace
+		word, free string
+		level      email.Level
+		note       string
+		low        bool
+	}{
+		{"ok", destinations.TypeDisk, checkedSpace(5<<30, destinations.LowNone, fresh), "OK", "5.0 GiB", email.LevelOK, "checked 07:40", false},
+		{"ok yesterday", destinations.TypeDisk, checkedSpace(5<<30, destinations.LowNone, yesterday.Add(-12*time.Hour)), "Stale", "5.0 GiB", email.LevelWarning,
+			"last checked 7 Nov 00:00, more than 3 hours ago", false},
+		{"ok stale", destinations.TypeSFTP, checkedSpace(5<<30, destinations.LowNone, stale), "Stale", "5.0 GiB", email.LevelWarning,
+			"last checked 8 Nov 04:00, more than 3 hours ago", false},
+		{"low fraction", destinations.TypeDisk, checkedSpace(1<<30, destinations.LowFraction, fresh), "Low space", "1.0 GiB", email.LevelWarning,
+			"less than 10% free; checked 07:40", true},
+		{"low below set, stale", destinations.TypeWebDAV, checkedSpace(1<<30, destinations.LowBelowNewestSet, stale), "Low space", "1.0 GiB", email.LevelWarning,
+			"less free than the newest backup set needs; last checked 8 Nov 04:00, more than 3 hours ago", true},
+		{"check failed", destinations.TypeSFTP, failed(string(storage.CodeNetwork), fresh), "Check failed", "–", email.LevelWarning,
+			"the destination could not be reached; checked 07:40", false},
+		{"check failed, not ready", destinations.TypeSFTP, failed(destinations.SpaceCodeNotReady, fresh), "Check failed", "–", email.LevelWarning,
+			"the destination was not ready; checked 07:40", false},
+		{"check failed, stale", destinations.TypeWebDAV, failed(destinations.SpaceCodeFailed, stale), "Check failed", "–", email.LevelWarning,
+			"the space could not be checked; last checked 8 Nov 04:00, more than 3 hours ago", false},
+		{"check failed, unknown code", destinations.TypeWebDAV, failed("something_new", fresh), "Check failed", "–", email.LevelWarning,
+			storage.ErrorCode("something_new").Message() + "; checked 07:40", false},
+		{"s3", destinations.TypeS3, destinations.StoredSpace{Status: destinations.SpaceUnsupported, CheckedAt: fresh},
+			"No limit", "–", email.LevelNone, "no limit reported: S3 buckets have no fixed size; checked 07:40", false},
+		{"s3, stale", destinations.TypeS3, destinations.StoredSpace{Status: destinations.SpaceUnsupported, CheckedAt: stale},
+			"Stale", "–", email.LevelWarning, "no limit reported: S3 buckets have no fixed size; last checked 8 Nov 04:00, more than 3 hours ago", false},
+		{"no quota", destinations.TypeWebDAV, destinations.StoredSpace{Status: destinations.SpaceUnsupported, CheckedAt: fresh},
+			"No limit", "–", email.LevelNone, "no limit reported: the server reports no free space or quota; checked 07:40", false},
+		{"used only", destinations.TypeWebDAV, destinations.StoredSpace{Status: destinations.SpaceAvailable, Space: storage.Space{Used: 9, UsedKnown: true}, CheckedAt: fresh},
+			"No limit", "–", email.LevelNone, "no limit reported: the destination reports no free space; checked 07:40", false},
+		{"used only, stale", destinations.TypeWebDAV, destinations.StoredSpace{Status: destinations.SpaceAvailable, Space: storage.Space{Used: 9, UsedKnown: true}, CheckedAt: stale},
+			"Stale", "–", email.LevelWarning, "no limit reported: the destination reports no free space; last checked 8 Nov 04:00, more than 3 hours ago", false},
+		{"never", destinations.TypeDisk, destinations.StoredSpace{}, "Not checked", "–", email.LevelNone, "the hourly space check has not run yet", false},
+		{"settings changed", destinations.TypeDisk, destinations.StoredSpace{SettingsChanged: true}, "Not checked", "–", email.LevelNone,
+			"not checked since the settings changed", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			d := allOK(t, p)
+			d.ShowUsage = true
+			d.Destinations = []destinationUsage{{Name: "dest", Type: c.typ, Bytes: 1 << 30, Backups: 2, Space: c.space}}
+			row := d.storageTable().Rows[0]
+			if row.Cells[0] != c.word || row.Cells[3] != c.free || row.Level != c.level || row.Note != c.note {
+				t.Errorf("row = %q level %v note %q; want %q %q level %v note %q", row.Cells, row.Level, row.Note, c.word, c.free, c.level, c.note)
+			}
+			if got := d.lowDestinations() == 1; got != c.low {
+				t.Errorf("counted low = %v, want %v", got, c.low)
+			}
+			if o := d.overall(); (o.level == levelWarning) != c.low {
+				t.Errorf("overall = %+v", o)
+			}
+		})
+	}
+}
+
+// TestSummaryStorageRenderClock: the stored answers are read when the
+// summary is rendered, so their age and "checked HH:MM" follow the render
+// time, not the end of the period: a summary delivered hours late shows a
+// then-fresh answer as fresh with the time of day of the render's day, and
+// an answer that was fresh at the period end but is old at render as
+// stale.
+func TestSummaryStorageRenderClock(t *testing.T) {
+	t.Parallel()
+	p := dailyPeriod(t)
+	render := p.until.Add(20 * time.Hour) // 9 Nov 04:00 in Amsterdam
+	for _, c := range []struct {
+		name       string
+		at         time.Time
+		word, note string
+	}{
+		{"fresh at render", render.Add(-30 * time.Minute), "OK", "checked 03:30"},
+		{"fresh at the period end, old at render", p.until.Add(-10 * time.Minute), "Stale", "last checked 8 Nov 07:50, more than 3 hours ago"},
+	} {
+		d := allOK(t, p)
+		d.Now, d.ShowUsage = render, true
+		d.Destinations = []destinationUsage{{Name: "dest", Type: destinations.TypeDisk, Bytes: 1, Space: checkedSpace(5<<30, destinations.LowNone, c.at)}}
+		if row := d.storageTable().Rows[0]; row.Cells[0] != c.word || row.Note != c.note {
+			t.Errorf("%s: %q, note %q; want %q, %q", c.name, row.Cells[0], row.Note, c.word, c.note)
+		}
 	}
 }

@@ -2066,6 +2066,17 @@ type Destination struct {
 	TlsPinCertificate       *string         `json:"tlsPinCertificate"`
 	TlsPinSetAt             *time.Time      `json:"tlsPinSetAt"`
 	TlsPinSetBy             *uuid.UUID      `json:"tlsPinSetBy"`
+	SpaceCheckedAt          *time.Time      `json:"spaceCheckedAt"`
+	SpaceStatus             *string         `json:"spaceStatus"`
+	SpaceCode               *string         `json:"spaceCode"`
+	SpaceTotalBytes         *int64          `json:"spaceTotalBytes"`
+	SpaceFreeBytes          *int64          `json:"spaceFreeBytes"`
+	SpaceUsedBytes          *int64          `json:"spaceUsedBytes"`
+	SpaceNewestSetBytes     *int64          `json:"spaceNewestSetBytes"`
+	SpaceLowCause           *string         `json:"spaceLowCause"`
+	SpaceLowSince           *time.Time      `json:"spaceLowSince"`
+	SpaceSettingsAt         *time.Time      `json:"spaceSettingsAt"`
+	SpaceOkSince            *time.Time      `json:"spaceOkSince"`
 }
 
 type DownloadTicket struct {

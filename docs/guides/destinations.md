@@ -566,18 +566,42 @@ other files, free).
 
 "Free" is the space available to the account bekup uses (for SFTP and
 disk the blocks available to unprivileged users); "used" counts every file
-there, not only bekup's. The space is asked only when the destination page
-is opened (`destinationSpace`, admins and maintainers), through the same
-guarded, pinned connection as a test, with a 15 second timeout and the
-test rate limit; the answer is cached for 5 minutes per destination (1
-minute after a failure; changing the destination's settings asks again).
-Failures show a fixed reason such as "could not be reached", never the
-server's text.
+there, not only bekup's.
+
+**Hourly space check (D-227).** Where the workers run, bekup asks every
+ready destination for its space once an hour (and at start), through the
+same guarded, pinned connection as a test and a backup, with a 15 second
+timeout and at most two destinations at once; S3 is recorded as "no limit
+reported" and a destination that is not ready as "not ready", both without
+contacting it. The destinations checked longest ago come first; a run stops
+starting new checks after 10 minutes, and the rest come first an hour
+later (with many unreachable destinations, every one is still checked in
+turn). The answer is stored with the destination (status, sizes, a fixed
+reason code, the time on the database clock), never the server's text, and
+changing the destination's settings hides it until the next check. A
+changed SSH host key or TLS certificate is audited and alerted once per
+settings, not on every hourly check. The destination page shows the
+stored answer with its age ("Last checked 20 minutes ago") and warns when
+it is older than 3 hours, whatever it says (the hourly check refreshes
+every answer, so an old one means the check stopped); **Check now** asks
+the destination right away (`destinationSpace`, admins and maintainers,
+the test rate limit, cached for 5 minutes, 1 minute after a failure), and
+stores that answer too. When it fails (rate limited, unreachable), the
+failure is shown next to the stored answer, which stays. When nothing is
+stored for the current settings, the page asks by itself. Failures show a
+fixed reason such as "could not be reached".
 
 The page warns that **free space is low** when less than a tenth of the
 total is free, or when the free space is smaller than the newest full set
 of backups on the destination (per job, the files of its newest backup
-there): the next backups may then not fit (D-225).
+there): the next backups may then not fit (D-225). When a check finds a
+destination low, admins and maintainers get the
+[`destination.low_space`](notifications.md#the-event-catalog) notification:
+once when it becomes low, then at most once a day while it stays low. The
+episode ends only after 3 hours of checks that find enough space (a failed
+check does not count either way), so a destination hovering around the
+limit does not alert again and again; a new episode on the same UTC day
+does not notify again.
 
 ## Testing a destination
 
