@@ -89,7 +89,8 @@ async function main() {
         if (w > PHONE_WIDTH)
           problems.push(`${name} (${scheme}): ${w} px wide at a ${PHONE_WIDTH} px viewport`);
       }
-      if (shots) await measure(browser, file, 600, "light", join(shots, `${name}-600-light${suffix}.png`));
+      if (shots)
+        await measure(browser, file, 600, "light", join(shots, `${name}-600-light${suffix}.png`));
       console.log(`  ${name}: ${widths.join(", ")} (viewport ${PHONE_WIDTH})`);
     }
   } finally {
@@ -100,7 +101,9 @@ async function main() {
     console.error(`\nemail-width-check FAILED (${problems.length} problem(s)).`);
     process.exit(1);
   }
-  console.log(`email-width-check passed: ${files.length} golden e-mails fit ${PHONE_WIDTH} px (light, dark).`);
+  console.log(
+    `email-width-check passed: ${files.length} golden e-mails fit ${PHONE_WIDTH} px (light, dark).`,
+  );
 }
 
 main().catch((err) => {

@@ -235,7 +235,8 @@ describe("destination storage (D-225)", () => {
         DestinationSpaceCheck: spaceCheck(),
         DestinationSpace: () => {
           n++;
-          if (n === 1) return gqlError("RATE_LIMITED", "Too many space checks; try again in a minute.");
+          if (n === 1)
+            return gqlError("RATE_LIMITED", "Too many space checks; try again in a minute.");
           if (n === 2)
             return space({
               status: "UNAVAILABLE",
