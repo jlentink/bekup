@@ -215,9 +215,10 @@ func (s *Sender) CloseIdleConnections() { s.client.CloseIdleConnections() }
 
 // Send performs one signed POST and classifies the result. It never
 // retries and never follows redirects.
-func (s *Sender) Send(ctx context.Context, d Delivery) Result {
+func (s *Sender) Send(ctx context.Context, d Delivery) (res Result) {
 	start := s.now()
-	res := Result{DeliveryID: d.DeliveryID, Timestamp: start.Unix()}
+	res = Result{DeliveryID: d.DeliveryID, Timestamp: start.Unix()}
+	// res is the named result, so the duration lands in what is returned.
 	defer func() { res.Duration = s.now().Sub(start) }()
 
 	if err := ctx.Err(); err != nil {

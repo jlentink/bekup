@@ -211,10 +211,9 @@ func TestSendTimeout(t *testing.T) {
 		if _, err := io.Copy(io.Discard, r.Body); err != nil {
 			t.Error(err)
 		}
-		select {
-		case <-r.Context().Done():
-		case <-release:
-		}
+		// Only the test ends the request: answering when the client's
+		// context ends would race the client's own cancellation.
+		<-release
 	}))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(release) })
@@ -227,6 +226,9 @@ func TestSendTimeout(t *testing.T) {
 	if el := time.Since(start); el > 3*time.Second {
 		t.Fatalf("timeout not enforced: %s", el)
 	}
+	if res.Duration < 300*time.Millisecond {
+		t.Fatalf("duration %s, want the time until the timeout", res.Duration)
+	}
 }
 
 func TestSendCallerCanceled(t *testing.T) {
@@ -235,10 +237,9 @@ func TestSendCallerCanceled(t *testing.T) {
 		if _, err := io.Copy(io.Discard, r.Body); err != nil {
 			t.Error(err)
 		}
-		select {
-		case <-r.Context().Done():
-		case <-release:
-		}
+		// Only the test ends the request: answering when the client's
+		// context ends would race the client's own cancellation.
+		<-release
 	}))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(release) })
