@@ -371,35 +371,66 @@ func (q *Queries) SetSummaryPlan(ctx context.Context, arg SetSummaryPlanParams) 
 	return err
 }
 
-const summaryRunCounts = `-- name: SummaryRunCounts :many
-SELECT r.job_id, r.status::text AS status, count(*)::bigint AS runs
-FROM runs r
-JOIN jobs j ON j.id = r.job_id
-WHERE r.finished_at > $1::timestamptz AND r.finished_at <= $2::timestamptz
-  AND j.deleted_at IS NULL
-  AND ($3::boolean OR EXISTS (
-        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
-        WHERE o.job_id = r.job_id AND o.user_id = $4::uuid AND ou.deleted_at IS NULL))
-GROUP BY r.job_id, r.status
+const summaryJobActivity = `-- name: SummaryJobActivity :many
+WITH a AS (
+    SELECT r.job_id,
+           count(*) FILTER (WHERE r.status = 'success')::bigint AS succeeded,
+           count(*) FILTER (WHERE r.status = 'partial')::bigint AS partial,
+           count(*) FILTER (WHERE r.status = 'failed')::bigint AS failed,
+           count(*) FILTER (WHERE r.status = 'canceled')::bigint AS canceled,
+           count(*) FILTER (WHERE r.status = 'skipped')::bigint AS skipped,
+           count(*) FILTER (WHERE r.status = 'success' AND r.has_warnings)::bigint AS with_warnings,
+           COALESCE(sum(r.bytes_stored), 0)::bigint AS bytes_stored,
+           max(r.finished_at)::timestamptz AS last_finished_at
+    FROM runs r
+    JOIN jobs j ON j.id = r.job_id
+    WHERE r.finished_at > $1::timestamptz AND r.finished_at <= $2::timestamptz
+      AND j.deleted_at IS NULL
+      AND ($3::boolean OR EXISTS (
+            SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+            WHERE o.job_id = r.job_id AND o.user_id = $4::uuid AND ou.deleted_at IS NULL))
+    GROUP BY r.job_id
+)
+SELECT a.job_id, a.succeeded, a.partial, a.failed, a.canceled, a.skipped, a.with_warnings, a.bytes_stored,
+       a.last_finished_at::timestamptz AS last_finished_at,
+       COALESCE(lf.error_code, '')::text AS last_failure_code
+FROM a
+LEFT JOIN LATERAL (
+    SELECT f.error_code FROM runs f
+    WHERE a.failed > 0 AND f.job_id = a.job_id AND f.status = 'failed'
+      AND f.finished_at > $1::timestamptz AND f.finished_at <= $2::timestamptz
+    ORDER BY f.finished_at DESC, f.id DESC
+    LIMIT 1
+) lf ON true
 `
 
-type SummaryRunCountsParams struct {
+type SummaryJobActivityParams struct {
 	PeriodFrom  time.Time `json:"periodFrom"`
 	PeriodUntil time.Time `json:"periodUntil"`
 	ScopeAll    bool      `json:"scopeAll"`
 	UserID      uuid.UUID `json:"userId"`
 }
 
-type SummaryRunCountsRow struct {
-	JobID  uuid.UUID `json:"jobId"`
-	Status string    `json:"status"`
-	Runs   int64     `json:"runs"`
+type SummaryJobActivityRow struct {
+	JobID           uuid.UUID `json:"jobId"`
+	Succeeded       int64     `json:"succeeded"`
+	Partial         int64     `json:"partial"`
+	Failed          int64     `json:"failed"`
+	Canceled        int64     `json:"canceled"`
+	Skipped         int64     `json:"skipped"`
+	WithWarnings    int64     `json:"withWarnings"`
+	BytesStored     int64     `json:"bytesStored"`
+	LastFinishedAt  time.Time `json:"lastFinishedAt"`
+	LastFailureCode string    `json:"lastFailureCode"`
 }
 
-// SummaryRunCounts counts the runs of visible jobs that finished in
-// (@period_from, @period_until], per job and status.
-func (q *Queries) SummaryRunCounts(ctx context.Context, arg SummaryRunCountsParams) ([]SummaryRunCountsRow, error) {
-	rows, err := q.db.Query(ctx, summaryRunCounts,
+// SummaryJobActivity summarizes, per visible job, the runs that finished
+// in (@period_from, @period_until]: counts per status (and of successful
+// runs with warnings), the bytes stored, the newest finish time and the
+// error code of the newest failed run (” for none; one index probe per
+// job with a failure, runs_job_failed_idx).
+func (q *Queries) SummaryJobActivity(ctx context.Context, arg SummaryJobActivityParams) ([]SummaryJobActivityRow, error) {
+	rows, err := q.db.Query(ctx, summaryJobActivity,
 		arg.PeriodFrom,
 		arg.PeriodUntil,
 		arg.ScopeAll,
@@ -409,10 +440,75 @@ func (q *Queries) SummaryRunCounts(ctx context.Context, arg SummaryRunCountsPara
 		return nil, err
 	}
 	defer rows.Close()
-	var items []SummaryRunCountsRow
+	var items []SummaryJobActivityRow
 	for rows.Next() {
-		var i SummaryRunCountsRow
-		if err := rows.Scan(&i.JobID, &i.Status, &i.Runs); err != nil {
+		var i SummaryJobActivityRow
+		if err := rows.Scan(
+			&i.JobID,
+			&i.Succeeded,
+			&i.Partial,
+			&i.Failed,
+			&i.Canceled,
+			&i.Skipped,
+			&i.WithWarnings,
+			&i.BytesStored,
+			&i.LastFinishedAt,
+			&i.LastFailureCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const summaryRestoreCounts = `-- name: SummaryRestoreCounts :many
+SELECT r.status::text AS status, count(*)::bigint AS restores
+FROM restores r
+JOIN jobs j ON j.id = r.job_id
+WHERE r.finished_at > $1::timestamptz AND r.finished_at <= $2::timestamptz
+  AND j.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM test_restore_items i WHERE i.restore_id = r.id)
+  AND ($3::boolean OR EXISTS (
+        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+        WHERE o.job_id = r.job_id AND o.user_id = $4::uuid AND ou.deleted_at IS NULL))
+GROUP BY r.status
+`
+
+type SummaryRestoreCountsParams struct {
+	PeriodFrom  time.Time `json:"periodFrom"`
+	PeriodUntil time.Time `json:"periodUntil"`
+	ScopeAll    bool      `json:"scopeAll"`
+	UserID      uuid.UUID `json:"userId"`
+}
+
+type SummaryRestoreCountsRow struct {
+	Status   string `json:"status"`
+	Restores int64  `json:"restores"`
+}
+
+// SummaryRestoreCounts counts the restores of visible jobs (requested
+// restores; the internal restores of test restores are counted by
+// SummaryTestRestoreCounts) that finished in (@period_from,
+// @period_until], per status.
+func (q *Queries) SummaryRestoreCounts(ctx context.Context, arg SummaryRestoreCountsParams) ([]SummaryRestoreCountsRow, error) {
+	rows, err := q.db.Query(ctx, summaryRestoreCounts,
+		arg.PeriodFrom,
+		arg.PeriodUntil,
+		arg.ScopeAll,
+		arg.UserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SummaryRestoreCountsRow
+	for rows.Next() {
+		var i SummaryRestoreCountsRow
+		if err := rows.Scan(&i.Status, &i.Restores); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -1,7 +1,14 @@
-{{.Heading}}
+{{if .TextBanner}}{{.TextBanner}}
+
+{{end}}{{.Heading}}
 {{range .Paragraphs}}
 {{.}}
-{{end}}{{if .Details}}
+{{end}}{{if .TextFigures}}
+{{.TextFigures}}
+{{end}}{{range .Tables}}
+{{.Title}}
+{{range .Text}}{{.}}
+{{end}}{{end}}{{if .Details}}
 {{range .Details}}{{.Label}}: {{.Value}}
 {{end}}{{end}}{{with .Action}}
 {{.Label}}:

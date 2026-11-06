@@ -1,0 +1,61 @@
+!! 2 failed: 2 of 12 jobs failed, 2 jobs missed their backups and 3 more need attention in the last 24 hours; 1 destination is low on space and 1 security alert was raised. !!
+
+Daily summary
+
+Period: Sat 7 Nov 2026, 08:00 – Sun 8 Nov 2026, 08:00 (Europe/Amsterdam).
+
+Backups: 26 runs finished (22 succeeded, 2 partially failed, 2 failed).
+
+Jobs OK: 1/12  |  Failed/missed: 2/2  |  Written: 10.0 GiB  |  Test restores: 3/5
+
+Security
+   Status  Security alerts
+   ------  -------------------------------
+>> Review  1 security alert in this period
+           review them in bekup
+
+Jobs
+   Status    Job        OK/Fail     Last run     Size  Stored
+   --------  ---------  -------  -----------  -------  ------
+>> Failed    Billing        1/2  8 Nov 07:00      0 B       –
+             target unreachable (2 failed runs); 1 partially failed run
+>> Failed    Forms          7/0  8 Nov 07:00  1.0 GiB       –
+             2 test restores failed
+>> Missed    CRM            0/0            –        –       –
+             missed since Thu 5 Nov 2026, 04:00
+>> Missed    Docs           0/0            –        –       –
+             no successful backup in this period
+>> Partial   Ledger         1/0  8 Nov 07:00  1.0 GiB       –
+             1 partially failed run
+>> Warnings  Mail           1/0  8 Nov 07:00  2.0 GiB       –
+             1 run with warnings
+>> Held      Events         7/0  8 Nov 07:00  1.0 GiB       –
+             retention keeps 3 incomplete backups on 2 destinations
+   OK        Garden         7/0  8 Nov 07:00  5.0 GiB       –
+   No run    Handbook       0/0            –        –       –
+   No run    Journal        0/0            –        –       –
+   No run    Kiosk          0/0            –        –       –
+   Disabled  Inventory      0/0            –        –       –
+
+Restores
+   Result         Kind           Count
+   -------------  -------------  -----
+   Succeeded      Restores           2
+>> Failed         Restores           1
+   Passed         Test restores      3
+>> Failed         Test restores      1
+>> Could not run  Test restores      1
+
+Storage
+   Status       Destination        Stored      Free  Backups
+   -----------  ----------------  -------  --------  -------
+>> Low space    nas-01            2.4 TiB  96.0 GiB      412
+                less than 10% free
+   Not checked  offsite s3        3.0 TiB         –      512
+   OK           sftp backup host  3.0 TiB   4.0 TiB      380
+
+Open the dashboard:
+https://bekup.example.com/
+
+--
+Times are in Europe/Amsterdam. Change how often you get this summary, or turn it off, in your notification settings. This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

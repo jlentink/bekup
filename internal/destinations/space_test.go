@@ -162,20 +162,29 @@ func TestLowSpace(t *testing.T) {
 		name   string
 		sp     storage.Space
 		newest int64
-		want   bool
+		cause  LowCause
 	}{
-		{"plenty", known(1000, 500), 100, false},
-		{"below a tenth", known(1000, 99), 0, true},
-		{"exactly a tenth", known(1000, 100), 0, false},
-		{"newest set does not fit", known(1000, 400), 500, true},
-		{"free only, set fits", storage.Space{Free: 600, FreeKnown: true}, 500, false},
-		{"free only, set does not fit", storage.Space{Free: 400, FreeKnown: true}, 500, true},
-		{"free unknown", storage.Space{Used: 5, UsedKnown: true}, 500, false},
-		{"no backups yet", known(1000, 200), 0, false},
+		{"plenty", known(1000, 500), 100, LowNone},
+		{"below a tenth", known(1000, 99), 0, LowFraction},
+		{"exactly a tenth", known(1000, 100), 0, LowNone},
+		{"newest set does not fit", known(1000, 400), 500, LowBelowNewestSet},
+		{"newest set exactly fits", known(1000, 500), 500, LowNone},
+		// Both parts hold: the fraction is reported.
+		{"below a tenth and the set", known(1000, 50), 500, LowFraction},
+		{"free only, set fits", storage.Space{Free: 600, FreeKnown: true}, 500, LowNone},
+		{"free only, set does not fit", storage.Space{Free: 400, FreeKnown: true}, 500, LowBelowNewestSet},
+		{"free only, tiny", storage.Space{Free: 1, FreeKnown: true}, 0, LowNone},
+		{"zero total", known(0, 0), 0, LowNone},
+		{"free unknown", storage.Space{Used: 5, UsedKnown: true}, 500, LowNone},
+		{"free unknown, total known", storage.Space{Total: 1000, TotalKnown: true}, 500, LowNone},
+		{"no backups yet", known(1000, 200), 0, LowNone},
 	}
 	for _, tt := range tests {
-		if got := lowSpace(tt.sp, tt.newest); got != tt.want {
-			t.Errorf("%s: lowSpace = %v, want %v", tt.name, got, tt.want)
+		if got := LowSpaceCause(tt.sp, tt.newest); got != tt.cause {
+			t.Errorf("%s: LowSpaceCause = %v, want %v", tt.name, got, tt.cause)
+		}
+		if got, want := LowSpace(tt.sp, tt.newest), tt.cause != LowNone; got != want {
+			t.Errorf("%s: LowSpace = %v, want %v", tt.name, got, want)
 		}
 	}
 }

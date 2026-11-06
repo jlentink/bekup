@@ -38,18 +38,30 @@ func (f Frequency) Valid() bool {
 	return false
 }
 
-// nominal is the rough length of one period (the start of a first period
-// when no earlier occurrence exists).
-func (f Frequency) nominal() time.Duration {
+// periodBefore is one calendar period of f before end in zone: a day,
+// two days, a week or a month of wall-clock time (so a daily period is
+// 23 or 25 hours on the days the clocks change). A month back from a day
+// the previous month lacks is that month's last day at the same time of
+// day (31 Mar → 28 Feb, or 29 Feb in a leap year), never AddDate's
+// normalized 3 Mar. decide's monthly due days are 1-28 (MaxMonthDay), so
+// only the preview, which ends now, can need the clamp.
+func periodBefore(end time.Time, f Frequency, zone *time.Location) time.Time {
+	local := end.In(zone)
 	switch f {
 	case Daily:
-		return 24 * time.Hour
+		return local.AddDate(0, 0, -1)
 	case EveryOtherDay:
-		return 48 * time.Hour
+		return local.AddDate(0, 0, -2)
 	case Monthly:
-		return 31 * 24 * time.Hour
+		back := local.AddDate(0, -1, 0)
+		if back.Day() != local.Day() {
+			// Normalized into the current month (the day overflowed):
+			// step back to the previous month's last day.
+			back = back.AddDate(0, 0, -back.Day())
+		}
+		return back
 	default:
-		return 7 * 24 * time.Hour
+		return local.AddDate(0, 0, -7)
 	}
 }
 
@@ -199,11 +211,18 @@ type decision struct {
 
 // decide evaluates a due summary (due <= now, the stored
 // next_due_at): the period ends at the newest due time not after now and
-// starts at the previous period's end (or one occurrence earlier for a
-// first summary), so missed due times give one summary, never a burst.
+// starts at the previous period's end, but never later than one full
+// calendar period before the end (periodBefore; D-226 amendment 1), so
+// missed due times give one longer summary, never a burst, and a settings
+// change never yields a summary of a few hours (it may overlap the
+// previous one instead). Periods are capped at maxPeriod.
 func decide(s Settings, due time.Time, lastPeriodEnd *time.Time, now time.Time) (decision, error) {
 	if s.Frequency == Never {
 		return decision{}, fmt.Errorf("%w: never has no due summary", ErrInvalidSettings)
+	}
+	loc, err := scheduler.LoadZone(s.Timezone)
+	if err != nil {
+		return decision{}, fmt.Errorf("%w: timezone", ErrInvalidSettings)
 	}
 	anchor := due
 	if lastPeriodEnd != nil {
@@ -235,34 +254,14 @@ func decide(s Settings, due time.Time, lastPeriodEnd *time.Time, now time.Time) 
 			return decision{}, err
 		}
 	}
-	var start time.Time
-	if lastPeriodEnd != nil && lastPeriodEnd.Before(end) {
+	start := periodBefore(end, s.Frequency, loc)
+	if lastPeriodEnd != nil && lastPeriodEnd.Before(start) {
 		start = *lastPeriodEnd
-	} else {
-		start = previousOccurrence(p, end, s.Frequency.nominal())
 	}
 	if end.Sub(start) > maxPeriod {
 		start = end.Add(-maxPeriod)
 	}
-	return decision{PeriodStart: start, PeriodEnd: end, NextDue: next, CatchUp: !end.Equal(due)}, nil
-}
-
-// previousOccurrence is the newest occurrence of p before end, or end
-// minus the nominal period when the series has none (it starts at end).
-func previousOccurrence(p *scheduler.Plan, end time.Time, nominal time.Duration) time.Time {
-	t := end.Add(-nominal - 72*time.Hour)
-	prev := time.Time{}
-	for range 64 {
-		n, err := p.Next(t)
-		if err != nil || !n.Before(end) {
-			break
-		}
-		prev, t = n, n
-	}
-	if prev.IsZero() {
-		return end.Add(-nominal)
-	}
-	return prev
+	return decision{PeriodStart: start.UTC(), PeriodEnd: end, NextDue: next, CatchUp: !end.Equal(due)}, nil
 }
 
 // effective returns the settings of a stored row (nil: none) under

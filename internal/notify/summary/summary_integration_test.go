@@ -5,8 +5,10 @@ package summary
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -298,18 +300,19 @@ func TestTickDefaultWeekly(t *testing.T) {
 	if err := e.pool.QueryRow(t.Context(), `SELECT title, body, link FROM notifications WHERE user_id = $1`, admin).Scan(&title, &body, &link); err != nil {
 		t.Fatal(err)
 	}
-	if title != "Weekly summary: All 2 backup jobs ran fine" || link == nil || *link != "https://bekup.test/" {
+	if title != "Weekly summary: no problems (1 OK)" || link == nil || *link != "https://bekup.test/" {
 		t.Fatalf("inbox = %q %v", title, link)
 	}
 	if strings.Contains(body, "Billing") || strings.Contains(body, "CRM") {
 		t.Fatalf("inbox body names jobs: %q", body)
 	}
 	mails := e.mail.to(adminMail)
-	if len(mails) != 1 || mails[0].Subject != "[bekup] Weekly summary: All 2 backup jobs ran fine" {
+	if len(mails) != 1 || mails[0].Subject != "[bekup] Weekly summary: no problems" {
 		t.Fatalf("admin mails = %+v", mails)
 	}
-	if !strings.Contains(mails[0].Text, "This summary covers Mon 2 Nov 2026, 08:00 to Mon 9 Nov 2026, 08:00 (UTC).") ||
-		!strings.Contains(mails[0].Text, "Security alerts: none in this period.") ||
+	if !strings.Contains(mails[0].Text, "Period: Mon 2 Nov 2026, 08:00 – Mon 9 Nov 2026, 08:00 (UTC).") ||
+		!strings.Contains(mails[0].Text, "No security alerts in this period") ||
+		!strings.Contains(mails[0].Text, "All OK: No problems in the last 7 days (1 OK, 1 without a run).") ||
 		!strings.Contains(mails[0].Text, "https://bekup.test/") {
 		t.Fatalf("admin mail:\n%s", mails[0].Text)
 	}
@@ -326,7 +329,7 @@ func TestTickDefaultWeekly(t *testing.T) {
 	if e.count(`SELECT count(*) FROM notification_deliveries WHERE user_id = $1 AND channel = 'email' AND last_code = 'email_unverified'`, owner) != 1 {
 		t.Fatal("unverified e-mail not recorded as skipped")
 	}
-	if e.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND title = 'Weekly summary: Your backup job ran fine'`, owner) != 1 {
+	if e.count(`SELECT count(*) FROM notifications WHERE user_id = $1 AND title = 'Weekly summary: your backup job is OK'`, owner) != 1 {
 		t.Fatal("owner inbox row missing")
 	}
 }
@@ -359,12 +362,12 @@ func TestTickDedupAndCatchUp(t *testing.T) {
 	if len(ev) != 2 {
 		t.Fatalf("events = %d", len(ev))
 	}
-	var from, until string
-	if err := e.pool.QueryRow(t.Context(), `SELECT detail->>'period_start', detail->>'period_end' FROM notification_events WHERE id = $1`, ev[1]).Scan(&from, &until); err != nil {
+	var from, until, catchUp string
+	if err := e.pool.QueryRow(t.Context(), `SELECT detail->>'period_start', detail->>'period_end', detail->>'catch_up' FROM notification_events WHERE id = $1`, ev[1]).Scan(&from, &until, &catchUp); err != nil {
 		t.Fatal(err)
 	}
-	if from != "2026-11-09T08:00:00Z" || until != "2026-11-30T08:00:00Z" {
-		t.Fatalf("catch-up period = %s .. %s", from, until)
+	if from != "2026-11-09T08:00:00Z" || until != "2026-11-30T08:00:00Z" || catchUp != "true" {
+		t.Fatalf("catch-up period = %s .. %s (catch_up %s)", from, until, catchUp)
 	}
 	eq(t, "next due", e.row(admin).NextDueAt, "2026-12-07T08:00:00Z")
 }
@@ -416,16 +419,16 @@ func TestOwnerScoping(t *testing.T) {
 	e.deliver(e.events(owner)[0])
 	e.deliver(e.events(admin)[0])
 	om := e.mail.to(ownerMail)
-	if len(om) != 1 || om[0].Subject != "[bekup] Weekly summary: Your backup job ran fine" {
+	if len(om) != 1 || om[0].Subject != "[bekup] Weekly summary: your backup job is OK" {
 		t.Fatalf("owner mail = %+v", om)
 	}
-	if strings.Contains(om[0].Text, "Secret payroll") || strings.Contains(om[0].Text, "failed") ||
-		strings.Contains(om[0].Text, "Storage:") || strings.Contains(om[0].Text, "Security alerts") {
+	if strings.Contains(om[0].Text, "Secret payroll") || strings.Contains(om[0].Text, ">>") ||
+		strings.Contains(om[0].Text, "\nStorage\n") || strings.Contains(om[0].Text, "Security alerts") {
 		t.Fatalf("owner mail shows what the owner may not see:\n%s", om[0].Text)
 	}
 	am := e.mail.to(adminMail)
-	if len(am) != 1 || am[0].Subject != "[bekup] Weekly summary: Needs attention: 1 of 2 jobs" ||
-		!strings.Contains(am[0].Text, "Secret payroll: 1 failed backup") {
+	if len(am) != 1 || am[0].Subject != "[bekup] Weekly summary: 1 FAILED" ||
+		!regexp.MustCompile(`(?m)^>> Failed +Secret payroll +0/1 `).MatchString(am[0].Text) {
 		t.Fatalf("admin mail = %+v", am)
 	}
 }
@@ -486,7 +489,7 @@ func TestSettingsAndPreview(t *testing.T) {
 	}
 
 	p, err := e.sum.SendPreview(ctx)
-	if err != nil || !p.EmailVerified || !p.PeriodEnd.Equal(e.clock()) {
+	if err != nil || !p.EmailVerified || !p.PeriodEnd.Equal(e.clock()) || !p.PeriodStart.Equal(e.clock().Add(-24*time.Hour)) {
 		t.Fatalf("preview = %+v, %v", p, err)
 	}
 	var rl *serviceutil.RateLimitedError
@@ -506,5 +509,224 @@ func TestSettingsAndPreview(t *testing.T) {
 	// The preview does not count as the period's summary.
 	if st := e.row(admin); st.LastPeriodEnd != nil {
 		t.Fatal("the preview moved the schedule")
+	}
+}
+
+// TestSummaryDayContent: a daily summary of a seeded day (successes with
+// sizes, a failure with an error code, a missed job) has the right rows,
+// sizes and level; SummaryJobActivity respects the owner scope; and a
+// change from weekly 08:00 to daily 12:00 still covers 24 hours.
+func TestSummaryDayContent(t *testing.T) {
+	e := newEnv(t, nil)
+	admin, adminMail := e.user("admin", true)
+	owner, _ := e.user("user", true)
+	good := e.job("Billing", owner)
+	bad := e.job("CRM")
+	missed := e.job("Docs")
+	e.exec(`INSERT INTO runs (id, job_id, trigger, status, queued_at, started_at, finished_at, bytes_stored)
+		VALUES ($1, $2, 'manual', 'success', '2026-11-08T23:00:00Z', '2026-11-08T23:00:00Z', '2026-11-08T23:10:00Z', $3)`,
+		uuid.New(), good, int64(3)<<30)
+	e.exec(`INSERT INTO runs (id, job_id, trigger, status, queued_at, started_at, finished_at, bytes_stored)
+		VALUES ($1, $2, 'manual', 'success', '2026-11-09T03:00:00Z', '2026-11-09T03:00:00Z', '2026-11-09T03:20:00Z', $3)`,
+		uuid.New(), good, int64(512)<<20)
+	e.exec(`INSERT INTO runs (id, job_id, trigger, status, queued_at, started_at, finished_at, error_code, error_message)
+		VALUES ($1, $2, 'manual', 'failed', '2026-11-09T04:00:00Z', '2026-11-09T04:00:00Z', '2026-11-09T04:01:00Z',
+		        'target_unreachable', 'the database server could not be reached')`, uuid.New(), bad)
+	// Outside the period: not counted.
+	e.run(good, "failed", "2026-11-08T11:00:00Z")
+	e.exec(`INSERT INTO job_missed_state (job_id, missed_since, last_missed_at, reason, checked_at)
+		VALUES ($1, '2026-11-08T03:00:00Z', '2026-11-09T03:00:00Z', 'no_run', now())`, missed)
+
+	// Weekly 08:00 (default) planned, then daily 12:00 in UTC.
+	e.setNow("2026-11-09T08:00:30Z")
+	e.tick()
+	e.exec(`UPDATE user_summary_settings SET last_period_end = '2026-11-09T08:00:00Z' WHERE user_id = $1`, admin)
+	if _, err := e.sum.SetSettings(e.as(admin, auth.RoleAdmin), Settings{Frequency: Daily, Hour: 12, Weekday: 1, MonthDay: 1, Timezone: "UTC"}); err != nil {
+		t.Fatal(err)
+	}
+	e.setNow("2026-11-09T12:01:00Z")
+	e.tick()
+	ev := e.events(admin)
+	if len(ev) != 1 {
+		t.Fatalf("events = %d", len(ev))
+	}
+	var from, until, catchUp string
+	var hasLevel bool
+	if err := e.pool.QueryRow(t.Context(), `SELECT detail->>'period_start', detail->>'period_end', detail->>'catch_up', detail ? 'level'
+		FROM notification_events WHERE id = $1`, ev[0]).Scan(&from, &until, &catchUp, &hasLevel); err != nil {
+		t.Fatal(err)
+	}
+	// The switch from weekly to daily is no catch-up.
+	if from != "2026-11-08T12:00:00Z" || until != "2026-11-09T12:00:00Z" || catchUp != "false" || hasLevel {
+		t.Fatalf("period %s .. %s, catch_up %s, level %v", from, until, catchUp, hasLevel)
+	}
+	e.deliver(ev[0])
+	m := e.mail.to(adminMail)
+	if len(m) != 1 || m[0].Subject != "[bekup] Daily summary: 1 FAILED, 1 missed" {
+		t.Fatalf("mail = %+v", m)
+	}
+	for _, re := range []string{
+		`(?m)^!! 1 failed: 1 of 3 jobs failed and 1 job missed its backups in the last 24 hours`,
+		`(?m)^>> Failed +CRM +0/1 +9 Nov 04:01 +0 B +–$`,
+		`(?m)^ +target unreachable$`,
+		`(?m)^>> Missed +Docs +0/0 +– +– +–$`,
+		`(?m)^ +missed since Sun 8 Nov 2026, 03:00$`,
+		`(?m)^   OK +Billing +2/0 +9 Nov 03:20 +3\.5 GiB +–$`,
+		`Written: 3\.5 GiB`,
+	} {
+		if !regexp.MustCompile(re).MatchString(m[0].Text) {
+			t.Errorf("mail lacks %s:\n%s", re, m[0].Text)
+		}
+	}
+	if !strings.Contains(m[0].HTML, ">target unreachable</td>") || strings.Contains(m[0].Text, "could not be reached") {
+		t.Error("the failure shows the fixed code text, never the stored message")
+	}
+
+	// The activity query is scoped: the owner sees only their job.
+	q := sqlc.New(e.pool)
+	rows, err := q.SummaryJobActivity(t.Context(), sqlc.SummaryJobActivityParams{
+		PeriodFrom: at(t, from), PeriodUntil: at(t, until), ScopeAll: false, UserID: owner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].JobID != good || rows[0].Succeeded != 2 || rows[0].BytesStored != int64(3)<<30+int64(512)<<20 ||
+		!rows[0].LastFinishedAt.Equal(at(t, "2026-11-09T03:20:00Z")) || rows[0].LastFailureCode != "" {
+		t.Fatalf("owner activity = %+v", rows)
+	}
+	all, err := q.SummaryJobActivity(t.Context(), sqlc.SummaryJobActivityParams{PeriodFrom: at(t, from), PeriodUntil: at(t, until), ScopeAll: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all activity = %+v", all)
+	}
+	for _, r := range all {
+		if r.JobID == bad && (r.Failed != 1 || r.LastFailureCode != "target_unreachable") {
+			t.Fatalf("failed job activity = %+v", r)
+		}
+	}
+	restores, err := q.SummaryRestoreCounts(t.Context(), sqlc.SummaryRestoreCountsParams{PeriodFrom: at(t, from), PeriodUntil: at(t, until), ScopeAll: true})
+	if err != nil || len(restores) != 0 {
+		t.Fatalf("restores = %+v, %v", restores, err)
+	}
+}
+
+// TestSummaryQueryBounds: the content queries count what finished in
+// (period_from, period_until] (a finish at period_from belongs to the
+// previous summary, one at period_until to this one), follow the owner
+// scope, take the newest failure's code inside the period only, and
+// SummaryRestoreCounts leaves out the internal restores of test restores.
+func TestSummaryQueryBounds(t *testing.T) {
+	e := newEnv(t, nil)
+	owner, _ := e.user("user", true)
+	mine := e.job("Billing", owner)
+	other := e.job("CRM")
+	const from, until = "2026-11-08T12:00:00Z", "2026-11-09T12:00:00Z"
+	failed := func(job uuid.UUID, finished, code string) {
+		f := at(t, finished)
+		e.exec(`INSERT INTO runs (id, job_id, trigger, status, queued_at, started_at, finished_at, error_code)
+			VALUES ($1, $2, 'manual', 'failed', $3, $3, $4, $5)`, uuid.New(), job, f.Add(-time.Minute), f, code)
+	}
+	e.run(mine, "success", from)  // excluded: the previous period's
+	e.run(mine, "success", until) // included
+	e.run(mine, "success", "2026-11-09T12:00:01Z")
+	failed(mine, "2026-11-08T13:00:00Z", "dump_failed")
+	failed(mine, "2026-11-08T14:00:00Z", "target_unreachable") // the newest failure in the period
+	failed(mine, from, "timeout")                              // excluded
+	failed(mine, "2026-11-09T12:00:01Z", "verify_failed")      // after the period
+	e.run(other, "success", "2026-11-08T15:00:00Z")
+
+	// Restores and test restores (foreign keys off: artifacts, run items
+	// and connections are not needed for the counts).
+	conn := uuid.New()
+	restore := func(job uuid.UUID, status, finished string) uuid.UUID {
+		id := uuid.New()
+		if err := e.d.SuperExec(t.Context(), "SET session_replication_role = replica", fmt.Sprintf(
+			`INSERT INTO restores (id, artifact_id, run_item_id, job_id, target_connection_id, target_db_name, mode, status, started_at, finished_at)
+			VALUES ('%s', '%s', '%s', '%s', '%s', 'app', 'new_db', '%s', '%s', '%s')`,
+			id, uuid.New(), uuid.New(), job, conn, status, finished, finished)); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	testRestore := func(job uuid.UUID, status, finished string) uuid.UUID {
+		id := uuid.New()
+		if err := e.d.SuperExec(t.Context(), "SET session_replication_role = replica", fmt.Sprintf(
+			`INSERT INTO test_restores (id, job_id, target_connection_id, trigger, status, started_at, finished_at)
+			VALUES ('%s', '%s', '%s', 'schedule', '%s', '%s', '%s')`, id, job, conn, status, finished, finished)); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	restore(mine, "succeeded", until)
+	restore(mine, "succeeded", "2026-11-09T01:00:00Z")
+	restore(mine, "failed", from)                   // excluded
+	restore(mine, "failed", "2026-11-09T12:00:01Z") // after the period
+	restore(other, "canceled", "2026-11-09T02:00:00Z")
+	// The internal restore of a test restore: counted as a test restore only.
+	internal := restore(mine, "failed", "2026-11-09T03:00:00Z")
+	tr := testRestore(mine, "failed", "2026-11-09T03:05:00Z")
+	if err := e.d.SuperExec(t.Context(), "SET session_replication_role = replica", fmt.Sprintf(
+		`INSERT INTO test_restore_items (test_restore_id, run_item_id, restore_id, db_name, scratch_id, status, finished_at)
+		VALUES ('%s', '%s', '%s', 'app', 'abcdef123456', 'failed', '%s')`, tr, uuid.New(), internal, "2026-11-09T03:05:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	testRestore(mine, "passed", until)
+	testRestore(mine, "passed", from) // excluded
+	testRestore(other, "error", "2026-11-09T04:00:00Z")
+
+	q := sqlc.New(e.pool)
+	pf, pu := at(t, from), at(t, until)
+	type scope struct {
+		name string
+		all  bool
+	}
+	for _, sc := range []scope{{"owner", false}, {"all", true}} {
+		act, err := q.SummaryJobActivity(t.Context(), sqlc.SummaryJobActivityParams{PeriodFrom: pf, PeriodUntil: pu, ScopeAll: sc.all, UserID: owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := map[bool]int{false: 1, true: 2}[sc.all]; len(act) != want {
+			t.Fatalf("%s: activity rows = %+v", sc.name, act)
+		}
+		for _, r := range act {
+			if r.JobID == mine && (r.Succeeded != 1 || r.Failed != 2 || r.LastFailureCode != "target_unreachable" || !r.LastFinishedAt.Equal(pu)) {
+				t.Fatalf("%s: activity = %+v", sc.name, r)
+			}
+			if r.JobID == other && (r.Succeeded != 1 || r.Failed != 0 || r.LastFailureCode != "") {
+				t.Fatalf("%s: other activity = %+v", sc.name, r)
+			}
+		}
+		rs, err := q.SummaryRestoreCounts(t.Context(), sqlc.SummaryRestoreCountsParams{PeriodFrom: pf, PeriodUntil: pu, ScopeAll: sc.all, UserID: owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]int64{}
+		for _, r := range rs {
+			got[r.Status] = r.Restores
+		}
+		want := map[string]int64{"succeeded": 2}
+		if sc.all {
+			want["canceled"] = 1
+		}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Fatalf("%s: restores = %v, want %v", sc.name, got, want)
+		}
+		ts, err := q.SummaryTestRestoreCounts(t.Context(), sqlc.SummaryTestRestoreCountsParams{PeriodFrom: pf, PeriodUntil: pu, ScopeAll: sc.all, UserID: owner})
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotT := map[string]int64{}
+		for _, r := range ts {
+			gotT[r.Status] += r.TestRestores
+		}
+		wantT := map[string]int64{"failed": 1, "passed": 1}
+		if sc.all {
+			wantT["error"] = 1
+		}
+		if fmt.Sprint(gotT) != fmt.Sprint(wantT) {
+			t.Fatalf("%s: test restores = %v, want %v", sc.name, gotT, wantT)
+		}
 	}
 }

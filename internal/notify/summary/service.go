@@ -15,6 +15,7 @@ import (
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/serviceutil"
+	"github.com/jlentink/bekup/internal/storage"
 )
 
 // Preview rate limit: like the test sends, per user (an e-mail goes out
@@ -34,10 +35,11 @@ type Options struct {
 	BaseURL string
 	// Defaults are notifications.summary_default_*; zero: DefaultDefaults.
 	Defaults Defaults
-	// CachedFreeSpace returns a destination's free space when a recent
-	// answer is cached in this process (destinations.Service.CachedSpace).
-	// The summary never asks a destination itself; nil: not shown.
-	CachedFreeSpace func(destinationID uuid.UUID) (int64, bool)
+	// CachedSpace returns a destination's space report when a recent
+	// answer with a known free space is cached in this process
+	// (destinations.Service.CachedSpace). The summary never asks a
+	// destination itself; nil: free space is not shown.
+	CachedSpace func(destinationID uuid.UUID) (storage.Space, bool)
 	// PreviewLimiter is the per-user limit of sendSummaryPreview; nil: one
 	// per minute, burst three.
 	PreviewLimiter func(key string) (bool, time.Duration)

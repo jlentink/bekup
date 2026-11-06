@@ -1,0 +1,19 @@
+All OK: All 3 jobs ran fine in the last 24 hours.
+
+Daily summary: all 3 jobs OK
+
+Sat 7 Nov 2026, 08:00 – Sun 8 Nov 2026, 08:00 (Europe/Amsterdam)
+
+Jobs OK: 3/3  |  Failed: 0  |  Written: 4.1 GiB
+
+Jobs
+   Status  Job     OK/Fail     Last run      Size     Stored
+   ------  ------  -------  -----------  --------  ---------
+   OK      Forms      24/0  8 Nov 07:30  12.7 GiB  301.5 GiB
+   OK      Garden      1/0  8 Nov 01:00  18.3 GiB    1.4 TiB
+
+Open the dashboard:
+https://bekup.example.com/
+
+--
+This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

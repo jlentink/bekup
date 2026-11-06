@@ -158,37 +158,56 @@ func (s *Service) Space(ctx context.Context, actor Actor, id uuid.UUID) (SpaceRe
 		DestinationID: id, Status: res.status, Reason: res.reason, Space: res.space,
 		NewestSetBytes: newest, CheckedAt: res.checkedAt,
 	}
-	rep.Low = lowSpace(res.space, newest)
+	rep.Low = LowSpace(res.space, newest)
 	return rep, nil
 }
 
-// CachedFreeSpace returns the free space of a destination when this
-// process holds a fresh answer for it (from an earlier Space call); it
-// never asks the backend (the answer may predate a settings change by up
-// to the cache lifetime). The periodic summary (D-226) shows free space
-// only this way.
-func (s *Service) CachedFreeSpace(id uuid.UUID) (int64, bool) {
+// CachedSpace returns the space report of a destination when this
+// process holds a fresh answer with a known free space (from an earlier
+// Space call); it never asks the backend (the answer may predate a
+// settings change by up to the cache lifetime). The periodic summary
+// (D-226) shows free space only this way.
+func (s *Service) CachedSpace(id uuid.UUID) (storage.Space, bool) {
 	now := s.now()
 	s.space.mu.Lock()
 	defer s.space.mu.Unlock()
 	e, ok := s.space.entries[id]
 	if !ok || !now.Before(e.expires) || e.res.status != SpaceAvailable || !e.res.space.FreeKnown {
-		return 0, false
+		return storage.Space{}, false
 	}
-	return e.res.space.Free, true
+	return e.res.space, true
 }
 
-// lowSpace is the low-space rule of D-225: the free space is known and
-// below a tenth of the total (when known) or below the newest full set of
-// backups.
-func lowSpace(sp storage.Space, newestSet int64) bool {
-	if !sp.FreeKnown {
-		return false
+// LowCause is why LowSpace reports low space.
+type LowCause int
+
+// Low-space causes.
+const (
+	// LowNone: not low (or the free space is unknown).
+	LowNone LowCause = iota
+	// LowFraction: less than a tenth of the total is free.
+	LowFraction
+	// LowBelowNewestSet: less is free than the newest full set of backups.
+	LowBelowNewestSet
+)
+
+// LowSpace is the low-space rule of D-225 (also the summary's, D-226):
+// the free space is known and below a tenth of the total (when known) or
+// below the newest full set of backups.
+func LowSpace(sp storage.Space, newestSet int64) bool { return LowSpaceCause(sp, newestSet) != LowNone }
+
+// LowSpaceCause applies LowSpace and tells which part of the rule holds.
+func LowSpaceCause(sp storage.Space, newestSet int64) LowCause {
+	switch {
+	case !sp.FreeKnown:
+		return LowNone
+	case sp.TotalKnown && sp.Total > 0 && sp.Free < sp.Total/lowSpaceFractionDivisor:
+		return LowFraction
+	case newestSet > 0 && sp.Free < newestSet:
+		return LowBelowNewestSet
+	default:
+		return LowNone
 	}
-	if sp.TotalKnown && sp.Total > 0 && sp.Free < sp.Total/lowSpaceFractionDivisor {
-		return true
-	}
-	return newestSet > 0 && sp.Free < newestSet
 }
 
 // spaceResult returns the backend's answer for r: without a network call

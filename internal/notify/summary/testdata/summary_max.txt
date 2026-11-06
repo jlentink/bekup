@@ -1,0 +1,149 @@
+!! 12 failed: 12 of 140 jobs failed in the last 24 hours. !!
+
+Daily summary
+
+Period: Sat 7 Nov 2026, 08:00 – Sun 8 Nov 2026, 08:00 (Europe/Amsterdam).
+
+Backups: 140 runs finished (128 succeeded, 12 failed).
+
+Jobs OK: 128/140  |  Failed: 12  |  Written: 1.5 TiB
+
+Jobs
+   Status  Job                              OK/Fail     Last run      Size     Stored
+   ------  -------------------------------  -------  -----------  --------  ---------
+>> Failed  postgres-production-cluster-000      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-001      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-002      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-003      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-004      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-005      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-006      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-007      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-008      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-009      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-010      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+>> Failed  postgres-production-cluster-011      0/1  8 Nov 07:00       0 B  300.0 GiB
+           dump failed
+   OK      postgres-production-cluster-012      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-013      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-014      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-015      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-016      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-017      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-018      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-019      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-020      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-021      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-022      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-023      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-024      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-025      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-026      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-027      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-028      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-029      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-030      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-031      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-032      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-033      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-034      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-035      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-036      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-037      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-038      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-039      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-040      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-041      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-042      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-043      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-044      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-045      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-046      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-047      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-048      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-049      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-050      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-051      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-052      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-053      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-054      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-055      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-056      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-057      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-058      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-059      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-060      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-061      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-062      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-063      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-064      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-065      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-066      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-067      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-068      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-069      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-070      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-071      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-072      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-073      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-074      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-075      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-076      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-077      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-078      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-079      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-080      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-081      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-082      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-083      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-084      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-085      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-086      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-087      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-088      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-089      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-090      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-091      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-092      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-093      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-094      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-095      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-096      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-097      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      postgres-production-cluster-098      1/0  8 Nov 07:00  12.0 GiB  300.0 GiB
+   OK      +41 more jobs without problems
+
+Storage
+   Status       Destination              Stored  Free  Backups
+   -----------  --------------------  ---------  ----  -------
+   Not checked  destination-00              0 B     –        0
+   Not checked  destination-01        256.0 GiB     –       40
+   Not checked  destination-02        512.0 GiB     –       80
+   Not checked  destination-03        768.0 GiB     –      120
+   Not checked  destination-04          1.0 TiB     –      160
+   Not checked  destination-05          1.2 TiB     –      200
+   Not checked  destination-06          1.5 TiB     –      240
+   Not checked  destination-07          1.8 TiB     –      280
+   More         +2 more destinations
+
+Security
+   Status  Security alerts
+   ------  ---------------------------------
+   OK      No security alerts in this period
+
+Open the dashboard:
+https://bekup.example.com/
+
+--
+Times are in Europe/Amsterdam. Change how often you get this summary, or turn it off, in your notification settings. This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

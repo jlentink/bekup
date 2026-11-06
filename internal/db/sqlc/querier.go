@@ -1267,9 +1267,17 @@ type Querier interface {
 	StartRun(ctx context.Context, arg StartRunParams) (Run, error)
 	// StartTestRestore moves a queued test restore to running.
 	StartTestRestore(ctx context.Context, id uuid.UUID) (int64, error)
-	// SummaryRunCounts counts the runs of visible jobs that finished in
-	// (@period_from, @period_until], per job and status.
-	SummaryRunCounts(ctx context.Context, arg SummaryRunCountsParams) ([]SummaryRunCountsRow, error)
+	// SummaryJobActivity summarizes, per visible job, the runs that finished
+	// in (@period_from, @period_until]: counts per status (and of successful
+	// runs with warnings), the bytes stored, the newest finish time and the
+	// error code of the newest failed run ('' for none; one index probe per
+	// job with a failure, runs_job_failed_idx).
+	SummaryJobActivity(ctx context.Context, arg SummaryJobActivityParams) ([]SummaryJobActivityRow, error)
+	// SummaryRestoreCounts counts the restores of visible jobs (requested
+	// restores; the internal restores of test restores are counted by
+	// SummaryTestRestoreCounts) that finished in (@period_from,
+	// @period_until], per status.
+	SummaryRestoreCounts(ctx context.Context, arg SummaryRestoreCountsParams) ([]SummaryRestoreCountsRow, error)
 	// SummaryTestRestoreCounts counts the test restores of visible jobs that
 	// finished in (@period_from, @period_until], per job and status.
 	SummaryTestRestoreCounts(ctx context.Context, arg SummaryTestRestoreCountsParams) ([]SummaryTestRestoreCountsRow, error)

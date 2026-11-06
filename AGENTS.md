@@ -218,7 +218,8 @@ internal/
                   db/externaltest (plain PostgreSQL 15-17 with a test CA
                   for the external-database tests, D-207)
                 notify/email (5.1: SMTP settings, sender, message
-                  builder + templates, e-mail verification)
+                  builder + templates, e-mail verification; shared layout
+                  view.go + palette.go, goldens in testdata/: D-226)
                 notify/webhook (5.2: URL validation, signed sender,
                   result classification, FailurePolicy, signing keys)
                 notify (5.3: D-161 catalog.go, Emit/outbox event.go,
@@ -231,8 +232,10 @@ internal/
                 notify/missed (5.4: dead-man detector, evaluate.go pure
                   outage logic, detector.go periodic missed_backup_check)
                 notify/summary (D-226: periodic summary e-mail; schedule.go
-                  due times on scheduler.Plan, tick.go notify_summary_tick,
-                  content.go Render (notify.SummaryRenderer), api.go settings
+                  due times on scheduler.Plan + periodBefore, tick.go
+                  notify_summary_tick, content.go Render
+                  (notify.SummaryRenderer) + data and status rule, build.go
+                  the e-mail, codes.go error-code texts, api.go settings
                   and preview)
                 schemaversion (D-210: preset catalog presets.go, custom
                   query rules custom.go, statuses, value check; pure, used
@@ -536,7 +539,24 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   (`Notice`: plain values, embedded html/template layout, no images or
   tracking, absolute http(s) links from `server.base_url`) and messages
   with `email.NewMessage`; header values are refused on CR/LF/controls,
-  never sanitized. Only `email.Settings` touches the `smtp` settings row
+  never sanitized. The optional parts `Notice.Preheader`, `Banner`
+  (`Level` + `Word` + `Text`), `Figures` (≤ 4) and `Tables` (≤ 4, ≤ 8
+  columns, ≤ 120 rows, ≤ 160 in total; `Status` makes column 0 a status
+  word, `Row.Note` a short fixed reason) always pair a level with a word,
+  never color alone (D-226 amendment 1). The shared layout
+  (`templates/notice.html.tmpl`, `view.go`) is tables + inline styles;
+  `<style>` blocks carry only enhancements (phones, hairlines, monospace,
+  dark mode via `prefers-color-scheme` and `[data-ogsc]`/`[data-ogsb]`);
+  Outlook wrappers come only from the fixed `template.HTML` constants
+  (`msoHead`/`msoOpen`/`msoClose`, never data); colors only from
+  `palette.go`, the hex copies of `web/src/styles/theme.css` (change both;
+  `TestPaletteMatchesTheme`, WCAG AA in `TestPaletteContrast`); Outlook
+  for Windows needs backgrounds as `bgcolor` on cells (problem-row tints
+  on every `td`, status badges are a `td`); budget sizes with
+  `email.EncodedLen` (the part as sent, quoted-printable) against Gmail's
+  102 KB clip (the summary's limit is `maxSummaryHTML`, 90 000); review
+  layout changes in the goldens (`go test -update`) at 600/375 px, light
+  and dark. Only `email.Settings` touches the `smtp` settings row
   (password sealed under AAD `settings:smtp:password`, write-only, re-entry
   required on host/port/username change, on weakening the mode to
   `auto`/`none` and on a CA bundle change (D-198); audited `setting.changed` +
@@ -990,9 +1010,21 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   content `Render` builds at fan-out and delivery from the recipient's
   current access (`authz.JobScope`, `destination.usage_view`,
   `monitor.alert_list`), from bekup's own tables only (free space only via
-  `destinations.Service.CachedFreeSpace`, never a backend call); the inbox
-  row carries counts, never names. Accounts that see no job get none
-  (`no_jobs`). `sendSummaryPreview` is single-root and rate limited.
+  `destinations.Service.CachedSpace` + the D-225 `destinations.LowSpace`
+  rule, never a backend call); the stored inbox row carries the job and
+  run counts only (no names, no storage or security part).
+  Accounts that see no job get none (`no_jobs`). `sendSummaryPreview` is
+  single-root and rate limited. A period is at least one calendar period
+  (`periodBefore`; it may overlap the previous summary after a settings
+  change), the preview covers `periodBefore(now)` (D-226 amendment 1).
+  The e-mail lists every job (status rule in `jobRow.status`, worst
+  first, ≤ 100 rows with every problem first; `fitJobs` lists fewer when
+  the HTML as sent would exceed `maxSummaryHTML`); failures show only the
+  fixed texts of `failureTexts` (add one for every new `jobs.Code*`,
+  `runstate.Code*` or runner reason; `TestFailureTextsCoverCodes` reads
+  them from the sources), never stored messages. The "previous one could
+  not be sent on time" note follows only the event detail `catch_up`
+  (`decide`'s `CatchUp`).
 - Dashboard aggregates (D-196): `Job.missed`/`missedSince` read
   `job_missed_state`, written only by the missed-backup detector
   (`internal/notify/missed`, upsert/clear per batch, prune of unwatched

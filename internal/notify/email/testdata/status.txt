@@ -1,0 +1,35 @@
+!! 2 failed: 2 of 14 jobs failed and 1 missed its backup in the last 24 hours. !!
+
+Daily summary: 2 failed, 1 missed
+
+Sat 7 Nov 2026, 08:00 – Sun 8 Nov 2026, 08:00 (Europe/Amsterdam)
+
+Jobs OK: 11/14  |  Failed: 2  |  Written: 38.2 GiB  |  Test restores: 3/3
+
+Jobs
+   Status   Job             OK/Fail     Last run      Size     Stored
+   -------  --------------  -------  -----------  --------  ---------
+>> Failed   Billing <prod>      0/3  8 Nov 03:12       0 B  412.0 GiB
+            target unreachable
+>> Failed   CRM                 5/1  8 Nov 06:00   1.2 GiB   88.4 GiB
+            dump failed
+>> Missed   Docs                0/0  5 Nov 04:00       0 B    3.1 GiB
+            missed since Thu 5 Nov, 04:00
+>> Partial  Events              1/0  8 Nov 02:00   6.0 GiB  120.9 GiB
+            partially failed
+   OK       Forms              24/0  8 Nov 07:30  12.7 GiB  301.5 GiB
+   OK       Garden              1/0  8 Nov 01:00  18.3 GiB    1.4 TiB
+   No run   Handbook            0/0            –       0 B  512.0 MiB
+
+Storage
+   Status     Destination   Stored      Free  Backups
+   ---------  -----------  -------  --------  -------
+>> Low space  nas-01       1.9 TiB  96.0 GiB      412
+              less than 10% free
+   OK         s3 offsite   2.4 TiB         –      512
+
+Open the dashboard:
+https://bekup.example.com/
+
+--
+This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

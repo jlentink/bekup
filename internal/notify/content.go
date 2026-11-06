@@ -38,12 +38,16 @@ type names struct {
 }
 
 // DisplayName makes an admin-entered name safe for every channel: no
-// control characters, at most 100 characters.
+// control characters, no line or paragraph separators and no format
+// characters (Unicode Cf: bidi overrides and isolates such as U+202E and
+// U+2066-U+2069 that reorder the text around them, zero-width characters
+// that hide a difference; a space shows where one was), at most 100
+// characters.
 func DisplayName(s string) string { return displayName(s) }
 
 func displayName(s string) string {
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' {
 			return ' '
 		}
 		return r

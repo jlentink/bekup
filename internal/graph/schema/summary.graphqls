@@ -80,8 +80,9 @@ extend type Mutation {
   setSummarySettings(input: SummarySettingsInput!): MySummarySettings! @authenticated
 
   """
-  Sends your summary of the current period so far now, marked as a
-  preview (inbox and e-mail; rate limited). VALIDATION when you can see no
+  Sends your summary of one full period up to now (the last 24 hours, 48
+  hours, 7 days or month), marked as a preview (inbox and e-mail; rate
+  limited; the schedule is not moved). VALIDATION when you can see no
   backup job.
   """
   sendSummaryPreview: SummaryPreviewResult! @authenticated

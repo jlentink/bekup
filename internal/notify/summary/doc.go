@@ -19,7 +19,10 @@
 // usage and monitor.alert_list for the security alert count. It reads
 // only bekup's own tables (free space only when destinations has a
 // recent answer cached); the inbox row carries counts only, the e-mail
-// (email.Render) the jobs that need attention.
+// (email.Render) a status banner, key figures and one row per job with its
+// status (worst first, at most 100 rows), the restores, the storage
+// (staff) and the security alerts (admins). A period is at least one
+// calendar period in the user's zone (periodBefore, D-226 amendment 1).
 //
 // The settings API (MySettings, SetSettings, SendPreview) backs
 // mySummarySettings, setSummarySettings and sendSummaryPreview.

@@ -1,0 +1,11 @@
+Verify your e-mail address
+
+Someone (hopefully you) asked bekup to send notifications to this address. Open the link below while signed in to bekup to confirm it.
+
+The link works once and expires in 24 hours. If you did not ask for this, ignore this message: nothing will be sent to this address.
+
+Verify e-mail address:
+https://bekup.example.com/profile/notifications/verify#Zm9vYmFy
+
+--
+This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

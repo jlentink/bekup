@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,9 +15,9 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/notify"
-	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
 
@@ -31,23 +31,39 @@ import (
 
 // Bounds of the summary content.
 const (
-	// maxSummaryAttention is how many jobs needing attention are listed
-	// (the rest is counted).
-	maxSummaryAttention = 20
+	// maxSummaryRows is how many job rows the e-mail lists: every problem
+	// first, the rest counted in one line (D-226 amendment 1).
+	maxSummaryRows = 100
+	// maxSummaryHTML is the size budget of the HTML part as it is sent
+	// (quoted-printable, email.EncodedLen, which is never smaller than the
+	// decoded HTML), well under Gmail's clipping at 102 KB; fitJobs lists
+	// fewer job rows when names that escape or encode large exceed it.
+	maxSummaryHTML = 90_000
 	// maxSummaryDestinations is how many destinations the usage lists.
 	maxSummaryDestinations = 8
 	// maxSummaryJobs bounds the jobs read for one summary.
 	maxSummaryJobs = 5000
+	// maxJobNameCell bounds a job name in the table (characters).
+	maxJobNameCell = 64
 	// noSuccessGrace: an occurrence this close to the end of the period
 	// may still be running; it is not judged.
 	noSuccessGrace = 15 * time.Minute
 )
 
-// eventDetail is the event detail of a summary for (from, until].
-func eventDetail(from, until time.Time, zone string, f Frequency, preview bool) notify.Detail {
+// Overall levels of a summary (banner and subject).
+const (
+	levelOK      = "ok"
+	levelWarning = "warning"
+	levelFailure = "failure"
+)
+
+// eventDetail is the event detail of a summary for (from, until]:
+// catchUp is decide's CatchUp (more than one due time passed, so the
+// summary covers the missed ones too); the e-mail says so.
+func eventDetail(from, until time.Time, zone string, f Frequency, preview, catchUp bool) notify.Detail {
 	return notify.Detail{
 		"period_start": from.UTC().Format(time.RFC3339), "period_end": until.UTC().Format(time.RFC3339),
-		"timezone": zone, "frequency": string(f), "preview": preview,
+		"timezone": zone, "frequency": string(f), "preview": preview, "catch_up": catchUp,
 	}
 }
 
@@ -63,6 +79,8 @@ type summaryPeriod struct {
 	zone        string
 	frequency   Frequency
 	preview     bool
+	// catchUp: the summary covers missed due times too.
+	catchUp bool
 }
 
 // storedDetail is the stored detail of a summary event (written by
@@ -73,6 +91,8 @@ type storedDetail struct {
 	Zone      string `json:"timezone"`
 	Frequency string `json:"frequency"`
 	Preview   bool   `json:"preview"`
+	// CatchUp is absent (false) in events from before amendment 1.
+	CatchUp bool `json:"catch_up"`
 }
 
 func periodOf(raw []byte) (summaryPeriod, bool) {
@@ -90,13 +110,54 @@ func periodOf(raw []byte) (summaryPeriod, bool) {
 	if err != nil {
 		zone, loc = "UTC", time.UTC
 	}
-	return summaryPeriod{from: from, until: until, loc: loc, zone: zone, frequency: Frequency(d.Frequency), preview: d.Preview}, true
+	return summaryPeriod{
+		from: from, until: until, loc: loc, zone: zone, frequency: Frequency(d.Frequency), preview: d.Preview,
+		catchUp: d.CatchUp && !d.Preview,
+	}, true
 }
 
-// attentionJob is a job that needs attention in the period.
-type attentionJob struct {
-	Name               string
-	Failed, Partial    int64
+// jobStatus is a job's status for the period, worst first (the sort
+// order of the jobs table).
+type jobStatus int
+
+// Job statuses: one rule per job, the first that applies.
+const (
+	// statusFailed: a failed run or a failed test restore in the period.
+	statusFailed jobStatus = iota
+	// statusMissed: job_missed_state, or scheduled in the period without
+	// a successful run.
+	statusMissed
+	// statusPartial: a partially failed run, or a run with warnings.
+	statusPartial
+	// statusHeld: retention keeps incomplete backups (retention holds).
+	statusHeld
+	// statusOK: at least one successful run and nothing above.
+	statusOK
+	// statusNoRun: no run and none due in the period.
+	statusNoRun
+	// statusDisabled: a disabled job without a run in the period.
+	statusDisabled
+)
+
+// problem reports the statuses that need attention.
+func (s jobStatus) problem() bool { return s <= statusHeld }
+
+// jobRow is one job of the summary.
+type jobRow struct {
+	Name    string
+	Enabled bool
+	Status  jobStatus
+	// Run counts in the period (OK: successful and partially failed
+	// runs, which stored a backup; Warned: successful runs with warnings).
+	OK, Failed, Partial, Warned, Canceled int64
+	// Bytes is what the period's runs stored; Stored what the job's
+	// present backups occupy now (HasStored false: none).
+	Bytes, Stored int64
+	HasStored     bool
+	// LastAt is the newest run of the period (nil: none).
+	LastAt *time.Time
+	// FailureCode is the error code of the newest failed run.
+	FailureCode        string
 	MissedSince        *time.Time
 	NoSuccess          bool
 	HeldRuns           int64
@@ -110,8 +171,9 @@ type destinationUsage struct {
 	Bytes   int64
 	Backups int64
 	// Free is the free space when a recent answer is cached (nil: not
-	// known here).
+	// known here); Low is the D-225 low-space rule on that answer.
 	Free *int64
+	Low  destinations.LowCause
 }
 
 // summaryData is everything a summary shows (pure input of buildSummary).
@@ -119,11 +181,14 @@ type summaryData struct {
 	Period summaryPeriod
 	// Jobs is the number of jobs the recipient may see.
 	Jobs int
-	// Runs and TestRestores count by status in the period.
+	// Runs, TestRestores and Restores count by status in the period.
 	Runs         map[string]int64
 	TestRestores map[string]int64
-	// Attention lists every job needing attention (sorted by name).
-	Attention []attentionJob
+	Restores     map[string]int64
+	// Written is what the period's runs stored.
+	Written int64
+	// JobRows lists the jobs, worst first, then by name.
+	JobRows []jobRow
 	// Staff: destination usage (operation destination.usage_view).
 	ShowUsage    bool
 	Destinations []destinationUsage
@@ -220,7 +285,7 @@ func (s *Service) Render(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notifica
 
 // summaryData reads the summary of scope sc for period p.
 func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summaryScope, p summaryPeriod) (*summaryData, error) {
-	d := &summaryData{Period: p, Runs: map[string]int64{}, TestRestores: map[string]int64{}}
+	d := &summaryData{Period: p, Runs: map[string]int64{}, TestRestores: map[string]int64{}, Restores: map[string]int64{}}
 	if !sc.any {
 		return d, nil
 	}
@@ -237,88 +302,121 @@ func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summarySc
 	for i := range jobs {
 		ids[i] = jobs[i].ID
 	}
-	runs, err := q.SummaryRunCounts(ctx, sqlc.SummaryRunCountsParams{PeriodFrom: p.from, PeriodUntil: p.until, ScopeAll: sc.scopeAll, UserID: sc.user})
-	if err != nil {
-		return nil, fmt.Errorf("notify: summary runs: %w", err)
+	from, until := p.from, p.until
+	in := summaryInput{jobs: jobs}
+	if in.activity, err = q.SummaryJobActivity(ctx, sqlc.SummaryJobActivityParams{PeriodFrom: from, PeriodUntil: until, ScopeAll: sc.scopeAll, UserID: sc.user}); err != nil {
+		return nil, fmt.Errorf("notify: summary job activity: %w", err)
 	}
-	tests, err := q.SummaryTestRestoreCounts(ctx, sqlc.SummaryTestRestoreCountsParams{PeriodFrom: p.from, PeriodUntil: p.until, ScopeAll: sc.scopeAll, UserID: sc.user})
-	if err != nil {
+	if in.tests, err = q.SummaryTestRestoreCounts(ctx, sqlc.SummaryTestRestoreCountsParams{PeriodFrom: from, PeriodUntil: until, ScopeAll: sc.scopeAll, UserID: sc.user}); err != nil {
 		return nil, fmt.Errorf("notify: summary test restores: %w", err)
 	}
-	missed, err := q.ListJobMissedState(ctx, ids)
-	if err != nil {
+	if in.restores, err = q.SummaryRestoreCounts(ctx, sqlc.SummaryRestoreCountsParams{PeriodFrom: from, PeriodUntil: until, ScopeAll: sc.scopeAll, UserID: sc.user}); err != nil {
+		return nil, fmt.Errorf("notify: summary restores: %w", err)
+	}
+	if in.stored, err = q.JobStorageTotals(ctx, sqlc.JobStorageTotalsParams{JobIds: ids, ScopeAll: sc.scopeAll, UserID: sc.user}); err != nil {
+		return nil, fmt.Errorf("notify: summary job storage: %w", err)
+	}
+	if in.missed, err = q.ListJobMissedState(ctx, ids); err != nil {
 		return nil, fmt.Errorf("notify: summary missed state: %w", err)
 	}
-	holds, err := q.ListRetentionHoldsForJobs(ctx, ids)
-	if err != nil {
+	if in.holds, err = q.ListRetentionHoldsForJobs(ctx, ids); err != nil {
 		return nil, fmt.Errorf("notify: summary retention holds: %w", err)
 	}
-	active, err := q.ListActiveRunJobs(ctx, ids)
-	if err != nil {
+	if in.active, err = q.ListActiveRunJobs(ctx, ids); err != nil {
 		return nil, fmt.Errorf("notify: summary active runs: %w", err)
 	}
-	in := summaryInput{
-		jobs: jobs, runs: runs, tests: tests, missed: missed, holds: holds, active: active,
-	}
 	if sc.usage {
-		usage, err := q.DestinationUsage(ctx)
-		if err != nil {
+		if in.usage, err = q.DestinationUsage(ctx); err != nil {
 			return nil, fmt.Errorf("notify: summary destination usage: %w", err)
 		}
-		in.usage, d.ShowUsage = usage, true
+		d.ShowUsage = true
+		if in.space, err = s.cachedSpace(ctx, q, in.usage); err != nil {
+			return nil, err
+		}
 	}
 	if sc.alerts {
-		if d.SecurityAlerts, err = q.CountSecurityAlertsBetween(ctx, sqlc.CountSecurityAlertsBetweenParams{PeriodFrom: p.from, PeriodUntil: p.until}); err != nil {
+		if d.SecurityAlerts, err = q.CountSecurityAlertsBetween(ctx, sqlc.CountSecurityAlertsBetweenParams{PeriodFrom: from, PeriodUntil: until}); err != nil {
 			return nil, fmt.Errorf("notify: summary security alerts: %w", err)
 		}
 		d.ShowAlerts = true
 	}
-	in.fill(d, s.o.CachedFreeSpace)
+	in.fill(d)
 	return d, nil
+}
+
+// spaceInfo is a destination's cached free space and its low-space
+// verdict.
+type spaceInfo struct {
+	free int64
+	low  destinations.LowCause
+}
+
+// cachedSpace returns the cached free space of the listed destinations
+// (the first maxSummaryDestinations) with the D-225 low-space rule, which
+// also compares with the newest full set of backups there.
+func (s *Service) cachedSpace(ctx context.Context, q *sqlc.Queries, usage []sqlc.DestinationUsageRow) (map[uuid.UUID]spaceInfo, error) {
+	out := map[uuid.UUID]spaceInfo{}
+	if s.o.CachedSpace == nil {
+		return out, nil
+	}
+	for i := range min(len(usage), maxSummaryDestinations) {
+		sp, ok := s.o.CachedSpace(usage[i].ID)
+		if !ok {
+			continue
+		}
+		newest, err := q.DestinationNewestSetBytes(ctx, usage[i].ID)
+		if err != nil {
+			return nil, fmt.Errorf("notify: summary newest backup set: %w", err)
+		}
+		out[usage[i].ID] = spaceInfo{free: sp.Free, low: destinations.LowSpaceCause(sp, newest)}
+	}
+	return out, nil
 }
 
 // summaryInput are the rows of one summary.
 type summaryInput struct {
-	jobs   []sqlc.ListSummaryJobsRow
-	runs   []sqlc.SummaryRunCountsRow
-	tests  []sqlc.SummaryTestRestoreCountsRow
-	missed []sqlc.ListJobMissedStateRow
-	holds  []sqlc.ListRetentionHoldsForJobsRow
-	active []uuid.UUID
-	usage  []sqlc.DestinationUsageRow
+	jobs     []sqlc.ListSummaryJobsRow
+	activity []sqlc.SummaryJobActivityRow
+	tests    []sqlc.SummaryTestRestoreCountsRow
+	restores []sqlc.SummaryRestoreCountsRow
+	stored   []sqlc.JobStorageTotalsRow
+	missed   []sqlc.ListJobMissedStateRow
+	holds    []sqlc.ListRetentionHoldsForJobsRow
+	active   []uuid.UUID
+	usage    []sqlc.DestinationUsageRow
+	space    map[uuid.UUID]spaceInfo
 }
 
-// fill computes the totals and the jobs needing attention (pure apart
-// from the cached free space).
-func (in *summaryInput) fill(d *summaryData, free func(uuid.UUID) (int64, bool)) {
-	type perJob struct {
-		failed, partial, ok, testsFailed int64
-	}
-	by := map[uuid.UUID]*perJob{}
-	get := func(id uuid.UUID) *perJob {
-		if by[id] == nil {
-			by[id] = &perJob{}
+// fill computes the totals and the job rows (pure).
+func (in *summaryInput) fill(d *summaryData) {
+	act := map[uuid.UUID]*sqlc.SummaryJobActivityRow{}
+	for i := range in.activity {
+		a := &in.activity[i]
+		act[a.JobID] = a
+		for status, n := range map[string]int64{
+			string(sqlc.RunStatusSuccess): a.Succeeded, string(sqlc.RunStatusPartial): a.Partial,
+			string(sqlc.RunStatusFailed): a.Failed, string(sqlc.RunStatusCanceled): a.Canceled,
+			string(sqlc.RunStatusSkipped): a.Skipped,
+		} {
+			if n > 0 {
+				d.Runs[status] += n
+			}
 		}
-		return by[id]
+		d.Written += a.BytesStored
 	}
-	for _, r := range in.runs {
-		d.Runs[r.Status] += r.Runs
-		j := get(r.JobID)
-		switch r.Status {
-		case string(sqlc.RunStatusFailed):
-			j.failed += r.Runs
-		case string(sqlc.RunStatusPartial):
-			j.partial += r.Runs
-			j.ok += r.Runs
-		case string(sqlc.RunStatusSuccess):
-			j.ok += r.Runs
-		}
-	}
+	testsFailed := map[uuid.UUID]int64{}
 	for _, t := range in.tests {
 		d.TestRestores[t.Status] += t.TestRestores
 		if t.Status == string(sqlc.TestRestoreStatusFailed) || t.Status == string(sqlc.TestRestoreStatusError) {
-			get(t.JobID).testsFailed += t.TestRestores
+			testsFailed[t.JobID] += t.TestRestores
 		}
+	}
+	for _, r := range in.restores {
+		d.Restores[r.Status] += r.Restores
+	}
+	stored := map[uuid.UUID]int64{}
+	for _, st := range in.stored {
+		stored[st.JobID] = st.StoredBytes
 	}
 	missed := map[uuid.UUID]time.Time{}
 	for _, m := range in.missed {
@@ -342,27 +440,53 @@ func (in *summaryInput) fill(d *summaryData, free func(uuid.UUID) (int64, bool))
 		active[id] = true
 	}
 	for _, j := range in.jobs {
-		pj := get(j.ID)
-		a := attentionJob{Name: notify.DisplayName(j.Name), Failed: pj.failed, Partial: pj.partial, TestRestoresFailed: pj.testsFailed}
+		r := jobRow{Name: notify.DisplayName(j.Name), Enabled: j.Enabled, TestRestoresFailed: testsFailed[j.ID]}
+		if a := act[j.ID]; a != nil {
+			r.OK, r.Failed, r.Partial, r.Warned, r.Canceled = a.Succeeded+a.Partial, a.Failed, a.Partial, a.WithWarnings, a.Canceled
+			r.Bytes, r.FailureCode = a.BytesStored, a.LastFailureCode
+			last := a.LastFinishedAt
+			r.LastAt = &last
+		}
+		r.Stored, r.HasStored = stored[j.ID]
 		if since, ok := missed[j.ID]; ok {
-			a.MissedSince = &since
+			r.MissedSince = &since
 		}
 		if h := holds[j.ID]; h != nil {
-			a.HeldRuns, a.HoldDestinations = h.runs, h.dests
+			r.HeldRuns, r.HoldDestinations = h.runs, h.dests
 		}
-		a.NoSuccess = pj.ok == 0 && a.MissedSince == nil && !active[j.ID] && scheduledIn(j, d.Period.from, d.Period.until)
-		if a.Failed > 0 || a.Partial > 0 || a.MissedSince != nil || a.NoSuccess || a.HeldRuns > 0 || a.TestRestoresFailed > 0 {
-			d.Attention = append(d.Attention, a)
-		}
+		r.NoSuccess = r.OK == 0 && r.MissedSince == nil && !active[j.ID] && scheduledIn(j, d.Period.from, d.Period.until)
+		r.Status = r.status()
+		d.JobRows = append(d.JobRows, r)
 	}
+	// Worst first, then by name (ListSummaryJobs is ordered by name).
+	slices.SortStableFunc(d.JobRows, func(a, b jobRow) int { return int(a.Status) - int(b.Status) })
 	for _, u := range in.usage {
 		du := destinationUsage{Name: notify.DisplayName(u.Name), Bytes: u.StoredBytes, Backups: u.BackupCount}
-		if free != nil {
-			if f, ok := free(u.ID); ok {
-				du.Free = &f
-			}
+		if sp, ok := in.space[u.ID]; ok {
+			free := sp.free
+			du.Free, du.Low = &free, sp.low
 		}
 		d.Destinations = append(d.Destinations, du)
+	}
+}
+
+// status applies the job status rule (the first that applies).
+func (r *jobRow) status() jobStatus {
+	switch {
+	case r.Failed > 0 || r.TestRestoresFailed > 0:
+		return statusFailed
+	case r.MissedSince != nil || r.NoSuccess:
+		return statusMissed
+	case r.Partial > 0 || r.Warned > 0:
+		return statusPartial
+	case r.HeldRuns > 0:
+		return statusHeld
+	case r.OK > 0:
+		return statusOK
+	case !r.Enabled:
+		return statusDisabled
+	default:
+		return statusNoRun
 	}
 }
 
@@ -388,234 +512,39 @@ func scheduledIn(j sqlc.ListSummaryJobsRow, from, until time.Time) bool {
 	return err == nil && !n.After(until.Add(-noSuccessGrace))
 }
 
-// --- rendering --------------------------------------------------------------------
+// counts are the number of jobs per status.
+type counts [statusDisabled + 1]int
 
-func clampRunes(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
+func (d *summaryData) counts() counts {
+	var c counts
+	for i := range d.JobRows {
+		c[d.JobRows[i].Status]++
 	}
-	return string([]rune(s)[:n-1]) + "…"
+	return c
 }
 
-func pick(cond bool, yes, no string) string {
-	if cond {
-		return yes
-	}
-	return no
+func (c counts) problems() int {
+	return c[statusFailed] + c[statusMissed] + c[statusPartial] + c[statusHeld]
 }
 
-func plural(n int64, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return fmt.Sprintf("%d %s", n, many)
-}
-
-// summaryTime is a local time of the summary ("Mon 3 Nov 2026, 08:00").
-func summaryTime(t time.Time, loc *time.Location) string {
-	return t.In(loc).Format("Mon 2 Jan 2006, 15:04")
-}
-
-// formatBytes formats a size with binary (IEC) units.
-func formatBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
-	v, i := float64(n)/unit, 0
-	for v >= unit && i < len(units)-1 {
-		v /= unit
-		i++
-	}
-	return fmt.Sprintf("%.1f %s", v, units[i])
-}
-
-var frequencyLabels = map[Frequency]string{
-	Daily: "Daily", EveryOtherDay: "Every-other-day", Weekly: "Weekly", Monthly: "Monthly",
-}
-
-// headline is "All 5 backup jobs ran fine" or "Needs attention: 2 of 5 jobs".
-func (d *summaryData) headline() string {
-	switch {
-	case d.Jobs == 0:
-		return "No backup jobs to summarize"
-	case len(d.Attention) == 0 && d.Jobs == 1:
-		return "Your backup job ran fine"
-	case len(d.Attention) == 0:
-		return fmt.Sprintf("All %d backup jobs ran fine", d.Jobs)
-	default:
-		return fmt.Sprintf("Needs attention: %d of %d jobs", len(d.Attention), d.Jobs)
-	}
-}
-
-func (d *summaryData) title() string {
-	label := frequencyLabels[d.Period.frequency]
-	if label == "" {
-		label = "Periodic"
-	}
-	prefix := label + " summary"
-	if d.Period.preview {
-		prefix = "Summary preview"
-	}
-	return prefix + ": " + d.headline()
-}
-
-var runStatusOrder = []struct{ status, label string }{
-	{string(sqlc.RunStatusSuccess), "succeeded"},
-	{string(sqlc.RunStatusPartial), "partially failed"},
-	{string(sqlc.RunStatusFailed), "failed"},
-	{string(sqlc.RunStatusCanceled), "canceled"},
-	{string(sqlc.RunStatusSkipped), "skipped"},
-}
-
-var testStatusOrder = []struct{ status, label string }{
-	{string(sqlc.TestRestoreStatusPassed), "passed"},
-	{string(sqlc.TestRestoreStatusWarnings), "passed with warnings"},
-	{string(sqlc.TestRestoreStatusFailed), "failed"},
-	{string(sqlc.TestRestoreStatusError), "could not run"},
-	{string(sqlc.TestRestoreStatusCanceled), "canceled"},
-}
-
-func countsSentence(counts map[string]int64, order []struct{ status, label string }) (int64, string) {
-	var total int64
-	var parts []string
-	for _, o := range order {
-		if n := counts[o.status]; n > 0 {
-			total += n
-			parts = append(parts, fmt.Sprintf("%d %s", n, o.label))
+// lowDestinations counts the listed destinations low on space.
+func (d *summaryData) lowDestinations() int {
+	n := 0
+	for i := range d.Destinations[:min(len(d.Destinations), maxSummaryDestinations)] {
+		if d.Destinations[i].Low != destinations.LowNone {
+			n++
 		}
 	}
-	return total, strings.Join(parts, ", ")
+	return n
 }
 
-func (d *summaryData) runsSentence() string {
-	total, parts := countsSentence(d.Runs, runStatusOrder)
-	if total == 0 {
-		return "Backups: no backup finished in this period."
+// joinAnd joins parts as "a, b and c".
+func joinAnd(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
 	}
-	return fmt.Sprintf("Backups: %s finished (%s).", plural(total, "run", "runs"), parts)
-}
-
-func (d *summaryData) testsSentence() string {
-	total, parts := countsSentence(d.TestRestores, testStatusOrder)
-	if total == 0 {
-		return "Test restores: none in this period."
-	}
-	return fmt.Sprintf("Test restores: %s (%s).", plural(total, "test restore", "test restores"), parts)
-}
-
-// reasons explains why a job needs attention (fixed text and numbers).
-func (a *attentionJob) reasons(loc *time.Location) string {
-	var r []string
-	if a.Failed > 0 {
-		r = append(r, plural(a.Failed, "failed backup", "failed backups"))
-	}
-	if a.Partial > 0 {
-		r = append(r, plural(a.Partial, "partially failed backup", "partially failed backups"))
-	}
-	if a.MissedSince != nil {
-		r = append(r, "backups missed since "+summaryTime(*a.MissedSince, loc))
-	}
-	if a.NoSuccess {
-		r = append(r, "no successful backup in this period")
-	}
-	if a.HeldRuns > 0 {
-		r = append(r, fmt.Sprintf("retention keeps %s on %s", plural(a.HeldRuns, "incomplete backup", "incomplete backups"),
-			plural(int64(a.HoldDestinations), "destination", "destinations")))
-	}
-	if a.TestRestoresFailed > 0 {
-		r = append(r, plural(a.TestRestoresFailed, "failed test restore", "failed test restores"))
-	}
-	return strings.Join(r, "; ")
-}
-
-// buildSummary renders d (pure): the inbox title and body (counts only,
-// no job or destination names, so the row says nothing a later role
-// change would hide) and the e-mail (email.Render limits: at most 20
-// paragraphs and 30 details).
-func buildSummary(d *summaryData, dashboard string) notify.SummaryContent {
-	p := d.Period
-	title := d.title()
-	period := fmt.Sprintf("This summary covers %s to %s (%s).", summaryTime(p.from, p.loc), summaryTime(p.until, p.loc), p.zone)
-	paragraphs := []string{}
-	if p.preview {
-		paragraphs = append(paragraphs, "This is a preview you requested: it covers the current period so far.")
-	}
-	paragraphs = append(paragraphs, period)
-	one := len(d.Attention) == 1
-	switch {
-	case len(d.Attention) == 0 && d.Jobs == 1:
-		paragraphs = append(paragraphs, "The backup job you can see ran without problems.")
-	case len(d.Attention) == 0:
-		paragraphs = append(paragraphs, fmt.Sprintf("All %d backup jobs you can see ran without problems.", d.Jobs))
-	default:
-		paragraphs = append(paragraphs, fmt.Sprintf("%s of the %s you can see %s attention; %s listed below.",
-			plural(int64(len(d.Attention)), "job", "jobs"), plural(int64(d.Jobs), "backup job", "backup jobs"),
-			pick(one, "needs", "need"), pick(one, "it is", "they are")))
-	}
-	paragraphs = append(paragraphs, d.runsSentence(), d.testsSentence())
-	if d.ShowAlerts {
-		if d.SecurityAlerts == 0 {
-			paragraphs = append(paragraphs, "Security alerts: none in this period.")
-		} else {
-			paragraphs = append(paragraphs, fmt.Sprintf("Security alerts: %s in this period; review them in bekup.", plural(d.SecurityAlerts, "alert", "alerts")))
-		}
-	}
-	var details []email.Detail
-	shown := min(len(d.Attention), maxSummaryAttention)
-	for i := range shown {
-		a := &d.Attention[i]
-		details = append(details, email.Detail{Label: a.Name, Value: a.reasons(p.loc)})
-	}
-	if more := len(d.Attention) - shown; more > 0 {
-		paragraphs = append(paragraphs, fmt.Sprintf("And %d more %s attention; see the dashboard.", more, pick(more == 1, "job needs", "jobs need")))
-	}
-	if d.ShowUsage {
-		if len(d.Destinations) == 0 {
-			paragraphs = append(paragraphs, "Destination usage: no destinations.")
-		} else {
-			paragraphs = append(paragraphs, "Destination usage (backups bekup keeps on each destination) is listed below.")
-		}
-		n := min(len(d.Destinations), maxSummaryDestinations)
-		for i := range n {
-			du := &d.Destinations[i]
-			v := fmt.Sprintf("%s in %s", formatBytes(du.Bytes), plural(du.Backups, "backup", "backups"))
-			if du.Free != nil {
-				v += fmt.Sprintf(", %s free", formatBytes(*du.Free))
-			}
-			details = append(details, email.Detail{Label: "Storage: " + du.Name, Value: v})
-		}
-		if more := len(d.Destinations) - n; more > 0 {
-			paragraphs = append(paragraphs, fmt.Sprintf("%d more %s not listed.", more, pick(more == 1, "destination is", "destinations are")))
-		}
-	}
-	paragraphs = append(paragraphs, fmt.Sprintf("Times are in %s.", p.zone),
-		"Change how often you get this summary, or turn it off, in your notification settings.")
-
-	_, runParts := countsSentence(d.Runs, runStatusOrder)
-	body := period
-	if runParts != "" {
-		body += " Backups: " + runParts + "."
-	} else {
-		body += " No backup finished."
-	}
-	if _, tp := countsSentence(d.TestRestores, testStatusOrder); tp != "" {
-		body += " Test restores: " + tp + "."
-	}
-	if len(d.Attention) > 0 {
-		body += fmt.Sprintf(" %s %s attention: see the dashboard.", plural(int64(len(d.Attention)), "job", "jobs"), pick(one, "needs", "need"))
-	}
-	if d.ShowAlerts && d.SecurityAlerts > 0 {
-		body += fmt.Sprintf(" Security alerts: %d.", d.SecurityAlerts)
-	}
-	return notify.SummaryContent{
-		Title: clampRunes(title, 200),
-		Body:  clampRunes(body, 1000),
-		Notice: email.Notice{
-			Subject: "[bekup] " + clampRunes(title, 180), Heading: clampRunes(title, 200),
-			Paragraphs: paragraphs, Details: details,
-			Action: &email.Action{Label: "Open the dashboard", URL: dashboard},
-		},
-	}
+	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }

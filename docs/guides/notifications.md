@@ -255,34 +255,88 @@ summary (or from the first one). Daylight saving is handled like job
 schedules: a time that does not exist on the day the clocks go forward
 moves forward by the gap, a time that occurs twice uses the first one.
 
-A summary covers the time since the previous one and shows:
+A summary covers **at least one full period** in your zone: the last
+24 hours (daily), 48 hours (every other day), 7 days (weekly) or calendar
+month (monthly); on the days the clocks change a "day" is 23 or 25 hours.
+After an outage it covers everything since the previous summary; after you
+change the frequency or the hour the first summary may overlap the
+previous one (an hour shown twice rather than hours missing). The e-mail
+shows, top to bottom:
 
-- the headline: **All N backup jobs ran fine** or **Needs attention: X of
-  N jobs**;
-- the backups that finished in the period by status (succeeded, partially
-  failed, failed, canceled, skipped) and the test restores by result;
-- the jobs that need attention (at most 20 by name, the rest counted):
-  failed or partially failed backups, missed backups, no successful backup
-  although the job was scheduled in the period, retention keeping
-  incomplete backups, failed test restores;
-- admins and maintainers: the storage bekup keeps on each destination
-  (free space only when bekup checked it in the last few minutes; the
-  summary never contacts a destination); admins: the number of security
-  alerts in the period;
-- the times in your zone and a link to the dashboard.
+- the **subject** with the worst state first: `[bekup] Daily summary:
+  2 FAILED, 1 missed`, `… needs attention` or `… all 14 jobs OK`;
+- a **status banner** in green, amber or red with a word ("ALL OK",
+  "2 FAILED", "ATTENTION") and one sentence, e.g. "2 of 14 jobs failed in
+  the last 24 hours"; the word, not only the colour, carries the meaning;
+- the period ("Period: Sat 7 Nov 2026, 08:00 – Sun 8 Nov 2026, 08:00
+  (Europe/Amsterdam)") and the backups that finished by status;
+- **key figures**: jobs OK (e.g. `12/14`), failed (and missed), the data
+  written in the period and the test restores that passed;
+- the **jobs table**, one row per job you may see, worst first, then by
+  name: status, job, runs OK/failed, last run, size written in the period
+  and the total stored now. The status follows one rule per job, the
+  first that applies: **Failed** (a failed backup or test restore),
+  **Missed** (backups missed, or scheduled without a successful one),
+  **Partial** (a partially failed run; **Warnings** when runs only had
+  warnings), **Held** (retention keeps incomplete backups), **OK**, **No
+  run** (nothing due, nothing ran), **Disabled**. Problem rows are tinted,
+  marked with a rule and carry a short fixed reason ("target unreachable",
+  "missed since …"), never server output. At most 100 rows: every problem
+  first, the rest as one line ("+N more jobs without problems"); when long
+  names would make the e-mail larger than Gmail shows before it cuts the
+  rest off (102 KB), it lists fewer rows (jobs without problems first)
+  and counts the others in that line;
+- **restores** (only when there were any): restores and test restores in
+  the period by result;
+- admins and maintainers: **storage** per destination (stored, free,
+  backups). Free space shows only when bekup checked it in the last few
+  minutes (the summary never contacts a destination); "Low space" uses the
+  rule of the storage page: less than 10% free, or less free than the
+  newest set of backups needs;
+- admins: **security** alerts raised in the period (above the jobs table
+  when there were any, at the end when there were none);
+- a link to the dashboard; times in your zone.
+
+Phones get the same mail with stacked figures and fewer columns; dark mode
+follows your mail app. The plain-text part carries the same content, for
+example:
+
+```text
+!! 1 failed: 1 of 3 jobs failed and 1 job missed its backups in the last 24 hours. !!
+
+Daily summary
+
+Period: Sun 8 Nov 2026, 12:00 – Mon 9 Nov 2026, 12:00 (UTC).
+
+Backups: 3 runs finished (2 succeeded, 1 failed).
+
+Jobs OK: 1/3  |  Failed/missed: 1/1  |  Written: 3.5 GiB
+
+Jobs
+   Status  Job      OK/Fail     Last run     Size    Stored
+   ------  -------  -------  -----------  -------  --------
+>> Failed  CRM          0/1  9 Nov 04:01      0 B  18.4 GiB
+           target unreachable
+>> Missed  Docs         0/0            –        –   2.1 GiB
+           missed since Sun 8 Nov 2026, 03:00
+   OK      Billing      2/0  9 Nov 03:20  3.5 GiB  41.2 GiB
+```
 
 It reaches your inbox and, with a [verified address](#verifying-your-e-mail-address),
 your e-mail (both can be turned off in the preference matrix, row
 **Periodic summary**; there is no webhook). The inbox entry shows the
-counts only; the e-mail names the jobs. The content is put together when
-it is sent, from what you may see at that moment.
+counts worst first ("Daily summary: 2 failed, 1 missed, 11 OK"), never
+names; the e-mail names the jobs. The content is put together when it is
+sent, from what you may see at that moment.
 
 - If bekup was down when a summary was due, the next run sends **one**
-  summary covering the whole gap, never one per missed date.
+  summary covering the whole gap, never one per missed date (it says so
+  at the top).
 - If you can see no backup job, no summary is sent (an empty one would say
   nothing); the page tells you.
-- **Send a preview now** (`sendSummaryPreview`) sends the summary of the
-  current period so far, marked as a preview, to your inbox and e-mail. It
+- **Send a preview now** (`sendSummaryPreview`) sends the summary of one
+  full period up to now (the last 24 hours, 7 days, ...), marked as a
+  preview, to your inbox and e-mail. It
   is rate limited (one a minute, three at once) and does not move the
   schedule.
 - **Never** turns it off. Turning it on again starts afresh: the first

@@ -193,6 +193,21 @@ func writeQP(buf *bytes.Buffer, s string) error {
 	return nil
 }
 
+// EncodedLen is the size of s as a message body part carries it
+// (quoted-printable with CRLF line breaks, as NewMessage sends both
+// parts): the size to budget against Gmail's clipping (102 KB), which is
+// larger than len(s) for markup ("=" becomes "=3D"), non-ASCII text (three
+// bytes per byte) and long lines (soft breaks).
+func EncodedLen(s string) int {
+	var b bytes.Buffer
+	b.Grow(len(s) + len(s)/4)
+	if err := writeQP(&b, s); err != nil {
+		// A bytes.Buffer does not fail; count the worst case.
+		return 3*len(s) + 3*(len(s)/25+1)
+	}
+	return b.Len()
+}
+
 // messageID returns a random Message-ID in the sender's domain.
 func messageID(from string) (string, error) {
 	var b [16]byte

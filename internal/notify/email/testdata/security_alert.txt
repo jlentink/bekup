@@ -1,0 +1,12 @@
+Security alert
+
+The SSRF allowlist was widened: 10.0.0.0/8 now allowed for destinations. Review the change in the audit log.
+
+Event: security.system
+Time: 2026-11-08 07:12:03 UTC
+
+Open in bekup:
+https://bekup.example.com/admin/audit
+
+--
+This message was sent automatically by bekup. It contains no images, no tracking and no secrets.

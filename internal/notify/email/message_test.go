@@ -183,3 +183,25 @@ func FuzzMessageHeaders(f *testing.F) {
 		}
 	})
 }
+
+// TestEncodedLen: EncodedLen is the size of a part as build writes it.
+func TestEncodedLen(t *testing.T) {
+	for in, want := range map[string]int{"": 0, "abc": 3, "a=b": 5, "ü": 6, "a\nb": 4} {
+		if got := EncodedLen(in); got != want {
+			t.Errorf("EncodedLen(%q) = %d, want %d", in, got, want)
+		}
+	}
+	html := `<td class="x" style="color:#123">` + strings.Repeat("café & 😀 ", 400) + "</td>\n<p>end</p>"
+	m := &Message{To: []string{"ops@example.com"}, Subject: "s", Text: "t", HTML: html}
+	raw, err := m.build(sender{Address: "bekup@example.com"}, time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	if err := writeQP(&b, html); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, b.Bytes()) || EncodedLen(html) != b.Len() || b.Len() <= len(html) {
+		t.Fatalf("encoded part not found or sizes differ: %d vs %d (raw %d)", EncodedLen(html), b.Len(), len(html))
+	}
+}

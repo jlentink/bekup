@@ -229,7 +229,7 @@ func (s *Service) handleDueSummary(ctx context.Context, now time.Time, skip []uu
 		}
 		id, err := notify.Emit(ctx, q, notify.Event{
 			Type: notify.SummaryPeriodic, Subject: notify.Subject{UserID: user},
-			Detail:   eventDetail(dec.PeriodStart, dec.PeriodEnd, eff.Timezone, eff.Frequency, false),
+			Detail:   eventDetail(dec.PeriodStart, dec.PeriodEnd, eff.Timezone, eff.Frequency, false, dec.CatchUp),
 			DedupKey: dedupKey(user, dec.PeriodEnd),
 		})
 		if err != nil {

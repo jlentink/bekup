@@ -444,6 +444,26 @@ func TestDisplayName(t *testing.T) {
 	if displayName("  ") != "(unnamed)" {
 		t.Fatal("empty name")
 	}
+	// Format characters (bidi overrides and isolates, zero-width ones) are
+	// shown as spaces like control characters; ordinary text is kept.
+	for in, want := range map[string]string{
+		"invoice\u202Efdp.exe":          "invoice fdp.exe",
+		"\u202Abilling\u202C":           "billing",
+		"\u202Dx\u202B":                 "x",
+		"a\u2066b\u2067c\u2068d\u2069e": "a b c d e",
+		"Bil\u200Bling":                 "Bil ling",
+		"\uFEFFdocs":                    "docs",
+		"a\u00ADb":                      "a b",
+		"\u2028x\u2029":                 "x",
+		"Prod-DB café 😀 日本":             "Prod-DB café 😀 日本",
+	} {
+		if got := displayName(in); got != want {
+			t.Errorf("displayName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := DisplayName("\u202E\u2066"); got != "(unnamed)" {
+		t.Errorf("only format characters = %q", got)
+	}
 }
 
 // TestRenderRetentionBlocked: retention.blocked names the destination, the

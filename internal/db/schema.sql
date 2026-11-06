@@ -3714,6 +3714,12 @@ CREATE INDEX restores_active_idx ON public.restores USING btree (status) WHERE (
 CREATE INDEX restores_artifact_idx ON public.restores USING btree (artifact_id);
 
 --
+-- Name: restores_finished_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX restores_finished_at_idx ON public.restores USING btree (finished_at) WHERE (finished_at IS NOT NULL);
+
+--
 -- Name: restores_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -3846,6 +3852,12 @@ CREATE INDEX runs_finished_at_idx ON public.runs USING btree (finished_at) WHERE
 CREATE INDEX runs_job_early_idx ON public.runs USING btree (job_id, scheduled_for) WHERE (trigger = 'early'::public.run_trigger);
 
 --
+-- Name: runs_job_failed_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX runs_job_failed_idx ON public.runs USING btree (job_id, finished_at DESC, id DESC) WHERE (status = 'failed'::public.run_status);
+
+--
 -- Name: runs_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -3900,6 +3912,12 @@ CREATE INDEX sessions_user_id_idx ON public.sessions USING btree (user_id);
 CREATE UNIQUE INDEX shared_channels_name_key ON public.shared_channels USING btree (lower(name));
 
 --
+-- Name: test_restore_items_restore_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX test_restore_items_restore_idx ON public.test_restore_items USING btree (restore_id) WHERE (restore_id IS NOT NULL);
+
+--
 -- Name: test_restore_items_scratch_idx; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -3916,6 +3934,12 @@ CREATE UNIQUE INDEX test_restore_items_unique_idx ON public.test_restore_items U
 --
 
 CREATE UNIQUE INDEX test_restores_active_idx ON public.test_restores USING btree (job_id) WHERE (status = ANY (ARRAY['queued'::public.test_restore_status, 'running'::public.test_restore_status]));
+
+--
+-- Name: test_restores_finished_at_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX test_restores_finished_at_idx ON public.test_restores USING btree (finished_at) WHERE (finished_at IS NOT NULL);
 
 --
 -- Name: test_restores_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner

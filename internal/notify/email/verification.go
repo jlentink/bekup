@@ -195,15 +195,7 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 		return VerificationRequest{}, err
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(code)
-	c, err := Render(Notice{
-		Subject: "Verify your e-mail address for bekup",
-		Heading: "Verify your e-mail address",
-		Paragraphs: []string{
-			"Someone (hopefully you) asked bekup to send notifications to this address. Open the link below while signed in to bekup to confirm it.",
-			"The link works once and expires in 24 hours. If you did not ask for this, ignore this message: nothing will be sent to this address.",
-		},
-		Action: &Action{Label: "Verify e-mail address", URL: v.link(encoded)},
-	})
+	c, err := Render(verificationNotice(v.link(encoded)))
 	if err == nil {
 		err = v.o.Mailer.Send(ctx, NewMessage([]string{st.Email}, c))
 	}
@@ -217,6 +209,19 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 		return VerificationRequest{}, err
 	}
 	return VerificationRequest{SentTo: st.Email, ExpiresAt: expires}, nil
+}
+
+// verificationNotice is the verification e-mail with its link.
+func verificationNotice(link string) Notice {
+	return Notice{
+		Subject: "Verify your e-mail address for bekup",
+		Heading: "Verify your e-mail address",
+		Paragraphs: []string{
+			"Someone (hopefully you) asked bekup to send notifications to this address. Open the link below while signed in to bekup to confirm it.",
+			"The link works once and expires in 24 hours. If you did not ask for this, ignore this message: nothing will be sent to this address.",
+		},
+		Action: &Action{Label: "Verify e-mail address", URL: link},
+	}
 }
 
 // Verify redeems code for the caller's account: it must have been issued to

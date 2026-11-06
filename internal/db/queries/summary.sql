@@ -101,18 +101,42 @@ WHERE j.deleted_at IS NULL
 ORDER BY lower(j.name), j.id
 LIMIT @max_rows::int;
 
--- SummaryRunCounts counts the runs of visible jobs that finished in
--- (@period_from, @period_until], per job and status.
--- name: SummaryRunCounts :many
-SELECT r.job_id, r.status::text AS status, count(*)::bigint AS runs
-FROM runs r
-JOIN jobs j ON j.id = r.job_id
-WHERE r.finished_at > @period_from::timestamptz AND r.finished_at <= @period_until::timestamptz
-  AND j.deleted_at IS NULL
-  AND (@scope_all::boolean OR EXISTS (
-        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
-        WHERE o.job_id = r.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
-GROUP BY r.job_id, r.status;
+-- SummaryJobActivity summarizes, per visible job, the runs that finished
+-- in (@period_from, @period_until]: counts per status (and of successful
+-- runs with warnings), the bytes stored, the newest finish time and the
+-- error code of the newest failed run ('' for none; one index probe per
+-- job with a failure, runs_job_failed_idx).
+-- name: SummaryJobActivity :many
+WITH a AS (
+    SELECT r.job_id,
+           count(*) FILTER (WHERE r.status = 'success')::bigint AS succeeded,
+           count(*) FILTER (WHERE r.status = 'partial')::bigint AS partial,
+           count(*) FILTER (WHERE r.status = 'failed')::bigint AS failed,
+           count(*) FILTER (WHERE r.status = 'canceled')::bigint AS canceled,
+           count(*) FILTER (WHERE r.status = 'skipped')::bigint AS skipped,
+           count(*) FILTER (WHERE r.status = 'success' AND r.has_warnings)::bigint AS with_warnings,
+           COALESCE(sum(r.bytes_stored), 0)::bigint AS bytes_stored,
+           max(r.finished_at)::timestamptz AS last_finished_at
+    FROM runs r
+    JOIN jobs j ON j.id = r.job_id
+    WHERE r.finished_at > @period_from::timestamptz AND r.finished_at <= @period_until::timestamptz
+      AND j.deleted_at IS NULL
+      AND (@scope_all::boolean OR EXISTS (
+            SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+            WHERE o.job_id = r.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
+    GROUP BY r.job_id
+)
+SELECT a.job_id, a.succeeded, a.partial, a.failed, a.canceled, a.skipped, a.with_warnings, a.bytes_stored,
+       a.last_finished_at::timestamptz AS last_finished_at,
+       COALESCE(lf.error_code, '')::text AS last_failure_code
+FROM a
+LEFT JOIN LATERAL (
+    SELECT f.error_code FROM runs f
+    WHERE a.failed > 0 AND f.job_id = a.job_id AND f.status = 'failed'
+      AND f.finished_at > @period_from::timestamptz AND f.finished_at <= @period_until::timestamptz
+    ORDER BY f.finished_at DESC, f.id DESC
+    LIMIT 1
+) lf ON true;
 
 -- SummaryTestRestoreCounts counts the test restores of visible jobs that
 -- finished in (@period_from, @period_until], per job and status.
@@ -126,6 +150,22 @@ WHERE t.finished_at > @period_from::timestamptz AND t.finished_at <= @period_unt
         SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
         WHERE o.job_id = t.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
 GROUP BY t.job_id, t.status;
+
+-- SummaryRestoreCounts counts the restores of visible jobs (requested
+-- restores; the internal restores of test restores are counted by
+-- SummaryTestRestoreCounts) that finished in (@period_from,
+-- @period_until], per status.
+-- name: SummaryRestoreCounts :many
+SELECT r.status::text AS status, count(*)::bigint AS restores
+FROM restores r
+JOIN jobs j ON j.id = r.job_id
+WHERE r.finished_at > @period_from::timestamptz AND r.finished_at <= @period_until::timestamptz
+  AND j.deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM test_restore_items i WHERE i.restore_id = r.id)
+  AND (@scope_all::boolean OR EXISTS (
+        SELECT 1 FROM job_owners o JOIN users ou ON ou.id = o.user_id
+        WHERE o.job_id = r.job_id AND o.user_id = @user_id::uuid AND ou.deleted_at IS NULL))
+GROUP BY r.status;
 
 -- ListActiveRunJobs returns the jobs of @job_ids with a queued or running
 -- run (not judged "no success" while a run is under way).

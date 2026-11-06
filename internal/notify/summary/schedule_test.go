@@ -122,9 +122,10 @@ func TestNextDueNever(t *testing.T) {
 	}
 }
 
-// TestDecide covers the period of a due summary: first summaries cover
-// one occurrence back, later ones start at the last period's end, and an
-// outage collapses into one summary covering the whole gap.
+// TestDecide covers the period of a due summary: at least one calendar
+// period (a settings change may overlap the previous summary), from the
+// last period's end when that is earlier, and an outage collapses into
+// one summary covering the whole gap.
 func TestDecide(t *testing.T) {
 	t.Parallel()
 	ptr := func(s string) *time.Time {
@@ -159,6 +160,19 @@ func TestDecide(t *testing.T) {
 			last: ptr("2026-03-28T01:00:00Z"), start: "2026-03-28T01:00:00Z", end: "2026-03-29T01:00:00Z", next: "2026-03-30T00:00:00Z"},
 		{name: "ny weekly first summary across spring", s: settings(Weekly, 8, "America/New_York"), due: "2026-03-09T12:00:00Z", now: "2026-03-09T12:01:00Z",
 			start: "2026-03-02T13:00:00Z", end: "2026-03-09T12:00:00Z", next: "2026-03-16T12:00:00Z"},
+		// D-226 amendment 1: at least one full calendar period.
+		{name: "weekly 08:00 to daily 12:00 gives a day", s: settings(Daily, 12, "UTC"), due: "2026-11-09T12:00:00Z", now: "2026-11-09T12:03:00Z",
+			last: ptr("2026-11-09T08:00:00Z"), start: "2026-11-08T12:00:00Z", end: "2026-11-09T12:00:00Z", next: "2026-11-10T12:00:00Z"},
+		{name: "hour change gives a day", s: settings(Daily, 10, "Europe/Amsterdam"), due: "2026-11-09T09:00:00Z", now: "2026-11-09T09:01:00Z",
+			last: ptr("2026-11-09T07:00:00Z"), start: "2026-11-08T09:00:00Z", end: "2026-11-09T09:00:00Z", next: "2026-11-10T09:00:00Z"},
+		{name: "daily after three days down", s: settings(Daily, 8, "UTC"), due: "2026-11-05T08:00:00Z", now: "2026-11-07T09:00:00Z",
+			last: ptr("2026-11-04T08:00:00Z"), start: "2026-11-04T08:00:00Z", end: "2026-11-07T08:00:00Z", next: "2026-11-08T08:00:00Z", catchUp: true},
+		{name: "ams daily on the spring-forward day is 23 h", s: settings(Daily, 8, "Europe/Amsterdam"), due: "2026-03-29T06:00:00Z", now: "2026-03-29T06:01:00Z",
+			last: ptr("2026-03-28T07:00:00Z"), start: "2026-03-28T07:00:00Z", end: "2026-03-29T06:00:00Z", next: "2026-03-30T06:00:00Z"},
+		{name: "ams daily first summary on the fall-back day is 25 h", s: settings(Daily, 8, "Europe/Amsterdam"), due: "2026-10-25T07:00:00Z", now: "2026-10-25T07:01:00Z",
+			start: "2026-10-24T06:00:00Z", end: "2026-10-25T07:00:00Z", next: "2026-10-26T07:00:00Z"},
+		{name: "monthly is a calendar month (February)", s: settings(Monthly, 8, "UTC"), due: "2027-03-01T08:00:00Z", now: "2027-03-01T08:02:00Z",
+			last: ptr("2027-02-20T08:00:00Z"), start: "2027-02-01T08:00:00Z", end: "2027-03-01T08:00:00Z", next: "2027-04-01T08:00:00Z"},
 		{name: "period capped at a year", s: settings(Weekly, 8, "UTC"), due: "2026-11-09T08:00:00Z", now: "2026-11-09T08:03:00Z",
 			last: ptr("2024-01-01T08:00:00Z"), start: "2025-11-08T08:00:00Z", end: "2026-11-09T08:00:00Z", next: "2026-11-16T08:00:00Z"},
 	}
@@ -266,5 +280,82 @@ func TestBasisAndEffective(t *testing.T) {
 			t.Fatalf("basis %q not unique or too long", b)
 		}
 		seen[b] = true
+	}
+}
+
+// TestPeriodBefore: one calendar period in the user's zone.
+func TestPeriodBefore(t *testing.T) {
+	t.Parallel()
+	ams := mustZone(t, "Europe/Amsterdam")
+	for _, c := range []struct {
+		f         Frequency
+		zone      *time.Location
+		end, want string
+	}{
+		{Daily, time.UTC, "2026-11-09T12:00:00Z", "2026-11-08T12:00:00Z"},
+		{EveryOtherDay, time.UTC, "2026-11-09T12:00:00Z", "2026-11-07T12:00:00Z"},
+		{Weekly, time.UTC, "2026-11-09T12:00:00Z", "2026-11-02T12:00:00Z"},
+		{Monthly, time.UTC, "2026-03-01T08:00:00Z", "2026-02-01T08:00:00Z"},
+		// A day the previous month lacks clamps to its last day.
+		{Monthly, time.UTC, "2026-03-31T08:00:00Z", "2026-02-28T08:00:00Z"},
+		{Monthly, time.UTC, "2026-03-29T08:00:00Z", "2026-02-28T08:00:00Z"},
+		{Monthly, time.UTC, "2028-03-31T08:00:00Z", "2028-02-29T08:00:00Z"},
+		{Monthly, time.UTC, "2028-03-30T08:00:00Z", "2028-02-29T08:00:00Z"},
+		{Monthly, time.UTC, "2028-03-29T08:00:00Z", "2028-02-29T08:00:00Z"},
+		{Monthly, time.UTC, "2026-05-31T08:00:00Z", "2026-04-30T08:00:00Z"},
+		{Monthly, time.UTC, "2026-01-31T08:00:00Z", "2025-12-31T08:00:00Z"},
+		// Same local time across the spring-forward change (CEST → CET).
+		{Monthly, ams, "2026-03-31T10:00:00Z", "2026-02-28T11:00:00Z"},
+		{Daily, ams, "2026-03-29T06:00:00Z", "2026-03-28T07:00:00Z"},
+		{Daily, ams, "2026-10-25T07:00:00Z", "2026-10-24T06:00:00Z"},
+		{Weekly, ams, "2026-03-30T06:00:00Z", "2026-03-23T07:00:00Z"},
+		{Weekly, mustZone(t, "America/New_York"), "2026-03-09T12:00:00Z", "2026-03-02T13:00:00Z"},
+	} {
+		if got := periodBefore(at(t, c.end), c.f, c.zone); !got.Equal(at(t, c.want)) {
+			t.Errorf("%s %s before %s = %s, want %s", c.f, c.zone, c.end, got.UTC().Format(time.RFC3339), c.want)
+		}
+	}
+}
+
+// TestPreviewStart: the preview covers one full period up to now, never
+// "since the last due time".
+func TestPreviewStart(t *testing.T) {
+	t.Parallel()
+	now := at(t, "2026-11-09T11:00:00Z")
+	for _, c := range []struct {
+		s    Settings
+		want string
+	}{
+		{settings(Daily, 8, "Europe/Amsterdam"), "2026-11-08T11:00:00Z"},
+		{settings(EveryOtherDay, 8, "UTC"), "2026-11-07T11:00:00Z"},
+		{settings(Weekly, 8, "UTC"), "2026-11-02T11:00:00Z"},
+		{settings(Monthly, 8, "UTC"), "2026-10-09T11:00:00Z"},
+		{settings(Never, 8, "UTC"), "2026-11-02T11:00:00Z"},
+		{settings(Daily, 8, "Mars/Base"), "2026-11-08T11:00:00Z"},
+	} {
+		if got := previewStart(c.s, now); !got.Equal(at(t, c.want)) {
+			t.Errorf("%+v: %s, want %s", c.s, got.UTC().Format(time.RFC3339), c.want)
+		}
+	}
+	// A month back from the 29th-31st clamps to the previous month's last
+	// day (a leap year included), so the preview covers a whole month.
+	for _, c := range []struct{ now, want string }{
+		{"2026-03-31T11:00:00Z", "2026-02-28T11:00:00Z"},
+		{"2028-03-31T11:00:00Z", "2028-02-29T11:00:00Z"},
+		{"2026-12-31T11:00:00Z", "2026-11-30T11:00:00Z"},
+	} {
+		got := previewStart(settings(Monthly, 8, "UTC"), at(t, c.now))
+		if !got.Equal(at(t, c.want)) {
+			t.Errorf("monthly preview at %s: %s, want %s", c.now, got.UTC().Format(time.RFC3339), c.want)
+		}
+		p := summaryPeriod{from: got, until: at(t, c.now), loc: time.UTC, frequency: Monthly, preview: true}
+		if w := p.window(); w != "the last month" {
+			t.Errorf("monthly preview at %s: %q", c.now, w)
+		}
+	}
+	// Across the fall-back night in Amsterdam a day is 25 hours.
+	got := previewStart(settings(Daily, 8, "Europe/Amsterdam"), at(t, "2026-10-25T12:00:00Z"))
+	if want := at(t, "2026-10-24T11:00:00Z"); !got.Equal(want) {
+		t.Errorf("fall back: %s", got.UTC())
 	}
 }

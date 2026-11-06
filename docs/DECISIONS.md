@@ -14995,3 +14995,127 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/graph/schema/summary.graphqls`,
   `web/src/features/notifications/summary-section.tsx`,
   `docs/guides/notifications.md#summary-e-mail`.
+- **Amendment 1 (2026-11-06, a clearer summary: the full period,
+  standout failures, per-job detail, a shared e-mail layout; decided by
+  user (plan `plans/robust-giggling-tide.md`) and agent (details);
+  proposed):**
+  1. **At least one full period.** `decide` starts the period at
+     `min(last_period_end, periodBefore(end))`: one calendar period in the
+     user's zone before the end (`AddDate` −1 day, −2 days, −7 days, −1
+     month, so 23/25 hours on DST days; a month back from a day the
+     previous month lacks is that month's last day at the same local time,
+     31 Mar → 28/29 Feb, never the normalized 3 Mar; scheduled monthly
+     periods end on day 1–28, so only previews meet it). A summary never covers less (a
+     settings change such as weekly 08:00 → daily 12:00 gave 08:00–12:00
+     before); after an outage it still covers the whole gap (one summary,
+     capped at a year); after a settings change it may overlap the
+     previous summary (an hour shown twice is better than hours missing).
+     The preview covers `periodBefore(now)` (the last 24 hours, 48 hours,
+     7 days or month up to now; "never" a week) and still never touches
+     `last_period_end`.
+  2. **One row per job, one status per job, worst first.** A new scoped
+     query `SummaryJobActivity` (replacing `SummaryRunCounts`) gives per
+     job the run counts by status (and successful runs with warnings),
+     the bytes stored, the newest run and the newest failure's error code;
+     `JobStorageTotals` adds the stored total, `SummaryRestoreCounts` the
+     requested restores (internal test-restore restores excluded). Status
+     rule, first match: **Failed** (a failed run or test restore),
+     **Missed** (`job_missed_state`, or scheduled without success),
+     **Partial** (a partial run; "Warnings" when only runs with warnings),
+     **Held** (retention holds), **OK**, **No run**, **Disabled**. The jobs
+     table (Status | Job | OK/Fail | Last run | Size | Stored) lists every
+     job worst first, then by name; a failure shows bekup's fixed text of
+     the error code (`summary.failureTexts`, covering every `jobs.Code*`
+     and runner reason; unknown codes show "backup failed"), never the
+     stored message or server output. At most 100 rows: problems first;
+     the rest becomes one line ("+N more jobs without problems"; if more
+     than 99 jobs have problems, 99 are listed and the line counts the
+     others and is a failure row).
+  3. **Subject, title, banner.** The subject names the worst state first
+     (`[bekup] Daily summary: 2 FAILED, 1 missed`, `… needs attention`,
+     `… all 14 jobs OK`); the inbox title counts worst first (`Daily
+     summary: 2 failed, 1 missed, 11 OK`) and the inbox body still carries
+     counts only (no names). The e-mail opens with a status strip and a
+     banner (failure when a job failed or missed, warning for other
+     problems, a low destination or security alerts, else OK) whose big
+     word ("2 FAILED", "ATTENTION", "ALL OK") always carries the meaning
+     in text, then key figures, the jobs table, a restores table (only when
+     there were restores or test restores), the storage table (staff) with
+     a warning row for low space and the security table (admins; above
+     the jobs table when alerts were raised, so a long table never pushes
+     them down, at the end when there were none). The event detail gains
+     `catch_up` (`decide`'s `CatchUp`, a bool): the note "the previous one
+     could not be sent on time" follows it, never the period length (a
+     switch from monthly to daily gives a long first period without a
+     missed summary). The stored inbox body carries only the job and run
+     counts of the recipient's scope (no names, no storage or security
+     part: the row outlives a role change). Job and destination names go
+     through `notify.DisplayName`, which shows control and format
+     characters (Unicode Cf: bidi overrides/isolates, zero-width ones) as
+     spaces.
+  4. **Low space** reuses the D-225 rule (`destinations.LowSpace`: less
+     than a tenth of the total free, or less than the newest full backup
+     set) on the cached answer only (`destinations.Service.CachedSpace`);
+     there is no separate summary threshold.
+  5. **Shared e-mail layout (`internal/notify/email`).** Every bekup
+     e-mail (verification, test mails, notifications, the summary) uses
+     one layout: tables with `role="presentation"`, a 600 px centred card,
+     inline styles as the baseline; `<style>` blocks only for enhancements
+     (phones: stacked figure tiles, hidden columns; table hairlines and the
+     monospace numbers; dark mode via `prefers-color-scheme` and
+     `[data-ogsc]`/`[data-ogsb]` for Outlook.com); Outlook for Windows
+     gets a fixed-width wrapper and a font block from fixed
+     `template.HTML` constants (html/template drops comments; never built
+     from data). Colors are hex copies of the web theme's tokens
+     (`theme.css`, converted like `web/src/lib/color.ts`; a test fails
+     when they drift) and every text/background pair passes WCAG AA in
+     both schemes (test). `Notice` gains optional `Preheader`, `Banner`,
+     `Figures` (≤ 4), `Tables` (≤ 4 tables, ≤ 8 columns, ≤ 120 rows each,
+     ≤ 160 in total, cells bounded and control-free, a status column
+     whose cell is always a word, an optional per-row `Note`); the plain
+     text part gets the banner line (`!! … !!` for failures), the figures
+     and aligned tables with `>>` on problem rows. No images, scripts,
+     remote CSS or fonts. Outlook for Windows (Word) shows backgrounds only
+     as `bgcolor` on cells: every cell of a problem row carries the tint
+     and a status badge is a cell of its own. **Size:** Gmail clips a
+     message after 102 KB; whether it counts the decoded HTML or the part
+     as sent is not documented, so the budget is on the larger one: the
+     HTML part quoted-printable encoded as `email.NewMessage` sends it
+     (`email.EncodedLen`; `=` becomes `=3D`, every non-ASCII byte three
+     bytes, soft line breaks), at most `maxSummaryHTML` = 90 000 bytes.
+     The row cap alone cannot guarantee it: html/template writes `&`
+     and `"` as five bytes and `<` as four, and an emoji is four bytes
+     decoded and twelve encoded, so 99 rows of such names came to about
+     117 KB of HTML. `fitJobs` therefore renders the summary and, when the
+     encoded HTML is over the budget, lists fewer jobs (the most that fit,
+     by bisection; OK rows go first, then the excess problem rows) and
+     counts the others in the "+N more" line, so the restores, storage and
+     security parts, the button and the footer always arrive. Plain names
+     never hit it (100 rows of 31-character names: about 72 KB encoded);
+     `TestSummaryWorstCaseSize` checks names of `&`, `"`, `<`, emoji,
+     umlauts and ASCII (decoded < 100 KB, encoded ≤ 90 000 bytes).
+  - **Alternatives considered:** a minimum period only for the first
+    summary after a change (an hour change would still give a short one);
+    an MJML/CSS-inliner toolchain (a new dependency; html/template with
+    fixed palettes keeps escaping in one place); listing only jobs that
+    need attention (all-OK cannot be seen at a glance); a separate
+    free-space threshold for the summary (two rules for one badge); three
+    tables as in the plan (the admins' security count needs a fourth).
+  - **Consequences:** a summary is never shorter than one period and may
+    repeat part of the previous one after a settings change; the per-job
+    table makes e-mails larger (bounded by the row cap and the HTML
+    budget, which may list fewer rows for long or escaped names); the
+    summary renders up to eight times while it fits the budget; four
+    new read indexes (`00041_summary_indexes.sql`: `runs_job_failed_idx`,
+    `restores_finished_at_idx`, `test_restore_items_restore_idx`,
+    `test_restores_finished_at_idx`) bound the content queries. Security impact: none new: the content follows the same scope
+    rule and view operations; error texts are bekup's own fixed strings
+    per code; the only raw HTML is the fixed Outlook constants; every
+    value is escaped by html/template.
+  - **Related:** D-021, D-178, D-225; `internal/notify/summary/`
+    (`schedule.go`, `build.go`, `codes.go`, `content.go`),
+    `internal/notify/email/` (`template.go`, `view.go`, `palette.go`,
+    `templates/`, `testdata/`), `internal/db/queries/summary.sql`,
+    `internal/destinations/space.go`,
+    `internal/db/migrations/00041_summary_indexes.sql`,
+    `docs/guides/notifications.md#summary-e-mail`.

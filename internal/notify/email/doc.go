@@ -22,7 +22,10 @@
 //     password is write-only in the API and never logged.
 //   - Every header value is validated (no CR/LF or other control
 //     characters) and encoded; bodies are rendered with html/template
-//     (auto-escaping), carry no remote images and no tracking.
+//     (auto-escaping), carry no remote images and no tracking. The shared
+//     layout (D-226 amendment 1) is tables with inline styles; its only
+//     raw HTML is the fixed Outlook constants in view.go, its colors the
+//     theme copies in palette.go.
 //   - Verification links carry a 256-bit code; the database stores only a
 //     keyed MAC bound to the user and the address. Codes are single use,
 //     expire after 24 hours and can only be redeemed by the signed-in

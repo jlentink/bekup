@@ -14,6 +14,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/scheduler"
 	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
@@ -208,7 +209,7 @@ func (s *Service) SetSettings(ctx context.Context, in Settings) (View, error) {
 	return out, err
 }
 
-// SendPreview emits the caller's summary of the current period so far
+// SendPreview emits the caller's summary of the last full period up to now
 // (marked as a preview; inbox and, with a verified address, e-mail
 // through the normal pipeline: preferences and the flood rule apply).
 // Rate limited per user; an account that can see no job gets a field
@@ -248,32 +249,28 @@ func (s *Service) SendPreview(ctx context.Context) (Preview, error) {
 	}
 	eff, _ := effective(row, s.o.Defaults)
 	now := s.o.Now().Truncate(time.Second)
-	start := previewStart(eff, row, now)
+	start := previewStart(eff, now)
 	if _, err := notify.Emit(ctx, q, notify.Event{
 		Type: notify.SummaryPeriodic, Subject: notify.Subject{UserID: u.ID},
-		Detail: eventDetail(start, now, eff.Timezone, eff.Frequency, true),
+		Detail: eventDetail(start, now, eff.Timezone, eff.Frequency, true, false),
 	}); err != nil {
 		return Preview{}, err
 	}
 	return Preview{PeriodStart: start, PeriodEnd: now, EmailVerified: u.EmailVerifiedAt != nil}, nil
 }
 
-// previewStart is the start of the current period: the end of the last
-// summary, else the newest due time before now (a week for "never").
-func previewStart(eff Settings, row *sqlc.UserSummarySetting, now time.Time) time.Time {
-	if row != nil && row.LastPeriodEnd != nil && row.LastPeriodEnd.Before(now) && now.Sub(*row.LastPeriodEnd) <= maxPeriod {
-		return *row.LastPeriodEnd
+// previewStart is the start of the preview: one full period before now
+// in the user's zone (periodBefore; a week for "never"), so the preview
+// shows "the last 24 hours / 7 days up to now". It never reads or moves
+// last_period_end.
+func previewStart(eff Settings, now time.Time) time.Time {
+	f := eff.Frequency
+	if f == Never {
+		f = Weekly
 	}
-	if eff.Frequency == Never {
-		return now.Add(-Weekly.nominal())
-	}
-	anchor := now
-	if row != nil && row.NextDueAt != nil {
-		anchor = *row.NextDueAt
-	}
-	p, err := eff.plan(anchor)
+	loc, err := scheduler.LoadZone(eff.Timezone)
 	if err != nil {
-		return now.Add(-eff.Frequency.nominal())
+		loc = time.UTC
 	}
-	return previousOccurrence(p, now, eff.Frequency.nominal())
+	return periodBefore(now, f, loc)
 }
