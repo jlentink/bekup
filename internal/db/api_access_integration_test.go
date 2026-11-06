@@ -45,7 +45,7 @@ func TestExternalRoleAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v, err := sqlc.New(ext).ExternalSchemaVersion(ctx); err != nil || int64(v) != latest {
+	if v, err := sqlc.New(ext).ExternalSchemaVersion(ctx); err != nil || v != latest {
 		t.Fatalf("api.schema_version() = %d, %v; want %d", v, err, latest)
 	}
 	// Other roles' sessions are refused.

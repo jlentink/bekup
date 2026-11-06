@@ -244,7 +244,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
 | [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes) |
 | [D-221](#d-221-sftp-uploads-verify-the-stored-size-by-path-after-closing-cloud-backed-gateways-drop-messages-carry-a-curated-detail) | SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail | proposed |
-| [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check) |
+| [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check; amendment 2: same-key Puts serialized per process) |
 | [D-223](#d-223-read-only-view-of-the-runners-target-allowlist-on-the-network-page-gettargetpolicy) | Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`) | proposed |
 | [D-224](#d-224-runnertoml-log-and-a-debug-line-for-every-refused-target) | `runner.toml` `[log]` and a debug line for every refused target | proposed |
 | [D-225](#d-225-storage-views-bekups-stored-bytes-per-destination-and-job-total-and-free-space-reported-on-demand-by-disk-sftp-and-webdav) | Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV | proposed |
@@ -14687,6 +14687,37 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
     `internal/storage/webdav/webdav.go`, `internal/destinations/config.go`,
     `internal/destinations/service.go`,
     `internal/destinations/location.go`, `docs/guides/destinations.md`.
+- **Amendment 2 (2026-11-06, conformance failure on Apache mod_dav and
+  ownCloud; decided by agent; proposed):**
+  1. **Same-key Puts take turns in the process.** The `ConcurrentPuts`
+     conformance test showed that Apache mod_dav checks `Overwrite: F`
+     and renames in two steps: of eight concurrent Puts of one key three
+     answered 201, each replacing the previous object (a silent overwrite
+     the probe cannot see, since it runs sequentially); ownCloud's chunked
+     MOVE answered one of them with 404. Put now holds a per-resource
+     lock of the process (`putLocks`, keyed by the full resource URL, so
+     it spans every destination opened in the process; context-aware,
+     dropped from the map when unused) from the existence check to the
+     MOVE, so every later Put of the key sees the object and answers
+     `ErrAlreadyExists`.
+  - **Alternatives considered:** `LOCK` on the final URL before the MOVE
+    (lock-null resources, see above; not supported by every server and
+    still needs a fallback); relaxing the conformance test for WebDAV
+    (the Destination contract "Put never overwrites" would no longer
+    hold within one process).
+  - **Consequences:** same-key Puts within one process are serialized
+    (they wait for each other; distinct keys are unaffected). Residual:
+    across processes (serve and `bekup worker`) the refusal still rests on
+    the server's MOVE; bekup does not write one key from two processes
+    (artifact and manifest keys carry the run, runs of a job never
+    overlap), and an overwrite would still be caught by the artifact's
+    SHA-256 and the signed manifest. Security impact: closes a silent
+    overwrite path within a process; no new trust.
+  - **Related:** `internal/storage/webdav/putlock.go`,
+    `internal/storage/webdav/webdav.go`,
+    `internal/storage/webdav/putlock_test.go`
+    (`TestConcurrentPutsRacyServer`: a fake server with Apache's two-step
+    MOVE), `internal/storage/storagetest` (`ConcurrentPuts`).
 
 ## D-223: Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`)
 

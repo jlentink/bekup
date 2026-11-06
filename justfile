@@ -218,6 +218,10 @@ gen:
 # quality
 # ---------------------------------------------------------------------------
 
+[doc('Run quality test locally')]
+[group('quality')]
+qa: lint test test-scripts test-int
+
 [doc('Lint Go (golangci-lint incl. gosec, also for Linux), shell scripts (shellcheck), proto (buf lint/format/breaking) and, if present, web (eslint + tsc)')]
 [group('quality')]
 [script]

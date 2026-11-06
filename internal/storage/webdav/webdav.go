@@ -379,7 +379,9 @@ func (d *Destination) mkcolAll(ctx context.Context, segs []string, floor int) er
 // ".<hex>.partial" (generic: one PUT with chunked transfer encoding;
 // Nextcloud: the chunked-upload API), are hashed with storage.CopyHashed
 // and size-checked, and are published with MOVE "Overwrite: F", which the
-// overwrite probe has shown the server to honor.
+// overwrite probe has shown the server to honor. Puts of one key take
+// turns within the process (putLocks), from the existence check to the
+// MOVE.
 func (d *Destination) Put(ctx context.Context, key storage.Key, r io.Reader, opts storage.PutOptions) (storage.ObjectInfo, error) {
 	if err := storage.CheckPutOptions(d.Capabilities(), opts); err != nil {
 		return storage.ObjectInfo{}, err
@@ -396,6 +398,11 @@ func (d *Destination) Put(ctx context.Context, key storage.Key, r io.Reader, opt
 	}
 	final := d.join(lay.files, key.Segments())
 	parent := final[:len(final)-1]
+	unlock, err := putLocks.lock(ctx, d.urlOf(final, false))
+	if err != nil {
+		return storage.ObjectInfo{}, err
+	}
+	defer unlock()
 	if _, err := d.statObject(ctx, final); err == nil {
 		return storage.ObjectInfo{}, storage.ErrAlreadyExists
 	} else if !errors.Is(err, storage.ErrNotFound) {

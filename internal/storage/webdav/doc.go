@@ -35,9 +35,10 @@
 // upload of every opened destination (see probe.go); a server that
 // ignores it is never written to (storage.CodeOverwriteIgnored).
 //
-// Residual trust in the server: WebDAV has no exclusive create, so the
-// refusal to overwrite is the server's MOVE implementation (most check and
-// rename under their own locks); bekup never writes the same key twice
-// concurrently. Data integrity against a malicious server comes from age
+// WebDAV has no exclusive create, and some servers (Apache mod_dav) check
+// "Overwrite: F" and rename in two steps, so Puts of one key take turns
+// within the process (putLocks, D-222 amendment 2). Residual trust in the
+// server: across processes the refusal to overwrite is the server's MOVE
+// implementation; bekup never writes the same key from two processes. Data integrity against a malicious server comes from age
 // encryption and the signed manifest, not from this backend.
 package webdav
