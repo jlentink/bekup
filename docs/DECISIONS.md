@@ -242,7 +242,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed (amendment 1: review findings) |
 | [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
 | [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
-| [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes) |
+| [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes; amended by D-229: tokens without expiry) |
 | [D-221](#d-221-sftp-uploads-verify-the-stored-size-by-path-after-closing-cloud-backed-gateways-drop-messages-carry-a-curated-detail) | SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail | proposed |
 | [D-222](#d-222-webdav-destination-own-client-move-overwrite-f-proven-by-a-runtime-probe-nextcloudowncloud-chunked-uploads-certificate-pinning-a-webdav-exception-to-d-018-basic-over-https-only) | WebDAV destination: own client, MOVE "Overwrite: F" proven by a runtime probe, Nextcloud/ownCloud chunked uploads, certificate pinning (a WebDAV exception to D-018), Basic over HTTPS only | proposed (amendment 1: empty chunked uploads, listing spelling, Nextcloud user id in the overlap check; amendment 2: same-key Puts serialized per process) |
 | [D-223](#d-223-read-only-view-of-the-runners-target-allowlist-on-the-network-page-gettargetpolicy) | Read-only view of the runner's target allowlist on the Network page (`GetTargetPolicy`) | proposed |
@@ -250,6 +250,8 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-225](#d-225-storage-views-bekups-stored-bytes-per-destination-and-job-total-and-free-space-reported-on-demand-by-disk-sftp-and-webdav) | Storage views: bekup's stored bytes per destination and job; total and free space reported on demand by disk, SFTP and WebDAV | proposed (amended by D-227) |
 | [D-226](#d-226-periodic-summary-e-mail-per-user-frequency-and-local-time-one-summary-per-period-built-at-delivery-from-the-recipients-access) | Periodic summary e-mail: per-user frequency and local time, one summary per period, built at delivery from the recipient's access | proposed (amended by D-227) |
 | [D-227](#d-227-scheduled-destination-space-check-stored-on-the-destination-row-low-space-notification) | Scheduled destination space check, stored on the destination row; low-space notification | proposed (amendment 1: review findings) |
+| [D-228](#d-228-accepted-security-risks-per-condition-one-month-one-year-or-forever-by-admins-and-for-their-jobs-backup-owners-the-badge-stays) | Accepted security risks: per condition, one month, one year or forever, by admins and (for their jobs) backup owners; the badge stays | proposed (amendment 1: review findings) |
+| [D-229](#d-229-api-tokens-without-expiry-as-an-explicit-choice-amends-d-220) | API tokens without expiry, as an explicit choice (amends D-220) | proposed |
 
 ---
 
@@ -13568,7 +13570,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-220: External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views
 
 - **Date:** 2026-11-03
-- **Status:** proposed
+- **Status:** proposed (amended by D-229: tokens without expiry)
 - **Decided by:** user (separate process with its own minimal DB role;
   per-job tokens created by an admin or the job's owner with step-up,
   mandatory expiry of 1–365 days, revocable, shown once, stored hashed;
@@ -15326,3 +15328,217 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   `internal/graph/resolvers/storage.go`,
   `web/src/features/destinations/destination-storage.tsx`,
   `docs/guides/destinations.md`, `docs/guides/notifications.md`.
+
+---
+
+## D-228: Accepted security risks: per condition, one month, one year or forever, by admins and (for their jobs) backup owners; the badge stays
+
+- **Date:** 2026-11-07
+- **Status:** proposed (amendment 1: review findings)
+- **Decided by:** user (admins and owners can accept an insecure
+  transport or a privileged role; an accepted risk is no open security
+  issue and is not flagged in e-mail or on the main dashboard; durations
+  of one month, one year or forever; a separate page lists every accepted
+  risk; acceptable kinds: the instance posture, connection TLS, privileged
+  roles, SMTP and the encryption opt-out; owners only for risks of jobs
+  they own; the restore and test-restore privileged-target
+  acknowledgement stays; badges and the plain-HTTP banner stay, muted
+  with "accepted until"; admins and maintainers see every acceptance,
+  owners those of their jobs; a warning 7 days before expiry; a count
+  line in the admins' summary) and agent (the details below)
+- **Context:** D-001 flags every weakened setting permanently: daily
+  posture reminders (insecure transport, app-database TLS, single
+  account, unpinned image), open items on the dashboard's security tile
+  (unencrypted jobs, insecure transport, privileged roles) and the
+  security alert count of the periodic summary. Operators cannot always
+  control the environment (a managed database without a CA to pin, a
+  legacy server without TLS, a role the provider does not let them
+  restrict), so the flags turn into noise and real problems drown.
+- **Decision:**
+  1. **What is accepted.** One row in `risk_acceptances`
+     (`00044_risk_acceptances.sql`) per acceptance: a `risk_kind`
+     (`insecure_transport`, `insecure_db_tls`, `insecure_db_roles`,
+     `unpinned_image`, `connection_tls`, `privileged_role`,
+     `smtp_unencrypted`, `encryption_opt_out`), the subject (a connection,
+     a job, or none for instance-wide kinds; CHECK per kind), the
+     **condition** (SHA-256 of a canonical, length-prefixed encoding built
+     only by `internal/riskaccept` from the database or the process
+     configuration, plus a short display text), the duration (`month`,
+     `year`, `forever`), the reason (1–500 characters), who and when.
+     The condition holds the facts that make it a different risk when they
+     change: TLS mode and endpoint of a connection; privilege verdict,
+     sorted reasons, endpoint and role; the opt-out time; SMTP mode and
+     endpoint; app-database TLS mode and CA choice; the base URL. An
+     acceptance covers **exactly** that condition: anything else is
+     flagged again. The browser never sends a condition: it names the
+     `conditionId` it was shown and the server rebuilds the condition under
+     a share lock of the subject (a different one is CONFLICT).
+  2. **Rows.** `expires_at` follows from the duration on the database
+     clock (CHECK; NULL = forever). One live acceptance per kind and
+     subject (partial unique index; a new one supersedes the old). A guard
+     trigger makes everything immutable except `warned_at` (once) and the
+     end (`ended_at`, `ended_by`, `end_reason`; once, final); `bekup_app`
+     has UPDATE only on those columns and no DELETE. End reasons:
+     revoked, superseded, expired, condition_changed, resolved,
+     subject_deleted, acceptor_lost_rights.
+  3. **Covered** means: not ended, not expired, the hash matches the
+     current condition, and the acceptor still holds the right (an active
+     admin, or for a job's opt-out an active user who still owns the job;
+     like `api_token_valid`). A lookup error covers nothing (fail closed:
+     the risk stays flagged). Instance kinds are judged per process (serve
+     and worker may run different `bekup.toml`s): each checks its own
+     condition, and the sweep never ends an instance acceptance because
+     another process's condition differs.
+  4. **Who.** `risk.list` (staff + OwnerList: maintainers read everything,
+     owners the acceptances on jobs they own), `risk.accept` and
+     `risk.revoke` (admins; owners with a job they own, i.e. only
+     `encryption_opt_out`; maintainers never, also not as owners, D-067;
+     fresh step-up). The service refuses non-admins for kinds without a
+     job besides the policy (defence in depth). Revoking is allowed on any
+     acceptance the caller could make (an owner may revoke an admin's
+     acceptance on their job).
+  5. **Audit and alerts.** `risk.accepted` (with the reason as `note`,
+     the replaced acceptance) raises `risk_accepted` (warning) or
+     `risk_accepted_permanently` (error, forever);
+     `risk.acceptance_revoked` raises nothing (stricter);
+     `risk.acceptance_expiring` (7 days before, once, the hourly security
+     check) and `risk.acceptance_ended` (expired, condition_changed,
+     acceptor_lost_rights; not resolved/subject_deleted) raise
+     `risk_acceptance_expiring` / `risk_acceptance_ended` to the admins
+     and as an account alert to the acceptor. All fail closed. Alert
+     details carry the kind, id, duration, end date and end reason, never
+     the reason text or the condition.
+  6. **What changes for an accepted risk.** The hourly posture reminder
+     is skipped; the startup posture entry is still recorded (fail
+     closed) but carries `risk_accepted`, `risk_acceptance_id`,
+     `accepted_until`, and the audit observer raises no alert for it; the
+     startup WARN line stays. The dashboard's security tile computes the
+     acceptable findings from the server's `Query.securityRisks`
+     (accepted items leave the open list; the open instance and SMTP
+     risks appear there for the first time; a failed query flags
+     everything) and shows "N accepted risks" linking to the page. The
+     summary needs no query change (accepted posture raises no event) and
+     gets one neutral row for admins: accepted risks, those without an
+     end date and API tokens without expiry (D-229). Badges stay
+     (D-001) in a muted, signed-off variant ("Accepted until …" /
+     "Accepted, no end date", `hatch-accepted`); the plain-HTTP banner
+     stays for everyone and names an accepted risk when signed in.
+  7. **What does not change:** the one-time alerts at the moment of a
+     weakening (`security.opt_out`, `connection.tls_downgraded`), the audit
+     entries, the restore and test-restore privileged-target
+     acknowledgements (D-168, D-170, D-173), and every check that refuses
+     an operation.
+  8. **Ending.** The hourly `security_check` sweeps (system actor,
+     conditional updates, so concurrent processes audit once): warns,
+     ends expired ones and those whose acceptor lost the right, and for
+     connection and job subjects those whose condition changed, is gone
+     or whose subject was deleted. `connections.Service` ends a
+     connection's live acceptances in the change's transaction when its
+     TLS mode (TLS kind) or host, port or username (both kinds) change
+     (`Options.RiskEnder`), so a change and a change back never re-cover
+     an old acceptance. An opt-out's condition is its time, so a later
+     opt-out is always a new risk.
+  9. **API and UI.** `Query.securityRisks`, `Query.riskAcceptances`,
+     `Mutation.acceptRisk`, `Mutation.revokeRiskAcceptance`
+     (`riskaccept.graphqls`). The page `/risks` ("Accepted risks", every
+     role) lists the open risks the caller may accept and the ledger
+     (active / ended / all) with revoke; the accept dialog (1 month /
+     1 year / forever with a warning, reason) opens from the page, the
+     connection pages (TLS, privileged role), the job encryption panel,
+     the SMTP and configuration pages. Badges read the acceptance from
+     the one `securityRisks` query (cache), not from fields on each type.
+- **Alternatives considered:** snoozing alerts per kind (rejected: it
+  does not reopen when the condition changes and silences new
+  occurrences); acknowledging single alerts with the reserved
+  `monitor.alert_acknowledge` (rejected: reminders are created again
+  every day, and dashboard findings are not alerts); hiding the badges of
+  accepted risks (rejected by the user, D-001); letting owners accept
+  connection risks for their jobs (rejected by the user: it would silence
+  them for everyone); skipping the restore acknowledgement for an
+  accepted privileged role (rejected by the user); per-object GraphQL
+  acceptance fields with loaders (deferred: one cached `securityRisks`
+  query serves every badge with less code).
+- **Consequences:** fewer, more meaningful security flags; every
+  decision is attributable, audited, alerted and reversible. Security
+  impact: a stolen admin (or owner) session could hide a risk; mitigated
+  by the fresh step-up, the audit entry, the alert to all admins (error
+  level for forever), the badge that stays, the condition fingerprint
+  (any change reopens it), the acceptor-rights check and the summary
+  line. A forever acceptance silences the reminders of that exact
+  condition until someone revokes it: that is the user's choice and is
+  always listed.
+- **Related:** `internal/riskaccept`, `internal/db/migrations/00044_risk_acceptances.sql`,
+  `internal/db/queries/riskaccept.sql`, `internal/monitor/security.go`,
+  `internal/app/risks.go`, `internal/app/audit.go`,
+  `internal/notify/security.go`, `internal/notify/summary`,
+  `internal/connections/service.go`, `internal/graph/schema/riskaccept.graphqls`,
+  `web/src/features/accepted-risks`, `web/src/features/dashboard`,
+  `web/src/components/status/security-badge.tsx`, D-001, D-067, D-095,
+  D-100, D-142, D-168, D-180, D-190, D-207, D-212, D-229; plan task 6.22.
+
+- **Amendment 1 (2026-11-07, review findings; agent):**
+  1. The connection conditions include the **route** (direct, or the SSH
+     bastion's user, host and port): removing or moving a tunnel is a
+     different risk, and `connections.Service.Update` ends the
+     acceptances on a route change too. The SMTP condition includes the
+     username (AUTH may travel without TLS), the app-database TLS
+     condition the database host.
+  2. Instance and SMTP risks and their acceptances (condition text,
+     reason) are **admins only**, like `config.status_view` and
+     `smtp.view`; maintainers see the connection and job ones.
+  3. SMTP acceptances are swept like subjects (the settings are in the
+     database, the same for every process; a process without the SMTP
+     service, a worker, leaves them alone), so a change and a change back
+     never re-cover.
+  4. A connection without a stored privilege verdict (a failed or missing
+     test) keeps its privileged-role acceptance instead of ending it as
+     resolved. Residual: a verdict that flips privileged → not privileged
+     → privileged with the same reasons between two hourly sweeps is
+     covered again (restore gating is unaffected).
+  5. An insert guard sets `created_at = now()` and clears the warning and
+     end columns on every new row (no backdated or pre-ended rows, also
+     not from `bekup_app`).
+  6. A concurrent second acceptance of the same risk answers CONFLICT; the
+     UI reloads the risks after a CONFLICT and the badges read them
+     cache-and-network.
+
+---
+
+## D-229: API tokens without expiry, as an explicit choice (amends D-220)
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (API access gets a "forever" option; admins and
+  owners, i.e. whoever may create tokens, with a security alert and a
+  permanent badge) and agent (the details below)
+- **Context:** D-220 made the expiry mandatory (1–365 days) and listed
+  "tokens without expiry" as rejected by the user. Some pipelines cannot
+  rotate secrets regularly; the user now wants a "never" option.
+- **Decision:**
+  1. `api_tokens.never_expires` (`00043_api_access_never_expires.sql`):
+     true exactly when `expires_at` is NULL (CHECK), so a NULL written by
+     mistake can never mean "forever"; immutable like `expires_at` (guard
+     trigger). `public.api_token_valid` accepts `never_expires OR
+     expires_at > now()`; signatures and grants are unchanged. Every other
+     validity rule stays (revocation, address allowlist, creator active
+     and still owning the job).
+  2. The service takes exactly one of `ExpiresAt` (1–365 days) and
+     `NeverExpires`; GraphQL `CreateApiTokenInput.neverExpires: Boolean!`
+     with a nullable `expiresAt` (both set or neither is VALIDATION on
+     `expiresAt`); `ApiToken.expiresAt` is nullable plus `neverExpires`.
+     `GET /api/v1/self` answers `expiresAt: null, neverExpires: true`.
+  3. `api_token.created` records `never_expires` (and `expires_at` ""),
+     which raises the new `api_token_never_expires` alert (error) next to
+     `api_token_created`. The UI offers "Never" with a warning, and the
+     token carries the permanent "Never expires" badge.
+  4. The admins' summary counts the valid tokens without expiry (D-228).
+- **Alternatives considered:** a very long expiry (10 years; rejected:
+  the same risk with a misleading date); a nullable `expiresAt` alone
+  (rejected: a client that forgets the field would create a forever
+  token).
+- **Consequences:** a leaked forever token stays valid until revoked;
+  mitigated by the address allowlist, the creator-rights rule, the alert,
+  the badge and the summary line. A down migration revokes such tokens.
+- **Related:** `internal/apiaccess`, `internal/externalapi`,
+  `internal/notify/security.go`, `web/src/features/api-access`,
+  `docs/guides/external-api.md`, D-220, D-228; plan task 6.23.

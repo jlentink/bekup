@@ -25,8 +25,8 @@ import { T } from "./messages";
 import {
   addressProblem,
   DEFAULT_EXPIRY,
-  EXPIRY_PRESETS,
-  expiresAtFor,
+  EXPIRY_CHOICES,
+  expiryInput,
   splitAddresses,
   type ExpiryPreset,
 } from "./model";
@@ -120,7 +120,7 @@ export function CreateDialog({
     const input = {
       name: n,
       jobIds: [...jobs.keys()],
-      expiresAt: expiresAtFor(expiry),
+      ...expiryInput(expiry),
       allowedCidrs: addresses.allowAny ? [] : list,
       allowAnyAddress: addresses.allowAny,
     };
@@ -248,7 +248,7 @@ export function CreateDialog({
           <fieldset className="flex flex-col gap-2" aria-describedby={ids.expiry}>
             <legend className="mb-1 text-sm font-medium">{T.create.expiry}</legend>
             <div className="flex flex-wrap gap-2">
-              {EXPIRY_PRESETS.map((d) => (
+              {EXPIRY_CHOICES.map((d) => (
                 <label
                   key={d}
                   className={cn(
@@ -265,7 +265,7 @@ export function CreateDialog({
                       setExpiry(d);
                     }}
                   />
-                  {T.create.days(d)}
+                  {d === "never" ? T.create.never : T.create.days(d)}
                 </label>
               ))}
             </div>
@@ -276,7 +276,7 @@ export function CreateDialog({
                 errors.expiresAt ? "text-destructive" : "text-muted-foreground",
               )}
             >
-              {errors.expiresAt ?? T.create.expiryHint}
+              {errors.expiresAt ?? (expiry === "never" ? T.create.neverHint : T.create.expiryHint)}
             </p>
           </fieldset>
 

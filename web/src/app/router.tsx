@@ -5,6 +5,7 @@ import { ShellSkeleton } from "@/components/shell/shell-skeleton";
 import { ForcedEnrollment, ForcedPasswordChange } from "@/features/auth/forced-flows";
 import { RequireRole } from "@/features/auth/require-role";
 import { RequireSession } from "@/features/auth/session";
+import { acceptedRisksRoutes } from "@/features/accepted-risks/routes";
 import { adminRoutes } from "@/features/admin/routes";
 import { calendarRoutes } from "@/features/calendar/routes";
 import { connectionsRoutes } from "@/features/connections/routes";
@@ -67,6 +68,7 @@ export const appRoutes: RouteObject[] = [
   ...destinationsRoutes,
   ...restoreRoutes,
   ...calendarRoutes,
+  ...acceptedRisksRoutes,
   ...jobsRoutes,
   ...runsRoutes,
   ...notificationsRoutes,

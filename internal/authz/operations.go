@@ -187,6 +187,16 @@ const (
 	OpAPITokenRevoke Operation = "api_token.revoke"
 	OpAPITokenUpdate Operation = "api_token.update" // updateApiTokenAddresses
 
+	// Accepted security risks (D-228). Admins accept and revoke every
+	// kind; backup owners (role user) only risks of a job they own (the
+	// service passes that job; other kinds pass none and are refused).
+	// Maintainers read the list but never decide. Listing is filtered by
+	// JobScope (owners: acceptances on their jobs). Changes need a fresh
+	// step-up.
+	OpRiskList   Operation = "risk.list"   // riskAcceptances, securityRisks
+	OpRiskAccept Operation = "risk.accept" // acceptRisk
+	OpRiskRevoke Operation = "risk.revoke" // revokeRiskAcceptance
+
 	// OpCalendarView is the job calendar (task 3.14, D-156): every role;
 	// the jobs are filtered by JobScope like a listing.
 	OpCalendarView Operation = "calendar.view"
@@ -437,6 +447,11 @@ var policy = map[Operation]Rule{
 	OpAPITokenList:   {Roles: adminOnly, Owner: OwnerList},
 	OpAPITokenRevoke: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
 	OpAPITokenUpdate: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
+
+	// D-228: maintainers read only; owners decide for their own jobs.
+	OpRiskList:   {Roles: staff, Owner: OwnerList},
+	OpRiskAccept: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
+	OpRiskRevoke: {Roles: adminOnly, Owner: OwnerJob, Fresh: FreshStepUp},
 
 	OpCalendarView: {Roles: staff, Owner: OwnerList},
 

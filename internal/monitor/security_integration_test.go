@@ -3,6 +3,7 @@
 package monitor
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -21,6 +22,7 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/riskaccept"
 )
 
 func TestMain(m *testing.M) { os.Exit(dbtest.Main(m)) }
@@ -186,5 +188,49 @@ func TestSecurityCheckAuditTamper(t *testing.T) {
 	}
 	if got := systemEvents(t, pool, notify.KindAuditVerifyFailed); len(got) != 2 {
 		t.Fatalf("%d alerts after a full run: %v", len(got), got)
+	}
+}
+
+// fakeRisks covers the listed posture kinds (D-228) and counts sweeps.
+type fakeRisks struct {
+	covered []string
+	sweeps  int
+}
+
+func (f *fakeRisks) Sweep(context.Context) error { f.sweeps++; return nil }
+
+func (f *fakeRisks) AcceptedPosture(context.Context) map[string]riskaccept.Coverage {
+	out := map[string]riskaccept.Coverage{}
+	for _, k := range f.covered {
+		out[k] = riskaccept.Coverage{AcceptanceID: uuid.New()}
+	}
+	return out
+}
+
+// TestSecurityCheckSkipsAcceptedPosture: an accepted posture kind gets no
+// reminder, the others still do, and every run sweeps first (D-228).
+func TestSecurityCheckSkipsAcceptedPosture(t *testing.T) {
+	d := dbtest.Migrated(t)
+	pool := d.AppPool(t)
+	risks := &fakeRisks{covered: []string{notify.KindInsecureDBTLS}}
+	c, err := NewSecurityChecker(SecurityOptions{
+		DB: pool, Auditor: audit.New(pool, audit.Options{Observer: notify.ObserveAudit}),
+		Posture: func() []string { return []string{notify.KindInsecureDBTLS, notify.KindUnpinnedImage} },
+		Risks:   risks,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(systemEvents(t, pool, notify.KindInsecureDBTLS)); n != 0 {
+		t.Fatalf("%d reminders for an accepted risk", n)
+	}
+	if n := len(systemEvents(t, pool, notify.KindUnpinnedImage)); n != 1 {
+		t.Fatalf("%d reminders for an open risk", n)
+	}
+	if risks.sweeps != 1 {
+		t.Fatalf("%d sweeps", risks.sweeps)
 	}
 }

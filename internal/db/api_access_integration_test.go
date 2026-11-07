@@ -372,7 +372,7 @@ func (f *apiFixture) tokenFrom(createdBy uuid.UUID, cidrs []netip.Prefix, jobs .
 	f.t.Helper()
 	tok := apiToken{id: uuid.New(), hash: randomHash(f.t)}
 	if _, err := f.appQ.InsertAPIToken(f.ctx, sqlc.InsertAPITokenParams{
-		ID: tok.id, Name: "ci " + tok.id.String()[:8], SecretHash: tok.hash, CreatedBy: createdBy, ExpiresAt: time.Now().Add(90 * 24 * time.Hour),
+		ID: tok.id, Name: "ci " + tok.id.String()[:8], SecretHash: tok.hash, CreatedBy: createdBy, ExpiresAt: new(time.Now().Add(90 * 24 * time.Hour)),
 		AllowedCidrs: cidrs, AllowAnyAddress: cidrs == nil,
 	}); err != nil {
 		f.t.Fatal(err)
@@ -713,13 +713,36 @@ func TestAPIScopeRule(t *testing.T) {
 		t.Fatal("expired token accepted")
 	}
 	f.wantRefusal(expired, jobB, "unauthenticated")
-	_, err := f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "long", SecretHash: randomHash(t), CreatedBy: admin, ExpiresAt: time.Now().Add(367 * 24 * time.Hour), AllowAnyAddress: true})
+	_, err := f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "long", SecretHash: randomHash(t), CreatedBy: admin, ExpiresAt: new(time.Now().Add(367 * 24 * time.Hour)), AllowAnyAddress: true})
 	if pgCode(err) != "23514" {
 		t.Fatalf("expiry beyond 366 days: %v", err)
 	}
-	_, err = f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "dup", SecretHash: userTok.hash, CreatedBy: admin, ExpiresAt: time.Now().Add(time.Hour), AllowAnyAddress: true})
+	_, err = f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "dup", SecretHash: userTok.hash, CreatedBy: admin, ExpiresAt: new(time.Now().Add(time.Hour)), AllowAnyAddress: true})
 	if pgCode(err) != "23505" {
 		t.Fatalf("duplicate secret hash: %v", err)
+	}
+
+	// No expiry (D-229): only as the explicit never_expires choice, never
+	// with a date, never as a bare NULL; such a token authenticates.
+	_, err = f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "null", SecretHash: randomHash(t), CreatedBy: admin, AllowAnyAddress: true})
+	if pgCode(err) != "23514" {
+		t.Fatalf("NULL expiry without never_expires: %v", err)
+	}
+	_, err = f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: uuid.New(), Name: "both", SecretHash: randomHash(t), CreatedBy: admin, ExpiresAt: new(time.Now().Add(time.Hour)), NeverExpires: true, AllowAnyAddress: true})
+	if pgCode(err) != "23514" {
+		t.Fatalf("never_expires with a date: %v", err)
+	}
+	forever := apiToken{id: uuid.New(), hash: randomHash(t)}
+	if _, err := f.appQ.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{ID: forever.id, Name: "forever", SecretHash: forever.hash, CreatedBy: admin, NeverExpires: true, AllowAnyAddress: true}); err != nil {
+		t.Fatalf("never-expiring token: %v", err)
+	}
+	f.exec(f.owner, "INSERT INTO api_token_jobs (token_id, job_id) VALUES ($1, $2)", forever.id, jobB)
+	if !f.authenticated(forever) || !allowed(forever, jobB) {
+		t.Fatal("never-expiring token refused")
+	}
+	// Immutable, even for the owner role (the guard).
+	if _, err := f.owner.Exec(ctx, "UPDATE api_tokens SET never_expires = false, expires_at = now() + interval '1 day' WHERE id = $1", forever.id); pgCode(err) != "42501" {
+		t.Fatalf("never_expires changed: %v", err)
 	}
 }
 
@@ -952,7 +975,7 @@ func TestAPIAddressConstraints(t *testing.T) {
 	admin := f.user(sqlc.UserRoleAdmin)
 	insert := func(cidrs []netip.Prefix, allowAny bool) error {
 		_, err := f.appQ.InsertAPIToken(f.ctx, sqlc.InsertAPITokenParams{
-			ID: uuid.New(), Name: "c", SecretHash: randomHash(t), CreatedBy: admin, ExpiresAt: time.Now().Add(time.Hour),
+			ID: uuid.New(), Name: "c", SecretHash: randomHash(t), CreatedBy: admin, ExpiresAt: new(time.Now().Add(time.Hour)),
 			AllowedCidrs: cidrs, AllowAnyAddress: allowAny,
 		})
 		return err

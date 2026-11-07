@@ -38,10 +38,14 @@ func (r *Resolver) createAPIToken(ctx context.Context, in model.CreateAPITokenIn
 	if r.APITokens == nil {
 		return nil, errAPITokensUnconfigured
 	}
-	c, err := r.APITokens.Create(ctx, apiaccess.CreateInput{
-		Name: in.Name, JobIDs: in.JobIds, ExpiresAt: in.ExpiresAt,
+	ci := apiaccess.CreateInput{
+		Name: in.Name, JobIDs: in.JobIds, NeverExpires: in.NeverExpires,
 		AllowedCIDRs: in.AllowedCidrs, AllowAnyAddress: in.AllowAnyAddress,
-	})
+	}
+	if in.ExpiresAt != nil {
+		ci.ExpiresAt = *in.ExpiresAt
+	}
+	c, err := r.APITokens.Create(ctx, ci)
 	if err != nil {
 		return nil, apiTokenError(err)
 	}
@@ -93,7 +97,7 @@ func apiTokenModel(t *apiaccess.Token) model.APIToken {
 	m := model.APIToken{
 		ID: t.ID, Name: t.Name, Prefix: t.Prefix, Jobs: make([]model.APITokenJob, len(t.Jobs)),
 		HiddenJobCount: t.HiddenJobs, CreatedByMe: t.CreatedByCaller, CreatedAt: t.CreatedAt, ExpiresAt: t.ExpiresAt,
-		RevokedAt: t.RevokedAt, AllowedCidrs: apiaccess.AddressStrings(t.AllowedCIDRs), AllowAnyAddress: t.AllowAnyAddress,
+		NeverExpires: t.NeverExpires, RevokedAt: t.RevokedAt, AllowedCidrs: apiaccess.AddressStrings(t.AllowedCIDRs), AllowAnyAddress: t.AllowAnyAddress,
 		LastUsedAt: t.LastUsedAt,
 	}
 	for i, j := range t.Jobs {

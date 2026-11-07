@@ -7,9 +7,9 @@
 -- them (CHECKs api_tokens_allowed_cidrs and api_tokens_addresses; D-220
 -- amendment 1).
 -- name: InsertAPIToken :one
-INSERT INTO api_tokens (id, name, secret_hash, created_by, expires_at, allowed_cidrs, allow_any_address)
-VALUES (@id, @name, @secret_hash, @created_by, @expires_at, coalesce(@allowed_cidrs::cidr[], '{}'), @allow_any_address)
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address;
+INSERT INTO api_tokens (id, name, secret_hash, created_by, expires_at, never_expires, allowed_cidrs, allow_any_address)
+VALUES (@id, @name, @secret_hash, @created_by, sqlc.narg(expires_at), @never_expires, coalesce(@allowed_cidrs::cidr[], '{}'), @allow_any_address)
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires;
 
 -- InsertAPITokenJobs sets the (immutable) scope of a new token.
 -- name: InsertAPITokenJobs :execrows
@@ -19,7 +19,7 @@ FROM unnest(@job_ids::uuid[]) AS j (id);
 
 -- name: GetAPIToken :one
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -30,7 +30,7 @@ WHERE t.id = @id;
 -- GetAPITokenForUpdate locks a token (revocation).
 -- name: GetAPITokenForUpdate :one
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address
+       t.allowed_cidrs, t.allow_any_address, t.never_expires
 FROM api_tokens t
 WHERE t.id = @id
 FOR UPDATE;
@@ -38,7 +38,7 @@ FOR UPDATE;
 -- ListAPITokens lists every token, newest first (the admin page).
 -- name: ListAPITokens :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -50,7 +50,7 @@ LIMIT @max_rows;
 -- ListAPITokensForJob lists the tokens whose scope includes the job.
 -- name: ListAPITokensForJob :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 JOIN api_token_jobs tj ON tj.token_id = t.id AND tj.job_id = @job_id
@@ -64,7 +64,7 @@ LIMIT @max_rows;
 -- user owns (a backup owner's view without a job filter), newest first.
 -- name: ListAPITokensForOwner :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -117,7 +117,7 @@ ORDER BY tj.token_id, lower(j.name), j.id;
 UPDATE api_tokens
 SET revoked_at = now(), revoked_by = @revoked_by
 WHERE id = @id AND revoked_at IS NULL
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address;
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires;
 
 -- UpdateAPITokenAddresses replaces the client addresses of an unrevoked
 -- token (the same CHECKs as InsertAPIToken); no row: unknown or revoked.
@@ -127,7 +127,7 @@ RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, 
 UPDATE api_tokens
 SET allowed_cidrs = coalesce(@allowed_cidrs::cidr[], '{}'), allow_any_address = @allow_any_address
 WHERE id = @id AND revoked_at IS NULL
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address;
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires;
 
 -- ListAPITokenLastSeen: per token the client address it was last seen
 -- from, the later of its newest run request (accepted address) and its

@@ -22,8 +22,10 @@ type Credential struct {
 
 // Token is what an authenticated token may learn about itself.
 type Token struct {
-	Name      string
-	ExpiresAt time.Time
+	Name string
+	// ExpiresAt is nil when the token never expires (D-229; the database
+	// guarantees never_expires = (expires_at IS NULL)).
+	ExpiresAt *time.Time
 }
 
 // Job is a job in a token's scope.
@@ -128,10 +130,15 @@ func (s DBStore) Authenticate(ctx context.Context, c Credential, ip netip.Addr) 
 		return Token{}, ErrUnauthenticated
 	case err != nil:
 		return Token{}, err
-	case row.TokenID == nil || row.Name == nil || row.ExpiresAt == nil:
+	case row.TokenID == nil || row.Name == nil:
 		return Token{}, ErrUnauthenticated
 	}
-	return Token{Name: *row.Name, ExpiresAt: *row.ExpiresAt}, nil
+	t := Token{Name: *row.Name}
+	if row.ExpiresAt != nil {
+		at := row.ExpiresAt.UTC()
+		t.ExpiresAt = &at
+	}
+	return t, nil
 }
 
 // TokenJobs implements Store.

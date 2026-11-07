@@ -13,6 +13,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { sharedStream } from "@/lib/apollo";
 import { formatRelative } from "@/lib/format";
+import { SecurityRisksQuery } from "@/lib/operations";
 
 import { ActivityTile } from "./activity";
 import { AlertsTile } from "./alerts";
@@ -30,6 +31,7 @@ import {
   mergeRestores,
   newerRun,
   overdueJobIds,
+  acceptedRiskCount,
   securityFindings,
   sortActive,
   sortHealth,
@@ -118,6 +120,11 @@ export function DashboardPage() {
     DashboardInfraQuery,
     flags.staff ? { fetchPolicy: "cache-and-network" } : skipToken,
   );
+  // Accepted risks (D-228) leave the security tile's open findings.
+  const risksQ = useQuery(
+    SecurityRisksQuery,
+    flags.staff ? { fetchPolicy: "cache-and-network" } : skipToken,
+  );
   const healthQ = useQuery(
     DashboardSystemHealthQuery,
     flags.admin ? { fetchPolicy: "network-only", pollInterval: 30_000 } : skipToken,
@@ -185,9 +192,10 @@ export function DashboardPage() {
 
   const connections = infraQ.data?.connections;
   const destinations = infraQ.data?.destinations;
+  const risks = risksQ.data?.securityRisks;
   const findings = useMemo(
-    () => securityFindings(jobNodes, connections ?? []),
-    [jobNodes, connections],
+    () => securityFindings(jobNodes, connections ?? [], risks),
+    [jobNodes, connections, risks],
   );
   const storageRows = useMemo(
     () => storageByDestination(storageQ.data?.destinationUsage ?? []),
@@ -299,6 +307,7 @@ export function DashboardPage() {
           <SecurityTile
             className="xl:col-span-2"
             findings={findings}
+            accepted={acceptedRiskCount(risks)}
             loading={infraQ.loading || jobsQ.loading}
             error={infraQ.error ?? jobsQ.error}
           />

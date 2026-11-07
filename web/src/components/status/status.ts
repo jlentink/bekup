@@ -73,5 +73,6 @@ export const SECURITY_FLAGS = [
   "insecure-transport",
   "personal-webhooks-widened",
   "any-address",
+  "never-expires",
 ] as const;
 export type SecurityFlag = (typeof SECURITY_FLAGS)[number];

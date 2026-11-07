@@ -133,6 +133,10 @@ type Querier interface {
 	// user since a time that were not skipped, without the exempt (mandatory)
 	// event types: the per-user flood rule.
 	CountRecentUserDeliveries(ctx context.Context, arg CountRecentUserDeliveriesParams) (int64, error)
+	// CountRiskSummary counts the active acceptances, those without an end
+	// date, and the active API tokens without expiry (the admins' summary
+	// line).
+	CountRiskSummary(ctx context.Context) (CountRiskSummaryRow, error)
 	CountRunSlots(ctx context.Context) (int64, error)
 	// CountSecurityAlertsBetween counts the security.system alerts raised in
 	// (@period_from, @period_until] (admins' summaries only).
@@ -231,6 +235,12 @@ type Querier interface {
 	// EnableSharedChannel turns a channel on and starts its failure counters
 	// afresh.
 	EnableSharedChannel(ctx context.Context, id uuid.UUID) (SharedChannel, error)
+	// EndLiveRiskAcceptancesForConnection ends the live acceptances of a
+	// connection (a TLS or endpoint change, D-228) in the change's
+	// transaction.
+	EndLiveRiskAcceptancesForConnection(ctx context.Context, arg EndLiveRiskAcceptancesForConnectionParams) ([]EndLiveRiskAcceptancesForConnectionRow, error)
+	// EndRiskAcceptance ends a live acceptance once; no row: unknown or ended.
+	EndRiskAcceptance(ctx context.Context, arg EndRiskAcceptanceParams) (EndRiskAcceptanceRow, error)
 	// Job encryption keys (task 3.2, D-142). Only internal/jobkeys uses these
 	// queries; sealed_passphrase is sealed under AAD
 	// job_passphrases:<job_id>:v<version>. There are no DELETE queries: keys
@@ -408,6 +418,8 @@ type Querier interface {
 	GetRecentConfigReloadUIRequest(ctx context.Context, arg GetRecentConfigReloadUIRequestParams) (ConfigReloadRequest, error)
 	GetRestore(ctx context.Context, id uuid.UUID) (Restore, error)
 	GetRestoreView(ctx context.Context, id uuid.UUID) (GetRestoreViewRow, error)
+	// GetRiskAcceptance reads one acceptance with its display facts.
+	GetRiskAcceptance(ctx context.Context, id uuid.UUID) (GetRiskAcceptanceRow, error)
 	GetRun(ctx context.Context, id uuid.UUID) (Run, error)
 	GetRunForUpdate(ctx context.Context, id uuid.UUID) (Run, error)
 	GetRunLogCounts(ctx context.Context, id uuid.UUID) (GetRunLogCountsRow, error)
@@ -543,6 +555,12 @@ type Querier interface {
 	// InsertRestoreLogs appends a batch of restore log lines (arrays of equal
 	// length; task 4.2).
 	InsertRestoreLogs(ctx context.Context, arg InsertRestoreLogsParams) error
+	// Accepted security risks (D-228), only for internal/riskaccept. The
+	// acceptance rows are written only here; the subject reads (connections,
+	// jobs) are read-only views of what is weakened now.
+	// InsertRiskAcceptance stores a new acceptance; expires_at follows from
+	// the duration on the database clock (risk_acceptances_expiry).
+	InsertRiskAcceptance(ctx context.Context, arg InsertRiskAcceptanceParams) (InsertRiskAcceptanceRow, error)
 	// Backup runs (task 3.6, D-147). Only internal/runstate writes these
 	// tables; tasks 3.7 (run queries), 3.8 (retention) and 4.x (restores) read
 	// them.
@@ -766,6 +784,12 @@ type Querier interface {
 	// @user_id owns (authz.JobScope). owner_id (staff only, checked by the
 	// service) narrows the page to the jobs that user owns.
 	ListJobs(ctx context.Context, arg ListJobsParams) ([]Job, error)
+	// ListLiveRiskAcceptances returns every acceptance that has not ended
+	// (expired ones included, flagged) with whether it covers anything now:
+	// unexpired and its acceptor still holds the right (an active admin, or
+	// for a job's encryption opt-out an active user who still owns the job;
+	// maintainers never).
+	ListLiveRiskAcceptances(ctx context.Context) ([]ListLiveRiskAcceptancesRow, error)
 	// Missed-backup (dead-man) detector (internal/notify/missed, task 5.4,
 	// D-188); only that package uses these queries. All reads are bounded per
 	// job (keyset batches of jobs, a lookback window, a cap of occurrences).
@@ -815,6 +839,20 @@ type Querier interface {
 	// still have present artifacts (completeness: every item needs a present,
 	// verified artifact on the destination).
 	ListRetentionRunItems(ctx context.Context, jobID uuid.UUID) ([]ListRetentionRunItemsRow, error)
+	// ListRiskAcceptanceUsers returns the display facts of acceptors.
+	ListRiskAcceptanceUsers(ctx context.Context, ids []uuid.UUID) ([]ListRiskAcceptanceUsersRow, error)
+	// ListRiskAcceptances lists acceptances, newest first: every one
+	// (owner_id NULL) or those on jobs the user owns; live_only keeps the
+	// active ones (not ended, not expired), ended_only the others.
+	ListRiskAcceptances(ctx context.Context, arg ListRiskAcceptancesParams) ([]ListRiskAcceptancesRow, error)
+	// ListRiskConnections returns the permanent, not deleted connections
+	// that carry an acceptable risk now: a TLS mode other than pinned, or a
+	// stored privilege verdict of privileged or unknown. With ids, only those
+	// (deleted ones included, flagged: the sweep checks its subjects).
+	ListRiskConnections(ctx context.Context, ids []uuid.UUID) ([]ListRiskConnectionsRow, error)
+	// ListRiskJobs returns the not deleted jobs whose encryption is opted
+	// out. With ids, only those (deleted and opted-in ones included).
+	ListRiskJobs(ctx context.Context, ids []uuid.UUID) ([]ListRiskJobsRow, error)
 	ListRunArtifacts(ctx context.Context, runID uuid.UUID) ([]Artifact, error)
 	// ListRunIDsUpdatedSince finds runs changed since a time (run event
 	// streams after possibly lost notifications; every run is authorized
@@ -954,11 +992,19 @@ type Querier interface {
 	// LockJobsForAPIToken share-locks the non-deleted jobs among @job_ids for
 	// a new token's scope (a concurrent delete waits for the insert).
 	LockJobsForAPIToken(ctx context.Context, jobIds []uuid.UUID) ([]LockJobsForAPITokenRow, error)
+	// LockLiveRiskAcceptance locks the live acceptance of a kind and subject
+	// (no row: none).
+	LockLiveRiskAcceptance(ctx context.Context, arg LockLiveRiskAcceptanceParams) (LockLiveRiskAcceptanceRow, error)
 	// LockRestore locks a restore row (cancelRestore, the stuck sweep).
 	LockRestore(ctx context.Context, id uuid.UUID) (Restore, error)
 	// LockRestoreTargetName serializes restore requests for one target
 	// database (or one connection's globals) until the transaction ends.
 	LockRestoreTargetName(ctx context.Context, lockKey string) error
+	// LockRiskConnection share-locks a connection for an acceptance (its
+	// settings cannot change until the acceptance is stored).
+	LockRiskConnection(ctx context.Context, id uuid.UUID) (LockRiskConnectionRow, error)
+	// LockRiskJob share-locks a job and its encryption row for an acceptance.
+	LockRiskJob(ctx context.Context, id uuid.UUID) (LockRiskJobRow, error)
 	// LockRiverJobState locks a River job row and returns its state (cancelRun
 	// of a run whose job waits for a retry; internal/queue only).
 	LockRiverJobState(ctx context.Context, id int64) (string, error)
@@ -984,6 +1030,9 @@ type Querier interface {
 	MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedParams) (int64, error)
 	MarkEventFannedOut(ctx context.Context, arg MarkEventFannedOutParams) error
 	MarkEventsDispatched(ctx context.Context, arg MarkEventsDispatchedParams) error
+	// MarkRiskAcceptanceWarned records the "expires soon" warning once; no
+	// row: already warned, ended or not expiring within the window.
+	MarkRiskAcceptanceWarned(ctx context.Context, arg MarkRiskAcceptanceWarnedParams) (MarkRiskAcceptanceWarnedRow, error)
 	// MarkSessionSecondFactor records a step-up with a second factor on an
 	// AAL2 session (task 1.9): step-up and second-factor times become now.
 	MarkSessionSecondFactor(ctx context.Context, id uuid.UUID) (int64, error)

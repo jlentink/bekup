@@ -997,6 +997,216 @@ func AllRestoreStatusValues() []RestoreStatus {
 	}
 }
 
+type RiskDuration string
+
+const (
+	RiskDurationMonth   RiskDuration = "month"
+	RiskDurationYear    RiskDuration = "year"
+	RiskDurationForever RiskDuration = "forever"
+)
+
+func (e *RiskDuration) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RiskDuration(s)
+	case string:
+		*e = RiskDuration(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RiskDuration: %T", src)
+	}
+	return nil
+}
+
+type NullRiskDuration struct {
+	RiskDuration RiskDuration `json:"riskDuration"`
+	Valid        bool         `json:"valid"` // Valid is true if RiskDuration is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRiskDuration) Scan(value interface{}) error {
+	if value == nil {
+		ns.RiskDuration, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RiskDuration.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRiskDuration) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RiskDuration), nil
+}
+
+func (e RiskDuration) Valid() bool {
+	switch e {
+	case RiskDurationMonth,
+		RiskDurationYear,
+		RiskDurationForever:
+		return true
+	}
+	return false
+}
+
+func AllRiskDurationValues() []RiskDuration {
+	return []RiskDuration{
+		RiskDurationMonth,
+		RiskDurationYear,
+		RiskDurationForever,
+	}
+}
+
+type RiskEndReason string
+
+const (
+	RiskEndReasonRevoked            RiskEndReason = "revoked"
+	RiskEndReasonSuperseded         RiskEndReason = "superseded"
+	RiskEndReasonExpired            RiskEndReason = "expired"
+	RiskEndReasonConditionChanged   RiskEndReason = "condition_changed"
+	RiskEndReasonResolved           RiskEndReason = "resolved"
+	RiskEndReasonSubjectDeleted     RiskEndReason = "subject_deleted"
+	RiskEndReasonAcceptorLostRights RiskEndReason = "acceptor_lost_rights"
+)
+
+func (e *RiskEndReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RiskEndReason(s)
+	case string:
+		*e = RiskEndReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RiskEndReason: %T", src)
+	}
+	return nil
+}
+
+type NullRiskEndReason struct {
+	RiskEndReason RiskEndReason `json:"riskEndReason"`
+	Valid         bool          `json:"valid"` // Valid is true if RiskEndReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRiskEndReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.RiskEndReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RiskEndReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRiskEndReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RiskEndReason), nil
+}
+
+func (e RiskEndReason) Valid() bool {
+	switch e {
+	case RiskEndReasonRevoked,
+		RiskEndReasonSuperseded,
+		RiskEndReasonExpired,
+		RiskEndReasonConditionChanged,
+		RiskEndReasonResolved,
+		RiskEndReasonSubjectDeleted,
+		RiskEndReasonAcceptorLostRights:
+		return true
+	}
+	return false
+}
+
+func AllRiskEndReasonValues() []RiskEndReason {
+	return []RiskEndReason{
+		RiskEndReasonRevoked,
+		RiskEndReasonSuperseded,
+		RiskEndReasonExpired,
+		RiskEndReasonConditionChanged,
+		RiskEndReasonResolved,
+		RiskEndReasonSubjectDeleted,
+		RiskEndReasonAcceptorLostRights,
+	}
+}
+
+type RiskKind string
+
+const (
+	RiskKindInsecureTransport RiskKind = "insecure_transport"
+	RiskKindInsecureDbTls     RiskKind = "insecure_db_tls"
+	RiskKindInsecureDbRoles   RiskKind = "insecure_db_roles"
+	RiskKindUnpinnedImage     RiskKind = "unpinned_image"
+	RiskKindConnectionTls     RiskKind = "connection_tls"
+	RiskKindPrivilegedRole    RiskKind = "privileged_role"
+	RiskKindSmtpUnencrypted   RiskKind = "smtp_unencrypted"
+	RiskKindEncryptionOptOut  RiskKind = "encryption_opt_out"
+)
+
+func (e *RiskKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RiskKind(s)
+	case string:
+		*e = RiskKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RiskKind: %T", src)
+	}
+	return nil
+}
+
+type NullRiskKind struct {
+	RiskKind RiskKind `json:"riskKind"`
+	Valid    bool     `json:"valid"` // Valid is true if RiskKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRiskKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.RiskKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RiskKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRiskKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RiskKind), nil
+}
+
+func (e RiskKind) Valid() bool {
+	switch e {
+	case RiskKindInsecureTransport,
+		RiskKindInsecureDbTls,
+		RiskKindInsecureDbRoles,
+		RiskKindUnpinnedImage,
+		RiskKindConnectionTls,
+		RiskKindPrivilegedRole,
+		RiskKindSmtpUnencrypted,
+		RiskKindEncryptionOptOut:
+		return true
+	}
+	return false
+}
+
+func AllRiskKindValues() []RiskKind {
+	return []RiskKind{
+		RiskKindInsecureTransport,
+		RiskKindInsecureDbTls,
+		RiskKindInsecureDbRoles,
+		RiskKindUnpinnedImage,
+		RiskKindConnectionTls,
+		RiskKindPrivilegedRole,
+		RiskKindSmtpUnencrypted,
+		RiskKindEncryptionOptOut,
+	}
+}
+
 type RiverJobState string
 
 const (
@@ -1880,11 +2090,12 @@ type ApiToken struct {
 	SecretHash      []byte         `json:"secretHash"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 }
 
 type ApiTokenJob struct {
@@ -2324,6 +2535,24 @@ type RetentionHold struct {
 	NewestCompleteAt *time.Time `json:"newestCompleteAt"`
 	FirstSeenAt      time.Time  `json:"firstSeenAt"`
 	CheckedAt        time.Time  `json:"checkedAt"`
+}
+
+type RiskAcceptance struct {
+	ID            uuid.UUID      `json:"id"`
+	Kind          RiskKind       `json:"kind"`
+	ConnectionID  *uuid.UUID     `json:"connectionId"`
+	JobID         *uuid.UUID     `json:"jobId"`
+	ConditionHash []byte         `json:"conditionHash"`
+	Condition     string         `json:"condition"`
+	Duration      RiskDuration   `json:"duration"`
+	Reason        string         `json:"reason"`
+	CreatedBy     uuid.UUID      `json:"createdBy"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	ExpiresAt     *time.Time     `json:"expiresAt"`
+	WarnedAt      *time.Time     `json:"warnedAt"`
+	EndedAt       *time.Time     `json:"endedAt"`
+	EndedBy       *uuid.UUID     `json:"endedBy"`
+	EndReason     *RiskEndReason `json:"endReason"`
 }
 
 type RiverJob struct {

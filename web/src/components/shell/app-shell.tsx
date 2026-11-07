@@ -51,7 +51,7 @@ export function AppShell() {
       </a>
       <Sidebar role={user.role} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <InsecureTransportBanner />
+        <InsecureTransportBanner signedIn />
         <EnrollmentDeadlineBanner user={user} />
         <StreamLimitBanner />
         <TopBar user={user} title={title} />

@@ -329,6 +329,7 @@ export function ConnectionChecks({
         <StoredTestPanel
           test={lastTest}
           privileges={lastTest?.privileges}
+          connectionId={id}
           emptyText="Never tested. A test also reports whether the backup role is privileged (relevant for restores)."
         />
       ) : null}

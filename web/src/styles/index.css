@@ -152,6 +152,17 @@
     );
   }
 
+  /* An accepted risk (D-228): the same hatch, faded and signed off. The
+   * weakened setting stays marked (D-001), but reads as decided, not open. */
+  .hatch-accepted {
+    background-color: var(--surface-sunken);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent 0 6px,
+      color-mix(in oklch, var(--status-insecure) 7%, var(--surface-sunken)) 6px 8px
+    );
+  }
+
   /* Ledger paper: faint ruled grid used on the auth pages. */
   .ledger-grid {
     background-image:

@@ -1,6 +1,7 @@
 /**
  * Client-side helpers of the API access UI (D-220). The server decides
- * (internal/apiaccess.ParseAddresses, the 1-365 day expiry); these checks
+ * (internal/apiaccess.ParseAddresses, the 1-365 day expiry or never,
+ * D-229); these checks
  * only give early, local feedback with the same rules.
  */
 
@@ -9,7 +10,10 @@ export const MAX_ADDRESSES = 32;
 
 /** Expiry presets in days; 90 is the default (D-220). */
 export const EXPIRY_PRESETS = [30, 90, 180, 365] as const;
-export type ExpiryPreset = (typeof EXPIRY_PRESETS)[number];
+export type ExpiryDays = (typeof EXPIRY_PRESETS)[number];
+/** A preset, or "never": a token without expiry (D-229, alerted). */
+export type ExpiryPreset = ExpiryDays | "never";
+export const EXPIRY_CHOICES: readonly ExpiryPreset[] = [...EXPIRY_PRESETS, "never"];
 export const DEFAULT_EXPIRY: ExpiryPreset = 90;
 
 /** Tokens expiring within this many days are flagged. */
@@ -18,8 +22,20 @@ export const EXPIRY_WARNING_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** expiresAt (ISO) for a preset, counted from now. */
-export function expiresAtFor(days: ExpiryPreset, now: number = Date.now()): string {
+export function expiresAtFor(days: ExpiryDays, now: number = Date.now()): string {
   return new Date(now + days * DAY_MS).toISOString();
+}
+
+/** The create input's expiry fields for a choice: exactly one of the two. */
+export function expiryInput(
+  choice: ExpiryPreset,
+  now: number = Date.now(),
+): {
+  expiresAt: string | null;
+  neverExpires: boolean;
+} {
+  if (choice === "never") return { expiresAt: null, neverExpires: true };
+  return { expiresAt: expiresAtFor(choice, now), neverExpires: false };
 }
 
 /** Splits the address editor's text: one entry per line or comma. */
@@ -120,10 +136,12 @@ export function daysUntil(iso: string, now: number = Date.now()): number {
 export type TokenState = "active" | "expiring" | "expired" | "revoked";
 
 export function tokenState(
-  t: { expiresAt: string; revokedAt?: string | null | undefined },
+  t: { expiresAt?: string | null | undefined; revokedAt?: string | null | undefined },
   now: number = Date.now(),
 ): TokenState {
   if (t.revokedAt) return "revoked";
+  // No expiry (D-229): active until revoked.
+  if (!t.expiresAt) return "active";
   const ms = Date.parse(t.expiresAt) - now;
   if (ms <= 0) return "expired";
   if (ms < EXPIRY_WARNING_DAYS * DAY_MS) return "expiring";

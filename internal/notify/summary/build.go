@@ -579,6 +579,18 @@ func (d *summaryData) securityTable() email.Table {
 			Level: email.LevelWarning, Note: "review them in bekup",
 		}}
 	}
+	// Accepted risks (D-228) and tokens without expiry (D-229): neutral,
+	// never a problem, but always visible to admins.
+	if r := d.Risks; r.Accepted > 0 || r.TokensNeverExpiring > 0 {
+		text := plural(r.Accepted, "accepted risk", "accepted risks")
+		if r.Forever > 0 {
+			text += fmt.Sprintf(" (%d without end date)", r.Forever)
+		}
+		if r.TokensNeverExpiring > 0 {
+			text += "; " + plural(r.TokensNeverExpiring, "API token", "API tokens") + " without expiry"
+		}
+		t.Rows = append(t.Rows, email.Row{Cells: []string{"Accepted", text}, Level: email.LevelNone, Note: "listed under Accepted risks"})
+	}
 	return t
 }
 

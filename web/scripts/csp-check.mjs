@@ -661,6 +661,67 @@ const API_TOKENS = [
     allowAnyAddress: false,
     lastSeenIp: "192.0.2.10",
   },
+  {
+    ...API_TOKEN_BASE,
+    id: "0b6c3f7e-0000-4000-8000-0000000000e4",
+    name: "legacy cron",
+    expiresAt: null,
+    neverExpires: true,
+    allowedCidrs: ["192.0.2.0/24"],
+    allowAnyAddress: false,
+    lastSeenIp: "192.0.2.11",
+  },
+];
+// Accepted security risks (D-228): an open connection risk and an accepted
+// instance risk.
+const RISK_ACCEPTANCE = {
+  __typename: "RiskAcceptance",
+  id: "0b6c3f7e-0000-4000-8000-00000000acc1",
+  kind: "INSECURE_DB_TLS",
+  connectionId: null,
+  jobId: null,
+  subjectName: null,
+  subjectDeleted: false,
+  condition: "App database TLS mode require (CA checked, host name not verified)",
+  duration: "FOREVER",
+  reason: "Managed database: the provider publishes no CA we can pin.",
+  createdBy: {
+    __typename: "RiskAcceptor",
+    id: "u-admin",
+    displayName: "Ada Admin",
+    email: "ada@example.com",
+    deleted: false,
+  },
+  createdByMe: true,
+  createdAt: "2026-11-01T10:00:00Z",
+  expiresAt: null,
+  endedAt: null,
+  endReason: null,
+  status: "ACTIVE",
+};
+const SECURITY_RISKS = [
+  {
+    __typename: "SecurityRisk",
+    kind: "CONNECTION_TLS",
+    conditionId: "ab".repeat(32),
+    condition: "TLS without verification (db.internal:5432)",
+    connectionId: "0b6c3f7e-0000-4000-8000-0000000000c1",
+    jobId: null,
+    subjectName: "billing-db",
+    canAccept: true,
+    acceptance: null,
+  },
+  {
+    __typename: "SecurityRisk",
+    kind: "INSECURE_DB_TLS",
+    conditionId: "cd".repeat(32),
+    condition: RISK_ACCEPTANCE.condition,
+    connectionId: null,
+    jobId: null,
+    subjectName: null,
+    canAccept: true,
+    acceptance: RISK_ACCEPTANCE,
+  },
 ];
 const JR_SCHEDULE = {
   __typename: "Schedule",
@@ -1039,6 +1100,8 @@ const JOBS_RUNS_OPERATIONS = {
   // External API tokens (D-220): the job's API access panel, the admin
   // page, the create dialog and the show-once dialog.
   ApiTokens: () => ({ data: { apiTokens: API_TOKENS } }),
+  SecurityRisks: () => ({ data: { securityRisks: SECURITY_RISKS } }),
+  RiskAcceptances: () => ({ data: { riskAcceptances: [RISK_ACCEPTANCE] } }),
   ApiAccessJobs: () => ({
     data: {
       jobs: {
@@ -2806,6 +2869,15 @@ async function exercise(page, base, colorScheme) {
   await page.goto(`${base}/admin/api-access`);
   await page.getByRole("heading", { name: "API access" }).waitFor();
   await page.getByTestId("api-token").first().waitFor();
+  await page.getByText("Valid until revoked").waitFor();
+  await page.goto(`${base}/risks`);
+  await page.getByRole("heading", { name: "Accepted risks" }).waitFor();
+  await page.getByTestId("risk-acceptance").first().waitFor();
+  await page.getByRole("button", { name: /Accept risk: Connection TLS/ }).click();
+  await page.getByRole("dialog", { name: "Accept this risk" }).waitFor();
+  await page.getByRole("dialog", { name: "Accept this risk" }).getByText("Forever").click();
+  await page.getByText(/never flagged again/).waitFor();
+  await page.keyboard.press("Escape");
   await page.goto(`${base}/admin/audit`);
   await page.getByTestId("audit-chain-finding").waitFor();
   await page.getByRole("button", { name: /Details of user\.created/ }).click();

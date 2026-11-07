@@ -293,7 +293,7 @@ function JobListRow({ job, staff }: { job: JobRow; staff: boolean }) {
         )}
       </TableCell>
       <TableCell>
-        <EncryptionBadge encryption={job.encryption} />
+        <EncryptionBadge encryption={job.encryption} jobId={job.id} />
       </TableCell>
       <TableCell className="text-right whitespace-nowrap" data-testid="job-stored">
         {job.storage.totalBytes > 0 ? (

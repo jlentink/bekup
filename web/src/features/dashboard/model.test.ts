@@ -10,6 +10,7 @@ import {
   jobHealth,
   mergeRestores,
   queueSummary,
+  acceptedRiskCount,
   securityFindings,
   sortHealth,
   storageByDestination,
@@ -297,6 +298,51 @@ describe("upcomingRuns", () => {
 describe("securityFindings", () => {
   it("is empty for a secure setup", () => {
     expect(securityFindings([job()], [conn()])).toEqual([]);
+  });
+
+  it("leaves accepted risks out of the open findings and adds open instance risks (D-228)", () => {
+    const jobs = [
+      job({ id: "j1", encryption: { configured: true, mode: "NONE", optedOut: true } }),
+    ];
+    const conns = [
+      conn({ id: "c1", name: "plain", tlsMode: "DISABLED", insecureTransport: true }),
+      conn({ id: "c2", name: "legacy", tlsMode: "UNVERIFIED", insecureTransport: true }),
+    ];
+    const risks = [
+      {
+        kind: "ENCRYPTION_OPT_OUT" as const,
+        condition: "x",
+        jobId: "j1",
+        acceptance: { id: "a1" },
+      },
+      {
+        kind: "CONNECTION_TLS" as const,
+        condition: "x",
+        connectionId: "c2",
+        acceptance: { id: "a2" },
+      },
+      {
+        kind: "INSECURE_DB_TLS" as const,
+        condition: "App database TLS mode require",
+        acceptance: null,
+      },
+      { kind: "UNPINNED_IMAGE" as const, condition: "follows a tag", acceptance: { id: "a3" } },
+    ];
+    const f = securityFindings(jobs, conns, risks);
+    expect(f.map((x) => x.kind)).toEqual(["instance", "insecure-transport"]);
+    expect(f[0]?.items).toEqual([
+      expect.objectContaining({
+        name: "App database TLS",
+        detail: "App database TLS mode require",
+      }),
+    ]);
+    expect(f[1]?.items.map((i) => i.id)).toEqual(["c1"]);
+    expect(acceptedRiskCount(risks)).toBe(3);
+    // Without the risks (not loaded or failed) everything stays flagged.
+    expect(securityFindings(jobs, conns).map((x) => x.kind)).toEqual([
+      "unencrypted",
+      "insecure-transport",
+    ]);
   });
 
   it("flags every weakened setting, critical first", () => {

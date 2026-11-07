@@ -212,6 +212,10 @@ var RootFieldOperations = map[string]authz.Operation{
 	// JobScope).
 	"Query.apiTokens":                  authz.OpAPITokenList,
 	"Mutation.createApiToken":          authz.OpAPITokenCreate,
+	"Query.securityRisks":              authz.OpRiskList,
+	"Query.riskAcceptances":            authz.OpRiskList,
+	"Mutation.acceptRisk":              authz.OpRiskAccept,
+	"Mutation.revokeRiskAcceptance":    authz.OpRiskRevoke,
 	"Mutation.revokeApiToken":          authz.OpAPITokenRevoke,
 	"Mutation.updateApiTokenAddresses": authz.OpAPITokenUpdate,
 	// Downloads (task 3.9, D-150): admins and owners (role user) only,

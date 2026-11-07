@@ -1,4 +1,4 @@
-import { ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
+import { CircleCheck, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import { Link } from "react-router";
 
 import { cn } from "@/lib/utils";
@@ -15,12 +15,15 @@ const ITEMS_MAX = 5;
  */
 export function SecurityTile({
   findings,
+  accepted = 0,
   loading,
   error,
   className,
 }: {
   className?: string;
   findings: SecurityFinding[];
+  /** Accepted risks (D-228): no open issue, but always in sight. */
+  accepted?: number;
   loading: boolean;
   error: unknown;
 }) {
@@ -91,6 +94,20 @@ export function SecurityTile({
           })}
         </ul>
       )}
+      {accepted > 0 ? (
+        <Link
+          to="/risks"
+          data-testid="accepted-risks"
+          className="hatch-accepted mt-3 flex items-center gap-2 rounded-md border border-dashed border-status-insecure/35 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <CircleCheck aria-hidden="true" className="size-3.5 shrink-0" />
+          <span>
+            {accepted === 1 ? "1 accepted risk" : `${String(accepted)} accepted risks`}: still
+            marked, no longer open issues
+          </span>
+          <span className="ml-auto font-medium underline underline-offset-4">Review</span>
+        </Link>
+      ) : null}
     </Tile>
   );
 }

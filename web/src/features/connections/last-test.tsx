@@ -3,6 +3,7 @@ import { History } from "lucide-react";
 import { Tag } from "@/components/status/tag";
 import type { TargetPrivilegeStatus } from "@/graphql/gen/graphql";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { RiskDecision } from "@/features/accepted-risks/risk-badge";
 import { cn } from "@/lib/utils";
 
 import { PRIVILEGE_META, privilegeReason } from "./labels";
@@ -80,10 +81,13 @@ export function StoredTestPanel({
   test,
   privileges,
   emptyText,
+  connectionId,
 }: {
   test: StoredTest | null | undefined;
   privileges?: StoredPrivileges | null | undefined;
   emptyText: string;
+  /** The connection: a privileged verdict can then be accepted (D-228). */
+  connectionId?: string | undefined;
 }) {
   if (!test) {
     return <p className="text-sm text-muted-foreground">{emptyText}</p>;
@@ -123,6 +127,9 @@ export function StoredTestPanel({
           <div className="flex flex-wrap items-center gap-2">
             <span className="eyebrow">Role privileges</span>
             <Tag tone={meta.tone}>{meta.label}</Tag>
+            {connectionId && privileges.status !== "NOT_PRIVILEGED" ? (
+              <RiskDecision kind="PRIVILEGED_ROLE" subjectId={connectionId} />
+            ) : null}
           </div>
           <p className="text-sm text-muted-foreground">{meta.description}</p>
           {privileges.reasons.length > 0 ? (

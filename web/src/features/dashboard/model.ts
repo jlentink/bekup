@@ -13,6 +13,7 @@ import type {
   JobEncryptionMode,
   RestoreStatus,
   RetentionHoldReason,
+  RiskKind,
   RunStatus,
   TargetPrivilegeStatus,
   TlsPinStatus,
@@ -355,6 +356,7 @@ export interface ConnectionInput {
 }
 
 export type FindingKind =
+  | "instance"
   | "unencrypted"
   | "insecure-transport"
   | "identity-mismatch"
@@ -383,11 +385,44 @@ const TLS_DETAIL: Record<ConnectionTlsMode, string> = {
   DISABLED: "TLS disabled",
 };
 
-/** Weakened or failing security settings, most severe first; empty kinds are left out. */
+/** An acceptable risk from Query.securityRisks (D-228). */
+export interface RiskInput {
+  kind: RiskKind;
+  condition: string;
+  connectionId?: string | null;
+  jobId?: string | null;
+  acceptance?: { id: string } | null;
+}
+
+const INSTANCE_RISK: Partial<Record<RiskKind, { name: string; to: string }>> = {
+  INSECURE_TRANSPORT: { name: "Plain HTTP", to: "/admin/settings/configuration" },
+  INSECURE_DB_TLS: { name: "App database TLS", to: "/admin/settings/configuration" },
+  INSECURE_DB_ROLES: { name: "Single database account", to: "/admin/settings/configuration" },
+  UNPINNED_IMAGE: { name: "Unpinned image", to: "/admin/settings/configuration" },
+  SMTP_UNENCRYPTED: { name: "Unencrypted e-mail", to: "/admin/settings" },
+};
+
+/** The number of accepted risks (D-228): shown, but not as open issues. */
+export function acceptedRiskCount(risks: readonly RiskInput[] | undefined): number {
+  return risks?.filter((r) => r.acceptance).length ?? 0;
+}
+
+/**
+ * Weakened or failing security settings, most severe first; empty kinds are
+ * left out. Risks covered by an acceptance (D-228, from risks) are no open
+ * issue; without the risks (not loaded or failed) everything stays flagged.
+ */
 export function securityFindings(
   jobs: readonly JobInput[],
   connections: readonly ConnectionInput[],
+  risks?: readonly RiskInput[],
 ): SecurityFinding[] {
+  const accepted = new Set(
+    (risks ?? [])
+      .filter((r) => r.acceptance)
+      .map((r) => `${r.kind}:${r.connectionId ?? r.jobId ?? ""}`),
+  );
+  const isAccepted = (kind: RiskKind, id: string) => accepted.has(`${kind}:${id}`);
   const job = (j: JobInput, detail: string): FindingItem => ({
     id: j.id,
     name: j.name,
@@ -430,11 +465,21 @@ export function securityFindings(
       items: connections.filter((c) => c.pinStatus === "EXPIRED").map((c) => conn(c, "Expired")),
     },
     {
+      kind: "instance",
+      title: "Weakened instance settings",
+      severity: "warning",
+      items: (risks ?? []).flatMap((r) => {
+        const meta = INSTANCE_RISK[r.kind];
+        if (!meta || r.acceptance) return [];
+        return [{ id: r.kind, name: meta.name, to: meta.to, detail: r.condition }];
+      }),
+    },
+    {
       kind: "unencrypted",
       title: "Unencrypted jobs",
       severity: "warning",
       items: jobs
-        .filter((j) => isUnencrypted(j.encryption))
+        .filter((j) => isUnencrypted(j.encryption) && !isAccepted("ENCRYPTION_OPT_OUT", j.id))
         .map((j) => job(j, "Encryption opted out")),
     },
     {
@@ -442,7 +487,10 @@ export function securityFindings(
       title: "Insecure transport",
       severity: "warning",
       items: connections
-        .filter((c) => c.insecureTransport || c.tlsMode !== "PINNED")
+        .filter(
+          (c) =>
+            (c.insecureTransport || c.tlsMode !== "PINNED") && !isAccepted("CONNECTION_TLS", c.id),
+        )
         .map((c) => conn(c, TLS_DETAIL[c.tlsMode])),
     },
     {
@@ -452,7 +500,7 @@ export function securityFindings(
       items: connections
         .filter((c) => {
           const s = c.lastTest?.privileges?.status;
-          return s === "PRIVILEGED" || s === "UNKNOWN";
+          return (s === "PRIVILEGED" || s === "UNKNOWN") && !isAccepted("PRIVILEGED_ROLE", c.id);
         })
         .map((c) =>
           conn(

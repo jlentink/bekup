@@ -19,6 +19,7 @@ import (
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/queue"
+	"github.com/jlentink/bekup/internal/riskaccept"
 )
 
 // Periodic security checks (task 5.5, D-190): conditions that no single
@@ -38,7 +39,10 @@ import (
 //     Every completed verification is stored as the latest result
 //     (audit.SaveVerification, Query.auditChainStatus; D-196).
 //   - Weakened posture (plain HTTP outside dev mode, weakened app-database
-//     TLS): a daily reminder, sharing the dedup key with the startup alert.
+//     TLS): a daily reminder, sharing the dedup key with the startup alert,
+//     unless an active acceptance covers it (D-228).
+//   - Accepted risks (D-228): the sweep announces acceptances that end
+//     within 7 days and ends those that cover nothing any more.
 const (
 	// SecurityCheckInterval is how often the checks run.
 	SecurityCheckInterval = time.Hour
@@ -67,8 +71,22 @@ type SecurityOptions struct {
 	// (notify.KindInsecureTransport, notify.KindInsecureDBTLS,
 	// notify.KindInsecureDBRoles, notify.KindUnpinnedImage).
 	Posture func() []string
-	Now     func() time.Time
-	Logger  *slog.Logger
+	// Risks are the accepted security risks (D-228): swept before the
+	// posture reminders, which skip the accepted kinds; nil: none.
+	Risks  PostureRisks
+	Now    func() time.Time
+	Logger *slog.Logger
+}
+
+// PostureRisks is the risk acceptance service as the security check
+// uses it (*riskaccept.Service).
+type PostureRisks interface {
+	// Sweep announces expiring acceptances and ends the ones that cover
+	// nothing any more.
+	Sweep(ctx context.Context) error
+	// AcceptedPosture returns the posture kinds whose current condition
+	// an active acceptance covers (a lookup error covers nothing).
+	AcceptedPosture(ctx context.Context) map[string]riskaccept.Coverage
 }
 
 // SecurityChecker runs the periodic security checks. It is safe for
@@ -110,6 +128,11 @@ func (c *SecurityChecker) Run(ctx context.Context) error {
 	}
 	if err := c.checkPins(ctx, q, now); err != nil {
 		errs = append(errs, err)
+	}
+	if c.o.Risks != nil {
+		if err := c.o.Risks.Sweep(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("monitor: risk acceptance sweep: %w", err))
+		}
 	}
 	if err := c.checkPosture(ctx, q, now); err != nil {
 		errs = append(errs, err)
@@ -229,7 +252,15 @@ func (c *SecurityChecker) checkPosture(ctx context.Context, q *sqlc.Queries, now
 	if c.o.Posture == nil {
 		return nil
 	}
+	var accepted map[string]riskaccept.Coverage
+	if c.o.Risks != nil {
+		accepted = c.o.Risks.AcceptedPosture(ctx)
+	}
 	for _, kind := range c.o.Posture() {
+		if _, ok := accepted[kind]; ok {
+			// An accepted risk (D-228): no open issue, no reminder.
+			continue
+		}
 		if _, err := notify.Emit(ctx, q, notify.Event{
 			Type: notify.SecuritySystem, Severity: notify.SystemSeverity(kind),
 			Detail:   notify.Detail{"kind": kind, "reminder": true},

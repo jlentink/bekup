@@ -272,6 +272,32 @@ const (
 	ActionAPITokenAddressesChanged Action = "api_token.addresses_changed" //nolint:gosec // G101: an action name, not a credential
 )
 
+// Accepted security risks (D-228; target type risk_acceptance, target id
+// the acceptance id). Details of every entry: risk_acceptance_id, kind,
+// connection_id or job_id (when the subject is one), condition (the short
+// readable form), duration (month, year, forever), expires_at (RFC 3339;
+// "" when forever) and creator_id (who accepted it).
+const (
+	// ActionRiskAccepted: acceptRisk (user actor; step-up). Also note
+	// (the reason as entered, bounded) and superseded_id (the live
+	// acceptance it replaced, "" when none). Raises risk_accepted, or
+	// risk_accepted_permanently when the duration is forever.
+	ActionRiskAccepted Action = "risk.accepted"
+	// ActionRiskAcceptanceRevoked: revokeRiskAcceptance (user actor;
+	// step-up). The risk is flagged again; no alert (stricter).
+	ActionRiskAcceptanceRevoked Action = "risk.acceptance_revoked"
+	// ActionRiskAcceptanceExpiring: the acceptance ends within 7 days
+	// (system actor, the hourly security check, once). Raises
+	// risk_acceptance_expiring to admins and the acceptor.
+	ActionRiskAcceptanceExpiring Action = "risk.acceptance_expiring"
+	// ActionRiskAcceptanceEnded: the acceptance ended without a revoke
+	// (system actor, or the user whose change ended it): end_reason
+	// expired, condition_changed, resolved, subject_deleted or
+	// acceptor_lost_rights. Raises risk_acceptance_ended to admins and
+	// the acceptor unless the risk is gone (resolved, subject_deleted).
+	ActionRiskAcceptanceEnded Action = "risk.acceptance_ended"
+)
+
 // Run actions (task 3.6, D-147; target type run, target id the run id).
 // A cancel request records the job, the run status at the request and the
 // River job state; runs themselves are operational history in the runs
@@ -450,6 +476,7 @@ var catalog = []Action{
 	ActionJobOwnerAdded, ActionJobOwnerRemoved, ActionJobRunRequested, ActionJobRunStartedEarly,
 	ActionRunCancelRequested,
 	ActionAPIAddressDenied, ActionAPITokenCreated, ActionAPITokenRevoked, ActionAPITokenAddressesChanged,
+	ActionRiskAccepted, ActionRiskAcceptanceRevoked, ActionRiskAcceptanceExpiring, ActionRiskAcceptanceEnded,
 	ActionRetentionDeletionPlanned, ActionRetentionSwept, ActionRetentionAborted, ActionRetentionArtifactMissing,
 	ActionRestoreVerificationFailed, ActionRestoreStarted, ActionRestoreFinished,
 	ActionRestoreRequested, ActionRestoreCancelRequested, ActionRestoreAbandoned,
