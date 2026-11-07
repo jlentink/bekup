@@ -9,9 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import { confirmationMatches } from "./model";
 import { RestoreFactorStatusQuery } from "./operations";
 import type { Preview } from "./preview-step";
+
+const T = restoreMessages.confirm;
 
 export function ConfirmStep({
   preview,
@@ -50,18 +53,19 @@ export function ConfirmStep({
           <p id={hintId} className="max-w-prose text-sm">
             {globals ? (
               <>
-                The globals restore changes roles on the whole server. Type the phrase{" "}
-                <span className="font-mono font-semibold select-all">{text}</span> to confirm.
+                {T.globalsBefore}
+                <span className="font-mono font-semibold select-all">{text}</span>
+                {T.globalsAfter}
               </>
             ) : (
               <>
-                <span className="font-mono font-semibold select-all">{text}</span> will be replaced
-                as a whole. Type its name exactly to confirm.
+                <span className="font-mono font-semibold select-all">{text}</span>
+                {T.databaseAfter}
               </>
             )}
           </p>
           <label htmlFor={inputId} className="sr-only">
-            {globals ? "Confirmation phrase" : "Database name to confirm"}
+            {globals ? T.phraseLabel : T.nameLabel}
           </label>
           <Input
             id={inputId}
@@ -80,34 +84,29 @@ export function ConfirmStep({
           />
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          A new database is created; nothing existing is replaced.
-        </p>
+        <p className="text-sm text-muted-foreground">{T.newDatabase}</p>
       )}
 
       <div className="flex flex-col gap-3 rounded-md border bg-surface-sunken/60 p-4">
         <div className="flex items-start gap-3">
           <Fingerprint aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" />
           <div className="flex flex-col gap-1">
-            <span className="font-medium">Second-factor check</span>
-            <p className="text-sm text-muted-foreground">
-              Restores need a fresh check with a passkey (with user verification) or your
-              authenticator app. Recovery codes and passwords do not count.
-            </p>
+            <span className="font-medium">{T.factorTitle}</span>
+            <p className="text-sm text-muted-foreground">{T.factorText}</p>
           </div>
         </div>
         {factors.loading ? <Skeleton className="h-6 w-48" /> : null}
         {noFactor ? (
           <Alert variant="destructive">
             <ShieldPlus aria-hidden="true" />
-            <AlertTitle>Set up a passkey or an authenticator app first</AlertTitle>
+            <AlertTitle>{T.setupFirst}</AlertTitle>
             <AlertDescription>
-              <p>Your account has no second factor that can confirm a restore.</p>
+              <p>{T.noFactor}</p>
               <Link
                 to="/profile/security"
                 className="font-medium text-primary underline underline-offset-4"
               >
-                Open two-factor settings
+                {T.openSettings}
               </Link>
             </AlertDescription>
           </Alert>
@@ -116,7 +115,7 @@ export function ConfirmStep({
 
       {submitError ? (
         <Alert variant="destructive">
-          <AlertTitle>The restore was not started</AlertTitle>
+          <AlertTitle>{T.notStarted}</AlertTitle>
           <AlertDescription>{submitError}</AlertDescription>
         </Alert>
       ) : null}
@@ -133,7 +132,7 @@ export function ConfirmStep({
           ) : (
             <RotateCcw aria-hidden="true" />
           )}
-          Verify and start the restore
+          {T.submit}
         </Button>
       </div>
     </div>

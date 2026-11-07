@@ -3,12 +3,13 @@ import { useId } from "react";
 
 import { useTheme } from "@/lib/theme-context";
 import { type ThemePreference } from "@/lib/theme-model";
+import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
 const OPTIONS: readonly { value: ThemePreference; label: string; icon: LucideIcon }[] = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-  { value: "system", label: "System", icon: Monitor },
+  { value: "light", label: messages.theme.light, icon: Sun },
+  { value: "dark", label: messages.theme.dark, icon: Moon },
+  { value: "system", label: messages.theme.system, icon: Monitor },
 ];
 
 /**
@@ -26,7 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         className,
       )}
     >
-      <legend className="sr-only">Color theme</legend>
+      <legend className="sr-only">{messages.theme.legend}</legend>
       {OPTIONS.map(({ value, label, icon: Icon }) => (
         <label
           key={value}

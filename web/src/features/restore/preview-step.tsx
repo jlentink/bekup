@@ -16,6 +16,7 @@ import type { RestorePreviewQuery as RestorePreviewResult } from "@/graphql/gen/
 import { userMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import {
   ENGINE_LABELS,
   PRIVILEGE_LABELS,
@@ -26,6 +27,9 @@ import {
   type WarningSeverity,
 } from "./model";
 
+const T = restoreMessages.preview;
+const C = restoreMessages.common;
+
 export type Preview = RestorePreviewResult["restorePreview"];
 
 const SEVERITY_META: Record<
@@ -33,19 +37,19 @@ const SEVERITY_META: Record<
   { label: string; icon: typeof Info; row: string; icon_: string }
 > = {
   destructive: {
-    label: "Destructive",
+    label: T.severity.destructive,
     icon: OctagonAlert,
     row: "border-l-destructive bg-status-failed-soft",
     icon_: "text-destructive",
   },
   caution: {
-    label: "Caution",
+    label: T.severity.caution,
     icon: CircleAlert,
     row: "border-l-status-partial bg-status-partial-soft",
     icon_: "text-status-partial-fg",
   },
   info: {
-    label: "Note",
+    label: T.severity.info,
     icon: Info,
     row: "border-l-primary/60 bg-surface",
     icon_: "text-primary",
@@ -70,7 +74,7 @@ export function PreviewStep({
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>The restore request was refused</AlertTitle>
+        <AlertTitle>{T.refused}</AlertTitle>
         <AlertDescription>{userMessage(error)}</AlertDescription>
       </Alert>
     );
@@ -92,9 +96,9 @@ export function PreviewStep({
       {/* What will happen: source → target, as the server understood it. */}
       <div className="grid items-stretch gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex flex-col gap-1 rounded-md border bg-surface px-4 py-3">
-          <span className="eyebrow">From the backup</span>
+          <span className="eyebrow">{T.fromBackup}</span>
           <span className="truncate font-mono text-base">
-            {globals ? "cluster globals" : preview.source.database}
+            {globals ? C.clusterGlobals : preview.source.database}
           </span>
           <span className="text-xs text-muted-foreground">
             {ENGINE_LABELS[preview.source.engine] ?? preview.source.engine}{" "}
@@ -114,14 +118,14 @@ export function PreviewStep({
           )}
         >
           <span className="eyebrow">
-            {globals ? "Into the server" : preview.mode === "OVERWRITE" ? "Replaces" : "Creates"}
+            {globals ? T.intoServer : preview.mode === "OVERWRITE" ? C.replaces : C.creates}
           </span>
           <span className="truncate font-mono text-base">
             {globals ? preview.target.name : preview.targetDatabase}
           </span>
           <span className="text-xs text-muted-foreground">
-            {globals ? "every database on it" : `on ${preview.target.name}`}
-            {preview.target.temporary ? " (temporary connection)" : ""}
+            {globals ? T.everyDatabase : T.on(preview.target.name)}
+            {preview.target.temporary ? T.temporaryConnection : ""}
           </span>
         </div>
       </div>
@@ -130,8 +134,8 @@ export function PreviewStep({
         <div className="flex items-start gap-3 rounded-md border border-status-partial/50 bg-status-partial-soft px-4 py-3 text-sm">
           <GitFork aria-hidden="true" className="mt-0.5 size-4 text-status-partial-fg" />
           <p>
-            <span className="font-semibold">Cross-source restore.</span> The target is not the
-            connection this backup was taken from; this is recorded in the audit log.
+            <span className="font-semibold">{T.crossSource}</span>
+            {T.crossSourceText}
           </p>
         </div>
       ) : null}
@@ -145,13 +149,13 @@ export function PreviewStep({
 
       <section aria-labelledby="restore-warnings" className="flex flex-col gap-3">
         <h3 id="restore-warnings" className="text-[0.9375rem] font-semibold tracking-tight">
-          Before you continue{" "}
+          {T.beforeContinue}{" "}
           <span className="font-mono text-xs font-normal text-muted-foreground">
             ({warnings.length})
           </span>
         </h3>
         {warnings.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No warnings for this restore.</p>
+          <p className="text-sm text-muted-foreground">{T.noWarnings}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {warnings.map((w) => {
@@ -179,8 +183,9 @@ export function PreviewStep({
                     <p className="text-sm leading-relaxed">{w.message}</p>
                     {w.code === "restore_hardening" ? (
                       <p className="text-xs text-muted-foreground">
-                        Applications that connect to the restored database need an explicit{" "}
-                        <code className="font-mono">GRANT CONNECT</code> afterwards.
+                        {T.grantBefore}
+                        <code className="font-mono">{T.grantCode}</code>
+                        {T.grantAfter}
                       </p>
                     ) : null}
                   </div>
@@ -211,25 +216,22 @@ function PrivilegePanel({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <ShieldCheck aria-hidden="true" className="size-4 text-status-success" />
-        Target role: {PRIVILEGE_LABELS[p.status]}
+        {T.targetRole(PRIVILEGE_LABELS[p.status])}
       </div>
     );
   }
   return (
     <section
-      aria-label="Privileged target"
+      aria-label={T.privilegedTarget}
       className="flex flex-col gap-3 rounded-md border-2 border-destructive/60 bg-status-failed-soft p-4"
     >
       <div className="flex items-start gap-3">
         <ShieldAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive" />
         <div className="flex flex-col gap-1">
           <h3 className="font-semibold text-status-failed-fg">
-            Privileged target role: {PRIVILEGE_LABELS[p.status]}
+            {T.privilegedRole(PRIVILEGE_LABELS[p.status])}
           </h3>
-          <p className="text-sm">
-            SQL in the backup runs with this role's rights. A malicious dump could take over the
-            target server.
-          </p>
+          <p className="text-sm">{T.privilegedRisk}</p>
           {p.reasons.length > 0 ? (
             <ul className="mt-1 flex flex-wrap gap-1.5">
               {p.reasons.map((r) => (
@@ -246,8 +248,7 @@ function PrivilegePanel({
       </div>
       {gate === "blocked" ? (
         <p role="alert" className="rounded-sm bg-surface px-3 py-2 text-sm font-medium">
-          Only an admin can restore into this connection. Ask an admin, or choose a connection whose
-          role is not privileged.
+          {T.adminOnly}
         </p>
       ) : (
         <label
@@ -264,10 +265,8 @@ function PrivilegePanel({
             }}
           />
           <span>
-            I trust this backup's source and accept that its SQL runs with the privileged role.
-            <span className="block text-xs text-muted-foreground">
-              Recorded in the audit log and raised as a security alert.
-            </span>
+            {T.acknowledge}
+            <span className="block text-xs text-muted-foreground">{T.acknowledgeNote}</span>
           </span>
         </label>
       )}

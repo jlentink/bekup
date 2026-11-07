@@ -33,6 +33,7 @@ import type { AdminJobsQuery } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
 import { downloadText } from "@/lib/download";
+import { defineMessages, plural } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { ExportJobPassphrasesMutation } from "@/lib/operations";
 
@@ -42,47 +43,101 @@ import { Command, DocLink } from "../ui";
 
 type Job = AdminJobsQuery["jobs"]["edges"][number]["node"];
 
-const T = {
-  title: "Recovery",
-  lead: "Escrow what you need to verify and decrypt backups without bekup: the instance public keys and every job's passphrases. Keep the copies offline, away from this host and the backups.",
-  guide: "Disaster recovery guide",
-  keysTitle: "Instance public keys",
-  keysLead:
-    "Needed to verify manifest signatures offline. Not secret, but integrity-relevant: record the printed fingerprints separately (for example on a printed escrow sheet).",
-  keysRun: "Run on the bekup host (needs the database, not the keyring):",
-  keysAgain:
-    "Export again whenever the command shows a key you have not escrowed. Retired keys stay valid for the manifests they signed: keep every key.",
-  passTitle: "Job passphrases",
-  passLead:
-    "One export per passphrase-encrypted job, with every passphrase version. Re-export after each passphrase change.",
-  warnTitle: "An export is a decryption key",
-  warn: "Anyone holding the file can decrypt all of the job's passphrase-encrypted backups. Every export is audited and raises a security alert to all admins.",
-  colJob: "Job",
-  colKey: "Key",
-  colAction: "Export",
-  passphrase: (v: number) => `Passphrase v${String(v)}`,
-  since: (when: string) => `since ${when}`,
-  recipient: "age recipient",
-  recipientHint: "Escrow the age identity yourself; bekup never stored it.",
-  unencrypted: "Unencrypted",
-  notConfigured: "No key",
-  export: "Export",
-  exportLabel: (name: string) => `Export the passphrases of ${name}`,
-  none: "No jobs yet.",
-  pager: "Job pages",
-  dialogTitle: (name: string) => `Export the passphrases of ${name}?`,
-  dialogLead:
-    "The file holds every passphrase version of this job in clear text. It downloads straight to this device and is never shown on screen.",
-  dialogPoints: [
-    "Store it offline (password manager vault, encrypted USB stick in a safe). Never next to the backups.",
-    "Delete the downloaded copy from this device after moving it.",
-    "All admins get a security alert and the export is in the audit log.",
-  ],
-  acknowledge: "I understand that this file decrypts the job's backups",
-  confirm: "Confirm identity and export",
-  exported: (versions: number) =>
-    `Passphrases exported (${String(versions)} version${versions === 1 ? "" : "s"}). Move the file offline now.`,
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Recovery",
+    lead: "Escrow what you need to verify and decrypt backups without bekup: the instance public keys and every job's passphrases. Keep the copies offline, away from this host and the backups.",
+    guide: "Disaster recovery guide",
+    keysTitle: "Instance public keys",
+    keysLead:
+      "Needed to verify manifest signatures offline. Not secret, but integrity-relevant: record the printed fingerprints separately (for example on a printed escrow sheet).",
+    keysRun: "Run on the bekup host (needs the database, not the keyring):",
+    keysAgain:
+      "Export again whenever the command shows a key you have not escrowed. Retired keys stay valid for the manifests they signed: keep every key.",
+    passTitle: "Job passphrases",
+    passLead:
+      "One export per passphrase-encrypted job, with every passphrase version. Re-export after each passphrase change.",
+    warnTitle: "An export is a decryption key",
+    warn: "Anyone holding the file can decrypt all of the job's passphrase-encrypted backups. Every export is audited and raises a security alert to all admins.",
+    colJob: "Job",
+    colKey: "Key",
+    colAction: "Export",
+    passphrase: (v: number) => `Passphrase v${String(v)}`,
+    since: (when: string) => `since ${when}`,
+    recipient: "age recipient",
+    recipientHint: "Escrow the age identity yourself; bekup never stored it.",
+    unencrypted: "Unencrypted",
+    notConfigured: "No key",
+    export: "Export",
+    exportLabel: (name: string) => `Export the passphrases of ${name}`,
+    none: "No jobs yet.",
+    pager: "Job pages",
+    dialogTitle: (name: string) => `Export the passphrases of ${name}?`,
+    dialogLead:
+      "The file holds every passphrase version of this job in clear text. It downloads straight to this device and is never shown on screen.",
+    dialogPoints: [
+      "Store it offline (password manager vault, encrypted USB stick in a safe). Never next to the backups.",
+      "Delete the downloaded copy from this device after moving it.",
+      "All admins get a security alert and the export is in the audit log.",
+    ],
+    acknowledge: "I understand that this file decrypts the job's backups",
+    confirm: "Confirm identity and export",
+    exported: (versions: number) =>
+      plural(versions, {
+        one: "Passphrases exported (1 version). Move the file offline now.",
+        other: `Passphrases exported (${String(versions)} versions). Move the file offline now.`,
+      }),
+    secretMaterial: "Secret material",
+  },
+  nl: {
+    title: "Noodherstel",
+    lead: "Bewaar wat je nodig hebt om back-ups zonder bekup te controleren en te ontsleutelen: de publieke sleutels van de instantie en de wachtwoordzinnen van elke taak. Bewaar de kopieën offline, weg van deze host en van de back-ups.",
+    guide: "Handleiding noodherstel",
+    keysTitle: "Publieke sleutels van de instantie",
+    keysLead:
+      "Nodig om handtekeningen van manifesten offline te controleren. Niet geheim, maar wel van belang voor de integriteit: noteer de getoonde vingerafdrukken apart (bijvoorbeeld op een afgedrukt bewaarblad).",
+    keysRun: "Voer dit uit op de bekup-host (heeft de database nodig, niet de sleutelring):",
+    keysAgain:
+      "Exporteer opnieuw zodra het commando een sleutel toont die je nog niet hebt bewaard. Buiten gebruik gestelde sleutels blijven geldig voor de manifesten die ze hebben ondertekend: bewaar elke sleutel.",
+    passTitle: "Wachtwoordzinnen van taken",
+    passLead:
+      "Eén export per taak die met een wachtwoordzin is versleuteld, met elke versie van de wachtwoordzin. Exporteer opnieuw na elke wijziging van de wachtwoordzin.",
+    warnTitle: "Een export is een ontsleutelingssleutel",
+    warn: "Iedereen die het bestand heeft, kan alle met een wachtwoordzin versleutelde back-ups van de taak ontsleutelen. Elke export komt in de auditlog en stuurt alle beheerders een beveiligingsmelding.",
+    colJob: "Taak",
+    colKey: "Sleutel",
+    colAction: "Export",
+    passphrase: (v: number) => `Wachtwoordzin v${String(v)}`,
+    since: (when: string) => `sinds ${when}`,
+    recipient: "age-ontvanger",
+    recipientHint: "Bewaar de age-identiteit zelf; bekup heeft die nooit opgeslagen.",
+    unencrypted: "Onversleuteld",
+    notConfigured: "Geen sleutel",
+    export: "Exporteren",
+    exportLabel: (name: string) => `De wachtwoordzinnen van ${name} exporteren`,
+    none: "Nog geen taken.",
+    pager: "Pagina's met taken",
+    dialogTitle: (name: string) => `De wachtwoordzinnen van ${name} exporteren?`,
+    dialogLead:
+      "Het bestand bevat elke versie van de wachtwoordzin van deze taak als leesbare tekst. Het wordt direct naar dit apparaat gedownload en nooit op het scherm getoond.",
+    dialogPoints: [
+      "Bewaar het offline (kluis van een wachtwoordbeheerder, versleutelde USB-stick in een kluis). Nooit naast de back-ups.",
+      "Verwijder de gedownloade kopie van dit apparaat nadat je hem hebt verplaatst.",
+      "Alle beheerders krijgen een beveiligingsmelding en de export staat in de auditlog.",
+    ],
+    acknowledge: "Ik begrijp dat dit bestand de back-ups van de taak ontsleutelt",
+    confirm: "Identiteit bevestigen en exporteren",
+    exported: (versions: number) =>
+      plural(versions, {
+        one: "Wachtwoordzinnen geëxporteerd (1 versie). Zet het bestand nu offline.",
+        other: `Wachtwoordzinnen geëxporteerd (${String(versions)} versies). Zet het bestand nu offline.`,
+      }),
+    secretMaterial: "Geheim materiaal",
+  },
+});
+
+/** The host command of the key export (code, never translated). */
+const EXPORT_COMMAND = "bekup keys export-public --out bekup-instance-keys.txt";
 
 /** Recovery escrow (admin, D-142/D-154/D-164): passphrase export and public keys. */
 export function RecoveryPage() {
@@ -105,7 +160,7 @@ export function RecoveryPage() {
 
       <Section icon={FileKey2} title={T.keysTitle} lead={T.keysLead}>
         <p className="text-sm">{T.keysRun}</p>
-        <Command>bekup keys export-public --out bekup-instance-keys.txt</Command>
+        <Command>{EXPORT_COMMAND}</Command>
         <p className="text-sm text-muted-foreground">{T.keysAgain}</p>
       </Section>
 
@@ -287,7 +342,7 @@ function ExportDialog({ job, onClose }: { job: Job; onClose: () => void }) {
       <DialogContent className="gap-5 sm:max-w-lg">
         <DialogHeader>
           <p className="eyebrow flex items-center gap-1.5 text-status-failed-fg">
-            <TriangleAlert aria-hidden="true" className="size-3.5" /> Secret material
+            <TriangleAlert aria-hidden="true" className="size-3.5" /> {T.secretMaterial}
           </p>
           <DialogTitle className="font-display text-2xl font-normal">
             {T.dialogTitle(job.name)}

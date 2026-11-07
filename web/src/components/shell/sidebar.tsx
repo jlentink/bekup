@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 
 import { Wordmark } from "@/components/brand/logo";
+import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
 import { navForRole, type Role } from "./nav";
@@ -8,7 +9,7 @@ import { navForRole, type Role } from "./nav";
 export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
   const sections = navForRole(role);
   return (
-    <nav aria-label="Main" className="flex flex-col gap-6">
+    <nav aria-label={messages.shell.navMain} className="flex flex-col gap-6">
       {sections.map((section) => (
         <div key={section.label} className="flex flex-col gap-1">
           <h2 className="eyebrow px-3 pb-1 text-sidebar-muted-foreground">{section.label}</h2>
@@ -50,9 +51,9 @@ export function Sidebar({ role }: { role: Role }) {
         <SidebarNav role={role} />
       </div>
       <div className="border-t border-sidebar-border px-5 py-3">
-        <p className="eyebrow text-sidebar-muted-foreground">Instance</p>
+        <p className="eyebrow text-sidebar-muted-foreground">{messages.shell.instance}</p>
         <p className="mt-0.5 font-mono text-xs text-sidebar-muted-foreground">
-          v{__BEKUP_VERSION__}
+          {messages.about.version(__BEKUP_VERSION__)}
         </p>
       </div>
     </aside>

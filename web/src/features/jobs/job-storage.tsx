@@ -13,6 +13,7 @@ import {
 import type { JobStorageQuery as JobStorageResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatBytes, formatDateTime } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 
 import { STORAGE_T } from "./job-storage-text";
 import { JobStorageQuery } from "./operations";
@@ -20,7 +21,10 @@ import { JobStorageQuery } from "./operations";
 type Storage = NonNullable<JobStorageResult["job"]>["storage"];
 type TrendRun = Storage["trend"][number];
 
-const TYPE_LABEL = { DISK: "Disk", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" } as const;
+const TYPE_LABEL = defineMessages({
+  en: { DISK: "Disk", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" },
+  nl: { DISK: "Schijf", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" },
+});
 
 const T = STORAGE_T;
 

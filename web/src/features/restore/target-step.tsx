@@ -27,9 +27,12 @@ import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import { ENGINE_LABELS, newDatabaseProblem, PRIVILEGE_LABELS, privilegeReasonLabel } from "./model";
 import { RestoreTargetDatabasesQuery } from "./operations";
 import { TemporaryConnectionPanel } from "./temp-connection";
+
+const T = restoreMessages.target;
 
 export type RestoreTarget = RestoreTargetsResult["restoreTargets"]["targets"][number];
 
@@ -78,18 +81,13 @@ export function TargetStep({
   return (
     <div className="flex flex-col gap-8">
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-3 text-[0.9375rem] font-semibold tracking-tight">
-          Target connection
-        </legend>
+        <legend className="mb-3 text-[0.9375rem] font-semibold tracking-tight">{T.legend}</legend>
         {targets.some((t) => t.existingRestricted) ? (
-          <p className="text-sm text-muted-foreground">
-            You can replace only the databases your own jobs back up, or create a new database on
-            the connections they use.
-          </p>
+          <p className="text-sm text-muted-foreground">{T.restricted}</p>
         ) : null}
         {targets.length === 0 ? (
           <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-            No connection with the backup's engine is available to you as a restore target.
+            {T.none}
           </p>
         ) : (
           <div className="grid gap-2 md:grid-cols-2">
@@ -132,7 +130,7 @@ export function TargetStep({
                 }}
               >
                 <Plus aria-hidden="true" />
-                Create a temporary connection
+                {T.createTemporary}
               </Button>
             </div>
           )
@@ -188,28 +186,30 @@ function TargetCard({
       <span id={descId} className="flex flex-wrap gap-1.5 pl-7 text-xs">
         {t.original ? (
           <Tag compact tone="primary">
-            Original source
+            {T.original}
           </Tag>
         ) : null}
         {t.temporary ? (
           <Tag compact tone="neutral">
             <Clock3 aria-hidden="true" className="size-3" />
-            Temporary{t.expiresAt ? `, expires ${formatRelative(t.expiresAt)}` : ""}
+            {T.temporary}
+            {t.expiresAt ? T.expires(formatRelative(t.expiresAt)) : ""}
           </Tag>
         ) : null}
         {t.insecureTransport ? (
           <Tag compact tone="insecure">
-            Insecure transport
+            {T.insecure}
           </Tag>
         ) : null}
         {!t.ready ? (
           <Tag compact tone="danger" className="h-auto min-h-5 py-0.5 whitespace-normal">
-            Not ready{t.notReadyReason ? `: ${t.notReadyReason}` : ""}
+            {T.notReady}
+            {t.notReadyReason ? `: ${t.notReadyReason}` : ""}
           </Tag>
         ) : null}
         {!t.newDatabaseAllowed ? (
           <Tag compact tone="neutral">
-            No new databases
+            {T.noNewDatabases}
           </Tag>
         ) : null}
       </span>
@@ -236,15 +236,15 @@ function DatabaseChoice({
   return (
     <fieldset className="flex flex-col gap-4">
       <legend className="mb-3 text-[0.9375rem] font-semibold tracking-tight">
-        Database on {target.name}
+        {T.databaseOn(target.name)}
       </legend>
-      <div role="radiogroup" aria-label="How to restore" className="grid gap-2 sm:grid-cols-2">
+      <div role="radiogroup" aria-label={T.howToRestore} className="grid gap-2 sm:grid-cols-2">
         <ModeOption
           checked={choice.mode === "NEW_DB"}
           disabled={!target.newDatabaseAllowed}
           icon={Sparkles}
-          title="Create a new database"
-          lead="Restores next to what exists. Nothing is replaced."
+          title={T.newTitle}
+          lead={T.newLead}
           onSelect={() => {
             onChange({ mode: "NEW_DB" });
           }}
@@ -252,8 +252,8 @@ function DatabaseChoice({
         <ModeOption
           checked={choice.mode === "OVERWRITE"}
           icon={Replace}
-          title="Replace an existing database"
-          lead="Overwrites the chosen database as a whole."
+          title={T.replaceTitle}
+          lead={T.replaceLead}
           destructive
           onSelect={() => {
             onChange({ mode: "OVERWRITE" });
@@ -263,7 +263,7 @@ function DatabaseChoice({
 
       {choice.mode === "NEW_DB" ? (
         <div className="grid max-w-md gap-2">
-          <Label htmlFor={nameId}>New database name</Label>
+          <Label htmlFor={nameId}>{T.newName}</Label>
           <Input
             id={nameId}
             value={choice.newDatabase}
@@ -345,7 +345,7 @@ function ModeOption({
       <span className="flex flex-col gap-0.5 font-medium">
         {title}
         <span className="text-xs font-normal text-muted-foreground">
-          {disabled ? "Not allowed on this connection." : lead}
+          {disabled ? T.notAllowed : lead}
         </span>
       </span>
     </label>
@@ -373,10 +373,10 @@ function ExistingDatabases({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <span className="eyebrow">Existing databases</span>
+        <span className="eyebrow">{T.existing}</span>
         {list ? (
           <span className="text-xs text-muted-foreground">
-            listed {formatDateTime(list.listedAt)}
+            {T.listed(formatDateTime(list.listedAt))}
           </span>
         ) : null}
         <Button
@@ -389,7 +389,7 @@ function ExistingDatabases({
           }}
         >
           <RefreshCw aria-hidden="true" className={cn(loading && "animate-spin")} />
-          Refresh
+          {T.refresh}
         </Button>
       </div>
       {loading && !list ? (
@@ -402,12 +402,12 @@ function ExistingDatabases({
         <>
           {list.databases.length === 0 ? (
             <p className="rounded-md border border-dashed px-4 py-5 text-center text-sm text-muted-foreground">
-              No databases you may replace on this connection.
+              {T.noneToReplace}
             </p>
           ) : (
             <div
               role="radiogroup"
-              aria-label="Database to replace"
+              aria-label={T.toReplace}
               className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3"
             >
               {list.databases.map((db) => (
@@ -437,18 +437,18 @@ function ExistingDatabases({
           {list.warnings.length > 0 ? (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CircleAlert aria-hidden="true" className="size-3.5" />
-              Runner notes: <span className="font-mono">{list.warnings.join(", ")}</span>
+              {T.runnerNotes} <span className="font-mono">{list.warnings.join(", ")}</span>
             </p>
           ) : null}
           {list.targetPrivileges.acknowledgementRequired ? (
             <Alert variant="destructive">
               <ShieldAlert aria-hidden="true" />
               <AlertTitle>
-                Privileged target role: {PRIVILEGE_LABELS[list.targetPrivileges.status]}
+                {T.privilegedTitle(PRIVILEGE_LABELS[list.targetPrivileges.status])}
               </AlertTitle>
               <AlertDescription>
-                {list.targetPrivileges.reasons.map(privilegeReasonLabel).join("; ")}. Only admins
-                can restore into it, with an explicit acknowledgement in the preview.
+                {list.targetPrivileges.reasons.map(privilegeReasonLabel).join("; ")}
+                {T.privilegedOnly}
               </AlertDescription>
             </Alert>
           ) : null}

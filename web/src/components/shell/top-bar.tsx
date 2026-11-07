@@ -68,7 +68,7 @@ function MobileNav({ user, onAbout }: { user: SessionUser; onAbout: () => void }
             {messages.about.openDrawer}
           </button>
           <p className="mt-1 px-3 font-mono text-xs text-sidebar-muted-foreground">
-            v{__BEKUP_VERSION__}
+            {messages.about.version(__BEKUP_VERSION__)}
           </p>
         </div>
       </DialogContent>

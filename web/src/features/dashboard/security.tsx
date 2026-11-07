@@ -1,12 +1,39 @@
 import { CircleCheck, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import { Link } from "react-router";
 
+import { defineMessages, plural } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { SecurityFinding } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
 const ITEMS_MAX = 5;
+
+const T = defineMessages({
+  en: {
+    title: "Security",
+    link: "Connections",
+    loading: "Loading security findings",
+    empty: "No weakened settings: every job is encrypted and every connection is pinned.",
+    listLabel: "Security findings",
+    more: (n: number) => `and ${String(n)} more`,
+    accepted: (n: number) =>
+      `${plural(n, { one: "1 accepted risk", other: `${String(n)} accepted risks` })}: still marked, no longer open issues`,
+    review: "Review",
+  },
+  nl: {
+    title: "Beveiliging",
+    link: "Verbindingen",
+    loading: "Beveiligingsbevindingen laden",
+    empty:
+      "Geen verzwakte instellingen: elke taak is versleuteld en elke verbinding is vastgepind.",
+    listLabel: "Beveiligingsbevindingen",
+    more: (n: number) => `en nog ${String(n)}`,
+    accepted: (n: number) =>
+      `${plural(n, { one: "1 geaccepteerd risico", other: `${String(n)} geaccepteerde risico's` })}: nog steeds gemarkeerd, niet langer open`,
+    review: "Bekijken",
+  },
+});
 
 /**
  * Weakened or failing security settings (D-001): unencrypted jobs,
@@ -30,22 +57,22 @@ export function SecurityTile({
   return (
     <Tile
       folio="05"
-      title="Security"
+      title={T.title}
       to="/connections"
-      linkLabel="Connections"
+      linkLabel={T.link}
       testId="tile-security"
       {...(className ? { className } : {})}
     >
       {loading && findings.length === 0 ? (
-        <TileSkeleton rows={3} label="Loading security findings" />
+        <TileSkeleton rows={3} label={T.loading} />
       ) : error && findings.length === 0 ? (
         <TileError error={error} />
       ) : findings.length === 0 ? (
         <TileEmpty icon={<ShieldCheck aria-hidden="true" className="size-4 text-status-success" />}>
-          No weakened settings: every job is encrypted and every connection is pinned.
+          {T.empty}
         </TileEmpty>
       ) : (
-        <ul aria-label="Security findings" className="grid gap-3 sm:grid-cols-2">
+        <ul aria-label={T.listLabel} className="grid gap-3 sm:grid-cols-2">
           {findings.map((f) => {
             const Icon = f.severity === "critical" ? ShieldAlert : ShieldOff;
             return (
@@ -86,7 +113,7 @@ export function SecurityTile({
                     </li>
                   ))}
                   {f.items.length > ITEMS_MAX ? (
-                    <li className="text-muted-foreground">and {f.items.length - ITEMS_MAX} more</li>
+                    <li className="text-muted-foreground">{T.more(f.items.length - ITEMS_MAX)}</li>
                   ) : null}
                 </ul>
               </li>
@@ -101,11 +128,8 @@ export function SecurityTile({
           className="hatch-accepted mt-3 flex items-center gap-2 rounded-md border border-dashed border-status-insecure/35 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
         >
           <CircleCheck aria-hidden="true" className="size-3.5 shrink-0" />
-          <span>
-            {accepted === 1 ? "1 accepted risk" : `${String(accepted)} accepted risks`}: still
-            marked, no longer open issues
-          </span>
-          <span className="ml-auto font-medium underline underline-offset-4">Review</span>
+          <span>{T.accepted(accepted)}</span>
+          <span className="ml-auto font-medium underline underline-offset-4">{T.review}</span>
         </Link>
       ) : null}
     </Tile>

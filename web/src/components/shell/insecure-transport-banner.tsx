@@ -42,11 +42,9 @@ export function InsecureTransportBanner({
       <ShieldOff aria-hidden="true" className="size-4 shrink-0" />
       <p className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[0.8125rem]">
         <span className="font-mono text-2xs font-semibold tracking-[0.12em] uppercase">
-          Not encrypted
+          {messages.insecureTransport.label}
         </span>
-        <span>
-          Connection is not encrypted (no HTTPS). Passwords and session data travel in clear text.
-        </span>
+        <span>{messages.insecureTransport.body}</span>
         {accepted ? (
           <span data-testid="insecure-transport-accepted" className="text-2xs opacity-85">
             {accepted.expiresAt

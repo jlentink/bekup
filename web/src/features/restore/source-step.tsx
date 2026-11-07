@@ -25,8 +25,12 @@ import { userMessage } from "@/lib/api-error";
 import { formatBytes, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import { ENGINE_LABELS } from "./model";
 import { RestoreJobsQuery, RestoreRunsQuery } from "./operations";
+
+const T = restoreMessages.source;
+const C = restoreMessages.common;
 
 type Run = RestoreRunsResult["runs"]["edges"][number]["node"];
 type Artifact = Run["items"][number]["artifacts"][number];
@@ -86,7 +90,7 @@ export function SourceStep({
       <div className="flex flex-col gap-4">
         {sourceError ? (
           <Alert variant="destructive">
-            <AlertTitle>This backup cannot be restored</AlertTitle>
+            <AlertTitle>{T.cannotRestore}</AlertTitle>
             <AlertDescription>{userMessage(sourceError)}</AlertDescription>
           </Alert>
         ) : sourceLoading || !source ? (
@@ -96,7 +100,7 @@ export function SourceStep({
         )}
         <div>
           <Button variant="outline" size="sm" onClick={onClear}>
-            Choose a different backup
+            {T.chooseOther}
           </Button>
         </div>
       </div>
@@ -116,42 +120,42 @@ export function SourceSummary({
   const globals = source.kind === "GLOBALS";
   return (
     <div className="grid gap-px overflow-hidden rounded-md border bg-rule sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
-      <Fact label={globals ? "Cluster globals" : "Database"}>
+      <Fact label={globals ? T.clusterGlobals : T.database}>
         <span className="flex items-center gap-2 font-mono text-base">
           {globals ? (
             <Users aria-hidden="true" className="size-4 text-muted-foreground" />
           ) : (
             <Database aria-hidden="true" className="size-4 text-muted-foreground" />
           )}
-          <span className="truncate">{globals ? "roles and tablespaces" : source.database}</span>
+          <span className="truncate">{globals ? T.rolesAndTablespaces : source.database}</span>
         </span>
         {picked ? <span className="text-xs text-muted-foreground">{picked.jobName}</span> : null}
       </Fact>
-      <Fact label="Engine">
+      <Fact label={T.engine}>
         {ENGINE_LABELS[source.engine] ?? source.engine} {source.versionKey}
         <span className="font-mono text-xs text-muted-foreground">
-          server {source.serverVersion}
+          {T.server(source.serverVersion)}
         </span>
       </Fact>
-      <Fact label={picked ? "Taken" : "Integrity"}>
+      <Fact label={picked ? T.taken : T.integrity}>
         {picked ? (
           <time dateTime={picked.createdAt}>{formatDateTime(picked.createdAt)}</time>
         ) : null}
         <span className="inline-flex items-center gap-1 text-xs text-status-success-fg">
           <BadgeCheck aria-hidden="true" className="size-3.5" />
-          Verified, signed
+          {T.verifiedSigned}
         </span>
       </Fact>
-      <Fact label={picked ? "Size" : "Key"}>
+      <Fact label={picked ? T.size : T.key}>
         {picked ? <span data-numeric>{formatBytes(picked.size)}</span> : null}
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           {source.needsIdentity ? (
             <>
-              <FileKey2 aria-hidden="true" className="size-3.5" /> Needs the age identity
+              <FileKey2 aria-hidden="true" className="size-3.5" /> {T.needsIdentity}
             </>
           ) : (
             <>
-              <KeyRound aria-hidden="true" className="size-3.5" /> Key held by bekup
+              <KeyRound aria-hidden="true" className="size-3.5" /> {T.keyHeld}
             </>
           )}
         </span>
@@ -180,7 +184,7 @@ function BackupBrowser({ role, onPick }: { role: Role; onPick: (a: PickedArtifac
   return (
     <div className="flex flex-col gap-5">
       <div className="grid max-w-md gap-2">
-        <Label htmlFor={jobSelectId}>Job</Label>
+        <Label htmlFor={jobSelectId}>{C.job}</Label>
         {jobs.loading ? (
           <Skeleton className="h-9 w-full" />
         ) : jobs.error ? (
@@ -188,11 +192,11 @@ function BackupBrowser({ role, onPick }: { role: Role; onPick: (a: PickedArtifac
             <AlertDescription>{userMessage(jobs.error)}</AlertDescription>
           </Alert>
         ) : jobList.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No jobs are visible to you.</p>
+          <p className="text-sm text-muted-foreground">{T.noJobs}</p>
         ) : (
           <Select value={jobId ?? ""} onValueChange={setJobId}>
             <SelectTrigger id={jobSelectId} className="w-full">
-              <SelectValue placeholder="Choose the job whose backup you restore" />
+              <SelectValue placeholder={T.choosePlaceholder} />
             </SelectTrigger>
             <SelectContent>
               {jobList.map((j) => (
@@ -259,17 +263,17 @@ function RunList({
     <div className="flex flex-col gap-4">
       {runs.length === 0 ? (
         <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-          No verified, signed backups of this job in the loaded runs.
+          {T.noBackups}
         </p>
       ) : (
-        <ol className="flex flex-col gap-3" aria-label={`Runs of ${jobName}`}>
+        <ol className="flex flex-col gap-3" aria-label={T.runsOf(jobName)}>
           {runs.map(({ run, copies }) => {
             const when = run.storageTimestamp ?? run.startedAt ?? run.queuedAt;
             const badge = RUN_BADGE[run.status];
             return (
               <li key={run.id}>
                 <fieldset className="rounded-md border bg-surface">
-                  <legend className="sr-only">Run of {formatDateTime(when)}</legend>
+                  <legend className="sr-only">{T.runOf(formatDateTime(when))}</legend>
                   <div
                     aria-hidden="true"
                     className="flex flex-wrap items-center gap-3 border-b border-rule px-4 py-2.5"
@@ -308,10 +312,10 @@ function RunList({
                             }}
                           />
                           <span className="min-w-40 font-mono text-sm">
-                            {a.kind === "GLOBALS" ? "cluster globals" : item.database}
+                            {a.kind === "GLOBALS" ? C.clusterGlobals : item.database}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            on {a.destination.name}{" "}
+                            {T.on(a.destination.name)}{" "}
                             <span className="font-mono">({a.destination.type})</span>
                           </span>
                           <span className="ml-auto text-xs text-muted-foreground" data-numeric>
@@ -348,7 +352,7 @@ function RunList({
               });
             }}
           >
-            Load older runs
+            {T.loadOlder}
           </Button>
         </div>
       ) : null}

@@ -5,10 +5,20 @@
  */
 import type { JobRetentionInput, RetentionHoldReason } from "@/graphql/gen/graphql";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
+
+const W = defineMessages({
+  en: {
+    backups: (n: number) => plural(n, { one: "1 backup", other: `${String(n)} backups` }),
+  },
+  nl: {
+    backups: (n: number) => plural(n, { one: "1 back-up", other: `${String(n)} back-ups` }),
+  },
+});
 
 /** "1 backup", "3 backups". */
 export function backups(n: number): string {
-  return n === 1 ? "1 backup" : `${String(n)} backups`;
+  return W.backups(n);
 }
 
 function limit(v: string): number | null | undefined {
@@ -34,30 +44,61 @@ export function retentionInput(keepLast: string, keepDays: string): JobRetention
   };
 }
 
-export const ESTIMATE_T = {
-  eyebrow: "Backups kept per destination",
-  kept: (n: number, atLeast: boolean) =>
-    `With these settings ${atLeast ? "at least" : "about"} ${backups(n)} per destination ${
-      n === 1 ? "is" : "are"
-    } kept.`,
-  unknown:
-    "Unknown with a manual schedule and a day limit: how many backups fall within the days depends on how often someone starts the job.",
-  unknownFloor: (n: number) => `The newest-backups rule alone keeps ${backups(n)}.`,
-  figurePrefix: (atLeast: boolean) => (atLeast ? "≥" : "≈"),
-  figureLabel: "per destination",
-  ruleLast: (n: number | null) => (n === null ? "Keep the newest" : `Keep the newest ${String(n)}`),
-  ruleDays: (n: number | null) =>
-    n === null ? "Day limit" : `Younger than ${String(n)} ${n === 1 ? "day" : "days"}`,
-  ruleTotal: "Kept: either rule",
-  ruleUnknown: "unknown",
-  ruleOff: "off",
-  rulesLabel: "Backups each rule keeps",
-  assumption:
-    "Assumes every planned run succeeds. Each destination keeps its own copies; the rules add up, so the total is the larger count.",
-  invalid: "Enter valid limits to see how many backups are kept.",
-  scheduleInvalid: "Fix the schedule to see how many backups are kept.",
-  checking: "Estimating",
-} as const;
+export const ESTIMATE_T = defineMessages({
+  en: {
+    eyebrow: "Backups kept per destination",
+    kept: (n: number, atLeast: boolean) =>
+      `With these settings ${atLeast ? "at least" : "about"} ${backups(n)} per destination ${plural(n, { one: "is", other: "are" })} kept.`,
+    unknown:
+      "Unknown with a manual schedule and a day limit: how many backups fall within the days depends on how often someone starts the job.",
+    unknownFloor: (n: number) => `The newest-backups rule alone keeps ${backups(n)}.`,
+    figurePrefix: (atLeast: boolean) => (atLeast ? "≥" : "≈"),
+    figureLabel: "per destination",
+    ruleLast: (n: number | null) =>
+      n === null ? "Keep the newest" : `Keep the newest ${String(n)}`,
+    ruleDays: (n: number | null) =>
+      n === null
+        ? "Day limit"
+        : `Younger than ${String(n)} ${plural(n, { one: "day", other: "days" })}`,
+    ruleTotal: "Kept: either rule",
+    ruleUnknown: "unknown",
+    ruleOff: "off",
+    rulesLabel: "Backups each rule keeps",
+    assumption:
+      "Assumes every planned run succeeds. Each destination keeps its own copies; the rules add up, so the total is the larger count.",
+    invalid: "Enter valid limits to see how many backups are kept.",
+    scheduleInvalid: "Fix the schedule to see how many backups are kept.",
+    checking: "Estimating",
+  },
+  nl: {
+    eyebrow: "Bewaarde back-ups per bestemming",
+    kept: (n: number, atLeast: boolean) =>
+      `Met deze instellingen ${plural(n, { one: "blijft", other: "blijven" })} er ${
+        atLeast ? "minstens" : "ongeveer"
+      } ${backups(n)} per bestemming bewaard.`,
+    unknown:
+      "Onbekend bij een handmatige planning met een dagenlimiet: hoeveel back-ups binnen die dagen vallen, hangt af van hoe vaak iemand de taak start.",
+    unknownFloor: (n: number) =>
+      `Alleen de regel voor de nieuwste back-ups bewaart al ${backups(n)}.`,
+    figurePrefix: (atLeast: boolean) => (atLeast ? "≥" : "≈"),
+    figureLabel: "per bestemming",
+    ruleLast: (n: number | null) =>
+      n === null ? "Nieuwste bewaren" : `Laatste ${String(n)} bewaren`,
+    ruleDays: (n: number | null) =>
+      n === null
+        ? "Dagenlimiet"
+        : `Jonger dan ${plural(n, { one: "1 dag", other: `${String(n)} dagen` })}`,
+    ruleTotal: "Bewaard: een van beide regels",
+    ruleUnknown: "onbekend",
+    ruleOff: "uit",
+    rulesLabel: "Back-ups die elke regel bewaart",
+    assumption:
+      "Gaat ervan uit dat elke geplande run slaagt. Elke bestemming bewaart haar eigen kopieën; de regels vullen elkaar aan, dus het totaal is het grootste aantal.",
+    invalid: "Vul geldige limieten in om te zien hoeveel back-ups bewaard blijven.",
+    scheduleInvalid: "Corrigeer de planning om te zien hoeveel back-ups bewaard blijven.",
+    checking: "Bezig met schatten",
+  },
+});
 
 /** SchedulePreview.retention (RetentionEstimate, D-209). */
 export interface EstimateInput {
@@ -111,21 +152,42 @@ export interface HoldInput {
   newestCompleteAt?: string | null;
 }
 
-export const HOLD_T = {
-  title: "Retention is keeping incomplete backups",
-  deleted: "(deleted)",
-  explain:
-    "Retention never deletes the newest complete backup, and it keeps incomplete backups newer than that because they may hold the only copy of a database. They stay, and use space, until a complete backup reaches the destination again. Check the failed and partial runs.",
-  runsLink: "Show the run history",
-  listLabel: "Destinations where retention keeps incomplete backups",
-} as const;
+export const HOLD_T = defineMessages({
+  en: {
+    title: "Retention is keeping incomplete backups",
+    deleted: "(deleted)",
+    explain:
+      "Retention never deletes the newest complete backup, and it keeps incomplete backups newer than that because they may hold the only copy of a database. They stay, and use space, until a complete backup reaches the destination again. Check the failed and partial runs.",
+    runsLink: "Show the run history",
+    listLabel: "Destinations where retention keeps incomplete backups",
+    reasonSince: (at: string) => `no complete backup there since ${at}`,
+    reason: "no complete backup there",
+    sentence: (n: number, dest: string, since: string, reason: string) =>
+      `Retention is holding ${String(n)} incomplete ${plural(n, { one: "backup", other: "backups" })} on ${dest} since ${since}: ${reason}.`,
+  },
+  nl: {
+    title: "Het bewaarbeleid houdt onvolledige back-ups vast",
+    deleted: "(verwijderd)",
+    explain:
+      "Het bewaarbeleid verwijdert nooit de nieuwste volledige back-up, en bewaart onvolledige back-ups die nieuwer zijn, omdat die de enige kopie van een database kunnen bevatten. Ze blijven staan, en nemen ruimte in, tot er weer een volledige back-up op de bestemming staat. Controleer de mislukte en gedeeltelijke runs.",
+    runsLink: "Rungeschiedenis tonen",
+    listLabel: "Bestemmingen waar het bewaarbeleid onvolledige back-ups vasthoudt",
+    reasonSince: (at: string) => `daar geen volledige back-up sinds ${at}`,
+    reason: "daar geen volledige back-up",
+    sentence: (n: number, dest: string, since: string, reason: string) =>
+      `Het bewaarbeleid houdt sinds ${since} ${plural(n, {
+        one: "1 onvolledige back-up",
+        other: `${String(n)} onvolledige back-ups`,
+      })} vast op ${dest}: ${reason}.`,
+  },
+});
 
 /** The reason part of a hold sentence. */
 export function holdReason(h: HoldInput): string {
   if (h.reason === "NEWER_THAN_NEWEST_COMPLETE" && h.newestCompleteAt) {
-    return `no complete backup there since ${formatDateTime(h.newestCompleteAt)}`;
+    return HOLD_T.reasonSince(formatDateTime(h.newestCompleteAt));
   }
-  return "no complete backup there";
+  return HOLD_T.reason;
 }
 
 /**
@@ -134,7 +196,5 @@ export function holdReason(h: HoldInput): string {
  */
 export function holdSentence(h: HoldInput): string {
   const dest = h.destinationDeleted ? `${h.destinationName} ${HOLD_T.deleted}` : h.destinationName;
-  return `Retention is holding ${String(h.heldRuns)} incomplete ${
-    h.heldRuns === 1 ? "backup" : "backups"
-  } on ${dest} since ${formatDateTime(h.since)}: ${holdReason(h)}.`;
+  return HOLD_T.sentence(h.heldRuns, dest, formatDateTime(h.since), holdReason(h));
 }

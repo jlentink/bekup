@@ -22,6 +22,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { reportActionError, useStepUp } from "@/features/auth/use-step-up";
 import { applyFieldErrors } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import {
@@ -47,6 +48,182 @@ import {
 } from "./operations";
 import { FormGroup } from "./ui";
 import { WriteOnlyField } from "./write-only-field";
+
+const T = defineMessages({
+  en: {
+    nothingChanged: "Nothing changed.",
+    saved: "Connection saved.",
+    createdPin: "Connection created. Next: pin the server's certificate.",
+    created: "Connection created.",
+    editForm: "Edit connection",
+    newForm: "New connection",
+    identity: "Identity",
+    name: "Name",
+    engine: "Engine",
+    engineLead:
+      "The version key selects the digest-pinned client image from the allowlisted catalog.",
+    engineFixed: "The engine cannot change.",
+    serverVersion: "Server version",
+    choose: "Choose…",
+    versionOption: (key: string, client: string, legacy: boolean) =>
+      `${key} (client ${client})${legacy ? " · legacy" : ""}`,
+    detectHint: "Not sure? Save, then use “Detect version” on the connection.",
+    clientImage: "Client image",
+    sameAsServer: "Same as the server version",
+    imageOption: (key: string, client: string) => `${key} (client ${client})`,
+    endOfLife:
+      "This is an end-of-life series: it stays supported for backups but gets no new features.",
+    endpoint: "Endpoint",
+    endpointLead:
+      "Pinned TLS to an IP address or localhost needs an SSH tunnel (the certificate must name the host).",
+    host: "Host",
+    port: "Port",
+    login: "Database login",
+    loginLead: "Credentials are write-only: stored encrypted, never shown again.",
+    user: "User",
+    password: "Password",
+    passwordReentry:
+      "The database endpoint changed. Enter the password again or remove it: bekup never sends a stored password to a new endpoint.",
+    newPassword: "New password",
+    passwordEmpty: "Leave empty for roles that sign in without one.",
+    transport: "Transport",
+    changeOnPage: "Change the TLS mode and certificate pins on the connection page.",
+    tlsMode: "TLS mode",
+    recommended: " (recommended)",
+    optOut: "Security opt-out",
+    optOutBody:
+      "Creating the connection without pinned TLS is audited, alerts every admin and shows a permanent “Insecure transport” badge.",
+    sshTunnel: "SSH tunnel",
+    sshLead:
+      "Reach the database through a bastion. Its host key is confirmed on the connection page.",
+    sshSwitch: "Connect through an SSH bastion",
+    sshRemoved: "Saving removes the tunnel with its stored credentials and pinned host key.",
+    bastionHost: "Bastion host",
+    sshUser: "SSH user",
+    runLimit: "Run limit",
+    runLimitLead:
+      "Backups and restores of this connection share the limit. Lowering it never stops active runs.",
+    concurrentRuns: "Concurrent runs",
+    globalDefault: "Global default",
+    runsHint: (effective: number | undefined) =>
+      `1 to 64, capped by the instance-wide limit.${
+        effective !== undefined ? ` Applies now: ${effective}.` : " Empty uses the global default."
+      }`,
+    cancel: "Cancel",
+    saveChanges: "Save changes",
+    create: "Create connection",
+    clientCertStored: "A TLS client certificate is stored.",
+    clientCertRemoved: "The client certificate is removed on save.",
+    noClientCert: "No TLS client certificate.",
+    undo: "Undo",
+    replace: "Replace",
+    addClientCert: "Add a client certificate",
+    remove: "Remove",
+    clientCertPem: "Client certificate (PEM)",
+    clientKeyPem: "Client private key (PEM, write-only)",
+    keepCredential: "Keep the stored credential",
+    generateLater: "Generate a keypair after saving (recommended)",
+    pasteKey: "Paste a private key",
+    aPassword: "A password",
+    sshReentry:
+      "The bastion or SSH user changed. Enter the SSH password again or switch to a key: bekup never sends a stored password to a new endpoint.",
+    sshSignIn: "SSH sign-in",
+    sshPassword: "SSH password",
+    privateKey: "Private key (write-only)",
+    preferGenerate: "Prefer generating a keypair: the private key then never leaves the server.",
+    passphrase: "Key passphrase (optional)",
+  },
+  nl: {
+    nothingChanged: "Er is niets gewijzigd.",
+    saved: "Verbinding opgeslagen.",
+    createdPin: "Verbinding aangemaakt. Volgende stap: pin het certificaat van de server.",
+    created: "Verbinding aangemaakt.",
+    editForm: "Verbinding bewerken",
+    newForm: "Nieuwe verbinding",
+    identity: "Identiteit",
+    name: "Naam",
+    engine: "Engine",
+    engineLead:
+      "De versiesleutel kiest het client-image, vastgepind op digest, uit de toegestane catalogus.",
+    engineFixed: "De engine kan niet worden gewijzigd.",
+    serverVersion: "Serverversie",
+    choose: "Kies…",
+    versionOption: (key: string, client: string, legacy: boolean) =>
+      `${key} (client ${client})${legacy ? " · verouderd" : ""}`,
+    detectHint:
+      "Weet je het niet zeker? Sla op en gebruik daarna „Versie detecteren” bij de verbinding.",
+    clientImage: "Client-image",
+    sameAsServer: "Gelijk aan de serverversie",
+    imageOption: (key: string, client: string) => `${key} (client ${client})`,
+    endOfLife:
+      "Dit is een reeks aan het einde van haar levensduur: back-ups blijven ondersteund, maar er komen geen nieuwe functies.",
+    endpoint: "Eindpunt",
+    endpointLead:
+      "Vastgepinde TLS naar een IP-adres of localhost vereist een SSH-tunnel (het certificaat moet de host noemen).",
+    host: "Host",
+    port: "Poort",
+    login: "Database-login",
+    loginLead: "Inloggegevens zijn alleen-schrijven: versleuteld opgeslagen en nooit meer getoond.",
+    user: "Gebruiker",
+    password: "Wachtwoord",
+    passwordReentry:
+      "Het eindpunt van de database is gewijzigd. Vul het wachtwoord opnieuw in of verwijder het: bekup stuurt een opgeslagen wachtwoord nooit naar een nieuw eindpunt.",
+    newPassword: "Nieuw wachtwoord",
+    passwordEmpty: "Laat leeg voor rollen die zonder wachtwoord inloggen.",
+    transport: "Transport",
+    changeOnPage: "Wijzig de TLS-modus en certificaatpins op de pagina van de verbinding.",
+    tlsMode: "TLS-modus",
+    recommended: " (aanbevolen)",
+    optOut: "Afwijking van de veilige standaard",
+    optOutBody:
+      "Een verbinding zonder vastgepinde TLS aanmaken wordt vastgelegd in de auditlog, waarschuwt elke beheerder en toont een permanent label „Onveilig transport”.",
+    sshTunnel: "SSH-tunnel",
+    sshLead:
+      "Bereik de database via een bastionhost. De hostsleutel bevestig je op de pagina van de verbinding.",
+    sshSwitch: "Verbinden via een SSH-bastionhost",
+    sshRemoved:
+      "Opslaan verwijdert de tunnel met de opgeslagen inloggegevens en de vastgepinde hostsleutel.",
+    bastionHost: "Bastionhost",
+    sshUser: "SSH-gebruiker",
+    runLimit: "Runlimiet",
+    runLimitLead:
+      "Back-ups en herstel van deze verbinding delen de limiet. Verlagen stopt nooit actieve runs.",
+    concurrentRuns: "Gelijktijdige runs",
+    globalDefault: "Globale standaard",
+    runsHint: (effective: number | undefined) =>
+      `1 tot en met 64, begrensd door de limiet van de instantie.${
+        effective !== undefined
+          ? ` Geldt nu: ${effective}.`
+          : " Leeg gebruikt de globale standaard."
+      }`,
+    cancel: "Annuleren",
+    saveChanges: "Wijzigingen opslaan",
+    create: "Verbinding aanmaken",
+    clientCertStored: "Er is een TLS-clientcertificaat opgeslagen.",
+    clientCertRemoved: "Het clientcertificaat wordt verwijderd bij opslaan.",
+    noClientCert: "Geen TLS-clientcertificaat.",
+    undo: "Ongedaan maken",
+    replace: "Vervangen",
+    addClientCert: "Een clientcertificaat toevoegen",
+    remove: "Verwijderen",
+    clientCertPem: "Clientcertificaat (PEM)",
+    clientKeyPem: "Privésleutel van de client (PEM, alleen-schrijven)",
+    keepCredential: "Opgeslagen inloggegevens behouden",
+    generateLater: "Na opslaan een sleutelpaar genereren (aanbevolen)",
+    pasteKey: "Een privésleutel plakken",
+    aPassword: "Een wachtwoord",
+    sshReentry:
+      "De bastionhost of SSH-gebruiker is gewijzigd. Vul het SSH-wachtwoord opnieuw in of stap over op een sleutel: bekup stuurt een opgeslagen wachtwoord nooit naar een nieuw eindpunt.",
+    sshSignIn: "SSH-login",
+    sshPassword: "SSH-wachtwoord",
+    privateKey: "Privésleutel (alleen-schrijven)",
+    preferGenerate: "Genereer liever een sleutelpaar: de privésleutel verlaat de server dan nooit.",
+    passphrase: "Wachtwoordzin van de sleutel (optioneel)",
+  },
+});
+
+/** Example host name (technical, not translated). */
+const HOST_EXAMPLE = "db.internal.example";
 
 const textarea =
   "w-full rounded-md border border-input bg-surface px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-surface-sunken";
@@ -88,20 +265,16 @@ export function ConnectionForm({ original }: { original?: Original }) {
       if (original) {
         const input = toUpdateInput(v, original);
         if (Object.keys(input).length === 0) {
-          toast.info("Nothing changed.");
+          toast.info(T.nothingChanged);
           return;
         }
         await withStepUp(() => update({ variables: { id: original.id, input } }));
-        toast.success("Connection saved.");
+        toast.success(T.saved);
         void navigate(`/connections/${original.id}`);
       } else {
         const r = await withStepUp(() => create({ variables: { input: toCreateInput(v) } }));
         const id = r.data?.createConnection.id;
-        toast.success(
-          v.tlsMode === "PINNED"
-            ? "Connection created. Next: pin the server's certificate."
-            : "Connection created.",
-        );
+        toast.success(v.tlsMode === "PINNED" ? T.createdPin : T.created);
         void navigate(id ? `/connections/${id}` : "/connections");
       }
     } catch (err) {
@@ -120,15 +293,15 @@ export function ConnectionForm({ original }: { original?: Original }) {
         onSubmit={(e) => void form.handleSubmit(onSubmit)(e)}
         noValidate
         className="flex flex-col"
-        aria-label={editing ? "Edit connection" : "New connection"}
+        aria-label={editing ? T.editForm : T.newForm}
       >
-        <FormGroup legend="Identity">
+        <FormGroup legend={T.identity}>
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Name</FormLabel>
+                <FormLabel>{T.name}</FormLabel>
                 <FormControl>
                   <Input autoComplete="off" {...field} />
                 </FormControl>
@@ -138,16 +311,13 @@ export function ConnectionForm({ original }: { original?: Original }) {
           />
         </FormGroup>
 
-        <FormGroup
-          legend="Engine"
-          lead="The version key selects the digest-pinned client image from the allowlisted catalog."
-        >
+        <FormGroup legend={T.engine} lead={T.engineLead}>
           <FormField
             control={form.control}
             name="engine"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Engine</FormLabel>
+                <FormLabel>{T.engine}</FormLabel>
                 <FormControl>
                   <NativeSelect
                     {...field}
@@ -165,7 +335,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
                     ))}
                   </NativeSelect>
                 </FormControl>
-                {editing ? <FormDescription>The engine cannot change.</FormDescription> : null}
+                {editing ? <FormDescription>{T.engineFixed}</FormDescription> : null}
                 <FormMessage />
               </FormItem>
             )}
@@ -176,20 +346,18 @@ export function ConnectionForm({ original }: { original?: Original }) {
               name="versionKey"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Server version</FormLabel>
+                  <FormLabel>{T.serverVersion}</FormLabel>
                   <FormControl>
                     <NativeSelect {...field} disabled={versions.loading && options.length === 0}>
-                      <option value="">Choose…</option>
+                      <option value="">{T.choose}</option>
                       {options.map((o) => (
                         <option key={o.key} value={o.key}>
-                          {o.key} (client {o.clientVersion}){o.legacy ? " · legacy" : ""}
+                          {T.versionOption(o.key, o.clientVersion, o.legacy)}
                         </option>
                       ))}
                     </NativeSelect>
                   </FormControl>
-                  <FormDescription>
-                    Not sure? Save, then use &ldquo;Detect version&rdquo; on the connection.
-                  </FormDescription>
+                  <FormDescription>{T.detectHint}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -199,13 +367,13 @@ export function ConnectionForm({ original }: { original?: Original }) {
               name="imageKey"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Client image</FormLabel>
+                  <FormLabel>{T.clientImage}</FormLabel>
                   <FormControl>
                     <NativeSelect {...field}>
-                      <option value="">Same as the server version</option>
+                      <option value="">{T.sameAsServer}</option>
                       {options.map((o) => (
                         <option key={o.key} value={o.key}>
-                          {o.key} (client {o.clientVersion})
+                          {T.imageOption(o.key, o.clientVersion)}
                         </option>
                       ))}
                     </NativeSelect>
@@ -216,29 +384,23 @@ export function ConnectionForm({ original }: { original?: Original }) {
             />
           </div>
           {options.find((o) => o.key === values.versionKey)?.legacy ? (
-            <p className="text-sm text-status-partial-fg">
-              This is an end-of-life series: it stays supported for backups but gets no new
-              features.
-            </p>
+            <p className="text-sm text-status-partial-fg">{T.endOfLife}</p>
           ) : null}
         </FormGroup>
 
-        <FormGroup
-          legend="Endpoint"
-          lead="Pinned TLS to an IP address or localhost needs an SSH tunnel (the certificate must name the host)."
-        >
+        <FormGroup legend={T.endpoint} lead={T.endpointLead}>
           <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_8rem]">
             <FormField
               control={form.control}
               name="host"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Host</FormLabel>
+                  <FormLabel>{T.host}</FormLabel>
                   <FormControl>
                     <Input
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="db.internal.example"
+                      placeholder={HOST_EXAMPLE}
                       {...field}
                     />
                   </FormControl>
@@ -251,7 +413,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
               name="port"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Port</FormLabel>
+                  <FormLabel>{T.port}</FormLabel>
                   <FormControl>
                     <Input
                       inputMode="numeric"
@@ -266,16 +428,13 @@ export function ConnectionForm({ original }: { original?: Original }) {
           </div>
         </FormGroup>
 
-        <FormGroup
-          legend="Database login"
-          lead="Credentials are write-only: stored encrypted, never shown again."
-        >
+        <FormGroup legend={T.login} lead={T.loginLead}>
           <FormField
             control={form.control}
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>User</FormLabel>
+                <FormLabel>{T.user}</FormLabel>
                 <FormControl>
                   <Input autoComplete="off" spellCheck={false} {...field} />
                 </FormControl>
@@ -284,7 +443,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
             )}
           />
           <WriteOnlyField
-            label="Password"
+            label={T.password}
             stored={s?.hasPassword === true}
             action={values.passwordAction}
             onAction={(a) => {
@@ -293,26 +452,18 @@ export function ConnectionForm({ original }: { original?: Original }) {
               form.clearErrors("password");
             }}
             allowClear
-            reentry={
-              moved.needsPassword
-                ? "The database endpoint changed. Enter the password again or remove it: bekup never sends a stored password to a new endpoint."
-                : undefined
-            }
+            reentry={moved.needsPassword ? T.passwordReentry : undefined}
           >
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{s?.hasPassword ? "New password" : "Password"}</FormLabel>
+                  <FormLabel>{s?.hasPassword ? T.newPassword : T.password}</FormLabel>
                   <FormControl>
                     <Input type="password" autoComplete="new-password" {...field} />
                   </FormControl>
-                  {!editing ? (
-                    <FormDescription>
-                      Leave empty for roles that sign in without one.
-                    </FormDescription>
-                  ) : null}
+                  {!editing ? <FormDescription>{T.passwordEmpty}</FormDescription> : null}
                   <FormMessage />
                 </FormItem>
               )}
@@ -320,13 +471,11 @@ export function ConnectionForm({ original }: { original?: Original }) {
           </WriteOnlyField>
         </FormGroup>
 
-        <FormGroup legend="Transport">
+        <FormGroup legend={T.transport}>
           {editing ? (
             <p className="text-sm">
               <span className="font-medium">{TLS_MODE[values.tlsMode].label}.</span>{" "}
-              <span className="text-muted-foreground">
-                Change the TLS mode and certificate pins on the connection page.
-              </span>
+              <span className="text-muted-foreground">{T.changeOnPage}</span>
             </p>
           ) : (
             <FormField
@@ -334,13 +483,13 @@ export function ConnectionForm({ original }: { original?: Original }) {
               name="tlsMode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>TLS mode</FormLabel>
+                  <FormLabel>{T.tlsMode}</FormLabel>
                   <FormControl>
                     <NativeSelect {...field}>
                       {TLS_MODES.map((m) => (
                         <option key={m} value={m}>
                           {TLS_MODE[m].label}
-                          {m === "PINNED" ? " (recommended)" : ""}
+                          {m === "PINNED" ? T.recommended : ""}
                         </option>
                       ))}
                     </NativeSelect>
@@ -354,20 +503,14 @@ export function ConnectionForm({ original }: { original?: Original }) {
           {!editing && values.tlsMode !== "PINNED" ? (
             <Alert variant="destructive" className="hatch-insecure border-status-insecure/60">
               <ShieldOff aria-hidden="true" />
-              <AlertTitle>Security opt-out</AlertTitle>
-              <AlertDescription>
-                Creating the connection without pinned TLS is audited, alerts every admin and shows
-                a permanent &ldquo;Insecure transport&rdquo; badge.
-              </AlertDescription>
+              <AlertTitle>{T.optOut}</AlertTitle>
+              <AlertDescription>{T.optOutBody}</AlertDescription>
             </Alert>
           ) : null}
           <ClientCertificateFields form={form} stored={!!s?.clientCertificatePem} />
         </FormGroup>
 
-        <FormGroup
-          legend="SSH tunnel"
-          lead="Reach the database through a bastion. Its host key is confirmed on the connection page."
-        >
+        <FormGroup legend={T.sshTunnel} lead={T.sshLead}>
           <FormField
             control={form.control}
             name="sshEnabled"
@@ -376,14 +519,12 @@ export function ConnectionForm({ original }: { original?: Original }) {
                 <FormControl>
                   <Switch checked={field.value} onCheckedChange={field.onChange} />
                 </FormControl>
-                <FormLabel className="font-normal">Connect through an SSH bastion</FormLabel>
+                <FormLabel className="font-normal">{T.sshSwitch}</FormLabel>
               </FormItem>
             )}
           />
           {editing && original.sshEnabled && !values.sshEnabled ? (
-            <p className="text-sm text-status-partial-fg">
-              Saving removes the tunnel with its stored credentials and pinned host key.
-            </p>
+            <p className="text-sm text-status-partial-fg">{T.sshRemoved}</p>
           ) : null}
           {values.sshEnabled ? (
             <>
@@ -393,7 +534,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
                   name="ssh.host"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bastion host</FormLabel>
+                      <FormLabel>{T.bastionHost}</FormLabel>
                       <FormControl>
                         <Input autoComplete="off" spellCheck={false} {...field} />
                       </FormControl>
@@ -406,7 +547,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
                   name="ssh.port"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Port</FormLabel>
+                      <FormLabel>{T.port}</FormLabel>
                       <FormControl>
                         <Input inputMode="numeric" placeholder="22" {...field} />
                       </FormControl>
@@ -420,7 +561,7 @@ export function ConnectionForm({ original }: { original?: Original }) {
                 name="ssh.user"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>SSH user</FormLabel>
+                    <FormLabel>{T.sshUser}</FormLabel>
                     <FormControl>
                       <Input autoComplete="off" spellCheck={false} {...field} />
                     </FormControl>
@@ -438,24 +579,18 @@ export function ConnectionForm({ original }: { original?: Original }) {
           ) : null}
         </FormGroup>
 
-        <FormGroup
-          legend="Run limit"
-          lead="Backups and restores of this connection share the limit. Lowering it never stops active runs."
-        >
+        <FormGroup legend={T.runLimit} lead={T.runLimitLead}>
           <FormField
             control={form.control}
             name="maxConcurrentRuns"
             render={({ field }) => (
               <FormItem className="max-w-56">
-                <FormLabel>Concurrent runs</FormLabel>
+                <FormLabel>{T.concurrentRuns}</FormLabel>
                 <FormControl>
-                  <Input inputMode="numeric" placeholder="Global default" {...field} />
+                  <Input inputMode="numeric" placeholder={T.globalDefault} {...field} />
                 </FormControl>
                 <FormDescription>
-                  1 to 64, capped by the instance-wide limit.
-                  {original
-                    ? ` Applies now: ${original.effectiveMaxConcurrentRuns}.`
-                    : " Empty uses the global default."}
+                  {T.runsHint(original?.effectiveMaxConcurrentRuns)}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -465,11 +600,11 @@ export function ConnectionForm({ original }: { original?: Original }) {
 
         <div className="sticky bottom-0 flex justify-end gap-2 border-t bg-background/95 py-4 backdrop-blur-sm">
           <Button asChild variant="outline">
-            <Link to={cancelTo}>Cancel</Link>
+            <Link to={cancelTo}>{T.cancel}</Link>
           </Button>
           <Button type="submit" disabled={submitting}>
             {submitting ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-            {editing ? "Save changes" : "Create connection"}
+            {editing ? T.saveChanges : T.create}
           </Button>
         </div>
       </form>
@@ -491,10 +626,10 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">
           {action === "keep"
-            ? "A TLS client certificate is stored."
+            ? T.clientCertStored
             : action === "clear"
-              ? "The client certificate is removed on save."
-              : "No TLS client certificate."}
+              ? T.clientCertRemoved
+              : T.noClientCert}
         </span>
         {action === "clear" ? (
           <Button
@@ -505,7 +640,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
               setAction("keep");
             }}
           >
-            Undo
+            {T.undo}
           </Button>
         ) : (
           <Button
@@ -516,7 +651,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
               setAction("set");
             }}
           >
-            {action === "keep" ? "Replace" : "Add a client certificate"}
+            {action === "keep" ? T.replace : T.addClientCert}
           </Button>
         )}
         {action === "keep" ? (
@@ -528,7 +663,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
               setAction("clear");
             }}
           >
-            Remove
+            {T.remove}
           </Button>
         ) : null}
       </div>
@@ -541,7 +676,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
         name="clientCertificatePem"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Client certificate (PEM)</FormLabel>
+            <FormLabel>{T.clientCertPem}</FormLabel>
             <FormControl>
               <textarea rows={4} spellCheck={false} className={textarea} {...field} />
             </FormControl>
@@ -554,7 +689,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
         name="clientKeyPem"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>Client private key (PEM, write-only)</FormLabel>
+            <FormLabel>{T.clientKeyPem}</FormLabel>
             <FormControl>
               <textarea
                 rows={4}
@@ -577,7 +712,7 @@ function ClientCertificateFields({ form, stored }: { form: FormApi; stored: bool
           setAction(stored ? "keep" : "none");
         }}
       >
-        Cancel
+        {T.cancel}
       </Button>
     </div>
   );
@@ -596,27 +731,20 @@ function SshAuthFields({
 }) {
   const group = useId();
   const choices: { value: ConnectionFormValues["ssh"]["auth"]; label: string }[] = [
-    ...(stored && !reentry
-      ? [{ value: "keep" as const, label: "Keep the stored credential" }]
-      : []),
-    ...(!stored
-      ? [{ value: "later" as const, label: "Generate a keypair after saving (recommended)" }]
-      : []),
-    { value: "privateKey", label: "Paste a private key" },
-    { value: "password", label: "A password" },
+    ...(stored && !reentry ? [{ value: "keep" as const, label: T.keepCredential }] : []),
+    ...(!stored ? [{ value: "later" as const, label: T.generateLater }] : []),
+    { value: "privateKey", label: T.pasteKey },
+    { value: "password", label: T.aPassword },
   ];
   return (
     <div className="flex flex-col gap-4">
       {reentry ? (
         <Alert>
-          <AlertDescription>
-            The bastion or SSH user changed. Enter the SSH password again or switch to a key: bekup
-            never sends a stored password to a new endpoint.
-          </AlertDescription>
+          <AlertDescription>{T.sshReentry}</AlertDescription>
         </Alert>
       ) : null}
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-medium">SSH sign-in</legend>
+        <legend className="mb-1 text-sm font-medium">{T.sshSignIn}</legend>
         {choices.map((c) => (
           <label key={c.value} className="flex items-center gap-2 text-sm">
             <input
@@ -642,7 +770,7 @@ function SshAuthFields({
           name="ssh.password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>SSH password</FormLabel>
+              <FormLabel>{T.sshPassword}</FormLabel>
               <FormControl>
                 <Input type="password" autoComplete="new-password" {...field} />
               </FormControl>
@@ -658,7 +786,7 @@ function SshAuthFields({
             name="ssh.privateKey"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Private key (write-only)</FormLabel>
+                <FormLabel>{T.privateKey}</FormLabel>
                 <FormControl>
                   <textarea
                     rows={5}
@@ -668,9 +796,7 @@ function SshAuthFields({
                     {...field}
                   />
                 </FormControl>
-                <FormDescription>
-                  Prefer generating a keypair: the private key then never leaves the server.
-                </FormDescription>
+                <FormDescription>{T.preferGenerate}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -680,7 +806,7 @@ function SshAuthFields({
             name="ssh.privateKeyPassphrase"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Key passphrase (optional)</FormLabel>
+                <FormLabel>{T.passphrase}</FormLabel>
                 <FormControl>
                   <Input type="password" autoComplete="off" {...field} />
                 </FormControl>

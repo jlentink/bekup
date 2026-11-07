@@ -1,4 +1,10 @@
 import type { NotificationFilterInput, NotificationGroup } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
+
+const M = defineMessages({
+  en: { allJobEvents: "All job events" },
+  nl: { allJobEvents: "Alle gebeurtenissen van de taak" },
+});
 
 export interface CatalogEvent {
   type: string;
@@ -67,7 +73,7 @@ export function describeFilter(
   f: FilterDraft,
   catalog: readonly CatalogGroup[] | undefined,
 ): string {
-  if (f.groups.length === 0 && f.events.length === 0) return "All job events";
+  if (f.groups.length === 0 && f.events.length === 0) return M.allJobEvents;
   const groupLabel = (g: NotificationGroup) =>
     catalog?.find((c) => c.group === g)?.label ?? g.charAt(0) + g.slice(1).toLowerCase();
   const eventLabel = (t: string) =>

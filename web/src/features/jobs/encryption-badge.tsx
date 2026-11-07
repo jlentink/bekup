@@ -3,7 +3,25 @@ import { KeyRound, Lock, LockKeyhole, TriangleAlert } from "lucide-react";
 import { SecurityBadge } from "@/components/status/security-badge";
 import { RiskBadge } from "@/features/accepted-risks/risk-badge";
 import type { JobEncryptionMode } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+const T = defineMessages({
+  en: {
+    noKey: "No key configured",
+    passphraseTitle: "Encrypted with the job's passphrase (age)",
+    recipientTitle: "Encrypted to an age recipient",
+    passphrase: "Passphrase",
+    recipient: "Recipient",
+  },
+  nl: {
+    noKey: "Geen sleutel ingesteld",
+    passphraseTitle: "Versleuteld met de wachtwoordzin van de taak (age)",
+    recipientTitle: "Versleuteld voor een age-ontvanger",
+    passphrase: "Wachtwoordzin",
+    recipient: "Ontvanger",
+  },
+});
 
 interface Enc {
   configured: boolean;
@@ -52,7 +70,7 @@ export function EncryptionBadge({
         )}
       >
         <TriangleAlert aria-hidden="true" className="size-3.5" />
-        No key configured
+        {T.noKey}
       </span>
     );
   }
@@ -64,13 +82,11 @@ export function EncryptionBadge({
         "inline-flex h-6 items-center gap-1.5 rounded-sm border bg-surface px-2 font-mono text-2xs font-medium tracking-[0.06em] text-muted-foreground uppercase",
         className,
       )}
-      title={
-        passphrase ? "Encrypted with the job's passphrase (age)" : "Encrypted to an age recipient"
-      }
+      title={passphrase ? T.passphraseTitle : T.recipientTitle}
     >
       <Lock aria-hidden="true" className="size-3 text-status-success" />
       <Icon aria-hidden="true" className="size-3" />
-      {passphrase ? "Passphrase" : "Recipient"}
+      {passphrase ? T.passphrase : T.recipient}
     </span>
   );
 }

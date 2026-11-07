@@ -27,6 +27,7 @@ import { useStepUp } from "@/features/auth/use-step-up";
 import type { ConnectionDetailQuery as DetailResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 
 import { ConnectionChecks } from "./checks";
 import { DeleteDialog } from "./delete-dialog";
@@ -46,23 +47,194 @@ import { DetailSkeleton, Fact, Facts, LedgerSection } from "./ui";
 type Connection = NonNullable<DetailResult["connection"]>;
 type Pin = NonNullable<NonNullable<Connection["settings"]>["tlsPin"]>;
 
-const AUTH_LABEL = { NONE: "None yet", PASSWORD: "Password", PRIVATE_KEY: "Private key" } as const;
+const T = defineMessages({
+  en: {
+    auth: { NONE: "None yet", PASSWORD: "Password", PRIVATE_KEY: "Private key" },
+    anchor: "Anchor",
+    privateCa: "Private CA",
+    selfSigned: "Self-signed certificate",
+    subject: "Subject",
+    issuer: "Issuer",
+    leafSpki: "Leaf SPKI",
+    anyLeaf: "any leaf of this CA (rotation allowed)",
+    expires: "Expires",
+    pinned: "Pinned",
+    pinMissing:
+      "No certificate is pinned yet, so the connection cannot be used. Fetch the server's certificate and confirm it.",
+    pinExpired:
+      "The pinned certificate has expired: backups fail. Pin the server's new certificate.",
+    pinExpiring: (when: string) =>
+      `The pinned certificate expires ${when}. Stage the next certificate as a backup pin before the server switches.`,
+    transport: "Transport security",
+    repin: "Re-pin certificate",
+    pin: "Pin certificate",
+    stage: "Stage backup pin",
+    changeMode: "Change TLS mode",
+    optedOut:
+      "An admin opted out of pinned TLS. This was audited and stays visible until TLS is pinned again; an accepted risk is no open issue.",
+    currentPin: "Current pin",
+    stagedPin: "Staged backup pin",
+    clientCert: "Client certificate (public part)",
+    copyClientCert: "Copy the client certificate",
+    sshTunnel: "SSH tunnel",
+    direct: "The database is reached directly from the runner.",
+    editToTunnel: "Edit the connection to route it through an SSH bastion.",
+    noTunnel: "No tunnel.",
+    sshLead:
+      "The runner reaches the database through this bastion. Its host key is pinned, never trusted automatically.",
+    hostKeyPinned: "Host key pinned",
+    hostKeyNotConfirmed: "Host key not confirmed",
+    enabled: "Enabled",
+    recheck: "Re-check host key",
+    fetchConfirm: "Fetch and confirm host key",
+    generate: "Generate keypair",
+    bastion: "Bastion",
+    signsIn: "Signs in with",
+    withPassphrase: " (with passphrase)",
+    hostKey: "Host key",
+    notConfirmed: "Not confirmed: the tunnel cannot open",
+    publicKey: "Public key to install on the bastion",
+    copyPublicKey: "Copy the SSH public key",
+    bastionSubject: "the SSH bastion",
+    hostKeyPinnedToast: "Host key pinned.",
+    connections: "Connections",
+    loading: "Loading connection",
+    retry: "Try again",
+    notFound: "Connection not found",
+    notFoundBody: "It was deleted or never existed.",
+    edit: "Edit",
+    ready: "Ready",
+    notReady: (reason: string | null | undefined) => `Not ready${reason ? `: ${reason}` : ""}`,
+    legacyVersion: "Legacy version",
+    readOnly: "Read only",
+    checks: "Checks",
+    checksLead:
+      "Run on the runner with the stored credentials. serve never connects to a database itself.",
+    configuration: "Configuration",
+    engine: "Engine",
+    versionKey: "Version key",
+    legacy: " (legacy)",
+    clientImage: "Client image",
+    endpoint: "Endpoint",
+    user: "User",
+    password: "Password",
+    stored: "Stored",
+    none: "None",
+    concurrentRuns: "Concurrent runs",
+    globalDefault: " (global default)",
+    capped: (n: number) => ` (set to ${n}, capped by the global limit)`,
+    setHere: " (set on this connection)",
+    updated: "Updated",
+    adminsOnly: "Credentials and the full configuration are visible to admins only.",
+    delete: "Delete",
+    deleteLead:
+      "Soft delete: backups and the audit history stay. Jobs that use the connection block it.",
+    deleteConnection: "Delete connection",
+    deleted: (name: string) => `Connection "${name}" deleted.`,
+  },
+  nl: {
+    auth: { NONE: "Nog niets", PASSWORD: "Wachtwoord", PRIVATE_KEY: "Privésleutel" },
+    anchor: "Anker",
+    privateCa: "Private CA",
+    selfSigned: "Zelfondertekend certificaat",
+    subject: "Onderwerp",
+    issuer: "Uitgever",
+    leafSpki: "Leaf SPKI",
+    anyLeaf: "elk leaf-certificaat van deze CA (wisselen toegestaan)",
+    expires: "Verloopt",
+    pinned: "Vastgepind",
+    pinMissing:
+      "Er is nog geen certificaat vastgepind, dus de verbinding kan niet worden gebruikt. Haal het certificaat van de server op en bevestig het.",
+    pinExpired:
+      "Het vastgepinde certificaat is verlopen: back-ups mislukken. Pin het nieuwe certificaat van de server.",
+    pinExpiring: (when: string) =>
+      `Het vastgepinde certificaat verloopt ${when}. Zet het volgende certificaat klaar als reservepin voordat de server overschakelt.`,
+    transport: "Transportbeveiliging",
+    repin: "Certificaat opnieuw vastpinnen",
+    pin: "Certificaat vastpinnen",
+    stage: "Reservepin klaarzetten",
+    changeMode: "TLS-modus wijzigen",
+    optedOut:
+      "Een beheerder heeft afgezien van vastgepinde TLS. Dat is vastgelegd in de auditlog en blijft zichtbaar totdat TLS weer is vastgepind; een geaccepteerd risico is geen open probleem.",
+    currentPin: "Huidige pin",
+    stagedPin: "Klaargezette reservepin",
+    clientCert: "Clientcertificaat (publiek deel)",
+    copyClientCert: "Het clientcertificaat kopiëren",
+    sshTunnel: "SSH-tunnel",
+    direct: "De runner bereikt de database rechtstreeks.",
+    editToTunnel: "Bewerk de verbinding om haar via een SSH-bastionhost te leiden.",
+    noTunnel: "Geen tunnel.",
+    sshLead:
+      "De runner bereikt de database via deze bastionhost. De hostsleutel is vastgepind en wordt nooit automatisch vertrouwd.",
+    hostKeyPinned: "Hostsleutel vastgepind",
+    hostKeyNotConfirmed: "Hostsleutel niet bevestigd",
+    enabled: "Ingeschakeld",
+    recheck: "Hostsleutel opnieuw controleren",
+    fetchConfirm: "Hostsleutel ophalen en bevestigen",
+    generate: "Sleutelpaar genereren",
+    bastion: "Bastionhost",
+    signsIn: "Logt in met",
+    withPassphrase: " (met wachtwoordzin)",
+    hostKey: "Hostsleutel",
+    notConfirmed: "Niet bevestigd: de tunnel kan niet openen",
+    publicKey: "Publieke sleutel om op de bastionhost te installeren",
+    copyPublicKey: "De publieke SSH-sleutel kopiëren",
+    bastionSubject: "de SSH-bastionhost",
+    hostKeyPinnedToast: "Hostsleutel vastgepind.",
+    connections: "Verbindingen",
+    loading: "Verbinding laden",
+    retry: "Opnieuw proberen",
+    notFound: "Verbinding niet gevonden",
+    notFoundBody: "Ze is verwijderd of heeft nooit bestaan.",
+    edit: "Bewerken",
+    ready: "Gereed",
+    notReady: (reason: string | null | undefined) => `Niet gereed${reason ? `: ${reason}` : ""}`,
+    legacyVersion: "Verouderde versie",
+    readOnly: "Alleen lezen",
+    checks: "Controles",
+    checksLead:
+      "Worden op de runner uitgevoerd met de opgeslagen inloggegevens. serve maakt zelf nooit verbinding met een database.",
+    configuration: "Configuratie",
+    engine: "Engine",
+    versionKey: "Versiesleutel",
+    legacy: " (verouderd)",
+    clientImage: "Client-image",
+    endpoint: "Eindpunt",
+    user: "Gebruiker",
+    password: "Wachtwoord",
+    stored: "Opgeslagen",
+    none: "Geen",
+    concurrentRuns: "Gelijktijdige runs",
+    globalDefault: " (globale standaard)",
+    capped: (n: number) => ` (ingesteld op ${n}, begrensd door de globale limiet)`,
+    setHere: " (ingesteld op deze verbinding)",
+    updated: "Bijgewerkt",
+    adminsOnly: "Inloggegevens en de volledige configuratie zijn alleen zichtbaar voor beheerders.",
+    delete: "Verwijderen",
+    deleteLead:
+      "Zacht verwijderen: back-ups en de auditgeschiedenis blijven bewaard. Taken die de verbinding gebruiken, blokkeren het verwijderen.",
+    deleteConnection: "Verbinding verwijderen",
+    deleted: (name: string) => `Verbinding „${name}” verwijderd.`,
+  },
+});
+
+const AUTH_LABEL = T.auth;
 
 function PinFacts({ pin }: { pin: Pin }) {
   return (
     <Facts>
-      <Fact term="Anchor">{pin.isCa ? "Private CA" : "Self-signed certificate"}</Fact>
-      <Fact term="Subject" mono>
+      <Fact term={T.anchor}>{pin.isCa ? T.privateCa : T.selfSigned}</Fact>
+      <Fact term={T.subject} mono>
         {pin.subject}
       </Fact>
-      <Fact term="Issuer" mono>
+      <Fact term={T.issuer} mono>
         {pin.issuer}
       </Fact>
-      <Fact term="Leaf SPKI" mono>
-        {pin.leafSpkiSha256 ?? "any leaf of this CA (rotation allowed)"}
+      <Fact term={T.leafSpki} mono>
+        {pin.leafSpkiSha256 ?? T.anyLeaf}
       </Fact>
-      <Fact term="Expires">{formatDateTime(pin.notAfter)}</Fact>
-      <Fact term="Pinned">{formatDateTime(pin.pinnedAt)}</Fact>
+      <Fact term={T.expires}>{formatDateTime(pin.notAfter)}</Fact>
+      <Fact term={T.pinned}>{formatDateTime(pin.pinnedAt)}</Fact>
     </Facts>
   );
 }
@@ -73,10 +245,10 @@ function ExpiryAlert({ c }: { c: Connection }) {
   if (s === "VALID" || s === "NOT_REQUIRED") return null;
   const text =
     s === "MISSING"
-      ? "No certificate is pinned yet, so the connection cannot be used. Fetch the server's certificate and confirm it."
+      ? T.pinMissing
       : s === "EXPIRED"
-        ? "The pinned certificate has expired: backups fail. Pin the server's new certificate."
-        : `The pinned certificate expires ${formatDateTime(c.pinExpiresAt)}. Stage the next certificate as a backup pin before the server switches.`;
+        ? T.pinExpired
+        : T.pinExpiring(formatDateTime(c.pinExpiresAt));
   return (
     <Alert variant={s === "EXPIRES_WITHIN_30_DAYS" ? "default" : "destructive"}>
       <CalendarClock aria-hidden="true" />
@@ -92,7 +264,7 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
   const s = c.settings;
   return (
     <LedgerSection
-      title="Transport security"
+      title={T.transport}
       lead={TLS_MODE[c.tlsMode].description}
       aside={
         <>
@@ -117,8 +289,7 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
                   setDialog("pin");
                 }}
               >
-                <FileKey2 aria-hidden="true" />{" "}
-                {s?.tlsPin ? "Re-pin certificate" : "Pin certificate"}
+                <FileKey2 aria-hidden="true" /> {s?.tlsPin ? T.repin : T.pin}
               </Button>
             ) : null}
             {c.tlsMode === "PINNED" && s?.tlsPin ? (
@@ -130,7 +301,7 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
                   setDialog("stage");
                 }}
               >
-                <CalendarClock aria-hidden="true" /> Stage backup pin
+                <CalendarClock aria-hidden="true" /> {T.stage}
               </Button>
             ) : null}
             <Button
@@ -141,7 +312,7 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
                 setDialog("mode");
               }}
             >
-              <ShieldHalf aria-hidden="true" /> Change TLS mode
+              <ShieldHalf aria-hidden="true" /> {T.changeMode}
             </Button>
           </>
         ) : null
@@ -151,28 +322,25 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
       {c.insecureTransport ? (
         <div className="flex flex-col items-start gap-2">
           <RiskBadge flag="insecure-transport" kind="CONNECTION_TLS" subjectId={c.id} />
-          <p className="text-sm text-muted-foreground">
-            An admin opted out of pinned TLS. This was audited and stays visible until TLS is pinned
-            again; an accepted risk is no open issue.
-          </p>
+          <p className="text-sm text-muted-foreground">{T.optedOut}</p>
         </div>
       ) : null}
       {s?.tlsPin ? (
         <div className="flex flex-col gap-2">
-          <p className="eyebrow">Current pin</p>
+          <p className="eyebrow">{T.currentPin}</p>
           <PinFacts pin={s.tlsPin} />
         </div>
       ) : null}
       {s?.backupPin ? (
         <div className="flex flex-col gap-2 border-t border-rule pt-4">
-          <p className="eyebrow">Staged backup pin</p>
+          <p className="eyebrow">{T.stagedPin}</p>
           <PinFacts pin={s.backupPin} />
         </div>
       ) : null}
       {s?.clientCertificatePem ? (
         <div className="flex flex-col gap-2 border-t border-rule pt-4">
-          <p className="eyebrow">Client certificate (public part)</p>
-          <CopyValue value={s.clientCertificatePem} label="Copy the client certificate" multiline />
+          <p className="eyebrow">{T.clientCert}</p>
+          <CopyValue value={s.clientCertificatePem} label={T.copyClientCert} multiline />
         </div>
       ) : null}
       {isAdmin ? (
@@ -213,27 +381,25 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
 
   if (!c.sshEnabled) {
     return (
-      <LedgerSection title="SSH tunnel" lead="The database is reached directly from the runner.">
-        <p className="text-sm text-muted-foreground">
-          {isAdmin ? "Edit the connection to route it through an SSH bastion." : "No tunnel."}
-        </p>
+      <LedgerSection title={T.sshTunnel} lead={T.direct}>
+        <p className="text-sm text-muted-foreground">{isAdmin ? T.editToTunnel : T.noTunnel}</p>
       </LedgerSection>
     );
   }
 
   return (
     <LedgerSection
-      title="SSH tunnel"
-      lead="The runner reaches the database through this bastion. Its host key is pinned, never trusted automatically."
+      title={T.sshTunnel}
+      lead={T.sshLead}
       aside={
         ssh ? (
           ssh.hostKey ? (
-            <Tag tone="success">Host key pinned</Tag>
+            <Tag tone="success">{T.hostKeyPinned}</Tag>
           ) : (
-            <Tag tone="danger">Host key not confirmed</Tag>
+            <Tag tone="danger">{T.hostKeyNotConfirmed}</Tag>
           )
         ) : (
-          <Tag tone="info">Enabled</Tag>
+          <Tag tone="info">{T.enabled}</Tag>
         )
       }
       actions={
@@ -248,7 +414,7 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
               }}
             >
               <Fingerprint aria-hidden="true" />
-              {ssh?.hostKey ? "Re-check host key" : "Fetch and confirm host key"}
+              {ssh?.hostKey ? T.recheck : T.fetchConfirm}
             </Button>
             <Button
               type="button"
@@ -258,7 +424,7 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
                 setDialog("keypair");
               }}
             >
-              <KeyRound aria-hidden="true" /> Generate keypair
+              <KeyRound aria-hidden="true" /> {T.generate}
             </Button>
           </>
         ) : null
@@ -267,25 +433,25 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
       {ssh ? (
         <>
           <Facts>
-            <Fact term="Bastion" mono>
+            <Fact term={T.bastion} mono>
               {ssh.user}@{ssh.host}:{ssh.port}
             </Fact>
-            <Fact term="Signs in with">
+            <Fact term={T.signsIn}>
               {AUTH_LABEL[ssh.authMethod]}
-              {ssh.authMethod === "PRIVATE_KEY" && ssh.hasPassphrase ? " (with passphrase)" : ""}
+              {ssh.authMethod === "PRIVATE_KEY" && ssh.hasPassphrase ? T.withPassphrase : ""}
             </Fact>
-            <Fact term="Host key">
+            <Fact term={T.hostKey}>
               {ssh.hostKey ? (
                 <PinnedHostKey hostKey={ssh.hostKey} />
               ) : (
-                <span className="text-status-failed-fg">Not confirmed: the tunnel cannot open</span>
+                <span className="text-status-failed-fg">{T.notConfirmed}</span>
               )}
             </Fact>
           </Facts>
           {ssh.publicKey ? (
             <div className="flex flex-col gap-1.5">
-              <p className="eyebrow">Public key to install on the bastion</p>
-              <CopyValue value={ssh.publicKey} label="Copy the SSH public key" />
+              <p className="eyebrow">{T.publicKey}</p>
+              <CopyValue value={ssh.publicKey} label={T.copyPublicKey} />
             </div>
           ) : null}
         </>
@@ -297,7 +463,7 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
             onOpenChange={(o) => {
               if (!o) setDialog(undefined);
             }}
-            subject="the SSH bastion"
+            subject={T.bastionSubject}
             pinned={ssh?.hostKey}
             onFetch={async () => {
               const r = await fetchKey({ variables: { id: c.id } });
@@ -315,7 +481,7 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
                   },
                 }),
               );
-              toast.success("Host key pinned.");
+              toast.success(T.hostKeyPinnedToast);
             }}
           />
           <KeypairDialog
@@ -323,7 +489,7 @@ function SshSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
             onOpenChange={(o) => {
               if (!o) setDialog(undefined);
             }}
-            subject="the SSH bastion"
+            subject={T.bastionSubject}
             replaces={ssh ? ssh.authMethod !== "NONE" : false}
             onGenerate={async () => {
               const r = await withStepUp(() => generate({ variables: { id: c.id } }));
@@ -356,12 +522,12 @@ export function ConnectionDetailPage() {
   const back = (
     <Button asChild variant="ghost" size="sm" className="self-start">
       <Link to="/connections">
-        <ArrowLeft aria-hidden="true" /> Connections
+        <ArrowLeft aria-hidden="true" /> {T.connections}
       </Link>
     </Button>
   );
 
-  if (!data && loading) return <DetailSkeleton label="Loading connection" />;
+  if (!data && loading) return <DetailSkeleton label={T.loading} />;
   if (error && !data) {
     return (
       <div className="flex flex-col gap-6">
@@ -370,7 +536,7 @@ export function ConnectionDetailPage() {
           <AlertDescription>
             {userMessage(error)}
             <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              Try again
+              {T.retry}
             </Button>
           </AlertDescription>
         </Alert>
@@ -382,8 +548,8 @@ export function ConnectionDetailPage() {
     return (
       <div className="flex flex-col gap-6">
         {back}
-        <EmptyState icon={Trash2} title="Connection not found">
-          It was deleted or never existed.
+        <EmptyState icon={Trash2} title={T.notFound}>
+          {T.notFoundBody}
         </EmptyState>
       </div>
     );
@@ -405,7 +571,7 @@ export function ConnectionDetailPage() {
           isAdmin ? (
             <Button asChild variant="outline">
               <Link to={`/connections/${c.id}/edit`}>
-                <Pencil aria-hidden="true" /> Edit
+                <Pencil aria-hidden="true" /> {T.edit}
               </Link>
             </Button>
           ) : null
@@ -413,9 +579,9 @@ export function ConnectionDetailPage() {
       />
       <div className="flex flex-wrap items-center gap-2">
         {c.ready ? (
-          <Tag tone="success">Ready</Tag>
+          <Tag tone="success">{T.ready}</Tag>
         ) : (
-          <Tag tone="danger">Not ready{c.notReadyReason ? `: ${c.notReadyReason}` : ""}</Tag>
+          <Tag tone="danger">{T.notReady(c.notReadyReason)}</Tag>
         )}
         {c.insecureTransport ? (
           <RiskBadge
@@ -425,74 +591,64 @@ export function ConnectionDetailPage() {
             showAction={false}
           />
         ) : null}
-        {c.legacyVersion ? <Tag tone="warning">Legacy version</Tag> : null}
-        {!isAdmin ? <Tag tone="neutral">Read only</Tag> : null}
+        {c.legacyVersion ? <Tag tone="warning">{T.legacyVersion}</Tag> : null}
+        {!isAdmin ? <Tag tone="neutral">{T.readOnly}</Tag> : null}
       </div>
 
       <div className="flex flex-col">
-        <LedgerSection
-          title="Checks"
-          lead="Run on the runner with the stored credentials. serve never connects to a database itself."
-        >
+        <LedgerSection title={T.checks} lead={T.checksLead}>
           <ConnectionChecks id={c.id} lastTest={c.lastTest} />
         </LedgerSection>
 
-        <LedgerSection title="Configuration">
+        <LedgerSection title={T.configuration}>
           <Facts>
-            <Fact term="Engine">{ENGINE_LABEL[c.engine]}</Fact>
-            <Fact term="Version key" mono>
+            <Fact term={T.engine}>{ENGINE_LABEL[c.engine]}</Fact>
+            <Fact term={T.versionKey} mono>
               {c.versionKey}
-              {c.legacyVersion ? " (legacy)" : ""}
+              {c.legacyVersion ? T.legacy : ""}
             </Fact>
             {s ? (
-              <Fact term="Client image" mono>
+              <Fact term={T.clientImage} mono>
                 {s.imageKey}
               </Fact>
             ) : null}
-            <Fact term="Endpoint" mono>
+            <Fact term={T.endpoint} mono>
               {c.host}:{c.port}
             </Fact>
             {s ? (
               <>
-                <Fact term="User" mono>
+                <Fact term={T.user} mono>
                   {s.username}
                 </Fact>
-                <Fact term="Password">
+                <Fact term={T.password}>
                   {s.hasPassword ? (
-                    <Tag tone="success">Stored</Tag>
+                    <Tag tone="success">{T.stored}</Tag>
                   ) : (
-                    <Tag tone="neutral">None</Tag>
+                    <Tag tone="neutral">{T.none}</Tag>
                   )}
                 </Fact>
               </>
             ) : null}
-            <Fact term="Concurrent runs">
+            <Fact term={T.concurrentRuns}>
               <span className="font-mono">{c.effectiveMaxConcurrentRuns}</span>
               <span className="text-muted-foreground">
                 {c.maxConcurrentRuns == null
-                  ? " (global default)"
+                  ? T.globalDefault
                   : c.maxConcurrentRuns !== c.effectiveMaxConcurrentRuns
-                    ? ` (set to ${c.maxConcurrentRuns}, capped by the global limit)`
-                    : " (set on this connection)"}
+                    ? T.capped(c.maxConcurrentRuns)
+                    : T.setHere}
               </span>
             </Fact>
-            <Fact term="Updated">{formatDateTime(c.updatedAt)}</Fact>
+            <Fact term={T.updated}>{formatDateTime(c.updatedAt)}</Fact>
           </Facts>
-          {!s ? (
-            <p className="text-xs text-muted-foreground">
-              Credentials and the full configuration are visible to admins only.
-            </p>
-          ) : null}
+          {!s ? <p className="text-xs text-muted-foreground">{T.adminsOnly}</p> : null}
         </LedgerSection>
 
         <TransportSection c={c} isAdmin={isAdmin} />
         <SshSection c={c} isAdmin={isAdmin} />
 
         {isAdmin ? (
-          <LedgerSection
-            title="Delete"
-            lead="Soft delete: backups and the audit history stay. Jobs that use the connection block it."
-          >
+          <LedgerSection title={T.delete} lead={T.deleteLead}>
             <Button
               type="button"
               variant="outline"
@@ -501,7 +657,7 @@ export function ConnectionDetailPage() {
                 setDeleting(true);
               }}
             >
-              <Trash2 aria-hidden="true" /> Delete connection
+              <Trash2 aria-hidden="true" /> {T.deleteConnection}
             </Button>
             <DeleteDialog
               open={deleting}
@@ -510,7 +666,7 @@ export function ConnectionDetailPage() {
               name={c.name}
               onDelete={async () => {
                 await withStepUp(() => remove({ variables: { id: c.id } }));
-                toast.success(`Connection "${c.name}" deleted.`);
+                toast.success(T.deleted(c.name));
                 void navigate("/connections");
               }}
             />

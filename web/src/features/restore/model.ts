@@ -16,16 +16,13 @@ import type {
 } from "@/graphql/gen/graphql";
 import { extractIdentity } from "@/lib/age-identity";
 
+import { restoreMessages } from "./messages";
+
+const M = restoreMessages.model;
+
 export type StepId = "source" | "target" | "options" | "preview" | "confirm" | "progress";
 
-export const STEP_LABELS: Record<StepId, string> = {
-  source: "Backup",
-  target: "Target",
-  options: "Options",
-  preview: "Preview",
-  confirm: "Confirm",
-  progress: "Progress",
-};
+export const STEP_LABELS: Record<StepId, string> = M.steps;
 
 /** Globals restores have no database options (roles and tablespaces only). */
 export function stepsFor(kind: RunItemKind | undefined): StepId[] {
@@ -81,13 +78,12 @@ const MAX_DB_NAME_BYTES = 63;
 /** A problem with a new database name, or undefined. The server validates it again. */
 export function newDatabaseProblem(name: string): string | undefined {
   const n = name.trim();
-  if (n === "") return "Enter a name for the new database.";
-  if (new TextEncoder().encode(n).length > MAX_DB_NAME_BYTES)
-    return "Use at most 63 bytes for the database name.";
+  if (n === "") return M.nameEmpty;
+  if (new TextEncoder().encode(n).length > MAX_DB_NAME_BYTES) return M.nameTooLong;
   // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
-  if (/[\u0000-\u001f\u007f]/.test(n)) return "The name contains control characters.";
-  if (/[/\\.`"']/.test(n)) return "Avoid quotes, slashes, backslashes and dots in the name.";
-  if (/__bekup_/i.test(n) || /^bekup_test_/i.test(n)) return "That name is reserved by bekup.";
+  if (/[\u0000-\u001f\u007f]/.test(n)) return M.nameControl;
+  if (/[/\\.`"']/.test(n)) return M.nameChars;
+  if (/__bekup_/i.test(n) || /^bekup_test_/i.test(n)) return M.nameReserved;
   return undefined;
 }
 
@@ -225,29 +221,17 @@ export function sortWarnings<T extends { code: string }>(warnings: readonly T[])
   );
 }
 
-export const PRIVILEGE_LABELS: Record<TargetPrivilegeStatus, string> = {
-  NOT_PRIVILEGED: "Not privileged",
-  PRIVILEGED: "Privileged",
-  UNKNOWN: "Unknown (treated as privileged)",
-};
+export const PRIVILEGE_LABELS: Record<TargetPrivilegeStatus, string> = M.privilege;
 
 /** Plain-language names of the D-068 reason codes; unknown codes are shown as they are. */
 export function privilegeReasonLabel(code: string): string {
-  const fixed: Record<string, string> = {
-    superuser: "Superuser",
-    createrole: "Can create roles (CREATEROLE)",
-    replication: "Replication role",
-    bypassrls: "Bypasses row-level security",
-    proxy: "Proxy privilege",
-    system_schema_write: "Can write the mysql system schema",
-    roles_granted: "Has granted roles (could not be resolved completely)",
-    detection_failed: "The check could not complete",
-  };
-  if (fixed[code]) return fixed[code];
+  const fixed = M.reasons;
+  const known = Object.hasOwn(fixed, code) ? fixed[code] : undefined;
+  if (known) return known;
   if (code.startsWith("member_of_role_with:"))
-    return `Member of a role with ${code.slice("member_of_role_with:".length)}`;
-  if (code.startsWith("member_of:")) return `Member of ${code.slice("member_of:".length)}`;
-  if (code.startsWith("global:")) return `Global privilege ${code.slice("global:".length)}`;
+    return M.memberOfRoleWith(code.slice("member_of_role_with:".length));
+  if (code.startsWith("member_of:")) return M.memberOf(code.slice("member_of:".length));
+  if (code.startsWith("global:")) return M.globalPrivilege(code.slice("global:".length));
   return code;
 }
 
@@ -265,15 +249,7 @@ export function isActive(status: RestoreStatus): boolean {
 /** The progress phases in order (the ledger strip of the progress view). */
 export const PHASES: readonly RestoreStatus[] = ["QUEUED", "STAGING", "VERIFYING", "RESTORING"];
 
-export const STATUS_LABELS: Record<RestoreStatus, string> = {
-  QUEUED: "Queued",
-  STAGING: "Staging",
-  VERIFYING: "Verifying",
-  RESTORING: "Restoring",
-  SUCCEEDED: "Succeeded",
-  FAILED: "Failed",
-  CANCELED: "Canceled",
-};
+export const STATUS_LABELS: Record<RestoreStatus, string> = M.status;
 
 const NEUTRALIZED_PREFIX = "switched to SECURITY INVOKER: ";
 const NEUTRALIZED_MORE = /^\.\.\. and (\d+) more$/;

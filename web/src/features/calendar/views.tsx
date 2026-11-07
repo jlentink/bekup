@@ -1,8 +1,10 @@
 import { useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 
+import { intlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { EventChip } from "./event-chip";
+import { messages } from "./messages";
 import {
   dayKey,
   dayLabel,
@@ -14,16 +16,13 @@ import {
   type CivilDate,
 } from "./model";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
-const WEEKDAYS_LONG = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-] as const;
+/** Monday-first weekday names in the page's language (2024-01-01 was a Monday). */
+function weekdayNames(weekday: "short" | "long"): string[] {
+  const f = new Intl.DateTimeFormat(intlLocale, { weekday, timeZone: "UTC" });
+  return Array.from({ length: 7 }, (_, i) => f.format(new Date(Date.UTC(2024, 0, 1 + i, 12))));
+}
+const WEEKDAYS = weekdayNames("short");
+const WEEKDAYS_LONG = weekdayNames("long");
 
 /** Events shown per month cell before "+N more". */
 const MONTH_CELL_LIMIT = 3;
@@ -155,8 +154,8 @@ export function DayGrid({
                     <span aria-hidden="true">{c.d}</span>
                     <span className="sr-only">
                       {dayLabel(c)}
-                      {isToday ? ", today" : ""}
-                      {`, ${events.length === 0 ? "no events" : `${events.length} event${events.length === 1 ? "" : "s"}`}`}
+                      {isToday ? messages.grid.today : ""}
+                      {messages.grid.events(events.length)}
                     </span>
                   </span>
                   {view === "week" ? (
@@ -183,7 +182,8 @@ export function DayGrid({
                       onOpenDay(c);
                     }}
                   >
-                    +{hidden} more<span className="sr-only"> on {dayLabel(c)}</span>
+                    {messages.grid.more(hidden)}
+                    <span className="sr-only">{messages.grid.moreOn(dayLabel(c))}</span>
                   </button>
                 ) : null}
               </div>
@@ -248,7 +248,7 @@ export function DayTimeline({
         >
           <span className="sr-only">
             {dayLabel(anchor)}
-            {`, ${events.length === 0 ? "no events" : `${events.length} event${events.length === 1 ? "" : "s"}`}`}
+            {messages.grid.events(events.length)}
           </span>
           <ol className="divide-y divide-rule">
             {HOURS.map((h) => {

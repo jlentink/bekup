@@ -253,6 +253,14 @@ destination (bekup's own records of the files it wrote, D-196). Admins also see 
 scheduler tick, work queues and certificate expiries (D-192). Every tile
 links to its detail page.
 
+## Language
+
+The web interface is available in English and Dutch (D-235). It follows
+the browser's language until you pick one under **Profile → Account →
+Language**; the choice is stored in that browser and the page reloads in
+the new language. Messages sent by the server (error details, e-mails,
+the browser setup's questions) are still in English.
+
 ## Your first backup
 
 The steps below follow the order the dashboard's getting-started tile

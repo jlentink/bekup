@@ -2,26 +2,46 @@ import { GitCommitVertical } from "lucide-react";
 
 import { Tag, type Tone } from "@/components/status/tag";
 import type { SchemaVersionStatus } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** Strings of the schema-version display (D-210). */
-const SCHEMA_VERSION_T = {
-  label: "Schema version",
-  status: {
-    OK: "Captured",
-    NONE: "No version",
-    UNAVAILABLE: "Unavailable",
-    INVALID: "Invalid result",
-  } satisfies Record<SchemaVersionStatus, string>,
-  hint: {
-    OK: "The schema version read in the dump's snapshot.",
-    NONE: "The version table does not exist in this database, has no row or holds an empty value.",
-    UNAVAILABLE:
-      "The version query failed (missing privilege, time limit, unexpected table layout or error). The backup is not affected.",
-    INVALID:
-      "The query returned more than 64 characters or characters other than printable ASCII; the value was discarded.",
-  } satisfies Record<SchemaVersionStatus, string>,
-} as const;
+const SCHEMA_VERSION_T = defineMessages({
+  en: {
+    label: "Schema version",
+    status: {
+      OK: "Captured",
+      NONE: "No version",
+      UNAVAILABLE: "Unavailable",
+      INVALID: "Invalid result",
+    } satisfies Record<SchemaVersionStatus, string>,
+    hint: {
+      OK: "The schema version read in the dump's snapshot.",
+      NONE: "The version table does not exist in this database, has no row or holds an empty value.",
+      UNAVAILABLE:
+        "The version query failed (missing privilege, time limit, unexpected table layout or error). The backup is not affected.",
+      INVALID:
+        "The query returned more than 64 characters or characters other than printable ASCII; the value was discarded.",
+    } satisfies Record<SchemaVersionStatus, string>,
+  },
+  nl: {
+    label: "Schemaversie",
+    status: {
+      OK: "Vastgelegd",
+      NONE: "Geen versie",
+      UNAVAILABLE: "Niet beschikbaar",
+      INVALID: "Ongeldig resultaat",
+    },
+    hint: {
+      OK: "De schemaversie, gelezen in de snapshot van de dump.",
+      NONE: "De versietabel bestaat niet in deze database, heeft geen rij of bevat een lege waarde.",
+      UNAVAILABLE:
+        "De versiequery is mislukt (ontbrekend recht, tijdslimiet, onverwachte tabelopbouw of fout). De back-up heeft hier geen last van.",
+      INVALID:
+        "De query gaf meer dan 64 tekens of andere tekens dan afdrukbare ASCII terug; de waarde is genegeerd.",
+    },
+  },
+});
 
 const TONE: Record<SchemaVersionStatus, Tone> = {
   OK: "success",

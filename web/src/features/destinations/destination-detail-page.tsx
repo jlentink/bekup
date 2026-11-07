@@ -19,6 +19,7 @@ import { DetailSkeleton, Fact, Facts, LedgerSection } from "@/features/connectio
 import type { DestinationDetailQuery as DetailResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import {
   CHECKSUM_LABEL,
@@ -44,53 +45,217 @@ import { FLAVOR_LABEL, WT } from "./webdav-text";
 type Destination = NonNullable<DetailResult["destination"]>;
 type Settings = NonNullable<Destination["settings"]>;
 
-const AUTH_LABEL = { NONE: "None yet", PASSWORD: "Password", PRIVATE_KEY: "Private key" } as const;
+const D = defineMessages({
+  en: {
+    auth: { NONE: "None yet", PASSWORD: "Password", PRIVATE_KEY: "Private key" },
+    stored: "Stored",
+    none: "None",
+    endpoint: "Endpoint",
+    awsS3: "AWS S3",
+    region: "Region",
+    bucket: "Bucket",
+    prefix: "Prefix",
+    bucketRoot: "(bucket root)",
+    addressing: "Addressing",
+    pathStyle: "Path style",
+    virtualHosted: "Virtual-hosted style",
+    encryption: "Encryption",
+    storageClass: "Storage class",
+    checksums: "Checksums",
+    overwrites: "Overwrites",
+    overwritesRefused: "Refused atomically (If-None-Match)",
+    overwritesAllowed: "Not prevented by the store",
+    accessKeyId: "Access key ID",
+    secretKey: "Secret key",
+    caBundle: "Custom CA bundle",
+    copyCaBundle: "Copy the CA bundle",
+    sshTitle: "SSH",
+    sshLead:
+      "The server's host key is pinned, never trusted automatically. Prefer a generated key over a password.",
+    hostKeyPinned: "Host key pinned",
+    hostKeyNotConfirmed: "Host key not confirmed",
+    recheckHostKey: "Re-check host key",
+    fetchHostKey: "Fetch and confirm host key",
+    generateKeypair: "Generate keypair",
+    signsInWith: "Signs in with",
+    withPassphrase: " (with passphrase)",
+    hostKey: "Host key",
+    notConfirmed: "Not confirmed: uploads cannot start",
+    publicKey: "Public key to install on the server",
+    copyPublicKey: "Copy the SSH public key",
+    sftpSubject: "the SFTP server",
+    hostKeyPinnedToast: "Host key pinned.",
+    destinations: "Destinations",
+    loading: "Loading destination",
+    retry: "Try again",
+    notFound: "Destination not found",
+    notFoundBody: "It was deleted or never existed.",
+    eyebrow: (type: string) => `${type} destination`,
+    edit: "Edit",
+    ready: "Ready",
+    notReady: "Not ready",
+    notReadyReason: (reason: string) => `Not ready: ${reason}`,
+    objectLockTag: (mode: string) => `Object Lock · ${mode}`,
+    objectLockTagDays: (mode: string, days: number) => `Object Lock · ${mode} · ${days} days`,
+    noDeleteTag: "No-delete",
+    readOnly: "Read only",
+    testTitle: "Test",
+    testLead: "Writes, reads back and deletes a small probe object below the destination's prefix.",
+    retentionTitle: "Retention",
+    retentionNoDelete:
+      "bekup never deletes from this destination: configure lifecycle rules for retention.",
+    retentionLocked: "bekup applies retention once an object's lock has expired.",
+    retentionNormal: "bekup deletes backups here according to each job's retention policy.",
+    noDelete: "No-delete",
+    on: "On",
+    off: "Off",
+    objectLock: "Object Lock",
+    lockValue: (mode: string, days: string) => `${mode}, ${days} days`,
+    configuration: "Configuration",
+    directory: "Directory",
+    server: "Server",
+    basePath: "Base path",
+    basePathDefault: "(base path)",
+    password: "Password",
+    privateKey: "Private key",
+    updated: (when: string) => `Updated ${when}`,
+    adminOnly: "The full configuration is visible to admins only.",
+    deleteTitle: "Delete",
+    deleteLead:
+      "Soft delete: the stored backups stay where they are. Jobs that write here block it.",
+    deleteButton: "Delete destination",
+    deleted: (name: string) => `Destination "${name}" deleted.`,
+  },
+  nl: {
+    auth: { NONE: "Nog geen", PASSWORD: "Wachtwoord", PRIVATE_KEY: "Privésleutel" },
+    stored: "Opgeslagen",
+    none: "Geen",
+    endpoint: "Endpoint",
+    awsS3: "AWS S3",
+    region: "Regio",
+    bucket: "Bucket",
+    prefix: "Prefix",
+    bucketRoot: "(root van de bucket)",
+    addressing: "Adressering",
+    pathStyle: "Path style",
+    virtualHosted: "Virtual-hosted style",
+    encryption: "Versleuteling",
+    storageClass: "Opslagklasse",
+    checksums: "Checksums",
+    overwrites: "Overschrijven",
+    overwritesRefused: "Atomair geweigerd (If-None-Match)",
+    overwritesAllowed: "Niet verhinderd door de opslag",
+    accessKeyId: "Access key ID",
+    secretKey: "Secret key",
+    caBundle: "Eigen CA-bundel",
+    copyCaBundle: "CA-bundel kopiëren",
+    sshTitle: "SSH",
+    sshLead:
+      "De hostsleutel van de server is vastgepind en wordt nooit automatisch vertrouwd. Gebruik liever een gegenereerde sleutel dan een wachtwoord.",
+    hostKeyPinned: "Hostsleutel vastgepind",
+    hostKeyNotConfirmed: "Hostsleutel niet bevestigd",
+    recheckHostKey: "Hostsleutel opnieuw controleren",
+    fetchHostKey: "Hostsleutel ophalen en bevestigen",
+    generateKeypair: "Sleutelpaar genereren",
+    signsInWith: "Logt in met",
+    withPassphrase: " (met wachtwoordzin)",
+    hostKey: "Hostsleutel",
+    notConfirmed: "Niet bevestigd: uploads kunnen niet starten",
+    publicKey: "Publieke sleutel om op de server te installeren",
+    copyPublicKey: "Publieke SSH-sleutel kopiëren",
+    sftpSubject: "de SFTP-server",
+    hostKeyPinnedToast: "Hostsleutel vastgepind.",
+    destinations: "Bestemmingen",
+    loading: "Bestemming laden",
+    retry: "Opnieuw proberen",
+    notFound: "Bestemming niet gevonden",
+    notFoundBody: "Ze is verwijderd of heeft nooit bestaan.",
+    eyebrow: (type: string) => `Bestemming: ${type}`,
+    edit: "Bewerken",
+    ready: "Gereed",
+    notReady: "Niet gereed",
+    notReadyReason: (reason: string) => `Niet gereed: ${reason}`,
+    objectLockTag: (mode: string) => `Object Lock · ${mode}`,
+    objectLockTagDays: (mode: string, days: number) =>
+      `Object Lock · ${mode} · ${plural(days, { one: "1 dag", other: `${days} dagen` })}`,
+    noDeleteTag: "Niet verwijderen",
+    readOnly: "Alleen lezen",
+    testTitle: "Test",
+    testLead:
+      "Schrijft een klein testobject onder de prefix van de bestemming, leest het terug en verwijdert het.",
+    retentionTitle: "Bewaarbeleid",
+    retentionNoDelete:
+      "bekup verwijdert nooit iets van deze bestemming: stel lifecycle-regels in voor het bewaarbeleid.",
+    retentionLocked:
+      "bekup past het bewaarbeleid toe zodra de vergrendeling van een object is verlopen.",
+    retentionNormal: "bekup verwijdert hier back-ups volgens het bewaarbeleid van elke taak.",
+    noDelete: "Niet verwijderen",
+    on: "Aan",
+    off: "Uit",
+    objectLock: "Object Lock",
+    lockValue: (mode: string, days: string) => `${mode}, ${days} dagen`,
+    configuration: "Configuratie",
+    directory: "Map",
+    server: "Server",
+    basePath: "Basispad",
+    basePathDefault: "(basispad)",
+    password: "Wachtwoord",
+    privateKey: "Privésleutel",
+    updated: (when: string) => `Bijgewerkt ${when}`,
+    adminOnly: "De volledige configuratie is alleen zichtbaar voor beheerders.",
+    deleteTitle: "Verwijderen",
+    deleteLead:
+      "Zachte verwijdering: de opgeslagen back-ups blijven staan. Taken die hierheen schrijven blokkeren het.",
+    deleteButton: "Bestemming verwijderen",
+    deleted: (name: string) => `Bestemming „${name}” verwijderd.`,
+  },
+});
+
+const AUTH_LABEL = D.auth;
 
 function stored(has: boolean) {
-  return has ? <Tag tone="success">Stored</Tag> : <Tag tone="neutral">None</Tag>;
+  return has ? <Tag tone="success">{D.stored}</Tag> : <Tag tone="neutral">{D.none}</Tag>;
 }
 
 function S3Facts({ s3 }: { s3: NonNullable<Settings["s3"]> }) {
   return (
     <>
       <Facts>
-        <Fact term="Endpoint" mono>
-          {s3.endpoint ?? "AWS S3"}
+        <Fact term={D.endpoint} mono>
+          {s3.endpoint ?? D.awsS3}
         </Fact>
-        <Fact term="Region" mono>
+        <Fact term={D.region} mono>
           {s3.region}
         </Fact>
-        <Fact term="Bucket" mono>
+        <Fact term={D.bucket} mono>
           {s3.bucket}
         </Fact>
-        <Fact term="Prefix" mono>
-          {s3.prefix || "(bucket root)"}
+        <Fact term={D.prefix} mono>
+          {s3.prefix || D.bucketRoot}
         </Fact>
-        <Fact term="Addressing">{s3.pathStyle ? "Path style" : "Virtual-hosted style"}</Fact>
-        <Fact term="Encryption">
+        <Fact term={D.addressing}>{s3.pathStyle ? D.pathStyle : D.virtualHosted}</Fact>
+        <Fact term={D.encryption}>
           {ENCRYPTION_LABEL[s3.encryption]}
           {s3.kmsKeyId ? <span className="ml-2 font-mono text-xs">{s3.kmsKeyId}</span> : null}
         </Fact>
         {s3.storageClass ? (
-          <Fact term="Storage class" mono>
+          <Fact term={D.storageClass} mono>
             {s3.storageClass}
           </Fact>
         ) : null}
-        <Fact term="Checksums">{CHECKSUM_LABEL[s3.checksumMode]}</Fact>
-        <Fact term="Overwrites">
-          {s3.conditionalWrites
-            ? "Refused atomically (If-None-Match)"
-            : "Not prevented by the store"}
+        <Fact term={D.checksums}>{CHECKSUM_LABEL[s3.checksumMode]}</Fact>
+        <Fact term={D.overwrites}>
+          {s3.conditionalWrites ? D.overwritesRefused : D.overwritesAllowed}
         </Fact>
-        <Fact term="Access key ID" mono>
+        <Fact term={D.accessKeyId} mono>
           {s3.accessKeyId}
         </Fact>
-        <Fact term="Secret key">{stored(s3.hasSecretAccessKey)}</Fact>
+        <Fact term={D.secretKey}>{stored(s3.hasSecretAccessKey)}</Fact>
       </Facts>
       {s3.caBundlePem ? (
         <div className="flex flex-col gap-1.5">
-          <p className="eyebrow">Custom CA bundle</p>
-          <CopyValue value={s3.caBundlePem} label="Copy the CA bundle" multiline />
+          <p className="eyebrow">{D.caBundle}</p>
+          <CopyValue value={s3.caBundlePem} label={D.copyCaBundle} multiline />
         </div>
       ) : null}
     </>
@@ -135,13 +300,13 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
   if (!sftp) return null;
   return (
     <LedgerSection
-      title="SSH"
-      lead="The server's host key is pinned, never trusted automatically. Prefer a generated key over a password."
+      title={D.sshTitle}
+      lead={D.sshLead}
       aside={
         sftp.hostKey ? (
-          <Tag tone="success">Host key pinned</Tag>
+          <Tag tone="success">{D.hostKeyPinned}</Tag>
         ) : (
-          <Tag tone="danger">Host key not confirmed</Tag>
+          <Tag tone="danger">{D.hostKeyNotConfirmed}</Tag>
         )
       }
       actions={
@@ -156,7 +321,7 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
               }}
             >
               <Fingerprint aria-hidden="true" />
-              {sftp.hostKey ? "Re-check host key" : "Fetch and confirm host key"}
+              {sftp.hostKey ? D.recheckHostKey : D.fetchHostKey}
             </Button>
             <Button
               type="button"
@@ -166,29 +331,29 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
                 setDialog("keypair");
               }}
             >
-              <KeyRound aria-hidden="true" /> Generate keypair
+              <KeyRound aria-hidden="true" /> {D.generateKeypair}
             </Button>
           </>
         ) : null
       }
     >
       <Facts>
-        <Fact term="Signs in with">
+        <Fact term={D.signsInWith}>
           {AUTH_LABEL[sftp.authMethod]}
-          {sftp.authMethod === "PRIVATE_KEY" && sftp.hasPassphrase ? " (with passphrase)" : ""}
+          {sftp.authMethod === "PRIVATE_KEY" && sftp.hasPassphrase ? D.withPassphrase : ""}
         </Fact>
-        <Fact term="Host key">
+        <Fact term={D.hostKey}>
           {sftp.hostKey ? (
             <PinnedHostKey hostKey={sftp.hostKey} />
           ) : (
-            <span className="text-status-failed-fg">Not confirmed: uploads cannot start</span>
+            <span className="text-status-failed-fg">{D.notConfirmed}</span>
           )}
         </Fact>
       </Facts>
       {sftp.publicKey ? (
         <div className="flex flex-col gap-1.5">
-          <p className="eyebrow">Public key to install on the server</p>
-          <CopyValue value={sftp.publicKey} label="Copy the SSH public key" />
+          <p className="eyebrow">{D.publicKey}</p>
+          <CopyValue value={sftp.publicKey} label={D.copyPublicKey} />
         </div>
       ) : null}
       {isAdmin ? (
@@ -198,7 +363,7 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
             onOpenChange={(o) => {
               if (!o) setDialog(undefined);
             }}
-            subject="the SFTP server"
+            subject={D.sftpSubject}
             pinned={sftp.hostKey}
             onFetch={async () => {
               const r = await fetchKey({ variables: { id: d.id } });
@@ -216,7 +381,7 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
                   },
                 }),
               );
-              toast.success("Host key pinned.");
+              toast.success(D.hostKeyPinnedToast);
             }}
           />
           <KeypairDialog
@@ -224,7 +389,7 @@ function SftpSection({ d, isAdmin }: { d: Destination; isAdmin: boolean }) {
             onOpenChange={(o) => {
               if (!o) setDialog(undefined);
             }}
-            subject="the SFTP server"
+            subject={D.sftpSubject}
             replaces={sftp.authMethod !== "NONE"}
             onGenerate={async () => {
               const r = await withStepUp(() => generate({ variables: { id: d.id } }));
@@ -257,12 +422,12 @@ export function DestinationDetailPage() {
   const back = (
     <Button asChild variant="ghost" size="sm" className="self-start">
       <Link to="/destinations">
-        <ArrowLeft aria-hidden="true" /> Destinations
+        <ArrowLeft aria-hidden="true" /> {D.destinations}
       </Link>
     </Button>
   );
 
-  if (!data && loading) return <DetailSkeleton label="Loading destination" />;
+  if (!data && loading) return <DetailSkeleton label={D.loading} />;
   if (error && !data) {
     return (
       <div className="flex flex-col gap-6">
@@ -271,7 +436,7 @@ export function DestinationDetailPage() {
           <AlertDescription>
             {userMessage(error)}
             <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              Try again
+              {D.retry}
             </Button>
           </AlertDescription>
         </Alert>
@@ -283,8 +448,8 @@ export function DestinationDetailPage() {
     return (
       <div className="flex flex-col gap-6">
         {back}
-        <EmptyState icon={Trash2} title="Destination not found">
-          It was deleted or never existed.
+        <EmptyState icon={Trash2} title={D.notFound}>
+          {D.notFoundBody}
         </EmptyState>
       </div>
     );
@@ -295,13 +460,13 @@ export function DestinationDetailPage() {
     <div className="flex flex-col gap-6">
       {back}
       <PageHeader
-        eyebrow={`${TYPE_LABEL[d.type]} destination`}
+        eyebrow={D.eyebrow(TYPE_LABEL[d.type])}
         title={d.name}
         actions={
           isAdmin ? (
             <Button asChild variant="outline">
               <Link to={`/destinations/${d.id}/edit`}>
-                <Pencil aria-hidden="true" /> Edit
+                <Pencil aria-hidden="true" /> {D.edit}
               </Link>
             </Button>
           ) : null
@@ -309,26 +474,26 @@ export function DestinationDetailPage() {
       />
       <div className="flex flex-wrap items-center gap-2">
         {d.ready ? (
-          <Tag tone="success">Ready</Tag>
+          <Tag tone="success">{D.ready}</Tag>
         ) : (
-          <Tag tone="danger">Not ready{d.notReadyReason ? `: ${d.notReadyReason}` : ""}</Tag>
+          <Tag tone="danger">
+            {d.notReadyReason ? D.notReadyReason(d.notReadyReason) : D.notReady}
+          </Tag>
         )}
         {d.objectLockMode ? (
           <Tag tone="info" title={LOCK_DESCRIPTION[d.objectLockMode]}>
-            Object Lock · {LOCK_LABEL[d.objectLockMode]}
-            {d.objectLockRetentionDays != null ? ` · ${d.objectLockRetentionDays} days` : ""}
+            {d.objectLockRetentionDays != null
+              ? D.objectLockTagDays(LOCK_LABEL[d.objectLockMode], d.objectLockRetentionDays)
+              : D.objectLockTag(LOCK_LABEL[d.objectLockMode])}
           </Tag>
         ) : null}
-        {d.noDelete ? <Tag tone="info">No-delete</Tag> : null}
-        {!isAdmin ? <Tag tone="neutral">Read only</Tag> : null}
+        {d.noDelete ? <Tag tone="info">{D.noDeleteTag}</Tag> : null}
+        {!isAdmin ? <Tag tone="neutral">{D.readOnly}</Tag> : null}
       </div>
       <UnrecordedFilesBanner destinationId={d.id} enabled={isAdmin} />
 
       <div className="flex flex-col">
-        <LedgerSection
-          title="Test"
-          lead="Writes, reads back and deletes a small probe object below the destination's prefix."
-        >
+        <LedgerSection title={D.testTitle} lead={D.testLead}>
           <DestinationTest
             id={d.id}
             lastTest={d.lastTest}
@@ -339,30 +504,33 @@ export function DestinationDetailPage() {
         <DestinationStorageSection id={d.id} />
 
         <LedgerSection
-          title="Retention"
+          title={D.retentionTitle}
           lead={
             d.noDelete
-              ? "bekup never deletes from this destination: configure lifecycle rules for retention."
+              ? D.retentionNoDelete
               : d.objectLockMode
-                ? "bekup applies retention once an object's lock has expired."
-                : "bekup deletes backups here according to each job's retention policy."
+                ? D.retentionLocked
+                : D.retentionNormal
           }
         >
           <Facts>
-            <Fact term="No-delete">{d.noDelete ? "On" : "Off"}</Fact>
-            <Fact term="Object Lock">
+            <Fact term={D.noDelete}>{d.noDelete ? D.on : D.off}</Fact>
+            <Fact term={D.objectLock}>
               {d.objectLockMode
-                ? `${LOCK_LABEL[d.objectLockMode]}, ${d.objectLockRetentionDays ?? "?"} days`
-                : "Off"}
+                ? D.lockValue(
+                    LOCK_LABEL[d.objectLockMode],
+                    d.objectLockRetentionDays == null ? "?" : String(d.objectLockRetentionDays),
+                  )
+                : D.off}
             </Fact>
           </Facts>
         </LedgerSection>
 
         {s ? (
-          <LedgerSection title="Configuration">
+          <LedgerSection title={D.configuration}>
             {s.disk ? (
               <Facts>
-                <Fact term="Directory" mono>
+                <Fact term={D.directory} mono>
                   {s.disk.path}
                 </Fact>
               </Facts>
@@ -371,26 +539,26 @@ export function DestinationDetailPage() {
             {s.webdav ? <WebdavFacts webdav={s.webdav} /> : null}
             {s.sftp ? (
               <Facts>
-                <Fact term="Server" mono>
+                <Fact term={D.server} mono>
                   {s.sftp.user}@{s.sftp.host}:{s.sftp.port}
                 </Fact>
-                <Fact term="Base path" mono>
+                <Fact term={D.basePath} mono>
                   {s.sftp.basePath}
                 </Fact>
-                <Fact term="Directory" mono>
-                  {s.sftp.dir || "(base path)"}
+                <Fact term={D.directory} mono>
+                  {s.sftp.dir || D.basePathDefault}
                 </Fact>
-                <Fact term="Password">{stored(s.sftp.hasPassword)}</Fact>
-                <Fact term="Private key">{stored(s.sftp.hasPrivateKey)}</Fact>
+                <Fact term={D.password}>{stored(s.sftp.hasPassword)}</Fact>
+                <Fact term={D.privateKey}>{stored(s.sftp.hasPrivateKey)}</Fact>
               </Facts>
             ) : null}
-            <p className="text-xs text-muted-foreground">Updated {formatDateTime(d.updatedAt)}</p>
+            <p className="text-xs text-muted-foreground">
+              {D.updated(formatDateTime(d.updatedAt))}
+            </p>
           </LedgerSection>
         ) : (
-          <LedgerSection title="Configuration">
-            <p className="text-sm text-muted-foreground">
-              The full configuration is visible to admins only.
-            </p>
+          <LedgerSection title={D.configuration}>
+            <p className="text-sm text-muted-foreground">{D.adminOnly}</p>
           </LedgerSection>
         )}
 
@@ -407,10 +575,7 @@ export function DestinationDetailPage() {
         {isAdmin ? <UnrecordedFilesSection destinationId={d.id} noDelete={d.noDelete} /> : null}
 
         {isAdmin ? (
-          <LedgerSection
-            title="Delete"
-            lead="Soft delete: the stored backups stay where they are. Jobs that write here block it."
-          >
+          <LedgerSection title={D.deleteTitle} lead={D.deleteLead}>
             <Button
               type="button"
               variant="outline"
@@ -419,7 +584,7 @@ export function DestinationDetailPage() {
                 setDeleting(true);
               }}
             >
-              <Trash2 aria-hidden="true" /> Delete destination
+              <Trash2 aria-hidden="true" /> {D.deleteButton}
             </Button>
             <DeleteDialog
               open={deleting}
@@ -428,7 +593,7 @@ export function DestinationDetailPage() {
               name={d.name}
               onDelete={async () => {
                 await withStepUp(() => remove({ variables: { id: d.id } }));
-                toast.success(`Destination "${d.name}" deleted.`);
+                toast.success(D.deleted(d.name));
                 void navigate("/destinations");
               }}
             />

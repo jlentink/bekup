@@ -20,6 +20,7 @@ import { RunStatusBadge } from "@/features/runs/run-status";
 import type { JobFilter, JobsListQuery as JobsListResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import { EncryptionBadge } from "./encryption-badge";
 import { NativeSelect } from "./fields";
@@ -33,43 +34,96 @@ type JobRow = JobsListResult["jobs"]["edges"][number]["node"];
 
 const PAGE_SIZE = 25;
 
-const T = {
-  eyebrow: "Backups",
-  title: "Jobs",
-  leadStaff: "Every backup job, its schedule, last result and encryption.",
-  leadOwner: "The backup jobs you own.",
-  newJob: "New job",
-  search: "Search jobs",
-  searchPlaceholder: "Name or slug",
-  state: "State",
-  stateAll: "All jobs",
-  stateEnabled: "Enabled",
-  stateDisabled: "Disabled",
-  connection: "Connection",
-  connectionAll: "All connections",
-  empty: "No jobs match.",
-  emptyFirst: "No backup jobs yet.",
-  emptyOwner: "You do not own any backup jobs yet. An administrator can add you as an owner.",
-  cols: {
-    name: "Job",
+const T = defineMessages({
+  en: {
+    eyebrow: "Backups",
+    title: "Jobs",
+    leadStaff: "Every backup job, its schedule, last result and encryption.",
+    leadOwner: "The backup jobs you own.",
+    newJob: "New job",
+    search: "Search jobs",
+    searchPlaceholder: "Name or slug",
+    state: "State",
+    stateAll: "All jobs",
+    stateEnabled: "Enabled",
+    stateDisabled: "Disabled",
     connection: "Connection",
-    schedule: "Schedule",
-    next: "Next run",
-    last: "Last run",
-    encryption: "Encryption",
-    stored: "Stored",
-    owners: "Owners",
-    enabled: "Enabled",
+    connectionAll: "All connections",
+    empty: "No jobs match.",
+    emptyFirst: "No backup jobs yet.",
+    emptyOwner: "You do not own any backup jobs yet. An administrator can add you as an owner.",
+    cols: {
+      name: "Job",
+      connection: "Connection",
+      schedule: "Schedule",
+      next: "Next run",
+      last: "Last run",
+      encryption: "Encryption",
+      stored: "Stored",
+      owners: "Owners",
+      enabled: "Enabled",
+    },
+    storedTitle: (n: number) =>
+      `Present backup files on all destinations (every copy counts) · ${plural(n, { one: "1 backup", other: `${String(n)} backups` })}`,
+    storedNone: "None",
+    never: "Never run",
+    noNext: "Not planned",
+    paused: "Disabled",
+    pager: "Job pages",
+    deletedConnection: "deleted",
+    warnings: (n: number) => ` · ${String(n)} warning(s)`,
+    yes: "Yes",
+    no: "No",
+    ownersNone: "None",
+    ownersLabel: "Owners",
+    more: (n: number) => `+${String(n)}`,
   },
-  storedTitle: (n: number) =>
-    `Present backup files on all destinations (every copy counts) · ${n === 1 ? "1 backup" : `${String(n)} backups`}`,
-  storedNone: "None",
-  never: "Never run",
-  noNext: "Not planned",
-  paused: "Disabled",
-  pager: "Job pages",
-  deletedConnection: "deleted",
-} as const;
+  nl: {
+    eyebrow: "Back-ups",
+    title: "Taken",
+    leadStaff: "Elke back-uptaak, met planning, laatste resultaat en versleuteling.",
+    leadOwner: "De back-uptaken waarvan je eigenaar bent.",
+    newJob: "Nieuwe taak",
+    search: "Taken zoeken",
+    searchPlaceholder: "Naam of slug",
+    state: "Status",
+    stateAll: "Alle taken",
+    stateEnabled: "Ingeschakeld",
+    stateDisabled: "Uitgeschakeld",
+    connection: "Verbinding",
+    connectionAll: "Alle verbindingen",
+    empty: "Geen taken gevonden.",
+    emptyFirst: "Nog geen back-uptaken.",
+    emptyOwner:
+      "Je bent nog geen eigenaar van back-uptaken. Een beheerder kan je als eigenaar toevoegen.",
+    cols: {
+      name: "Taak",
+      connection: "Verbinding",
+      schedule: "Planning",
+      next: "Volgende run",
+      last: "Laatste run",
+      encryption: "Versleuteling",
+      stored: "Opgeslagen",
+      owners: "Eigenaren",
+      enabled: "Ingeschakeld",
+    },
+    storedTitle: (n: number) =>
+      `Aanwezige back-upbestanden op alle bestemmingen (elke kopie telt mee) · ${plural(n, { one: "1 back-up", other: `${String(n)} back-ups` })}`,
+    storedNone: "Geen",
+    never: "Nog nooit uitgevoerd",
+    noNext: "Niet gepland",
+    paused: "Uitgeschakeld",
+    pager: "Pagina's met taken",
+    deletedConnection: "verwijderd",
+    warnings: (n: number) =>
+      ` · ${plural(n, { one: "1 waarschuwing", other: `${String(n)} waarschuwingen` })}`,
+    yes: "Ja",
+    no: "Nee",
+    ownersNone: "Geen",
+    ownersLabel: "Eigenaren",
+    more: (n: number) => `+${String(n)}`,
+  },
+});
 
 function useDebouncedValue(value: string, ms: number): string {
   const [v, setV] = useState(value);
@@ -285,7 +339,7 @@ function JobListRow({ job, staff }: { job: JobRow; staff: boolean }) {
             <RunStatusBadge status={last.status} />
             <span className="font-mono text-2xs text-muted-foreground">
               {formatRelative(last.finishedAt ?? last.queuedAt)}
-              {last.warnings.length > 0 ? ` · ${String(last.warnings.length)} warning(s)` : ""}
+              {last.warnings.length > 0 ? T.warnings(last.warnings.length) : ""}
             </span>
           </Link>
         ) : (
@@ -313,7 +367,7 @@ function JobListRow({ job, staff }: { job: JobRow; staff: boolean }) {
         {staff ? (
           <JobEnabledToggle job={job} />
         ) : (
-          <span className="text-xs text-muted-foreground">{job.enabled ? "Yes" : "No"}</span>
+          <span className="text-xs text-muted-foreground">{job.enabled ? T.yes : T.no}</span>
         )}
       </TableCell>
     </TableRow>
@@ -327,10 +381,11 @@ export function OwnerChips({
   owners: readonly { userId: string; displayName: string; email: string; disabled: boolean }[];
   max?: number;
 }) {
-  if (owners.length === 0) return <span className="text-xs text-muted-foreground">None</span>;
+  if (owners.length === 0)
+    return <span className="text-xs text-muted-foreground">{T.ownersNone}</span>;
   const shown = owners.slice(0, max);
   return (
-    <ul className="flex flex-wrap gap-1" aria-label="Owners">
+    <ul className="flex flex-wrap gap-1" aria-label={T.ownersLabel}>
       {shown.map((o) => (
         <li
           key={o.userId}
@@ -345,7 +400,7 @@ export function OwnerChips({
       ))}
       {owners.length > max ? (
         <li className="inline-flex h-5 items-center px-1 text-2xs text-muted-foreground">
-          +{owners.length - max}
+          {T.more(owners.length - max)}
         </li>
       ) : null}
     </ul>

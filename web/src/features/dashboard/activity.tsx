@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { RunStatusBadge } from "@/features/runs/run-status";
 import type { RestoreStatus } from "@/graphql/gen/graphql";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 
 import type { LiveRun } from "./model";
 import { LiveMarker, Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
@@ -19,15 +20,48 @@ export interface ActiveRestore {
   target: { id: string; name: string };
 }
 
-const RESTORE_LABEL: Record<RestoreStatus, string> = {
-  QUEUED: "Queued",
-  STAGING: "Staging",
-  VERIFYING: "Verifying",
-  RESTORING: "Restoring",
-  SUCCEEDED: "Succeeded",
-  FAILED: "Failed",
-  CANCELED: "Canceled",
-};
+const T = defineMessages({
+  en: {
+    title: "Running now",
+    link: "Runs",
+    loading: "Loading active runs",
+    empty: "Nothing is running. Quiet ledger.",
+    listLabel: "Active runs and restores",
+    started: "started ",
+    queued: "queued ",
+    into: "into ",
+    restore: {
+      QUEUED: "Queued",
+      STAGING: "Staging",
+      VERIFYING: "Verifying",
+      RESTORING: "Restoring",
+      SUCCEEDED: "Succeeded",
+      FAILED: "Failed",
+      CANCELED: "Canceled",
+    },
+  },
+  nl: {
+    title: "Nu bezig",
+    link: "Runs",
+    loading: "Actieve runs laden",
+    empty: "Er loopt niets. Alles is rustig.",
+    listLabel: "Actieve runs en herstelacties",
+    started: "gestart ",
+    queued: "in de wachtrij ",
+    into: "naar ",
+    restore: {
+      QUEUED: "In de wachtrij",
+      STAGING: "Klaarzetten",
+      VERIFYING: "Controleren",
+      RESTORING: "Herstellen",
+      SUCCEEDED: "Geslaagd",
+      FAILED: "Mislukt",
+      CANCELED: "Geannuleerd",
+    },
+  },
+});
+
+const RESTORE_LABEL: Record<RestoreStatus, string> = T.restore;
 
 /** Running and queued backups and restores in progress (live via the page stream, D-197). */
 export function ActivityTile({
@@ -49,22 +83,20 @@ export function ActivityTile({
   return (
     <Tile
       folio="02"
-      title="Running now"
+      title={T.title}
       to="/runs"
-      linkLabel="Runs"
+      linkLabel={T.link}
       aside={<LiveMarker on={live} />}
       testId="tile-activity"
     >
       {loading && empty ? (
-        <TileSkeleton rows={2} label="Loading active runs" />
+        <TileSkeleton rows={2} label={T.loading} />
       ) : error && empty ? (
         <TileError error={error} />
       ) : empty ? (
-        <TileEmpty icon={<Activity aria-hidden="true" className="size-4" />}>
-          Nothing is running. Quiet ledger.
-        </TileEmpty>
+        <TileEmpty icon={<Activity aria-hidden="true" className="size-4" />}>{T.empty}</TileEmpty>
       ) : (
-        <ul aria-label="Active runs and restores" className="flex flex-col divide-y divide-rule">
+        <ul aria-label={T.listLabel} className="flex flex-col divide-y divide-rule">
           {runs.map((run) => (
             <li key={run.id} data-testid="active-run" className="flex items-start gap-3 py-2">
               <RunStatusBadge status={run.status} className="w-24 shrink-0" />
@@ -80,7 +112,7 @@ export function ActivityTile({
                   title={formatDateTime(run.startedAt ?? run.queuedAt)}
                   className="font-mono text-2xs text-muted-foreground"
                 >
-                  {run.status === "RUNNING" ? "started " : "queued "}
+                  {run.status === "RUNNING" ? T.started : T.queued}
                   {formatRelative(run.startedAt ?? run.queuedAt, now)}
                 </time>
               </span>
@@ -100,7 +132,7 @@ export function ActivityTile({
                   {r.job.name}
                 </Link>
                 <span className="truncate text-2xs text-muted-foreground">
-                  {"into "}
+                  {T.into}
                   {r.target.name}
                   {r.targetDatabase ? ` / ${r.targetDatabase}` : ""}
                   {" · "}

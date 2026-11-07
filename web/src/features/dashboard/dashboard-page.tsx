@@ -13,6 +13,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { sharedStream } from "@/lib/apollo";
 import { formatRelative } from "@/lib/format";
+import { defineMessages, intlLocale } from "@/lib/i18n";
 import { SecurityRisksQuery } from "@/lib/operations";
 
 import { ActivityTile } from "./activity";
@@ -56,6 +57,30 @@ import { SystemHealthTile } from "./system-health";
 import { UpcomingTile } from "./upcoming";
 
 const JOBS_MAX = 200;
+
+const T = defineMessages({
+  en: {
+    title: "Dashboard",
+    ownerDescription: "The health of the backup jobs you own, live.",
+    staffDescription: "Job health, live runs, failures, security and storage at a glance.",
+    summary: "Summary",
+    healthy: "Healthy jobs",
+    attention: "Need attention",
+    running: "Running now",
+    next: "Next run",
+  },
+  nl: {
+    title: "Dashboard",
+    ownerDescription: "De gezondheid van de back-uptaken waarvan je eigenaar bent, live.",
+    staffDescription:
+      "Gezondheid van taken, lopende runs, fouten, beveiliging en opslag in één oogopslag.",
+    summary: "Overzicht",
+    healthy: "Gezonde taken",
+    attention: "Aandacht nodig",
+    running: "Nu bezig",
+    next: "Volgende run",
+  },
+});
 
 type RunEvent = NonNullable<ActivityResult["activityUpdated"]["run"]>;
 type RestoreRow = RestoresResult["restores"]["edges"][number]["node"];
@@ -215,35 +240,31 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow={new Intl.DateTimeFormat(undefined, {
+        eyebrow={new Intl.DateTimeFormat(intlLocale, {
           weekday: "long",
           day: "numeric",
           month: "long",
         }).format(now)}
-        title="Dashboard"
-        description={
-          flags.owner
-            ? "The health of the backup jobs you own, live."
-            : "Job health, live runs, failures, security and storage at a glance."
-        }
+        title={T.title}
+        description={flags.owner ? T.ownerDescription : T.staffDescription}
       />
 
       {jobsLoaded && !noJobs ? (
         <dl
-          aria-label="Summary"
+          aria-label={T.summary}
           className="dash-figures grid grid-cols-2 rounded-lg border bg-card md:grid-cols-4"
         >
-          <Figure label="Healthy jobs" testId="figure-healthy">
+          <Figure label={T.healthy} testId="figure-healthy">
             {counts.healthy}
             <span className="text-muted-foreground"> / {health.length}</span>
           </Figure>
-          <Figure label="Need attention" testId="figure-attention" alert={attentionCount > 0}>
+          <Figure label={T.attention} testId="figure-attention" alert={attentionCount > 0}>
             {attentionCount}
           </Figure>
-          <Figure label="Running now" testId="figure-running">
+          <Figure label={T.running} testId="figure-running">
             {activeRuns.length + activeRestores.length}
           </Figure>
-          <Figure label="Next run" testId="figure-next">
+          <Figure label={T.next} testId="figure-next">
             {nextRun ? formatRelative(nextRun, now) : "—"}
           </Figure>
         </dl>

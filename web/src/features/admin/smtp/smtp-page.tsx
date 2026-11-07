@@ -39,6 +39,7 @@ import { getFragmentData } from "@/graphql/gen";
 import type { AdminSendTestEmailMutation, SmtpMode } from "@/graphql/gen/graphql";
 import { applyFieldErrors, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -62,64 +63,134 @@ import {
   type SmtpShape,
 } from "./model";
 
-const T = {
-  title: "E-mail (SMTP)",
-  connection: "Relay",
-  connectionLead:
-    "bekup sends notifications and verification links through this relay. The host must pass the outbound SSRF guard: a relay on a private network needs an allowlist entry.",
-  enabled: "Send e-mail",
-  enabledHint: "Off: bekup sends no e-mail at all (the in-app inbox still works).",
-  host: "Host",
-  port: "Port",
-  security: "Transport security",
-  securityLead:
-    "How the connection is protected. Prefer STARTTLS or implicit TLS: the other modes can expose mail and the relay password.",
-  unencrypted: "E-mail may be sent unencrypted",
-  unencryptedLead:
-    "Mail, metadata and the SMTP password may travel in clear text. Saving this mode is written to the audit log.",
-  auth: "Authentication",
-  authLead: "Leave the username empty for a relay without AUTH. The password is write-only.",
-  username: "Username",
-  password: "Password",
-  passwordStored: "Stored",
-  passwordNever: "Write-only: never shown again.",
-  passwordChange: "Change password",
-  passwordRemove: "Remove",
-  passwordKeep: "Keep the stored password",
-  passwordUndo: "Undo",
-  passwordRemoved: "Removed on save",
-  reentry:
-    "Host, port or username changed: enter the password again. bekup never sends a stored password to a new endpoint.",
-  reentryMissing: "Enter the password for the new endpoint, or remove it.",
-  sender: "Sender",
-  fromAddress: "From address",
-  fromName: "From name",
-  fromNameHint: "Optional display name, e.g. “bekup backups”.",
-  tls: "Certificates and timeouts",
-  tlsLead: "A CA bundle replaces the system roots for this relay only (private CA).",
-  caBundle: "CA bundle (PEM)",
-  caBundleHint: "Empty: the system trust store.",
-  connectTimeout: "Connect timeout (s)",
-  sendTimeout: "Session timeout (s)",
-  save: "Save settings",
-  saved: "SMTP settings saved.",
-  noChanges: "Nothing changed.",
-  notConfigured: "Not configured",
-  disabled: "E-mail off",
-  active: "Sending",
-  lastChanged: (when: string) => `Last changed ${when}`,
-  test: "Test e-mail",
-  testLead:
-    "Sends a message with the saved settings (save first). The result shows whether the session was encrypted and with which TLS version.",
-  testTo: "Recipient",
-  testSend: "Send test e-mail",
-  testOk: "Delivered to the relay",
-  testFailed: "Not delivered",
-  encrypted: "Encrypted",
-  notEncrypted: "Not encrypted",
-  noTls: "No TLS",
-  guide: "SMTP guide",
-} as const;
+const T = defineMessages({
+  en: {
+    title: "E-mail (SMTP)",
+    connection: "Relay",
+    connectionLead:
+      "bekup sends notifications and verification links through this relay. The host must pass the outbound SSRF guard: a relay on a private network needs an allowlist entry.",
+    enabled: "Send e-mail",
+    enabledHint: "Off: bekup sends no e-mail at all (the in-app inbox still works).",
+    host: "Host",
+    port: "Port",
+    security: "Transport security",
+    securityLead:
+      "How the connection is protected. Prefer STARTTLS or implicit TLS: the other modes can expose mail and the relay password.",
+    unencrypted: "E-mail may be sent unencrypted",
+    unencryptedLead:
+      "Mail, metadata and the SMTP password may travel in clear text. Saving this mode is written to the audit log.",
+    auth: "Authentication",
+    authLead: "Leave the username empty for a relay without AUTH. The password is write-only.",
+    username: "Username",
+    password: "Password",
+    passwordStored: "Stored",
+    passwordNever: "Write-only: never shown again.",
+    passwordChange: "Change password",
+    passwordRemove: "Remove",
+    passwordKeep: "Keep the stored password",
+    passwordUndo: "Undo",
+    passwordRemoved: "Removed on save",
+    reentry:
+      "Host, port or username changed: enter the password again. bekup never sends a stored password to a new endpoint.",
+    reentryMissing: "Enter the password for the new endpoint, or remove it.",
+    sender: "Sender",
+    fromAddress: "From address",
+    fromName: "From name",
+    fromNameHint: "Optional display name, e.g. “bekup backups”.",
+    tls: "Certificates and timeouts",
+    tlsLead: "A CA bundle replaces the system roots for this relay only (private CA).",
+    caBundle: "CA bundle (PEM)",
+    caBundleHint: "Empty: the system trust store.",
+    connectTimeout: "Connect timeout (s)",
+    sendTimeout: "Session timeout (s)",
+    save: "Save settings",
+    saved: "SMTP settings saved.",
+    noChanges: "Nothing changed.",
+    notConfigured: "Not configured",
+    disabled: "E-mail off",
+    active: "Sending",
+    lastChanged: (when: string) => `Last changed ${when}`,
+    test: "Test e-mail",
+    testLead:
+      "Sends a message with the saved settings (save first). The result shows whether the session was encrypted and with which TLS version.",
+    testTo: "Recipient",
+    testSend: "Send test e-mail",
+    testOk: "Delivered to the relay",
+    testFailed: "Not delivered",
+    encrypted: "Encrypted",
+    notEncrypted: "Not encrypted",
+    noTls: "No TLS",
+    guide: "SMTP guide",
+    tlsTag: "TLS",
+    mayBeUnencrypted: "may be unencrypted",
+  },
+  nl: {
+    title: "E-mail (SMTP)",
+    connection: "Relay",
+    connectionLead:
+      "bekup verstuurt meldingen en verificatielinks via deze relay. De host moet door de uitgaande SSRF-beveiliging komen: een relay op een privénetwerk heeft een vermelding in de toegestane lijst nodig.",
+    enabled: "E-mail versturen",
+    enabledHint: "Uit: bekup verstuurt helemaal geen e-mail (de inbox in de app werkt nog wel).",
+    host: "Host",
+    port: "Poort",
+    security: "Transportbeveiliging",
+    securityLead:
+      "Hoe de verbinding wordt beschermd. Kies bij voorkeur STARTTLS of impliciete TLS: de andere modi kunnen e-mail en het relaywachtwoord blootstellen.",
+    unencrypted: "E-mail kan onversleuteld worden verstuurd",
+    unencryptedLead:
+      "E-mail, metadata en het SMTP-wachtwoord kunnen als leesbare tekst over het netwerk gaan. Het opslaan van deze modus komt in de auditlog.",
+    auth: "Authenticatie",
+    authLead:
+      "Laat de gebruikersnaam leeg voor een relay zonder AUTH. Het wachtwoord is alleen-schrijven.",
+    username: "Gebruikersnaam",
+    password: "Wachtwoord",
+    passwordStored: "Opgeslagen",
+    passwordNever: "Alleen-schrijven: wordt nooit meer getoond.",
+    passwordChange: "Wachtwoord wijzigen",
+    passwordRemove: "Verwijderen",
+    passwordKeep: "Opgeslagen wachtwoord behouden",
+    passwordUndo: "Ongedaan maken",
+    passwordRemoved: "Wordt verwijderd bij opslaan",
+    reentry:
+      "Host, poort of gebruikersnaam is gewijzigd: vul het wachtwoord opnieuw in. bekup stuurt een opgeslagen wachtwoord nooit naar een nieuw eindpunt.",
+    reentryMissing: "Vul het wachtwoord voor het nieuwe eindpunt in, of verwijder het.",
+    sender: "Afzender",
+    fromAddress: "Afzenderadres",
+    fromName: "Afzendernaam",
+    fromNameHint: "Optionele weergavenaam, bijvoorbeeld „bekup-back-ups”.",
+    tls: "Certificaten en time-outs",
+    tlsLead: "Een CA-bundel vervangt de systeemroots alleen voor deze relay (privé-CA).",
+    caBundle: "CA-bundel (PEM)",
+    caBundleHint: "Leeg: de vertrouwde certificaten van het systeem.",
+    connectTimeout: "Time-out verbinden (s)",
+    sendTimeout: "Time-out sessie (s)",
+    save: "Instellingen opslaan",
+    saved: "SMTP-instellingen opgeslagen.",
+    noChanges: "Er is niets gewijzigd.",
+    notConfigured: "Niet ingesteld",
+    disabled: "E-mail uit",
+    active: "Verstuurt",
+    lastChanged: (when: string) => `Laatst gewijzigd ${when}`,
+    test: "Test-e-mail",
+    testLead:
+      "Verstuurt een bericht met de opgeslagen instellingen (sla eerst op). Het resultaat laat zien of de sessie versleuteld was en met welke TLS-versie.",
+    testTo: "Ontvanger",
+    testSend: "Test-e-mail versturen",
+    testOk: "Afgeleverd bij de relay",
+    testFailed: "Niet afgeleverd",
+    encrypted: "Versleuteld",
+    notEncrypted: "Niet versleuteld",
+    noTls: "Geen TLS",
+    guide: "Handleiding SMTP",
+    tlsTag: "TLS",
+    mayBeUnencrypted: "mogelijk onversleuteld",
+  },
+});
+
+/** Example values, the same in every language. */
+const HOST_PLACEHOLDER = "smtp.example.com";
+const FROM_PLACEHOLDER = "bekup@example.com";
+const PEM_PLACEHOLDER = "-----BEGIN CERTIFICATE-----";
 
 /** SMTP settings (admin, D-178/D-180): mode, write-only password, test e-mail. */
 export function SmtpSettingsPage() {
@@ -310,7 +381,7 @@ function SmtpForm({ settings }: { settings: SmtpShape }) {
                     <Input
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="smtp.example.com"
+                      placeholder={HOST_PLACEHOLDER}
                       {...field}
                     />
                   </FormControl>
@@ -338,7 +409,9 @@ function SmtpForm({ settings }: { settings: SmtpShape }) {
           icon={mayBeUnencrypted(mode) ? LockOpen : LockKeyhole}
           title={T.security}
           lead={T.securityLead}
-          status={mayBeUnencrypted(mode) ? <UnencryptedBadge /> : <Tag tone="success">TLS</Tag>}
+          status={
+            mayBeUnencrypted(mode) ? <UnencryptedBadge /> : <Tag tone="success">{T.tlsTag}</Tag>
+          }
         >
           <FormField
             control={form.control}
@@ -500,7 +573,7 @@ function SmtpForm({ settings }: { settings: SmtpShape }) {
                     <Input
                       type="email"
                       autoComplete="off"
-                      placeholder="bekup@example.com"
+                      placeholder={FROM_PLACEHOLDER}
                       {...field}
                     />
                   </FormControl>
@@ -536,7 +609,7 @@ function SmtpForm({ settings }: { settings: SmtpShape }) {
                   <textarea
                     rows={4}
                     spellCheck={false}
-                    placeholder="-----BEGIN CERTIFICATE-----"
+                    placeholder={PEM_PLACEHOLDER}
                     className={textareaClass}
                     {...field}
                   />
@@ -639,7 +712,7 @@ function ModeCard({
       </span>
       {weak ? (
         <span className="eyebrow inline-flex items-center gap-1 text-status-insecure-fg">
-          <LockOpen aria-hidden="true" className="size-3" /> may be unencrypted
+          <LockOpen aria-hidden="true" className="size-3" /> {T.mayBeUnencrypted}
         </span>
       ) : null}
     </label>

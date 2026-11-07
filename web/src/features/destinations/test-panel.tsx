@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { userMessage } from "@/lib/api-error";
 import { formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { stepLabel } from "./labels";
@@ -14,6 +15,40 @@ import { StoredTestPanel, type StoredTest } from "@/features/connections/last-te
 
 import type { DestinationTestResult } from "./results";
 import { WebdavTestDetailsView, type WebdavViewer } from "./webdav-test-details";
+
+const T = defineMessages({
+  en: {
+    works: "Destination works",
+    failed: "Destination test failed",
+    tested: (when: string) => `tested ${when}`,
+    steps: "Test steps",
+    stepPassed: "passed",
+    stepFailed: "failed",
+    ok: "OK",
+    noSteps: "No steps ran.",
+    probeObject: "Probe object ",
+    probeLeft: " was left in place (no-delete, Object Lock or a failed delete).",
+    probeRemoved: " was removed.",
+    test: "Test destination",
+    neverTested: "Never tested. The test writes, reads back and deletes a small probe object.",
+  },
+  nl: {
+    works: "Bestemming werkt",
+    failed: "Test van de bestemming mislukt",
+    tested: (when: string) => `getest ${when}`,
+    steps: "Teststappen",
+    stepPassed: "geslaagd",
+    stepFailed: "mislukt",
+    ok: "OK",
+    noSteps: "Er zijn geen stappen uitgevoerd.",
+    probeObject: "Testobject ",
+    probeLeft: " is blijven staan (niet verwijderen, Object Lock of een mislukte verwijdering).",
+    probeRemoved: " is verwijderd.",
+    test: "Bestemming testen",
+    neverTested:
+      "Nooit getest. De test schrijft een klein testobject, leest het terug en verwijdert het.",
+  },
+});
 
 /** The normalized testDestination result as a step ledger. */
 export function DestinationTestResultView({
@@ -36,12 +71,12 @@ export function DestinationTestResultView({
       )}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-medium">{result.ok ? "Destination works" : "Destination test failed"}</p>
+        <p className="font-medium">{result.ok ? T.works : T.failed}</p>
         <span className="font-mono text-2xs text-muted-foreground">
-          tested {formatRelative(new Date(at).toISOString())}
+          {T.tested(formatRelative(new Date(at).toISOString()))}
         </span>
       </div>
-      <ol aria-label="Test steps" className="flex flex-col">
+      <ol aria-label={T.steps} className="flex flex-col">
         {result.steps.map((step, i) => {
           const Icon = step.ok ? Check : X;
           return (
@@ -58,10 +93,10 @@ export function DestinationTestResultView({
               />
               <span className="text-sm">
                 {stepLabel(step.name)}
-                <span className="sr-only">: {step.ok ? "passed" : "failed"}</span>
+                <span className="sr-only">: {step.ok ? T.stepPassed : T.stepFailed}</span>
               </span>
               <span className="flex flex-wrap items-baseline gap-2 text-sm text-muted-foreground">
-                {step.ok ? "OK" : step.message}
+                {step.ok ? T.ok : step.message}
                 {!step.ok ? <span className="font-mono text-2xs">{step.code}</span> : null}
               </span>
             </li>
@@ -69,16 +104,15 @@ export function DestinationTestResultView({
         })}
         {result.steps.length === 0 ? (
           <li className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Minus aria-hidden="true" className="size-3.5" /> No steps ran.
+            <Minus aria-hidden="true" className="size-3.5" /> {T.noSteps}
           </li>
         ) : null}
       </ol>
       {result.probeKey ? (
         <p className="text-xs text-muted-foreground">
-          Probe object <code className="font-mono break-all">{result.probeKey}</code>
-          {result.probeRemains
-            ? " was left in place (no-delete, Object Lock or a failed delete)."
-            : " was removed."}
+          {T.probeObject}
+          <code className="font-mono break-all">{result.probeKey}</code>
+          {result.probeRemains ? T.probeLeft : T.probeRemoved}
         </p>
       ) : null}
       {result.note ? <p className="text-sm">{result.note}</p> : null}
@@ -135,7 +169,7 @@ export function DestinationTest({
         ) : (
           <Radar aria-hidden="true" />
         )}
-        Test destination
+        {T.test}
       </Button>
       {error ? (
         <Alert variant="destructive">
@@ -150,10 +184,7 @@ export function DestinationTest({
           {...(viewer ? { viewer } : {})}
         />
       ) : (
-        <StoredTestPanel
-          test={lastTest}
-          emptyText="Never tested. The test writes, reads back and deletes a small probe object."
-        />
+        <StoredTestPanel test={lastTest} emptyText={T.neverTested} />
       )}
     </div>
   );

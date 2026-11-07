@@ -1,3 +1,4 @@
+import { defineMessages, plural } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { TestRestoreVerdict } from "./test-restore-verdict";
@@ -16,10 +17,10 @@ function signed(n: number): string {
 /** One-line chips of the diff: "2 FAIL · Row count differs ×1 ...". */
 export function DiffSummaryLine({ summary }: { summary: DiffSummary }) {
   if (summary.fail === 0 && summary.warn === 0) {
-    return <p className="text-xs text-muted-foreground">No differences found.</p>;
+    return <p className="text-xs text-muted-foreground">{T.none}</p>;
   }
   return (
-    <ul aria-label="Differences" className="flex flex-wrap items-center gap-1.5">
+    <ul aria-label={T.differences} className="flex flex-wrap items-center gap-1.5">
       {summary.codes.map((c) => (
         <li
           key={`${c.severity}-${c.code}`}
@@ -36,23 +37,59 @@ export function DiffSummaryLine({ summary }: { summary: DiffSummary }) {
         </li>
       ))}
       {summary.unlisted > 0 ? (
-        <li className="text-2xs text-muted-foreground">+{summary.unlisted} not listed</li>
+        <li className="text-2xs text-muted-foreground">{T.unlisted(summary.unlisted)}</li>
       ) : null}
     </ul>
   );
 }
 
-const T = {
-  tables: (c: number, e: number) => `${String(c)} tables compared, ${String(e)} exactly`,
-  findings: (shown: number, total: number) =>
-    shown < total
-      ? `${String(shown)} of ${String(total)} findings`
-      : `${String(total)} finding${total === 1 ? "" : "s"}`,
-  notDropped: "Scratch database not dropped yet (retried)",
-  restore: (status: string, code: string | null | undefined) =>
-    `Internal restore: ${status.toLowerCase()}${code ? ` (${code})` : ""}`,
-  cols: { code: "Finding", object: "Object", source: "Backup", restored: "Restored", delta: "Δ" },
-} as const;
+const NL_RESTORE_STATUS: Record<string, string> = {
+  CANCELED: "geannuleerd",
+  FAILED: "mislukt",
+  QUEUED: "in de wachtrij",
+  RESTORING: "bezig met herstellen",
+  STAGING: "bezig met klaarzetten",
+  SUCCEEDED: "geslaagd",
+  VERIFYING: "bezig met verifiëren",
+};
+
+const T = defineMessages({
+  en: {
+    tables: (c: number, e: number) => `${String(c)} tables compared, ${String(e)} exactly`,
+    findings: (shown: number, total: number) =>
+      shown < total
+        ? `${String(shown)} of ${String(total)} findings`
+        : plural(total, { one: "1 finding", other: `${String(total)} findings` }),
+    notDropped: "Scratch database not dropped yet (retried)",
+    restore: (status: string, code: string | null | undefined) =>
+      `Internal restore: ${status.toLowerCase()}${code ? ` (${code})` : ""}`,
+    cols: { code: "Finding", object: "Object", source: "Backup", restored: "Restored", delta: "Δ" },
+    none: "No differences found.",
+    differences: "Differences",
+    unlisted: (n: number) => `+${String(n)} not listed`,
+  },
+  nl: {
+    tables: (c: number, e: number) =>
+      `${plural(c, { one: "1 tabel", other: `${String(c)} tabellen` })} vergeleken, ${String(e)} exact`,
+    findings: (shown: number, total: number) =>
+      shown < total
+        ? `${String(shown)} van ${String(total)} bevindingen`
+        : plural(total, { one: "1 bevinding", other: `${String(total)} bevindingen` }),
+    notDropped: "Tijdelijke database nog niet verwijderd (wordt opnieuw geprobeerd)",
+    restore: (status: string, code: string | null | undefined) =>
+      `Intern herstel: ${NL_RESTORE_STATUS[status] ?? status.toLowerCase()}${code ? ` (${code})` : ""}`,
+    cols: {
+      code: "Bevinding",
+      object: "Object",
+      source: "Back-up",
+      restored: "Hersteld",
+      delta: "Δ",
+    },
+    none: "Geen verschillen gevonden.",
+    differences: "Verschillen",
+    unlisted: (n: number) => `+${String(n)} niet vermeld`,
+  },
+});
 
 /** The databases of a test restore, each with its findings table. */
 export function TestRestoreDatabases({

@@ -1,6 +1,13 @@
 import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { defineMessages } from "@/lib/i18n";
+
+const T = defineMessages({
+  en: { newTab: " (opens in a new tab)" },
+  nl: { newTab: " (opent in een nieuw tabblad)" },
+});
+
 /** An external documentation link (opens a new tab, says so to screen readers). */
 export function DocLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -12,7 +19,7 @@ export function DocLink({ href, children }: { href: string; children: ReactNode 
     >
       {children}
       <ExternalLink aria-hidden="true" className="size-3" />
-      <span className="sr-only"> (opens in a new tab)</span>
+      <span className="sr-only">{T.newTab}</span>
     </a>
   );
 }

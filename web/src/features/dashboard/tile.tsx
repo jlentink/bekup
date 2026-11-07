@@ -4,7 +4,13 @@ import { Link } from "react-router";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+const T = defineMessages({
+  en: { viewAll: "View all", live: "Live", offline: "Offline" },
+  nl: { viewAll: "Alles bekijken", live: "Live", offline: "Offline" },
+});
 
 /**
  * One dashboard tile: a ledger folio with a numbered mono eyebrow, a title,
@@ -53,7 +59,7 @@ export function Tile({
               to={to}
               className="inline-flex items-center gap-1 rounded-sm font-mono text-2xs tracking-[0.1em] text-muted-foreground uppercase underline-offset-4 hover:text-foreground hover:underline"
             >
-              {linkLabel ?? "View all"}
+              {linkLabel ?? T.viewAll}
               <span className="sr-only">: {title}</span>
               <ArrowUpRight aria-hidden="true" className="size-3" />
             </Link>
@@ -114,7 +120,7 @@ export function LiveMarker({ on }: { on: boolean }) {
           on ? "running-pulse bg-status-running" : "bg-status-neutral",
         )}
       />
-      {on ? "Live" : "Offline"}
+      {on ? T.live : T.offline}
     </span>
   );
 }

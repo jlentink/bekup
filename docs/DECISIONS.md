@@ -257,6 +257,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-232](#d-232-ms-sql-server-backups-as-sqlpackage-bacpac-exports) | MS SQL Server backups as sqlpackage bacpac exports | proposed |
 | [D-233](#d-233-remote-runners-dial-out-to-bekup) | Remote runners dial out to bekup | proposed |
 | [D-234](#d-234-kubernetes-through-a-jobs-executor-in-the-runner) | Kubernetes through a Jobs executor in the runner | proposed |
+| [D-235](#d-235-ui-translations-as-typed-message-tables-per-language-english-dutch) | UI translations as typed message tables per language (English, Dutch) | proposed |
 
 ---
 
@@ -15682,3 +15683,56 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   SECURITY.md; NetworkPolicies need a CNI that enforces them, which the
   runner checks or documents as a requirement.
 - **Related:** plan tasks 13.4–13.5, D-230.
+
+## D-235: UI translations as typed message tables per language (English, Dutch)
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (typed tables instead of i18next, Dutch with
+  "je") and agent (the details)
+- **Context:** task 8.1 adds Dutch to the web UI. The UI's strings already
+  live in typed TypeScript tables (`src/lib/messages.ts`, per-feature
+  `messages.ts` and `T` objects) with parameters as functions. The plan
+  proposed i18next with JSON catalogs.
+- **Decision:**
+  1. Every table is written once per language with
+     `defineMessages({ en, nl })` from `web/src/lib/i18n.ts`; the Dutch
+     table is typed `Messages<typeof en>` (string literals widened), so
+     the compiler refuses a missing or extra key, a parameter of another
+     type or a changed structure. TypeScript accepts a function with fewer
+     parameters, so `web/src/lib/i18n-parity.test.ts` loads every module
+     and compares each recorded table at runtime (keys, function arity,
+     arrays, empty Dutch strings). No runtime catalogs, no new dependency.
+  2. The language is chosen once per page load: the stored choice
+     (`localStorage` `bekup.locale`, set in Profile → Account), else the
+     first supported browser language, else English. Switching stores the
+     choice and reloads the page, so module-level constants built from
+     strings stay consistent. `<html lang>` follows it.
+  3. Every `Intl` formatter uses `intlLocale`: the browser's tag when its
+     base is the UI language, else the UI language with the region of the
+     browser's first language ("en-DE" for a German browser), else the UI
+     language; Unicode extensions are dropped. `lib/format` formats
+     decimals in that locale too.
+  4. The local ESLint rule `bekup/no-ui-literals`
+     (`web/eslint-rules/no-ui-literals.js`) refuses letters in JSX text and
+     in the literal parts (strings, template text, both sides of
+     conditionals, `&&`, `+`) of JSX children, text attributes
+     (`aria-label`, `title`, `placeholder`, `label`, `hint`, ...) and
+     `toast()` messages and descriptions, in every `.tsx` except tests and
+     the dev-only `/design` page. Plain `.ts` modules (e.g. zod messages)
+     are not linted; reviews and the parity test cover them.
+  5. Dutch uses "je" and the terms of `web/src/lib/i18n-glossary.md`.
+  6. Not covered by 8.1: texts the server sends (GraphQL error messages,
+     the browser setup's wizard steps, e-mails) stay English until tasks
+     8.2/8.3 give the server the user's language.
+- **Alternatives considered:** i18next + react-i18next with JSON catalogs
+  (two dependencies, string keys without parameter checks, every component
+  rewritten to hooks); switching without a reload (needs every
+  module-level string moved into render).
+- **Consequences:** a new string needs both languages in the same change
+  (the compiler and the lint enforce it); a third language means a third
+  key in `defineMessages` and in `LOCALES`. No security impact: strings
+  stay static and are rendered as text; no catalogs are fetched, the CSP
+  is unchanged.
+- **Related:** plan task 8.1, `web/src/lib/i18n.ts`,
+  `web/src/lib/messages.ts`, D-230.

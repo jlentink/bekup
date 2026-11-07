@@ -252,7 +252,7 @@ function LedgerEntry({
         </p>
       </div>
       <blockquote className="border-l-2 border-rule pl-3 text-sm italic">
-        “{a.reason}”
+        {T.quoted(a.reason)}
         <footer className="mt-1 text-xs text-muted-foreground not-italic">
           {by} · {formatDateTime(a.createdAt)}
         </footer>

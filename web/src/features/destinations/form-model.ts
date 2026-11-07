@@ -14,7 +14,54 @@ import type {
   WebdavFlavor,
 } from "@/graphql/gen/graphql";
 
+import { defineMessages } from "@/lib/i18n";
+
 import { WT } from "./webdav-text";
+
+const E = defineMessages({
+  en: {
+    name: "Enter a name.",
+    nameLength: "At most 100 characters.",
+    diskPath: "Enter a directory below the disk root.",
+    diskRelative: "Use a relative path without “..”.",
+    s3Endpoint: "Enter an https:// URL, or leave it empty for AWS S3.",
+    region: "Enter the region.",
+    bucket: "Enter the bucket.",
+    accessKeyId: "Enter the access key ID.",
+    secretAccessKey: "Enter the secret access key.",
+    retentionDays: "Enter the retention in whole days.",
+    caBundle: "Paste the CA bundle as PEM.",
+    sftpHost: "Enter the server.",
+    port: "Enter a port between 1 and 65535.",
+    user: "Enter the user.",
+    basePath: "Enter an absolute directory (starting with /).",
+    passwordReentry:
+      "The server, user or base path changed: enter the password again, or set a key. A stored password is never sent to a new endpoint.",
+    password: "Enter the password.",
+    privateKey: "Paste the private key (PEM or OpenSSH format).",
+  },
+  nl: {
+    name: "Vul een naam in.",
+    nameLength: "Maximaal 100 tekens.",
+    diskPath: "Vul een map onder de schijfroot in.",
+    diskRelative: "Gebruik een relatief pad zonder „..”.",
+    s3Endpoint: "Vul een https://-URL in, of laat het leeg voor AWS S3.",
+    region: "Vul de regio in.",
+    bucket: "Vul de bucket in.",
+    accessKeyId: "Vul de access key ID in.",
+    secretAccessKey: "Vul de secret access key in.",
+    retentionDays: "Vul de bewaartermijn in hele dagen in.",
+    caBundle: "Plak de CA-bundel als PEM.",
+    sftpHost: "Vul de server in.",
+    port: "Vul een poort in tussen 1 en 65535.",
+    user: "Vul de gebruiker in.",
+    basePath: "Vul een absolute map in (beginnend met /).",
+    passwordReentry:
+      "De server, de gebruiker of het basispad is gewijzigd: voer het wachtwoord opnieuw in, of stel een sleutel in. Een opgeslagen wachtwoord wordt nooit naar een nieuw eindpunt gestuurd.",
+    password: "Vul het wachtwoord in.",
+    privateKey: "Plak de privésleutel (PEM- of OpenSSH-formaat).",
+  },
+});
 
 /**
  * The destination form model: values, validation (incl. D-140: a stored
@@ -271,7 +318,7 @@ export function buildSchema(orig: Original | undefined) {
   const str = z.string();
   return z
     .object({
-      name: str.trim().min(1, "Enter a name.").max(100, "At most 100 characters."),
+      name: str.trim().min(1, E.name).max(100, E.nameLength),
       type: z.enum(["DISK", "S3", "SFTP", "WEBDAV"]),
       noDelete: z.boolean(),
       disk: z.object({ path: str.trim() }),
@@ -323,46 +370,43 @@ export function buildSchema(orig: Original | undefined) {
       const values: DestinationFormValues = v;
       switch (v.type) {
         case "DISK":
-          if (v.disk.path === "") issue(["disk", "path"], "Enter a directory below the disk root.");
+          if (v.disk.path === "") issue(["disk", "path"], E.diskPath);
           else if (v.disk.path.startsWith("/") || v.disk.path.split("/").includes(".."))
-            issue(["disk", "path"], "Use a relative path without “..”.");
+            issue(["disk", "path"], E.diskRelative);
           break;
         case "S3":
           if (v.s3.endpoint !== "" && !/^https?:\/\//i.test(v.s3.endpoint))
-            issue(["s3", "endpoint"], "Enter an https:// URL, or leave it empty for AWS S3.");
-          if (v.s3.region === "") issue(["s3", "region"], "Enter the region.");
-          if (v.s3.bucket === "") issue(["s3", "bucket"], "Enter the bucket.");
-          if (v.s3.accessKeyId === "") issue(["s3", "accessKeyId"], "Enter the access key ID.");
+            issue(["s3", "endpoint"], E.s3Endpoint);
+          if (v.s3.region === "") issue(["s3", "region"], E.region);
+          if (v.s3.bucket === "") issue(["s3", "bucket"], E.bucket);
+          if (v.s3.accessKeyId === "") issue(["s3", "accessKeyId"], E.accessKeyId);
           if (v.s3.secretAction === "set" && v.s3.secretAccessKey === "")
-            issue(["s3", "secretAccessKey"], "Enter the secret access key.");
+            issue(["s3", "secretAccessKey"], E.secretAccessKey);
           if (v.s3.objectLock) {
             const n = Number(v.s3.objectLockRetentionDays);
             if (!Number.isInteger(n) || n < 1)
-              issue(["s3", "objectLockRetentionDays"], "Enter the retention in whole days.");
+              issue(["s3", "objectLockRetentionDays"], E.retentionDays);
           }
           if (v.s3.caBundlePem.trim() !== "" && !v.s3.caBundlePem.includes("BEGIN CERTIFICATE"))
-            issue(["s3", "caBundlePem"], "Paste the CA bundle as PEM.");
+            issue(["s3", "caBundlePem"], E.caBundle);
           break;
         case "SFTP": {
-          if (v.sftp.host === "") issue(["sftp", "host"], "Enter the server.");
+          if (v.sftp.host === "") issue(["sftp", "host"], E.sftpHost);
           if (
             v.sftp.port !== "" &&
             (!PORT_RE.test(v.sftp.port) || Number(v.sftp.port) < 1 || Number(v.sftp.port) > 65535)
           )
-            issue(["sftp", "port"], "Enter a port between 1 and 65535.");
-          if (v.sftp.user === "") issue(["sftp", "user"], "Enter the user.");
-          if (!v.sftp.basePath.startsWith("/"))
-            issue(["sftp", "basePath"], "Enter an absolute directory (starting with /).");
+            issue(["sftp", "port"], E.port);
+          if (v.sftp.user === "") issue(["sftp", "user"], E.user);
+          if (!v.sftp.basePath.startsWith("/")) issue(["sftp", "basePath"], E.basePath);
           const auth = effectiveSftpAuth(values, orig);
           if (auth === "password" && v.sftp.password === "")
             issue(
               ["sftp", "password"],
-              sftpNeedsPassword(values, orig)
-                ? "The server, user or base path changed: enter the password again, or set a key. A stored password is never sent to a new endpoint."
-                : "Enter the password.",
+              sftpNeedsPassword(values, orig) ? E.passwordReentry : E.password,
             );
           if (auth === "privateKey" && !v.sftp.privateKey.includes("PRIVATE KEY"))
-            issue(["sftp", "privateKey"], "Paste the private key (PEM or OpenSSH format).");
+            issue(["sftp", "privateKey"], E.privateKey);
           break;
         }
         case "WEBDAV": {

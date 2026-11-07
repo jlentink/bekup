@@ -5,6 +5,49 @@
  * only give early, local feedback with the same rules.
  */
 
+import { defineMessages } from "@/lib/i18n";
+
+/** The address check's problem texts (D-235). */
+const P = defineMessages({
+  en: {
+    empty: "Add at least one network the token may be used from, or explicitly allow any address.",
+    tooMany: (max: number) => `At most ${String(max)} networks per token.`,
+    notAddress: (n: number, raw: string) =>
+      `Entry ${String(n)} (${raw}) is not an address or network.`,
+    notIP: (n: number, raw: string) =>
+      `Entry ${String(n)} (${raw}) is not an IPv4 or IPv6 address or network such as 203.0.113.0/24.`,
+    mapped: (n: number, raw: string) =>
+      `Entry ${String(n)} (${raw}) is an IPv4-mapped IPv6 address: write it in the IPv4 form.`,
+    prefix: (n: number, raw: string) => `Entry ${String(n)} (${raw}) has an invalid prefix length.`,
+    everything: (n: number, raw: string) =>
+      `Entry ${String(n)} (${raw}) allows every address: choose "Allow from any address" instead.`,
+    tooWide: (n: number, raw: string, minLen: number) =>
+      `Entry ${String(n)} (${raw}) is wider than /${String(minLen)}: a network that wide is as good as any address; choose "Allow from any address" instead or narrow it.`,
+    hostBits: (n: number, raw: string, net: string) =>
+      `Entry ${String(n)} (${raw}) has bits set after the prefix length: did you mean ${net}?`,
+    duplicate: (n: number, raw: string) => `Entry ${String(n)} (${raw}) is listed twice.`,
+  },
+  nl: {
+    empty:
+      "Voeg minstens één netwerk toe waarvandaan het token mag worden gebruikt, of sta uitdrukkelijk elk adres toe.",
+    tooMany: (max: number) => `Maximaal ${String(max)} netwerken per token.`,
+    notAddress: (n: number, raw: string) => `Regel ${String(n)} (${raw}) is geen adres of netwerk.`,
+    notIP: (n: number, raw: string) =>
+      `Regel ${String(n)} (${raw}) is geen IPv4- of IPv6-adres of -netwerk zoals 203.0.113.0/24.`,
+    mapped: (n: number, raw: string) =>
+      `Regel ${String(n)} (${raw}) is een IPv4-adres in IPv6-vorm: schrijf het in de IPv4-vorm.`,
+    prefix: (n: number, raw: string) =>
+      `Regel ${String(n)} (${raw}) heeft een ongeldige prefixlengte.`,
+    everything: (n: number, raw: string) =>
+      `Regel ${String(n)} (${raw}) staat elk adres toe: kies in plaats daarvan „Vanaf elk adres toestaan”.`,
+    tooWide: (n: number, raw: string, minLen: number) =>
+      `Regel ${String(n)} (${raw}) is breder dan /${String(minLen)}: zo'n breed netwerk is net zo goed als elk adres; kies in plaats daarvan „Vanaf elk adres toestaan” of maak het smaller.`,
+    hostBits: (n: number, raw: string, net: string) =>
+      `Regel ${String(n)} (${raw}) heeft bits gezet na de prefixlengte: bedoelde je ${net}?`,
+    duplicate: (n: number, raw: string) => `Regel ${String(n)} (${raw}) staat er twee keer in.`,
+  },
+});
+
 /** The most networks a token may list (the database CHECK). */
 export const MAX_ADDRESSES = 32;
 
@@ -80,36 +123,35 @@ function looksIPv6(s: string): boolean {
  */
 export function addressProblem(entries: readonly string[]): string | null {
   if (entries.length === 0) {
-    return "Add at least one network the token may be used from, or explicitly allow any address.";
+    return P.empty;
   }
-  if (entries.length > MAX_ADDRESSES) return `At most ${String(MAX_ADDRESSES)} networks per token.`;
+  if (entries.length > MAX_ADDRESSES) return P.tooMany(MAX_ADDRESSES);
   const seen = new Set<string>();
   for (const [i, raw] of entries.entries()) {
     const n = i + 1;
     const [addr = "", bits, extra] = raw.split("/");
-    if (extra !== undefined || addr === "")
-      return `Entry ${String(n)} (${raw}) is not an address or network.`;
+    if (extra !== undefined || addr === "") return P.notAddress(n, raw);
     const v4 = ipv4Octets(addr);
     const max = v4 ? 32 : 128;
     if (!v4 && !looksIPv6(addr)) {
-      return `Entry ${String(n)} (${raw}) is not an IPv4 or IPv6 address or network such as 203.0.113.0/24.`;
+      return P.notIP(n, raw);
     }
     if (!v4 && /^::ffff:/i.test(addr)) {
-      return `Entry ${String(n)} (${raw}) is an IPv4-mapped IPv6 address: write it in the IPv4 form.`;
+      return P.mapped(n, raw);
     }
     let len = max;
     if (bits !== undefined) {
       if (!/^\d{1,3}$/.test(bits) || Number(bits) > max) {
-        return `Entry ${String(n)} (${raw}) has an invalid prefix length.`;
+        return P.prefix(n, raw);
       }
       len = Number(bits);
     }
     if (len === 0) {
-      return `Entry ${String(n)} (${raw}) allows every address: choose "Allow from any address" instead.`;
+      return P.everything(n, raw);
     }
     const minLen = v4 ? MIN_PREFIX_V4 : MIN_PREFIX_V6;
     if (len < minLen) {
-      return `Entry ${String(n)} (${raw}) is wider than /${String(minLen)}: a network that wide is as good as any address; choose "Allow from any address" instead or narrow it.`;
+      return P.tooWide(n, raw, minLen);
     }
     if (v4) {
       const value = v4.reduce((acc, o) => acc * 256 + o, 0);
@@ -117,11 +159,11 @@ export function addressProblem(entries: readonly string[]): string | null {
       if (value % size !== 0) {
         const net = value - (value % size);
         const dotted = [24, 16, 8, 0].map((s) => String(Math.floor(net / 2 ** s) % 256)).join(".");
-        return `Entry ${String(n)} (${raw}) has bits set after the prefix length: did you mean ${dotted}/${String(len)}?`;
+        return P.hostBits(n, raw, `${dotted}/${String(len)}`);
       }
     }
     const key = `${v4 ? v4.join(".") : addr.toLowerCase()}/${String(len)}`;
-    if (seen.has(key)) return `Entry ${String(n)} (${raw}) is listed twice.`;
+    if (seen.has(key)) return P.duplicate(n, raw);
     seen.add(key);
   }
   return null;

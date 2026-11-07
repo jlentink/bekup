@@ -17,6 +17,7 @@ import { SchemaVersionValue } from "@/features/runs/schema-version";
 import type { JobDetailQuery as JobDetailResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { EncryptionBadge } from "./encryption-badge";
@@ -41,64 +42,128 @@ import { formatInZone } from "./schedule";
 
 type Job = NonNullable<JobDetailResult["job"]>;
 
-const T = {
-  back: "All jobs",
-  eyebrow: "Backup job",
-  disabledBanner:
-    "This job is disabled: no scheduled or manual runs start until it is enabled again.",
-  edit: "Edit",
-  delete: "Delete",
-  deleteTitle: (n: string) => `Delete ${n}?`,
-  deleteLead:
-    "The schedule stops at once and a run in progress finishes. Stored backups and keys stay and can still be restored.",
-  deleted: "Job deleted.",
-  facts: {
-    next: "Next run",
-    schedule: "Schedule",
-    last: "Last run",
-    connection: "Connection",
-    databases: "Databases",
-    retention: "Retention",
-    destinations: "Destinations",
-    encryption: "Encryption",
-    verification: "Evidence",
-    schemaVersion: "Schema version",
-    owners: "Owners",
+const T = defineMessages({
+  en: {
+    back: "All jobs",
+    eyebrow: "Backup job",
+    disabledBanner:
+      "This job is disabled: no scheduled or manual runs start until it is enabled again.",
+    edit: "Edit",
+    delete: "Delete",
+    deleteTitle: (n: string) => `Delete ${n}?`,
+    deleteLead:
+      "The schedule stops at once and a run in progress finishes. Stored backups and keys stay and can still be restored.",
+    deleted: "Job deleted.",
+    facts: {
+      next: "Next run",
+      schedule: "Schedule",
+      last: "Last run",
+      connection: "Connection",
+      databases: "Databases",
+      retention: "Retention",
+      destinations: "Destinations",
+      encryption: "Encryption",
+      verification: "Evidence",
+      schemaVersion: "Schema version",
+      owners: "Owners",
+    },
+    schemaVersionMode: (mode: string, label: string | null | undefined) =>
+      mode === "CUSTOM" ? "Custom query" : (label ?? "Preset"),
+    schemaVersionLast: "Last run",
+    schemaVersionNoRun: "Captured from the next run on.",
+    schemaVersionNoneRecorded:
+      "The last run recorded no version: only complete database dumps record one.",
+    noNext: "Not planned",
+    disabled: "Disabled",
+    never: "Never run",
+    allDbs: "All databases",
+    except: (list: string) => `except ${list}`,
+    globals: "+ cluster globals",
+    keepLast: (n: number) => `newest ${String(n)}`,
+    keepDays: (n: number) => `${String(n)} days`,
+    verification: { STANDARD: "Standard (estimates)", DEEP: "Deep (exact for PostgreSQL)" },
+    history: "Run history",
+    testRestore: "Test restores",
+    testRestoreNone: "No test restore has run for this job yet.",
+    testRestoreOff: "Scheduled test restores are off.",
+    testRestoreTarget: (n: string) => `Scratch target: ${n}`,
+    testRestoreNext: (at: string) => `next ${at}`,
+    testRestoreLatest: "Latest verdict",
+    testRestoreCounts: (p: number, w: number, f: number, total: number) =>
+      `${String(p)} passed · ${String(w)} with warnings · ${String(f)} failed of ${String(total)}`,
+    testRestoreRun: "Open the tested run",
+    testRestoreHistory: "All test restores",
+    testRestoreDetails: "Show the differences",
+    testRestoreAcked: (at: string) =>
+      `The scratch target's role is privileged or unknown; an admin acknowledged it ${at}.`,
+    testRestoreUnacked:
+      "The scratch target's role is privileged or unknown and not acknowledged: test restores refuse to run until an admin designates it again.",
+    calendar: "Open in the calendar",
+    notFound: "This job does not exist or was deleted.",
+    enabled: "Enabled",
+    inProgress: "in progress",
   },
-  schemaVersionMode: (mode: string, label: string | null | undefined) =>
-    mode === "CUSTOM" ? "Custom query" : (label ?? "Preset"),
-  schemaVersionLast: "Last run",
-  schemaVersionNoRun: "Captured from the next run on.",
-  schemaVersionNoneRecorded:
-    "The last run recorded no version: only complete database dumps record one.",
-  noNext: "Not planned",
-  disabled: "Disabled",
-  never: "Never run",
-  allDbs: "All databases",
-  except: (list: string) => `except ${list}`,
-  globals: "+ cluster globals",
-  keepLast: (n: number) => `newest ${String(n)}`,
-  keepDays: (n: number) => `${String(n)} days`,
-  verification: { STANDARD: "Standard (estimates)", DEEP: "Deep (exact for PostgreSQL)" },
-  history: "Run history",
-  testRestore: "Test restores",
-  testRestoreNone: "No test restore has run for this job yet.",
-  testRestoreOff: "Scheduled test restores are off.",
-  testRestoreTarget: (n: string) => `Scratch target: ${n}`,
-  testRestoreNext: (at: string) => `next ${at}`,
-  testRestoreLatest: "Latest verdict",
-  testRestoreCounts: (p: number, w: number, f: number, total: number) =>
-    `${String(p)} passed · ${String(w)} with warnings · ${String(f)} failed of ${String(total)}`,
-  testRestoreRun: "Open the tested run",
-  testRestoreHistory: "All test restores",
-  testRestoreDetails: "Show the differences",
-  testRestoreAcked: (at: string) =>
-    `The scratch target's role is privileged or unknown; an admin acknowledged it ${at}.`,
-  testRestoreUnacked:
-    "The scratch target's role is privileged or unknown and not acknowledged: test restores refuse to run until an admin designates it again.",
-  calendar: "Open in the calendar",
-  notFound: "This job does not exist or was deleted.",
-} as const;
+  nl: {
+    back: "Alle taken",
+    eyebrow: "Back-uptaak",
+    disabledBanner:
+      "Deze taak is uitgeschakeld: er starten geen geplande of handmatige runs tot hij weer is ingeschakeld.",
+    edit: "Bewerken",
+    delete: "Verwijderen",
+    deleteTitle: (n: string) => `${n} verwijderen?`,
+    deleteLead:
+      "De planning stopt direct en een run die bezig is, maakt zijn werk af. Opgeslagen back-ups en sleutels blijven bewaard en zijn nog steeds te herstellen.",
+    deleted: "Taak verwijderd.",
+    facts: {
+      next: "Volgende run",
+      schedule: "Planning",
+      last: "Laatste run",
+      connection: "Verbinding",
+      databases: "Databases",
+      retention: "Bewaarbeleid",
+      destinations: "Bestemmingen",
+      encryption: "Versleuteling",
+      verification: "Volledigheidsbewijs",
+      schemaVersion: "Schemaversie",
+      owners: "Eigenaren",
+    },
+    schemaVersionMode: (mode: string, label: string | null | undefined) =>
+      mode === "CUSTOM" ? "Eigen query" : (label ?? "Voorinstelling"),
+    schemaVersionLast: "Laatste run",
+    schemaVersionNoRun: "Wordt vastgelegd vanaf de volgende run.",
+    schemaVersionNoneRecorded:
+      "De laatste run heeft geen versie vastgelegd: alleen volledige databasedumps leggen er een vast.",
+    noNext: "Niet gepland",
+    disabled: "Uitgeschakeld",
+    never: "Nog nooit uitgevoerd",
+    allDbs: "Alle databases",
+    except: (list: string) => `behalve ${list}`,
+    globals: "+ globale objecten van het cluster",
+    keepLast: (n: number) => `nieuwste ${String(n)}`,
+    keepDays: (n: number) => plural(n, { one: "1 dag", other: `${String(n)} dagen` }),
+    verification: { STANDARD: "Standaard (schattingen)", DEEP: "Grondig (exact voor PostgreSQL)" },
+    history: "Rungeschiedenis",
+    testRestore: "Testherstels",
+    testRestoreNone: "Er is voor deze taak nog geen testherstel uitgevoerd.",
+    testRestoreOff: "Geplande testherstels staan uit.",
+    testRestoreTarget: (n: string) => `Tijdelijk hersteldoel: ${n}`,
+    testRestoreNext: (at: string) => `volgende ${at}`,
+    testRestoreLatest: "Laatste oordeel",
+    testRestoreCounts: (p: number, w: number, f: number, total: number) =>
+      `${String(p)} geslaagd · ${String(w)} met waarschuwingen · ${String(f)} mislukt van ${String(total)}`,
+    testRestoreRun: "De geteste run openen",
+    testRestoreHistory: "Alle testherstels",
+    testRestoreDetails: "De verschillen tonen",
+    testRestoreAcked: (at: string) =>
+      `De rol op het tijdelijke hersteldoel is bevoorrecht of onbekend; een beheerder heeft dit bevestigd ${at}.`,
+    testRestoreUnacked:
+      "De rol op het tijdelijke hersteldoel is bevoorrecht of onbekend en niet bevestigd: testherstels weigeren te draaien tot een beheerder het doel opnieuw aanwijst.",
+    calendar: "In de kalender openen",
+    notFound: "Deze taak bestaat niet of is verwijderd.",
+    enabled: "Ingeschakeld",
+    inProgress: "bezig",
+  },
+});
 
 /** /jobs/:jobId */
 export function JobDetailPage() {
@@ -191,7 +256,7 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
                 <JobEnabledToggle job={job} showLabel />
               ) : (
                 <span className="text-xs text-muted-foreground">
-                  {job.enabled ? "Enabled" : T.disabled}
+                  {job.enabled ? T.enabled : T.disabled}
                 </span>
               )}
             </div>
@@ -249,7 +314,7 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
                 <span>{formatDateTime(job.lastRun.finishedAt ?? job.lastRun.queuedAt)}</span>
                 <span className="text-xs text-muted-foreground">
                   {isActive(job.lastRun.status)
-                    ? "in progress"
+                    ? T.inProgress
                     : formatRelative(job.lastRun.finishedAt ?? job.lastRun.queuedAt)}
                 </span>
               </Link>

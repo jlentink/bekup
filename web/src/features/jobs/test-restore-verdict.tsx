@@ -1,5 +1,27 @@
 import type { TestRestoreStatus } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+const LABELS: Record<TestRestoreStatus, string> = defineMessages({
+  en: {
+    PASSED: "passed",
+    WARNINGS: "warnings",
+    FAILED: "failed",
+    ERROR: "error",
+    QUEUED: "queued",
+    RUNNING: "running",
+    CANCELED: "canceled",
+  },
+  nl: {
+    PASSED: "geslaagd",
+    WARNINGS: "waarschuwingen",
+    FAILED: "mislukt",
+    ERROR: "fout",
+    QUEUED: "in de wachtrij",
+    RUNNING: "bezig",
+    CANCELED: "geannuleerd",
+  },
+});
 
 const VERDICT_STYLE: Record<TestRestoreStatus, string> = {
   PASSED: "border-status-success/40 bg-status-success-soft text-status-success-fg",
@@ -20,7 +42,7 @@ export function TestRestoreVerdict({ status }: { status: TestRestoreStatus }) {
         VERDICT_STYLE[status],
       )}
     >
-      {status.toLowerCase()}
+      {LABELS[status]}
     </span>
   );
 }

@@ -5,6 +5,8 @@ import type {
   SummaryFrequency,
 } from "@/graphql/gen/graphql";
 
+import { defineMessages, plural, type Messages } from "@/lib/i18n";
+
 import type { SubjectKind, WebhookUrlProblem } from "./model";
 
 function ordinal(n: number): string {
@@ -18,7 +20,7 @@ function ordinal(n: number): string {
  * Strings of the notification center and the personal notification
  * settings (task 6.10). Kept next to the feature like the other M6 pages.
  */
-export const notificationsMessages = {
+const en = {
   bell: {
     label: (unread: number) =>
       unread > 0 ? `Notifications, ${String(unread)} unread` : "Notifications",
@@ -37,7 +39,7 @@ export const notificationsMessages = {
     filterLabel: "Show",
     all: "All",
     unreadOnly: "Unread",
-    unreadCount: (n: number) => (n === 1 ? "1 unread" : `${String(n)} unread`),
+    unreadCount: (n: number) => plural(n, { one: "1 unread", other: `${String(n)} unread` }),
     markAll: "Mark all read",
     markRead: (title: string) => `Mark "${title}" read`,
     delete: (title: string) => `Delete "${title}"`,
@@ -185,7 +187,8 @@ export const notificationsMessages = {
     enabled: "Enabled",
     disabled: "Disabled",
     autoDisabled: "Disabled automatically",
-    failures: (n: number) => (n === 1 ? "1 failed delivery" : `${String(n)} failed deliveries`),
+    failures: (n: number) =>
+      plural(n, { one: "1 failed delivery", other: `${String(n)} failed deliveries` }),
     lastFailure: (code: string, when: string) => `Last failure: ${code}, ${when}`,
     test: "Send test",
     testing: "Sending",
@@ -261,4 +264,257 @@ export const notificationsMessages = {
     toDashboard: "Go to the dashboard",
     retry: "Try again",
   },
-} as const;
+};
+
+const nl: Messages<typeof en> = {
+  bell: {
+    label: (unread: number) =>
+      unread > 0 ? `Meldingen, ${String(unread)} ongelezen` : "Meldingen",
+    heading: "Meldingen",
+    unread: (n: number) => (n > 99 ? "99+" : String(n)),
+    markAll: "Alles als gelezen markeren",
+    viewAll: "Inbox openen",
+    settings: "Meldingsinstellingen",
+    empty: "Niets nieuws. Back-ups, herstel en meldingen verschijnen hier.",
+    loadFailed: "De meldingen konden niet worden geladen.",
+  },
+  inbox: {
+    eyebrow: "Meldingencentrum",
+    title: "Inbox",
+    lead: "Alles waarover bekup je iets liet weten, nieuwste eerst. Berichten blijven 180 dagen bewaard.",
+    filterLabel: "Tonen",
+    all: "Alle",
+    unreadOnly: "Ongelezen",
+    unreadCount: (n: number) => `${String(n)} ongelezen`,
+    markAll: "Alles als gelezen markeren",
+    markRead: (title: string) => `„${title}” als gelezen markeren`,
+    delete: (title: string) => `„${title}” verwijderen`,
+    deleted: "Melding verwijderd.",
+    allRead: "Alles is als gelezen gemarkeerd.",
+    emptyTitle: "Je inbox is leeg",
+    emptyUnread: "Geen ongelezen meldingen",
+    emptyBody: "Kies in je meldingsinstellingen welke gebeurtenissen hier binnenkomen.",
+    settings: "Meldingsinstellingen",
+    pager: "Inboxpagina's",
+    unreadMark: "Ongelezen",
+  },
+  subject: {
+    dashboard: "Dashboard openen",
+    run: "Run openen",
+    job: "Taak openen",
+    restore: "Herstel openen",
+    connection: "Verbinding openen",
+    destination: "Bestemming openen",
+    account: "Je instellingen openen",
+    admin: "Openen in beheer",
+  },
+  severity: {
+    INFO: "Info",
+    WARNING: "Waarschuwing",
+    ERROR: "Fout",
+    CRITICAL: "Kritiek",
+  },
+  groups: {
+    BACKUP: "Back-ups",
+    RESTORE: "Herstel",
+    RETENTION: "Bewaarbeleid en opslag",
+    CONFIG: "Taken en configuratie",
+    SUMMARY: "Samenvatting",
+    SECURITY: "Beveiliging",
+  },
+  channels: {
+    INBOX: "In de app",
+    EMAIL: "E-mail",
+    WEBHOOK: "Webhooks",
+  },
+  prefs: {
+    heading: "Wat je ontvangt",
+    lead: "Eén schakelaar per gebeurtenis en kanaal. Uitzonderingen per taak gaan voor bij die taak. Beveiligingsmeldingen komen altijd in je inbox en per e-mail.",
+    eventColumn: "Gebeurtenis",
+    cell: (event: string, channel: string) => `${event}: ${channel}`,
+    cellForJob: (event: string, channel: string, job: string) => `${event}: ${channel} voor ${job}`,
+    lockedTitle: "Verplichte beveiligingsmeldingen",
+    lockedNote:
+      "Beveiligingsmeldingen komen altijd in je inbox en per e-mail, zodat een aanval niet onopgemerkt blijft. Je kunt er je webhooks aan toevoegen.",
+    locked: "Altijd aan",
+    problem: "Probleem",
+    lowPriority: "Samengevoegd",
+    lowPriorityHint: "Meerdere hiervan per taak worden samengevoegd tot één.",
+    custom: "Gewijzigd",
+    resetAll: "Standaardwaarden herstellen",
+    resetAllTitle: "Alle meldingsvoorkeuren terugzetten?",
+    resetAllBody:
+      "Elke gebeurtenis en elk kanaal gaat terug naar de standaardwaarden (inbox voor elke gebeurtenis, e-mail bij problemen) en elke uitzondering per taak wordt verwijderd.",
+    resetDone: "Je meldingsvoorkeuren staan weer op de standaardwaarden.",
+    saved: "Opgeslagen.",
+    emailUnverified:
+      "Je e-mailadres is nog niet geverifieerd: e-mailmeldingen worden overgeslagen tot je het verifieert.",
+    noWebhooks:
+      "Je hebt geen actieve webhook: de webhookkolom heeft geen effect tot je er een toevoegt.",
+    loadFailed: "Je meldingsvoorkeuren konden niet worden geladen.",
+    notOffered: "Niet beschikbaar voor deze gebeurtenis",
+  },
+  summary: {
+    heading: "Samenvatting per e-mail",
+    lead: "Een regelmatige samenvatting van de back-ups die je kunt zien: wat er draaide, wat er mislukte en wat aandacht nodig heeft. Die komt in je inbox en, met een geverifieerd adres, per e-mail.",
+    off: "Uit",
+    frequency: "Hoe vaak",
+    frequencies: {
+      DAILY: { label: "Dagelijks", hint: "Elke dag" },
+      EVERY_OTHER_DAY: { label: "Om de dag", hint: "Gerekend vanaf het vorige" },
+      WEEKLY: { label: "Wekelijks", hint: "Op één weekdag" },
+      MONTHLY: { label: "Maandelijks", hint: "Op één dag, 1 tot 28" },
+      NEVER: { label: "Nooit", hint: "Geen samenvatting" },
+    },
+    hour: "Tijd",
+    weekday: "Weekdag",
+    monthDay: "Dag van de maand",
+    monthDayOption: (d: number) => `De ${String(d)}e`,
+    timezone: "Tijdzone",
+    timezoneHint: "IANA-naam, bijv. Europe/Amsterdam. Zomertijd wordt meegenomen.",
+    weekdays: ["maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag"],
+    next: "Volgende samenvatting",
+    nextNever: "Geen: de samenvatting staat uit",
+    nextAfterSave: "Sla op om de volgende samenvatting met deze instellingen te plannen.",
+    last: (when: string) => `Laatste samenvatting ${when}`,
+    lastNoJobs: (when: string) => `Overgeslagen ${when}: je kon geen back-uptaken zien`,
+    defaults: (desc: string) =>
+      `Je hebt nog niets gekozen, dus de standaard van de server geldt: ${desc}. Bij opslaan wordt je keuze bewaard met de tijdzone die hier staat.`,
+    describe: (f: string, at: string, zone: string) => `${f}, ${at} (${zone})`,
+    emailUnverified:
+      "Je e-mailadres is niet geverifieerd: samenvattingen komen alleen in je inbox tot je het verifieert.",
+    noJobs: "Je kunt geen back-uptaken zien, dus er wordt geen samenvatting verstuurd.",
+    save: "Opslaan",
+    saved: "Overzichtsinstellingen opgeslagen.",
+    preview: "Nu een voorbeeld sturen",
+    previewSent: (email: boolean) =>
+      email
+        ? "Voorbeeld naar je inbox en per e-mail verstuurd."
+        : "Voorbeeld naar je inbox verstuurd (je adres is niet geverifieerd).",
+    loadFailed: "Je samenvattingsinstellingen konden niet worden geladen.",
+  },
+  overrides: {
+    heading: "Uitzonderingen per taak",
+    lead: "Wijzig wat één taak je stuurt zonder de andere taken aan te raken. Uitzonderingen gelden alleen voor taakgebeurtenissen.",
+    pick: "Kies een taak",
+    search: "Taken zoeken",
+    searchPlaceholder: "Taaknaam",
+    noJobs: "Geen overeenkomende taken.",
+    add: "Uitzonderingen bewerken",
+    existing: "Taken met uitzonderingen",
+    none: "Nog geen uitzonderingen per taak.",
+    editing: (job: string) => `Uitzonderingen voor ${job}`,
+    thisJob: "deze taak",
+    inherited: "overgenomen",
+    overridden: "uitzondering",
+    reset: "Uitzonderingen verwijderen",
+    resetTitle: (job: string) => `De uitzonderingen van ${job} verwijderen?`,
+    resetBody: "Deze taak gaat terug naar je instellingen per gebeurtenis.",
+    resetDone: (job: string) => `De uitzonderingen van ${job} zijn verwijderd.`,
+    close: "Klaar",
+  },
+  email: {
+    heading: "E-mail",
+    lead: "bekup stuurt e-mailmeldingen alleen naar een geverifieerd adres.",
+    verified: "Geverifieerd",
+    unverified: "Niet geverifieerd",
+    verifiedAt: (when: string) => `Geverifieerd ${when}`,
+    send: "Verificatie-e-mail sturen",
+    resend: "Nieuwe link sturen",
+    sent: (to: string, until: string) =>
+      `We hebben een link naar ${to} gestuurd. Open die vóór ${until} terwijl je bij dit account bent ingelogd.`,
+  },
+  webhooks: {
+    heading: "Webhooks",
+    lead: "Ondertekende HTTPS-POSTs naar je eigen ontvanger (Slack, Teams, een script). Bij toevoegen, vernieuwen en verwijderen vragen we je je identiteit te bevestigen.",
+    count: (n: number, max: number) => `${String(n)} van ${String(max)}`,
+    add: "Webhook toevoegen",
+    none: "Nog geen webhooks.",
+    limit: (max: number) => `Je hebt het maximum van ${String(max)} webhooks.`,
+    enabled: "Ingeschakeld",
+    disabled: "Uitgeschakeld",
+    autoDisabled: "Automatisch uitgeschakeld",
+    failures: (n: number) =>
+      plural(n, { one: "1 mislukte bezorging", other: `${String(n)} mislukte bezorgingen` }),
+    lastFailure: (code: string, when: string) => `Laatste fout: ${code}, ${when}`,
+    test: "Test sturen",
+    testing: "Bezig met sturen",
+    testOk: "Afgeleverd",
+    testOkHelp: "Je ontvanger heeft de testmelding geaccepteerd.",
+    testNotAllowed: "Adres niet toegestaan",
+    testNotAllowedHelp:
+      "Dit adres is niet bereikbaar voor persoonlijke webhooks (bijvoorbeeld een host op een privénetwerk). Vraag een beheerder of bekup het mag bereiken.",
+    testFailed: "Aflevering mislukt",
+    testFailedHelp:
+      "De ontvanger was niet bereikbaar of accepteerde het verzoek niet. Controleer de URL en de logs van je ontvanger en probeer het opnieuw.",
+    rotate: "Sleutel vernieuwen",
+    rotateTitle: (label: string) => `De ondertekeningssleutel van ${label} vernieuwen?`,
+    rotateBody:
+      "Er wordt een nieuwe sleutel aangemaakt en één keer getoond. De oude sleutel werkt meteen niet meer, dus werk je ontvanger direct bij.",
+    delete: "Verwijderen",
+    deleteTitle: (label: string) => `De webhook ${label} verwijderen?`,
+    deleteBody: "bekup stuurt niets meer naar deze URL. Dit kan niet ongedaan worden gemaakt.",
+    deleted: "Webhook verwijderd.",
+    reenable: "Weer inschakelen",
+    reenabled: "Webhook ingeschakeld. De foutentellers beginnen opnieuw.",
+    actions: (label: string) => `Acties voor ${label}`,
+    addedAt: (when: string) => `Toegevoegd ${when}`,
+  },
+  addWebhook: {
+    title: "Webhook toevoegen",
+    lead: "bekup maakt er een ondertekeningssleutel voor en toont die één keer.",
+    label: "Label",
+    labelHint: "Alleen voor jou, bijv. Team Slack.",
+    labelRequired: "Vul een label in (1 tot 100 tekens).",
+    url: "URL",
+    urlHint:
+      "Alleen https, alleen publieke hosts, geen omleidingen. De URL wordt versleuteld opgeslagen en daarna getoond als https://host/….",
+    submit: "Webhook toevoegen",
+    urlProblem: {
+      empty: "Vul de webhook-URL in.",
+      invalid: "Vul een volledige URL in, bijv. https://hooks.example.com/bekup.",
+      https: "Webhook-URL's moeten beginnen met https://.",
+      userinfo: "Haal de gebruikersnaam en het wachtwoord uit de URL.",
+      fragment: "Haal het #fragment uit de URL.",
+      length: "De URL is te lang (maximaal 2048 tekens).",
+    },
+  },
+  key: {
+    eyebrow: "Ondertekeningssleutel · één keer getoond",
+    titleAdded: (label: string) => `${label} is klaar`,
+    titleRotated: (label: string) => `Nieuwe sleutel voor ${label}`,
+    lead: "bekup ondertekent elke bezorging met deze HMAC-sleutel. Sla hem nu op in je ontvanger: hij wordt nooit meer getoond. Een verloren sleutel betekent vernieuwen.",
+    label: "Ondertekeningssleutel",
+    copied: "Ondertekeningssleutel gekopieerd.",
+    verifyLink: "Zo controleer je de handtekening",
+    warning: "Als je dit venster sluit, verdwijnt de sleutel definitief van deze pagina.",
+    acknowledge: "Ik heb de sleutel opgeslagen",
+    done: "Klaar",
+  },
+  verify: {
+    eyebrow: "E-mailverificatie",
+    working: "Je adres wordt geverifieerd",
+    workingLead: "Een ogenblik.",
+    doneTitle: "Adres geverifieerd",
+    doneLead: "bekup kan je nu e-mailmeldingen sturen.",
+    failedTitle: "Deze link werkt niet",
+    failedLead:
+      "Misschien is hij verlopen (links zijn 24 uur geldig), al gebruikt, vervangen door een nieuwere link of hoort hij bij een ander account. Vraag een nieuwe aan in je meldingsinstellingen.",
+    missingTitle: "Geen verificatiecode",
+    missingLead:
+      "Open de link uit de e-mail precies zoals hij is verstuurd, of vraag een nieuwe aan in je meldingsinstellingen.",
+    signInTitle: "Log in om te verifiëren",
+    signInLead:
+      "Verificatielinks werken alleen terwijl je bent ingelogd bij het account waarnaar ze zijn gestuurd.",
+    signIn: "Inloggen en doorgaan",
+    toSettings: "Meldingsinstellingen",
+    toDashboard: "Naar het dashboard",
+    retry: "Opnieuw proberen",
+  },
+};
+
+/**
+ * Strings of the notification center and the personal notification
+ * settings (task 6.10), in English and Dutch (D-235).
+ */
+export const notificationsMessages = defineMessages({ en, nl });

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 
 import { eventLabel, VARIANT_META } from "./event-chip-model";
+import { messages } from "./messages";
 import { eventHref, formatTime, variantOf, type CalEvent, type Variant } from "./model";
 
 /** One event: a link to the run or job, styled by kind and status. */
@@ -56,21 +57,22 @@ export function EventChip({
 
 /** The key to the event styles. */
 export function Legend() {
+  const L = messages.legend;
   const items: [Variant, string][] = [
-    ["planned", "Planned"],
-    ["paused", "Paused"],
-    ["early", "Started early"],
-    ["overdue", "Overdue"],
-    ["skipped", "Skipped"],
-    ["run-success", "Run succeeded"],
-    ["run-partial", "Partial"],
-    ["run-failed", "Failed"],
-    ["run-running", "Running"],
-    ["expiry-exact", "Expiry, exact"],
-    ["expiry-projected", "Expiry, projected"],
+    ["planned", L.planned],
+    ["paused", L.paused],
+    ["early", L.early],
+    ["overdue", L.overdue],
+    ["skipped", L.skipped],
+    ["run-success", L.runSuccess],
+    ["run-partial", L.runPartial],
+    ["run-failed", L.runFailed],
+    ["run-running", L.runRunning],
+    ["expiry-exact", L.expiryExact],
+    ["expiry-projected", L.expiryProjected],
   ];
   return (
-    <ul aria-label="Legend" className="flex flex-wrap gap-1.5">
+    <ul aria-label={messages.page.legend} className="flex flex-wrap gap-1.5">
       {items.map(([v, label]) => {
         const meta = VARIANT_META[v];
         const Icon = meta.icon;

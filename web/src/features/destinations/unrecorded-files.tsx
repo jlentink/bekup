@@ -21,6 +21,7 @@ import { Fact, Facts, LedgerSection } from "@/features/connections/ui";
 import type { DestinationUnrecordedFilesQuery as FilesResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { DeleteUnrecordedFileMutation, DestinationUnrecordedFilesQuery } from "./operations";
@@ -32,50 +33,101 @@ type FileRow = Files["files"][number];
 /** Id of the section heading target (the banner links to it). */
 const SECTION_ID = "unrecorded-files";
 
-const files = (n: number) => (n === 1 ? "1 unrecorded file" : `${String(n)} unrecorded files`);
+const enFiles = (n: number) =>
+  plural(n, { one: "1 unrecorded file", other: `${String(n)} unrecorded files` });
+const nlFiles = (n: number) =>
+  plural(n, {
+    one: "1 niet-geregistreerd bestand",
+    other: `${String(n)} niet-geregistreerde bestanden`,
+  });
 
-const T = {
-  title: "Unrecorded files",
-  lead: "Files in bekup's layout ({job slug}/{timestamp}/{file}), older than 24 hours, that no backup record references: left over from an interrupted upload or cleanup, or put there by something else. A daily scan finds them. bekup never deletes them on its own.",
-  banner: (n: number, size: string) => `${files(n)} (${size}) on this destination`,
-  bannerLead:
-    "No backup record references them, so retention never removes them. Review them and delete what you do not need.",
-  bannerLink: "Review the files",
-  none: "None",
-  count: (n: number) => files(n),
-  lastScan: "Last scan",
-  neverScanned: "Not scanned yet: the daily scan has not finished on this destination.",
-  totals: "Recorded",
-  totalsValue: (n: number, size: string) => `${files(n)} · ${size}`,
-  pruned: "Empty folders removed",
-  prunedHint: "by the last scan",
-  truncated:
-    "The scan found more files than it records, or stopped at its object limit: this list is incomplete. Clean up and the next scan records the rest.",
-  noDelete:
-    "This destination is in no-delete mode: bekup cannot delete these files. Remove them with the storage's own tools.",
-  empty: "No unrecorded files: every file in bekup's layout belongs to a backup record.",
-  tableLabel: "Unrecorded files",
-  cols: {
-    key: "Key",
-    size: "Size",
-    modified: "Modified",
-    firstSeen: "First seen",
-    action: "Action",
+const T = defineMessages({
+  en: {
+    title: "Unrecorded files",
+    lead: "Files in bekup's layout ({job slug}/{timestamp}/{file}), older than 24 hours, that no backup record references: left over from an interrupted upload or cleanup, or put there by something else. A daily scan finds them. bekup never deletes them on its own.",
+    banner: (n: number, size: string) => `${enFiles(n)} (${size}) on this destination`,
+    bannerLead:
+      "No backup record references them, so retention never removes them. Review them and delete what you do not need.",
+    bannerLink: "Review the files",
+    none: "None",
+    count: (n: number) => enFiles(n),
+    lastScan: "Last scan",
+    neverScanned: "Not scanned yet: the daily scan has not finished on this destination.",
+    totals: "Recorded",
+    totalsValue: (n: number, size: string) => `${enFiles(n)} · ${size}`,
+    pruned: "Empty folders removed",
+    prunedHint: "by the last scan",
+    truncated:
+      "The scan found more files than it records, or stopped at its object limit: this list is incomplete. Clean up and the next scan records the rest.",
+    noDelete:
+      "This destination is in no-delete mode: bekup cannot delete these files. Remove them with the storage's own tools.",
+    empty: "No unrecorded files: every file in bekup's layout belongs to a backup record.",
+    tableLabel: "Unrecorded files",
+    cols: {
+      key: "Key",
+      size: "Size",
+      modified: "Modified",
+      firstSeen: "First seen",
+      action: "Action",
+    },
+    unknown: "unknown",
+    delete: "Delete",
+    deleteLabel: (key: string) => `Delete ${key}`,
+    noDeleteTitle: "Not possible in no-delete mode",
+    loadMore: "Load more",
+    loading: "Loading unrecorded files",
+    shown: (shown: number, total: number) => `${String(shown)} of ${String(total)} shown`,
+    confirmTitle: "Delete this unrecorded file?",
+    confirmLead:
+      "bekup deletes the file from the destination; this cannot be undone. Right before deleting it checks again that no backup record references the key and that the file has not changed in the last 24 hours.",
+    confirmLabel: "Delete file",
+    deleted: (key: string) => `Deleted ${key}.`,
+    notDeleted: (key: string, message: string) => `${key} was not deleted: ${message}`,
   },
-  unknown: "unknown",
-  delete: "Delete",
-  deleteLabel: (key: string) => `Delete ${key}`,
-  noDeleteTitle: "Not possible in no-delete mode",
-  loadMore: "Load more",
-  loading: "Loading unrecorded files",
-  shown: (shown: number, total: number) => `${String(shown)} of ${String(total)} shown`,
-  confirmTitle: "Delete this unrecorded file?",
-  confirmLead:
-    "bekup deletes the file from the destination; this cannot be undone. Right before deleting it checks again that no backup record references the key and that the file has not changed in the last 24 hours.",
-  confirmLabel: "Delete file",
-  deleted: (key: string) => `Deleted ${key}.`,
-  notDeleted: (key: string, message: string) => `${key} was not deleted: ${message}`,
-} as const;
+  nl: {
+    title: "Niet-geregistreerde bestanden",
+    lead: "Bestanden in de indeling van bekup ({job slug}/{timestamp}/{file}), ouder dan 24 uur, waar geen back-uprecord naar verwijst: overgebleven van een onderbroken upload of opruiming, of daar neergezet door iets anders. Een dagelijkse scan vindt ze. bekup verwijdert ze nooit uit zichzelf.",
+    banner: (n: number, size: string) => `${nlFiles(n)} (${size}) op deze bestemming`,
+    bannerLead:
+      "Geen back-uprecord verwijst ernaar, dus het bewaarbeleid verwijdert ze nooit. Bekijk ze en verwijder wat je niet nodig hebt.",
+    bannerLink: "Bestanden bekijken",
+    none: "Geen",
+    count: (n: number) => nlFiles(n),
+    lastScan: "Laatste scan",
+    neverScanned: "Nog niet gescand: de dagelijkse scan is op deze bestemming nog niet afgerond.",
+    totals: "Geregistreerd",
+    totalsValue: (n: number, size: string) => `${nlFiles(n)} · ${size}`,
+    pruned: "Lege mappen verwijderd",
+    prunedHint: "door de laatste scan",
+    truncated:
+      "De scan vond meer bestanden dan hij registreert, of stopte bij zijn objectlimiet: deze lijst is onvolledig. Ruim op, dan registreert de volgende scan de rest.",
+    noDelete:
+      "Deze bestemming staat in niet-verwijderen-modus: bekup kan deze bestanden niet verwijderen. Verwijder ze met de eigen hulpmiddelen van de opslag.",
+    empty:
+      "Geen niet-geregistreerde bestanden: elk bestand in de indeling van bekup hoort bij een back-uprecord.",
+    tableLabel: "Niet-geregistreerde bestanden",
+    cols: {
+      key: "Sleutel",
+      size: "Grootte",
+      modified: "Gewijzigd",
+      firstSeen: "Eerst gezien",
+      action: "Actie",
+    },
+    unknown: "onbekend",
+    delete: "Verwijderen",
+    deleteLabel: (key: string) => `${key} verwijderen`,
+    noDeleteTitle: "Niet mogelijk in niet-verwijderen-modus",
+    loadMore: "Meer laden",
+    loading: "Niet-geregistreerde bestanden laden",
+    shown: (shown: number, total: number) => `${String(shown)} van ${String(total)} getoond`,
+    confirmTitle: "Dit niet-geregistreerde bestand verwijderen?",
+    confirmLead:
+      "bekup verwijdert het bestand van de bestemming; dit kan niet ongedaan worden gemaakt. Vlak voor het verwijderen controleert bekup opnieuw dat geen back-uprecord naar de sleutel verwijst en dat het bestand de laatste 24 uur niet is gewijzigd.",
+    confirmLabel: "Bestand verwijderen",
+    deleted: (key: string) => `${key} verwijderd.`,
+    notDeleted: (key: string, message: string) => `${key} is niet verwijderd: ${message}`,
+  },
+});
 
 /**
  * The page-level warning on a destination with unrecorded files (D-209).

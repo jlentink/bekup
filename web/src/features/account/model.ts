@@ -10,8 +10,8 @@ export function groupKey(key: string): string {
 /** Plain-text file content of a recovery code set. */
 export function recoveryCodesText(codes: readonly string[], account: string, host: string): string {
   return [
-    `bekup recovery codes for ${account} at ${host}`,
-    "Each code works once. Keep them somewhere safe.",
+    messages.recovery.fileHeading(account, host),
+    messages.recovery.fileNote,
     "",
     ...codes,
     "",
@@ -40,6 +40,6 @@ export function describeUserAgent(ua: string | null | undefined): string {
   if (!ua) return M.unknownDevice;
   const browser = BROWSERS.find(([marker]) => ua.includes(marker))?.[1];
   const os = SYSTEMS.find(([marker]) => ua.includes(marker))?.[1];
-  if (browser && os) return `${browser} on ${os}`;
+  if (browser && os) return M.deviceOn(browser, os);
   return browser ?? os ?? M.unknownDevice;
 }

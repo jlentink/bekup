@@ -28,12 +28,18 @@ import type { RestoreFilter, RestoreStatus } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatDuration, formatRelative } from "@/lib/format";
 
+import { restoreMessages } from "./messages";
 import { STATUS_LABELS } from "./model";
 import { RestoreFieldsFragment, RestoreHistoryQuery, RestoreJobsQuery } from "./operations";
 import { RestoreProgress } from "./progress";
 import { RestoreStatusBadge } from "./restore-status";
 
+const T = restoreMessages.history;
+const C = restoreMessages.common;
+
 const ALL = "all";
+/** The restore mode shown for globals restores (an API value, not translated). */
+const GLOBALS_MODE = "GLOBALS";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUSES = Object.keys(STATUS_LABELS) as RestoreStatus[];
 
@@ -77,21 +83,21 @@ export function RestoresPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="Backups"
-        title="Restores"
-        description="Every restore, newest first. Backup owners see the restores of their own jobs."
+        eyebrow={T.eyebrow}
+        title={T.title}
+        description={T.description}
         actions={
           <Button asChild>
             <Link to="/restore">
               <RotateCcw aria-hidden="true" />
-              New restore
+              {T.newRestore}
             </Link>
           </Button>
         }
       />
-      <div className="flex flex-wrap items-end gap-4" role="group" aria-label="Filters">
+      <div className="flex flex-wrap items-end gap-4" role="group" aria-label={T.filters}>
         <div className="grid w-52 gap-1.5">
-          <Label htmlFor={statusId}>Status</Label>
+          <Label htmlFor={statusId}>{C.status}</Label>
           <Select
             value={status ?? ALL}
             onValueChange={(v) => {
@@ -102,7 +108,7 @@ export function RestoresPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>Any status</SelectItem>
+              <SelectItem value={ALL}>{T.anyStatus}</SelectItem>
               {STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
                   {STATUS_LABELS[s]}
@@ -112,7 +118,7 @@ export function RestoresPage() {
           </Select>
         </div>
         <div className="grid w-64 gap-1.5">
-          <Label htmlFor={jobId}>Job</Label>
+          <Label htmlFor={jobId}>{C.job}</Label>
           <Select
             value={uuidParam(params.get("jobId")) ?? ALL}
             onValueChange={(v) => {
@@ -123,7 +129,7 @@ export function RestoresPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>Any job</SelectItem>
+              <SelectItem value={ALL}>{T.anyJob}</SelectItem>
               {(jobs.data?.jobs.edges ?? []).map(({ node }) => (
                 <SelectItem key={node.id} value={node.id}>
                   {node.name}
@@ -143,7 +149,7 @@ export function RestoresPage() {
               setParams(next, { replace: true });
             }}
           >
-            Clear backup/target filter
+            {T.clearFilter}
           </Button>
         ) : null}
       </div>
@@ -156,21 +162,21 @@ export function RestoresPage() {
         <Skeleton className="h-64 w-full" />
       ) : rows.length === 0 ? (
         <p className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">
-          No restores match these filters.
+          {T.noMatch}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-md border bg-surface">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Requested</TableHead>
-                <TableHead>Backup</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Mode</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Duration</TableHead>
+                <TableHead>{T.requested}</TableHead>
+                <TableHead>{C.backup}</TableHead>
+                <TableHead>{T.target}</TableHead>
+                <TableHead>{T.mode}</TableHead>
+                <TableHead>{C.status}</TableHead>
+                <TableHead>{T.duration}</TableHead>
                 <TableHead>
-                  <span className="sr-only">Open</span>
+                  <span className="sr-only">{T.open}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -190,17 +196,17 @@ export function RestoresPage() {
                   <TableCell>
                     <span className="block font-medium">{r.job.name}</span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {r.kind === "GLOBALS" ? "cluster globals" : r.sourceDatabase}
+                      {r.kind === "GLOBALS" ? C.clusterGlobals : r.sourceDatabase}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="block font-mono">{r.targetDatabase ?? "globals"}</span>
+                    <span className="block font-mono">{r.targetDatabase ?? T.globals}</span>
                     <span className="text-xs text-muted-foreground">
                       {r.target.name}
-                      {r.target.temporary ? " (temporary)" : ""}
+                      {r.target.temporary ? T.temporary : ""}
                     </span>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{r.mode ?? "GLOBALS"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.mode ?? GLOBALS_MODE}</TableCell>
                   <TableCell>
                     <RestoreStatusBadge status={r.status} />
                   </TableCell>
@@ -210,10 +216,9 @@ export function RestoresPage() {
                       to={`/restores/${r.id}`}
                       className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                     >
-                      Details
+                      {T.details}
                       <span className="sr-only">
-                        {" "}
-                        of the restore of {r.job.name} requested {formatDateTime(r.createdAt)}
+                        {T.detailsOf(r.job.name, formatDateTime(r.createdAt))}
                       </span>
                       <ArrowRight aria-hidden="true" className="size-3.5" />
                     </Link>
@@ -245,7 +250,7 @@ export function RestoresPage() {
             }}
           >
             {more ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-            Load more
+            {T.loadMore}
           </Button>
         </div>
       ) : null}
@@ -260,11 +265,11 @@ export function RestoreDetailPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="Restore"
-        title="Restore record"
+        eyebrow={T.recordEyebrow}
+        title={T.recordTitle}
         actions={
           <Button variant="outline" size="sm" asChild>
-            <Link to="/restores">All restores</Link>
+            <Link to="/restores">{T.allRestores}</Link>
           </Button>
         }
       />
@@ -272,7 +277,7 @@ export function RestoreDetailPage() {
         <RestoreProgress key={id} restoreId={id} />
       ) : (
         <Alert variant="destructive">
-          <AlertDescription>That is not a valid restore link.</AlertDescription>
+          <AlertDescription>{T.invalidLink}</AlertDescription>
         </Alert>
       )}
     </div>

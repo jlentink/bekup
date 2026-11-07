@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { RowCountKind, RunItemStatsQuery as StatsResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages, intlLocale, plural } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { codeTitle } from "./codes";
@@ -21,61 +22,119 @@ type Finding = ItemStats["warnings"][number];
 /** Table rows rendered before "Show all" (a database may list 10 000). */
 export const TABLE_PREVIEW = 50;
 
-const T = {
-  heading: "Per-database statistics",
-  lead: "The source statistics taken for each verified dump: names and counts only, never data.",
-  none: "No statistics were recorded for this run (failed or unverified dumps, or statistics unavailable).",
-  pending: "Statistics appear once the run has finished.",
-  level: { STANDARD: "standard", DEEP: "deep" },
-  consistency: {
-    SNAPSHOT: "in the dump's snapshot",
-    APPROXIMATE: "taken before the dump",
+const T = defineMessages({
+  en: {
+    heading: "Per-database statistics",
+    lead: "The source statistics taken for each verified dump: names and counts only, never data.",
+    none: "No statistics were recorded for this run (failed or unverified dumps, or statistics unavailable).",
+    pending: "Statistics appear once the run has finished.",
+    level: { STANDARD: "standard", DEEP: "deep" },
+    consistency: {
+      SNAPSHOT: "in the dump's snapshot",
+      APPROXIMATE: "taken before the dump",
+    },
+    consistencyHint: {
+      SNAPSHOT: "Taken inside the snapshot the dump used: exact counts match the dump.",
+      APPROXIMATE: "Taken right before the dump: rows may have changed since.",
+    },
+    globals: "Cluster globals",
+    objects: "Objects",
+    tables: "Tables",
+    tablesOf: (shown: number, total: number) =>
+      shown < total ? `${String(shown)} of ${String(total)} listed` : String(total),
+    truncated: (listed: number, total: number) =>
+      `Only ${String(listed)} of ${String(total)} tables are listed: the statistics table limit was reached. The remaining tables were dumped but not counted individually.`,
+    warnings: "Completeness warnings",
+    notices: "Notices",
+    more: "and more",
+    filter: "Filter tables",
+    noMatch: "No table matches.",
+    showAll: (n: number) => `Show all ${String(n)} tables`,
+    cols: { name: "Table", rows: "Rows", count: "Count" },
+    summary: (e: number, s: number, u: number) =>
+      [
+        e > 0 ? `${String(e)} exact` : "",
+        s > 0 ? `${String(s)} estimated` : "",
+        u > 0 ? `${String(u)} unknown` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    recorded: (at: string) => `recorded ${at}`,
+    warningCount: (n: number) => plural(n, { one: "1 warning", other: `${String(n)} warnings` }),
+    approximate: "approximate",
+    approximateHint: "Taken outside the dump's snapshot (MySQL/MariaDB): rows may have changed.",
+    countKind: {
+      EXACT: { label: "exact", title: "Counted exactly." },
+      ESTIMATE: { label: "estimate", title: "A planner or information_schema estimate." },
+      UNKNOWN: { label: "unknown", title: "Not counted (time limit, budget or failure)." },
+    } satisfies Record<RowCountKind, { label: string; title: string }>,
   },
-  consistencyHint: {
-    SNAPSHOT: "Taken inside the snapshot the dump used: exact counts match the dump.",
-    APPROXIMATE: "Taken right before the dump: rows may have changed since.",
+  nl: {
+    heading: "Statistieken per database",
+    lead: "De bronstatistieken van elke geverifieerde dump: alleen namen en aantallen, nooit gegevens.",
+    none: "Voor deze run zijn geen statistieken vastgelegd (mislukte of niet-geverifieerde dumps, of statistieken niet beschikbaar).",
+    pending: "Statistieken verschijnen zodra de run klaar is.",
+    level: { STANDARD: "standaard", DEEP: "grondig" },
+    consistency: {
+      SNAPSHOT: "in de snapshot van de dump",
+      APPROXIMATE: "vóór de dump genomen",
+    },
+    consistencyHint: {
+      SNAPSHOT:
+        "Genomen binnen de snapshot die de dump gebruikte: exacte aantallen kloppen met de dump.",
+      APPROXIMATE: "Vlak vóór de dump genomen: rijen kunnen sindsdien zijn veranderd.",
+    },
+    globals: "Globale objecten van het cluster",
+    objects: "Objecten",
+    tables: "Tabellen",
+    tablesOf: (shown, total) =>
+      shown < total ? `${String(shown)} van ${String(total)} getoond` : String(total),
+    truncated: (listed, total) =>
+      `Slechts ${String(listed)} van ${String(total)} tabellen staan in de lijst: de limiet van de statistiekentabel is bereikt. De overige tabellen zitten wel in de dump, maar zijn niet afzonderlijk geteld.`,
+    warnings: "Waarschuwingen over volledigheid",
+    notices: "Opmerkingen",
+    more: "en meer",
+    filter: "Tabellen filteren",
+    noMatch: "Geen tabel komt overeen.",
+    showAll: (n) => `Alle ${String(n)} tabellen tonen`,
+    cols: { name: "Tabel", rows: "Rijen", count: "Telling" },
+    summary: (e, s, u) =>
+      [
+        e > 0 ? `${String(e)} exact` : "",
+        s > 0 ? `${String(s)} geschat` : "",
+        u > 0 ? `${String(u)} onbekend` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    recorded: (at) => `vastgelegd ${at}`,
+    warningCount: (n) => plural(n, { one: "1 waarschuwing", other: `${String(n)} waarschuwingen` }),
+    approximate: "benaderd",
+    approximateHint:
+      "Genomen buiten de snapshot van de dump (MySQL/MariaDB): rijen kunnen zijn veranderd.",
+    countKind: {
+      EXACT: { label: "exact", title: "Exact geteld." },
+      ESTIMATE: {
+        label: "schatting",
+        title: "Een schatting van de planner of uit information_schema.",
+      },
+      UNKNOWN: { label: "onbekend", title: "Niet geteld (tijdslimiet, budget of fout)." },
+    },
   },
-  globals: "Cluster globals",
-  objects: "Objects",
-  tables: "Tables",
-  tablesOf: (shown: number, total: number) =>
-    shown < total ? `${String(shown)} of ${String(total)} listed` : String(total),
-  truncated: (listed: number, total: number) =>
-    `Only ${String(listed)} of ${String(total)} tables are listed: the statistics table limit was reached. The remaining tables were dumped but not counted individually.`,
-  warnings: "Completeness warnings",
-  notices: "Notices",
-  more: "and more",
-  filter: "Filter tables",
-  noMatch: "No table matches.",
-  showAll: (n: number) => `Show all ${String(n)} tables`,
-  cols: { name: "Table", rows: "Rows", count: "Count" },
-  summary: (e: number, s: number, u: number) =>
-    [
-      e > 0 ? `${String(e)} exact` : "",
-      s > 0 ? `${String(s)} estimated` : "",
-      u > 0 ? `${String(u)} unknown` : "",
-    ]
-      .filter(Boolean)
-      .join(" · "),
-  recorded: (at: string) => `recorded ${at}`,
-} as const;
+});
 
-const numberFormat = new Intl.NumberFormat();
+const numberFormat = new Intl.NumberFormat(intlLocale);
 
 const COUNT_META: Record<RowCountKind, { label: string; title: string; className: string }> = {
   EXACT: {
-    label: "exact",
-    title: "Counted exactly.",
+    ...T.countKind.EXACT,
     className: "border-status-success/40 bg-status-success-soft text-status-success-fg",
   },
   ESTIMATE: {
-    label: "estimate",
-    title: "A planner or information_schema estimate.",
+    ...T.countKind.ESTIMATE,
     className: "border-border bg-surface-sunken text-muted-foreground",
   },
   UNKNOWN: {
-    label: "unknown",
-    title: "Not counted (time limit, budget or failure).",
+    ...T.countKind.UNKNOWN,
     className: "border-status-partial/45 bg-status-partial-soft text-status-partial-fg",
   },
 };
@@ -97,10 +156,10 @@ export function CountBadges({ table }: { table: Table }) {
       </span>
       {table.approximate ? (
         <span
-          title="Taken outside the dump's snapshot (MySQL/MariaDB): rows may have changed."
+          title={T.approximateHint}
           className="inline-flex h-5 items-center rounded-sm border border-dashed border-border px-1.5 font-mono text-2xs text-muted-foreground"
         >
-          approximate
+          {T.approximate}
         </span>
       ) : null}
     </span>
@@ -281,7 +340,7 @@ export function ItemStatsCard({ item, stats }: { item: Item; stats: ItemStats })
         {summary ? <span className="text-xs text-muted-foreground">{summary}</span> : null}
         {stats.warnings.length > 0 ? (
           <span className="ml-auto rounded-sm border border-status-partial/45 bg-status-partial-soft px-1.5 text-2xs font-medium text-status-partial-fg">
-            {stats.warnings.length} warning{stats.warnings.length === 1 ? "" : "s"}
+            {T.warningCount(stats.warnings.length)}
           </span>
         ) : null}
       </summary>

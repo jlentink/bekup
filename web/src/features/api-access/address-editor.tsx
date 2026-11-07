@@ -8,6 +8,14 @@ import { MAX_ADDRESSES } from "./model";
 import { T } from "./messages";
 import { apiBaseUrl } from "./snippets";
 
+/** Example networks, the same in every language. */
+/** The API request shown as code (not translated). */
+function selfRequest(base: string): string {
+  return `GET ${base}/self`;
+}
+
+const ADDRESS_PLACEHOLDER = "203.0.113.0/24\n2001:db8::/48";
+
 export interface AddressDraft {
   /** The editor's text: one network per line. */
   text: string;
@@ -47,7 +55,7 @@ export function AddressEditor({
           disabled={disabled || value.allowAny}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          placeholder={"203.0.113.0/24\n2001:db8::/48"}
+          placeholder={ADDRESS_PLACEHOLDER}
           onChange={(e) => {
             onChange({ ...value, text: e.target.value });
           }}
@@ -61,7 +69,7 @@ export function AddressEditor({
           <p>{T.addresses.hint(MAX_ADDRESSES)}</p>
           <p>
             {T.addresses.selfHint}{" "}
-            <code className="font-mono break-all">GET {apiBaseUrl()}/self</code>{" "}
+            <code className="font-mono break-all">{selfRequest(apiBaseUrl())}</code>{" "}
             {T.addresses.selfHintAfter}
           </p>
           <p>{T.addresses.hostedRunners}</p>

@@ -63,18 +63,20 @@ Every task below (8.1, 8.2, ..., 14.2) is one change on its own branch.
   in sync). Fixes from that go into a branch `feature/p3-m<N>-review-fixes`.
 
 ## M8 Internationalization (first, so every later UI task ships nl too)
-- **8.1 i18n foundation (web).** Keyed catalogs `web/src/locales/{en,nl}/*.json`
-  per feature (replacing `src/lib/messages.ts` and the per-feature `T`
-  tables), `i18next` + `react-i18next` (MIT; no runtime fetch, catalogs bundled
-  per route, CSP unchanged), `Intl` for dates/numbers (keep `lib/format` IEC
-  units, localized), language switcher in profile. AC: key-parity test (every
-  en key in nl, no unused keys), no literal strings in JSX (lint rule),
-  `pnpm csp-check` green, setup SPA too.
+- **8.1 i18n foundation (web).** (User decision, D-235: typed tables
+  instead of i18next.) Every message table written as `defineMessages({ en,
+  nl })` (`web/src/lib/i18n.ts`, compiler parity via `Messages<typeof en>`),
+  language per page load (stored choice, browser, English; switching
+  reloads), `intlLocale` for `Intl`/`lib/format`, language switcher in
+  profile, lint rule `bekup/no-ui-literals`, Dutch with "je" and the glossary
+  `web/src/lib/i18n-glossary.md`, `pnpm csp-check` with a Dutch pass, setup
+  SPA chrome too.
 - **8.2 Locale per user.** `users.locale` (`en`|`nl`, migration, DML-only),
   `Accept-Language` fallback before sign-in, GraphQL `updateMyLocale`
   (authz row). Error codes stay codes; the UI maps them.
 - **8.3 Server-rendered texts.** E-mail templates, notification contents,
-  summary e-mails, `failureTexts` in the recipient's locale (catalog in Go,
+  summary e-mails, `failureTexts`, GraphQL error messages and the browser
+  setup wizard's step texts in the recipient's/request's locale (catalog in Go,
   parity test like the web one, goldens per locale, 375 px width check).
 - **8.4 Docs**: translation guide (`docs/development.md`), contributing a
   language. *deps: 8.1*

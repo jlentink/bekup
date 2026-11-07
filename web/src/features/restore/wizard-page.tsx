@@ -12,6 +12,7 @@ import { ApiCode, hasApiCode, userMessage } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 
 import { ConfirmStep } from "./confirm-step";
+import { restoreMessages } from "./messages";
 import {
   artifactInput,
   canAdvance,
@@ -42,14 +43,10 @@ import { TargetStep, type TargetChoice } from "./target-step";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const STEP_LEADS: Record<StepId, string> = {
-  source: "Only verified backups covered by a signed manifest can be restored.",
-  target: "Choose where the backup goes. Connections must use the backup's engine.",
-  options: "How the restored objects are owned, and the key for recipient-encrypted backups.",
-  preview: "What bekup will do, checked by the server. Read every warning.",
-  confirm: "Confirm the target, then prove it is you with a second factor.",
-  progress: "Live status of the restore.",
-};
+const T = restoreMessages.wizard;
+const C = restoreMessages.common;
+
+const STEP_LEADS: Record<StepId, string> = T.leads;
 
 /**
  * The restore wizard (task 6.7): backup → target → options → preview →
@@ -207,14 +204,14 @@ export function RestoreWizardPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="Restore"
-        title={full.kind === "GLOBALS" ? "Restore cluster globals" : "Restore a backup"}
-        description="Every restore is checked by the server, confirmed with a second factor and audited."
+        eyebrow={T.eyebrow}
+        title={full.kind === "GLOBALS" ? T.titleGlobals : T.title}
+        description={T.description}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link to="/restores">
               <History aria-hidden="true" />
-              Restore history
+              {C.restoreHistory}
             </Link>
           </Button>
         }
@@ -224,7 +221,7 @@ export function RestoreWizardPage() {
         <section aria-labelledby="restore-step-heading" className="flex min-w-0 flex-col gap-6">
           <header className="flex flex-col gap-1 border-b border-rule pb-4">
             <p className="eyebrow">
-              Step {String(index + 1).padStart(2, "0")} of {String(steps.length).padStart(2, "0")}
+              {T.stepOf(String(index + 1).padStart(2, "0"), String(steps.length).padStart(2, "0"))}
             </p>
             <h2
               id="restore-step-heading"
@@ -319,12 +316,12 @@ export function RestoreWizardPage() {
               {index > 0 ? (
                 <Button variant="ghost" onClick={goBack} disabled={submitting}>
                   <ChevronLeft aria-hidden="true" />
-                  Back
+                  {C.back}
                 </Button>
               ) : null}
               {step !== "confirm" ? (
                 <Button className="ml-auto" onClick={goNext} disabled={!canNext}>
-                  Continue
+                  {C.continue}
                   <ChevronRight aria-hidden="true" />
                 </Button>
               ) : null}
@@ -332,10 +329,10 @@ export function RestoreWizardPage() {
           ) : (
             <footer className="flex gap-3 border-t border-rule pt-5">
               <Button variant="outline" asChild>
-                <Link to={`/restores/${restoreId ?? ""}`}>Open the restore record</Link>
+                <Link to={`/restores/${restoreId ?? ""}`}>{T.openRecord}</Link>
               </Button>
               <Button variant="ghost" asChild>
-                <Link to="/restores">Restore history</Link>
+                <Link to="/restores">{C.restoreHistory}</Link>
               </Button>
             </footer>
           )}
@@ -349,7 +346,7 @@ export function RestoreWizardPage() {
 function StepRail({ steps, current }: { steps: StepId[]; current: StepId }) {
   const at = steps.indexOf(current);
   return (
-    <nav aria-label="Restore steps">
+    <nav aria-label={T.stepsLabel}>
       <ol className="flex gap-1 overflow-x-auto lg:flex-col lg:gap-0 lg:border-l lg:border-rule">
         {steps.map((s, i) => {
           const done = i < at;
@@ -375,7 +372,7 @@ function StepRail({ steps, current }: { steps: StepId[]; current: StepId }) {
                 {done ? <Check className="size-3" /> : String(i + 1).padStart(2, "0")}
               </span>
               {STEP_LABELS[s]}
-              <span className="sr-only">{done ? " (done)" : ""}</span>
+              <span className="sr-only">{done ? C.done : ""}</span>
             </li>
           );
         })}

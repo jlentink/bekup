@@ -6,6 +6,34 @@
  * same in every supported browser.
  */
 
+import { defineMessages } from "./i18n";
+
+/** Error texts (shown by the passkey pages for non-cancelled failures). */
+const T = defineMessages({
+  en: {
+    invalidBase64: "invalid base64url value",
+    malformed: "passkey options are malformed",
+    cancelled: "the passkey check was cancelled",
+    alreadyRegistered: "this passkey is already registered",
+    notAllowed: "passkeys are not allowed for this address",
+    failed: "the passkey check failed",
+    unsupported: "passkeys are not supported here",
+    noneUsed: "no passkey was used",
+    noneCreated: "no passkey was created",
+  },
+  nl: {
+    invalidBase64: "ongeldige base64url-waarde",
+    malformed: "de passkey-opties zijn ongeldig",
+    cancelled: "de passkey-controle is geannuleerd",
+    alreadyRegistered: "deze passkey is al geregistreerd",
+    notAllowed: "passkeys zijn voor dit adres niet toegestaan",
+    failed: "de passkey-controle is mislukt",
+    unsupported: "passkeys worden hier niet ondersteund",
+    noneUsed: "er is geen passkey gebruikt",
+    noneCreated: "er is geen passkey aangemaakt",
+  },
+});
+
 export type WebAuthnErrorKind = "unsupported" | "cancelled" | "invalid";
 
 export class WebAuthnError extends Error {
@@ -33,7 +61,7 @@ export function webauthnSupported(): boolean {
 
 export function base64urlToBuffer(value: string): ArrayBuffer {
   if (!/^[A-Za-z0-9_-]*={0,2}$/.test(value)) {
-    throw new WebAuthnError("invalid", "invalid base64url value");
+    throw new WebAuthnError("invalid", T.invalidBase64);
   }
   const b64 = value.replace(/=+$/, "").replace(/-/g, "+").replace(/_/g, "/");
   const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
@@ -62,7 +90,7 @@ function isObject(v: unknown): v is JSONObject {
 /** The publicKey member of the server's options. */
 function publicKeyOf(options: unknown): JSONObject {
   if (isObject(options) && isObject(options["publicKey"])) return options["publicKey"];
-  throw new WebAuthnError("invalid", "passkey options are malformed");
+  throw new WebAuthnError("invalid", T.malformed);
 }
 
 function decodeDescriptors(list: unknown): PublicKeyCredentialDescriptor[] | undefined {
@@ -96,7 +124,7 @@ export function decodeRequestOptions(options: unknown): PublicKeyCredentialReque
 export function decodeCreationOptions(options: unknown): PublicKeyCredentialCreationOptions {
   const pk = publicKeyOf(options);
   const user = pk["user"];
-  if (!isObject(user)) throw new WebAuthnError("invalid", "passkey options are malformed");
+  if (!isObject(user)) throw new WebAuthnError("invalid", T.malformed);
   const out = {
     ...(pk as unknown as PublicKeyCredentialCreationOptions),
     challenge: base64urlToBuffer(String(pk["challenge"])),
@@ -155,21 +183,20 @@ function mapDomError(err: unknown): never {
     err instanceof DOMException &&
     (err.name === "NotAllowedError" || err.name === "AbortError")
   ) {
-    throw new WebAuthnError("cancelled", "the passkey check was cancelled");
+    throw new WebAuthnError("cancelled", T.cancelled);
   }
   if (err instanceof DOMException && err.name === "InvalidStateError") {
-    throw new WebAuthnError("invalid", "this passkey is already registered");
+    throw new WebAuthnError("invalid", T.alreadyRegistered);
   }
   if (err instanceof DOMException && err.name === "SecurityError") {
-    throw new WebAuthnError("unsupported", "passkeys are not allowed for this address");
+    throw new WebAuthnError("unsupported", T.notAllowed);
   }
-  throw new WebAuthnError("cancelled", "the passkey check failed");
+  throw new WebAuthnError("cancelled", T.failed);
 }
 
 /** Runs navigator.credentials.get with the server's options; returns the JSON response. */
 export async function getAssertion(options: unknown, signal?: AbortSignal): Promise<JSONObject> {
-  if (!webauthnSupported())
-    throw new WebAuthnError("unsupported", "passkeys are not supported here");
+  if (!webauthnSupported()) throw new WebAuthnError("unsupported", T.unsupported);
   const publicKey = decodeRequestOptions(options);
   let cred: Credential | null;
   try {
@@ -177,7 +204,7 @@ export async function getAssertion(options: unknown, signal?: AbortSignal): Prom
   } catch (err) {
     mapDomError(err);
   }
-  if (cred?.type !== "public-key") throw new WebAuthnError("cancelled", "no passkey was used");
+  if (cred?.type !== "public-key") throw new WebAuthnError("cancelled", T.noneUsed);
   return encodeAssertion(cred as PublicKeyCredential);
 }
 
@@ -187,7 +214,7 @@ export async function createCredential(
   signal?: AbortSignal,
 ): Promise<JSONObject> {
   if (!webauthnSupported() || typeof navigator.credentials.create !== "function") {
-    throw new WebAuthnError("unsupported", "passkeys are not supported here");
+    throw new WebAuthnError("unsupported", T.unsupported);
   }
   const publicKey = decodeCreationOptions(options);
   let cred: Credential | null;
@@ -197,7 +224,7 @@ export async function createCredential(
     mapDomError(err);
   }
   if (cred?.type !== "public-key") {
-    throw new WebAuthnError("cancelled", "no passkey was created");
+    throw new WebAuthnError("cancelled", T.noneCreated);
   }
   return encodeAttestation(cred as PublicKeyCredential);
 }

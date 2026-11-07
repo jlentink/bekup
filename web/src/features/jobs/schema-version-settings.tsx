@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { isStepUpCancelled, useStepUp } from "@/features/auth/use-step-up";
 import type { JobDetailQuery as JobDetailResult, SchemaVersionMode } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { Field, NativeSelect } from "./fields";
@@ -22,42 +23,90 @@ import {
 
 type Job = NonNullable<JobDetailResult["job"]>;
 
-const T = {
-  legend: "Capture",
-  modes: {
-    NONE: { label: "Off", hint: "No version is read." },
-    PRESET: { label: "Framework preset", hint: "Reviewed SQL for a migration tool." },
-    CUSTOM: { label: "Custom query", hint: "Your own SELECT statement." },
-  } satisfies Record<SchemaVersionMode, { label: string; hint: string }>,
-  preset: "Migration framework",
-  choosePreset: "Choose a framework",
-  presetRequired: "Choose a framework.",
-  reads: (table: string) => `Reads ${table}`,
-  schema: "Schema",
-  schemaHint: "The PostgreSQL schema of the framework's table.",
-  schemaInvalid: "A letter or underscore, then up to 62 letters, digits or underscores.",
-  customSql: "Version query",
-  customHint: (n: number) =>
-    `${String(n)} of ${String(MAX_CUSTOM_SQL_BYTES)} bytes. One SELECT or WITH statement without ; or comments; the first column of the first row becomes the version.`,
-  warningTitle: "This query runs on your databases",
-  warning: [
-    "It runs on every backed-up database with the backup role's rights, read-only, inside the dump's snapshot, stopped after 5 seconds.",
-    "PostgreSQL resolves names only in pg_catalog: qualify tables with their schema (public.schema_migrations).",
-    "Saving needs a fresh confirmation of your identity; the change is audited and admins are alerted.",
-  ],
-  refusedTitle: "What the query may not contain",
-  refused: [
-    "It must start with SELECT or WITH. Every rule applies to the whole text, also inside quotes.",
-    `Characters: ${REFUSED_SUMMARY.characters}.`,
-    `Words: ${REFUSED_SUMMARY.words}.`,
-    `Functions: ${REFUSED_SUMMARY.functions}.`,
-    "This list is a guardrail, not the protection: the query runs read-only with time limits and only a short result is kept. Give the backup role only the rights it needs.",
-  ],
-  notes:
-    "A failed capture is a warning on the run (the backup itself is unaffected). Versions are at most 64 printable characters.",
-  save: "Save schema version",
-  saved: "Schema-version capture saved.",
-} as const;
+/** Example queries (SQL, not translated). */
+const PG_SQL_PLACEHOLDER = "SELECT max(version)::text FROM public.schema_migrations";
+const MYSQL_SQL_PLACEHOLDER = "SELECT MAX(version) FROM schema_migrations";
+
+const T = defineMessages({
+  en: {
+    legend: "Capture",
+    modes: {
+      NONE: { label: "Off", hint: "No version is read." },
+      PRESET: { label: "Framework preset", hint: "Reviewed SQL for a migration tool." },
+      CUSTOM: { label: "Custom query", hint: "Your own SELECT statement." },
+    } satisfies Record<SchemaVersionMode, { label: string; hint: string }>,
+    preset: "Migration framework",
+    choosePreset: "Choose a framework",
+    presetRequired: "Choose a framework.",
+    reads: (table: string) => `Reads ${table}`,
+    schema: "Schema",
+    schemaHint: "The PostgreSQL schema of the framework's table.",
+    schemaInvalid: "A letter or underscore, then up to 62 letters, digits or underscores.",
+    customSql: "Version query",
+    customHint: (n: number) =>
+      `${String(n)} of ${String(MAX_CUSTOM_SQL_BYTES)} bytes. One SELECT or WITH statement without ; or comments; the first column of the first row becomes the version.`,
+    warningTitle: "This query runs on your databases",
+    warning: [
+      "It runs on every backed-up database with the backup role's rights, read-only, inside the dump's snapshot, stopped after 5 seconds.",
+      "PostgreSQL resolves names only in pg_catalog: qualify tables with their schema (public.schema_migrations).",
+      "Saving needs a fresh confirmation of your identity; the change is audited and admins are alerted.",
+    ],
+    refusedTitle: "What the query may not contain",
+    refused: [
+      "It must start with SELECT or WITH. Every rule applies to the whole text, also inside quotes.",
+      `Characters: ${REFUSED_SUMMARY.characters}.`,
+      `Words: ${REFUSED_SUMMARY.words}.`,
+      `Functions: ${REFUSED_SUMMARY.functions}.`,
+      "This list is a guardrail, not the protection: the query runs read-only with time limits and only a short result is kept. Give the backup role only the rights it needs.",
+    ],
+    notes:
+      "A failed capture is a warning on the run (the backup itself is unaffected). Versions are at most 64 printable characters.",
+    save: "Save schema version",
+    saved: "Schema-version capture saved.",
+    formLabel: "Schema-version settings",
+  },
+  nl: {
+    legend: "Vastleggen",
+    modes: {
+      NONE: { label: "Uit", hint: "Er wordt geen versie gelezen." },
+      PRESET: {
+        label: "Framework-voorinstelling",
+        hint: "Gecontroleerde SQL voor een migratietool.",
+      },
+      CUSTOM: { label: "Eigen query", hint: "Je eigen SELECT-statement." },
+    },
+    preset: "Migratieframework",
+    choosePreset: "Kies een framework",
+    presetRequired: "Kies een framework.",
+    reads: (table: string) => `Leest ${table}`,
+    schema: "Schema",
+    schemaHint: "Het PostgreSQL-schema van de tabel van het framework.",
+    schemaInvalid:
+      "Een letter of underscore, gevolgd door hooguit 62 letters, cijfers of underscores.",
+    customSql: "Versiequery",
+    customHint: (n: number) =>
+      `${String(n)} van ${String(MAX_CUSTOM_SQL_BYTES)} bytes. Eén SELECT- of WITH-statement zonder ; of commentaar; de eerste kolom van de eerste rij wordt de versie.`,
+    warningTitle: "Deze query draait op je databases",
+    warning: [
+      "Hij draait op elke database waarvan een back-up wordt gemaakt, met de rechten van de back-uprol, alleen-lezen, binnen de snapshot van de dump, en stopt na 5 seconden.",
+      "PostgreSQL zoekt namen alleen op in pg_catalog: geef tabellen hun schema mee (public.schema_migrations).",
+      "Opslaan vraagt opnieuw om je identiteit te bevestigen; de wijziging wordt geaudit en beheerders krijgen een melding.",
+    ],
+    refusedTitle: "Wat de query niet mag bevatten",
+    refused: [
+      "Hij moet beginnen met SELECT of WITH. Elke regel geldt voor de hele tekst, ook binnen aanhalingstekens.",
+      `Tekens: ${REFUSED_SUMMARY.characters}.`,
+      `Woorden: ${REFUSED_SUMMARY.words}.`,
+      `Functies: ${REFUSED_SUMMARY.functions}.`,
+      "Deze lijst is een vangrail, niet de bescherming: de query draait alleen-lezen met tijdslimieten en alleen een kort resultaat wordt bewaard. Geef de back-uprol alleen de rechten die hij nodig heeft.",
+    ],
+    notes:
+      "Een mislukte vastlegging is een waarschuwing bij de run (de back-up zelf blijft goed). Versies zijn hooguit 64 afdrukbare tekens.",
+    save: "Schemaversie opslaan",
+    saved: "Vastleggen van de schemaversie opgeslagen.",
+    formLabel: "Instellingen voor de schemaversie",
+  },
+});
 
 const MODES: readonly SchemaVersionMode[] = ["NONE", "PRESET", "CUSTOM"];
 
@@ -111,7 +160,7 @@ export function SchemaVersionSettings({ job }: { job: Job }) {
   return (
     <form
       className="flex flex-col gap-5"
-      aria-label="Schema-version settings"
+      aria-label={T.formLabel}
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -248,11 +297,7 @@ export function SchemaVersionSettings({ job }: { job: Job }) {
                 value={sql}
                 rows={5}
                 spellCheck={false}
-                placeholder={
-                  isPG
-                    ? "SELECT max(version)::text FROM public.schema_migrations"
-                    : "SELECT MAX(version) FROM schema_migrations"
-                }
+                placeholder={isPG ? PG_SQL_PLACEHOLDER : MYSQL_SQL_PLACEHOLDER}
                 onChange={(e) => {
                   setSql(e.target.value);
                 }}

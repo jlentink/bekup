@@ -354,6 +354,15 @@ Each `internal/` package has a `doc.go` describing its responsibility.
 - All UI work uses the **`frontend-design` skill** on top of the design
   system from task 0.8 (D-021). Accessible (WCAG AA), dark mode.
 - Apollo Client + graphql-codegen; react-hook-form + zod.
+- Languages (D-235): English and Dutch. Every string table is
+  `defineMessages({ en, nl })` (`src/lib/i18n.ts`; large modules: `const
+  nl: Messages<typeof en>`), so a missing key or a parameter type change
+  fails `tsc` and a dropped parameter fails `i18n-parity.test.ts`; no
+  literal UI text in `.tsx` (`bekup/no-ui-literals`; `.ts` modules by hand). Dutch uses
+  "je" and the terms of `src/lib/i18n-glossary.md`; plurals via `plural()`;
+  every `Intl` formatter takes `intlLocale`. The language is fixed per page
+  load (switching reloads). Never translate texts the server compares
+  (type-to-confirm) or sends (error messages, until 8.3).
 - Every signed-in route declares `handle: access.…` (`lib/route-access`,
   derived from the nav roles); the single `RequireRole` guard denies routes
   without one (D-199). Format sizes/durations only with `lib/format`
@@ -370,7 +379,7 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   codes are handled globally by the Apollo error link. Return paths only
   via `safeReturnPath`. Strings stay out of the markup: shell/auth/account
   in `src/lib/messages.ts`, each feature its own (`messages.ts` or a `T`
-  table in `src/features/<area>/`). Every signed-in route declares its
+  table in `src/features/<area>/`), always in both languages (D-235). Every signed-in route declares its
   roles as `handle` (`lib/route-access.ts`, enforced by `RequireRole`; UI
   only). One-time material (keys, tickets, temporary passwords) uses
   `fetchPolicy: "no-cache"` and lives only in component state. Never insert

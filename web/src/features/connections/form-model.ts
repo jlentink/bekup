@@ -8,7 +8,52 @@ import type {
   UpdateConnectionInput,
 } from "@/graphql/gen/graphql";
 
+import { defineMessages } from "@/lib/i18n";
+
 import { defaultPort } from "./labels";
+
+const V = defineMessages({
+  en: {
+    name: "Enter a name.",
+    nameMax: "At most 100 characters.",
+    version: "Choose the server's version.",
+    host: "Enter the database host.",
+    username: "Enter the database user.",
+    port: "Enter a port between 1 and 65535.",
+    maxRuns: "Enter a whole number from 1 to 64, or leave it empty.",
+    passwordAgain:
+      "The endpoint changed: enter the password again, or remove it. A stored password is never sent to a new endpoint.",
+    password: "Enter the new password.",
+    clientCert: "Paste the client certificate as PEM.",
+    clientKey: "Paste the matching private key (PEM).",
+    sshHost: "Enter the bastion host.",
+    sshUser: "Enter the SSH user.",
+    sshPasswordAgain:
+      "The bastion or user changed: enter the SSH password again, or set a key. A stored password is never sent to a new endpoint.",
+    sshPassword: "Enter the SSH password.",
+    sshKey: "Paste the private key (PEM or OpenSSH format).",
+  },
+  nl: {
+    name: "Vul een naam in.",
+    nameMax: "Maximaal 100 tekens.",
+    version: "Kies de versie van de server.",
+    host: "Vul de databasehost in.",
+    username: "Vul de databasegebruiker in.",
+    port: "Vul een poort tussen 1 en 65535 in.",
+    maxRuns: "Vul een geheel getal van 1 tot en met 64 in, of laat het leeg.",
+    passwordAgain:
+      "Het eindpunt is gewijzigd: vul het wachtwoord opnieuw in, of verwijder het. Een opgeslagen wachtwoord wordt nooit naar een nieuw eindpunt gestuurd.",
+    password: "Vul het nieuwe wachtwoord in.",
+    clientCert: "Plak het clientcertificaat als PEM.",
+    clientKey: "Plak de bijbehorende privésleutel (PEM).",
+    sshHost: "Vul de bastionhost in.",
+    sshUser: "Vul de SSH-gebruiker in.",
+    sshPasswordAgain:
+      "De bastionhost of gebruiker is gewijzigd: vul het SSH-wachtwoord opnieuw in, of stel een sleutel in. Een opgeslagen wachtwoord wordt nooit naar een nieuw eindpunt gestuurd.",
+    sshPassword: "Vul het SSH-wachtwoord in.",
+    sshKey: "Plak de privésleutel (PEM- of OpenSSH-formaat).",
+  },
+});
 
 /**
  * The connection form model: values, validation (incl. the D-140 rule that
@@ -192,13 +237,13 @@ export function buildSchema(orig: Original | undefined) {
   const str = z.string();
   return z
     .object({
-      name: str.trim().min(1, "Enter a name.").max(100, "At most 100 characters."),
+      name: str.trim().min(1, V.name).max(100, V.nameMax),
       engine: z.enum(["POSTGRES", "MYSQL", "MARIADB"]),
-      versionKey: str.min(1, "Choose the server's version."),
+      versionKey: str.min(1, V.version),
       imageKey: str,
-      host: str.trim().min(1, "Enter the database host."),
+      host: str.trim().min(1, V.host),
       port: str.trim(),
-      username: str.trim().min(1, "Enter the database user."),
+      username: str.trim().min(1, V.username),
       passwordAction: z.enum(["keep", "set", "clear"]),
       password: str,
       tlsMode: z.enum(["PINNED", "UNVERIFIED", "DISABLED"]),
@@ -223,42 +268,33 @@ export function buildSchema(orig: Original | undefined) {
       };
       const badPort = (p: string) =>
         p !== "" && (!PORT_RE.test(p) || Number(p) < 1 || Number(p) > 65535);
-      if (badPort(v.port)) issue(["port"], "Enter a port between 1 and 65535.");
+      if (badPort(v.port)) issue(["port"], V.port);
       if (v.maxConcurrentRuns !== "") {
         const n = Number(v.maxConcurrentRuns);
-        if (!Number.isInteger(n) || n < 1 || n > 64)
-          issue(["maxConcurrentRuns"], "Enter a whole number from 1 to 64, or leave it empty.");
+        if (!Number.isInteger(n) || n < 1 || n > 64) issue(["maxConcurrentRuns"], V.maxRuns);
       }
       const values: ConnectionFormValues = v;
       const pw = effectivePasswordAction(values, orig);
       if (pw === "set" && orig && v.password === "") {
-        issue(
-          ["password"],
-          retarget(values, orig).needsPassword
-            ? "The endpoint changed: enter the password again, or remove it. A stored password is never sent to a new endpoint."
-            : "Enter the new password.",
-        );
+        issue(["password"], retarget(values, orig).needsPassword ? V.passwordAgain : V.password);
       }
       if (v.clientCert === "set") {
         if (!v.clientCertificatePem.trim().startsWith(PEM_CERT))
-          issue(["clientCertificatePem"], "Paste the client certificate as PEM.");
-        if (v.clientKeyPem.trim() === "")
-          issue(["clientKeyPem"], "Paste the matching private key (PEM).");
+          issue(["clientCertificatePem"], V.clientCert);
+        if (v.clientKeyPem.trim() === "") issue(["clientKeyPem"], V.clientKey);
       }
       if (v.sshEnabled) {
-        if (v.ssh.host === "") issue(["ssh", "host"], "Enter the bastion host.");
-        if (badPort(v.ssh.port)) issue(["ssh", "port"], "Enter a port between 1 and 65535.");
-        if (v.ssh.user === "") issue(["ssh", "user"], "Enter the SSH user.");
+        if (v.ssh.host === "") issue(["ssh", "host"], V.sshHost);
+        if (badPort(v.ssh.port)) issue(["ssh", "port"], V.port);
+        if (v.ssh.user === "") issue(["ssh", "user"], V.sshUser);
         const auth = effectiveSshAuth(values, orig);
         if (auth === "password" && v.ssh.password === "")
           issue(
             ["ssh", "password"],
-            retarget(values, orig).needsSshPassword
-              ? "The bastion or user changed: enter the SSH password again, or set a key. A stored password is never sent to a new endpoint."
-              : "Enter the SSH password.",
+            retarget(values, orig).needsSshPassword ? V.sshPasswordAgain : V.sshPassword,
           );
         if (auth === "privateKey" && !v.ssh.privateKey.includes("PRIVATE KEY"))
-          issue(["ssh", "privateKey"], "Paste the private key (PEM or OpenSSH format).");
+          issue(["ssh", "privateKey"], V.sshKey);
       }
     });
 }

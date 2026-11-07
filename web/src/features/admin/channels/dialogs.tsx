@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { isStepUpCancelled } from "@/features/auth/use-step-up";
 import type { NotificationGroup, SharedChannelType } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -41,35 +42,68 @@ export interface ChannelDraft {
   url: string;
 }
 
-const F = {
-  createTitle: "New shared channel",
-  editTitle: "Edit shared channel",
-  createLead:
-    "An e-mail list or a webhook that receives the events of the jobs you attach it to. Security alerts are never sent to shared channels.",
-  editLead: "Changes are audited. A new webhook URL keeps the signing key; rotate it separately.",
-  type: "Type",
-  types: { EMAIL_LIST: "E-mail list", WEBHOOK: "Webhook" } satisfies Record<
-    SharedChannelType,
-    string
-  >,
-  typeHints: {
-    EMAIL_LIST: "Up to 50 addresses, e.g. an on-call list.",
-    WEBHOOK: "HTTPS endpoint (Slack, Teams, your own receiver); requests are HMAC signed.",
-  } satisfies Record<SharedChannelType, string>,
-  name: "Name",
-  addresses: "Addresses",
-  addressesHint: "One per line, or separated by commas.",
-  url: "Webhook URL",
-  urlEdit: "New webhook URL (optional)",
-  urlHint:
-    "https only; it must pass the SSRF guard. The URL may contain a credential, so it is write-only: afterwards only scheme, host and port are shown.",
-  urlEditHint: "Leave empty to keep the stored URL. Stored URL: ",
-  create: "Create channel",
-  save: "Save changes",
-  nameMissing: "Enter a name (1 to 100 characters).",
-  addressesMissing: "Enter 1 to 50 e-mail addresses.",
-  urlMissing: "Enter an https:// URL.",
-} as const;
+const F = defineMessages({
+  en: {
+    createTitle: "New shared channel",
+    editTitle: "Edit shared channel",
+    createLead:
+      "An e-mail list or a webhook that receives the events of the jobs you attach it to. Security alerts are never sent to shared channels.",
+    editLead: "Changes are audited. A new webhook URL keeps the signing key; rotate it separately.",
+    type: "Type",
+    types: { EMAIL_LIST: "E-mail list", WEBHOOK: "Webhook" } satisfies Record<
+      SharedChannelType,
+      string
+    >,
+    typeHints: {
+      EMAIL_LIST: "Up to 50 addresses, e.g. an on-call list.",
+      WEBHOOK: "HTTPS endpoint (Slack, Teams, your own receiver); requests are HMAC signed.",
+    } satisfies Record<SharedChannelType, string>,
+    name: "Name",
+    addresses: "Addresses",
+    addressesHint: "One per line, or separated by commas.",
+    url: "Webhook URL",
+    urlEdit: "New webhook URL (optional)",
+    urlHint:
+      "https only; it must pass the SSRF guard. The URL may contain a credential, so it is write-only: afterwards only scheme, host and port are shown.",
+    urlEditHint: "Leave empty to keep the stored URL. Stored URL: ",
+    create: "Create channel",
+    save: "Save changes",
+    nameMissing: "Enter a name (1 to 100 characters).",
+    addressesMissing: "Enter 1 to 50 e-mail addresses.",
+    urlMissing: "Enter an https:// URL.",
+  },
+  nl: {
+    createTitle: "Nieuw gedeeld kanaal",
+    editTitle: "Gedeeld kanaal bewerken",
+    createLead:
+      "Een e-maillijst of webhook die de gebeurtenissen ontvangt van de taken waaraan je het koppelt. Beveiligingsmeldingen worden nooit naar gedeelde kanalen gestuurd.",
+    editLead:
+      "Wijzigingen komen in de auditlog. Een nieuwe webhook-URL behoudt de ondertekeningssleutel; vernieuw die apart.",
+    type: "Soort",
+    types: { EMAIL_LIST: "E-maillijst", WEBHOOK: "Webhook" },
+    typeHints: {
+      EMAIL_LIST: "Maximaal 50 adressen, bijvoorbeeld een lijst van wie dienst heeft.",
+      WEBHOOK:
+        "HTTPS-eindpunt (Slack, Teams, je eigen ontvanger); verzoeken worden met HMAC ondertekend.",
+    },
+    name: "Naam",
+    addresses: "Adressen",
+    addressesHint: "Eén per regel, of gescheiden door komma's.",
+    url: "Webhook-URL",
+    urlEdit: "Nieuwe webhook-URL (optioneel)",
+    urlHint:
+      "Alleen https; de URL moet door de SSRF-beveiliging komen. De URL kan inloggegevens bevatten en is daarom alleen-schrijven: daarna worden alleen schema, host en poort getoond.",
+    urlEditHint: "Laat leeg om de opgeslagen URL te behouden. Opgeslagen URL: ",
+    create: "Kanaal aanmaken",
+    save: "Wijzigingen opslaan",
+    nameMissing: "Vul een naam in (1 tot 100 tekens).",
+    addressesMissing: "Vul 1 tot 50 e-mailadressen in.",
+    urlMissing: "Vul een https://-URL in.",
+  },
+});
+
+/** An example URL, the same in every language. */
+const URL_PLACEHOLDER = "https://hooks.example.com/…";
 
 export function ChannelFormDialog({
   open,
@@ -204,7 +238,7 @@ export function ChannelFormDialog({
                 inputMode="url"
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="https://hooks.example.com/…"
+                placeholder={URL_PLACEHOLDER}
                 value={url}
                 onChange={(e) => {
                   setUrl(e.target.value);
@@ -248,22 +282,41 @@ export function ChannelFormDialog({
 
 /* ---------------- Attach to a job with an event filter ---------------- */
 
-const A = {
-  title: "Attach to a job",
-  editTitle: (job: string) => `Events from ${job}`,
-  lead: "Pick the job and the events the channel receives from it. Nothing picked: every job event. Security alerts are never sent to shared channels.",
-  job: "Job",
-  search: "Search jobs",
-  noJobs: "No jobs match.",
-  attached: "attached",
-  events: "Events",
-  wholeGroup: (label: string) => `All ${label.toLowerCase()} events`,
-  allEvents: "Nothing picked: the channel receives every job event.",
-  securityNote: "Security events are excluded: they only reach admins personally.",
-  attach: "Attach",
-  save: "Save filter",
-  pickJob: "Pick a job.",
-} as const;
+const A = defineMessages({
+  en: {
+    title: "Attach to a job",
+    editTitle: (job: string) => `Events from ${job}`,
+    lead: "Pick the job and the events the channel receives from it. Nothing picked: every job event. Security alerts are never sent to shared channels.",
+    job: "Job",
+    search: "Search jobs",
+    noJobs: "No jobs match.",
+    attached: "attached",
+    events: "Events",
+    wholeGroup: (label: string) => `All ${label.toLowerCase()} events`,
+    allEvents: "Nothing picked: the channel receives every job event.",
+    securityNote: "Security events are excluded: they only reach admins personally.",
+    attach: "Attach",
+    save: "Save filter",
+    pickJob: "Pick a job.",
+  },
+  nl: {
+    title: "Aan een taak koppelen",
+    editTitle: (job: string) => `Gebeurtenissen van ${job}`,
+    lead: "Kies de taak en de gebeurtenissen die het kanaal van die taak ontvangt. Niets gekozen: elke gebeurtenis van de taak. Beveiligingsmeldingen worden nooit naar gedeelde kanalen gestuurd.",
+    job: "Taak",
+    search: "Taken zoeken",
+    noJobs: "Geen taken gevonden.",
+    attached: "gekoppeld",
+    events: "Gebeurtenissen",
+    wholeGroup: (label: string) => `Alle gebeurtenissen in „${label}”`,
+    allEvents: "Niets gekozen: het kanaal ontvangt elke gebeurtenis van de taak.",
+    securityNote:
+      "Beveiligingsgebeurtenissen vallen erbuiten: die bereiken alleen beheerders persoonlijk.",
+    attach: "Koppelen",
+    save: "Filter opslaan",
+    pickJob: "Kies een taak.",
+  },
+});
 
 export function AttachDialog({
   open,

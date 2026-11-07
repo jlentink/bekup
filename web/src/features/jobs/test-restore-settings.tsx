@@ -16,6 +16,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { ApiCode, firstApiError, hasApiCode, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { CheckboxField, Field, NativeSelect } from "./fields";
@@ -37,36 +38,73 @@ type VerdictSource =
   | { kind: "lastTest"; verdict: Verdict; at: string; stale: boolean }
   | { kind: "none" };
 
-const T = {
-  enabled: "Scheduled test restores",
-  enabledHint:
-    "Regularly restore the newest verified backup into a scratch database, compare it with the source statistics and drop it again.",
-  target: "Scratch target",
-  targetNone: "No scratch target",
-  targetHint: (engine: string) =>
-    `A permanent ${engine} connection. bekup only ever creates and drops bekup_test_<id> databases there; it receives a copy of this job's data.`,
-  targetRequired: "Choose a scratch target to turn test restores on.",
-  notReady: "not ready",
-  schedule: "When test restores run",
-  verdict: "Target role",
-  fromDesignation: "probed when it was designated",
-  fromTest: (when: string, stale: boolean) =>
-    `from the connection's last test, ${when}${stale ? " (stale)" : ""}`,
-  untested:
-    "Not tested yet. The role is probed when you save; a privileged or unknown role needs an admin and an acknowledgement.",
-  ack: "I accept that SQL in the tested backups runs with this role's rights on the scratch target",
-  ackHint:
-    "Required for a privileged or unknown role (D-068, D-170). Audited and alerted; the worker re-probes the role before every test restore.",
-  ackedAt: (at: string) => `Acknowledged by an admin ${at}.`,
-  maintainerGated:
-    "This role is privileged or unknown: only an admin can designate it as a scratch target.",
-  stepUpNote:
-    "Saving needs a passkey or authenticator code from the last 5 minutes: the scratch target receives a copy of the job's data.",
-  save: "Save test-restore settings",
-  saved: "Test-restore settings saved.",
-  forbidden: "Only an admin can designate a target whose role is privileged or unknown.",
-  testConnection: "Test the connection",
-} as const;
+const T = defineMessages({
+  en: {
+    enabled: "Scheduled test restores",
+    enabledHint:
+      "Regularly restore the newest verified backup into a scratch database, compare it with the source statistics and drop it again.",
+    target: "Scratch target",
+    targetNone: "No scratch target",
+    targetHint: (engine: string) =>
+      `A permanent ${engine} connection. bekup only ever creates and drops bekup_test_<id> databases there; it receives a copy of this job's data.`,
+    targetRequired: "Choose a scratch target to turn test restores on.",
+    notReady: "not ready",
+    schedule: "When test restores run",
+    verdict: "Target role",
+    fromDesignation: "probed when it was designated",
+    fromTest: (when: string, stale: boolean) =>
+      `from the connection's last test, ${when}${stale ? " (stale)" : ""}`,
+    untested:
+      "Not tested yet. The role is probed when you save; a privileged or unknown role needs an admin and an acknowledgement.",
+    ack: "I accept that SQL in the tested backups runs with this role's rights on the scratch target",
+    ackHint:
+      "Required for a privileged or unknown role (D-068, D-170). Audited and alerted; the worker re-probes the role before every test restore.",
+    ackedAt: (at: string) => `Acknowledged by an admin ${at}.`,
+    maintainerGated:
+      "This role is privileged or unknown: only an admin can designate it as a scratch target.",
+    stepUpNote:
+      "Saving needs a passkey or authenticator code from the last 5 minutes: the scratch target receives a copy of the job's data.",
+    save: "Save test-restore settings",
+    saved: "Test-restore settings saved.",
+    forbidden: "Only an admin can designate a target whose role is privileged or unknown.",
+    testConnection: "Test the connection",
+    formLabel: "Test-restore settings",
+    reasonsLabel: "Privilege reasons",
+  },
+  nl: {
+    enabled: "Geplande testherstels",
+    enabledHint:
+      "Herstel regelmatig de nieuwste geverifieerde back-up in een tijdelijke database, vergelijk die met de statistieken van de bron en verwijder hem weer.",
+    target: "Tijdelijk hersteldoel",
+    targetNone: "Geen tijdelijk hersteldoel",
+    targetHint: (engine: string) =>
+      `Een permanente ${engine}-verbinding. bekup maakt daar alleen bekup_test_<id>-databases aan en verwijdert ze weer; het doel ontvangt een kopie van de gegevens van deze taak.`,
+    targetRequired: "Kies een tijdelijk hersteldoel om testherstels in te schakelen.",
+    notReady: "niet gereed",
+    schedule: "Wanneer testherstels draaien",
+    verdict: "Rol op het doel",
+    fromDesignation: "gecontroleerd toen het werd aangewezen",
+    fromTest: (when: string, stale: boolean) =>
+      `uit de laatste test van de verbinding, ${when}${stale ? " (verouderd)" : ""}`,
+    untested:
+      "Nog niet getest. De rol wordt gecontroleerd als je opslaat; een bevoorrechte of onbekende rol vereist een beheerder en een bevestiging.",
+    ack: "Ik accepteer dat SQL in de geteste back-ups met de rechten van deze rol op het tijdelijke hersteldoel draait",
+    ackHint:
+      "Vereist voor een bevoorrechte of onbekende rol (D-068, D-170). Wordt geaudit en gemeld; de worker controleert de rol opnieuw voor elk testherstel.",
+    ackedAt: (at: string) => `Bevestigd door een beheerder ${at}.`,
+    maintainerGated:
+      "Deze rol is bevoorrecht of onbekend: alleen een beheerder kan hem als tijdelijk hersteldoel aanwijzen.",
+    stepUpNote:
+      "Opslaan vereist een passkey of authenticator-code van de afgelopen 5 minuten: het tijdelijke hersteldoel ontvangt een kopie van de gegevens van de taak.",
+    save: "Testherstelinstellingen opslaan",
+    saved: "Testherstelinstellingen opgeslagen.",
+    forbidden:
+      "Alleen een beheerder kan een doel aanwijzen waarvan de rol bevoorrecht of onbekend is.",
+    testConnection: "De verbinding testen",
+    formLabel: "Testherstelinstellingen",
+    reasonsLabel: "Redenen voor de privileges",
+  },
+});
 
 const ENGINE: Record<DatabaseEngine, string> = {
   POSTGRES: "PostgreSQL",
@@ -157,7 +195,7 @@ export function TestRestoreSettings({ job, admin }: { job: Job; admin: boolean }
   return (
     <form
       className="flex flex-col gap-5"
-      aria-label="Test-restore settings"
+      aria-label={T.formLabel}
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -288,7 +326,7 @@ function VerdictPanel({ source, connectionId }: { source: VerdictSource; connect
         <p className="text-xs text-muted-foreground">{meta.description}</p>
       ) : null}
       {source.verdict.reasons.length > 0 ? (
-        <ul aria-label="Privilege reasons" className="flex flex-wrap gap-1.5">
+        <ul aria-label={T.reasonsLabel} className="flex flex-wrap gap-1.5">
           {source.verdict.reasons.map((r) => (
             <li
               key={r}

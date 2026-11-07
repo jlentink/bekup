@@ -9,22 +9,52 @@ import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/features/auth/use-session-user";
 import { DetailSkeleton } from "@/features/connections/ui";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 
 import { DestinationForm } from "./destination-form";
 import { DestinationDetailQuery } from "./operations";
+
+const T = defineMessages({
+  en: {
+    adminsOnly: "Admins only",
+    back: "Back",
+    adminsOnlyBody: "Only admins create and change destinations.",
+    destinations: "Destinations",
+    eyebrow: "Infrastructure",
+    newTitle: "New destination",
+    destination: "Destination",
+    editEyebrow: "Edit destination",
+    loading: "Loading destination",
+    notFound: "Destination not found",
+    notFoundBody: "It was deleted or never existed.",
+  },
+  nl: {
+    adminsOnly: "Alleen voor beheerders",
+    back: "Terug",
+    adminsOnlyBody: "Alleen beheerders maken en wijzigen bestemmingen.",
+    destinations: "Bestemmingen",
+    eyebrow: "Infrastructuur",
+    newTitle: "Nieuwe bestemming",
+    destination: "Bestemming",
+    editEyebrow: "Bestemming bewerken",
+    loading: "Bestemming laden",
+    notFound: "Bestemming niet gevonden",
+    notFoundBody: "Ze is verwijderd of heeft nooit bestaan.",
+  },
+});
 
 function AdminsOnly({ back }: { back: string }) {
   return (
     <EmptyState
       icon={Lock}
-      title="Admins only"
+      title={T.adminsOnly}
       action={
         <Button asChild variant="outline">
-          <Link to={back}>Back</Link>
+          <Link to={back}>{T.back}</Link>
         </Button>
       }
     >
-      Only admins create and change destinations.
+      {T.adminsOnlyBody}
     </EmptyState>
   );
 }
@@ -36,10 +66,10 @@ export function NewDestinationPage() {
     <div className="flex flex-col gap-6">
       <Button asChild variant="ghost" size="sm" className="self-start">
         <Link to="/destinations">
-          <ArrowLeft aria-hidden="true" /> Destinations
+          <ArrowLeft aria-hidden="true" /> {T.destinations}
         </Link>
       </Button>
-      <PageHeader eyebrow="Infrastructure" title="New destination" />
+      <PageHeader eyebrow={T.eyebrow} title={T.newTitle} />
       {role === "ADMIN" ? <DestinationForm /> : <AdminsOnly back="/destinations" />}
     </div>
   );
@@ -58,14 +88,14 @@ export function EditDestinationPage() {
     <div className="flex flex-col gap-6">
       <Button asChild variant="ghost" size="sm" className="self-start">
         <Link to={`/destinations/${id}`}>
-          <ArrowLeft aria-hidden="true" /> {d?.name ?? "Destination"}
+          <ArrowLeft aria-hidden="true" /> {d?.name ?? T.destination}
         </Link>
       </Button>
-      <PageHeader eyebrow="Edit destination" title={d?.name ?? "Destination"} />
+      <PageHeader eyebrow={T.editEyebrow} title={d?.name ?? T.destination} />
       {role !== "ADMIN" ? (
         <AdminsOnly back={`/destinations/${id}`} />
       ) : loading && !d ? (
-        <DetailSkeleton label="Loading destination" />
+        <DetailSkeleton label={T.loading} />
       ) : error && !d ? (
         <Alert variant="destructive">
           <AlertDescription>{userMessage(error)}</AlertDescription>
@@ -73,8 +103,8 @@ export function EditDestinationPage() {
       ) : d ? (
         <DestinationForm key={d.updatedAt} original={d} />
       ) : (
-        <EmptyState icon={Lock} title="Destination not found">
-          It was deleted or never existed.
+        <EmptyState icon={Lock} title={T.notFound}>
+          {T.notFoundBody}
         </EmptyState>
       )}
     </div>

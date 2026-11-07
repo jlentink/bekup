@@ -161,7 +161,7 @@ export function ChallengeForm({
     <div className="flex flex-col gap-5">
       {usable.length > 1 ? (
         <fieldset className="grid auto-cols-fr grid-flow-col gap-0.5 rounded-md border bg-surface-sunken p-0.5">
-          <legend className="sr-only">Method</legend>
+          <legend className="sr-only">{messages.secondFactor.methodLegend}</legend>
           {usable.map((m) => {
             const Icon = METHOD_ICON[m];
             return (

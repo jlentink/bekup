@@ -9,6 +9,9 @@ import type {
   CalendarRunUpdatedSubscription as RunUpdatedResult,
   RunStatus,
 } from "@/graphql/gen/graphql";
+import { intlLocale } from "@/lib/i18n";
+
+import { messages } from "./messages";
 
 export type CalendarView = "month" | "week" | "day";
 
@@ -296,35 +299,26 @@ export function variantOf(e: CalEvent): Variant {
   }
 }
 
-const RUN_STATUS_LABELS: Record<RunStatus, string> = {
-  QUEUED: "Run queued",
-  RUNNING: "Run in progress",
-  SUCCESS: "Run succeeded",
-  PARTIAL: "Run partial",
-  FAILED: "Run failed",
-  CANCELED: "Run canceled",
-  SKIPPED: "Run skipped",
-};
-
 /** The text that names an event's kind and state (also for screen readers). */
 export function kindLabel(e: CalEvent): string {
+  const K = messages.kinds;
   switch (variantOf(e)) {
     case "planned":
-      return "Planned";
+      return K.planned;
     case "paused":
-      return "Paused (job disabled)";
+      return K.paused;
     case "early":
-      return "Started early";
+      return K.early;
     case "overdue":
-      return "Overdue: catch-up run pending";
+      return K.overdue;
     case "skipped":
-      return "Skipped";
+      return K.skipped;
     case "expiry-exact":
-      return "Expires (exact)";
+      return K.expiryExact;
     case "expiry-projected":
-      return "Expiry (projected)";
+      return K.expiryProjected;
     default:
-      return e.status ? RUN_STATUS_LABELS[e.status] : "Run";
+      return e.status ? K.runStatus[e.status] : K.run;
   }
 }
 
@@ -341,7 +335,7 @@ const timeFormatters = new Map<string, Intl.DateTimeFormat>();
 export function formatTime(iso: string, tz: string): string {
   let f = timeFormatters.get(tz);
   if (!f) {
-    f = new Intl.DateTimeFormat(undefined, {
+    f = new Intl.DateTimeFormat(intlLocale, {
       timeZone: tz,
       hour: "2-digit",
       minute: "2-digit",
@@ -361,19 +355,19 @@ export function hourOf(iso: string, tz: string): number {
 export function viewTitle(view: CalendarView, anchor: CivilDate): string {
   const utc = (c: CivilDate) => new Date(Date.UTC(c.y, c.m - 1, c.d, 12));
   if (view === "month")
-    return new Intl.DateTimeFormat(undefined, {
+    return new Intl.DateTimeFormat(intlLocale, {
       month: "long",
       year: "numeric",
       timeZone: "UTC",
     }).format(utc(anchor));
   if (view === "day")
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeZone: "UTC" }).format(
+    return new Intl.DateTimeFormat(intlLocale, { dateStyle: "full", timeZone: "UTC" }).format(
       utc(anchor),
     );
   const days = viewDays("week", anchor);
   const first = days[0] ?? anchor;
   const last = days[6] ?? anchor;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(intlLocale, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -383,7 +377,7 @@ export function viewTitle(view: CalendarView, anchor: CivilDate): string {
 
 /** A full, readable date of a civil day (accessible names of day cells). */
 export function dayLabel(c: CivilDate): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeZone: "UTC" }).format(
+  return new Intl.DateTimeFormat(intlLocale, { dateStyle: "full", timeZone: "UTC" }).format(
     new Date(Date.UTC(c.y, c.m - 1, c.d, 12)),
   );
 }

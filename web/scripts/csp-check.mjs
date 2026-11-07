@@ -3213,6 +3213,63 @@ function openEventStream(page, url) {
   );
 }
 
+/**
+ * Dutch pass (D-235): switch the language on the profile page (the page
+ * reloads), then open the main pages in Dutch. Locators avoid English text.
+ */
+async function exerciseDutch(page, base, violations) {
+  await page.emulateMedia({ colorScheme: "light" });
+  resetApi();
+  await page.goto(`${base}/profile`);
+  await page.locator('input[type="email"]').fill("ada@example.com");
+  await page.locator('input[type="password"]').fill("correct horse battery staple");
+  await page.locator('button[type="submit"]').click();
+  await page.locator('input[type="radio"][value="TOTP"]').check({ force: true });
+  await page.locator('input[autocomplete="one-time-code"]').fill("123456");
+  await page.locator('button[type="submit"]').click();
+  await page.getByRole("heading", { name: "Profile and security" }).waitFor();
+  await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("nl");
+  await page.getByRole("heading", { name: "Profiel en beveiliging" }).waitFor();
+  const lang = await page.evaluate(() => document.documentElement.lang);
+  if (lang !== "nl") throw new Error(`html lang is "${lang}" after switching to Dutch`);
+  const routes = [
+    "/",
+    "/connections",
+    "/destinations",
+    `/destinations/${INFRA_DEST_ID}`,
+    "/jobs",
+    `/jobs/${JR_IDS.job}`,
+    `/jobs/${JR_IDS.job}/edit`,
+    "/runs",
+    `/runs/${JR_IDS.run}`,
+    "/restores",
+    `/restore?artifactId=${RC_IDS.artifact}`,
+    "/calendar",
+    "/notifications",
+    "/profile/security",
+    "/profile/sessions",
+    "/profile/notifications",
+    "/admin/settings",
+    "/admin/channels",
+    "/admin/api-access",
+    "/admin/audit",
+    "/risks",
+    "/does-not-exist",
+  ];
+  for (const route of routes) {
+    await page.goto(`${base}${route}`);
+    await page.locator("h1").first().waitFor();
+    // Still Dutch after the navigation (the stored choice), nav included.
+    const routeLang = await page.evaluate(() => document.documentElement.lang);
+    if (routeLang !== "nl") throw new Error(`html lang is "${routeLang}" on ${route}`);
+    if ((await page.getByRole("link", { name: "Connections", exact: true }).count()) > 0)
+      throw new Error(`English navigation on ${route} in the Dutch pass`);
+    // Every navigation resets window.__csp: collect per route.
+    const seen = await page.evaluate(() => window.__csp);
+    violations.push(...seen.map((v) => `[nl] ${route}: ${v}`));
+  }
+}
+
 async function main() {
   build();
   const problems = assertNoInlineCode();
@@ -3300,6 +3357,33 @@ async function main() {
     });
     if (foreign.status !== 403)
       problems.push(`cross-origin stream POST was not refused (status ${foreign.status})`);
+    {
+      const page = await browser.newPage();
+      page.setDefaultTimeout(STEP_TIMEOUT_MS);
+      await page.addInitScript(() => {
+        window.__csp = [];
+        document.addEventListener("securitypolicyviolation", (e) => {
+          window.__csp.push(
+            `${e.effectiveDirective} blocked ${e.blockedURI || "inline"} at ${e.sourceFile}:${e.lineNumber} ${e.sample}`,
+          );
+        });
+      });
+      page.on("console", (msg) => {
+        if (/Content.Security.Policy|Trusted.Type/i.test(msg.text()))
+          violations.push(`[nl] console: ${msg.text()}`);
+      });
+      page.on("pageerror", (err) => violations.push(`[nl] page error: ${err.message}`));
+      try {
+        await exerciseDutch(page, base, violations);
+      } catch (err) {
+        problems.push(
+          `[nl] Dutch walk-through failed at ${page.url()}: ${err.message.split("\n")[0]}`,
+        );
+      }
+      const seen = await page.evaluate(() => window.__csp);
+      violations.push(...seen.map((v) => `[nl] ${v}`));
+      await page.close();
+    }
     await checkSetupPages(browser, problems, violations);
   } finally {
     await browser.close();
@@ -3314,7 +3398,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    "csp-check passed: no CSP or Trusted Types violations in light and dark mode (UI and browser setup); same-origin event stream allowed, cross-origin blocked.",
+    "csp-check passed: no CSP or Trusted Types violations in light and dark mode and in Dutch (UI and browser setup); same-origin event stream allowed, cross-origin blocked.",
   );
 }
 

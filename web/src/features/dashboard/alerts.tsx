@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import type { NotificationSeverity } from "@/graphql/gen/graphql";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { internalLink } from "./model";
@@ -17,11 +18,30 @@ export interface AlertItem {
   createdAt: string;
 }
 
+const T = defineMessages({
+  en: {
+    title: "Alerts",
+    unread: " unread",
+    loading: "Loading alerts",
+    empty: "No unread alerts.",
+    listLabel: "Unread alerts",
+    severity: { CRITICAL: "Critical", ERROR: "Error", WARNING: "Warning", INFO: "Info" },
+  },
+  nl: {
+    title: "Meldingen",
+    unread: " ongelezen",
+    loading: "Meldingen laden",
+    empty: "Geen ongelezen meldingen.",
+    listLabel: "Ongelezen meldingen",
+    severity: { CRITICAL: "Kritiek", ERROR: "Fout", WARNING: "Waarschuwing", INFO: "Info" },
+  },
+});
+
 const SEVERITY: Record<NotificationSeverity, { icon: LucideIcon; text: string; label: string }> = {
-  CRITICAL: { icon: OctagonX, text: "text-status-failed-fg", label: "Critical" },
-  ERROR: { icon: CircleAlert, text: "text-status-failed-fg", label: "Error" },
-  WARNING: { icon: TriangleAlert, text: "text-status-partial-fg", label: "Warning" },
-  INFO: { icon: Info, text: "text-muted-foreground", label: "Info" },
+  CRITICAL: { icon: OctagonX, text: "text-status-failed-fg", label: T.severity.CRITICAL },
+  ERROR: { icon: CircleAlert, text: "text-status-failed-fg", label: T.severity.ERROR },
+  WARNING: { icon: TriangleAlert, text: "text-status-partial-fg", label: T.severity.WARNING },
+  INFO: { icon: Info, text: "text-muted-foreground", label: T.severity.INFO },
 };
 
 /** Unread notifications of the caller's inbox (task 5.3b); the full center is task 6.10. */
@@ -41,7 +61,7 @@ export function AlertsTile({
   return (
     <Tile
       folio="07"
-      title="Alerts"
+      title={T.title}
       aside={
         unread ? (
           <span
@@ -49,22 +69,20 @@ export function AlertsTile({
             className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 font-mono text-2xs text-primary-foreground"
           >
             {unread}
-            <span className="sr-only"> unread</span>
+            <span className="sr-only">{T.unread}</span>
           </span>
         ) : null
       }
       testId="tile-alerts"
     >
       {loading && unread === undefined ? (
-        <TileSkeleton rows={2} label="Loading alerts" />
+        <TileSkeleton rows={2} label={T.loading} />
       ) : error && unread === undefined ? (
         <TileError error={error} />
       ) : items.length === 0 ? (
-        <TileEmpty icon={<BellOff aria-hidden="true" className="size-4" />}>
-          No unread alerts.
-        </TileEmpty>
+        <TileEmpty icon={<BellOff aria-hidden="true" className="size-4" />}>{T.empty}</TileEmpty>
       ) : (
-        <ul aria-label="Unread alerts" className="flex flex-col divide-y divide-rule">
+        <ul aria-label={T.listLabel} className="flex flex-col divide-y divide-rule">
           {items.map((n) => {
             const meta = SEVERITY[n.severity];
             const Icon = meta.icon;

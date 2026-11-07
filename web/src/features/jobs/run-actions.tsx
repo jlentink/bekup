@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { ApiCode, firstApiError, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 
 import {
   JobDetailQuery,
@@ -24,33 +25,63 @@ import {
 } from "./operations";
 import { formatInZone, scheduleToInput, type Schedule } from "./schedule";
 
-const T = {
-  runNow: "Run now",
-  runNowSub: "extra run",
-  runNowTitle: "Start an extra run now?",
-  runNowLead:
-    "bekup queues one additional backup right away. The schedule does not change: the next planned run still happens at its time.",
-  runNowNext: (at: string) => `Next planned run stays at ${at}.`,
-  runNowQueued: "Extra run queued.",
-  startEarly: "Start next planned run early",
-  startEarlyTitle: "Start the next planned run now?",
-  startEarlyLead:
-    "The next planned occurrence runs now instead of at its time, and is then skipped. The schedule continues with the occurrence after it.",
-  moves: "This occurrence moves",
-  startsNow: "Starts now",
-  resultingNext: "Next planned run afterwards",
-  resultingUnknown: "The occurrence after it, as the schedule defines.",
-  startEarlyQueued: (next: string | null) =>
-    next ? `Started early. Next planned run: ${next}.` : "Started early.",
-  confirm: "Start now",
-  cancel: "Cancel",
-  view: "View run",
-  conflict: "A run of this job is already queued or running. Wait for it to finish.",
-  noPlanned: "This job has no planned run to start early.",
-  disabledHint: "The job is disabled.",
-  oneAhead:
-    "Only one occurrence can be pulled forward. You can start the following one early once the original time has passed.",
-} as const;
+const T = defineMessages({
+  en: {
+    runNow: "Run now",
+    runNowSub: "extra run",
+    runNowTitle: "Start an extra run now?",
+    runNowLead:
+      "bekup queues one additional backup right away. The schedule does not change: the next planned run still happens at its time.",
+    runNowNext: (at: string) => `Next planned run stays at ${at}.`,
+    runNowQueued: "Extra run queued.",
+    startEarly: "Start next planned run early",
+    startEarlyTitle: "Start the next planned run now?",
+    startEarlyLead:
+      "The next planned occurrence runs now instead of at its time, and is then skipped. The schedule continues with the occurrence after it.",
+    moves: "This occurrence moves",
+    startsNow: "Starts now",
+    resultingNext: "Next planned run afterwards",
+    resultingUnknown: "The occurrence after it, as the schedule defines.",
+    startEarlyQueued: (next: string | null) =>
+      next ? `Started early. Next planned run: ${next}.` : "Started early.",
+    confirm: "Start now",
+    cancel: "Cancel",
+    view: "View run",
+    conflict: "A run of this job is already queued or running. Wait for it to finish.",
+    noPlanned: "This job has no planned run to start early.",
+    disabledHint: "The job is disabled.",
+    oneAhead:
+      "Only one occurrence can be pulled forward. You can start the following one early once the original time has passed.",
+  },
+  nl: {
+    runNow: "Nu uitvoeren",
+    runNowSub: "extra run",
+    runNowTitle: "Nu een extra run starten?",
+    runNowLead:
+      "bekup zet direct één extra back-up in de wachtrij. De planning verandert niet: de volgende geplande run gaat gewoon op zijn tijd door.",
+    runNowNext: (at: string) => `De volgende geplande run blijft op ${at}.`,
+    runNowQueued: "Extra run in de wachtrij gezet.",
+    startEarly: "Volgende geplande run eerder starten",
+    startEarlyTitle: "De volgende geplande run nu starten?",
+    startEarlyLead:
+      "Het volgende geplande moment draait nu in plaats van op zijn tijd, en wordt daarna overgeslagen. De planning gaat verder met het moment daarna.",
+    moves: "Dit moment verschuift",
+    startsNow: "Start nu",
+    resultingNext: "Volgende geplande run daarna",
+    resultingUnknown: "Het moment daarna, zoals de planning het bepaalt.",
+    startEarlyQueued: (next: string | null) =>
+      next ? `Eerder gestart. Volgende geplande run: ${next}.` : "Eerder gestart.",
+    confirm: "Nu starten",
+    cancel: "Annuleren",
+    view: "Run bekijken",
+    conflict:
+      "Er staat al een run van deze taak in de wachtrij of er is er een bezig. Wacht tot die klaar is.",
+    noPlanned: "Deze taak heeft geen geplande run om eerder te starten.",
+    disabledHint: "De taak is uitgeschakeld.",
+    oneAhead:
+      "Er kan maar één moment naar voren worden gehaald. Je kunt het volgende moment eerder starten zodra de oorspronkelijke tijd voorbij is.",
+  },
+});
 
 interface JobLike {
   id: string;

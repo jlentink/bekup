@@ -4,6 +4,7 @@ import type {
   NotificationEventPreferenceFieldsFragment,
   NotificationGroup,
 } from "@/graphql/gen/graphql";
+import { intlLocale } from "@/lib/i18n";
 
 import { NotificationEventPreferenceFields, NotificationPreferencesFields } from "./operations";
 
@@ -148,7 +149,7 @@ export function jobsWithOverrides(
   for (const row of rows) for (const o of row.jobOverrides) seen.set(o.jobId, o.jobName);
   return [...seen.entries()]
     .map(([jobId, jobName]) => ({ jobId, jobName }))
-    .sort((a, b) => a.jobName.localeCompare(b.jobName));
+    .sort((a, b) => a.jobName.localeCompare(b.jobName, intlLocale));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

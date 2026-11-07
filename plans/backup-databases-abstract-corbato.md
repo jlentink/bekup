@@ -317,9 +317,9 @@ Scope and order: D-230 (plan `analize-the-current-application-cosmic-hammock.md`
 - [x] **P3.0** Phase 3 in the plan and D-230–D-234 (branch `feature/p3-plan`, stacked on `feature/accept-risks` with the user's consent).
 
 ### M8 Internationalization (English, Dutch)
-- [ ] **8.1** i18n foundation in the web UI: keyed `en`/`nl` catalogs per feature replacing `src/lib/messages.ts` and the feature `T` tables, `i18next` + `react-i18next` bundled (no runtime fetch, CSP unchanged), `Intl` formatting with `lib/format`, language switcher, key-parity test, no literal JSX strings (lint), setup SPA, `pnpm csp-check`. *deps: P3.0*
+- [x] **8.1** i18n foundation in the web UI (D-235: typed `defineMessages({ en, nl })` tables in `web/src/lib/i18n.ts` instead of i18next, Dutch with "je", glossary `web/src/lib/i18n-glossary.md`): every table and literal in both languages (compiler parity via `Messages<typeof en>`), language chosen per page load (stored choice in Profile → Account, else browser, else English; switching reloads), `intlLocale` for every `Intl` formatter and `lib/format`, ESLint rule `bekup/no-ui-literals`, setup SPA chrome, `pnpm csp-check` with a Dutch pass. *deps: P3.0*
 - [ ] **8.2** Locale per user (`users.locale`, `Accept-Language` before sign-in, `updateMyLocale` + authz row). *deps: 8.1*
-- [ ] **8.3** Server-rendered texts per recipient locale (e-mails, notification contents, summary, `failureTexts`; Go catalog + parity test, goldens per locale, 375 px check). *deps: 8.2*
+- [ ] **8.3** Server-rendered texts per recipient/request locale (e-mails, notification contents, summary, `failureTexts`, GraphQL error messages, the browser setup wizard's step texts; Go catalog + parity test, goldens per locale, 375 px check). *deps: 8.2*
 - [ ] **8.4** Translation guide in `docs/development.md`. *deps: 8.1*
 
 ### M9 Visibility and limits (∥ after M8)

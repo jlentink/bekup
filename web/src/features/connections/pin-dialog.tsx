@@ -21,6 +21,7 @@ import { isStepUpCancelled, useStepUp } from "@/features/auth/use-step-up";
 import type { CertificatePinInput } from "@/graphql/gen/graphql";
 import { apiErrors, ApiCode, userMessage } from "@/lib/api-error";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import {
@@ -31,18 +32,116 @@ import {
 } from "./operations";
 import { canAnchor, chainRole, validity, type Chain, type ChainCert } from "./pin-model";
 
+const T = defineMessages({
+  en: {
+    expired: "Expired",
+    notYetValid: "Not yet valid",
+    expires7: "Expires within 7 days",
+    expires30: "Expires within 30 days",
+    valid: "Valid",
+    suggestedAnchor: "Suggested anchor",
+    subject: "Subject",
+    issuer: "Issuer",
+    names: "Names (SAN)",
+    validity: "Valid",
+    certSha: "Cert SHA-256",
+    publicCaTitle: "Why a public CA is refused",
+    publicCaBody:
+      "The database clients can only check a pinned CA, not the server's own key. A public CA issues certificates for any name to anyone who proves control of it, so pinning one would trust far more than your server. Pin a self-signed server certificate or your own private CA. A server with a publicly issued certificate can only use TLS without verification (an audited opt-out).",
+    titlePin: "Pin the server certificate",
+    titleStage: "Stage a backup pin",
+    descriptionPin: (host: string) =>
+      `The runner connects to ${host} without credentials and shows the chain it presents. Nothing is trusted until you compare the leaf's SPKI fingerprint with the server and confirm.`,
+    descriptionStage:
+      "A backup pin is accepted alongside the current one during a planned certificate rotation. Confirm it as the pin once the server presents it.",
+    tabCapture: "Capture from the server",
+    tabPem: "Paste a PEM",
+    fetch: "Fetch certificate",
+    leafCompare: "Leaf SPKI SHA-256: compare this with the server",
+    copyLeaf: "Copy the leaf SPKI fingerprint",
+    example: "On the server, for example:",
+    noAnchor:
+      "The server did not present a certificate that can be pinned (a self-signed certificate or a CA). Paste your private root CA as PEM instead.",
+    chain: "Certificate chain, server first",
+    fetchAgain: "Fetch again",
+    anchorPem: "Anchor certificate (PEM)",
+    anchorPemHint:
+      "A self-signed server certificate or your private root CA, obtained out of band.",
+    leafSpki: "Leaf SPKI SHA-256 (base64 or hex)",
+    rotationBefore:
+      "Allow leaf rotation (CA pins only): accept any certificate this CA issues for ",
+    rotationAfter: ", not just the current server key.",
+    compared: "I compared the fingerprints with the server out of band and they match.",
+    cancel: "Cancel",
+    confirmPin: "Confirm pin",
+    stagePin: "Stage backup pin",
+  },
+  nl: {
+    expired: "Verlopen",
+    notYetValid: "Nog niet geldig",
+    expires7: "Verloopt binnen 7 dagen",
+    expires30: "Verloopt binnen 30 dagen",
+    valid: "Geldig",
+    suggestedAnchor: "Voorgesteld anker",
+    subject: "Onderwerp",
+    issuer: "Uitgever",
+    names: "Namen (SAN)",
+    validity: "Geldig",
+    certSha: "Certificaat SHA-256",
+    publicCaTitle: "Waarom een publieke CA wordt geweigerd",
+    publicCaBody:
+      "De databaseclients kunnen alleen een vastgepinde CA controleren, niet de eigen sleutel van de server. Een publieke CA geeft certificaten voor elke naam uit aan iedereen die aantoont die naam te beheren, dus met zo'n pin vertrouw je veel meer dan alleen jouw server. Pin een zelfondertekend servercertificaat of je eigen private CA. Een server met een publiek uitgegeven certificaat kan alleen TLS zonder controle gebruiken (een vastgelegde afwijking van de veilige standaard).",
+    titlePin: "Het servercertificaat vastpinnen",
+    titleStage: "Een reservepin klaarzetten",
+    descriptionPin: (host: string) =>
+      `De runner maakt zonder inloggegevens verbinding met ${host} en toont de keten die de server aanbiedt. Er wordt niets vertrouwd totdat je de SPKI-vingerafdruk van het leaf-certificaat met de server hebt vergeleken en bevestigt.`,
+    descriptionStage:
+      "Een reservepin wordt tijdens een geplande certificaatwissel naast de huidige geaccepteerd. Bevestig hem als pin zodra de server hem aanbiedt.",
+    tabCapture: "Ophalen van de server",
+    tabPem: "Een PEM plakken",
+    fetch: "Certificaat ophalen",
+    leafCompare: "Leaf SPKI SHA-256: vergelijk deze met de server",
+    copyLeaf: "De SPKI-vingerafdruk van het leaf-certificaat kopiëren",
+    example: "Op de server, bijvoorbeeld:",
+    noAnchor:
+      "De server bood geen certificaat aan dat je kunt vastpinnen (een zelfondertekend certificaat of een CA). Plak in plaats daarvan je private root-CA als PEM.",
+    chain: "Certificaatketen, server eerst",
+    fetchAgain: "Opnieuw ophalen",
+    anchorPem: "Ankercertificaat (PEM)",
+    anchorPemHint:
+      "Een zelfondertekend servercertificaat of je private root-CA, via een ander kanaal verkregen.",
+    leafSpki: "Leaf SPKI SHA-256 (base64 of hex)",
+    rotationBefore:
+      "Wisselen van het leaf-certificaat toestaan (alleen CA-pins): accepteer elk certificaat dat deze CA uitgeeft voor ",
+    rotationAfter: ", niet alleen de huidige serversleutel.",
+    compared:
+      "Ik heb de vingerafdrukken via een ander kanaal met de server vergeleken en ze komen overeen.",
+    cancel: "Annuleren",
+    confirmPin: "Pin bevestigen",
+    stagePin: "Reservepin klaarzetten",
+  },
+});
+
+/** The command that prints a server's SPKI fingerprint (not translated). */
+const SPKI_COMMAND =
+  "openssl x509 -in server.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64";
+
+/** Technical labels, the same in every language. */
+const SPKI_TERM = "SPKI SHA-256";
+const PEM_PLACEHOLDER = "-----BEGIN CERTIFICATE-----";
+
 function ValidityPill({ cert }: { cert: ChainCert }) {
   switch (validity(cert)) {
     case "expired":
-      return <Tag tone="danger">Expired</Tag>;
+      return <Tag tone="danger">{T.expired}</Tag>;
     case "not-yet":
-      return <Tag tone="danger">Not yet valid</Tag>;
+      return <Tag tone="danger">{T.notYetValid}</Tag>;
     case "7d":
-      return <Tag tone="danger">Expires within 7 days</Tag>;
+      return <Tag tone="danger">{T.expires7}</Tag>;
     case "30d":
-      return <Tag tone="warning">Expires within 30 days</Tag>;
+      return <Tag tone="warning">{T.expires30}</Tag>;
     case "ok":
-      return <Tag tone="success">Valid</Tag>;
+      return <Tag tone="success">{T.valid}</Tag>;
   }
 }
 
@@ -98,20 +197,20 @@ function CertificateCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {suggested ? (
             <span className="inline-flex h-6 items-center gap-1 rounded-sm bg-primary px-2 text-xs font-medium text-primary-foreground">
-              <Anchor aria-hidden="true" className="size-3" /> Suggested anchor
+              <Anchor aria-hidden="true" className="size-3" /> {T.suggestedAnchor}
             </span>
           ) : null}
           <ValidityPill cert={cert} />
         </div>
       </div>
       <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-        <dt className="eyebrow pt-0.5">Subject</dt>
+        <dt className="eyebrow pt-0.5">{T.subject}</dt>
         <dd className="font-mono text-xs break-all">{cert.subject}</dd>
-        <dt className="eyebrow pt-0.5">Issuer</dt>
+        <dt className="eyebrow pt-0.5">{T.issuer}</dt>
         <dd className="font-mono text-xs break-all">{cert.issuer}</dd>
         {names.length > 0 ? (
           <>
-            <dt className="eyebrow pt-0.5">Names (SAN)</dt>
+            <dt className="eyebrow pt-0.5">{T.names}</dt>
             <dd className="flex flex-wrap gap-1">
               {names.map((n) => (
                 <span key={n} className="rounded-sm border px-1.5 font-mono text-2xs">
@@ -121,16 +220,16 @@ function CertificateCard({
             </dd>
           </>
         ) : null}
-        <dt className="eyebrow pt-0.5">Valid</dt>
+        <dt className="eyebrow pt-0.5">{T.validity}</dt>
         <dd className="text-xs">
           {formatDateTime(cert.notBefore)} → {formatDateTime(cert.notAfter)}
         </dd>
-        <dt className="eyebrow pt-0.5">SPKI SHA-256</dt>
+        <dt className="eyebrow pt-0.5">{SPKI_TERM}</dt>
         <dd className="flex flex-col gap-0.5 font-mono text-2xs break-all">
           <span>{cert.spkiSha256}</span>
           <span className="text-muted-foreground">{cert.spkiSha256Hex}</span>
         </dd>
-        <dt className="eyebrow pt-0.5">Cert SHA-256</dt>
+        <dt className="eyebrow pt-0.5">{T.certSha}</dt>
         <dd className="font-mono text-2xs break-all text-muted-foreground">
           {cert.fingerprintSha256}
         </dd>
@@ -144,15 +243,9 @@ function PublicCaNote() {
   return (
     <Alert>
       <Info aria-hidden="true" />
-      <AlertTitle>Why a public CA is refused</AlertTitle>
+      <AlertTitle>{T.publicCaTitle}</AlertTitle>
       <AlertDescription>
-        <p>
-          The database clients can only check a pinned CA, not the server&apos;s own key. A public
-          CA issues certificates for any name to anyone who proves control of it, so pinning one
-          would trust far more than your server. Pin a self-signed server certificate or your own
-          private CA. A server with a publicly issued certificate can only use TLS without
-          verification (an audited opt-out).
-        </p>
+        <p>{T.publicCaBody}</p>
       </AlertDescription>
     </Alert>
   );
@@ -279,7 +372,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
       ? anchor !== undefined
       : pem.trim().startsWith("-----BEGIN CERTIFICATE-----") && (rotation || spki.trim() !== ""));
 
-  const title = mode === "pin" ? "Pin the server certificate" : "Stage a backup pin";
+  const title = mode === "pin" ? T.titlePin : T.titleStage;
 
   return (
     <Dialog
@@ -294,9 +387,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {mode === "pin"
-              ? `The runner connects to ${host} without credentials and shows the chain it presents. Nothing is trusted until you compare the leaf's SPKI fingerprint with the server and confirm.`
-              : "A backup pin is accepted alongside the current one during a planned certificate rotation. Confirm it as the pin once the server presents it."}
+            {mode === "pin" ? T.descriptionPin(host) : T.descriptionStage}
           </DialogDescription>
         </DialogHeader>
 
@@ -308,8 +399,8 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
           }}
         >
           <TabsList>
-            <TabsTrigger value="capture">Capture from the server</TabsTrigger>
-            <TabsTrigger value="pem">Paste a PEM</TabsTrigger>
+            <TabsTrigger value="capture">{T.tabCapture}</TabsTrigger>
+            <TabsTrigger value="pem">{T.tabPem}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="capture" className="flex flex-col gap-4 pt-4">
@@ -326,31 +417,24 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
                 ) : (
                   <FileKey2 aria-hidden="true" />
                 )}
-                Fetch certificate
+                {T.fetch}
               </Button>
             ) : (
               <>
                 <div className="flex flex-col gap-1.5 rounded-md border border-primary/30 bg-accent/40 p-4">
-                  <p className="eyebrow">Leaf SPKI SHA-256: compare this with the server</p>
-                  <CopyValue value={chain.leafSpkiSha256} label="Copy the leaf SPKI fingerprint" />
+                  <p className="eyebrow">{T.leafCompare}</p>
+                  <CopyValue value={chain.leafSpkiSha256} label={T.copyLeaf} />
                   <p className="text-xs text-muted-foreground">
-                    On the server, for example:{" "}
-                    <code className="font-mono">
-                      openssl x509 -in server.crt -pubkey -noout | openssl pkey -pubin -outform der
-                      | openssl dgst -sha256 -binary | base64
-                    </code>
+                    {T.example} <code className="font-mono">{SPKI_COMMAND}</code>
                   </p>
                 </div>
                 {chain.suggestedAnchorIndex == null ? (
                   <Alert>
                     <Info aria-hidden="true" />
-                    <AlertDescription>
-                      The server did not present a certificate that can be pinned (a self-signed
-                      certificate or a CA). Paste your private root CA as PEM instead.
-                    </AlertDescription>
+                    <AlertDescription>{T.noAnchor}</AlertDescription>
                   </Alert>
                 ) : null}
-                <ol aria-label="Certificate chain, server first" className="flex flex-col gap-3">
+                <ol aria-label={T.chain} className="flex flex-col gap-3">
                   {chain.certificates.map((cert, i) => (
                     <CertificateCard
                       key={cert.fingerprintSha256}
@@ -377,7 +461,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
                   disabled={busy !== undefined}
                   onClick={() => void capture()}
                 >
-                  <RefreshCw aria-hidden="true" /> Fetch again
+                  <RefreshCw aria-hidden="true" /> {T.fetchAgain}
                 </Button>
               </>
             )}
@@ -385,7 +469,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
 
           <TabsContent value="pem" className="flex flex-col gap-4 pt-4">
             <div className="grid gap-2">
-              <Label htmlFor={pemId}>Anchor certificate (PEM)</Label>
+              <Label htmlFor={pemId}>{T.anchorPem}</Label>
               <textarea
                 id={pemId}
                 value={pem}
@@ -394,20 +478,18 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
                 }}
                 rows={7}
                 spellCheck={false}
-                placeholder="-----BEGIN CERTIFICATE-----"
+                placeholder={PEM_PLACEHOLDER}
                 aria-invalid={fieldErrors["certificatePem"] ? true : undefined}
                 className="w-full rounded-md border border-input bg-surface px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-surface-sunken"
               />
               {fieldErrors["certificatePem"] ? (
                 <p className="text-sm text-destructive">{fieldErrors["certificatePem"]}</p>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  A self-signed server certificate or your private root CA, obtained out of band.
-                </p>
+                <p className="text-xs text-muted-foreground">{T.anchorPemHint}</p>
               )}
             </div>
             <div className="grid gap-2">
-              <Label htmlFor={spkiId}>Leaf SPKI SHA-256 (base64 or hex)</Label>
+              <Label htmlFor={spkiId}>{T.leafSpki}</Label>
               <Input
                 id={spkiId}
                 value={spki}
@@ -438,8 +520,9 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
               className="mt-0.5 size-4 accent-primary"
             />
             <span>
-              Allow leaf rotation (CA pins only): accept any certificate this CA issues for{" "}
-              <span className="font-mono text-xs">{host}</span>, not just the current server key.
+              {T.rotationBefore}
+              <span className="font-mono text-xs">{host}</span>
+              {T.rotationAfter}
             </span>
           </label>
         ) : null}
@@ -460,7 +543,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
               }}
               className="mt-0.5 size-4 accent-primary"
             />
-            I compared the fingerprints with the server out of band and they match.
+            {T.compared}
           </label>
         ) : null}
 
@@ -480,7 +563,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
               onOpenChange(false);
             }}
           >
-            Cancel
+            {T.cancel}
           </Button>
           <Button type="button" disabled={!canSubmit} onClick={() => void submit()}>
             {busy === "confirm" ? (
@@ -488,7 +571,7 @@ export function PinDialog({ id, host, mode, open, onOpenChange }: PinDialogProps
             ) : (
               <ShieldCheck aria-hidden="true" />
             )}
-            {mode === "pin" ? "Confirm pin" : "Stage backup pin"}
+            {mode === "pin" ? T.confirmPin : T.stagePin}
           </Button>
         </DialogFooter>
       </DialogContent>

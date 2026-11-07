@@ -10,40 +10,82 @@ import {
 import type { ComponentProps } from "react";
 
 import { formatDateTime } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
 import type { SecurityFlag } from "./status";
 
+const L = defineMessages({
+  en: {
+    unencrypted: {
+      label: "Unencrypted",
+      description: "Backup encryption was turned off by an administrator.",
+    },
+    "insecure-transport": {
+      label: "Insecure transport",
+      description: "TLS verification was relaxed for this connection by an administrator.",
+    },
+    "personal-webhooks-widened": {
+      label: "Personal webhooks widened",
+      description:
+        "An administrator let every user's personal webhooks reach a private network (SSRF allowlist).",
+    },
+    "any-address": {
+      label: "Any address",
+      description:
+        "An administrator or a backup owner let this API token be used from any address: no client address allowlist protects it.",
+    },
+    "never-expires": {
+      label: "Never expires",
+      description:
+        "An administrator or a backup owner created this API token without an expiry: it stays valid until it is revoked.",
+    },
+  },
+  nl: {
+    unencrypted: {
+      label: "Niet versleuteld",
+      description: "De versleuteling van back-ups is door een beheerder uitgeschakeld.",
+    },
+    "insecure-transport": {
+      label: "Onveilig transport",
+      description: "Een beheerder heeft de TLS-controle voor deze verbinding versoepeld.",
+    },
+    "personal-webhooks-widened": {
+      label: "Persoonlijke webhooks verruimd",
+      description:
+        "Een beheerder heeft de persoonlijke webhooks van alle gebruikers toegang gegeven tot een privénetwerk (SSRF-toegestane lijst).",
+    },
+    "any-address": {
+      label: "Elk adres",
+      description:
+        "Een beheerder of een eigenaar van een back-uptaak heeft dit API-token vanaf elk adres bruikbaar gemaakt: geen lijst met toegestane adressen beschermt het.",
+    },
+    "never-expires": {
+      label: "Verloopt nooit",
+      description:
+        "Een beheerder of een eigenaar van een back-uptaak heeft dit API-token zonder vervaldatum aangemaakt: het blijft geldig totdat het wordt ingetrokken.",
+    },
+  },
+});
+
+const FLAG_ICON: Record<SecurityFlag, LucideIcon> = {
+  unencrypted: LockOpen,
+  "insecure-transport": ShieldOff,
+  "personal-webhooks-widened": Webhook,
+  "any-address": Globe,
+  "never-expires": InfinityIcon,
+};
+
 const FLAG_META: Record<SecurityFlag, { label: string; description: string; icon: LucideIcon }> = {
-  unencrypted: {
-    label: "Unencrypted",
-    description: "Backup encryption was turned off by an administrator.",
-    icon: LockOpen,
-  },
-  "insecure-transport": {
-    label: "Insecure transport",
-    description: "TLS verification was relaxed for this connection by an administrator.",
-    icon: ShieldOff,
-  },
+  unencrypted: { ...L.unencrypted, icon: FLAG_ICON.unencrypted },
+  "insecure-transport": { ...L["insecure-transport"], icon: FLAG_ICON["insecure-transport"] },
   "personal-webhooks-widened": {
-    label: "Personal webhooks widened",
-    description:
-      "An administrator let every user's personal webhooks reach a private network (SSRF allowlist).",
-    icon: Webhook,
+    ...L["personal-webhooks-widened"],
+    icon: FLAG_ICON["personal-webhooks-widened"],
   },
-  "any-address": {
-    label: "Any address",
-    description:
-      "An administrator or a backup owner let this API token be used from any address: no client address allowlist protects it.",
-    icon: Globe,
-  },
-  "never-expires": {
-    label: "Never expires",
-    description:
-      "An administrator or a backup owner created this API token without an expiry: it stays valid until it is revoked.",
-    icon: InfinityIcon,
-  },
+  "any-address": { ...L["any-address"], icon: FLAG_ICON["any-address"] },
+  "never-expires": { ...L["never-expires"], icon: FLAG_ICON["never-expires"] },
 };
 
 interface SecurityBadgeProps extends Omit<ComponentProps<"span">, "children"> {

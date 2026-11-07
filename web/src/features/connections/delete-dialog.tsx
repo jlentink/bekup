@@ -13,8 +13,37 @@ import {
 } from "@/components/ui/dialog";
 import { isStepUpCancelled } from "@/features/auth/use-step-up";
 import { ApiCode, firstApiError, userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 
 import { jobsInUse } from "./delete-dialog-utils";
+
+type Kind = "connection" | "destination";
+
+const T = defineMessages({
+  en: {
+    title: (kind: Kind, name: string) => `Delete the ${kind} “${name}”?`,
+    description: (kind: Kind) =>
+      `Its stored credentials become unusable and its name can be reused. Existing backups and the audit history are kept. A ${kind} that a job still uses cannot be deleted.`,
+    stillInUse: "Still in use",
+    notDeleted: "Not deleted",
+    moveFirst: "Move or delete these jobs first:",
+    jobsUsing: "Jobs using it",
+    cancel: "Cancel",
+    delete: (kind: Kind) => `Delete ${kind}`,
+  },
+  nl: {
+    title: (kind: Kind, name: string) =>
+      `${kind === "connection" ? "Verbinding" : "Bestemming"} „${name}” verwijderen?`,
+    description: (kind: Kind) =>
+      `De opgeslagen inloggegevens worden onbruikbaar en de naam kan opnieuw worden gebruikt. Bestaande back-ups en de auditgeschiedenis blijven bewaard. Een ${kind === "connection" ? "verbinding" : "bestemming"} die een taak nog gebruikt, kun je niet verwijderen.`,
+    stillInUse: "Nog in gebruik",
+    notDeleted: "Niet verwijderd",
+    moveFirst: "Verplaats of verwijder eerst deze taken:",
+    jobsUsing: "Taken die dit gebruiken",
+    cancel: "Annuleren",
+    delete: (kind: Kind) => `${kind === "connection" ? "Verbinding" : "Bestemming"} verwijderen`,
+  },
+});
 
 /**
  * Confirms a soft delete. An in-use CONFLICT keeps the dialog open and
@@ -29,8 +58,7 @@ export function DeleteDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** "connection", "destination". */
-  kind: string;
+  kind: Kind;
   name: string;
   onDelete: () => Promise<void>;
 }) {
@@ -71,22 +99,17 @@ export function DeleteDialog({
     >
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>
-            Delete the {kind} &ldquo;{name}&rdquo;?
-          </DialogTitle>
-          <DialogDescription>
-            Its stored credentials become unusable and its name can be reused. Existing backups and
-            the audit history are kept. A {kind} that a job still uses cannot be deleted.
-          </DialogDescription>
+          <DialogTitle>{T.title(kind, name)}</DialogTitle>
+          <DialogDescription>{T.description(kind)}</DialogDescription>
         </DialogHeader>
         {error ? (
           <Alert variant="destructive">
-            <AlertTitle>{error.jobs.length > 0 ? `Still in use` : "Not deleted"}</AlertTitle>
+            <AlertTitle>{error.jobs.length > 0 ? T.stillInUse : T.notDeleted}</AlertTitle>
             <AlertDescription>
               {error.jobs.length > 0 ? (
                 <>
-                  <p>Move or delete these jobs first:</p>
-                  <ul aria-label="Jobs using it" className="list-disc pl-5">
+                  <p>{T.moveFirst}</p>
+                  <ul aria-label={T.jobsUsing} className="list-disc pl-5">
                     {error.jobs.map((j) => (
                       <li key={j}>{j}</li>
                     ))}
@@ -100,11 +123,11 @@ export function DeleteDialog({
         ) : null}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
-            Cancel
+            {T.cancel}
           </Button>
           <Button type="button" variant="destructive" disabled={busy} onClick={() => void run()}>
             {busy ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-            Delete {kind}
+            {T.delete(kind)}
           </Button>
         </DialogFooter>
       </DialogContent>

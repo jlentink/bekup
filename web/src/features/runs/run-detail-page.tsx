@@ -23,8 +23,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { reportActionError } from "@/features/auth/use-step-up";
 import { useRoleFlags } from "@/features/jobs/roles";
-import type { ArtifactState, RunDetailQuery as RunDetailResult } from "@/graphql/gen/graphql";
+import type {
+  ArtifactState,
+  JobEncryptionMode,
+  RunDetailQuery as RunDetailResult,
+} from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import {
   formatBytes,
   formatClock,
@@ -50,54 +55,106 @@ type Run = NonNullable<RunDetailResult["run"]>;
 type Item = Run["items"][number];
 type ItemArtifact = Item["artifacts"][number];
 
-const T = {
-  back: "Back to the job",
-  eyebrow: "Backup run",
-  notFound: "This run does not exist.",
-  cancel: "Cancel run",
-  cancelTitle: "Cancel this run?",
-  cancelLead:
-    "The dump container is stopped and no partial file is kept. Databases already stored stay. Audited.",
-  cancelRequested: "Cancellation requested.",
-  cancelRetry: "The pending retry was canceled.",
-  cancelPending: "Cancellation requested; the worker is stopping the run.",
-  timeline: "Timeline",
-  queued: "Queued",
-  planned: "Planned for",
-  started: "Started",
-  finished: "Finished",
-  cancelAsked: "Cancel requested",
-  notYet: "pending",
-  stats: {
-    raw: "Dumped",
-    stored: "Stored",
-    duration: "Duration",
-    trigger: "Trigger",
-    by: "Started by",
-    byToken: (creator: string) => `API token created by ${creator}`,
+const T = defineMessages({
+  en: {
+    back: "Back to the job",
+    eyebrow: "Backup run",
+    notFound: "This run does not exist.",
+    cancel: "Cancel run",
+    cancelTitle: "Cancel this run?",
+    cancelLead:
+      "The dump container is stopped and no partial file is kept. Databases already stored stay. Audited.",
+    cancelRequested: "Cancellation requested.",
+    cancelRetry: "The pending retry was canceled.",
+    cancelPending: "Cancellation requested; the worker is stopping the run.",
+    timeline: "Timeline",
+    queued: "Queued",
+    planned: "Planned for",
+    started: "Started",
+    finished: "Finished",
+    cancelAsked: "Cancel requested",
+    notYet: "pending",
+    stats: {
+      raw: "Dumped",
+      stored: "Stored",
+      duration: "Duration",
+      trigger: "Trigger",
+      by: "Started by",
+      byToken: (creator: string) => `API token created by ${creator}`,
+    },
+    attempt: (n: number) => `attempt ${String(n)}`,
+    error: "Error",
+    warnings: "Warnings",
+    warningsLead: "Problems worth attention.",
+    notices: "Notices",
+    noticesLead: "Informational; nothing went wrong.",
+    items: "Databases",
+    globals: "Cluster globals",
+    verified: "verified",
+    unverified: "not verified",
+    signed: "signed",
+    states: { PRESENT: "Present", DELETED: "Deleted", MISSING: "Missing" } satisfies Record<
+      ArtifactState,
+      string
+    >,
+    download: "Download",
+    restore: "Restore…",
+    downloadUnavailable:
+      "Only present, verified files covered by a signed manifest can be downloaded.",
+    noArtifacts: "No file stored.",
+    lockUntil: (at: string) => `locked until ${at}`,
+    encryption: { NONE: "none", PASSPHRASE: "passphrase", RECIPIENT: "recipient" } satisfies Record<
+      JobEncryptionMode,
+      string
+    >,
   },
-  attempt: (n: number) => `attempt ${String(n)}`,
-  error: "Error",
-  warnings: "Warnings",
-  warningsLead: "Problems worth attention.",
-  notices: "Notices",
-  noticesLead: "Informational; nothing went wrong.",
-  items: "Databases",
-  globals: "Cluster globals",
-  verified: "verified",
-  unverified: "not verified",
-  signed: "signed",
-  states: { PRESENT: "Present", DELETED: "Deleted", MISSING: "Missing" } satisfies Record<
-    ArtifactState,
-    string
-  >,
-  download: "Download",
-  restore: "Restore…",
-  downloadUnavailable:
-    "Only present, verified files covered by a signed manifest can be downloaded.",
-  noArtifacts: "No file stored.",
-  lockUntil: (at: string) => `locked until ${at}`,
-} as const;
+  nl: {
+    back: "Terug naar de taak",
+    eyebrow: "Back-uprun",
+    notFound: "Deze run bestaat niet.",
+    cancel: "Run annuleren",
+    cancelTitle: "Deze run annuleren?",
+    cancelLead:
+      "De dumpcontainer wordt gestopt en er blijft geen gedeeltelijk bestand achter. Databases die al zijn opgeslagen, blijven bestaan. Wordt gelogd in de auditlog.",
+    cancelRequested: "Annulering aangevraagd.",
+    cancelRetry: "De geplande nieuwe poging is geannuleerd.",
+    cancelPending: "Annulering aangevraagd; de worker stopt de run.",
+    timeline: "Tijdlijn",
+    queued: "In wachtrij gezet",
+    planned: "Gepland voor",
+    started: "Gestart",
+    finished: "Klaar",
+    cancelAsked: "Annulering aangevraagd",
+    notYet: "nog niet",
+    stats: {
+      raw: "Gedumpt",
+      stored: "Opgeslagen",
+      duration: "Duur",
+      trigger: "Aanleiding",
+      by: "Gestart door",
+      byToken: (creator) => `API-token gemaakt door ${creator}`,
+    },
+    attempt: (n) => `poging ${String(n)}`,
+    error: "Fout",
+    warnings: "Waarschuwingen",
+    warningsLead: "Problemen die aandacht verdienen.",
+    notices: "Opmerkingen",
+    noticesLead: "Ter informatie; er ging niets mis.",
+    items: "Databases",
+    globals: "Globale objecten van het cluster",
+    verified: "geverifieerd",
+    unverified: "niet geverifieerd",
+    signed: "ondertekend",
+    states: { PRESENT: "Aanwezig", DELETED: "Verwijderd", MISSING: "Ontbreekt" },
+    download: "Downloaden",
+    restore: "Herstellen…",
+    downloadUnavailable:
+      "Alleen aanwezige, geverifieerde bestanden die onder een ondertekend manifest vallen, kun je downloaden.",
+    noArtifacts: "Geen bestand opgeslagen.",
+    lockUntil: (at) => `vergrendeld tot ${at}`,
+    encryption: { NONE: "geen", PASSPHRASE: "wachtwoordzin", RECIPIENT: "ontvanger" },
+  },
+});
 
 /** /runs/:runId */
 export function RunDetailPage() {
@@ -541,7 +598,7 @@ function ItemsSection({
                       <span className="font-mono text-2xs text-muted-foreground">
                         {a.verified ? T.verified : T.unverified}
                         {a.signed ? ` · ${T.signed}` : ""}
-                        {a.encryption.mode ? ` · ${a.encryption.mode.toLowerCase()}` : ""}
+                        {a.encryption.mode ? ` · ${T.encryption[a.encryption.mode]}` : ""}
                         {a.lockUntil ? ` · ${T.lockUntil(formatDateTime(a.lockUntil))}` : ""}
                       </span>
                       <span className="font-mono text-xs text-muted-foreground" title={a.sha256}>

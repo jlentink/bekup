@@ -59,7 +59,13 @@ export function RouteErrorPage() {
   if (isRouteErrorResponse(error) && error.status === 404) {
     return <Frame code="404" title={messages.notFound.title} body={messages.notFound.body} />;
   }
-  return <Frame code="Error" title={messages.routeError.title} body={messages.routeError.body} />;
+  return (
+    <Frame
+      code={messages.routeError.eyebrow}
+      title={messages.routeError.title}
+      body={messages.routeError.body}
+    />
+  );
 }
 
 /**
@@ -71,7 +77,7 @@ export function InShellErrorPage() {
   if (isRouteErrorResponse(error) && error.status === 404) return <NotFoundPage />;
   return (
     <div role="alert" className="flex flex-col items-start gap-4 py-16">
-      <p className="eyebrow">Error</p>
+      <p className="eyebrow">{messages.routeError.eyebrow}</p>
       <h1 className="font-display text-display leading-none">{messages.routeError.title}</h1>
       <p className="max-w-prose text-sm text-muted-foreground">{messages.routeError.body}</p>
       <Actions />

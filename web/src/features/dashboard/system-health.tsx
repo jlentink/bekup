@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import type { DashboardSystemHealthQuery } from "@/graphql/gen/graphql";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { daysLeft, expiryLevel, queueSummary, tickState, type Level } from "./model";
@@ -17,13 +18,96 @@ const LEVEL: Record<Level | "off", { icon: LucideIcon; text: string }> = {
   off: { icon: CircleSlash, text: "text-muted-foreground" },
 };
 
-const COMPONENT_LABEL: Record<string, string> = {
-  runner_server: "Runner server",
-  runner_client: "Runner client",
-  runner_ca: "Runner CA",
-  postgres_ca: "App DB CA",
-  postgres_client: "App DB client",
-};
+const T = defineMessages({
+  en: {
+    component: {
+      runner_server: "Runner server",
+      runner_client: "Runner client",
+      runner_ca: "Runner CA",
+      postgres_ca: "App DB CA",
+      postgres_client: "App DB client",
+    },
+    title: "System",
+    loading: "Loading system health",
+    runner: "Runner",
+    unreachable: "Unreachable",
+    up: "Up",
+    dockerUnavailable: "Docker unavailable",
+    containers: " containers",
+    cannotStart: "Backups and restores cannot start.",
+    scheduler: "Scheduler",
+    schedulerOff: "Off on this instance",
+    noTick: "No tick yet",
+    staleTick: "Tick is stale",
+    ticking: "Ticking",
+    lastTick: (rel: string) => `last tick ${rel}`,
+    pins: "Pinned DB certificates",
+    daysLeft: (n: number) => `${String(n)} days left`,
+    nonePinned: "None pinned",
+    earliest: (at: string) => `earliest ${at}`,
+    oldest: "Oldest last success",
+    noneYet: "None yet",
+    acrossEnabled: "across enabled jobs",
+    queues: "Work queues",
+    dbUnreadable: "The app database could not be read.",
+    noQueued: "No queued work.",
+    queue: "Queue",
+    waiting: "Waiting",
+    running: "Running",
+    retrying: "Retrying",
+    certificates: "Certificates",
+    noCerts: "No certificate files readable.",
+    expired: "expired",
+    days: (n: number) => `${String(n)} d`,
+    snapshot: "Snapshot",
+    cached: "(cached up to 15 seconds).",
+  },
+  nl: {
+    component: {
+      runner_server: "Runner-server",
+      runner_client: "Runner-client",
+      runner_ca: "Runner-CA",
+      postgres_ca: "CA van de app-database",
+      postgres_client: "Client van de app-database",
+    },
+    title: "Systeem",
+    loading: "Systeemstatus laden",
+    runner: "Runner",
+    unreachable: "Onbereikbaar",
+    up: "Actief",
+    dockerUnavailable: "Docker niet beschikbaar",
+    containers: " containers",
+    cannotStart: "Back-ups en herstelacties kunnen niet starten.",
+    scheduler: "Planner",
+    schedulerOff: "Uit op deze instantie",
+    noTick: "Nog geen tick",
+    staleTick: "Tick is verouderd",
+    ticking: "Actief",
+    lastTick: (rel: string) => `laatste tick ${rel}`,
+    pins: "Vastgepinde DB-certificaten",
+    daysLeft: (n: number) => `nog ${String(n)} dagen`,
+    nonePinned: "Geen vastgepind",
+    earliest: (at: string) => `eerste ${at}`,
+    oldest: "Oudste laatste succes",
+    noneYet: "Nog geen",
+    acrossEnabled: "over ingeschakelde taken",
+    queues: "Werkwachtrijen",
+    dbUnreadable: "De app-database kon niet worden gelezen.",
+    noQueued: "Geen werk in de wachtrij.",
+    queue: "Wachtrij",
+    waiting: "Wachtend",
+    running: "Bezig",
+    retrying: "Opnieuw",
+    certificates: "Certificaten",
+    noCerts: "Geen leesbare certificaatbestanden.",
+    expired: "verlopen",
+    days: (n: number) => `${String(n)} d`,
+    snapshot: "Momentopname",
+    cached: "(tot 15 seconden in de cache).",
+  },
+});
+
+const COMPONENT_LABEL: Record<string, string> = T.component;
 
 function Fact({
   label,
@@ -65,9 +149,9 @@ export function SystemHealthTile({
   now: number;
 }) {
   return (
-    <Tile folio="08" title="System" testId="tile-system">
+    <Tile folio="08" title={T.title} testId="tile-system">
       {loading && !health ? (
-        <TileSkeleton rows={3} label="Loading system health" />
+        <TileSkeleton rows={3} label={T.loading} />
       ) : !health ? (
         <TileError error={error} />
       ) : (
@@ -87,10 +171,10 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
     <div className="flex flex-col gap-5">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 lg:grid-cols-4">
         <Fact
-          label="Runner"
+          label={T.runner}
           level={runnerLevel}
           testId="fact-runner"
-          value={!runner.up ? "Unreachable" : runner.dockerOk ? "Up" : "Docker unavailable"}
+          value={!runner.up ? T.unreachable : runner.dockerOk ? T.up : T.dockerUnavailable}
           detail={
             runner.up ? (
               <>
@@ -101,28 +185,28 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
                     {runner.activeRuns}
                     {runner.maxConcurrentRuns != null
                       ? ` / ${String(runner.maxConcurrentRuns)}`
-                      : ""}{" "}
-                    containers
+                      : ""}
+                    {T.containers}
                   </>
                 ) : null}
               </>
             ) : (
-              "Backups and restores cannot start."
+              T.cannotStart
             )
           }
         />
         <Fact
-          label="Scheduler"
+          label={T.scheduler}
           testId="fact-scheduler"
           level={tick === "ok" ? "ok" : tick === "off" ? "off" : "warning"}
           value={
             tick === "off"
-              ? "Off on this instance"
+              ? T.schedulerOff
               : tick === "none"
-                ? "No tick yet"
+                ? T.noTick
                 : tick === "stale"
-                  ? "Tick is stale"
-                  : "Ticking"
+                  ? T.staleTick
+                  : T.ticking
           }
           detail={
             health.lastSchedulerTick ? (
@@ -130,28 +214,28 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
                 dateTime={health.lastSchedulerTick}
                 title={formatDateTime(health.lastSchedulerTick)}
               >
-                last tick {formatRelative(health.lastSchedulerTick, now)}
+                {T.lastTick(formatRelative(health.lastSchedulerTick, now))}
               </time>
             ) : null
           }
         />
         <Fact
-          label="Pinned DB certificates"
+          label={T.pins}
           testId="fact-pins"
           level={health.earliestPinNotAfter ? pinLevel : "off"}
           value={
             health.earliestPinNotAfter
-              ? `${String(daysLeft(health.earliestPinNotAfter, now))} days left`
-              : "None pinned"
+              ? T.daysLeft(daysLeft(health.earliestPinNotAfter, now))
+              : T.nonePinned
           }
           detail={
             health.earliestPinNotAfter
-              ? `earliest ${formatDateTime(health.earliestPinNotAfter)}`
+              ? T.earliest(formatDateTime(health.earliestPinNotAfter))
               : null
           }
         />
         <Fact
-          label="Oldest last success"
+          label={T.oldest}
           testId="fact-oldest"
           level={
             !health.oldestLastSuccess
@@ -161,33 +245,33 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
                 : "ok"
           }
           value={
-            health.oldestLastSuccess ? formatRelative(health.oldestLastSuccess, now) : "None yet"
+            health.oldestLastSuccess ? formatRelative(health.oldestLastSuccess, now) : T.noneYet
           }
-          detail="across enabled jobs"
+          detail={T.acrossEnabled}
         />
       </dl>
       <div className="grid gap-5 md:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <h3 className="eyebrow">Work queues</h3>
+          <h3 className="eyebrow">{T.queues}</h3>
           {queues === null ? (
-            <p className="text-xs text-status-partial-fg">The app database could not be read.</p>
+            <p className="text-xs text-status-partial-fg">{T.dbUnreadable}</p>
           ) : queues.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No queued work.</p>
+            <p className="text-xs text-muted-foreground">{T.noQueued}</p>
           ) : (
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-2xs text-muted-foreground">
                   <th scope="col" className="py-1 font-medium">
-                    Queue
+                    {T.queue}
                   </th>
                   <th scope="col" className="py-1 text-right font-medium">
-                    Waiting
+                    {T.waiting}
                   </th>
                   <th scope="col" className="py-1 text-right font-medium">
-                    Running
+                    {T.running}
                   </th>
                   <th scope="col" className="py-1 text-right font-medium">
-                    Retrying
+                    {T.retrying}
                   </th>
                 </tr>
               </thead>
@@ -214,9 +298,9 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
           )}
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="eyebrow">Certificates</h3>
+          <h3 className="eyebrow">{T.certificates}</h3>
           {health.certificates.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No certificate files readable.</p>
+            <p className="text-xs text-muted-foreground">{T.noCerts}</p>
           ) : (
             <ul className="flex flex-col divide-y divide-rule text-xs">
               {health.certificates.map((c) => {
@@ -238,7 +322,7 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
                       title={formatDateTime(c.notAfter)}
                       className={cn("ml-auto font-mono", meta.text)}
                     >
-                      {days < 0 ? "expired" : `${String(days)} d`}
+                      {days < 0 ? T.expired : T.days(days)}
                     </time>
                   </li>
                 );
@@ -248,8 +332,8 @@ function SystemHealthBody({ health, now }: { health: Health; now: number }) {
         </div>
       </div>
       <p className="text-2xs text-muted-foreground">
-        Snapshot <time dateTime={health.checkedAt}>{formatRelative(health.checkedAt, now)}</time>{" "}
-        (cached up to 15 seconds).
+        {T.snapshot}{" "}
+        <time dateTime={health.checkedAt}>{formatRelative(health.checkedAt, now)}</time> {T.cached}
       </p>
     </div>
   );
