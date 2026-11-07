@@ -252,6 +252,11 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-227](#d-227-scheduled-destination-space-check-stored-on-the-destination-row-low-space-notification) | Scheduled destination space check, stored on the destination row; low-space notification | proposed (amendment 1: review findings) |
 | [D-228](#d-228-accepted-security-risks-per-condition-one-month-one-year-or-forever-by-admins-and-for-their-jobs-backup-owners-the-badge-stays) | Accepted security risks: per condition, one month, one year or forever, by admins and (for their jobs) backup owners; the badge stays | proposed (amendment 1: review findings) |
 | [D-229](#d-229-api-tokens-without-expiry-as-an-explicit-choice-amends-d-220) | API tokens without expiry, as an explicit choice (amends D-220) | proposed |
+| [D-230](#d-230-phase-3-scope-and-one-branch-per-change) | Phase 3 scope and one branch per change | proposed |
+| [D-231](#d-231-sqlite-through-pinned-ssh-and-through-runner-allowlisted-local-directories) | SQLite through pinned SSH and through runner-allowlisted local directories | proposed |
+| [D-232](#d-232-ms-sql-server-backups-as-sqlpackage-bacpac-exports) | MS SQL Server backups as sqlpackage bacpac exports | proposed |
+| [D-233](#d-233-remote-runners-dial-out-to-bekup) | Remote runners dial out to bekup | proposed |
+| [D-234](#d-234-kubernetes-through-a-jobs-executor-in-the-runner) | Kubernetes through a Jobs executor in the runner | proposed |
 
 ---
 
@@ -15542,3 +15547,138 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** `internal/apiaccess`, `internal/externalapi`,
   `internal/notify/security.go`, `web/src/features/api-access`,
   `docs/guides/external-api.md`, D-220, D-228; plan task 6.23.
+
+## D-230: Phase 3 scope and one branch per change
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (the feature selection and one branch per change)
+  and agent (the order and task split)
+- **Context:** a gap analysis against other database backup tools
+  produced a list of missing features. The user selected the ones bekup
+  should get next and asked for a separate branch per change.
+- **Decision:**
+  1. Phase 3 (plan `plans/analize-the-current-application-cosmic-hammock.md`,
+     checklist in `plans/backup-databases-abstract-corbato.md`) covers, in
+     this order: M8 English and Dutch UI and e-mails; M9 backup anomaly
+     detection, upload bandwidth limits, storage forecast, recovery metrics
+     and compliance report, audit export and SIEM forwarding; M10 scoped
+     dumps, typed pre/post actions (signed webhooks only), copy jobs,
+     Azure Blob and Google Cloud Storage, self-backup of bekup; M11 OIDC
+     single sign-on; M12 MongoDB, MS SQL Server and SQLite; M13 remote
+     runners and the Kubernetes executor with a Helm chart; M14 masked
+     development copies.
+  2. Out of scope for now: point-in-time recovery, GFS retention,
+     single-table restore, native chat channels, dedup/incremental
+     backups, configuration as code.
+  3. Every task is one change on its own branch
+     `feature/p3-<task-id>-<slug>`, started from an up-to-date `main`
+     (stacking on an unmerged branch only with the user's consent),
+     reviewed by a security and a code review agent before hand-over;
+     every milestone gets a final pair of reviews on `main`. Migration
+     and decision numbers are renumbered at the rebase if another branch
+     took them first (never once merged).
+- **Alternatives considered:** one branch per milestone (rejected by the
+  user); starting with point-in-time recovery (not selected).
+- **Consequences:** every later Phase 3 decision gets its own entry in its
+  task's branch. Each new trust boundary (identity provider, runner
+  gateway, Kubernetes API, SIEM, SSH command execution) is added to
+  SECURITY.md by the task that introduces it.
+- **Related:** D-231 to D-234; plan Phase 3.
+
+## D-231: SQLite through pinned SSH and through runner-allowlisted local directories
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (both access paths) and agent (the details)
+- **Context:** SQLite is a file, not a network server, so the runner
+  cannot reach it through the target allowlist like the other engines.
+- **Decision:**
+  1. **SSH:** the runner connects with the pinned host key
+     (`internal/sshpolicy`) and runs one fixed command that makes a
+     consistent copy with the SQLite online backup API and streams it
+     back; the database path is a validated absolute path passed as a
+     fixed argument (never through a shell string built from input), and
+     only hosts listed in a new runner allowlist may receive commands.
+  2. **Local:** directories listed in `runner.toml` are mounted read-only
+     into the dump container; the path must resolve inside a listed
+     directory without symlinks (`os.Root`). The Kubernetes executor uses
+     an allowlist of volumes instead.
+  3. Every copy is checked with `PRAGMA integrity_check` before it enters
+     the pipeline; restores write a new file under the same rules and
+     overwrite only with a temporary file and an atomic rename.
+- **Alternatives considered:** SSH only (no files on the bekup host);
+  local only (no remote hosts).
+- **Consequences:** running a command over SSH is a new runner capability
+  and a new SECURITY.md row (the command is fixed; the risk is a
+  compromised or hostile host answering with a crafted file, handled by
+  the integrity check and by treating the file as untrusted data). Two
+  code paths need tests and review.
+- **Related:** plan task 12.4, D-230.
+
+## D-232: MS SQL Server backups as sqlpackage bacpac exports
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (bacpac) and agent (the details)
+- **Context:** SQL Server has no client-side dump tool like `pg_dump`;
+  its native `BACKUP DATABASE` writes the file on the server.
+- **Decision:** dumps use `sqlpackage /Action:Export` from the official,
+  digest-pinned image and stream through the normal pipeline; restores
+  import only into a new database, overwrites go to a temporary database
+  that is renamed into place. The certificate is pinned
+  (`TrustServerCertificate` is never used). Because a bacpac is not
+  transactionally consistent, runs warn unless they export from a
+  database snapshot (offered where the server supports it).
+- **Alternatives considered:** native `.bak` files (the server writes
+  them, so bekup would have to fetch them afterwards and needs more
+  privileges); both per job (more surface for little gain now).
+- **Consequences:** slower on very large databases; the consistency
+  warning is visible on every run without a snapshot.
+- **Related:** plan task 12.3, D-230.
+
+## D-233: Remote runners dial out to bekup
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (dial-out) and agent (the details)
+- **Context:** one runner per deployment limits bekup to targets in one
+  network. Runners at other sites must be reachable without opening
+  inbound ports there.
+- **Decision:** a remote runner opens an outbound mTLS connection (TLS 1.3,
+  private CA, client identity `spiffe://bekup/runner/<id>`, issued
+  offline) to a bekup gateway listener; bekup then calls the unchanged,
+  typed runner gRPC API over that connection. Runners are registered and
+  disabled by admins (step-up, audited, alerted); a disabled or unknown
+  runner is refused at the handshake. Connections are bound to one
+  runner; each runner keeps its own `runner.toml` allowlists. The local
+  runner keeps today's direct mode.
+- **Alternatives considered:** bekup dials each runner (needs an inbound
+  port at every site).
+- **Consequences:** a new trust boundary and listener (SECURITY.md); the
+  gRPC transport is carried over a reverse connection, which needs its
+  own review. Details (gateway process or listener, multiplexing) are
+  decided in task 13.2.
+- **Related:** plan tasks 13.1–13.3, D-230.
+
+## D-234: Kubernetes through a Jobs executor in the runner
+
+- **Date:** 2026-11-07
+- **Status:** proposed
+- **Decided by:** user (native executor) and agent (the details)
+- **Context:** bekup runs dump containers through Docker. On Kubernetes a
+  Docker socket would need privileged node access.
+- **Decision:** a second runner executor creates the dump Pods through the
+  Kubernetes API: digest-pinned image, restricted Pod Security (non-root,
+  read-only root, all capabilities dropped, RuntimeDefault seccomp, no
+  service account token), a per-run NetworkPolicy that allows only the
+  target, secrets through the stdin preamble over `pods/attach`, cleanup
+  and a reaper by label. The runner's ServiceAccount is limited to its
+  namespace. A Helm chart installs bekup with this executor.
+- **Alternatives considered:** a Helm chart with the Docker socket
+  (privileged, not Kubernetes-native); the chart first and the executor
+  later.
+- **Consequences:** a new trust boundary (runner → Kubernetes API) in
+  SECURITY.md; NetworkPolicies need a CNI that enforces them, which the
+  runner checks or documents as a requirement.
+- **Related:** plan tasks 13.4–13.5, D-230.

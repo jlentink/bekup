@@ -93,6 +93,10 @@ Trust boundaries:
 
 - **One task per agent at a time.** Parallelize only tasks marked **∥** in the
   plan, respecting their `deps:` lines.
+- **One branch per task** (Phase 3 onwards, D-230): `feature/p3-<task-id>-<slug>`
+  from an up-to-date `main`; stacking on an unmerged branch only with the
+  user's consent; renumber migrations and `D-NNN` at the rebase if another
+  branch took them first; each branch gets its own security and code review.
 - If you are unsure about a detail, **ask the user until you are >95% sure.**
 - Mark a task done (`- [ ]` → `- [x]` in the plan) only when its acceptance
   criteria are met and you are **≥95% sure** it is fully implemented, tested

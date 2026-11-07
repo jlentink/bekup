@@ -312,6 +312,52 @@ This phase adds only the external API; no further client phases follow (D-206). 
 - [ ] **P2.8** Docs (`docs/guides/external-api.md` with the CI snippet, configuration, db-roles, upgrades, reverse-proxy, compose) and AGENTS.md. *deps: P2.4–P2.7*
 - [ ] **P2.9** End-to-end integration, then the security and code reviews and fixes; the user accepts D-220. *deps: P2.1–P2.8*
 
+## Phase 3 — Copies, scope, SSO, engines, reach, i18n
+Scope and order: D-230 (plan `analize-the-current-application-cosmic-hammock.md`, which holds the full AC per task). User decisions: D-231 (SQLite), D-232 (MS SQL bacpac), D-233 (remote runners dial out), D-234 (Kubernetes executor). **One branch per task** (`feature/p3-<task-id>-<slug>`, from an up-to-date `main`; stacking only with the user's consent), each branch reviewed by a security and a code review agent before hand-over, plus a final pair of reviews on `main` per milestone. Precondition M7/P2 set aside by the user for the plan and M8 (2026-11-07).
+- [x] **P3.0** Phase 3 in the plan and D-230–D-234 (branch `feature/p3-plan`, stacked on `feature/accept-risks` with the user's consent).
+
+### M8 Internationalization (English, Dutch)
+- [ ] **8.1** i18n foundation in the web UI: keyed `en`/`nl` catalogs per feature replacing `src/lib/messages.ts` and the feature `T` tables, `i18next` + `react-i18next` bundled (no runtime fetch, CSP unchanged), `Intl` formatting with `lib/format`, language switcher, key-parity test, no literal JSX strings (lint), setup SPA, `pnpm csp-check`. *deps: P3.0*
+- [ ] **8.2** Locale per user (`users.locale`, `Accept-Language` before sign-in, `updateMyLocale` + authz row). *deps: 8.1*
+- [ ] **8.3** Server-rendered texts per recipient locale (e-mails, notification contents, summary, `failureTexts`; Go catalog + parity test, goldens per locale, 375 px check). *deps: 8.2*
+- [ ] **8.4** Translation guide in `docs/development.md`. *deps: 8.1*
+
+### M9 Visibility and limits (∥ after M8)
+- [ ] **9.1** ∥ Backup anomaly detection (`internal/anomaly`, `backup.anomaly`, item warnings, job thresholds, UI). *deps: M8*
+- [ ] **9.2** ∥ Upload bandwidth limits per destination + global cap, token bucket in the fan-out, no false lag drops. *deps: M8*
+- [ ] **9.3** ∥ Storage forecast ("full in ~N days", `destination.full_forecast`). *deps: M8*
+- [ ] **9.4** ∥ Recovery metrics and compliance report (`report.view`, CSV, print view). *deps: M8*
+- [ ] **9.5** ∥ Audit export and SIEM forwarding (syslog-TLS, signed HTTPS, netguard scope `siem`). *deps: M8*
+
+### M10 Backup scope, actions, copies, storage
+- [ ] **10.1** Scoped dumps (include/exclude schemas and tables, exclude data, schema-only; typed runner fields). *deps: M9*
+- [ ] **10.2** ∥ Typed pre/post actions (signed webhooks only, netguard scope `job_actions`). *deps: M9*
+- [ ] **10.3** Copy jobs and "repair partial run" (`copy_run`, verify → copy → re-verify → manifest last). *deps: 9.2*
+- [ ] **10.4** ∥ Azure Blob and Google Cloud Storage destinations (explicit credentials only, `storagetest.Run`). *deps: M9*
+- [ ] **10.5** ∥ Self-backup of bekup (`bekup_backup` role, escrowed age recipient, `bekup keys verify-escrow`). *deps: M9*
+
+### M11 Single sign-on
+- [ ] **11.1** OIDC login (code + PKCE + nonce, netguard scope `oidc`, sealed client secret). *deps: M10*
+- [ ] **11.2** Accounts and roles (link by `sub`, JIT off by default, group → role mapping, admin mapping alerted, break-glass admin). *deps: 11.1*
+- [ ] **11.3** Assurance (bekup second factor still required; restores keep FreshAAL2), docs, SECURITY.md boundary. *deps: 11.2*
+
+### M12 Engines
+- [ ] **12.1** Engine capabilities pass (`engine.Capabilities`). *deps: 10.1*
+- [ ] **12.2** MongoDB. *deps: 12.1*
+- [ ] **12.3** MS SQL Server via bacpac (D-232). *deps: 12.1*
+- [ ] **12.4** SQLite via SSH and allowlisted local directories (D-231). *deps: 12.1*
+
+### M13 Remote runners and Kubernetes
+- [ ] **13.1** Runner registry (D-233). *deps: M12*
+- [ ] **13.2** Dial-out gateway transport (D-233). *deps: 13.1*
+- [ ] **13.3** Scheduling, health and metrics across runners. *deps: 13.2*
+- [ ] **13.4** Kubernetes Jobs executor (D-234). *deps: M12*
+- [ ] **13.5** Helm chart + kind smoke test + signed chart. *deps: 13.4*
+
+### M14 Masked development copies
+- [ ] **14.1** Typed masking rules per job (no user SQL). *deps: M13*
+- [ ] **14.2** Masked-copy restore into a new database (restore → neutralize → mask → announce). *deps: 14.1*
+
 ---
 
 ## Verification
