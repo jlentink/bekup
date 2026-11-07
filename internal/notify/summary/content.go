@@ -18,6 +18,7 @@ import (
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/notify"
+	"github.com/jlentink/bekup/internal/riskaccept"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
 
@@ -199,6 +200,9 @@ type summaryData struct {
 	// Admins: security alerts raised in the period (monitor.alert_list).
 	ShowAlerts     bool
 	SecurityAlerts int64
+	// Admins: accepted risks and API tokens without expiry (D-228, D-229;
+	// a count line, never problems).
+	Risks riskaccept.Counts
 }
 
 // summaryScope is the recipient's view: their job scope and the staff
@@ -341,6 +345,9 @@ func (s *Service) summaryData(ctx context.Context, q *sqlc.Queries, sc summarySc
 	if sc.alerts {
 		if d.SecurityAlerts, err = q.CountSecurityAlertsBetween(ctx, sqlc.CountSecurityAlertsBetweenParams{PeriodFrom: from, PeriodUntil: until}); err != nil {
 			return nil, fmt.Errorf("notify: summary security alerts: %w", err)
+		}
+		if d.Risks, err = riskaccept.CountsOf(ctx, q); err != nil {
+			return nil, fmt.Errorf("notify: summary accepted risks: %w", err)
 		}
 		d.ShowAlerts = true
 	}

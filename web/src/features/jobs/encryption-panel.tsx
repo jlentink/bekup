@@ -142,7 +142,7 @@ export function EncryptionPanel({ job, admin }: { job: Job; admin: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
-        <EncryptionBadge encryption={enc} />
+        <EncryptionBadge encryption={enc} jobId={job.id} acceptAction />
         {enc.optedOut && enc.optedOutAt ? (
           <span className="text-xs text-status-insecure-fg">
             {T.optedOut(formatDateTime(enc.optedOutAt))}

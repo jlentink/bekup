@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 // only the base URL and the job id.
 import guide from "../../../../docs/guides/external-api.md?raw";
 
-import { addressProblem, expiresAtFor, splitAddresses, tokenState } from "./model";
+import { addressProblem, expiresAtFor, expiryInput, splitAddresses, tokenState } from "./model";
 import {
   apiBaseUrl,
   ciScript,
@@ -101,5 +101,13 @@ describe("expiry", () => {
     expect(
       tokenState({ expiresAt: "2027-02-01T12:00:00Z", revokedAt: "2026-11-02T00:00:00Z" }, now),
     ).toBe("revoked");
+    // No expiry (D-229): active until revoked; the input carries exactly one choice.
+    expect(tokenState({ expiresAt: null }, now)).toBe("active");
+    expect(tokenState({ expiresAt: null, revokedAt: "2026-11-02T00:00:00Z" }, now)).toBe("revoked");
+    expect(expiryInput("never", now)).toEqual({ expiresAt: null, neverExpires: true });
+    expect(expiryInput(30, now)).toEqual({
+      expiresAt: "2026-12-03T12:00:00.000Z",
+      neverExpires: false,
+    });
   });
 });

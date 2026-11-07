@@ -141,9 +141,10 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   `api` (`request_id` added). Token management (D-220 amendment 3; the
   user actor, step-up; details `api_token_id`, `api_token_name`,
   `job_ids`, never the token or its hash): `api_token.created`
-  (`expires_at`, `allowed_cidrs`, `allow_any_address`; raises the
-  `api_token_created` alert, and `api_token_any_address` with any
-  address), `api_token.revoked` (`expires_at`) and
+  (`expires_at` ("" for a token without expiry), `never_expires`
+  (D-229), `allowed_cidrs`, `allow_any_address`; raises the
+  `api_token_created` alert, `api_token_any_address` with any address
+  and `api_token_never_expires` without expiry), `api_token.revoked` (`expires_at`) and
   `api_token.addresses_changed` (`allowed_cidrs`, `allow_any_address` and
   their `previous_` values, `widened` (the token may now be used from an
   address it could not be used from before), `creator_id`,
@@ -391,6 +392,24 @@ supplies `id`, `ts` or hashes: the trigger computes them.
   above. When the runner's verdict arrives only after startup (the runner
   was not ready), the process records it once then (a failure is logged and
   retried at the next runner check).
+- Accepted security risks (D-228; target type `risk_acceptance`, target id
+  the acceptance id; details `risk_acceptance_id`, `kind`, `connection_id` or
+  `job_id`, `condition` (the short readable form), `duration`, `expires_at`
+  ("" without an end date), `creator_id`): `risk.accepted` (user actor,
+  step-up; plus `note` (the reason) and `superseded_id`; raises
+  `risk_accepted` or, without an end date, `risk_accepted_permanently`),
+  `risk.acceptance_revoked` (user actor, step-up; no alert),
+  `risk.acceptance_expiring` (system actor, 7 days before the end, once;
+  raises `risk_acceptance_expiring` to admins and the acceptor) and
+  `risk.acceptance_ended` (system actor from the hourly check, or the user
+  whose connection change ended it; plus `end_reason`: expired,
+  condition_changed, resolved, subject_deleted, acceptor_lost_rights;
+  raises `risk_acceptance_ended` unless the risk is gone). The startup
+  posture entries (`system.insecure_transport_started`,
+  `security.insecure_db_tls`, `security.insecure_db_roles`,
+  `security.unpinned_image`) are always recorded; while an acceptance covers
+  the process's condition they carry `risk_accepted: true`,
+  `risk_acceptance_id` and `accepted_until`, and raise no alert.
 - `cli.db.bootstrap` (actor `cli`, target `database`, the database name) is
   recorded by `bekup db bootstrap` when it created or changed roles, the
   database or citext of an installation whose schema is already migrated

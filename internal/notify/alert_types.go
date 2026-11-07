@@ -34,6 +34,11 @@ var alertDescriptions = map[string]string{
 	KindAPIAddressDenied:         "A valid external API token was presented from an address outside its address allowlist and refused (it may be stolen); its creator is alerted too.",
 	KindAPITokenCreated:          "An external API token was created (a machine credential that can start backups of its jobs).",
 	KindAPITokenAnyAddress:       "An external API token may be used from any address (no client address allowlist), chosen when it was created or by an address change; a change names who made it and alerts the token's creator too.",
+	KindAPITokenNeverExpires:     "An external API token was created without an expiry (valid until it is revoked).",
+	KindRiskAccepted:             "A weakened setting was accepted as a risk for one month or one year; it is no longer flagged as an open issue (D-228).",
+	KindRiskAcceptedPermanently:  "A weakened setting was accepted as a risk without an end date (D-228).",
+	KindRiskAcceptanceExpiring:   "A risk acceptance ends within 7 days; the acceptor is alerted too.",
+	KindRiskAcceptanceEnded:      "A risk acceptance ended (it expired, the condition changed or the acceptor lost the right) and the risk is flagged again; the acceptor is alerted too.",
 	KindAPITokenAddressesWidened: "An address change lets an external API token be used from networks its old address list did not cover; it names who made the change, and the token's creator is alerted too.",
 }
 
@@ -64,6 +69,7 @@ var alertRepeat = map[string]string{
 	KindPinExpired:                 "once per pin",
 	KindConfigReloadWeakened:       "once per reload request and set of keys",
 	KindAPIAddressDenied:           "once per API token and 10 minutes",
+	KindRiskAcceptanceExpiring:     "once per acceptance",
 }
 
 var severityRank = map[Severity]int{SeverityCritical: 0, SeverityError: 1, SeverityWarning: 2, SeverityInfo: 3}

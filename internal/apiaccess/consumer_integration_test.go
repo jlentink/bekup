@@ -161,7 +161,7 @@ func (e *env) tokenFrom(createdBy uuid.UUID, cidrs []netip.Prefix, jobIDs ...uui
 		e.t.Fatal(err)
 	}
 	if _, err := e.q.InsertAPIToken(e.ctx, sqlc.InsertAPITokenParams{
-		ID: tok.id, Name: tok.name, SecretHash: tok.hash, CreatedBy: createdBy, ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+		ID: tok.id, Name: tok.name, SecretHash: tok.hash, CreatedBy: createdBy, ExpiresAt: new(time.Now().Add(30 * 24 * time.Hour)),
 		AllowedCidrs: cidrs, AllowAnyAddress: cidrs == nil,
 	}); err != nil {
 		e.t.Fatal(err)

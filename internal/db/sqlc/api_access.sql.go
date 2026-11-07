@@ -179,7 +179,7 @@ func (q *Queries) ClaimPendingRunRequests(ctx context.Context, arg ClaimPendingR
 
 const getAPIToken = `-- name: GetAPIToken :one
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -193,11 +193,12 @@ type GetAPITokenRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 	LastUsedAt      *time.Time     `json:"lastUsedAt"`
 }
 
@@ -214,6 +215,7 @@ func (q *Queries) GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow
 		&i.RevokedBy,
 		&i.AllowedCidrs,
 		&i.AllowAnyAddress,
+		&i.NeverExpires,
 		&i.LastUsedAt,
 	)
 	return i, err
@@ -221,7 +223,7 @@ func (q *Queries) GetAPIToken(ctx context.Context, id uuid.UUID) (GetAPITokenRow
 
 const getAPITokenForUpdate = `-- name: GetAPITokenForUpdate :one
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address
+       t.allowed_cidrs, t.allow_any_address, t.never_expires
 FROM api_tokens t
 WHERE t.id = $1
 FOR UPDATE
@@ -232,11 +234,12 @@ type GetAPITokenForUpdateRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 }
 
 // GetAPITokenForUpdate locks a token (revocation).
@@ -253,15 +256,16 @@ func (q *Queries) GetAPITokenForUpdate(ctx context.Context, id uuid.UUID) (GetAP
 		&i.RevokedBy,
 		&i.AllowedCidrs,
 		&i.AllowAnyAddress,
+		&i.NeverExpires,
 	)
 	return i, err
 }
 
 const insertAPIToken = `-- name: InsertAPIToken :one
 
-INSERT INTO api_tokens (id, name, secret_hash, created_by, expires_at, allowed_cidrs, allow_any_address)
-VALUES ($1, $2, $3, $4, $5, coalesce($6::cidr[], '{}'), $7)
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address
+INSERT INTO api_tokens (id, name, secret_hash, created_by, expires_at, never_expires, allowed_cidrs, allow_any_address)
+VALUES ($1, $2, $3, $4, $5, $6, coalesce($7::cidr[], '{}'), $8)
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires
 `
 
 type InsertAPITokenParams struct {
@@ -269,7 +273,8 @@ type InsertAPITokenParams struct {
 	Name            string         `json:"name"`
 	SecretHash      []byte         `json:"secretHash"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
+	NeverExpires    bool           `json:"neverExpires"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
 }
@@ -279,11 +284,12 @@ type InsertAPITokenRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 }
 
 // External API access as bekup_app (D-220): API tokens (internal/apiaccess)
@@ -300,6 +306,7 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 		arg.SecretHash,
 		arg.CreatedBy,
 		arg.ExpiresAt,
+		arg.NeverExpires,
 		arg.AllowedCidrs,
 		arg.AllowAnyAddress,
 	)
@@ -314,6 +321,7 @@ func (q *Queries) InsertAPIToken(ctx context.Context, arg InsertAPITokenParams) 
 		&i.RevokedBy,
 		&i.AllowedCidrs,
 		&i.AllowAnyAddress,
+		&i.NeverExpires,
 	)
 	return i, err
 }
@@ -477,7 +485,7 @@ func (q *Queries) ListAPITokenLastSeen(ctx context.Context, tokenIds []uuid.UUID
 
 const listAPITokens = `-- name: ListAPITokens :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -492,11 +500,12 @@ type ListAPITokensRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 	LastUsedAt      *time.Time     `json:"lastUsedAt"`
 }
 
@@ -520,6 +529,7 @@ func (q *Queries) ListAPITokens(ctx context.Context, maxRows int32) ([]ListAPITo
 			&i.RevokedBy,
 			&i.AllowedCidrs,
 			&i.AllowAnyAddress,
+			&i.NeverExpires,
 			&i.LastUsedAt,
 		); err != nil {
 			return nil, err
@@ -534,7 +544,7 @@ func (q *Queries) ListAPITokens(ctx context.Context, maxRows int32) ([]ListAPITo
 
 const listAPITokensForJob = `-- name: ListAPITokensForJob :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 JOIN api_token_jobs tj ON tj.token_id = t.id AND tj.job_id = $1
@@ -555,11 +565,12 @@ type ListAPITokensForJobRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 	LastUsedAt      *time.Time     `json:"lastUsedAt"`
 }
 
@@ -583,6 +594,7 @@ func (q *Queries) ListAPITokensForJob(ctx context.Context, arg ListAPITokensForJ
 			&i.RevokedBy,
 			&i.AllowedCidrs,
 			&i.AllowAnyAddress,
+			&i.NeverExpires,
 			&i.LastUsedAt,
 		); err != nil {
 			return nil, err
@@ -597,7 +609,7 @@ func (q *Queries) ListAPITokensForJob(ctx context.Context, arg ListAPITokensForJ
 
 const listAPITokensForOwner = `-- name: ListAPITokensForOwner :many
 SELECT t.id, t.name, t.created_by, t.created_at, t.expires_at, t.revoked_at, t.revoked_by,
-       t.allowed_cidrs, t.allow_any_address,
+       t.allowed_cidrs, t.allow_any_address, t.never_expires,
        lu.created_at AS last_used_at
 FROM api_tokens t
 LEFT JOIN run_requests lu ON lu.id = (
@@ -623,11 +635,12 @@ type ListAPITokensForOwnerRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 	LastUsedAt      *time.Time     `json:"lastUsedAt"`
 }
 
@@ -652,6 +665,7 @@ func (q *Queries) ListAPITokensForOwner(ctx context.Context, arg ListAPITokensFo
 			&i.RevokedBy,
 			&i.AllowedCidrs,
 			&i.AllowAnyAddress,
+			&i.NeverExpires,
 			&i.LastUsedAt,
 		); err != nil {
 			return nil, err
@@ -824,7 +838,7 @@ const revokeAPIToken = `-- name: RevokeAPIToken :one
 UPDATE api_tokens
 SET revoked_at = now(), revoked_by = $1
 WHERE id = $2 AND revoked_at IS NULL
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires
 `
 
 type RevokeAPITokenParams struct {
@@ -837,11 +851,12 @@ type RevokeAPITokenRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 }
 
 // RevokeAPIToken revokes a token once; no row: unknown or already revoked.
@@ -858,6 +873,7 @@ func (q *Queries) RevokeAPIToken(ctx context.Context, arg RevokeAPITokenParams) 
 		&i.RevokedBy,
 		&i.AllowedCidrs,
 		&i.AllowAnyAddress,
+		&i.NeverExpires,
 	)
 	return i, err
 }
@@ -866,7 +882,7 @@ const updateAPITokenAddresses = `-- name: UpdateAPITokenAddresses :one
 UPDATE api_tokens
 SET allowed_cidrs = coalesce($1::cidr[], '{}'), allow_any_address = $2
 WHERE id = $3 AND revoked_at IS NULL
-RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address
+RETURNING id, name, created_by, created_at, expires_at, revoked_at, revoked_by, allowed_cidrs, allow_any_address, never_expires
 `
 
 type UpdateAPITokenAddressesParams struct {
@@ -880,11 +896,12 @@ type UpdateAPITokenAddressesRow struct {
 	Name            string         `json:"name"`
 	CreatedBy       uuid.UUID      `json:"createdBy"`
 	CreatedAt       time.Time      `json:"createdAt"`
-	ExpiresAt       time.Time      `json:"expiresAt"`
+	ExpiresAt       *time.Time     `json:"expiresAt"`
 	RevokedAt       *time.Time     `json:"revokedAt"`
 	RevokedBy       *uuid.UUID     `json:"revokedBy"`
 	AllowedCidrs    []netip.Prefix `json:"allowedCidrs"`
 	AllowAnyAddress bool           `json:"allowAnyAddress"`
+	NeverExpires    bool           `json:"neverExpires"`
 }
 
 // UpdateAPITokenAddresses replaces the client addresses of an unrevoked
@@ -904,6 +921,7 @@ func (q *Queries) UpdateAPITokenAddresses(ctx context.Context, arg UpdateAPIToke
 		&i.RevokedBy,
 		&i.AllowedCidrs,
 		&i.AllowAnyAddress,
+		&i.NeverExpires,
 	)
 	return i, err
 }

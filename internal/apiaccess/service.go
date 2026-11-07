@@ -108,8 +108,10 @@ func NewService(o ServiceOptions) (*Service, error) {
 type CreateInput struct {
 	Name   string
 	JobIDs []uuid.UUID
-	// ExpiresAt must lie 1-365 days ahead (ExpirySkew tolerated).
-	ExpiresAt time.Time
+	// ExpiresAt (1-365 days ahead, ExpirySkew tolerated) or NeverExpires,
+	// exactly one (D-229: "never" is an explicit choice).
+	ExpiresAt    time.Time
+	NeverExpires bool
 	// AllowedCIDRs or AllowAnyAddress, exactly one (ParseAddresses).
 	AllowedCIDRs    []string
 	AllowAnyAddress bool
@@ -155,7 +157,9 @@ type Token struct {
 	CreatedBy       *Creator
 	CreatedByCaller bool
 	CreatedAt       time.Time
-	ExpiresAt       time.Time
+	// ExpiresAt is nil exactly when NeverExpires (D-229).
+	ExpiresAt       *time.Time
+	NeverExpires    bool
 	RevokedAt       *time.Time
 	AllowedCIDRs    []netip.Prefix
 	AllowAnyAddress bool
@@ -184,11 +188,12 @@ type tokenRow struct {
 	Name            string
 	CreatedBy       uuid.UUID
 	CreatedAt       time.Time
-	ExpiresAt       time.Time
+	ExpiresAt       *time.Time
 	RevokedAt       *time.Time
 	RevokedBy       *uuid.UUID
 	AllowedCidrs    []netip.Prefix
 	AllowAnyAddress bool
+	NeverExpires    bool
 	LastUsedAt      *time.Time
 }
 
@@ -198,16 +203,18 @@ type tokenRowNoUse struct {
 	Name            string
 	CreatedBy       uuid.UUID
 	CreatedAt       time.Time
-	ExpiresAt       time.Time
+	ExpiresAt       *time.Time
 	RevokedAt       *time.Time
 	RevokedBy       *uuid.UUID
 	AllowedCidrs    []netip.Prefix
 	AllowAnyAddress bool
+	NeverExpires    bool
 }
 
 func (r tokenRowNoUse) row() tokenRow {
 	return tokenRow{ID: r.ID, Name: r.Name, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt,
-		RevokedAt: r.RevokedAt, RevokedBy: r.RevokedBy, AllowedCidrs: r.AllowedCidrs, AllowAnyAddress: r.AllowAnyAddress}
+		RevokedAt: r.RevokedAt, RevokedBy: r.RevokedBy, AllowedCidrs: r.AllowedCidrs, AllowAnyAddress: r.AllowAnyAddress,
+		NeverExpires: r.NeverExpires}
 }
 
 // Create authorizes the caller (api_token.create: admin, or the owner of
@@ -234,7 +241,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 	if err != nil {
 		return Created{}, err
 	}
-	expires, err := s.checkExpiry(in.ExpiresAt)
+	expires, err := s.checkExpiry(in.ExpiresAt, in.NeverExpires)
 	if err != nil {
 		return Created{}, err
 	}
@@ -259,7 +266,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 			return serviceutil.FieldErr(FieldJobIDs, "a selected job does not exist or was deleted")
 		}
 		ins, err := q.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{
-			ID: g.ID, Name: name, SecretHash: g.Hash[:], CreatedBy: pr.UserID, ExpiresAt: expires,
+			ID: g.ID, Name: name, SecretHash: g.Hash[:], CreatedBy: pr.UserID, ExpiresAt: expires, NeverExpires: in.NeverExpires,
 			AllowedCidrs: cidrs, AllowAnyAddress: in.AllowAnyAddress,
 		})
 		if err != nil {
@@ -278,7 +285,8 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Created, error) {
 			jobs[i] = TokenJob{ID: j.ID, Name: j.Name}
 		}
 		details := tokenDetails(row, jobIDs)
-		details["expires_at"] = row.ExpiresAt.UTC().Format(time.RFC3339)
+		details["expires_at"] = expiryDetail(row.ExpiresAt)
+		details["never_expires"] = row.NeverExpires
 		details["allowed_cidrs"] = AddressStrings(row.AllowedCidrs)
 		details["allow_any_address"] = row.AllowAnyAddress
 		return s.record(ctx, q, pr, audit.ActionAPITokenCreated, row.ID, details)
@@ -386,7 +394,7 @@ func (s *Service) Revoke(ctx context.Context, id uuid.UUID) (Token, error) {
 		}
 		row = tokenRowNoUse(rev).row()
 		details := tokenDetails(row, scopeJobs)
-		details["expires_at"] = row.ExpiresAt.UTC().Format(time.RFC3339)
+		details["expires_at"] = expiryDetail(row.ExpiresAt)
 		return s.record(ctx, q, pr, audit.ActionAPITokenRevoked, id, details)
 	})
 	if err != nil {
@@ -665,7 +673,7 @@ func (s *Service) views(ctx context.Context, q *sqlc.Queries, pr auth.Principal,
 		t := Token{
 			ID: r.ID, Name: r.Name, Prefix: apikey.DisplayPrefix(r.ID),
 			Jobs: jobsOf[r.ID], HiddenJobs: hidden[r.ID], CreatedByCaller: r.CreatedBy == pr.UserID,
-			CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, RevokedAt: r.RevokedAt,
+			CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, NeverExpires: r.NeverExpires, RevokedAt: r.RevokedAt,
 			AllowedCIDRs: r.AllowedCidrs, AllowAnyAddress: r.AllowAnyAddress, LastUsedAt: r.LastUsedAt,
 			LastSeen: sightings[r.ID],
 		}
@@ -741,12 +749,29 @@ func normalizeName(s string) (string, error) {
 	return s, nil
 }
 
-// checkExpiry requires an expiry 1-365 days ahead (ExpirySkew tolerated
-// on both ends) and returns it in the database's precision.
-func (s *Service) checkExpiry(at time.Time) (time.Time, error) {
+// checkExpiry requires exactly one of an expiry 1-365 days ahead
+// (ExpirySkew tolerated on both ends) and never (D-229) and returns the
+// expiry in the database's precision (nil: never expires).
+func (s *Service) checkExpiry(at time.Time, never bool) (*time.Time, error) {
+	if never {
+		if !at.IsZero() {
+			return nil, serviceutil.FieldErr(FieldExpiresAt, "choose an expiry or never, not both")
+		}
+		return nil, nil
+	}
 	now := s.o.Now()
 	if at.IsZero() || at.Before(now.Add(MinExpiry-ExpirySkew)) || at.After(now.Add(MaxExpiry+ExpirySkew)) {
-		return time.Time{}, serviceutil.FieldErr(FieldExpiresAt, "the token must expire between 1 and 365 days from now")
+		return nil, serviceutil.FieldErr(FieldExpiresAt, "the token must expire between 1 and 365 days from now, or never")
 	}
-	return at.UTC().Truncate(time.Microsecond), nil
+	v := at.UTC().Truncate(time.Microsecond)
+	return &v, nil
+}
+
+// expiryDetail is the expires_at audit detail: RFC 3339, "" when the
+// token never expires.
+func expiryDetail(at *time.Time) string {
+	if at == nil {
+		return ""
+	}
+	return at.UTC().Format(time.RFC3339)
 }

@@ -86,6 +86,20 @@ const (
 	// address, chosen at creation or by an address change (D-220
 	// amendment 1: a weakened setting, permanently flagged in the UI).
 	KindAPITokenAnyAddress = "api_token_any_address" //nolint:gosec // G101: an alert kind, not a credential
+	// Accepted security risks (D-228): an admin or backup owner accepted a
+	// weakened condition (risk.accepted), permanently (duration forever),
+	// an acceptance expires within 7 days (risk.acceptance_expiring), or
+	// it ended without a revoke so the risk is flagged again
+	// (risk.acceptance_ended: expired, condition_changed,
+	// acceptor_lost_rights). Expiring and ended also go to the acceptor.
+	KindRiskAccepted            = "risk_accepted"
+	KindRiskAcceptedPermanently = "risk_accepted_permanently"
+	KindRiskAcceptanceExpiring  = "risk_acceptance_expiring"
+	KindRiskAcceptanceEnded     = "risk_acceptance_ended"
+	// KindAPITokenNeverExpires: an external API token was created without
+	// an expiry (D-229: an explicit choice, permanently flagged in the
+	// UI).
+	KindAPITokenNeverExpires = "api_token_never_expires"
 	// KindAPITokenAddressesWidened: an address change lets an external
 	// API token be used from addresses it could not be used from before
 	// (a network not covered by the old list, or "any address"; M1 of the
@@ -197,6 +211,11 @@ var systemSeverity = map[string]Severity{
 	KindAPIAddressDenied:            SeverityError,
 	KindAPITokenCreated:             SeverityWarning,
 	KindAPITokenAnyAddress:          SeverityError,
+	KindAPITokenNeverExpires:        SeverityError,
+	KindRiskAccepted:                SeverityWarning,
+	KindRiskAcceptedPermanently:     SeverityError,
+	KindRiskAcceptanceExpiring:      SeverityWarning,
+	KindRiskAcceptanceEnded:         SeverityWarning,
 	KindAPITokenAddressesWidened:    SeverityWarning,
 }
 
@@ -310,6 +329,12 @@ func securityFromAudit(ev audit.Event) []Event {
 			apiTokenDetail(ev, a.Detail)
 			out = append(out, a)
 		}
+		// No expiry (D-229): only at creation (it never changes).
+		if ev.Action == audit.ActionAPITokenCreated && detailTrue(ev.Details, "never_expires") {
+			a := system(ev, KindAPITokenNeverExpires)
+			apiTokenDetail(ev, a.Detail)
+			out = append(out, a)
+		}
 		if ev.Action == audit.ActionAPITokenAddressesChanged && detailTrue(ev.Details, "widened") {
 			if !anyAddr {
 				a := system(ev, KindAPITokenAddressesWidened)
@@ -322,6 +347,36 @@ func securityFromAudit(ev audit.Event) []Event {
 				apiTokenDetail(ev, a.Detail)
 				out = append(out, a)
 			}
+		}
+	case audit.ActionSystemInsecureTransportStarted, audit.ActionSecurityInsecureHTTP, audit.ActionSecurityInsecureDBTLS,
+		audit.ActionSecurityInsecureDBRoles, audit.ActionSecurityUnpinnedImage:
+		// An accepted posture risk (D-228): the startup entry is still
+		// recorded, but it is no open issue: no alert.
+		if detailTrue(ev.Details, "risk_accepted") {
+			kind = ""
+		}
+	case audit.ActionRiskAccepted:
+		kind = KindRiskAccepted
+		if detailString(ev.Details, "duration") == "forever" {
+			kind = KindRiskAcceptedPermanently
+		}
+	case audit.ActionRiskAcceptanceExpiring:
+		kind = KindRiskAcceptanceExpiring
+		if u, err := uuid.Parse(detailString(ev.Details, "creator_id")); err == nil && u != uuid.Nil {
+			a := accountEvent(ev, u, KindRiskAcceptanceExpiring)
+			riskDetail(ev, a.Detail)
+			out = append(out, a)
+		}
+	case audit.ActionRiskAcceptanceEnded:
+		switch detailString(ev.Details, "end_reason") {
+		case "expired", "condition_changed", "acceptor_lost_rights":
+			kind = KindRiskAcceptanceEnded
+			if u, err := uuid.Parse(detailString(ev.Details, "creator_id")); err == nil && u != uuid.Nil {
+				a := accountEvent(ev, u, KindRiskAcceptanceEnded)
+				riskDetail(ev, a.Detail)
+				out = append(out, a)
+			}
+		default:
 		}
 	case audit.ActionAPIAddressDenied:
 		// The token's creator is told too (their token may be stolen).
@@ -358,6 +413,11 @@ func securityFromAudit(ev audit.Event) []Event {
 			apiDenialDetail(ev, s.Detail)
 		case KindAPITokenCreated:
 			apiTokenDetail(ev, s.Detail)
+		case KindRiskAccepted, KindRiskAcceptedPermanently, KindRiskAcceptanceExpiring, KindRiskAcceptanceEnded:
+			riskDetail(ev, s.Detail)
+			if id, err := uuid.Parse(detailString(ev.Details, "connection_id")); err == nil {
+				s.Subject.ConnectionID = id
+			}
 		case KindServeAliasConflict, KindExternalAPIAliasConflict:
 			// Container addresses only (bounded).
 			s.Detail["addresses"] = joinBounded(detailAddrs(ev.Details, "addresses"), MaxDetailString)
@@ -372,6 +432,67 @@ func securityFromAudit(ev audit.Event) []Event {
 		out = append(out, s)
 	}
 	return out
+}
+
+// riskDetail adds the facts of a risk acceptance entry: the risk kind
+// (a fixed set), the acceptance id, the duration, the expiry date and the
+// end reason. Never the reason text or the condition (server names).
+func riskDetail(ev audit.Event, d Detail) {
+	d["risk_kind"] = detailString(ev.Details, "kind")
+	if id, err := uuid.Parse(detailString(ev.Details, "risk_acceptance_id")); err == nil {
+		d["acceptance_id"] = id.String()
+	}
+	if v := detailString(ev.Details, "duration"); v != "" {
+		d["duration"] = v
+	}
+	if t, err := time.Parse(time.RFC3339, detailString(ev.Details, "expires_at")); err == nil {
+		d["expires"] = t.UTC().Format("2006-01-02")
+	}
+	if v := detailString(ev.Details, "end_reason"); v != "" {
+		d["end_reason"] = v
+	}
+}
+
+// riskLabels name the accepted risk kinds in alert sentences.
+var riskLabels = map[string]string{
+	"insecure_transport": "bekup served over plain HTTP",
+	"insecure_db_tls":    "the weakened TLS mode of the app database",
+	"insecure_db_roles":  "single-account database mode",
+	"unpinned_image":     "an image that follows a tag",
+	"connection_tls":     "the relaxed TLS of a database connection",
+	"privileged_role":    "a privileged database role of a connection",
+	"smtp_unencrypted":   "e-mail that may be sent unencrypted",
+	"encryption_opt_out": "unencrypted backups of a job",
+}
+
+// riskBody is the sentence of the risk acceptance alerts.
+func riskBody(kind string, d Detail) string {
+	what := riskLabels[str(d, "risk_kind")]
+	if what == "" {
+		what = "a security risk"
+	}
+	switch kind {
+	case KindRiskAccepted:
+		until := ""
+		if e := str(d, "expires"); e != "" {
+			until = " until " + e
+		}
+		return "The risk of " + what + " was accepted" + until + "; it is no longer flagged as an open issue. Review it under Accepted risks."
+	case KindRiskAcceptedPermanently:
+		return "The risk of " + what + " was accepted without an end date; it will not be flagged again until the acceptance is revoked or the condition changes. Review it under Accepted risks."
+	case KindRiskAcceptanceExpiring:
+		return "The acceptance of " + what + " ends on " + str(d, "expires") + "; the risk will then be flagged again. Accept it again or fix the condition."
+	case KindRiskAcceptanceEnded:
+		why := "it expired"
+		switch str(d, "end_reason") {
+		case "condition_changed":
+			why = "the condition changed"
+		case "acceptor_lost_rights":
+			why = "the account that accepted it may no longer decide about it"
+		}
+		return "The acceptance of " + what + " ended (" + why + "); the risk is flagged again."
+	}
+	return ""
 }
 
 // apiDenialDetail adds the facts of an api_token.ip_denied entry to an
@@ -420,6 +541,9 @@ func apiTokenDetail(ev audit.Event, d Detail) {
 	}
 	if t, err := time.Parse(time.RFC3339, detailString(ev.Details, "expires_at")); err == nil {
 		d["expires"] = t.UTC().Format("2006-01-02")
+	}
+	if ev.Action == audit.ActionAPITokenCreated {
+		d["never_expires"] = detailTrue(ev.Details, "never_expires")
 	}
 }
 
@@ -621,6 +745,11 @@ func systemBody(d Detail) string {
 	case KindAPITokenAnyAddress:
 		return fmt.Sprintf("The external API token %q may now be used from any address%s: no client address allowlist protects it. "+
 			"Restrict it to your CI runners' networks if you can.", apiName(d), apiChangedBy(d))
+	case KindRiskAccepted, KindRiskAcceptedPermanently, KindRiskAcceptanceExpiring, KindRiskAcceptanceEnded:
+		return riskBody(kind, d)
+	case KindAPITokenNeverExpires:
+		return fmt.Sprintf("The external API token %q never expires: it stays valid until it is revoked. "+
+			"Revoke it when the pipeline that uses it is retired.", apiName(d))
 	case KindAPITokenAddressesWidened:
 		return apiWidenedBody(d)
 	default:
@@ -673,6 +802,8 @@ func apiTokenCreatedBody(d Detail) string {
 	until := ""
 	if e := str(d, "expires"); e != "" {
 		until = ", valid until " + e
+	} else if b, ok := d["never_expires"].(bool); ok && b {
+		until = ", never expiring"
 	}
 	return fmt.Sprintf("An external API token %q was created; it can start backups of %d job(s) %s%s.",
 		apiName(d), num(d, "jobs"), where, until)

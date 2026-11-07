@@ -1,0 +1,151 @@
+# Accepted security risks (D-228): a weakened condition accepted for one
+# month, one year or forever is no open issue any more (dashboard, daily
+# reminders, startup alert). Badges stay ("accepted until ..."), and every
+# decision is audited and alerted.
+
+"What an acceptance is about."
+enum RiskKind {
+  "bekup is served over plain HTTP (server.base_url)."
+  INSECURE_TRANSPORT
+  "The app database's TLS mode is require or disable."
+  INSECURE_DB_TLS
+  "One database account for migrations and the app (single-account mode)."
+  INSECURE_DB_ROLES
+  "The bekup image follows a tag instead of a pinned digest."
+  UNPINNED_IMAGE
+  "A connection's TLS mode is UNVERIFIED or DISABLED."
+  CONNECTION_TLS
+  "A connection's role is privileged (or its privileges are unknown)."
+  PRIVILEGED_ROLE
+  "The SMTP mode may send e-mail unencrypted (auto or none)."
+  SMTP_UNENCRYPTED
+  "A job's backups are not encrypted (opted out)."
+  ENCRYPTION_OPT_OUT
+}
+
+enum RiskDuration {
+  ONE_MONTH
+  ONE_YEAR
+  "No end date: until revoked or the condition changes (alerted as an error)."
+  FOREVER
+}
+
+enum RiskAcceptanceStatus {
+  ACTIVE
+  "The end date passed."
+  EXPIRED
+  "Someone revoked it."
+  REVOKED
+  "It ended otherwise (see endReason)."
+  ENDED
+}
+
+enum RiskEndReason {
+  REVOKED
+  "A new acceptance replaced it."
+  SUPERSEDED
+  EXPIRED
+  "The condition changed (a different risk now)."
+  CONDITION_CHANGED
+  "The risk is gone."
+  RESOLVED
+  "The connection or job was deleted."
+  SUBJECT_DELETED
+  "The account that accepted it may no longer decide about it."
+  ACCEPTOR_LOST_RIGHTS
+}
+
+enum RiskAcceptanceFilter {
+  ACTIVE
+  ENDED
+  ALL
+}
+
+"Who accepted a risk."
+type RiskAcceptor {
+  id: UUID!
+  displayName: String!
+  "Admins (and the acceptor themselves) only."
+  email: String
+  deleted: Boolean!
+}
+
+"An acceptance as the caller may see it."
+type RiskAcceptance {
+  id: UUID!
+  kind: RiskKind!
+  "The connection (connection kinds)."
+  connectionId: UUID
+  "The job (ENCRYPTION_OPT_OUT)."
+  jobId: UUID
+  "The connection's or job's name; null for instance-wide kinds."
+  subjectName: String
+  subjectDeleted: Boolean!
+  "A short readable form of the accepted condition."
+  condition: String!
+  duration: RiskDuration!
+  "Why the risk was accepted."
+  reason: String!
+  "For staff and the acceptor; null otherwise."
+  createdBy: RiskAcceptor
+  createdByMe: Boolean!
+  createdAt: Time!
+  "null: no end date."
+  expiresAt: Time
+  endedAt: Time
+  endReason: RiskEndReason
+  status: RiskAcceptanceStatus!
+}
+
+"An acceptable risk that exists now."
+type SecurityRisk {
+  kind: RiskKind!
+  "The opaque id of the current condition; acceptRisk must name it."
+  conditionId: String!
+  condition: String!
+  connectionId: UUID
+  jobId: UUID
+  subjectName: String
+  "The active acceptance covering exactly this condition; null: open."
+  acceptance: RiskAcceptance
+  "The caller may accept it (admins; backup owners for their jobs)."
+  canAccept: Boolean!
+}
+
+input AcceptRiskInput {
+  kind: RiskKind!
+  "Connection kinds only."
+  connectionId: UUID
+  "ENCRYPTION_OPT_OUT only."
+  jobId: UUID
+  "SecurityRisk.conditionId as shown (CONFLICT when the condition changed since)."
+  conditionId: String!
+  duration: RiskDuration!
+  "1-500 characters."
+  reason: String!
+}
+
+extend type Query {
+  """
+  The acceptable risks that exist now: staff see all (instance, SMTP,
+  connections, jobs), backup owners the encryption opt-outs of their jobs.
+  """
+  securityRisks: [SecurityRisk!]! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+  """
+  Acceptances, newest first (first ≤ 500): staff every one, backup owners
+  those on jobs they own.
+  """
+  riskAcceptances(filter: RiskAcceptanceFilter = ACTIVE, first: Int = 200): [RiskAcceptance!]!
+    @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Accepts the current condition of a risk (admins; backup owners for a job
+  they own; fresh step-up; audited and alerted). A live acceptance of the
+  same risk is replaced.
+  """
+  acceptRisk(input: AcceptRiskInput!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+  "Revokes an active acceptance: the risk is flagged again (same callers; fresh step-up; audited)."
+  revokeRiskAcceptance(id: UUID!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+}

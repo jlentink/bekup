@@ -216,11 +216,7 @@ function RunDetail({ run }: { run: Run }) {
           {run.triggeredBy ? (
             <Stat label={T.stats.by}>
               {run.triggeredBy.apiToken ? (
-                <span
-                  title={T.stats.byToken(
-                    run.triggeredBy.displayName || run.triggeredBy.email,
-                  )}
-                >
+                <span title={T.stats.byToken(run.triggeredBy.displayName || run.triggeredBy.email)}>
                   {run.triggeredBy.apiToken.name}
                 </span>
               ) : (

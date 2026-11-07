@@ -25,6 +25,7 @@ export const ApiTokensQuery = graphql(`
       createdByMe
       createdAt
       expiresAt
+      neverExpires
       revokedAt
       allowedCidrs
       allowAnyAddress
@@ -70,6 +71,7 @@ export const CreateApiTokenMutation = graphql(`
           deleted
         }
         expiresAt
+        neverExpires
       }
     }
   }

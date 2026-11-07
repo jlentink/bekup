@@ -15,6 +15,7 @@ import (
 	"github.com/jlentink/bekup/internal/deployguard"
 	"github.com/jlentink/bekup/internal/httpserver"
 	"github.com/jlentink/bekup/internal/instancekeys"
+	"github.com/jlentink/bekup/internal/notify"
 )
 
 // loadKeyring loads the master keyring (fail closed: bekup does not start
@@ -76,14 +77,16 @@ func (a *App) auditInsecureTransport(ctx context.Context) error {
 	}
 	cctx, cancel := context.WithTimeout(ctx, startupTimeout(cfg))
 	defer cancel()
+	d := audit.Details{
+		"base_url":            cfg.Server.BaseURL,
+		"allow_insecure_http": cfg.Server.AllowInsecureHTTP,
+	}
+	a.acceptedPosture(cctx, notify.KindInsecureTransport, d)
 	_, err := a.auditor.Record(cctx, audit.Event{
 		Actor:      audit.SystemActor(),
 		Action:     audit.ActionSystemInsecureTransportStarted,
 		TargetType: "server",
-		Details: audit.Details{
-			"base_url":            cfg.Server.BaseURL,
-			"allow_insecure_http": cfg.Server.AllowInsecureHTTP,
-		},
+		Details:    d,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -102,16 +105,18 @@ func (a *App) auditInsecureDBTLS(ctx context.Context) error {
 	}
 	cctx, cancel := context.WithTimeout(ctx, startupTimeout(cfg))
 	defer cancel()
+	d := audit.Details{
+		"tls_mode":       cfg.Database.TLSMode,
+		"ca_file_set":    cfg.Database.TLSCAFile != "",
+		"host_verified":  false,
+		"chain_verified": cfg.Database.TLSMode == config.DBTLSRequire && cfg.Database.TLSCAFile != "",
+	}
+	a.acceptedPosture(cctx, notify.KindInsecureDBTLS, d)
 	_, err := a.auditor.Record(cctx, audit.Event{
 		Actor:      audit.SystemActor(),
 		Action:     audit.ActionSecurityInsecureDBTLS,
 		TargetType: "server",
-		Details: audit.Details{
-			"tls_mode":       cfg.Database.TLSMode,
-			"ca_file_set":    cfg.Database.TLSCAFile != "",
-			"host_verified":  false,
-			"chain_verified": cfg.Database.TLSMode == config.DBTLSRequire && cfg.Database.TLSCAFile != "",
-		},
+		Details:    d,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -136,15 +141,17 @@ func (a *App) auditInsecureDBRoles(ctx context.Context) error {
 	if findings == nil {
 		findings = []string{}
 	}
+	d := audit.Details{
+		"single_account":      true,
+		"login_role_findings": findings,
+		"process":             a.processName(),
+	}
+	a.acceptedPosture(cctx, notify.KindInsecureDBRoles, d)
 	_, err := a.auditor.Record(cctx, audit.Event{
 		Actor:      audit.SystemActor(),
 		Action:     audit.ActionSecurityInsecureDBRoles,
 		TargetType: "server",
-		Details: audit.Details{
-			"single_account":      true,
-			"login_role_findings": findings,
-			"process":             a.processName(),
-		},
+		Details:    d,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -176,17 +183,19 @@ func (a *App) auditUnpinnedImage(ctx context.Context) error {
 func (a *App) recordUnpinnedImage(ctx context.Context) error {
 	cctx, cancel := context.WithTimeout(ctx, startupTimeout(a.opts.Config))
 	defer cancel()
+	d := audit.Details{
+		"image_mode":    deployguard.ImageModeFollowing,
+		"source":        a.imageSource(),
+		"version":       a.opts.Version,
+		"setup_version": a.opts.Deployment.SetupVersion,
+		"process":       a.processName(),
+	}
+	a.acceptedPosture(cctx, notify.KindUnpinnedImage, d)
 	_, err := a.auditor.Record(cctx, audit.Event{
 		Actor:      audit.SystemActor(),
 		Action:     audit.ActionSecurityUnpinnedImage,
 		TargetType: "server",
-		Details: audit.Details{
-			"image_mode":    deployguard.ImageModeFollowing,
-			"source":        a.imageSource(),
-			"version":       a.opts.Version,
-			"setup_version": a.opts.Deployment.SetupVersion,
-			"process":       a.processName(),
-		},
+		Details:    d,
 	})
 	if err != nil {
 		return err

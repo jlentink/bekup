@@ -8,6 +8,7 @@ import {
   KeyRound,
   LayoutDashboard,
   RotateCcw,
+  ShieldCheck,
   ScrollText,
   Settings,
   Users,
@@ -46,6 +47,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
       { to: "/calendar", label: "Calendar", icon: CalendarDays, roles: ALL },
+      { to: "/risks", label: "Accepted risks", icon: ShieldCheck, roles: ALL },
     ],
   },
   {

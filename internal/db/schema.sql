@@ -232,6 +232,51 @@ CREATE TYPE public.restore_status AS ENUM (
 ALTER TYPE public.restore_status OWNER TO bekup_owner;
 
 --
+-- Name: risk_duration; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.risk_duration AS ENUM (
+    'month',
+    'year',
+    'forever'
+);
+
+ALTER TYPE public.risk_duration OWNER TO bekup_owner;
+
+--
+-- Name: risk_end_reason; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.risk_end_reason AS ENUM (
+    'revoked',
+    'superseded',
+    'expired',
+    'condition_changed',
+    'resolved',
+    'subject_deleted',
+    'acceptor_lost_rights'
+);
+
+ALTER TYPE public.risk_end_reason OWNER TO bekup_owner;
+
+--
+-- Name: risk_kind; Type: TYPE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TYPE public.risk_kind AS ENUM (
+    'insecure_transport',
+    'insecure_db_tls',
+    'insecure_db_roles',
+    'unpinned_image',
+    'connection_tls',
+    'privileged_role',
+    'smtp_unencrypted',
+    'encryption_opt_out'
+);
+
+ALTER TYPE public.risk_kind OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state; Type: TYPE; Schema: public; Owner: bekup_owner
 --
 
@@ -827,7 +872,7 @@ CREATE FUNCTION public.api_token_valid(p_token_id uuid) RETURNS boolean
         JOIN public.users AS u ON u.id = t.created_by
         WHERE t.id = p_token_id
           AND t.revoked_at IS NULL
-          AND t.expires_at > pg_catalog.now()
+          AND (t.never_expires OR t.expires_at > pg_catalog.now())
           AND NOT u.disabled
           AND u.deleted_at IS NULL
           AND u.role IN ('admin', 'user')
@@ -847,7 +892,8 @@ CREATE FUNCTION public.api_tokens_guard() RETURNS trigger
 BEGIN
     IF NEW.id IS DISTINCT FROM OLD.id OR NEW.name IS DISTINCT FROM OLD.name
        OR NEW.secret_hash IS DISTINCT FROM OLD.secret_hash OR NEW.created_by IS DISTINCT FROM OLD.created_by
-       OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+       OR NEW.never_expires IS DISTINCT FROM OLD.never_expires THEN
         RAISE EXCEPTION 'api_tokens: token % cannot change', OLD.id
             USING ERRCODE = 'insufficient_privilege';
     END IF;
@@ -1155,6 +1201,61 @@ $$;
 ALTER FUNCTION public.restores_guard() OWNER TO bekup_owner;
 
 --
+-- Name: risk_acceptances_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.risk_acceptances_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    IF NEW.id IS DISTINCT FROM OLD.id OR NEW.kind IS DISTINCT FROM OLD.kind
+       OR NEW.connection_id IS DISTINCT FROM OLD.connection_id OR NEW.job_id IS DISTINCT FROM OLD.job_id
+       OR NEW.condition_hash IS DISTINCT FROM OLD.condition_hash OR NEW.condition IS DISTINCT FROM OLD.condition
+       OR NEW.duration IS DISTINCT FROM OLD.duration OR NEW.reason IS DISTINCT FROM OLD.reason
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+        RAISE EXCEPTION 'risk_acceptances: acceptance % cannot change', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.warned_at IS NOT NULL AND NEW.warned_at IS DISTINCT FROM OLD.warned_at THEN
+        RAISE EXCEPTION 'risk_acceptances: acceptance % was already warned about', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF OLD.ended_at IS NOT NULL AND (NEW.ended_at IS DISTINCT FROM OLD.ended_at
+                                     OR NEW.ended_by IS DISTINCT FROM OLD.ended_by
+                                     OR NEW.end_reason IS DISTINCT FROM OLD.end_reason
+                                     OR NEW.warned_at IS DISTINCT FROM OLD.warned_at) THEN
+        RAISE EXCEPTION 'risk_acceptances: acceptance % already ended', OLD.id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.risk_acceptances_guard() OWNER TO bekup_owner;
+
+--
+-- Name: risk_acceptances_insert_guard(); Type: FUNCTION; Schema: public; Owner: bekup_owner
+--
+
+CREATE FUNCTION public.risk_acceptances_insert_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'pg_catalog', 'pg_temp'
+    AS $$
+BEGIN
+    NEW.created_at := pg_catalog.now();
+    NEW.warned_at := NULL;
+    NEW.ended_at := NULL;
+    NEW.ended_by := NULL;
+    NEW.end_reason := NULL;
+    RETURN NEW;
+END
+$$;
+
+ALTER FUNCTION public.risk_acceptances_insert_guard() OWNER TO bekup_owner;
+
+--
 -- Name: river_job_state_in_bitmask(bit, public.river_job_state); Type: FUNCTION; Schema: public; Owner: bekup_owner
 --
 
@@ -1384,14 +1485,15 @@ CREATE TABLE public.api_tokens (
     secret_hash bytea NOT NULL,
     created_by uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone,
     revoked_at timestamp with time zone,
     revoked_by uuid,
     allowed_cidrs cidr[] DEFAULT '{}'::cidr[] NOT NULL,
     allow_any_address boolean NOT NULL,
+    never_expires boolean DEFAULT false NOT NULL,
     CONSTRAINT api_tokens_addresses CHECK ((allow_any_address = (cardinality(allowed_cidrs) = 0))),
     CONSTRAINT api_tokens_allowed_cidrs CHECK (public.api_cidrs_valid(allowed_cidrs)),
-    CONSTRAINT api_tokens_expiry CHECK (((expires_at > created_at) AND (expires_at <= (created_at + '366 days'::interval)))),
+    CONSTRAINT api_tokens_expiry CHECK (((never_expires = (expires_at IS NULL)) AND ((expires_at IS NULL) OR ((expires_at > created_at) AND (expires_at <= (created_at + '366 days'::interval)))))),
     CONSTRAINT api_tokens_name_length CHECK (((char_length(name) >= 1) AND (char_length(name) <= 100))),
     CONSTRAINT api_tokens_revoked_by CHECK (((revoked_by IS NULL) OR (revoked_at IS NOT NULL))),
     CONSTRAINT api_tokens_secret_hash_length CHECK ((octet_length(secret_hash) = 32))
@@ -2258,6 +2360,42 @@ CREATE TABLE public.retention_holds (
 );
 
 ALTER TABLE public.retention_holds OWNER TO bekup_owner;
+
+--
+-- Name: risk_acceptances; Type: TABLE; Schema: public; Owner: bekup_owner
+--
+
+CREATE TABLE public.risk_acceptances (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    kind public.risk_kind NOT NULL,
+    connection_id uuid,
+    job_id uuid,
+    condition_hash bytea NOT NULL,
+    condition text NOT NULL,
+    duration public.risk_duration NOT NULL,
+    reason text NOT NULL,
+    created_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    warned_at timestamp with time zone,
+    ended_at timestamp with time zone,
+    ended_by uuid,
+    end_reason public.risk_end_reason,
+    CONSTRAINT risk_acceptances_condition_length CHECK (((char_length(condition) >= 1) AND (char_length(condition) <= 300))),
+    CONSTRAINT risk_acceptances_end CHECK ((((ended_at IS NULL) = (end_reason IS NULL)) AND ((ended_by IS NULL) OR (ended_at IS NOT NULL)) AND ((end_reason IS DISTINCT FROM 'revoked'::public.risk_end_reason) OR (ended_by IS NOT NULL)))),
+    CONSTRAINT risk_acceptances_expiry CHECK ((((duration = 'forever'::public.risk_duration) AND (expires_at IS NULL)) OR ((duration = 'month'::public.risk_duration) AND (expires_at = (created_at + '1 mon'::interval))) OR ((duration = 'year'::public.risk_duration) AND (expires_at = (created_at + '1 year'::interval))))),
+    CONSTRAINT risk_acceptances_hash_length CHECK ((octet_length(condition_hash) = 32)),
+    CONSTRAINT risk_acceptances_reason_length CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 500))),
+    CONSTRAINT risk_acceptances_subject CHECK (
+CASE
+    WHEN (kind = ANY (ARRAY['connection_tls'::public.risk_kind, 'privileged_role'::public.risk_kind])) THEN ((connection_id IS NOT NULL) AND (job_id IS NULL))
+    WHEN (kind = 'encryption_opt_out'::public.risk_kind) THEN ((job_id IS NOT NULL) AND (connection_id IS NULL))
+    ELSE ((connection_id IS NULL) AND (job_id IS NULL))
+END),
+    CONSTRAINT risk_acceptances_warned CHECK (((warned_at IS NULL) OR (expires_at IS NOT NULL)))
+);
+
+ALTER TABLE public.risk_acceptances OWNER TO bekup_owner;
 
 --
 -- Name: river_job; Type: TABLE; Schema: public; Owner: bekup_owner
@@ -3190,6 +3328,13 @@ ALTER TABLE ONLY public.retention_holds
     ADD CONSTRAINT retention_holds_pkey PRIMARY KEY (job_id, destination_id);
 
 --
+-- Name: risk_acceptances risk_acceptances_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.risk_acceptances
+    ADD CONSTRAINT risk_acceptances_pkey PRIMARY KEY (id);
+
+--
 -- Name: river_job river_job_pkey; Type: CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -3755,6 +3900,30 @@ CREATE INDEX restores_job_idx ON public.restores USING btree (job_id, created_at
 CREATE INDEX restores_target_idx ON public.restores USING btree (target_connection_id);
 
 --
+-- Name: risk_acceptances_connection_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX risk_acceptances_connection_idx ON public.risk_acceptances USING btree (connection_id) WHERE (connection_id IS NOT NULL);
+
+--
+-- Name: risk_acceptances_created_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX risk_acceptances_created_idx ON public.risk_acceptances USING btree (created_at DESC, id DESC);
+
+--
+-- Name: risk_acceptances_job_idx; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE INDEX risk_acceptances_job_idx ON public.risk_acceptances USING btree (job_id) WHERE (job_id IS NOT NULL);
+
+--
+-- Name: risk_acceptances_live; Type: INDEX; Schema: public; Owner: bekup_owner
+--
+
+CREATE UNIQUE INDEX risk_acceptances_live ON public.risk_acceptances USING btree (kind, COALESCE(connection_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(job_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE (ended_at IS NULL);
+
+--
 -- Name: river_job_args_index; Type: INDEX; Schema: public; Owner: bekup_owner
 --
 
@@ -4131,6 +4300,18 @@ CREATE TRIGGER restores_guard BEFORE UPDATE ON public.restores FOR EACH ROW EXEC
 --
 
 CREATE TRIGGER restores_set_updated_at BEFORE UPDATE ON public.restores FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+--
+-- Name: risk_acceptances risk_acceptances_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER risk_acceptances_guard BEFORE UPDATE ON public.risk_acceptances FOR EACH ROW EXECUTE FUNCTION public.risk_acceptances_guard();
+
+--
+-- Name: risk_acceptances risk_acceptances_insert_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
+--
+
+CREATE TRIGGER risk_acceptances_insert_guard BEFORE INSERT ON public.risk_acceptances FOR EACH ROW EXECUTE FUNCTION public.risk_acceptances_insert_guard();
 
 --
 -- Name: run_requests run_requests_guard; Type: TRIGGER; Schema: public; Owner: bekup_owner
@@ -4673,6 +4854,34 @@ ALTER TABLE ONLY public.retention_holds
     ADD CONSTRAINT retention_holds_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE CASCADE;
 
 --
+-- Name: risk_acceptances risk_acceptances_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.risk_acceptances
+    ADD CONSTRAINT risk_acceptances_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id);
+
+--
+-- Name: risk_acceptances risk_acceptances_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.risk_acceptances
+    ADD CONSTRAINT risk_acceptances_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+--
+-- Name: risk_acceptances risk_acceptances_ended_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.risk_acceptances
+    ADD CONSTRAINT risk_acceptances_ended_by_fkey FOREIGN KEY (ended_by) REFERENCES public.users(id);
+
+--
+-- Name: risk_acceptances risk_acceptances_job_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
+--
+
+ALTER TABLE ONLY public.risk_acceptances
+    ADD CONSTRAINT risk_acceptances_job_id_fkey FOREIGN KEY (job_id) REFERENCES public.jobs(id);
+
+--
 -- Name: run_items run_items_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: bekup_owner
 --
 
@@ -5043,6 +5252,18 @@ REVOKE ALL ON FUNCTION public.restore_identity_handoff_guard() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.restores_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION risk_acceptances_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.risk_acceptances_guard() FROM PUBLIC;
+
+--
+-- Name: FUNCTION risk_acceptances_insert_guard(); Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+REVOKE ALL ON FUNCTION public.risk_acceptances_insert_guard() FROM PUBLIC;
 
 --
 -- Name: FUNCTION river_job_state_in_bitmask(bitmask bit, state public.river_job_state); Type: ACL; Schema: public; Owner: bekup_owner
@@ -5596,6 +5817,36 @@ GRANT UPDATE(newest_complete_at) ON TABLE public.retention_holds TO bekup_app;
 --
 
 GRANT UPDATE(checked_at) ON TABLE public.retention_holds TO bekup_app;
+
+--
+-- Name: TABLE risk_acceptances; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT SELECT,INSERT ON TABLE public.risk_acceptances TO bekup_app;
+
+--
+-- Name: COLUMN risk_acceptances.warned_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(warned_at) ON TABLE public.risk_acceptances TO bekup_app;
+
+--
+-- Name: COLUMN risk_acceptances.ended_at; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(ended_at) ON TABLE public.risk_acceptances TO bekup_app;
+
+--
+-- Name: COLUMN risk_acceptances.ended_by; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(ended_by) ON TABLE public.risk_acceptances TO bekup_app;
+
+--
+-- Name: COLUMN risk_acceptances.end_reason; Type: ACL; Schema: public; Owner: bekup_owner
+--
+
+GRANT UPDATE(end_reason) ON TABLE public.risk_acceptances TO bekup_app;
 
 --
 -- Name: TABLE river_job; Type: ACL; Schema: public; Owner: bekup_owner

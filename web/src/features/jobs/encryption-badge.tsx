@@ -1,6 +1,7 @@
 import { KeyRound, Lock, LockKeyhole, TriangleAlert } from "lucide-react";
 
 import { SecurityBadge } from "@/components/status/security-badge";
+import { RiskBadge } from "@/features/accepted-risks/risk-badge";
 import type { JobEncryptionMode } from "@/graphql/gen/graphql";
 import { cn } from "@/lib/utils";
 
@@ -18,11 +19,28 @@ interface Enc {
 export function EncryptionBadge({
   encryption,
   className,
+  jobId,
+  acceptAction = false,
 }: {
   encryption: Enc;
   className?: string;
+  /** The job: an accepted opt-out (D-228) shows as accepted. */
+  jobId?: string;
+  /** Offer "Accept risk" (detail pages). */
+  acceptAction?: boolean;
 }) {
   if (encryption.optedOut || encryption.mode === "NONE") {
+    if (jobId) {
+      return (
+        <RiskBadge
+          flag="unencrypted"
+          kind="ENCRYPTION_OPT_OUT"
+          subjectId={jobId}
+          showAction={acceptAction}
+          {...(className ? { className } : {})}
+        />
+      );
+    }
     return <SecurityBadge flag="unencrypted" {...(className ? { className } : {})} />;
   }
   if (!encryption.configured || !encryption.mode) {

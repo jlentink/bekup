@@ -12,6 +12,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type AcceptRiskInput struct {
+	Kind RiskKind `json:"kind"`
+	// Connection kinds only.
+	ConnectionID *uuid.UUID `json:"connectionId,omitempty"`
+	// ENCRYPTION_OPT_OUT only.
+	JobID *uuid.UUID `json:"jobId,omitempty"`
+	// SecurityRisk.conditionId as shown (CONFLICT when the condition changed since).
+	ConditionID string       `json:"conditionId"`
+	Duration    RiskDuration `json:"duration"`
+	// 1-500 characters.
+	Reason string `json:"reason"`
+}
+
 // One event of accountEvents: exactly one field is set.
 type AccountEvent struct {
 	// A change to one or all of your sessions.
@@ -44,10 +57,13 @@ type APIToken struct {
 	// The creator: for admins always, for others only on their own tokens.
 	CreatedBy *APITokenCreator `json:"createdBy,omitempty"`
 	// The caller created the token.
-	CreatedByMe bool       `json:"createdByMe"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	ExpiresAt   time.Time  `json:"expiresAt"`
-	RevokedAt   *time.Time `json:"revokedAt,omitempty"`
+	CreatedByMe bool      `json:"createdByMe"`
+	CreatedAt   time.Time `json:"createdAt"`
+	// When the token expires; null exactly when neverExpires.
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// The token never expires (an explicit choice; alerted, a permanent warning).
+	NeverExpires bool       `json:"neverExpires"`
+	RevokedAt    *time.Time `json:"revokedAt,omitempty"`
 	// The networks (canonical CIDRs) the token may be used from; empty when
 	// allowAnyAddress is set (exactly one of the two).
 	AllowedCidrs []string `json:"allowedCidrs"`
@@ -561,8 +577,11 @@ type CreateAPITokenInput struct {
 	// The jobs the token may start (1-100). Backup owners may list only jobs
 	// they own.
 	JobIds []uuid.UUID `json:"jobIds"`
-	// Between 1 and 365 days from now.
-	ExpiresAt time.Time `json:"expiresAt"`
+	// Between 1 and 365 days from now; null when neverExpires is set (exactly
+	// one of the two).
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	// Explicitly create a token that never expires (audited and alerted).
+	NeverExpires bool `json:"neverExpires"`
 	// 1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
 	// must be empty when allowAnyAddress is set.
 	AllowedCidrs []string `json:"allowedCidrs"`
@@ -1680,6 +1699,42 @@ type RetentionHold struct {
 	CheckedAt time.Time `json:"checkedAt"`
 }
 
+// An acceptance as the caller may see it.
+type RiskAcceptance struct {
+	ID   uuid.UUID `json:"id"`
+	Kind RiskKind  `json:"kind"`
+	// The connection (connection kinds).
+	ConnectionID *uuid.UUID `json:"connectionId,omitempty"`
+	// The job (ENCRYPTION_OPT_OUT).
+	JobID *uuid.UUID `json:"jobId,omitempty"`
+	// The connection's or job's name; null for instance-wide kinds.
+	SubjectName    *string `json:"subjectName,omitempty"`
+	SubjectDeleted bool    `json:"subjectDeleted"`
+	// A short readable form of the accepted condition.
+	Condition string       `json:"condition"`
+	Duration  RiskDuration `json:"duration"`
+	// Why the risk was accepted.
+	Reason string `json:"reason"`
+	// For staff and the acceptor; null otherwise.
+	CreatedBy   *RiskAcceptor `json:"createdBy,omitempty"`
+	CreatedByMe bool          `json:"createdByMe"`
+	CreatedAt   time.Time     `json:"createdAt"`
+	// null: no end date.
+	ExpiresAt *time.Time           `json:"expiresAt,omitempty"`
+	EndedAt   *time.Time           `json:"endedAt,omitempty"`
+	EndReason *RiskEndReason       `json:"endReason,omitempty"`
+	Status    RiskAcceptanceStatus `json:"status"`
+}
+
+// Who accepted a risk.
+type RiskAcceptor struct {
+	ID          uuid.UUID `json:"id"`
+	DisplayName string    `json:"displayName"`
+	// Admins (and the acceptor themselves) only.
+	Email   *string `json:"email,omitempty"`
+	Deleted bool    `json:"deleted"`
+}
+
 // A backup run.
 type Run struct {
 	ID      uuid.UUID  `json:"id"`
@@ -2085,6 +2140,21 @@ type SecurityAlertType struct {
 	Description string `json:"description"`
 	// How often it is sent, e.g. `every time` or `once a day`.
 	Repeat string `json:"repeat"`
+}
+
+// An acceptable risk that exists now.
+type SecurityRisk struct {
+	Kind RiskKind `json:"kind"`
+	// The opaque id of the current condition; acceptRisk must name it.
+	ConditionID  string     `json:"conditionId"`
+	Condition    string     `json:"condition"`
+	ConnectionID *uuid.UUID `json:"connectionId,omitempty"`
+	JobID        *uuid.UUID `json:"jobId,omitempty"`
+	SubjectName  *string    `json:"subjectName,omitempty"`
+	// The active acceptance covering exactly this condition; null: open.
+	Acceptance *RiskAcceptance `json:"acceptance,omitempty"`
+	// The caller may accept it (admins; backup owners for their jobs).
+	CanAccept bool `json:"canAccept"`
 }
 
 // Public information about the running server. Never contains secrets.
@@ -4640,6 +4710,329 @@ func (e *RetentionHoldReason) UnmarshalJSON(b []byte) error {
 }
 
 func (e RetentionHoldReason) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RiskAcceptanceFilter string
+
+const (
+	RiskAcceptanceFilterActive RiskAcceptanceFilter = "ACTIVE"
+	RiskAcceptanceFilterEnded  RiskAcceptanceFilter = "ENDED"
+	RiskAcceptanceFilterAll    RiskAcceptanceFilter = "ALL"
+)
+
+var AllRiskAcceptanceFilter = []RiskAcceptanceFilter{
+	RiskAcceptanceFilterActive,
+	RiskAcceptanceFilterEnded,
+	RiskAcceptanceFilterAll,
+}
+
+func (e RiskAcceptanceFilter) IsValid() bool {
+	switch e {
+	case RiskAcceptanceFilterActive, RiskAcceptanceFilterEnded, RiskAcceptanceFilterAll:
+		return true
+	}
+	return false
+}
+
+func (e RiskAcceptanceFilter) String() string {
+	return string(e)
+}
+
+func (e *RiskAcceptanceFilter) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RiskAcceptanceFilter(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RiskAcceptanceFilter", str)
+	}
+	return nil
+}
+
+func (e RiskAcceptanceFilter) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RiskAcceptanceFilter) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RiskAcceptanceFilter) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RiskAcceptanceStatus string
+
+const (
+	RiskAcceptanceStatusActive RiskAcceptanceStatus = "ACTIVE"
+	// The end date passed.
+	RiskAcceptanceStatusExpired RiskAcceptanceStatus = "EXPIRED"
+	// Someone revoked it.
+	RiskAcceptanceStatusRevoked RiskAcceptanceStatus = "REVOKED"
+	// It ended otherwise (see endReason).
+	RiskAcceptanceStatusEnded RiskAcceptanceStatus = "ENDED"
+)
+
+var AllRiskAcceptanceStatus = []RiskAcceptanceStatus{
+	RiskAcceptanceStatusActive,
+	RiskAcceptanceStatusExpired,
+	RiskAcceptanceStatusRevoked,
+	RiskAcceptanceStatusEnded,
+}
+
+func (e RiskAcceptanceStatus) IsValid() bool {
+	switch e {
+	case RiskAcceptanceStatusActive, RiskAcceptanceStatusExpired, RiskAcceptanceStatusRevoked, RiskAcceptanceStatusEnded:
+		return true
+	}
+	return false
+}
+
+func (e RiskAcceptanceStatus) String() string {
+	return string(e)
+}
+
+func (e *RiskAcceptanceStatus) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RiskAcceptanceStatus(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RiskAcceptanceStatus", str)
+	}
+	return nil
+}
+
+func (e RiskAcceptanceStatus) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RiskAcceptanceStatus) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RiskAcceptanceStatus) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RiskDuration string
+
+const (
+	RiskDurationOneMonth RiskDuration = "ONE_MONTH"
+	RiskDurationOneYear  RiskDuration = "ONE_YEAR"
+	// No end date: until revoked or the condition changes (alerted as an error).
+	RiskDurationForever RiskDuration = "FOREVER"
+)
+
+var AllRiskDuration = []RiskDuration{
+	RiskDurationOneMonth,
+	RiskDurationOneYear,
+	RiskDurationForever,
+}
+
+func (e RiskDuration) IsValid() bool {
+	switch e {
+	case RiskDurationOneMonth, RiskDurationOneYear, RiskDurationForever:
+		return true
+	}
+	return false
+}
+
+func (e RiskDuration) String() string {
+	return string(e)
+}
+
+func (e *RiskDuration) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RiskDuration(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RiskDuration", str)
+	}
+	return nil
+}
+
+func (e RiskDuration) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RiskDuration) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RiskDuration) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type RiskEndReason string
+
+const (
+	RiskEndReasonRevoked RiskEndReason = "REVOKED"
+	// A new acceptance replaced it.
+	RiskEndReasonSuperseded RiskEndReason = "SUPERSEDED"
+	RiskEndReasonExpired    RiskEndReason = "EXPIRED"
+	// The condition changed (a different risk now).
+	RiskEndReasonConditionChanged RiskEndReason = "CONDITION_CHANGED"
+	// The risk is gone.
+	RiskEndReasonResolved RiskEndReason = "RESOLVED"
+	// The connection or job was deleted.
+	RiskEndReasonSubjectDeleted RiskEndReason = "SUBJECT_DELETED"
+	// The account that accepted it may no longer decide about it.
+	RiskEndReasonAcceptorLostRights RiskEndReason = "ACCEPTOR_LOST_RIGHTS"
+)
+
+var AllRiskEndReason = []RiskEndReason{
+	RiskEndReasonRevoked,
+	RiskEndReasonSuperseded,
+	RiskEndReasonExpired,
+	RiskEndReasonConditionChanged,
+	RiskEndReasonResolved,
+	RiskEndReasonSubjectDeleted,
+	RiskEndReasonAcceptorLostRights,
+}
+
+func (e RiskEndReason) IsValid() bool {
+	switch e {
+	case RiskEndReasonRevoked, RiskEndReasonSuperseded, RiskEndReasonExpired, RiskEndReasonConditionChanged, RiskEndReasonResolved, RiskEndReasonSubjectDeleted, RiskEndReasonAcceptorLostRights:
+		return true
+	}
+	return false
+}
+
+func (e RiskEndReason) String() string {
+	return string(e)
+}
+
+func (e *RiskEndReason) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RiskEndReason(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RiskEndReason", str)
+	}
+	return nil
+}
+
+func (e RiskEndReason) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RiskEndReason) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RiskEndReason) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// What an acceptance is about.
+type RiskKind string
+
+const (
+	// bekup is served over plain HTTP (server.base_url).
+	RiskKindInsecureTransport RiskKind = "INSECURE_TRANSPORT"
+	// The app database's TLS mode is require or disable.
+	RiskKindInsecureDbTLS RiskKind = "INSECURE_DB_TLS"
+	// One database account for migrations and the app (single-account mode).
+	RiskKindInsecureDbRoles RiskKind = "INSECURE_DB_ROLES"
+	// The bekup image follows a tag instead of a pinned digest.
+	RiskKindUnpinnedImage RiskKind = "UNPINNED_IMAGE"
+	// A connection's TLS mode is UNVERIFIED or DISABLED.
+	RiskKindConnectionTLS RiskKind = "CONNECTION_TLS"
+	// A connection's role is privileged (or its privileges are unknown).
+	RiskKindPrivilegedRole RiskKind = "PRIVILEGED_ROLE"
+	// The SMTP mode may send e-mail unencrypted (auto or none).
+	RiskKindSMTPUnencrypted RiskKind = "SMTP_UNENCRYPTED"
+	// A job's backups are not encrypted (opted out).
+	RiskKindEncryptionOptOut RiskKind = "ENCRYPTION_OPT_OUT"
+)
+
+var AllRiskKind = []RiskKind{
+	RiskKindInsecureTransport,
+	RiskKindInsecureDbTLS,
+	RiskKindInsecureDbRoles,
+	RiskKindUnpinnedImage,
+	RiskKindConnectionTLS,
+	RiskKindPrivilegedRole,
+	RiskKindSMTPUnencrypted,
+	RiskKindEncryptionOptOut,
+}
+
+func (e RiskKind) IsValid() bool {
+	switch e {
+	case RiskKindInsecureTransport, RiskKindInsecureDbTLS, RiskKindInsecureDbRoles, RiskKindUnpinnedImage, RiskKindConnectionTLS, RiskKindPrivilegedRole, RiskKindSMTPUnencrypted, RiskKindEncryptionOptOut:
+		return true
+	}
+	return false
+}
+
+func (e RiskKind) String() string {
+	return string(e)
+}
+
+func (e *RiskKind) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RiskKind(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RiskKind", str)
+	}
+	return nil
+}
+
+func (e RiskKind) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RiskKind) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RiskKind) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

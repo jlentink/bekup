@@ -1,17 +1,35 @@
-import { useQuery } from "@apollo/client/react";
+import { skipToken, useQuery } from "@apollo/client/react";
 import { ShieldOff } from "lucide-react";
 
+import { formatDateTime } from "@/lib/format";
+import { messages } from "@/lib/messages";
+import { SecurityRisksQuery } from "@/lib/operations";
 import { pageIsInsecure, ServerInfoQuery } from "@/lib/server-info";
 import { cn } from "@/lib/utils";
 
 /**
  * D-095: a permanent, non-dismissable warning while traffic is not encrypted
- * (server.base_url is http, or the page came over plain HTTP).
+ * (server.base_url is http, or the page came over plain HTTP). Signed in, an
+ * accepted risk (D-228) is named, but the warning stays: it concerns every
+ * user's own password and session.
  */
-export function InsecureTransportBanner({ className }: { className?: string }) {
+export function InsecureTransportBanner({
+  className,
+  signedIn = false,
+}: {
+  className?: string;
+  signedIn?: boolean;
+}) {
   const { data } = useQuery(ServerInfoQuery, { fetchPolicy: "cache-first" });
   const insecure = data?.serverInfo.insecureTransport === true || pageIsInsecure();
+  const risks = useQuery(
+    SecurityRisksQuery,
+    signedIn && insecure ? { fetchPolicy: "cache-first" } : skipToken,
+  );
   if (!insecure) return null;
+  const accepted = risks.data?.securityRisks.find(
+    (r) => r.kind === "INSECURE_TRANSPORT" && r.acceptance,
+  )?.acceptance;
   return (
     <div
       role="alert"
@@ -29,6 +47,13 @@ export function InsecureTransportBanner({ className }: { className?: string }) {
         <span>
           Connection is not encrypted (no HTTPS). Passwords and session data travel in clear text.
         </span>
+        {accepted ? (
+          <span data-testid="insecure-transport-accepted" className="text-2xs opacity-85">
+            {accepted.expiresAt
+              ? messages.risks.bannerUntil(formatDateTime(accepted.expiresAt))
+              : messages.risks.bannerForever}
+          </span>
+        ) : null}
       </p>
     </div>
   );

@@ -44,7 +44,10 @@ type ApiToken {
   "The caller created the token."
   createdByMe: Boolean!
   createdAt: Time!
-  expiresAt: Time!
+  "When the token expires; null exactly when neverExpires."
+  expiresAt: Time
+  "The token never expires (an explicit choice; alerted, a permanent warning)."
+  neverExpires: Boolean!
   revokedAt: Time
   """
   The networks (canonical CIDRs) the token may be used from; empty when
@@ -77,8 +80,13 @@ input CreateApiTokenInput {
   they own.
   """
   jobIds: [UUID!]!
-  "Between 1 and 365 days from now."
-  expiresAt: Time!
+  """
+  Between 1 and 365 days from now; null when neverExpires is set (exactly
+  one of the two).
+  """
+  expiresAt: Time
+  "Explicitly create a token that never expires (audited and alerted)."
+  neverExpires: Boolean! = false
   """
   1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
   must be empty when allowAnyAddress is set.

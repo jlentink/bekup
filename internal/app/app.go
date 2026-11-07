@@ -46,6 +46,7 @@ import (
 	"github.com/jlentink/bekup/internal/queue"
 	"github.com/jlentink/bekup/internal/restore"
 	"github.com/jlentink/bekup/internal/retention"
+	"github.com/jlentink/bekup/internal/riskaccept"
 	"github.com/jlentink/bekup/internal/runnerclient"
 	"github.com/jlentink/bekup/internal/runstate"
 )
@@ -175,6 +176,8 @@ type App struct {
 	downloads *downloads.Service
 	// apiTokens manages the external API tokens (D-220, serve only).
 	apiTokens *apiaccess.Service
+	// risks is the risk acceptance service (D-228; serve and worker).
+	risks *riskaccept.Service
 	// restore stages and verifies restores (task 4.1).
 	restore *restore.Service
 	// restoreAPI backs the restore GraphQL fields (task 4.5).
@@ -247,6 +250,9 @@ func New(ctx context.Context, opts Options) (_ *App, err error) {
 	// Audited actions that are notification events go to the outbox in
 	// the audit entry's transaction (task 5.3).
 	a.auditor = audit.New(a.pool, audit.Options{Observer: notify.ObserveAudit})
+	if err := a.newRisks(); err != nil {
+		return nil, err
+	}
 	a.newMetrics()
 	if opts.Mode == ModeWorker {
 		if err := a.newWorkerMode(ctx); err != nil {
@@ -736,6 +742,8 @@ func (a *App) newGraphQL() (*graph.Handler, error) {
 		RetentionHolds: retention.HoldReader{DB: a.pool},
 		// External API tokens (D-220).
 		APITokens: a.apiTokens,
+		// Accepted security risks (D-228).
+		Risks: a.risks,
 		// The runner's target allowlist, read-only (D-223).
 		RunnerTargets: a.runnerTargets(),
 	})

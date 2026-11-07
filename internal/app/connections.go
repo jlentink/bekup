@@ -23,7 +23,9 @@ func (a *App) newConnections() (*connections.Service, error) {
 		Keyring: a.keyring,
 		Auditor: a.auditor,
 		Runner:  rc.RPC(),
-		Logger:  a.opts.Logger,
+		// Accepted risks of a changed connection end at once (D-228).
+		RiskEnder: a.risks.EndForConnectionTx,
+		Logger:    a.opts.Logger,
 		// Per-connection run limits (task 3.13, D-156).
 		MaxConcurrentRuns:        a.opts.Config.Workers.MaxConcurrentRuns,
 		DefaultRunsPerConnection: a.opts.Config.Workers.MaxRunsPerConnection,
