@@ -272,6 +272,9 @@ internal/
                   for GraphQL, ParseAddresses: D-220 amendment 3)
                 apikey (the one API token format + hash: Generate/Parse/HashOf,
                   D-220 amendment 2)
+                riskaccept (accepted security risks, D-228: condition builders
+                  condition.go, Accept/Revoke/List/Findings/Covered service.go,
+                  Sweep + EndForConnectionTx sweep.go, views.go)
                 externalapi (`bekup external-api`: handlers, Store over the
                   api.* functions, state aggregation, throttles, Run: D-220)
 web/                    # Vite + React + TS UI, embedded via go:embed (web/embed.go)
@@ -451,7 +454,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `apikey.Generate`; the plaintext is returned once
   (`CreatedApiToken.plaintext`, `fetchPolicy: "no-cache"`, component state
   until the show-once dialog closes), never stored, logged or put into a
-  snippet. Validate addresses only with `apiaccess.ParseAddresses` (the
+  snippet. Expiry (D-229): exactly one of `expiresAt` (1–365 days) and the
+  explicit `neverExpires` (column `never_expires`, CHECK `never_expires =
+  (expires_at IS NULL)`, immutable); a token without expiry raises
+  `api_token_never_expires` and carries the "Never expires" badge; code
+  that reads `expires_at` must handle NULL. Validate addresses only with `apiaccess.ParseAddresses` (the
   database CHECKs: no IPv4 network wider than /8, no IPv6 network wider
   than /32; keep `public.api_cidrs_valid` identical). The UI's curl snippets
   (`web/src/features/api-access/snippets.ts`) are the text of
@@ -1069,6 +1076,38 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   re-authorizes every event. The audit chain status comes from
   `audit.SaveVerification` (written only by `monitor.SecurityChecker`) and
   `audit.LoadChainStatus`; it is informational, never a proof.
+- Accepted security risks (`internal/riskaccept`, D-228, proposed): only
+  the package reads or writes `risk_acceptances` (guard trigger: only
+  `warned_at` and the end columns change, once; no DELETE). Conditions are
+  built only by its builders (`ConnectionTLS`, `PrivilegedRole`,
+  `EncryptionOptOut`, `SMTPUnencrypted`, the posture builders): a
+  length-prefixed canonical encoding hashed with SHA-256 over the facts
+  that make it a different risk; the API shows `Condition.ID()` and
+  `Accept` rebuilds the condition server-side under a share lock (another
+  one is CONFLICT). Flagging code asks `Covered` / `AcceptedPosture`
+  (covered = live, unexpired, same hash, acceptor still allowed; a lookup
+  error covers nothing), never the table. Accepted risks are no open
+  issue (posture reminders skipped in `monitor.SecurityChecker`, startup
+  posture entries still recorded fail closed with `risk_accepted` and no
+  alert, the dashboard's open findings from `Query.securityRisks`), but
+  badges stay (`SecurityBadge accepted`, `RiskBadge` / `RiskDecision`) and
+  one-time weakening alerts, audit entries and the restore privileged
+  acknowledgement are unchanged. `risk.accept`/`risk.revoke`: admins, owners
+  only for job kinds of jobs they own (the service also refuses non-admins
+  for other kinds), maintainers never; fresh step-up. A change of a
+  connection's TLS mode or host/port/username ends its acceptances in the
+  same transaction (`connections.Options.RiskEnder`); the hourly sweep
+  warns 7 days before the end and ends expired, orphaned, changed or
+  resolved ones (SMTP like a subject; the posture kinds never on a
+  mismatch: each process judges its own condition; a missing privilege
+  verdict keeps the acceptance). Instance and SMTP risks are admins only
+  (maintainers see connection and job ones). Connection conditions include
+  the SSH route; an insert guard forces `created_at = now()`. **A new acceptable kind needs** a `risk_kind` enum
+  value (migration) and a `Kind` constant, the subject CHECK, a builder, a
+  `Findings` source, a GraphQL `RiskKind` value with its label in
+  `web/src/features/accepted-risks/messages.ts`, a badge or `RiskDecision`
+  where it is shown, a `riskLabels` sentence in `notify/security.go` and a
+  row in `docs/guides/accepted-risks.md`.
 - Security alerts (task 5.5, D-190): to raise one, **audit the action**
   (fail closed) and map its audit action in `internal/notify/security.go`
   (`securitySystemKinds`, or a detail-conditional case in

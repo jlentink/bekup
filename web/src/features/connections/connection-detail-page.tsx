@@ -18,10 +18,10 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { HostKeyDialog, PinnedHostKey } from "@/components/ssh/host-key-dialog";
 import { KeypairDialog } from "@/components/ssh/keypair-dialog";
-import { SecurityBadge } from "@/components/status/security-badge";
 import { Tag } from "@/components/status/tag";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { RiskBadge } from "@/features/accepted-risks/risk-badge";
 import { useSessionUser } from "@/features/auth/use-session-user";
 import { useStepUp } from "@/features/auth/use-step-up";
 import type { ConnectionDetailQuery as DetailResult } from "@/graphql/gen/graphql";
@@ -150,10 +150,10 @@ function TransportSection({ c, isAdmin }: { c: Connection; isAdmin: boolean }) {
       <ExpiryAlert c={c} />
       {c.insecureTransport ? (
         <div className="flex flex-col items-start gap-2">
-          <SecurityBadge flag="insecure-transport" />
+          <RiskBadge flag="insecure-transport" kind="CONNECTION_TLS" subjectId={c.id} />
           <p className="text-sm text-muted-foreground">
             An admin opted out of pinned TLS. This was audited and stays visible until TLS is pinned
-            again.
+            again; an accepted risk is no open issue.
           </p>
         </div>
       ) : null}
@@ -417,7 +417,14 @@ export function ConnectionDetailPage() {
         ) : (
           <Tag tone="danger">Not ready{c.notReadyReason ? `: ${c.notReadyReason}` : ""}</Tag>
         )}
-        {c.insecureTransport ? <SecurityBadge flag="insecure-transport" /> : null}
+        {c.insecureTransport ? (
+          <RiskBadge
+            flag="insecure-transport"
+            kind="CONNECTION_TLS"
+            subjectId={c.id}
+            showAction={false}
+          />
+        ) : null}
         {c.legacyVersion ? <Tag tone="warning">Legacy version</Tag> : null}
         {!isAdmin ? <Tag tone="neutral">Read only</Tag> : null}
       </div>

@@ -23,9 +23,10 @@ import (
 
 // fakeToken is a token of the fake store.
 type fakeToken struct {
-	hash    [32]byte
-	name    string
-	expires time.Time
+	hash [32]byte
+	name string
+	// expires nil: never expires.
+	expires *time.Time
 	// allowed nil: any address.
 	allowed []netip.Prefix
 	jobs    []Job
@@ -172,7 +173,7 @@ func (s *fakeStore) addToken(t *testing.T, allowed []netip.Prefix, jobs ...Job) 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.tokens[g.ID] = &fakeToken{hash: g.Hash, name: "ci " + g.ID.String()[:6], expires: time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC), allowed: allowed, jobs: jobs}
+	s.tokens[g.ID] = &fakeToken{hash: g.Hash, name: "ci " + g.ID.String()[:6], expires: new(time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC)), allowed: allowed, jobs: jobs}
 	return g.Plaintext
 }
 
@@ -534,7 +535,8 @@ func TestSelf(t *testing.T) {
 		t.Fatal(w.Body.String())
 	}
 	s := decode[Self](t, w)
-	if !strings.HasPrefix(s.Name, "ci ") || !s.ExpiresAt.Equal(time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC)) || len(s.Jobs) != 2 ||
+	if !strings.HasPrefix(s.Name, "ci ") || s.ExpiresAt == nil || !s.ExpiresAt.Equal(time.Date(2027, 1, 2, 3, 4, 5, 0, time.UTC)) ||
+		s.NeverExpires || len(s.Jobs) != 2 ||
 		s.Jobs[0].ID != jobs[0].ID || s.Jobs[1].Name != "b" || s.ClientIP == nil || *s.ClientIP != ciAddr {
 		t.Fatalf("self %+v", s)
 	}
@@ -548,6 +550,25 @@ func TestSelf(t *testing.T) {
 	e.h.ServeHTTP(rec, hr)
 	if s := decode[Self](t, rec); s.ClientIP == nil || *s.ClientIP != "192.0.2.50" {
 		t.Fatalf("spoofed XFF used: %+v", s.ClientIP)
+	}
+}
+
+// TestSelfNeverExpires: a token without expiry (D-229) authenticates and
+// reports expiresAt null with neverExpires.
+func TestSelfNeverExpires(t *testing.T) {
+	e := newTestEnv(t, nil)
+	tok := e.store.addToken(t, nil, Job{ID: uuid.New(), Name: "a"})
+	e.store.mu.Lock()
+	for _, ft := range e.store.tokens {
+		ft.expires = nil
+	}
+	e.store.mu.Unlock()
+	w := e.do(req{method: http.MethodGet, path: "/api/v1/self", token: tok, from: ciAddr})
+	if w.Code != http.StatusOK {
+		t.Fatal(w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"expiresAt":null`) || !strings.Contains(w.Body.String(), `"neverExpires":true`) {
+		t.Fatalf("self %s", w.Body.String())
 	}
 }
 

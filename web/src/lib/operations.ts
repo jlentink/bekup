@@ -51,3 +51,47 @@ export const ExportJobPassphrasesMutation = graphql(`
     }
   }
 `);
+
+/**
+ * The acceptable security risks that exist now and the acceptance that
+ * covers each (D-228): the dashboard's security tile, the badges of the
+ * connection, job, SMTP and configuration pages, and the accepted risks page.
+ */
+export const SecurityRisksQuery = graphql(`
+  query SecurityRisks {
+    securityRisks {
+      kind
+      conditionId
+      condition
+      connectionId
+      jobId
+      subjectName
+      canAccept
+      acceptance {
+        id
+        duration
+        expiresAt
+        createdAt
+        reason
+        createdByMe
+        createdBy {
+          id
+          displayName
+        }
+      }
+    }
+  }
+`);
+
+/** Accepts the current condition of a risk (D-228; step-up). */
+export const AcceptRiskMutation = graphql(`
+  mutation AcceptRisk($input: AcceptRiskInput!) {
+    acceptRisk(input: $input) {
+      id
+      kind
+      duration
+      expiresAt
+      status
+    }
+  }
+`);

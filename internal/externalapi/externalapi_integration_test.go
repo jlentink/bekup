@@ -161,7 +161,7 @@ func TestIntegrationExternalAPIEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := q.InsertAPIToken(ctx, sqlc.InsertAPITokenParams{
-			ID: g.ID, Name: name, SecretHash: g.Hash[:], CreatedBy: admin.ID, ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
+			ID: g.ID, Name: name, SecretHash: g.Hash[:], CreatedBy: admin.ID, ExpiresAt: new(time.Now().Add(30 * 24 * time.Hour)),
 			AllowedCidrs: []netip.Prefix{netip.MustParsePrefix(cidr)},
 		}); err != nil {
 			t.Fatal(err)

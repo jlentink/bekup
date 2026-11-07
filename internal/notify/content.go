@@ -177,6 +177,8 @@ var accountMessages = map[string]string{
 	KindPasskeyCloneSuspected:    "A passkey of your account reported a signature counter that went backwards (possibly a cloned authenticator); the sign-in was refused. Review your passkeys.",
 	KindAPIAddressDenied:         "An external API token you created was presented from an address outside its address allowlist and refused; it may be stolen.",
 	KindAPITokenAddressesWidened: "The client addresses of an external API token you created were widened.",
+	KindRiskAcceptanceExpiring:   "A security risk you accepted will be flagged again soon.",
+	KindRiskAcceptanceEnded:      "A security risk you accepted is flagged again.",
 }
 
 var systemMessages = map[string]string{
@@ -324,6 +326,8 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
 				body = apiDenialBody(d)
 			case KindAPITokenAddressesWidened:
 				body = apiWidenedBody(d)
+			case KindRiskAcceptanceExpiring, KindRiskAcceptanceEnded:
+				body = riskBody(str(d, "kind"), d)
 			default:
 			}
 		} else {

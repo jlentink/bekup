@@ -125,6 +125,7 @@ func TestCreateValidatesBeforeTheDatabase(t *testing.T) {
 		{"expiry too soon", func(in *CreateInput) { in.ExpiresAt = testNow.Add(22 * time.Hour) }, FieldExpiresAt},
 		{"expiry in the past", func(in *CreateInput) { in.ExpiresAt = testNow.Add(-time.Hour) }, FieldExpiresAt},
 		{"expiry too late", func(in *CreateInput) { in.ExpiresAt = testNow.Add(MaxExpiry + 2*time.Hour) }, FieldExpiresAt},
+		{"expiry and never", func(in *CreateInput) { in.NeverExpires = true }, FieldExpiresAt},
 		{"no addresses", func(in *CreateInput) { in.AllowedCIDRs = nil }, FieldAllowedCIDRs},
 		{"both", func(in *CreateInput) { in.AllowAnyAddress = true }, FieldAllowedCIDRs},
 		{"bad network", func(in *CreateInput) { in.AllowedCIDRs = []string{"10.0.0.1/8"} }, FieldAllowedCIDRs},
@@ -196,18 +197,29 @@ func TestListAndManageAuthorizeFirst(t *testing.T) {
 func TestExpiryBounds(t *testing.T) {
 	s, _ := newTestService(t, &fakeAuthorizer{})
 	for _, d := range []time.Duration{24 * time.Hour, 23*time.Hour + 30*time.Minute, 30 * 24 * time.Hour, MaxExpiry, MaxExpiry + 30*time.Minute} {
-		got, err := s.checkExpiry(testNow.Add(d))
-		if err != nil {
-			t.Errorf("%s: %v", d, err)
+		got, err := s.checkExpiry(testNow.Add(d), false)
+		if err != nil || got == nil {
+			t.Errorf("%s: %v %v", d, got, err)
+			continue
 		}
 		if got.Location() != time.UTC || !got.Equal(testNow.Add(d)) {
 			t.Errorf("%s: %v", d, got)
 		}
 	}
 	// Database precision.
-	got, err := s.checkExpiry(testNow.Add(48*time.Hour + 1234*time.Nanosecond))
-	if err != nil || got.Nanosecond()%1000 != 0 {
+	got, err := s.checkExpiry(testNow.Add(48*time.Hour+1234*time.Nanosecond), false)
+	if err != nil || got == nil || got.Nanosecond()%1000 != 0 {
 		t.Fatalf("truncation: %v %v", got, err)
+	}
+	// Never (D-229): an explicit choice without a date.
+	if got, err := s.checkExpiry(time.Time{}, true); err != nil || got != nil {
+		t.Fatalf("never: %v %v", got, err)
+	}
+	if _, err := s.checkExpiry(testNow.Add(48*time.Hour), true); fieldOf(t, err) != FieldExpiresAt {
+		t.Fatalf("never with a date: %v", err)
+	}
+	if _, err := s.checkExpiry(time.Time{}, false); fieldOf(t, err) != FieldExpiresAt {
+		t.Fatalf("neither: %v", err)
 	}
 }
 

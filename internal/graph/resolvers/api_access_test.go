@@ -48,7 +48,7 @@ func TestAPITokenModel(t *testing.T) {
 		Jobs:       []apiaccess.TokenJob{{ID: uuid.New(), Name: "app", Deleted: true}},
 		HiddenJobs: 2, CreatedByCaller: true,
 		CreatedBy: &apiaccess.Creator{ID: uuid.New(), Email: "a@example.com", DisplayName: "A"},
-		CreatedAt: now, ExpiresAt: now.Add(time.Hour),
+		CreatedAt: now, ExpiresAt: new(now.Add(time.Hour)),
 		AllowedCIDRs: []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24"), netip.MustParsePrefix("2001:db8::/32")},
 		LastSeen:     &apiaccess.Sighting{At: now, IP: &ip, Refused: true},
 	}

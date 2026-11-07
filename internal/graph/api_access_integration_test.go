@@ -266,4 +266,34 @@ func TestAPITokensGraphQLEndToEnd(t *testing.T) {
 	}
 	e.bodies = nil
 	e.assertNoSecrets(created.Plaintext[len(apikey.Prefix)+apikey.IDChars+1:])
+
+	// A token without expiry (D-229): an explicit choice; expiresAt with
+	// neverExpires is refused, and /self reports expiresAt null.
+	never := map[string]any{"in": map[string]any{
+		"name": "forever", "jobIds": []string{a.Job.ID}, "neverExpires": true, "allowedCidrs": []string{"127.0.0.0/8"}, "allowAnyAddress": false,
+	}}
+	e.freshStepUp(owner.ID)
+	both := map[string]any{"in": map[string]any{
+		"name": "both", "jobIds": []string{a.Job.ID}, "expiresAt": expires, "neverExpires": true, "allowedCidrs": []string{"127.0.0.0/8"}, "allowAnyAddress": false,
+	}}
+	if r := e.gql(ownerC, createAPITokenMut, both); r.code() != "VALIDATION" || r.Errors[0].Extensions["field"] != "expiresAt" {
+		t.Fatalf("expiry and never: %+v", r.Errors)
+	}
+	e.freshStepUp(owner.ID)
+	var forever struct {
+		Plaintext string
+		Token     struct {
+			ExpiresAt    *string
+			NeverExpires bool
+		}
+	}
+	e.mustGQL(ownerC, `mutation($in: CreateApiTokenInput!) { createApiToken(input: $in) { plaintext token { expiresAt neverExpires } } }`, never).
+		field(t, "createApiToken", &forever)
+	if forever.Token.ExpiresAt != nil || !forever.Token.NeverExpires {
+		t.Fatalf("never-expiring token %+v", forever.Token)
+	}
+	if s, body := apiCall(t, http.MethodGet, base+"/api/v1/self", forever.Plaintext); s != http.StatusOK ||
+		!strings.Contains(body, `"expiresAt":null`) || !strings.Contains(body, `"neverExpires":true`) {
+		t.Fatalf("self of a never-expiring token: %d %s", s, body)
+	}
 }

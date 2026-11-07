@@ -73,6 +73,7 @@ type ComplexityRoot struct {
 		LastSeenRefused func(childComplexity int) int
 		LastUsedAt      func(childComplexity int) int
 		Name            func(childComplexity int) int
+		NeverExpires    func(childComplexity int) int
 		Prefix          func(childComplexity int) int
 		RevokedAt       func(childComplexity int) int
 	}
@@ -690,6 +691,7 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
+		AcceptRisk                    func(childComplexity int, input model.AcceptRiskInput) int
 		AddMyWebhook                  func(childComplexity int, url string, label string) int
 		AssignJobOwners               func(childComplexity int, jobID uuid.UUID, users []uuid.UUID) int
 		AttachSharedChannel           func(childComplexity int, jobID uuid.UUID, channelID uuid.UUID, filter *model.NotificationFilterInput) int
@@ -764,6 +766,7 @@ type ComplexityRoot struct {
 		RestoreArtifact               func(childComplexity int, input model.RestoreArtifactInput) int
 		RestoreGlobals                func(childComplexity int, input model.RestoreGlobalsInput) int
 		RevokeAPIToken                func(childComplexity int, id uuid.UUID) int
+		RevokeRiskAcceptance          func(childComplexity int, id uuid.UUID) int
 		RevokeSession                 func(childComplexity int, id uuid.UUID) int
 		RevokeUserSessions            func(childComplexity int, userID uuid.UUID) int
 		RotateMyWebhookKey            func(childComplexity int, id uuid.UUID) int
@@ -978,6 +981,7 @@ type ComplexityRoot struct {
 		RestoreTargetDatabases     func(childComplexity int, artifactID uuid.UUID, targetConnectionID uuid.UUID) int
 		RestoreTargets             func(childComplexity int, artifactID uuid.UUID) int
 		Restores                   func(childComplexity int, filter *model.RestoreFilter, first *int, after *string) int
+		RiskAcceptances            func(childComplexity int, filter *model.RiskAcceptanceFilter, first *int) int
 		Run                        func(childComplexity int, id uuid.UUID) int
 		RunLogs                    func(childComplexity int, runID uuid.UUID, afterID *string, first *int) int
 		RunnerTargetPolicy         func(childComplexity int) int
@@ -985,6 +989,7 @@ type ComplexityRoot struct {
 		SMTPSettings               func(childComplexity int) int
 		SchemaVersionPresets       func(childComplexity int) int
 		SecurityAlertTypes         func(childComplexity int) int
+		SecurityRisks              func(childComplexity int) int
 		ServerInfo                 func(childComplexity int) int
 		SharedChannels             func(childComplexity int) int
 		SsrfAllowlist              func(childComplexity int) int
@@ -1148,6 +1153,32 @@ type ComplexityRoot struct {
 		NewestCompleteAt   func(childComplexity int) int
 		Reason             func(childComplexity int) int
 		Since              func(childComplexity int) int
+	}
+
+	RiskAcceptance struct {
+		Condition      func(childComplexity int) int
+		ConnectionID   func(childComplexity int) int
+		CreatedAt      func(childComplexity int) int
+		CreatedBy      func(childComplexity int) int
+		CreatedByMe    func(childComplexity int) int
+		Duration       func(childComplexity int) int
+		EndReason      func(childComplexity int) int
+		EndedAt        func(childComplexity int) int
+		ExpiresAt      func(childComplexity int) int
+		ID             func(childComplexity int) int
+		JobID          func(childComplexity int) int
+		Kind           func(childComplexity int) int
+		Reason         func(childComplexity int) int
+		Status         func(childComplexity int) int
+		SubjectDeleted func(childComplexity int) int
+		SubjectName    func(childComplexity int) int
+	}
+
+	RiskAcceptor struct {
+		Deleted     func(childComplexity int) int
+		DisplayName func(childComplexity int) int
+		Email       func(childComplexity int) int
+		ID          func(childComplexity int) int
 	}
 
 	Run struct {
@@ -1392,6 +1423,17 @@ type ComplexityRoot struct {
 		Kind        func(childComplexity int) int
 		Repeat      func(childComplexity int) int
 		Severity    func(childComplexity int) int
+	}
+
+	SecurityRisk struct {
+		Acceptance   func(childComplexity int) int
+		CanAccept    func(childComplexity int) int
+		Condition    func(childComplexity int) int
+		ConditionID  func(childComplexity int) int
+		ConnectionID func(childComplexity int) int
+		JobID        func(childComplexity int) int
+		Kind         func(childComplexity int) int
+		SubjectName  func(childComplexity int) int
 	}
 
 	ServerInfo struct {
@@ -1893,6 +1935,8 @@ type MutationResolver interface {
 	RestoreArtifact(ctx context.Context, input model.RestoreArtifactInput) (*model.Restore, error)
 	RestoreGlobals(ctx context.Context, input model.RestoreGlobalsInput) (*model.Restore, error)
 	CancelRestore(ctx context.Context, id uuid.UUID) (*model.RestoreCancellation, error)
+	AcceptRisk(ctx context.Context, input model.AcceptRiskInput) (*model.RiskAcceptance, error)
+	RevokeRiskAcceptance(ctx context.Context, id uuid.UUID) (*model.RiskAcceptance, error)
 	CancelRun(ctx context.Context, id uuid.UUID) (*model.RunCancellation, error)
 	SetJobSchemaVersion(ctx context.Context, jobID uuid.UUID, input model.JobSchemaVersionInput) (*model.Job, error)
 	SetSummarySettings(ctx context.Context, input model.SummarySettingsInput) (*model.MySummarySettings, error)
@@ -1960,6 +2004,8 @@ type QueryResolver interface {
 	Restores(ctx context.Context, filter *model.RestoreFilter, first *int, after *string) (*model.RestoreConnection, error)
 	Restore(ctx context.Context, id uuid.UUID) (*model.Restore, error)
 	RestoreLogs(ctx context.Context, restoreID uuid.UUID, afterID *string, first *int) (*model.RestoreLogPage, error)
+	SecurityRisks(ctx context.Context) ([]model.SecurityRisk, error)
+	RiskAcceptances(ctx context.Context, filter *model.RiskAcceptanceFilter, first *int) ([]model.RiskAcceptance, error)
 	Runs(ctx context.Context, filter *model.RunFilter, first *int, after *string) (*model.RunConnection, error)
 	Run(ctx context.Context, id uuid.UUID) (*model.Run, error)
 	RunLogs(ctx context.Context, runID uuid.UUID, afterID *string, first *int) (*model.RunLogPage, error)
@@ -2132,6 +2178,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ApiToken.Name(childComplexity), true
+	case "ApiToken.neverExpires":
+		if e.ComplexityRoot.ApiToken.NeverExpires == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ApiToken.NeverExpires(childComplexity), true
 	case "ApiToken.prefix":
 		if e.ComplexityRoot.ApiToken.Prefix == nil {
 			break
@@ -4649,6 +4701,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.MarkNotificationsReadResult.UnreadCount(childComplexity), true
 
+	case "Mutation.acceptRisk":
+		if e.ComplexityRoot.Mutation.AcceptRisk == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_acceptRisk_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.AcceptRisk(childComplexity, args["input"].(model.AcceptRiskInput)), true
 	case "Mutation.addMyWebhook":
 		if e.ComplexityRoot.Mutation.AddMyWebhook == nil {
 			break
@@ -5418,6 +5481,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RevokeAPIToken(childComplexity, args["id"].(uuid.UUID)), true
+	case "Mutation.revokeRiskAcceptance":
+		if e.ComplexityRoot.Mutation.RevokeRiskAcceptance == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_revokeRiskAcceptance_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RevokeRiskAcceptance(childComplexity, args["id"].(uuid.UUID)), true
 	case "Mutation.revokeSession":
 		if e.ComplexityRoot.Mutation.RevokeSession == nil {
 			break
@@ -6635,6 +6709,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Restores(childComplexity, args["filter"].(*model.RestoreFilter), args["first"].(*int), args["after"].(*string)), true
+	case "Query.riskAcceptances":
+		if e.ComplexityRoot.Query.RiskAcceptances == nil {
+			break
+		}
+
+		args, err := ec.field_Query_riskAcceptances_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RiskAcceptances(childComplexity, args["filter"].(*model.RiskAcceptanceFilter), args["first"].(*int)), true
 	case "Query.run":
 		if e.ComplexityRoot.Query.Run == nil {
 			break
@@ -6692,6 +6777,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SecurityAlertTypes(childComplexity), true
+	case "Query.securityRisks":
+		if e.ComplexityRoot.Query.SecurityRisks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.SecurityRisks(childComplexity), true
 	case "Query.serverInfo":
 		if e.ComplexityRoot.Query.ServerInfo == nil {
 			break
@@ -7411,6 +7502,128 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RetentionHold.Since(childComplexity), true
+
+	case "RiskAcceptance.condition":
+		if e.ComplexityRoot.RiskAcceptance.Condition == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.Condition(childComplexity), true
+	case "RiskAcceptance.connectionId":
+		if e.ComplexityRoot.RiskAcceptance.ConnectionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.ConnectionID(childComplexity), true
+	case "RiskAcceptance.createdAt":
+		if e.ComplexityRoot.RiskAcceptance.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.CreatedAt(childComplexity), true
+	case "RiskAcceptance.createdBy":
+		if e.ComplexityRoot.RiskAcceptance.CreatedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.CreatedBy(childComplexity), true
+	case "RiskAcceptance.createdByMe":
+		if e.ComplexityRoot.RiskAcceptance.CreatedByMe == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.CreatedByMe(childComplexity), true
+	case "RiskAcceptance.duration":
+		if e.ComplexityRoot.RiskAcceptance.Duration == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.Duration(childComplexity), true
+	case "RiskAcceptance.endReason":
+		if e.ComplexityRoot.RiskAcceptance.EndReason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.EndReason(childComplexity), true
+	case "RiskAcceptance.endedAt":
+		if e.ComplexityRoot.RiskAcceptance.EndedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.EndedAt(childComplexity), true
+	case "RiskAcceptance.expiresAt":
+		if e.ComplexityRoot.RiskAcceptance.ExpiresAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.ExpiresAt(childComplexity), true
+	case "RiskAcceptance.id":
+		if e.ComplexityRoot.RiskAcceptance.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.ID(childComplexity), true
+	case "RiskAcceptance.jobId":
+		if e.ComplexityRoot.RiskAcceptance.JobID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.JobID(childComplexity), true
+	case "RiskAcceptance.kind":
+		if e.ComplexityRoot.RiskAcceptance.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.Kind(childComplexity), true
+	case "RiskAcceptance.reason":
+		if e.ComplexityRoot.RiskAcceptance.Reason == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.Reason(childComplexity), true
+	case "RiskAcceptance.status":
+		if e.ComplexityRoot.RiskAcceptance.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.Status(childComplexity), true
+	case "RiskAcceptance.subjectDeleted":
+		if e.ComplexityRoot.RiskAcceptance.SubjectDeleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.SubjectDeleted(childComplexity), true
+	case "RiskAcceptance.subjectName":
+		if e.ComplexityRoot.RiskAcceptance.SubjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptance.SubjectName(childComplexity), true
+
+	case "RiskAcceptor.deleted":
+		if e.ComplexityRoot.RiskAcceptor.Deleted == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptor.Deleted(childComplexity), true
+	case "RiskAcceptor.displayName":
+		if e.ComplexityRoot.RiskAcceptor.DisplayName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptor.DisplayName(childComplexity), true
+	case "RiskAcceptor.email":
+		if e.ComplexityRoot.RiskAcceptor.Email == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptor.Email(childComplexity), true
+	case "RiskAcceptor.id":
+		if e.ComplexityRoot.RiskAcceptor.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RiskAcceptor.ID(childComplexity), true
 
 	case "Run.artifacts":
 		if e.ComplexityRoot.Run.Artifacts == nil {
@@ -8433,6 +8646,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SecurityAlertType.Severity(childComplexity), true
+
+	case "SecurityRisk.acceptance":
+		if e.ComplexityRoot.SecurityRisk.Acceptance == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.Acceptance(childComplexity), true
+	case "SecurityRisk.canAccept":
+		if e.ComplexityRoot.SecurityRisk.CanAccept == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.CanAccept(childComplexity), true
+	case "SecurityRisk.condition":
+		if e.ComplexityRoot.SecurityRisk.Condition == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.Condition(childComplexity), true
+	case "SecurityRisk.conditionId":
+		if e.ComplexityRoot.SecurityRisk.ConditionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.ConditionID(childComplexity), true
+	case "SecurityRisk.connectionId":
+		if e.ComplexityRoot.SecurityRisk.ConnectionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.ConnectionID(childComplexity), true
+	case "SecurityRisk.jobId":
+		if e.ComplexityRoot.SecurityRisk.JobID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.JobID(childComplexity), true
+	case "SecurityRisk.kind":
+		if e.ComplexityRoot.SecurityRisk.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.Kind(childComplexity), true
+	case "SecurityRisk.subjectName":
+		if e.ComplexityRoot.SecurityRisk.SubjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SecurityRisk.SubjectName(childComplexity), true
 
 	case "ServerInfo.devMode":
 		if e.ComplexityRoot.ServerInfo.DevMode == nil {
@@ -10079,6 +10341,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalers := func() *graphql.InputUnmarshalerIndex {
 		return graphql.NewInputUnmarshalerIndex(
+			graphql.NewInputUnmarshaler("AcceptRiskInput", ec.unmarshalInputAcceptRiskInput),
 			graphql.NewInputUnmarshaler("ArtifactFilter", ec.unmarshalInputArtifactFilter),
 			graphql.NewInputUnmarshaler("AuditLogFilter", ec.unmarshalInputAuditLogFilter),
 			graphql.NewInputUnmarshaler("CertificatePinInput", ec.unmarshalInputCertificatePinInput),
@@ -10257,7 +10520,10 @@ type ApiToken {
   "The caller created the token."
   createdByMe: Boolean!
   createdAt: Time!
-  expiresAt: Time!
+  "When the token expires; null exactly when neverExpires."
+  expiresAt: Time
+  "The token never expires (an explicit choice; alerted, a permanent warning)."
+  neverExpires: Boolean!
   revokedAt: Time
   """
   The networks (canonical CIDRs) the token may be used from; empty when
@@ -10290,8 +10556,13 @@ input CreateApiTokenInput {
   they own.
   """
   jobIds: [UUID!]!
-  "Between 1 and 365 days from now."
-  expiresAt: Time!
+  """
+  Between 1 and 365 days from now; null when neverExpires is set (exactly
+  one of the two).
+  """
+  expiresAt: Time
+  "Explicitly create a token that never expires (audited and alerted)."
+  neverExpires: Boolean! = false
   """
   1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
   must be empty when allowAnyAddress is set.
@@ -13733,6 +14004,158 @@ extend type Subscription {
   restoresUpdated: Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }
 `, BuiltIn: false},
+	{Name: "../schema/riskaccept.graphqls", Input: `# Accepted security risks (D-228): a weakened condition accepted for one
+# month, one year or forever is no open issue any more (dashboard, daily
+# reminders, startup alert). Badges stay ("accepted until ..."), and every
+# decision is audited and alerted.
+
+"What an acceptance is about."
+enum RiskKind {
+  "bekup is served over plain HTTP (server.base_url)."
+  INSECURE_TRANSPORT
+  "The app database's TLS mode is require or disable."
+  INSECURE_DB_TLS
+  "One database account for migrations and the app (single-account mode)."
+  INSECURE_DB_ROLES
+  "The bekup image follows a tag instead of a pinned digest."
+  UNPINNED_IMAGE
+  "A connection's TLS mode is UNVERIFIED or DISABLED."
+  CONNECTION_TLS
+  "A connection's role is privileged (or its privileges are unknown)."
+  PRIVILEGED_ROLE
+  "The SMTP mode may send e-mail unencrypted (auto or none)."
+  SMTP_UNENCRYPTED
+  "A job's backups are not encrypted (opted out)."
+  ENCRYPTION_OPT_OUT
+}
+
+enum RiskDuration {
+  ONE_MONTH
+  ONE_YEAR
+  "No end date: until revoked or the condition changes (alerted as an error)."
+  FOREVER
+}
+
+enum RiskAcceptanceStatus {
+  ACTIVE
+  "The end date passed."
+  EXPIRED
+  "Someone revoked it."
+  REVOKED
+  "It ended otherwise (see endReason)."
+  ENDED
+}
+
+enum RiskEndReason {
+  REVOKED
+  "A new acceptance replaced it."
+  SUPERSEDED
+  EXPIRED
+  "The condition changed (a different risk now)."
+  CONDITION_CHANGED
+  "The risk is gone."
+  RESOLVED
+  "The connection or job was deleted."
+  SUBJECT_DELETED
+  "The account that accepted it may no longer decide about it."
+  ACCEPTOR_LOST_RIGHTS
+}
+
+enum RiskAcceptanceFilter {
+  ACTIVE
+  ENDED
+  ALL
+}
+
+"Who accepted a risk."
+type RiskAcceptor {
+  id: UUID!
+  displayName: String!
+  "Admins (and the acceptor themselves) only."
+  email: String
+  deleted: Boolean!
+}
+
+"An acceptance as the caller may see it."
+type RiskAcceptance {
+  id: UUID!
+  kind: RiskKind!
+  "The connection (connection kinds)."
+  connectionId: UUID
+  "The job (ENCRYPTION_OPT_OUT)."
+  jobId: UUID
+  "The connection's or job's name; null for instance-wide kinds."
+  subjectName: String
+  subjectDeleted: Boolean!
+  "A short readable form of the accepted condition."
+  condition: String!
+  duration: RiskDuration!
+  "Why the risk was accepted."
+  reason: String!
+  "For staff and the acceptor; null otherwise."
+  createdBy: RiskAcceptor
+  createdByMe: Boolean!
+  createdAt: Time!
+  "null: no end date."
+  expiresAt: Time
+  endedAt: Time
+  endReason: RiskEndReason
+  status: RiskAcceptanceStatus!
+}
+
+"An acceptable risk that exists now."
+type SecurityRisk {
+  kind: RiskKind!
+  "The opaque id of the current condition; acceptRisk must name it."
+  conditionId: String!
+  condition: String!
+  connectionId: UUID
+  jobId: UUID
+  subjectName: String
+  "The active acceptance covering exactly this condition; null: open."
+  acceptance: RiskAcceptance
+  "The caller may accept it (admins; backup owners for their jobs)."
+  canAccept: Boolean!
+}
+
+input AcceptRiskInput {
+  kind: RiskKind!
+  "Connection kinds only."
+  connectionId: UUID
+  "ENCRYPTION_OPT_OUT only."
+  jobId: UUID
+  "SecurityRisk.conditionId as shown (CONFLICT when the condition changed since)."
+  conditionId: String!
+  duration: RiskDuration!
+  "1-500 characters."
+  reason: String!
+}
+
+extend type Query {
+  """
+  The acceptable risks that exist now: staff see all (instance, SMTP,
+  connections, jobs), backup owners the encryption opt-outs of their jobs.
+  """
+  securityRisks: [SecurityRisk!]! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+  """
+  Acceptances, newest first (first ≤ 500): staff every one, backup owners
+  those on jobs they own.
+  """
+  riskAcceptances(filter: RiskAcceptanceFilter = ACTIVE, first: Int = 200): [RiskAcceptance!]!
+    @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Accepts the current condition of a risk (admins; backup owners for a job
+  they own; fresh step-up; audited and alerted). A live acceptance of the
+  same risk is replaced.
+  """
+  acceptRisk(input: AcceptRiskInput!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+  "Revokes an active acceptance: the risk is flagged again (same callers; fresh step-up; audited)."
+  revokeRiskAcceptance(id: UUID!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+}
+`, BuiltIn: false},
 	{Name: "../schema/runs.graphqls", Input: `# Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
 # see every run; backup owners see the runs and artifacts of the jobs they
 # own only (listings are filtered, single objects of other jobs answer
@@ -15344,6 +15767,8 @@ func (ec *executionContext) childFields_ApiToken(ctx context.Context, field grap
 		return ec.fieldContext_ApiToken_createdAt(ctx, field)
 	case "expiresAt":
 		return ec.fieldContext_ApiToken_expiresAt(ctx, field)
+	case "neverExpires":
+		return ec.fieldContext_ApiToken_neverExpires(ctx, field)
 	case "revokedAt":
 		return ec.fieldContext_ApiToken_revokedAt(ctx, field)
 	case "allowedCidrs":
@@ -17176,6 +17601,58 @@ func (ec *executionContext) childFields_RetentionHold(ctx context.Context, field
 	return nil, fmt.Errorf("no field named %q was found under type RetentionHold", field.Name)
 }
 
+func (ec *executionContext) childFields_RiskAcceptance(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_RiskAcceptance_id(ctx, field)
+	case "kind":
+		return ec.fieldContext_RiskAcceptance_kind(ctx, field)
+	case "connectionId":
+		return ec.fieldContext_RiskAcceptance_connectionId(ctx, field)
+	case "jobId":
+		return ec.fieldContext_RiskAcceptance_jobId(ctx, field)
+	case "subjectName":
+		return ec.fieldContext_RiskAcceptance_subjectName(ctx, field)
+	case "subjectDeleted":
+		return ec.fieldContext_RiskAcceptance_subjectDeleted(ctx, field)
+	case "condition":
+		return ec.fieldContext_RiskAcceptance_condition(ctx, field)
+	case "duration":
+		return ec.fieldContext_RiskAcceptance_duration(ctx, field)
+	case "reason":
+		return ec.fieldContext_RiskAcceptance_reason(ctx, field)
+	case "createdBy":
+		return ec.fieldContext_RiskAcceptance_createdBy(ctx, field)
+	case "createdByMe":
+		return ec.fieldContext_RiskAcceptance_createdByMe(ctx, field)
+	case "createdAt":
+		return ec.fieldContext_RiskAcceptance_createdAt(ctx, field)
+	case "expiresAt":
+		return ec.fieldContext_RiskAcceptance_expiresAt(ctx, field)
+	case "endedAt":
+		return ec.fieldContext_RiskAcceptance_endedAt(ctx, field)
+	case "endReason":
+		return ec.fieldContext_RiskAcceptance_endReason(ctx, field)
+	case "status":
+		return ec.fieldContext_RiskAcceptance_status(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RiskAcceptance", field.Name)
+}
+
+func (ec *executionContext) childFields_RiskAcceptor(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "id":
+		return ec.fieldContext_RiskAcceptor_id(ctx, field)
+	case "displayName":
+		return ec.fieldContext_RiskAcceptor_displayName(ctx, field)
+	case "email":
+		return ec.fieldContext_RiskAcceptor_email(ctx, field)
+	case "deleted":
+		return ec.fieldContext_RiskAcceptor_deleted(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type RiskAcceptor", field.Name)
+}
+
 func (ec *executionContext) childFields_Run(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 	switch field.Name {
 	case "id":
@@ -17662,6 +18139,28 @@ func (ec *executionContext) childFields_SecurityAlertType(ctx context.Context, f
 		return ec.fieldContext_SecurityAlertType_repeat(ctx, field)
 	}
 	return nil, fmt.Errorf("no field named %q was found under type SecurityAlertType", field.Name)
+}
+
+func (ec *executionContext) childFields_SecurityRisk(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+	switch field.Name {
+	case "kind":
+		return ec.fieldContext_SecurityRisk_kind(ctx, field)
+	case "conditionId":
+		return ec.fieldContext_SecurityRisk_conditionId(ctx, field)
+	case "condition":
+		return ec.fieldContext_SecurityRisk_condition(ctx, field)
+	case "connectionId":
+		return ec.fieldContext_SecurityRisk_connectionId(ctx, field)
+	case "jobId":
+		return ec.fieldContext_SecurityRisk_jobId(ctx, field)
+	case "subjectName":
+		return ec.fieldContext_SecurityRisk_subjectName(ctx, field)
+	case "acceptance":
+		return ec.fieldContext_SecurityRisk_acceptance(ctx, field)
+	case "canAccept":
+		return ec.fieldContext_SecurityRisk_canAccept(ctx, field)
+	}
+	return nil, fmt.Errorf("no field named %q was found under type SecurityRisk", field.Name)
 }
 
 func (ec *executionContext) childFields_ServerInfo(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
@@ -18573,6 +19072,20 @@ func (ec *executionContext) field_Job_recentRuns_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["first"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_acceptRisk_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input",
+		func(ctx context.Context, v any) (model.AcceptRiskInput, error) {
+			return ec.unmarshalNAcceptRiskInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAcceptRiskInput(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -19734,6 +20247,20 @@ func (ec *executionContext) field_Mutation_revokeApiToken_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_revokeRiskAcceptance_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id",
+		func(ctx context.Context, v any) (uuid.UUID, error) {
+			return ec.unmarshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_revokeSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -20766,6 +21293,28 @@ func (ec *executionContext) field_Query_restores_args(ctx context.Context, rawAr
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_riskAcceptances_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "filter",
+		func(ctx context.Context, v any) (*model.RiskAcceptanceFilter, error) {
+			return ec.unmarshalORiskAcceptanceFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceFilter(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["filter"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first",
+		func(ctx context.Context, v any) (*int, error) {
+			return ec.unmarshalOInt2ᚖint(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_runLogs_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -21468,15 +22017,38 @@ func (ec *executionContext) _ApiToken_expiresAt(ctx context.Context, field graph
 			return obj.ExpiresAt, nil
 		},
 		nil,
-		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
-			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_ApiToken_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+}
+
+func (ec *executionContext) _ApiToken_neverExpires(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_ApiToken_neverExpires(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.NeverExpires, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
 		},
 		true,
 		true,
 	)
 }
-func (ec *executionContext) fieldContext_ApiToken_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Time")
+func (ec *executionContext) fieldContext_ApiToken_neverExpires(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("ApiToken", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _ApiToken_revokedAt(ctx context.Context, field graphql.CollectedField, obj *model.APIToken) (ret graphql.Marshaler) {
@@ -36573,6 +37145,144 @@ func (ec *executionContext) fieldContext_Mutation_cancelRestore(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_acceptRisk(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_acceptRisk(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().AcceptRisk(ctx, fc.Args["input"].(model.AcceptRiskInput))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RiskAcceptance) graphql.Marshaler {
+			return ec.marshalNRiskAcceptance2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_acceptRisk(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RiskAcceptance(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_acceptRisk_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_revokeRiskAcceptance(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_revokeRiskAcceptance(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RevokeRiskAcceptance(ctx, fc.Args["id"].(uuid.UUID))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "USER"})
+				if err != nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+			directive2 := func(ctx context.Context) (any, error) {
+				if ec.Directives.StepUp == nil {
+					var zeroVal *model.RiskAcceptance
+					return zeroVal, errors.New("directive stepUp is not implemented")
+				}
+				return ec.Directives.StepUp(ctx, nil, directive1)
+			}
+
+			next = directive2
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RiskAcceptance) graphql.Marshaler {
+			return ec.marshalNRiskAcceptance2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_revokeRiskAcceptance(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RiskAcceptance(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_revokeRiskAcceptance_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_cancelRun(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -42456,6 +43166,118 @@ func (ec *executionContext) fieldContext_Query_restoreLogs(ctx context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_securityRisks(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_securityRisks(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().SecurityRisks(ctx)
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal []model.SecurityRisk
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.SecurityRisk
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.SecurityRisk) graphql.Marshaler {
+			return ec.marshalNSecurityRisk2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecurityRiskᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_securityRisks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_SecurityRisk(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_riskAcceptances(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Query_riskAcceptances(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RiskAcceptances(ctx, fc.Args["filter"].(*model.RiskAcceptanceFilter), fc.Args["first"].(*int))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				roles, err := ec.unmarshalNRole2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRoleᚄ(ctx, []any{"ADMIN", "MAINTAINER", "USER"})
+				if err != nil {
+					var zeroVal []model.RiskAcceptance
+					return zeroVal, err
+				}
+				if ec.Directives.HasRole == nil {
+					var zeroVal []model.RiskAcceptance
+					return zeroVal, errors.New("directive hasRole is not implemented")
+				}
+				return ec.Directives.HasRole(ctx, nil, directive0, roles)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v []model.RiskAcceptance) graphql.Marshaler {
+			return ec.marshalNRiskAcceptance2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceᚄ(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Query_riskAcceptances(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RiskAcceptance(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_riskAcceptances_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_runs(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -45878,6 +46700,475 @@ func (ec *executionContext) _RetentionHold_checkedAt(ctx context.Context, field 
 }
 func (ec *executionContext) fieldContext_RetentionHold_checkedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("RetentionHold", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RiskAcceptance_id(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RiskAcceptance_kind(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_kind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RiskKind) graphql.Marshaler {
+			return ec.marshalNRiskKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskKind(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "RiskKind")
+}
+
+func (ec *executionContext) _RiskAcceptance_connectionId(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_connectionId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectionID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_connectionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RiskAcceptance_jobId(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_jobId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JobID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_jobId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RiskAcceptance_subjectName(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_subjectName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_subjectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "String")
+}
+
+func (ec *executionContext) _RiskAcceptance_subjectDeleted(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_subjectDeleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectDeleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_subjectDeleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RiskAcceptance_condition(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_condition(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Condition, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_condition(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "String")
+}
+
+func (ec *executionContext) _RiskAcceptance_duration(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_duration(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Duration, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RiskDuration) graphql.Marshaler {
+			return ec.marshalNRiskDuration2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskDuration(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_duration(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "RiskDuration")
+}
+
+func (ec *executionContext) _RiskAcceptance_reason(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_reason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Reason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_reason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "String")
+}
+
+func (ec *executionContext) _RiskAcceptance_createdBy(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_createdBy(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedBy, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RiskAcceptor) graphql.Marshaler {
+			return ec.marshalORiskAcceptor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptor(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_createdBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RiskAcceptance",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RiskAcceptor(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RiskAcceptance_createdByMe(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_createdByMe(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedByMe, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_createdByMe(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "Boolean")
+}
+
+func (ec *executionContext) _RiskAcceptance_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_createdAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v time.Time) graphql.Marshaler {
+			return ec.marshalNTime2timeᚐTime(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RiskAcceptance_expiresAt(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_expiresAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ExpiresAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_expiresAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RiskAcceptance_endedAt(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_endedAt(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EndedAt, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *time.Time) graphql.Marshaler {
+			return ec.marshalOTime2ᚖtimeᚐTime(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_endedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "Time")
+}
+
+func (ec *executionContext) _RiskAcceptance_endReason(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_endReason(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.EndReason, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RiskEndReason) graphql.Marshaler {
+			return ec.marshalORiskEndReason2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskEndReason(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_endReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "RiskEndReason")
+}
+
+func (ec *executionContext) _RiskAcceptance_status(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptance) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptance_status(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RiskAcceptanceStatus) graphql.Marshaler {
+			return ec.marshalNRiskAcceptanceStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceStatus(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptance_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptance", field, false, false, "RiskAcceptanceStatus")
+}
+
+func (ec *executionContext) _RiskAcceptor_id(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptor_id(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v uuid.UUID) graphql.Marshaler {
+			return ec.marshalNUUID2githubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptor_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptor", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _RiskAcceptor_displayName(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptor_displayName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.DisplayName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptor_displayName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptor", field, false, false, "String")
+}
+
+func (ec *executionContext) _RiskAcceptor_email(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptor_email(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Email, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptor_email(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptor", field, false, false, "String")
+}
+
+func (ec *executionContext) _RiskAcceptor_deleted(ctx context.Context, field graphql.CollectedField, obj *model.RiskAcceptor) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_RiskAcceptor_deleted(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Deleted, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_RiskAcceptor_deleted(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("RiskAcceptor", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _Run_id(ctx context.Context, field graphql.CollectedField, obj *model.Run) (ret graphql.Marshaler) {
@@ -49957,6 +51248,199 @@ func (ec *executionContext) _SecurityAlertType_repeat(ctx context.Context, field
 }
 func (ec *executionContext) fieldContext_SecurityAlertType_repeat(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	return graphql.NewScalarFieldContext("SecurityAlertType", field, false, false, "String")
+}
+
+func (ec *executionContext) _SecurityRisk_kind(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_kind(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v model.RiskKind) graphql.Marshaler {
+			return ec.marshalNRiskKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskKind(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "RiskKind")
+}
+
+func (ec *executionContext) _SecurityRisk_conditionId(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_conditionId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConditionID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_conditionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "String")
+}
+
+func (ec *executionContext) _SecurityRisk_condition(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_condition(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Condition, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v string) graphql.Marshaler {
+			return ec.marshalNString2string(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_condition(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "String")
+}
+
+func (ec *executionContext) _SecurityRisk_connectionId(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_connectionId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectionID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_connectionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _SecurityRisk_jobId(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_jobId(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.JobID, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *uuid.UUID) graphql.Marshaler {
+			return ec.marshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_jobId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "UUID")
+}
+
+func (ec *executionContext) _SecurityRisk_subjectName(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_subjectName(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.SubjectName, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *string) graphql.Marshaler {
+			return ec.marshalOString2ᚖstring(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_subjectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "String")
+}
+
+func (ec *executionContext) _SecurityRisk_acceptance(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_acceptance(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Acceptance, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.RiskAcceptance) graphql.Marshaler {
+			return ec.marshalORiskAcceptance2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_acceptance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SecurityRisk",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_RiskAcceptance(ctx, field)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SecurityRisk_canAccept(ctx context.Context, field graphql.CollectedField, obj *model.SecurityRisk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_SecurityRisk_canAccept(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.CanAccept, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v bool) graphql.Marshaler {
+			return ec.marshalNBoolean2bool(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_SecurityRisk_canAccept(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("SecurityRisk", field, false, false, "Boolean")
 }
 
 func (ec *executionContext) _ServerInfo_version(ctx context.Context, field graphql.CollectedField, obj *model.ServerInfo) (ret graphql.Marshaler) {
@@ -57524,6 +59008,83 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputAcceptRiskInput(ctx context.Context, obj any) (model.AcceptRiskInput, error) {
+	var it model.AcceptRiskInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"kind", "connectionId", "jobId", "conditionId", "duration", "reason"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "kind":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
+			data, err := ec.unmarshalNRiskKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskKind(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Kind = data
+		case "connectionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connectionId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConnectionID = data
+		case "jobId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("jobId"))
+			data, err := ec.unmarshalOUUID2ᚖgithubᚗcomᚋgoogleᚋuuidᚐUUID(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.JobID = data
+		case "conditionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("conditionId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConditionID = data
+		case "duration":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("duration"))
+			data, err := ec.unmarshalNRiskDuration2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskDuration(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Duration = data
+		case "reason":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reason"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Reason = data
+		}
+	}
+	return it, nil
+}
+
+// UnmarshalAcceptRiskInput unmarshals raw into the AcceptRiskInput input type, using the
+// unmarshaler bound to ctx's request. Call it from a resolver to decode an input
+// object that was not passed as a field argument.
+//
+// ctx must come from a gqlgen request; outside one there is no unmarshaler to use
+// and the returned error says so.
+func UnmarshalAcceptRiskInput(ctx context.Context, raw any) (model.AcceptRiskInput, error) {
+	var out model.AcceptRiskInput
+	err := graphql.UnmarshalNamedInputFromContext(ctx, "AcceptRiskInput", raw, &out)
+	return out, err
+}
+
 func (ec *executionContext) unmarshalInputArtifactFilter(ctx context.Context, obj any) (model.ArtifactFilter, error) {
 	var it model.ArtifactFilter
 	if obj == nil {
@@ -57836,7 +59397,11 @@ func (ec *executionContext) unmarshalInputCreateApiTokenInput(ctx context.Contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "jobIds", "expiresAt", "allowedCidrs", "allowAnyAddress"}
+	if _, present := asMap["neverExpires"]; !present {
+		asMap["neverExpires"] = false
+	}
+
+	fieldsInOrder := [...]string{"name", "jobIds", "expiresAt", "neverExpires", "allowedCidrs", "allowAnyAddress"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -57859,11 +59424,18 @@ func (ec *executionContext) unmarshalInputCreateApiTokenInput(ctx context.Contex
 			it.JobIds = data
 		case "expiresAt":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expiresAt"))
-			data, err := ec.unmarshalNTime2timeᚐTime(ctx, v)
+			data, err := ec.unmarshalOTime2ᚖtimeᚐTime(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.ExpiresAt = data
+		case "neverExpires":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("neverExpires"))
+			data, err := ec.unmarshalNBoolean2bool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NeverExpires = data
 		case "allowedCidrs":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("allowedCidrs"))
 			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
@@ -60734,6 +62306,11 @@ func (ec *executionContext) _ApiToken(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "expiresAt":
 			out.Values[i] = ec._ApiToken_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "neverExpires":
+			out.Values[i] = ec._ApiToken_neverExpires(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -65324,6 +66901,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "acceptRisk":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_acceptRisk(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revokeRiskAcceptance":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_revokeRiskAcceptance(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "cancelRun":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_cancelRun(ctx, field)
@@ -66742,6 +68333,18 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				func(ctx context.Context) graphql.Marshaler {
 					return ec._Query_restoreLogs(ctx, field)
 				})
+		case "securityRisks":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_securityRisks(ctx, field)
+				})
+		case "riskAcceptances":
+			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
+				true, true,
+				func(ctx context.Context) graphql.Marshaler {
+					return ec._Query_riskAcceptances(ctx, field)
+				})
 		case "runs":
 			out.ResolveRootConcurrently(innerCtx, ec.OperationContext, i,
 				true, true,
@@ -67821,6 +69424,162 @@ func (ec *executionContext) _RetentionHold(ctx context.Context, sel ast.Selectio
 			}
 		case "checkedAt":
 			out.Values[i] = ec._RetentionHold_checkedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var riskAcceptanceImplementors = []string{"RiskAcceptance"}
+
+func (ec *executionContext) _RiskAcceptance(ctx context.Context, sel ast.SelectionSet, obj *model.RiskAcceptance) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, riskAcceptanceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RiskAcceptance")
+		case "id":
+			out.Values[i] = ec._RiskAcceptance_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._RiskAcceptance_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "connectionId":
+			out.Values[i] = ec._RiskAcceptance_connectionId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "jobId":
+			out.Values[i] = ec._RiskAcceptance_jobId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "subjectName":
+			out.Values[i] = ec._RiskAcceptance_subjectName(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "subjectDeleted":
+			out.Values[i] = ec._RiskAcceptance_subjectDeleted(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "condition":
+			out.Values[i] = ec._RiskAcceptance_condition(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "duration":
+			out.Values[i] = ec._RiskAcceptance_duration(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reason":
+			out.Values[i] = ec._RiskAcceptance_reason(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdBy":
+			out.Values[i] = ec._RiskAcceptance_createdBy(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "createdByMe":
+			out.Values[i] = ec._RiskAcceptance_createdByMe(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._RiskAcceptance_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "expiresAt":
+			out.Values[i] = ec._RiskAcceptance_expiresAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "endedAt":
+			out.Values[i] = ec._RiskAcceptance_endedAt(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "endReason":
+			out.Values[i] = ec._RiskAcceptance_endReason(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._RiskAcceptance_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var riskAcceptorImplementors = []string{"RiskAcceptor"}
+
+func (ec *executionContext) _RiskAcceptor(ctx context.Context, sel ast.SelectionSet, obj *model.RiskAcceptor) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, riskAcceptorImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RiskAcceptor")
+		case "id":
+			out.Values[i] = ec._RiskAcceptor_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "displayName":
+			out.Values[i] = ec._RiskAcceptor_displayName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "email":
+			out.Values[i] = ec._RiskAcceptor_email(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "deleted":
+			out.Values[i] = ec._RiskAcceptor_deleted(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -69384,6 +71143,74 @@ func (ec *executionContext) _SecurityAlertType(ctx context.Context, sel ast.Sele
 			}
 		case "repeat":
 			out.Values[i] = ec._SecurityAlertType_repeat(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	if n := len(deferred.Defers); n > 0 {
+		atomic.AddInt32(&ec.Deferred, int32(min(n, math.MaxInt32)))
+		ec.ProcessDeferredGroup(deferred)
+	}
+
+	return out
+}
+
+var securityRiskImplementors = []string{"SecurityRisk"}
+
+func (ec *executionContext) _SecurityRisk(ctx context.Context, sel ast.SelectionSet, obj *model.SecurityRisk) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, securityRiskImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := graphql.NewDeferredGroup(ctx)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SecurityRisk")
+		case "kind":
+			out.Values[i] = ec._SecurityRisk_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "conditionId":
+			out.Values[i] = ec._SecurityRisk_conditionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "condition":
+			out.Values[i] = ec._SecurityRisk_condition(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "connectionId":
+			out.Values[i] = ec._SecurityRisk_connectionId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "jobId":
+			out.Values[i] = ec._SecurityRisk_jobId(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "subjectName":
+			out.Values[i] = ec._SecurityRisk_subjectName(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "acceptance":
+			out.Values[i] = ec._SecurityRisk_acceptance(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				out.Invalids++
+			}
+		case "canAccept":
+			out.Values[i] = ec._SecurityRisk_canAccept(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -72281,6 +74108,11 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) unmarshalNAcceptRiskInput2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAcceptRiskInput(ctx context.Context, v any) (model.AcceptRiskInput, error) {
+	res, err := ec.unmarshalInputAcceptRiskInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNAccountEvent2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐAccountEvent(ctx context.Context, sel ast.SelectionSet, v *model.AccountEvent) graphql.Marshaler {
 	if v == nil {
 		graphql.AddInvalidNullError(ctx, "AccountEvent!")
@@ -74004,6 +75836,64 @@ func (ec *executionContext) marshalNRetentionHoldReason2githubᚗcomᚋjlentink�
 	return v
 }
 
+func (ec *executionContext) marshalNRiskAcceptance2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx context.Context, sel ast.SelectionSet, v model.RiskAcceptance) graphql.Marshaler {
+	return ec._RiskAcceptance(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRiskAcceptance2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceᚄ(ctx context.Context, sel ast.SelectionSet, v []model.RiskAcceptance) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRiskAcceptance2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRiskAcceptance2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx context.Context, sel ast.SelectionSet, v *model.RiskAcceptance) graphql.Marshaler {
+	if v == nil {
+		graphql.AddInvalidNullError(ctx, "RiskAcceptance!")
+		return graphql.Null
+	}
+	return ec._RiskAcceptance(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRiskAcceptanceStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceStatus(ctx context.Context, v any) (model.RiskAcceptanceStatus, error) {
+	var res model.RiskAcceptanceStatus
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRiskAcceptanceStatus2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceStatus(ctx context.Context, sel ast.SelectionSet, v model.RiskAcceptanceStatus) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNRiskDuration2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskDuration(ctx context.Context, v any) (model.RiskDuration, error) {
+	var res model.RiskDuration
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRiskDuration2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskDuration(ctx context.Context, sel ast.SelectionSet, v model.RiskDuration) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) unmarshalNRiskKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskKind(ctx context.Context, v any) (model.RiskKind, error) {
+	var res model.RiskKind
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRiskKind2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskKind(ctx context.Context, sel ast.SelectionSet, v model.RiskKind) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) unmarshalNRole2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (model.Role, error) {
 	var res model.Role
 	err := res.UnmarshalGQL(v)
@@ -74567,6 +76457,26 @@ func (ec *executionContext) marshalNSecurityAlertType2ᚕgithubᚗcomᚋjlentink
 		fc := graphql.GetFieldContext(ctx)
 		fc.Result = &v[i]
 		return ec.marshalNSecurityAlertType2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecurityAlertType(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSecurityRisk2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecurityRisk(ctx context.Context, sel ast.SelectionSet, v model.SecurityRisk) graphql.Marshaler {
+	return ec._SecurityRisk(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSecurityRisk2ᚕgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecurityRiskᚄ(ctx context.Context, sel ast.SelectionSet, v []model.SecurityRisk) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSecurityRisk2githubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐSecurityRisk(ctx, sel, v[i])
 	})
 
 	for _, e := range ret {
@@ -76255,6 +78165,52 @@ func (ec *executionContext) marshalORetentionEstimate2ᚖgithubᚗcomᚋjlentink
 		return graphql.Null
 	}
 	return ec._RetentionEstimate(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalORiskAcceptance2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptance(ctx context.Context, sel ast.SelectionSet, v *model.RiskAcceptance) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RiskAcceptance(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORiskAcceptanceFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceFilter(ctx context.Context, v any) (*model.RiskAcceptanceFilter, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.RiskAcceptanceFilter)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORiskAcceptanceFilter2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptanceFilter(ctx context.Context, sel ast.SelectionSet, v *model.RiskAcceptanceFilter) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) marshalORiskAcceptor2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskAcceptor(ctx context.Context, sel ast.SelectionSet, v *model.RiskAcceptor) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RiskAcceptor(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORiskEndReason2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskEndReason(ctx context.Context, v any) (*model.RiskEndReason, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.RiskEndReason)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORiskEndReason2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRiskEndReason(ctx context.Context, sel ast.SelectionSet, v *model.RiskEndReason) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) unmarshalORole2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐRole(ctx context.Context, v any) (*model.Role, error) {

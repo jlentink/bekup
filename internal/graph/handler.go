@@ -40,6 +40,7 @@ import (
 	"github.com/jlentink/bekup/internal/notify/summary"
 	"github.com/jlentink/bekup/internal/pubsub"
 	"github.com/jlentink/bekup/internal/restore"
+	"github.com/jlentink/bekup/internal/riskaccept"
 	"github.com/jlentink/bekup/internal/runstate"
 )
 
@@ -147,6 +148,9 @@ type Options struct {
 	// APITokens backs the external API token fields (D-220; nil: those
 	// fields fail with an internal error).
 	APITokens *apiaccess.Service
+	// Risks backs the accepted security risk fields (D-228; nil: those
+	// fields fail).
+	Risks *riskaccept.Service
 	// RunnerTargets backs Query.runnerTargetPolicy (D-223; nil: the field
 	// fails with an internal error).
 	RunnerTargets resolvers.RunnerTargetPolicySource
@@ -212,6 +216,7 @@ func New(opts Options) (*Handler, error) {
 			ConfigReload:    opts.ConfigReload,
 			RetentionHolds:  opts.RetentionHolds,
 			APITokens:       opts.APITokens,
+			Risks:           opts.Risks,
 			RunnerTargets:   opts.RunnerTargets,
 		},
 		Directives: directives(opts.Access),

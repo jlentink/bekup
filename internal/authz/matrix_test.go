@@ -151,6 +151,10 @@ var matrix = map[authz.Operation]expect{
 	authz.OpAPITokenRevoke: {"YFFYFU", "S"},
 	authz.OpAPITokenUpdate: {"YFFYFU", "S"},
 
+	authz.OpRiskList:   {"YYYYYU", "-"},
+	authz.OpRiskAccept: {"YFFYFU", "S"},
+	authz.OpRiskRevoke: {"YFFYFU", "S"},
+
 	authz.OpCalendarView: {"YYYYYU", "-"},
 
 	authz.OpArtifactList:     {"YYYYYU", "-"},
@@ -417,6 +421,29 @@ func TestMatrixInvariants(t *testing.T) {
 	for _, op := range []authz.Operation{authz.OpAPITokenCreate, authz.OpAPITokenList, authz.OpAPITokenRevoke, authz.OpAPITokenUpdate} {
 		if matrix[op].who[1] != 'F' {
 			t.Errorf("%s: maintainers must never manage API tokens (D-220)", op)
+		}
+	}
+	for _, op := range []authz.Operation{authz.OpRiskAccept, authz.OpRiskRevoke} {
+		if matrix[op].who[1] != 'F' || matrix[op].fresh != "S" {
+			t.Errorf("%s: maintainers never decide about a risk, and every decision needs a step-up (D-228)", op)
+		}
+	}
+}
+
+// TestRiskAcceptOwnerNeedsJob: a backup owner accepts or revokes only with
+// a job they own; without a job resource (instance, SMTP, connection
+// kinds) they are refused, admins are not (D-228).
+func TestRiskAcceptOwnerNeedsJob(t *testing.T) {
+	f := newFixture()
+	for _, op := range []authz.Operation{authz.OpRiskAccept, authz.OpRiskRevoke} {
+		if err := f.pol.Authorize(f.ctx(t, 3, false), op); !apierror.IsCode(err, apierror.Forbidden) {
+			t.Errorf("%s owner without a job: %v", op, err)
+		}
+		if err := f.pol.Authorize(f.ctx(t, 3, false), op, authz.Job{ID: f.job}); err != nil {
+			t.Errorf("%s owner with their job: %v", op, err)
+		}
+		if err := f.pol.Authorize(f.ctx(t, 0, false), op); err != nil {
+			t.Errorf("%s admin without a job: %v", op, err)
 		}
 	}
 }

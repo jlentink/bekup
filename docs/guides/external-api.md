@@ -62,7 +62,10 @@ revoke tokens you no longer need); setup has no command to disable it yet.
   secret scanners (GitHub, GitLab) recognize a leaked token.
 - **Shown once.** bekup stores only a SHA-256 hash; a lost token cannot be
   recovered, create a new one.
-- **Expiry.** Required, 1 to 365 days. Revocation applies to the next call.
+- **Expiry.** 1 to 365 days, or explicitly **never** (D-229): a token
+  without expiry stays valid until it is revoked, carries a permanent
+  **Never expires** warning badge and alerts the admins
+  (`api_token_never_expires`). Revocation applies to the next call.
 - **Scope follows the creator.** When the creator is disabled, deleted,
   demoted, or loses ownership of the job, the token loses access at once.
 - **Client address allowlist.** Each token lists the networks (IPv4/IPv6
@@ -86,7 +89,9 @@ and the job's backup owners; maintainers do not see it), or under
 1. **Create API token** opens the dialog. Give the token a name that says
    where it is used, keep the job (preselected on a job's page) and add other
    jobs you may use if one pipeline backs up several.
-2. Choose the expiry: 30, 90 (default), 180 or 365 days.
+2. Choose the expiry: 30, 90 (default), 180 or 365 days, or **Never** for a
+   pipeline you cannot rotate secrets in (alerted, permanently flagged;
+   revoke it when the pipeline is retired).
 3. List the networks the token may be used from, one per line (a bare
    address is a single host). Call `GET /api/v1/self` with a working token
    from the runner to see the address bekup sees (`clientIp`). Only if you
@@ -106,14 +111,16 @@ contain it.
 The token list shows each token's prefix (`bkp_` and the first characters of
 its public id, to recognize it in your secret store), its jobs (on a job's
 page as "+ N other jobs"; a backup owner sees only their own jobs and a count
-of the others), the expiry (flagged within 7 days), where it was last seen
+of the others), the expiry (flagged within 7 days, or the **Never expires**
+badge), where it was last seen
 (time and client address; a refused attempt from outside the allowlist is
 flagged) and its address list or the **Any address** badge. **Edit
 addresses** replaces the list (step-up; audited) and **Revoke** ends the
 token at once (step-up; the next call gets 401). A backup owner may revoke or
 re-address any token that covers one of their jobs. Every creation alerts
 the admins (`api_token_created`); choosing any address alerts them as well
-(`api_token_any_address`). An address change that widens the list (a
+(`api_token_any_address`), and so does a token without expiry
+(`api_token_never_expires`). An address change that widens the list (a
 network the old list did not cover, or any address) alerts the admins and
 the token's creator, naming who changed it (`api_token_addresses_widened`).
 
@@ -222,12 +229,14 @@ curl -fsS -H "Authorization: Bearer $BEKUP_TOKEN" https://backup.example.com/api
 {
   "name": "deploy pipeline",
   "expiresAt": "2027-02-01T00:00:00Z",
+  "neverExpires": false,
   "jobs": [{ "id": "0b6e…", "name": "app database" }],
   "clientIp": "203.0.113.7"
 }
 ```
 
-`clientIp` is the address bekup sees for your runner, the one the token's
+`expiresAt` is `null` (and `neverExpires` `true`) for a token without
+expiry. `clientIp` is the address bekup sees for your runner, the one the token's
 allowlist is checked against. Use it to find the network to allow. A token
 whose allowlist does not contain that address gets 401 here too, so call it
 first from a token that allows any address, or read the address from the
@@ -295,7 +304,7 @@ ranges shared with every other customer: an allowlist of those ranges keeps
 out little, and a short list breaks when the ranges change. Prefer
 self-hosted runners with fixed egress addresses, or a NAT gateway with a
 fixed address, and allow exactly those. If you must allow any address, keep
-the token's expiry short and its jobs few.
+the token's expiry short (never "Never") and its jobs few.
 
 ## Running it
 

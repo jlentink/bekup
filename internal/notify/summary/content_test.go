@@ -24,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/email"
+	"github.com/jlentink/bekup/internal/riskaccept"
 	"github.com/jlentink/bekup/internal/storage"
 )
 
@@ -929,5 +930,27 @@ func TestSummaryStorageRenderClock(t *testing.T) {
 		if row := d.storageTable().Rows[0]; row.Cells[0] != c.word || row.Note != c.note {
 			t.Errorf("%s: %q, note %q; want %q, %q", c.name, row.Cells[0], row.Note, c.word, c.note)
 		}
+	}
+}
+
+// TestSummaryAcceptedRisks: admins see the accepted risks and the API
+// tokens without expiry as one neutral row; it never changes the level
+// (D-228, D-229).
+func TestSummaryAcceptedRisks(t *testing.T) {
+	t.Parallel()
+	d := allOK(t, dailyPeriod(t))
+	d.ShowAlerts = true
+	before := d.overall()
+	d.Risks = riskaccept.Counts{Accepted: 3, Forever: 1, TokensNeverExpiring: 2}
+	if o := d.overall(); o != before {
+		t.Fatalf("accepted risks changed the level: %+v", o)
+	}
+	out := render(t, buildSummary(d, "https://bekup.example/"))
+	if !strings.Contains(out.Text, "3 accepted risks (1 without end date); 2 API tokens without expiry") {
+		t.Fatalf("text lacks the accepted risks:\n%s", out.Text)
+	}
+	d.Risks = riskaccept.Counts{}
+	if out := render(t, buildSummary(d, "https://bekup.example/")); strings.Contains(out.Text, "accepted risk") {
+		t.Fatal("an empty count is listed")
 	}
 }

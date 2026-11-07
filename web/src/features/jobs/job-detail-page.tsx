@@ -186,7 +186,7 @@ function JobDetail({ job, onRunFinished }: { job: Job; onRunFinished: () => void
             ) : null}
             <div className="flex flex-wrap items-center gap-2 pt-1">
               {job.lastRun ? <RunStatusBadge status={job.lastRun.status} /> : null}
-              <EncryptionBadge encryption={job.encryption} />
+              <EncryptionBadge encryption={job.encryption} jobId={job.id} />
               {flags.staff ? (
                 <JobEnabledToggle job={job} showLabel />
               ) : (

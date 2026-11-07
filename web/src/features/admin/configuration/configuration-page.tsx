@@ -44,6 +44,7 @@ import type {
   ConfigReloadRequestFieldsFragment,
   ConfigReloadStatus,
 } from "@/graphql/gen/graphql";
+import { RiskDecision } from "@/features/accepted-risks/risk-badge";
 import { ApiCode, hasApiCode, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { messages } from "@/lib/messages";
@@ -247,7 +248,10 @@ function ImageSection({ posture }: { posture: ImagePosture | undefined }) {
             <dt className="eyebrow self-center">{T.imageRef}</dt>
             <dd className="flex flex-wrap items-center gap-2">
               {posture.following ? (
-                <Tag tone="insecure">{T.imageFollowing}</Tag>
+                <>
+                  <Tag tone="insecure">{T.imageFollowing}</Tag>
+                  <RiskDecision kind="UNPINNED_IMAGE" />
+                </>
               ) : (
                 <Tag tone="success">{T.imagePinned}</Tag>
               )}
@@ -310,7 +314,10 @@ function DatabaseSection({ posture }: { posture: DatabasePosture | undefined }) 
             <dt className="eyebrow self-center">{T.dbMode}</dt>
             <dd className="flex flex-wrap items-center gap-2">
               {posture.singleAccount ? (
-                <Tag tone="insecure">{T.dbModes[posture.mode]}</Tag>
+                <>
+                  <Tag tone="insecure">{T.dbModes[posture.mode]}</Tag>
+                  <RiskDecision kind="INSECURE_DB_ROLES" />
+                </>
               ) : (
                 <span>{T.dbModes[posture.mode]}</span>
               )}
@@ -319,7 +326,10 @@ function DatabaseSection({ posture }: { posture: DatabasePosture | undefined }) 
             <dd className="flex flex-wrap items-center gap-2">
               <code className="font-mono text-xs">{posture.tlsMode}</code>
               {posture.insecureTransport ? (
-                <Tag tone="insecure">{T.dbWeakened}</Tag>
+                <>
+                  <Tag tone="insecure">{T.dbWeakened}</Tag>
+                  <RiskDecision kind="INSECURE_DB_TLS" />
+                </>
               ) : (
                 <Tag tone="success">{T.dbStrict}</Tag>
               )}

@@ -44,6 +44,7 @@ function tokenRow(overrides: Record<string, unknown> = {}) {
     createdByMe: false,
     createdAt: "2026-10-01T10:00:00Z",
     expiresAt: new Date(Date.now() + 60 * DAY).toISOString(),
+    neverExpires: false,
     revokedAt: null,
     allowedCidrs: ["192.0.2.0/24"],
     allowAnyAddress: false,
@@ -232,6 +233,7 @@ describe("API access panel", () => {
               prefix: "bkp_aaisem2e",
               jobs: [{ __typename: "ApiTokenJob", id: JOB_ID, name: "Billing DB", deleted: false }],
               expiresAt: new Date(Date.now() + 30 * DAY).toISOString(),
+              neverExpires: false,
             },
           },
         });
@@ -274,6 +276,7 @@ describe("API access panel", () => {
     const days = (Date.parse(input?.["expiresAt"] as string) - Date.now()) / DAY;
     expect(days).toBeGreaterThan(29.9);
     expect(days).toBeLessThan(30.1);
+    expect(input?.["neverExpires"]).toBe(false);
 
     await user.click(within(shown).getByRole("button", { name: "Copy token" }));
     expect(await navigator.clipboard.readText()).toBe(PLAINTEXT);
@@ -347,6 +350,49 @@ describe("API access panel", () => {
     expect(within(item).getByText(/Refused: address outside the allowlist/)).toBeInTheDocument();
     expect(within(item).getByText(/from 198\.51\.100\.9/)).toBeInTheDocument();
     expect(within(item).getByText("+ 2 other jobs")).toBeInTheDocument();
+  });
+
+  it("flags a token that never expires", async () => {
+    detailPage("USER", {
+      ApiTokens: () => ok({ apiTokens: [tokenRow({ expiresAt: null, neverExpires: true })] }),
+    });
+    const item = await screen.findByTestId("api-token");
+    expect(within(item).getByText("Never expires")).toBeInTheDocument();
+    expect(within(item).getByText("Valid until revoked")).toBeInTheDocument();
+    expect(within(item).getByText("Active")).toBeInTheDocument();
+  });
+
+  it("creates a token without expiry only as an explicit choice", async () => {
+    let input: Vars | undefined;
+    const { user } = detailPage("USER", {
+      CreateApiToken: (v) => {
+        input = v["input"] as Vars;
+        return ok({
+          createApiToken: {
+            __typename: "CreatedApiToken",
+            plaintext: PLAINTEXT,
+            token: {
+              __typename: "ApiToken",
+              id: "t-3",
+              name: "forever",
+              prefix: "bkp_aaisem2e",
+              jobs: [{ __typename: "ApiTokenJob", id: JOB_ID, name: "Billing DB", deleted: false }],
+              expiresAt: null,
+              neverExpires: true,
+            },
+          },
+        });
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Create API token" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create an API token" });
+    await user.type(within(dialog).getByLabelText("Name"), "forever");
+    await user.click(within(dialog).getByRole("radio", { name: "Never" }));
+    expect(within(dialog).getByText(/stays valid until it is revoked/)).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Allowed networks"), "192.0.2.0/24");
+    await user.click(within(dialog).getByRole("button", { name: "Create token" }));
+    await screen.findByRole("dialog", { name: "Save the API token" });
+    expect(input).toMatchObject({ expiresAt: null, neverExpires: true });
   });
 
   it("revokes a token after a confirmation", async () => {

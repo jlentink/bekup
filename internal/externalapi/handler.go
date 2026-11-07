@@ -419,9 +419,11 @@ func (h *handler) requestStatus(w http.ResponseWriter, r *http.Request) {
 
 // Self is the answer of GET /api/v1/self.
 type Self struct {
-	Name      string    `json:"name"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	Jobs      []SelfJob `json:"jobs"`
+	Name string `json:"name"`
+	// ExpiresAt is null when the token never expires (NeverExpires).
+	ExpiresAt    *time.Time `json:"expiresAt"`
+	NeverExpires bool       `json:"neverExpires"`
+	Jobs         []SelfJob  `json:"jobs"`
 	// ClientIP is the address bekup sees (and checks the token's address
 	// allowlist against); null when unknown.
 	ClientIP *string `json:"clientIp"`
@@ -447,7 +449,7 @@ func (h *handler) self(w http.ResponseWriter, r *http.Request) {
 		h.unavailable(w, r, c, err)
 		return
 	}
-	out := Self{Name: t.Name, ExpiresAt: t.ExpiresAt.UTC(), Jobs: make([]SelfJob, 0, len(jobs))}
+	out := Self{Name: t.Name, ExpiresAt: t.ExpiresAt, NeverExpires: t.ExpiresAt == nil, Jobs: make([]SelfJob, 0, len(jobs))}
 	for _, j := range jobs {
 		out.Jobs = append(out.Jobs, SelfJob(j))
 	}

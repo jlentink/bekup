@@ -4,7 +4,6 @@ import { Link } from "react-router";
 
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
-import { SecurityBadge } from "@/components/status/security-badge";
 import { Tag } from "@/components/status/tag";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useSessionUser } from "@/features/auth/use-session-user";
+import { RiskBadge } from "@/features/accepted-risks/risk-badge";
 import type { ConnectionsListQuery as ListResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 
@@ -33,7 +33,12 @@ function TransportCell({ c }: { c: Row }) {
     <div className="flex flex-col items-start gap-1.5">
       <span className="text-sm">{TLS_MODE[c.tlsMode].short}</span>
       {c.insecureTransport ? (
-        <SecurityBadge flag="insecure-transport" />
+        <RiskBadge
+          flag="insecure-transport"
+          kind="CONNECTION_TLS"
+          subjectId={c.id}
+          showAction={false}
+        />
       ) : (
         <Tag tone={pin.tone} {...(pin.detail ? { title: pin.detail } : {})}>
           {pin.label}

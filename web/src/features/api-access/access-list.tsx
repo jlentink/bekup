@@ -166,7 +166,9 @@ function TokenItem({
           <Tag
             tone={STATE_TONE[state]}
             title={
-              state === "expiring" ? T.list.expiringTitle(daysUntil(t.expiresAt, now)) : undefined
+              state === "expiring" && t.expiresAt
+                ? T.list.expiringTitle(daysUntil(t.expiresAt, now))
+                : undefined
             }
           >
             {T.list.states[state]}
@@ -217,15 +219,20 @@ function TokenItem({
           )}
         </Fact>
         <Fact label={T.list.expiry}>
-          <span className="flex flex-col">
-            <span>
-              {t.revokedAt
-                ? T.list.revoked(formatDateTime(t.revokedAt))
-                : state === "expired"
+          {t.revokedAt ? (
+            <span>{T.list.revoked(formatDateTime(t.revokedAt))}</span>
+          ) : !t.expiresAt ? (
+            <span className="flex flex-col gap-1">
+              <SecurityBadge flag="never-expires" className="self-start" />
+              <span className="text-xs text-muted-foreground">{T.list.neverExpiresHint}</span>
+            </span>
+          ) : (
+            <span className="flex flex-col">
+              <span>
+                {state === "expired"
                   ? T.list.expired(formatDateTime(t.expiresAt))
                   : T.list.expires(formatDateTime(t.expiresAt))}
-            </span>
-            {!t.revokedAt ? (
+              </span>
               <span
                 className={cn(
                   "text-xs",
@@ -234,8 +241,8 @@ function TokenItem({
               >
                 {formatRelative(t.expiresAt, now)}
               </span>
-            ) : null}
-          </span>
+            </span>
+          )}
         </Fact>
         <Fact label={T.list.lastUse}>
           {t.lastSeenAt ? (

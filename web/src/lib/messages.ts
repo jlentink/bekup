@@ -5,6 +5,13 @@
  * of internal details.
  */
 export const messages = {
+  /** Accepted security risks in the shell and the status badges (D-228). */
+  risks: {
+    acceptedUntil: (at: string) => `Accepted until ${at}`,
+    acceptedForever: "Accepted, no end date",
+    bannerUntil: (at: string) => `Accepted as a risk until ${at}.`,
+    bannerForever: "Accepted as a risk without an end date.",
+  },
   common: {
     cancel: "Cancel",
     close: "Close",

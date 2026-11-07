@@ -78,6 +78,11 @@ type Options struct {
 	// Alerts receives security events (pin mismatch, host-key mismatch,
 	// TLS downgrade); nil logs them. Task 5.5 turns them into alerts.
 	Alerts AlertFunc
+	// RiskEnder ends, in the change's transaction, the live risk
+	// acceptances of a connection whose TLS mode (tls) or endpoint, SSH
+	// route or role (endpoint) changes (D-228: a change and a change back must never
+	// re-cover an old acceptance); nil: none.
+	RiskEnder func(ctx context.Context, q *sqlc.Queries, id uuid.UUID, tls, endpoint bool) error
 	// Limiter is the per-user limit of runner operations; nil: 10 per
 	// minute, burst 5.
 	Limiter func(key string) (bool, time.Duration)
@@ -786,7 +791,15 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Upda
 			// not reused; the admin entered them again (or cleared them).
 			details["reentered_for_new_endpoint"] = reentered
 		}
-		return s.record(ctx, q, actor, audit.ActionConnectionUpdated, id, details, st.credsChanged)
+		if err := s.record(ctx, q, actor, audit.ActionConnectionUpdated, id, details, st.credsChanged); err != nil {
+			return err
+		}
+		routeMoved := st.ssh != cur.SshEnabled || (st.ssh && (st.sshHost != deref(cur.SshHost) ||
+			st.sshPort != int(deref(cur.SshPort)) || st.sshUser != deref(cur.SshUser)))
+		if s.o.RiskEnder != nil && (st.host != cur.Host || st.port != int(cur.Port) || st.username != cur.Username || routeMoved) {
+			return s.o.RiskEnder(ctx, q, id, false, true)
+		}
+		return nil
 	})
 	if err != nil {
 		return Connection{}, err
@@ -984,6 +997,11 @@ func (s *Service) SetTLSMode(ctx context.Context, actor Actor, id uuid.UUID, mod
 			"name": cur.Name, "from": string(from), "to": string(mode), "downgrade": downgrade,
 		}, nil); err != nil {
 			return err
+		}
+		if s.o.RiskEnder != nil {
+			if err := s.o.RiskEnder(ctx, q, id, true, false); err != nil {
+				return err
+			}
 		}
 		if downgrade {
 			return s.recordOptOut(ctx, q, actor, id, cur.Name, from, mode)

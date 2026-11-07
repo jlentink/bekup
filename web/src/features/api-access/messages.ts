@@ -5,7 +5,7 @@ const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1
 export const T = {
   panel: {
     title: "API access",
-    lead: "Let a CI pipeline start this job's backup and wait for the result, for example before a deployment migrates the database. Each token is shown once, expires and can be revoked at any time.",
+    lead: "Let a CI pipeline start this job's backup and wait for the result, for example before a deployment migrates the database. Each token is shown once, expires (unless created without an expiry) and can be revoked at any time.",
     create: "Create API token",
     empty: "No API tokens for this job yet.",
     loadFailed: "The API tokens could not be loaded.",
@@ -31,6 +31,8 @@ export const T = {
     expiry: "Expiry",
     expires: (at: string) => `Expires ${at}`,
     expired: (at: string) => `Expired ${at}`,
+    neverExpires: "Never expires",
+    neverExpiresHint: "Valid until revoked",
     revoked: (at: string) => `Revoked ${at}`,
     states: {
       active: "Active",
@@ -92,7 +94,10 @@ export const T = {
     noJobs: "No jobs you may use.",
     expiry: "Expires after",
     days: (n: number) => `${String(n)} days`,
+    never: "Never",
     expiryHint: "Required. Rotate the token before it expires.",
+    neverHint:
+      "The token stays valid until it is revoked. Admins are alerted and the token is permanently flagged; prefer an expiry you rotate.",
     submit: "Create token",
   },
   edit: {

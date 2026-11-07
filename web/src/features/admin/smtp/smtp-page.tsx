@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Section } from "@/features/account/section";
+import { RiskDecision } from "@/features/accepted-risks/risk-badge";
 import { useSessionUser } from "@/features/auth/use-session-user";
 import { reportActionError, useStepUp } from "@/features/auth/use-step-up";
 import { getFragmentData } from "@/graphql/gen";
@@ -182,7 +183,12 @@ function SmtpStatus({ settings }: { settings: SmtpShape & { mayBeUnencrypted: bo
       ) : (
         <Tag tone="neutral">{T.disabled}</Tag>
       )}
-      {settings.configured && settings.mayBeUnencrypted ? <UnencryptedBadge /> : null}
+      {settings.configured && settings.mayBeUnencrypted ? (
+        <>
+          <UnencryptedBadge />
+          <RiskDecision kind="SMTP_UNENCRYPTED" />
+        </>
+      ) : null}
     </>
   );
 }

@@ -50,4 +50,19 @@ describe("SecurityBadge", () => {
     expect(screen.getByText("Unencrypted")).toBeInTheDocument();
     expect(screen.getByText("Insecure transport")).toBeInTheDocument();
   });
+
+  it("keeps an accepted risk marked, muted and signed off (D-228)", () => {
+    const { container } = render(
+      <>
+        <SecurityBadge flag="insecure-transport" accepted={{ until: "2027-01-15T12:00:00Z" }} />
+        <SecurityBadge flag="unencrypted" accepted={{ until: null }} />
+      </>,
+    );
+    const [dated, forever] = container.querySelectorAll("[data-accepted]");
+    expect(dated).toHaveClass("hatch-accepted");
+    expect(dated).not.toHaveClass("hatch-insecure");
+    expect(dated?.textContent).toMatch(/Insecure transport.*Accepted until .*2027/);
+    expect(forever?.textContent).toContain("Accepted, no end date");
+    expect(forever?.textContent).toMatch(/administrator/);
+  });
 });

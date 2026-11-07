@@ -36,6 +36,7 @@ func (a *App) registerSecurityChecks(ws *queue.Workers) error {
 			{Component: monitor.CertPostgresClient, Path: cfg.Database.TLSClientCertFile},
 		},
 		Posture: a.weakenedPosture,
+		Risks:   a.risks,
 		Logger:  a.opts.Logger,
 	})
 	if err != nil {

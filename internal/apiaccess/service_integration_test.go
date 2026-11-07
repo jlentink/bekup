@@ -398,6 +398,38 @@ func TestIntegrationTokenService(t *testing.T) {
 	if e.authenticate(created.Plaintext, inside) {
 		t.Fatal("a revoked token authenticates")
 	}
+
+	// A token without expiry (D-229): stored with never_expires and no
+	// date, valid, audited and alerted.
+	forever, err := e.svc.Create(ownerCtx, apiaccess.CreateInput{Name: "forever", JobIDs: []uuid.UUID{jobA}, NeverExpires: true, AllowedCIDRs: []string{"192.0.2.0/24"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !forever.Token.NeverExpires || forever.Token.ExpiresAt != nil {
+		t.Fatalf("never-expiring token %+v", forever.Token)
+	}
+	if n := e.count("SELECT count(*) FROM api_tokens WHERE id = $1 AND never_expires AND expires_at IS NULL", forever.Token.ID); n != 1 {
+		t.Fatal("never_expires not stored")
+	}
+	if d := e.auditDetails("api_token.created", forever.Token.ID); d == nil || d["never_expires"] != true || d["expires_at"] != "" {
+		t.Fatalf("never-expiring audit %v", d)
+	}
+	if e.alerts("api_token_created", forever.Token.ID) != 1 || e.alerts("api_token_never_expires", forever.Token.ID) != 1 {
+		t.Fatal("never-expiring alerts")
+	}
+	if !e.authenticate(forever.Plaintext, inside) {
+		t.Fatal("a never-expiring token is refused")
+	}
+	// The column is not writable for bekup_app, and the guard refuses a
+	// change even for the owner role.
+	if _, err := e.pool.Exec(e.ctx, "UPDATE api_tokens SET never_expires = false, expires_at = now() + interval '1 day' WHERE id = $1", forever.Token.ID); err == nil {
+		t.Fatal("never_expires changed")
+	}
+	// Both an expiry and never: refused before the database.
+	if _, err := e.svc.Create(adminCtx, apiaccess.CreateInput{Name: "x", JobIDs: []uuid.UUID{jobA}, ExpiresAt: expires, NeverExpires: true, AllowAnyAddress: true}); field(err) != apiaccess.FieldExpiresAt {
+		t.Fatalf("expiry and never: %v", err)
+	}
+
 }
 
 // TestAddressRulesMatchDatabase: ParseAddresses and the database's
