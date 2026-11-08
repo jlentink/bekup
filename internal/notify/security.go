@@ -16,6 +16,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Security alerts (task 5.5, D-190). Every security-relevant audited
@@ -453,44 +454,38 @@ func riskDetail(ev audit.Event, d Detail) {
 	}
 }
 
-// riskLabels name the accepted risk kinds in alert sentences.
-var riskLabels = map[string]string{
-	"insecure_transport": "bekup served over plain HTTP",
-	"insecure_db_tls":    "the weakened TLS mode of the app database",
-	"insecure_db_roles":  "single-account database mode",
-	"unpinned_image":     "an image that follows a tag",
-	"connection_tls":     "the relaxed TLS of a database connection",
-	"privileged_role":    "a privileged database role of a connection",
-	"smtp_unencrypted":   "e-mail that may be sent unencrypted",
-	"encryption_opt_out": "unencrypted backups of a job",
+// riskLabel names an accepted risk kind in alert sentences
+// ("risk.label.<kind>" in texts).
+func riskLabel(t textFunc, kind string) string {
+	if _, ok := texts[i18n.EN]["risk.label."+kind]; kind == "" || !ok {
+		return t("risk.label.fallback")
+	}
+	return t("risk.label." + kind)
 }
 
 // riskBody is the sentence of the risk acceptance alerts.
-func riskBody(kind string, d Detail) string {
-	what := riskLabels[str(d, "risk_kind")]
-	if what == "" {
-		what = "a security risk"
-	}
+func riskBody(t textFunc, kind string, d Detail) string {
+	what := riskLabel(t, str(d, "risk_kind"))
 	switch kind {
 	case KindRiskAccepted:
 		until := ""
 		if e := str(d, "expires"); e != "" {
-			until = " until " + e
+			until = t("risk.until", e)
 		}
-		return "The risk of " + what + " was accepted" + until + "; it is no longer flagged as an open issue. Review it under Accepted risks."
+		return t("risk.accepted", what, until)
 	case KindRiskAcceptedPermanently:
-		return "The risk of " + what + " was accepted without an end date; it will not be flagged again until the acceptance is revoked or the condition changes. Review it under Accepted risks."
+		return t("risk.accepted_permanently", what)
 	case KindRiskAcceptanceExpiring:
-		return "The acceptance of " + what + " ends on " + str(d, "expires") + "; the risk will then be flagged again. Accept it again or fix the condition."
+		return t("risk.expiring", what, str(d, "expires"))
 	case KindRiskAcceptanceEnded:
-		why := "it expired"
+		why := t("risk.end.expired")
 		switch str(d, "end_reason") {
 		case "condition_changed":
-			why = "the condition changed"
+			why = t("risk.end.condition_changed")
 		case "acceptor_lost_rights":
-			why = "the account that accepted it may no longer decide about it"
+			why = t("risk.end.acceptor_lost_rights")
 		}
-		return "The acceptance of " + what + " ended (" + why + "); the risk is flagged again."
+		return t("risk.ended", what, why)
 	}
 	return ""
 }
@@ -705,123 +700,114 @@ func loginBurst(ctx context.Context, q *sqlc.Queries, ev audit.Event, now time.T
 	return nil
 }
 
-// systemBody is the sentence of a security.system event: the fixed text
-// of its kind, with the counts and dates of the kinds that carry them.
-func systemBody(d Detail) string {
+// systemBody is the sentence of a security.system event in t (language
+// l): the fixed text of its kind, with the counts and dates of the kinds
+// that carry them.
+func systemBody(t textFunc, l i18n.Locale, d Detail) string {
 	kind := str(d, "kind")
+	fixed, hasFixed := systemMessage(l, kind)
 	switch kind {
 	case KindLoginBurstAddress:
-		return fmt.Sprintf("%d failed sign-ins from %s within %d minutes.", num(d, "failures"), str(d, "ip"), num(d, "window_minutes"))
+		return t("alert.login_burst_address", num(d, "failures"), str(d, "ip"), num(d, "window_minutes"))
 	case KindLoginBurstAccount:
-		return fmt.Sprintf("%d failed sign-ins on one account within %d minutes.", num(d, "failures"), num(d, "window_minutes"))
+		return t("alert.login_burst_account", num(d, "failures"), num(d, "window_minutes"))
 	case KindLoginBurstGlobal:
-		return fmt.Sprintf("%d failed sign-ins in total within %d minutes.", num(d, "failures"), num(d, "window_minutes"))
+		return t("alert.login_burst_global", num(d, "failures"), num(d, "window_minutes"))
 	case KindCertExpiring:
-		return fmt.Sprintf("The %s certificate expires on %s (in %d days or less). Renew it with bekup setup renew (or bekup certs rotate).",
-			str(d, "component"), str(d, "not_after"), num(d, "threshold_days"))
+		return t("alert.cert_expiring", str(d, "component"), str(d, "not_after"), num(d, "threshold_days"))
 	case KindCertExpired:
-		return fmt.Sprintf("The %s certificate expired on %s. Renew it with bekup setup renew (or bekup certs rotate).", str(d, "component"), str(d, "not_after"))
+		return t("alert.cert_expired", str(d, "component"), str(d, "not_after"))
 	case KindPinExpiring:
-		return fmt.Sprintf("The pinned certificate of a database connection expires on %s (in %d days or less); re-pin it after the server's certificate is renewed.",
-			str(d, "not_after"), num(d, "threshold_days"))
+		return t("alert.pin_expiring", str(d, "not_after"), num(d, "threshold_days"))
 	case KindPinExpired:
-		return fmt.Sprintf("The pinned certificate of a database connection expired on %s.", str(d, "not_after"))
+		return t("alert.pin_expired", str(d, "not_after"))
 	case KindConfigReloadWeakened:
 		if k := str(d, "settings"); k != "" {
-			return systemMessages[kind] + " Changed: " + k + "."
+			return fixed + t("alert.changed_settings", k)
 		}
 	case KindSSRFAllowlistWidened:
 		if b, ok := d["personal_webhooks"].(bool); ok && b {
-			return systemMessages[kind] + " Personal webhooks of every user may now reach private targets as well."
+			return fixed + t("alert.ssrf_personal")
 		}
 	case KindCLIAction:
 		if a := str(d, "action"); a != "" {
-			return "A break-glass command was run on the bekup host (" + a + ")."
+			return t("alert.cli_action", a)
 		}
 	case KindAPIAddressDenied:
-		return apiDenialBody(d)
+		return apiDenialBody(t, d)
 	case KindAPITokenCreated:
-		return apiTokenCreatedBody(d)
+		return apiTokenCreatedBody(t, d)
 	case KindAPITokenAnyAddress:
-		return fmt.Sprintf("The external API token %q may now be used from any address%s: no client address allowlist protects it. "+
-			"Restrict it to your CI runners' networks if you can.", apiName(d), apiChangedBy(d))
+		return t("api.any_address", apiName(t, d), apiChangedBy(t, d))
 	case KindRiskAccepted, KindRiskAcceptedPermanently, KindRiskAcceptanceExpiring, KindRiskAcceptanceEnded:
-		return riskBody(kind, d)
+		return riskBody(t, kind, d)
 	case KindAPITokenNeverExpires:
-		return fmt.Sprintf("The external API token %q never expires: it stays valid until it is revoked. "+
-			"Revoke it when the pipeline that uses it is retired.", apiName(d))
+		return t("api.never_expires", apiName(t, d))
 	case KindAPITokenAddressesWidened:
-		return apiWidenedBody(d)
+		return apiWidenedBody(t, d)
 	default:
 	}
-	if m, ok := systemMessages[kind]; ok {
-		return m
+	if hasFixed {
+		return fixed
 	}
 	return ""
 }
 
 // apiName is the display name of the token of an API token alert.
-func apiName(d Detail) string {
+func apiName(t textFunc, d Detail) string {
 	if n := str(d, "api_name"); n != "" {
 		return n
 	}
-	return "(unnamed)"
+	return t("name.unnamed")
 }
 
 // apiChangedBy names who changed a token's addresses (" (changed by
 // ...)"), stressing a change by someone other than the token's creator;
 // "" for alerts of a token's creation.
-func apiChangedBy(d Detail) string {
+func apiChangedBy(t textFunc, d Detail) string {
 	who := str(d, "changed_by")
 	if who == "" {
 		return ""
 	}
 	if b, ok := d["by_creator"].(bool); ok && b {
-		return fmt.Sprintf(" (changed by %s, its creator)", who)
+		return t("api.changed_by_creator", who)
 	}
-	return fmt.Sprintf(" (changed by %s, not its creator)", who)
+	return t("api.changed_by_other", who)
 }
 
 // apiWidenedBody is the sentence of the api_token_addresses_widened
 // alerts (admins and the token's creator).
-func apiWidenedBody(d Detail) string {
-	where := fmt.Sprintf("from more addresses (now %d allowed network(s))", num(d, "networks"))
+func apiWidenedBody(t textFunc, d Detail) string {
+	where := t.n("n.from_more_addresses", num(d, "networks"))
 	if b, ok := d["any_address"].(bool); ok && b {
-		where = "from any address"
+		where = t("api.from_any_address")
 	}
-	return fmt.Sprintf("The client addresses of the external API token %q were widened%s: it may now be used %s. "+
-		"If you did not expect this change, review the token's addresses or revoke it.", apiName(d), apiChangedBy(d), where)
+	return t("api.widened", apiName(t, d), apiChangedBy(t, d), where)
 }
 
 // apiTokenCreatedBody is the sentence of the api_token_created alert.
-func apiTokenCreatedBody(d Detail) string {
-	where := fmt.Sprintf("from %d allowed network(s)", num(d, "networks"))
+func apiTokenCreatedBody(t textFunc, d Detail) string {
+	where := t.n("n.from_networks", num(d, "networks"))
 	if b, ok := d["any_address"].(bool); ok && b {
-		where = "from any address"
+		where = t("api.from_any_address")
 	}
 	until := ""
 	if e := str(d, "expires"); e != "" {
-		until = ", valid until " + e
+		until = t("api.valid_until", e)
 	} else if b, ok := d["never_expires"].(bool); ok && b {
-		until = ", never expiring"
+		until = t("api.never_expiring")
 	}
-	return fmt.Sprintf("An external API token %q was created; it can start backups of %d job(s) %s%s.",
-		apiName(d), num(d, "jobs"), where, until)
+	return t("api.created", apiName(t, d), t.n("n.jobs", num(d, "jobs")), where, until)
 }
 
 // apiDenialBody is the sentence of the api_token_ip_denied alerts (admins
 // and the token's creator).
-func apiDenialBody(d Detail) string {
-	name := str(d, "api_name")
-	if name == "" {
-		name = "(unnamed)"
-	}
+func apiDenialBody(t textFunc, d Detail) string {
 	ip := str(d, "ip")
-	if ip == "" {
-		ip = "unknown"
+	if ip == "" || ip == "unknown" {
+		ip = t("api.ip_unknown")
 	}
-	return fmt.Sprintf("The external API token %q was presented from the address %s, which its address allowlist does not include; "+
-		"the request was refused. If you do not recognize the address, the token may be stolen: revoke it.", name, ip)
+	return t("api.denied", apiName(t, d), ip)
 }
 
 // keyNameRE is the shape of a config key name in a reload entry.

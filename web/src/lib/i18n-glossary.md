@@ -1,4 +1,7 @@
-# Dutch UI glossary (D-235)
+# Dutch glossary (D-235, D-237)
+
+Used by the web UI and by the server texts (`texts.go` catalogs: inbox,
+e-mails, summaries).
 
 Every Dutch text in the UI uses these terms, so the same thing always has
 the same name. Add a row when you introduce a new concept; never use a
@@ -125,77 +128,86 @@ synonym for an existing one.
 
 ## Terms added during the 8.1 translation
 
-| English                                                                                | Nederlands                                                   |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| privileged (role)                                                                      | bevoorrecht (never "geprivilegieerd" or "verhoogde rechten") |
-| deep / standard (verification level)                                                   | grondig / standaard                                          |
-| exact / estimate / approximate (row counts)                                            | exact / schatting / benaderd                                 |
-| notices (run, informational)                                                           | opmerkingen (never "meldingen")                              |
-| event                                                                                  | gebeurtenis                                                  |
-| finding                                                                                | bevinding                                                    |
-| verdict (test restore, role)                                                           | oordeel                                                      |
-| trigger (of a run)                                                                     | aanleiding                                                   |
-| catch-up run                                                                           | inhaalrun                                                    |
-| attempt                                                                                | poging                                                       |
-| overdue                                                                                | te laat                                                      |
-| paused                                                                                 | gepauzeerd                                                   |
-| projected                                                                              | verwacht                                                     |
-| healthy / never run                                                                    | gezond / nooit uitgevoerd                                    |
-| staging / verifying (restore)                                                          | klaarzetten / controleren                                    |
-| restores (plural noun, page)                                                           | herstelacties; nav item "Herstel"                            |
-| restore history / log                                                                  | herstelgeschiedenis / herstellog                             |
-| target connection                                                                      | doelverbinding                                               |
-| temporary restore connection                                                           | tijdelijke herstelverbinding                                 |
-| scratch target                                                                         | tijdelijk hersteldoel                                        |
-| backup owner                                                                           | back-upeigenaar                                              |
-| ownership (owner grant)                                                                | eigenaarschap                                                |
-| shared channel                                                                         | gedeeld kanaal                                               |
-| attach / detach                                                                        | koppelen / ontkoppelen                                       |
-| per-job override / inherited                                                           | uitzondering (per taak) / overgenomen                        |
-| notification settings                                                                  | meldingsinstellingen                                         |
-| notification center                                                                    | meldingencentrum                                             |
-| grace period                                                                           | overgangsperiode                                             |
-| lockout / locked                                                                       | blokkering / geblokkeerd                                     |
-| enrolled (2FA)                                                                         | ingesteld                                                    |
-| credentials                                                                            | inloggegevens                                                |
-| write-only / read-only                                                                 | alleen-schrijven / alleen-lezen                              |
-| endpoint                                                                               | eindpunt                                                     |
-| ready / not ready                                                                      | gereed / niet gereed                                         |
-| keypair / key type                                                                     | sleutelpaar / sleuteltype                                    |
-| out of band                                                                            | via een ander kanaal                                         |
-| self-signed                                                                            | zelfondertekend                                              |
-| certificate pin                                                                        | certificaatpin                                               |
-| leaf / anchor / intermediate CA                                                        | leaf-certificaat / ankercertificaat / tussenliggende CA      |
-| CA bundle / private CA / system roots                                                  | CA-bundel / privé-CA / systeemroots                          |
-| insecure transport                                                                     | onveilig transport                                           |
-| opt-out (of a secure default)                                                          | afwijking van de veilige standaard                           |
-| widened                                                                                | verruimd                                                     |
-| any address                                                                            | elk adres                                                    |
-| never expires                                                                          | verloopt nooit                                               |
-| expiry                                                                                 | vervaldatum / verloopt                                       |
-| disk (destination type)                                                                | schijf                                                       |
-| no-delete mode                                                                         | niet-verwijderen-modus                                       |
-| unrecorded files                                                                       | niet-geregistreerde bestanden                                |
-| storage class / base path / subfolder                                                  | opslagklasse / basispad / submap                             |
-| Object Lock retention days                                                             | bewaartermijn                                                |
-| soft delete                                                                            | zachte verwijdering                                          |
-| preset / custom query / version query                                                  | voorinstelling / eigen query / versiequery                   |
-| capture (schema version)                                                               | vastleggen                                                   |
-| run history                                                                            | rungeschiedenis                                              |
-| run timeout                                                                            | maximale duur van een run                                    |
-| severity: critical / error / warning / info                                            | ernst: kritiek / fout / waarschuwing / info                  |
-| condition (of an accepted risk)                                                        | situatie                                                     |
-| ledger                                                                                 | register                                                     |
-| actor / target (audit)                                                                 | uitvoerder / doel                                            |
-| chain hash / signed head / redacted                                                    | ketenhash / ondertekende kop / geredigeerd                   |
-| SSRF guard / allowlist entry                                                           | SSRF-beveiliging / vermelding                                |
-| recovery (disaster, admin page)                                                        | noodherstel (never "herstel": that is restore)               |
-| key escrow / keyring                                                                   | sleutelbewaring / sleutelring                                |
-| live settings / restart required                                                       | live-instellingen / herstart nodig                           |
-| image (container) / pinned by digest                                                   | image / vastgepind op digest                                 |
-| scheduler / work queues                                                                | planner / werkwachtrijen                                     |
-| weakened settings                                                                      | verzwakte instellingen                                       |
-| getting started                                                                        | aan de slag                                                  |
-| setup (browser setup) / access code / report                                           | installatie / toegangscode / verslag                         |
-| colour theme: light / dark / system                                                    | kleurthema: licht / donker / systeem                         |
-| AWS field names (Access key ID, Secret access key, Path style, Governance, Compliance) | untranslated                                                 |
+| English                                                                                | Nederlands                                                                 |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| privileged (role)                                                                      | bevoorrecht (never "geprivilegieerd" or "verhoogde rechten")               |
+| deep / standard (verification level)                                                   | grondig / standaard                                                        |
+| exact / estimate / approximate (row counts)                                            | exact / schatting / benaderd                                               |
+| notices (run, informational)                                                           | opmerkingen (never "meldingen")                                            |
+| event                                                                                  | gebeurtenis                                                                |
+| finding                                                                                | bevinding                                                                  |
+| verdict (test restore, role)                                                           | oordeel                                                                    |
+| trigger (of a run)                                                                     | aanleiding                                                                 |
+| catch-up run                                                                           | inhaalrun                                                                  |
+| attempt                                                                                | poging                                                                     |
+| overdue                                                                                | te laat                                                                    |
+| paused                                                                                 | gepauzeerd                                                                 |
+| projected                                                                              | verwacht                                                                   |
+| healthy / never run                                                                    | gezond / nooit uitgevoerd                                                  |
+| staging / verifying (restore)                                                          | klaarzetten / controleren                                                  |
+| restores (plural noun, page)                                                           | herstelacties; nav item "Herstel"                                          |
+| restore history / log                                                                  | herstelgeschiedenis / herstellog                                           |
+| target connection                                                                      | doelverbinding                                                             |
+| temporary restore connection                                                           | tijdelijke herstelverbinding                                               |
+| scratch target                                                                         | tijdelijk hersteldoel                                                      |
+| backup owner                                                                           | back-upeigenaar                                                            |
+| ownership (owner grant)                                                                | eigenaarschap                                                              |
+| shared channel                                                                         | gedeeld kanaal                                                             |
+| attach / detach                                                                        | koppelen / ontkoppelen                                                     |
+| per-job override / inherited                                                           | uitzondering (per taak) / overgenomen                                      |
+| notification settings                                                                  | meldingsinstellingen                                                       |
+| notification center                                                                    | meldingencentrum                                                           |
+| grace period                                                                           | overgangsperiode                                                           |
+| lockout / locked                                                                       | blokkering / geblokkeerd                                                   |
+| enrolled (2FA)                                                                         | ingesteld                                                                  |
+| credentials                                                                            | inloggegevens                                                              |
+| write-only / read-only                                                                 | alleen-schrijven / alleen-lezen                                            |
+| endpoint                                                                               | eindpunt                                                                   |
+| ready / not ready                                                                      | gereed / niet gereed                                                       |
+| keypair / key type                                                                     | sleutelpaar / sleuteltype                                                  |
+| out of band                                                                            | via een ander kanaal                                                       |
+| self-signed                                                                            | zelfondertekend                                                            |
+| certificate pin                                                                        | certificaatpin                                                             |
+| leaf / anchor / intermediate CA                                                        | leaf-certificaat / ankercertificaat / tussenliggende CA                    |
+| CA bundle / private CA / system roots                                                  | CA-bundel / privé-CA / systeemroots                                        |
+| insecure transport                                                                     | onveilig transport                                                         |
+| opt-out (of a secure default)                                                          | afwijking van de veilige standaard                                         |
+| widened                                                                                | verruimd                                                                   |
+| any address                                                                            | elk adres                                                                  |
+| never expires                                                                          | verloopt nooit                                                             |
+| expiry                                                                                 | vervaldatum / verloopt                                                     |
+| disk (destination type)                                                                | schijf                                                                     |
+| no-delete mode                                                                         | niet-verwijderen-modus                                                     |
+| unrecorded files                                                                       | niet-geregistreerde bestanden                                              |
+| storage class / base path / subfolder                                                  | opslagklasse / basispad / submap                                           |
+| Object Lock retention days                                                             | bewaartermijn                                                              |
+| soft delete                                                                            | zachte verwijdering                                                        |
+| preset / custom query / version query                                                  | voorinstelling / eigen query / versiequery                                 |
+| capture (schema version)                                                               | vastleggen                                                                 |
+| run history                                                                            | rungeschiedenis                                                            |
+| run timeout                                                                            | maximale duur van een run                                                  |
+| severity: critical / error / warning / info                                            | ernst: kritiek / fout / waarschuwing / info                                |
+| condition (of an accepted risk)                                                        | situatie                                                                   |
+| ledger                                                                                 | register                                                                   |
+| actor / target (audit)                                                                 | uitvoerder / doel                                                          |
+| chain hash / signed head / redacted                                                    | ketenhash / ondertekende kop / geredigeerd                                 |
+| SSRF guard / allowlist entry                                                           | SSRF-beveiliging / vermelding                                              |
+| recovery (disaster, admin page)                                                        | noodherstel (never "herstel": that is restore)                             |
+| key escrow / keyring                                                                   | sleutelbewaring / sleutelring                                              |
+| live settings / restart required                                                       | live-instellingen / herstart nodig                                         |
+| image (container) / pinned by digest                                                   | image / vastgepind op digest                                               |
+| scheduler / work queues                                                                | planner / werkwachtrijen                                                   |
+| weakened settings                                                                      | verzwakte instellingen                                                     |
+| getting started                                                                        | aan de slag                                                                |
+| setup (browser setup) / access code / report                                           | installatie / toegangscode / verslag                                       |
+| colour theme: light / dark / system                                                    | kleurthema: licht / donker / systeem                                       |
+| AWS field names (Access key ID, Secret access key, Path style, Governance, Compliance) | untranslated                                                               |
+| warnings (summary status badge)                                                        | let op                                                                     |
+| retention hold (summary status badge)                                                  | blokkade                                                                   |
+| free space unknown (summary)                                                           | onbekend                                                                   |
+| summary frequency: daily / every other day / weekly                                    | dagelijkse samenvatting / samenvatting om de dag / wekelijkse samenvatting |
+| partial / disabled (summary status badge)                                              | deels / uit (short words for the badge column)                             |
+
+Server texts (`texts.go`) keep Go's `%q` quoting around names in both
+languages (it escapes control characters), so names appear in straight
+quotes there, not „…”.

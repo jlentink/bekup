@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/storage"
 )
@@ -33,6 +34,9 @@ type Content struct {
 type names struct {
 	job, connection, destination string
 	jobDeleted                   bool
+	// jobGone: the job row no longer exists; render shows the
+	// recipient's "(deleted job)" instead of a name.
+	jobGone bool
 	// summary is the content of a summary.periodic event (D-226), built
 	// for its recipient; nil when it cannot be built.
 	summary *SummaryContent
@@ -69,7 +73,7 @@ func (s *Service) loadNames(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notif
 		j, err := q.GetNotifyJob(ctx, *ev.JobID)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			n.job, n.jobDeleted = "(deleted job)", true
+			n.job, n.jobDeleted, n.jobGone = "(deleted job)", true, true
 		case err != nil:
 			return n, fmt.Errorf("notify: load job: %w", err)
 		default:
@@ -144,212 +148,152 @@ func num(d Detail, k string) int64 {
 // lowSpaceBody is the sentence of destination.low_space (D-227): the
 // free space, the part of the D-225 rule that holds and, for a reminder,
 // since when.
-func lowSpaceBody(dest string, d Detail) string {
-	free := storage.FormatSize(num(d, "free_bytes"))
+func lowSpaceBody(t textFunc, l i18n.Locale, dest string, d Detail) string {
+	size := func(n int64) string { return i18n.LocalizeDecimal(l, storage.FormatSize(n)) }
+	free := size(num(d, "free_bytes"))
 	if _, ok := d["total_bytes"]; ok {
-		free += " of " + storage.FormatSize(num(d, "total_bytes"))
+		free = t("body.low_space.of", free, size(num(d, "total_bytes")))
 	}
-	cause := "less than 10% of it is free"
+	cause := t("body.low_space.fraction")
 	if str(d, "cause") == "below_newest_set" {
-		cause = "less is free than the newest set of backups there needs (" + storage.FormatSize(num(d, "newest_set_bytes")) + ")"
+		cause = t("body.low_space.below_newest_set", size(num(d, "newest_set_bytes")))
 	}
-	body := fmt.Sprintf("Destination %q is low on space: %s free; %s.", dest, free, cause)
+	body := t("body.destination.low_space", dest, free, cause)
 	if num(d, "reminder") > 0 {
 		if since, err := time.Parse(time.RFC3339, str(d, "low_since")); err == nil {
-			body += " It has been low since " + since.UTC().Format("2 Jan 2006 15:04") + " UTC."
+			body += t("body.low_space.since", i18n.FormatTime(l, since.UTC(), "2 Jan 2006 15:04"))
 		}
 	}
 	return body
 }
 
-var accountMessages = map[string]string{
-	KindSignIn:                   "Someone signed in to your account. If this was not you, change your password and review your sessions.",
-	KindPasswordChanged:          "The password of your account was changed. If this was not you, contact an administrator at once.",
-	KindPasswordReset:            "An administrator reset the password of your account.",
-	KindSecondFactorAdded:        "A second factor (passkey or authenticator app) was added to your account.",
-	KindSecondFactorRemoved:      "A second factor was removed from your account.",
-	KindRecoveryCodeUsed:         "A recovery code of your account was used to sign in.",
-	KindRecoveryCodesRegenerated: "New recovery codes were generated for your account; the old ones no longer work.",
-	KindSecondFactorsReset:       "An administrator reset the second factors of your account.",
-	KindAccountLocked:            "Your account was locked after repeated failed sign-in attempts.",
-	KindSecondFactorLocked:       "Second-factor checks of your account were locked after repeated failures.",
-	KindRoleChanged:              "The role of your account was changed.",
-	KindPasskeyCloneSuspected:    "A passkey of your account reported a signature counter that went backwards (possibly a cloned authenticator); the sign-in was refused. Review your passkeys.",
-	KindAPIAddressDenied:         "An external API token you created was presented from an address outside its address allowlist and refused; it may be stolen.",
-	KindAPITokenAddressesWidened: "The client addresses of an external API token you created were widened.",
-	KindRiskAcceptanceExpiring:   "A security risk you accepted will be flagged again soon.",
-	KindRiskAcceptanceEnded:      "A security risk you accepted is flagged again.",
+// jobBodies are the event types whose sentence names only the job.
+var jobBodies = map[EventType]bool{
+	BackupSucceeded: true, BackupSucceededWithWarnings: true, BackupPartial: true, BackupFailed: true, BackupCanceled: true,
+	RestoreStarted: true, RestoreCompleted: true, RestoreFailed: true,
+	JobCreated: true, JobUpdated: true, JobDisabled: true, JobEnabled: true, JobDeleted: true, JobEncryptionChanged: true,
 }
 
-var systemMessages = map[string]string{
-	KindOptOut:                     "A security setting was weakened (an opt-out). Review it in the audit log.",
-	KindAdminCreated:               "A new administrator account was created.",
-	KindAdminGranted:               "An account was given the administrator role.",
-	KindKeysRotated:                "The master keys of this instance changed.",
-	KindInstanceKeyCreated:         "A new instance signing key was created.",
-	KindCertsRotated:               "The internal certificates were rotated.",
-	KindAuditVerifyFailed:          "The audit log chain verification failed.",
-	KindTLSPinMismatch:             "A database server presented a certificate that does not match its pin.",
-	KindSSHHostKeyMismatch:         "An SSH tunnel host presented a host key that does not match its pin.",
-	KindDestinationHostKeyMismatch: "An SFTP destination presented a host key that does not match its pin.",
-	KindDestinationTLSPinMismatch:  "A WebDAV destination presented a TLS certificate that does not match its pin.",
-	KindDestinationTLSPinCleared:   "The certificate pin of a WebDAV destination was removed; its server is verified against the system roots or its CA bundle again.",
-	KindRestoreVerificationFailed:  "A backup file failed its verification before a restore (possible tampering).",
-	// Task 5.5 (D-190).
-	KindJobOwnerAdded:               "An owner was added to a job (the account gains access to its backups).",
-	KindJobOwnerRemoved:             "An owner was removed from a job.",
-	KindPassphrasesExported:         "The encryption passphrases of a job were exported.",
-	KindArtifactDeletedExternally:   "A backup file disappeared from its destination without bekup deleting it.",
-	KindRetentionAborted:            "Retention stopped on a destination because a safety check failed (the newest backup is missing or changed).",
-	KindRestorePrivilegedTarget:     "A restore into a privileged (or unverified) database role was requested with an acknowledgement.",
-	KindRestorePrivilegedRefused:    "A restore was refused because its target role became privileged after the request.",
-	KindTestRestorePrivilegedTarget: "A privileged (or unverified) database role was set as a test-restore scratch target with an acknowledgement.",
-	KindJobCustomVersionQuery:       "A custom schema-version query was set on a job, or its job moved to another connection; it runs on the backed-up databases with the backup role's rights.",
-	KindSecdefNeutralized:           "A restore switched SECURITY DEFINER functions of the restored database to SECURITY INVOKER.",
-	KindTwoFactorPolicyWeakened:     "The two-factor authentication policy was weakened.",
-	KindPasskeyCloneSuspected:       "A passkey reported a signature counter that went backwards (possibly a cloned authenticator).",
-	KindDownloadRejected:            "A download link was presented after use, after expiry, by another session or by an account without access.",
-	KindInsecureTransport:           "bekup is running over plain HTTP outside dev mode; sessions and passwords travel unencrypted.",
-	KindInsecureDBTLS:               "bekup connects to its database with a weakened TLS mode (the server identity is not fully verified).",
-	KindInsecureDBRoles:             "bekup runs migrations and the app with one database account (single-account mode), so a compromised server process could alter the schema and the audit log.",
-	KindUnpinnedImage:               "bekup runs an image that follows a tag (such as :latest) instead of a digest, so whoever moves the tag decides which code runs; pin a digest with setup upgrade --image to remove this warning.",
-	KindServeAliasConflict:          "The network alias bekup-serve on your reverse proxy's Docker network also points to another container, so requests your proxy sends to http://bekup-serve:8080 may reach it. Remove that container's alias, or point the proxy at serve's container name.",
-	KindExternalAPIAliasConflict:    "The network alias bekup-external-api on your reverse proxy's Docker network points to more than one container (or to serve), so requests with API tokens your proxy sends to http://bekup-external-api:8081 may reach another container. Remove the other container's alias, or point the proxy at the external API's container name.",
-	KindAuditHeadExportFailed:       "The signed audit chain head could not be exported.",
-	KindCLIAction:                   "A break-glass command was run on the bekup host.",
-	KindSSRFAllowlistWidened:        "The SSRF allowlist was widened: bekup may now connect to more private hosts or networks. Review the change in the audit log.",
-	KindConfigReloadWeakened:        "A configuration reload applied a change that weakens security (for example a wider trusted-proxy or SSRF allowlist, higher limits or a shorter lockout). Review bekup.toml and the audit log.",
-}
-
-// render builds the content of ev.
-func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names) Content {
+// render builds the content of ev in l (the recipient's language).
+func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names, l i18n.Locale) Content {
+	t := textsFor(l)
 	d := detailOf(ev)
+	if n.jobGone {
+		n.job = t("name.deleted_job")
+	}
 	job := n.job
+	typ := EventType(ev.Type)
 	var body, path string
 	switch m.Group {
 	case GroupBackup:
 		path = idPath("/runs", ev.RunID)
-		switch EventType(ev.Type) {
+		switch typ {
 		case BackupStarted, BackupStartedEarly:
-			body = fmt.Sprintf("The backup of job %q started.", job)
-		case BackupSucceeded:
-			body = fmt.Sprintf("The backup of job %q succeeded.", job)
-		case BackupSucceededWithWarnings:
-			body = fmt.Sprintf("The backup of job %q succeeded with warnings.", job)
-		case BackupPartial:
-			body = fmt.Sprintf("The backup of job %q failed for some databases.", job)
-		case BackupFailed:
-			body = fmt.Sprintf("The backup of job %q failed.", job)
-		case BackupCanceled:
-			body = fmt.Sprintf("The backup of job %q was canceled.", job)
+			body = t("body.backup.started", job)
 		case BackupMissed:
-			body = fmt.Sprintf("The backup of job %q did not run in its expected window.", job)
+			body = t("body.backup.missed", job)
 			path = idPath("/jobs", ev.JobID)
 		default:
+			if jobBodies[typ] {
+				body = t("body."+string(typ), job)
+			}
 		}
 	case GroupRestore:
 		path = idPath("/restores", ev.RestoreID)
-		switch EventType(ev.Type) {
-		case RestoreStarted:
-			body = fmt.Sprintf("A restore of a backup of job %q started.", job)
-		case RestoreCompleted:
-			body = fmt.Sprintf("A restore of a backup of job %q completed.", job)
-		case RestoreFailed:
-			body = fmt.Sprintf("A restore of a backup of job %q failed.", job)
-		case TestRestorePassed:
-			body, path = fmt.Sprintf("The test restore of job %q passed.", job), idPath("/jobs", ev.JobID)
-		case TestRestoreWarnings:
-			body, path = fmt.Sprintf("The test restore of job %q passed with warnings.", job), idPath("/jobs", ev.JobID)
-		case TestRestoreFailed:
-			body, path = fmt.Sprintf("The test restore of job %q failed.", job), idPath("/jobs", ev.JobID)
+		switch typ {
+		case TestRestorePassed, TestRestoreWarnings, TestRestoreFailed:
+			body, path = t("body."+string(typ), job), idPath("/jobs", ev.JobID)
 		default:
+			if jobBodies[typ] {
+				body = t("body."+string(typ), job)
+			}
 		}
 	case GroupRetention:
-		switch EventType(ev.Type) {
+		switch typ {
 		case RetentionSummary:
-			body = fmt.Sprintf("Retention removed %d backup(s) (%d file(s), %d bytes) of job %q on %s.",
-				num(d, "runs"), num(d, "files"), num(d, "bytes"), job, str(d, "date"))
+			body = t("body.retention.summary", t.n("n.backups", num(d, "runs")), t.n("n.files", num(d, "files")),
+				num(d, "bytes"), job, str(d, "date"))
 			path = idPath("/jobs", ev.JobID)
 		case RetentionBlocked:
-			cause := "the destination holds no complete backup of the job"
+			cause := t("body.retention.blocked.no_complete")
 			if c := str(d, "newest_complete"); c != "" {
-				cause = "the backups after " + c + " are incomplete"
+				cause = t("body.retention.blocked.incomplete", c)
 			}
-			body = fmt.Sprintf("Retention is keeping %d incomplete backup(s) of job %q on destination %q since %s: %s.",
-				num(d, "held_runs"), job, n.destination, str(d, "since"), cause)
+			body = t("body.retention.blocked", t.n("n.incomplete_backups", num(d, "held_runs")), job, n.destination,
+				str(d, "since"), cause)
 			path = idPath("/jobs", ev.JobID)
 		case ArtifactMissing:
-			body = fmt.Sprintf("A backup file of job %q is missing from its destination; bekup did not delete it.", job)
+			body = t("body.artifact.missing", job)
 			path = idPath("/jobs", ev.JobID)
 		case DestinationTestFailed:
-			body = fmt.Sprintf("The test of destination %q failed.", n.destination)
+			body = t("body.destination.test_failed", n.destination)
 			path = idPath("/destinations", ev.DestinationID)
 		case DestinationLowSpace:
-			body, path = lowSpaceBody(n.destination, d), idPath("/destinations", ev.DestinationID)
+			body, path = lowSpaceBody(t, l, n.destination, d), idPath("/destinations", ev.DestinationID)
 		default:
 		}
 	case GroupConfig:
 		if m.Subject == SubjectConnection {
 			path = idPath("/connections", ev.ConnectionID)
-			switch EventType(ev.Type) {
-			case ConnectionPinChanged:
-				body = fmt.Sprintf("The certificate pin of connection %q was changed.", n.connection)
-			case ConnectionTLSDowngraded:
-				body = fmt.Sprintf("The TLS protection of connection %q was weakened.", n.connection)
-			case ConnectionHostKeyChanged:
-				body = fmt.Sprintf("The SSH host key pin of connection %q was changed.", n.connection)
+			switch typ {
+			case ConnectionPinChanged, ConnectionTLSDowngraded, ConnectionHostKeyChanged:
+				body = t("body."+string(typ), n.connection)
 			default:
 			}
 		} else {
 			path = idPath("/jobs", ev.JobID)
-			verb := map[EventType]string{
-				JobCreated: "was created", JobUpdated: "was changed", JobDisabled: "was disabled",
-				JobEnabled: "was enabled", JobDeleted: "was deleted", JobEncryptionChanged: "had its encryption changed",
-			}[EventType(ev.Type)]
-			body = fmt.Sprintf("Job %q %s.", job, verb)
+			key := "body." + string(typ)
+			if !jobBodies[typ] {
+				key = "body." + string(JobUpdated)
+			}
+			body = t(key, job)
 			if n.jobDeleted {
 				path = "/jobs"
 			}
 		}
 	case GroupSummary:
 		path = "/"
-		body = "Your periodic summary could not be put together; open the dashboard for the current state."
+		body = t("body.summary.fallback")
 		if n.summary != nil {
 			body = n.summary.Body
 		}
 	case GroupSecurity:
-		if EventType(ev.Type) == SecurityAccount {
+		if typ == SecurityAccount {
 			path = "/profile/security"
-			body = accountMessages[str(d, "kind")]
-			switch str(d, "kind") {
+			kind := str(d, "kind")
+			body = accountMessage(t, kind)
+			switch kind {
 			case KindAPIAddressDenied:
-				body = apiDenialBody(d)
+				body = apiDenialBody(t, d)
 			case KindAPITokenAddressesWidened:
-				body = apiWidenedBody(d)
+				body = apiWidenedBody(t, d)
 			case KindRiskAcceptanceExpiring, KindRiskAcceptanceEnded:
-				body = riskBody(str(d, "kind"), d)
+				body = riskBody(t, kind, d)
 			default:
 			}
 		} else {
 			path = "/admin/audit"
-			body = systemBody(d)
+			body = systemBody(t, l, d)
 		}
 		if body == "" {
-			body = "A security event occurred. Review it in bekup."
+			body = t("body.security.fallback")
 		}
 	}
 	title := m.Label
+	if _, ok := texts[i18n.EN]["title."+ev.Type]; ok {
+		title = t("title." + ev.Type)
+	}
 	if job != "" && m.Subject == SubjectJob {
-		title = m.Label + ": " + job
+		title = t("title.with_job", title, job)
 	}
 	if n.summary != nil {
 		title = n.summary.Title
 	}
 	if code := str(d, "error_code"); code != "" {
-		body += " Reason: " + code + "."
+		body += t("body.reason", code)
 	}
 	if ev.CollapsedCount > 0 {
-		body += fmt.Sprintf(" (%d similar event(s) collapsed.)", ev.CollapsedCount)
+		body += t.n("body.collapsed", int64(ev.CollapsedCount))
 	}
 	c := Content{Title: clampRunes(title, 200), Body: clampRunes(body, 1000)}
 	if path != "" {
@@ -380,7 +324,13 @@ func (s *Service) data(ev *sqlc.NotificationEvent, m Meta, n names, d Detail, c 
 		out["link"] = c.Link
 	}
 	if ev.JobID != nil {
-		out["job"] = map[string]any{"id": ev.JobID.String(), "name": n.job}
+		name := n.job
+		if n.jobGone {
+			// Payload values other than title/summary stay language-neutral
+			// (D-237): the deleted-job marker is always the English one.
+			name = texts.T(i18n.EN, "name.deleted_job")
+		}
+		out["job"] = map[string]any{"id": ev.JobID.String(), "name": name}
 	}
 	if ev.ConnectionID != nil {
 		out["connection"] = map[string]any{"id": ev.ConnectionID.String(), "name": n.connection}
@@ -404,49 +354,56 @@ func (s *Service) data(ev *sqlc.NotificationEvent, m Meta, n names, d Detail, c 
 	return out
 }
 
-// emailFor renders the e-mail of c (the 5.1 layout).
-func emailFor(ev *sqlc.NotificationEvent, c Content, n names) (email.Content, error) {
+// emailFor renders the e-mail of c (the 5.1 layout) in l.
+func emailFor(ev *sqlc.NotificationEvent, c Content, n names, l i18n.Locale) (email.Content, error) {
 	if n.summary != nil {
 		// The periodic summary has its own layout (D-226).
 		return email.Render(n.summary.Notice)
 	}
-	details := []email.Detail{{Label: "Event", Value: ev.Type}}
+	t := textsFor(l)
+	if n.jobGone {
+		n.job = t("name.deleted_job")
+	}
+	details := []email.Detail{{Label: t("email.event"), Value: ev.Type}}
 	if n.job != "" {
-		details = append(details, email.Detail{Label: "Job", Value: n.job})
+		details = append(details, email.Detail{Label: t("email.job"), Value: n.job})
 	}
 	if n.connection != "" {
-		details = append(details, email.Detail{Label: "Connection", Value: n.connection})
+		details = append(details, email.Detail{Label: t("email.connection"), Value: n.connection})
 	}
 	if n.destination != "" {
-		details = append(details, email.Detail{Label: "Destination", Value: n.destination})
+		details = append(details, email.Detail{Label: t("email.destination"), Value: n.destination})
 	}
-	details = append(details, email.Detail{Label: "Time", Value: ev.CreatedAt.UTC().Format("2006-01-02 15:04:05 UTC")})
+	details = append(details, email.Detail{Label: t("email.time"), Value: i18n.FormatTime(l, ev.CreatedAt.UTC(), "2006-01-02 15:04:05 UTC")})
 	notice := email.Notice{
-		Subject: "[bekup] " + clampRunes(c.Title, 180), Heading: c.Title, Paragraphs: []string{c.Body}, Details: details,
+		Subject: t("email.subject", clampRunes(c.Title, 180)), Heading: c.Title, Paragraphs: []string{c.Body}, Details: details,
+		Locale: l,
 	}
 	if c.Link != "" {
-		notice.Action = &email.Action{Label: "Open in bekup", URL: c.Link}
+		notice.Action = &email.Action{Label: t("email.open"), URL: c.Link}
 	}
 	return email.Render(notice)
 }
 
 // floodEmail is the one summary e-mail of the per-user flood rule.
-func (s *Service) floodEmail(limit int) (email.Content, error) {
+func (s *Service) floodEmail(limit int, l i18n.Locale) (email.Content, error) {
+	t := textsFor(l)
 	return email.Render(email.Notice{
-		Subject: "[bekup] Notifications paused for an hour",
-		Heading: "Many notifications in a short time",
+		Subject: t("flood.subject"),
+		Heading: t("flood.heading"),
 		Paragraphs: []string{
-			fmt.Sprintf("You received %d notifications through this channel within the last hour.", limit),
-			"Further notifications (except security alerts) are only shown in your bekup inbox until the rate drops.",
+			t("flood.received", limit),
+			t("flood.further"),
 		},
-		Action: &email.Action{Label: "Open the inbox", URL: s.link("/")},
+		Action: &email.Action{Label: t("flood.open_inbox"), URL: s.link("/")},
+		Locale: l,
 	})
 }
 
 // floodData is the webhook payload of the flood summary.
-func (s *Service) floodData(limit int) map[string]any {
+func (s *Service) floodData(limit int, l i18n.Locale) map[string]any {
 	return map[string]any{
-		"summary": fmt.Sprintf("%d notifications within the last hour; further ones (except security alerts) are only shown in the bekup inbox until the rate drops.", limit),
+		"summary": textsFor(l)("flood.webhook", limit),
 		"link":    s.link("/"),
 	}
 }

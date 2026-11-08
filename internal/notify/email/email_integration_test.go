@@ -29,6 +29,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db/dbtest"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/netguard"
 )
@@ -698,4 +699,50 @@ func linkCode(t *testing.T, m mpMessage) string {
 		t.Fatal("HTML link differs")
 	}
 	return rest
+}
+
+// TestVerificationLanguage: the verification e-mail uses the account's
+// stored language, else the request's, else English (D-237).
+func TestVerificationLanguage(t *testing.T) {
+	mp := startMailpit(t, false)
+	e := newEnv(t)
+	if _, err := e.settings.Update(t.Context(), e.admin, UpdateInput{
+		Enabled: true, Host: "127.0.0.1", Port: mp.smtpPort, Mode: ModeNone, FromAddress: "bekup@example.com",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := NewVerifier(VerifierOptions{
+		DB: e.pool, Keyring: e.kr, Auditor: e.auditor, Mailer: e.sender, BaseURL: testBase + "/",
+		Limiter: func(string) (bool, time.Duration) { return true, 0 }, Logger: e.logger,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := sqlc.New(e.pool)
+	for _, c := range []struct {
+		addr    string
+		stored  string
+		request i18n.Locale
+		subject string
+	}{
+		{"stored@example.com", "nl", i18n.EN, "Bevestig je e-mailadres voor bekup"},
+		{"request@example.com", "", i18n.NL, "Bevestig je e-mailadres voor bekup"},
+		{"default@example.com", "", "", "Verify your e-mail address for bekup"},
+	} {
+		u, err := q.InsertUser(t.Context(), sqlc.InsertUserParams{Email: c.addr, DisplayName: "U", Role: sqlc.UserRoleUser})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.stored != "" {
+			if _, err := e.pool.Exec(t.Context(), `UPDATE users SET locale = $1 WHERE id = $2`, c.stored, u.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := v.Request(t.Context(), Actor{UserID: u.ID, Locale: c.request}); err != nil {
+			t.Fatal(err)
+		}
+		if m := mp.waitMessage(t, c.addr); m.Subject != c.subject {
+			t.Errorf("%s: subject %q, want %q", c.addr, m.Subject, c.subject)
+		}
+	}
 }

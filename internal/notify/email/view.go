@@ -30,6 +30,9 @@ const (
 
 type view struct {
 	Subject, Heading, Preheader, Footer string
+	// Lang is the HTML lang attribute; ButtonMissing the fallback line
+	// under the action button (both in the recipient's language).
+	Lang, ButtonMissing                 string
 	Paragraphs                          []string
 	Details                             []Detail
 	Action                              *Action
@@ -118,6 +121,7 @@ type pillView struct {
 func newView(n *Notice) *view {
 	v := &view{
 		Subject: n.Subject, Heading: n.Heading, Preheader: n.Preheader, Footer: n.Footer,
+		Lang: string(n.Locale), ButtonMissing: layoutTexts.T(n.Locale, "button_missing"),
 		Paragraphs: n.Paragraphs, Details: n.Details, Action: n.Action,
 		L: lightPalette, D: darkPalette,
 		MSOHead: msoHead, MSOOpen: msoOpen, MSOClose: msoClose, PreFill: preheaderFill,

@@ -68,7 +68,8 @@ func emailActor(ctx context.Context) (email.Actor, error) {
 	if err != nil {
 		return email.Actor{}, err
 	}
-	return email.Actor{UserID: p.UserID, IP: auth.RequestMetaFrom(ctx).IP}, nil
+	meta := auth.RequestMetaFrom(ctx)
+	return email.Actor{UserID: p.UserID, IP: meta.IP, Locale: meta.Locale}, nil
 }
 
 func smtpModeModel(m email.Mode) model.SMTPMode {

@@ -1,0 +1,27 @@
+Alles OK: Alle 3 back-uptaken draaiden zonder problemen in de afgelopen 24 uur.
+
+Dagelijkse samenvatting
+
+Periode: za 7 nov 2026, 08:00 – zo 8 nov 2026, 08:00 (Europe/Amsterdam).
+
+Back-ups: 15 runs afgerond (15 geslaagd).
+
+Taken OK: 3/3  |  Mislukt: 0  |  Geschreven: 7,0 GiB  |  Testherstel: 2/2
+
+Taken
+   Status  Taak     OK/Fout  Laatste run  Grootte  Opgeslagen
+   ------  -------  -------  -----------  -------  ----------
+   OK      Billing      7/0  8 nov 04:00  7,0 GiB    50,0 GiB
+   OK      CRM          7/0  8 nov 04:00  3,0 MiB    21,0 MiB
+   OK      Docs         1/0  8 nov 04:00    900 B           –
+
+Herstel
+   Resultaat  Soort        Aantal
+   ---------  -----------  ------
+   Geslaagd   Testherstel       2
+
+Dashboard openen:
+https://bekup.example.com/
+
+--
+Tijden zijn in Europe/Amsterdam. In je meldingsinstellingen kies je hoe vaak je deze samenvatting krijgt, of zet je hem uit. Dit bericht is automatisch verstuurd door bekup. Het bevat geen afbeeldingen, geen tracking en geen geheimen.

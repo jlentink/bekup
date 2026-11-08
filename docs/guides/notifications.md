@@ -42,6 +42,14 @@ connection strings, server output or database content.
 Webhook URLs are stored encrypted (chat services put a bearer credential in
 the URL); bekup only shows scheme, host and port.
 
+**Language (D-237).** Inbox entries, e-mails, the summary and your
+personal webhooks' `title`/`summary` follow the language saved with your
+account (Profile → Account → Language: English or Dutch); "Same as this
+browser" means English for these messages. An inbox entry keeps the
+language it was written in. Shared channels have no single recipient and
+are always English. Webhook payload keys, event types and other values
+never change with the language.
+
 ### The event catalog
 
 Defaults for a new account: **every event you may see goes to the inbox;

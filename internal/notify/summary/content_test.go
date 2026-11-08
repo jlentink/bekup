@@ -22,6 +22,7 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/destinations"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/riskaccept"
@@ -194,7 +195,7 @@ func TestSummaryStatusRule(t *testing.T) {
 	d := newData(period(t, false), mixedInput(t, period(t, false)))
 	got := make([]string, 0, len(d.JobRows))
 	for _, r := range d.JobRows {
-		got = append(got, r.Name+"="+r.word())
+		got = append(got, r.Name+"="+r.word(&d.Period))
 	}
 	want := "Billing=Failed,Forms=Failed,CRM=Missed,Docs=Missed,Ledger=Partial,Mail=Warnings,Events=Held,Garden=OK," +
 		"Handbook=No run,Journal=No run,Kiosk=No run,Inventory=Disabled"
@@ -635,17 +636,23 @@ func TestFailureTextsCoverCodes(t *testing.T) {
 	for name, v := range reasons {
 		codes[strings.ToLower(v)] = "runnerpb." + name
 	}
-	for c, from := range codes {
-		if failureText(c) == "" {
-			t.Errorf("no failure text for %q (%s)", c, from)
+	for _, l := range i18n.Locales {
+		for c, from := range codes {
+			if failureText(l, c) == "" {
+				t.Errorf("%s: no failure text for %q (%s)", l, c, from)
+			}
 		}
-	}
-	for c, txt := range failureTexts {
-		if txt == "" || len(txt) > 60 || strings.ContainsAny(txt, "\r\n") {
-			t.Errorf("%s: bad text %q", c, txt)
-		}
-		if _, ok := codes[c]; !ok {
-			t.Errorf("failure text for %q, which no source defines", c)
+		for key, txt := range texts[l] {
+			c, ok := strings.CutPrefix(key, "failure.")
+			if !ok {
+				continue
+			}
+			if txt == "" || len(txt) > 60 || strings.ContainsAny(txt, "\r\n") {
+				t.Errorf("%s.%s: bad text %q", l, c, txt)
+			}
+			if _, ok := codes[c]; !ok {
+				t.Errorf("%s: failure text for %q, which no source defines", l, c)
+			}
 		}
 	}
 }

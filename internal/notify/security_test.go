@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/audit"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // TestSecurityAlertsFromAudit: every security hook of task 5.5 (each one
@@ -311,11 +312,11 @@ func TestSystemBody(t *testing.T) {
 		`widened (changed by Una, its creator)`: {"kind": KindAPITokenAddressesWidened, "api_name": "x", "changed_by": "Una", "by_creator": true},
 	}
 	for want, d := range cases {
-		if got := systemBody(d); !strings.Contains(got, want) {
+		if got := systemBody(textsFor(i18n.EN), i18n.EN, d); !strings.Contains(got, want) {
 			t.Errorf("systemBody(%v) = %q, want it to contain %q", d, got, want)
 		}
 	}
-	if strings.Contains(systemBody(Detail{"kind": KindSSRFAllowlistWidened}), "Personal") {
+	if strings.Contains(systemBody(textsFor(i18n.EN), i18n.EN, Detail{"kind": KindSSRFAllowlistWidened}), "Personal") {
 		t.Error("personal sentence without the flag")
 	}
 	// The audit flag reaches the alert detail (D-198).
@@ -332,7 +333,7 @@ func TestSystemBody(t *testing.T) {
 	}
 	// Every system kind has a sentence.
 	for kind := range systemSeverity {
-		if systemBody(Detail{"kind": kind}) == "" {
+		if systemBody(textsFor(i18n.EN), i18n.EN, Detail{"kind": kind}) == "" {
 			t.Errorf("kind %s has no message", kind)
 		}
 	}
@@ -356,7 +357,7 @@ func TestSecurityAlertTypes(t *testing.T) {
 			t.Errorf("not sorted by severity at %s", a.Kind)
 		}
 	}
-	for kind := range systemMessages {
+	for _, kind := range textKinds(systemTextPrefix) {
 		if !seen[kind] {
 			t.Errorf("%s has a message but no severity", kind)
 		}
@@ -468,7 +469,7 @@ func TestAPITokenIPDeniedAlert(t *testing.T) {
 		if _, err := ValidateDetail(g.Detail); err != nil {
 			t.Error(err)
 		}
-		if b := apiDenialBody(g.Detail); !strings.Contains(b, `"deploy [31m"`) || !strings.Contains(b, "192.0.2.7") || !strings.Contains(b, "revoke") {
+		if b := apiDenialBody(textsFor(i18n.EN), g.Detail); !strings.Contains(b, `"deploy [31m"`) || !strings.Contains(b, "192.0.2.7") || !strings.Contains(b, "revoke") {
 			t.Errorf("body %q", b)
 		}
 	}

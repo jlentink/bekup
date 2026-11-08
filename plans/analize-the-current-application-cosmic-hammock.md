@@ -74,10 +74,13 @@ Every task below (8.1, 8.2, ..., 14.2) is one change on its own branch.
 - **8.2 Locale per user.** `users.locale` (`en`|`nl`, migration, DML-only),
   `Accept-Language` fallback before sign-in, GraphQL `updateMyLocale`
   (authz row). Error codes stay codes; the UI maps them.
-- **8.3 Server-rendered texts.** E-mail templates, notification contents,
-  summary e-mails, `failureTexts`, GraphQL error messages and the browser
-  setup wizard's step texts in the recipient's/request's locale (catalog in Go,
-  parity test like the web one, goldens per locale, 375 px width check).
+- **8.3 Server-rendered texts** (user decision: three tasks, D-237).
+  **8.3a** notifications, inbox rows, e-mails and the periodic summary in
+  the recipient's language; **8.3b** GraphQL messages through a central
+  catalog in the error presenter (call sites keep their English text; a
+  source-walking test requires a Dutch entry for every message);
+  **8.3c** the setup wizard (terminal: `LC_ALL`/`LC_MESSAGES`/`LANG`,
+  `--lang` wins; browser setup: Accept-Language).
 - **8.4 Docs**: translation guide (`docs/development.md`), contributing a
   language. *deps: 8.1*
 

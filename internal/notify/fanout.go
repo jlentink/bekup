@@ -17,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/graph/apierror"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/queue"
 )
 
@@ -51,6 +52,8 @@ type recipient struct {
 	id       uuid.UUID
 	role     sqlc.UserRole
 	verified bool
+	// locale is the language of the recipient's inbox row (D-237).
+	locale i18n.Locale
 }
 
 // deliverySession is the placeholder session id of the principals built
@@ -116,7 +119,9 @@ func (s *Service) recipients(ctx context.Context, q *sqlc.Queries, ev *sqlc.Noti
 			return nil, err
 		}
 		if ok {
-			out = append(out, recipient{id: u.ID, role: u.Role, verified: u.EmailVerifiedAt != nil})
+			out = append(out, recipient{
+				id: u.ID, role: u.Role, verified: u.EmailVerifiedAt != nil, locale: i18n.Resolve(u.Locale, ""),
+			})
 		}
 	}
 	return out, nil
@@ -157,10 +162,24 @@ func (s *Service) FanOut(ctx context.Context, eventID uuid.UUID) error {
 		if err != nil {
 			return err
 		}
-		c := s.render(&ev, m, n)
-		payload, err := json.Marshal(c.Data)
-		if err != nil {
-			return fmt.Errorf("notify: payload: %w", err)
+		// One rendering per language: the inbox row is in the recipient's
+		// language (D-237).
+		type rendered struct {
+			c       Content
+			payload []byte
+		}
+		byLocale := map[i18n.Locale]rendered{}
+		contentFor := func(l i18n.Locale) (rendered, error) {
+			if r, ok := byLocale[l]; ok {
+				return r, nil
+			}
+			c := s.render(&ev, m, n, l)
+			payload, err := json.Marshal(c.Data)
+			if err != nil {
+				return rendered{}, fmt.Errorf("notify: payload: %w", err)
+			}
+			byLocale[l] = rendered{c: c, payload: payload}
+			return byLocale[l], nil
 		}
 		rcpts, err := s.recipients(ctx, q, &ev, m)
 		if err != nil {
@@ -192,6 +211,11 @@ func (s *Service) FanOut(ctx context.Context, eventID uuid.UUID) error {
 			}
 			up := prefs[r.id]
 			if Enabled(m, ChannelInbox, ev.JobID, up) {
+				rc, err := contentFor(r.locale)
+				if err != nil {
+					return err
+				}
+				c, payload := rc.c, rc.payload
 				link := &c.Link
 				if c.Link == "" {
 					link = nil

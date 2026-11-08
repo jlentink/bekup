@@ -3,6 +3,8 @@ package notify
 import (
 	"fmt"
 	"sort"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // SecurityAlertType describes one security.system alert kind for the
@@ -20,7 +22,8 @@ type SecurityAlertType struct {
 }
 
 // alertDescriptions are the reference texts of the kinds whose inbox
-// sentence carries values (systemBody); the others use systemMessages.
+// sentence carries values (systemBody); the others use their fixed
+// English sentence (systemMessage).
 //
 //nolint:gosec // G101: alert descriptions that mention API tokens, not credentials
 var alertDescriptions = map[string]string{
@@ -81,7 +84,7 @@ func SecurityAlertTypes() []SecurityAlertType {
 	for kind, sev := range systemSeverity {
 		d, ok := alertDescriptions[kind]
 		if !ok {
-			d = systemMessages[kind]
+			d, _ = systemMessage(i18n.EN, kind)
 		}
 		r, ok := alertRepeat[kind]
 		if !ok {

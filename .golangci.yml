@@ -132,6 +132,11 @@ linters:
           - revive
           - gocritic
         text: "unused-parameter|exported: exported method Resolver\\.|typeDefFirst|paramTypeCombine|var-naming: method parameter \\w+Ids should be"
+      # Server text catalogs (D-237) hold Dutch, which misspell reads as
+      # misspelled English. Catalogs live only in files named texts.go.
+      - path: (^|/)texts(_test)?\.go$
+        linters:
+          - misspell
       # Tests may use unchecked type assertions and weaker crypto fixtures,
       # but never disable security linters for production code.
       - path: _test\.go

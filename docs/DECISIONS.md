@@ -259,6 +259,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-234](#d-234-kubernetes-through-a-jobs-executor-in-the-runner) | Kubernetes through a Jobs executor in the runner | proposed |
 | [D-235](#d-235-ui-translations-as-typed-message-tables-per-language-english-dutch) | UI translations as typed message tables per language (English, Dutch) | proposed |
 | [D-236](#d-236-the-ui-language-per-account-and-the-request-language) | The UI language per account and the request language | proposed |
+| [D-237](#d-237-server-rendered-notification-texts-in-the-recipients-language) | Server-rendered notification texts in the recipient's language | proposed |
 
 ---
 
@@ -15792,3 +15793,52 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** plan task 8.2, `internal/i18n`, `internal/auth`,
   `web/src/features/auth/use-account-locale.ts`,
   `web/src/features/account/language-section.tsx`, D-235.
+
+## D-237: Server-rendered notification texts in the recipient's language
+
+- **Date:** 2026-11-08
+- **Status:** proposed
+- **Decided by:** user (task 8.3 split into 8.3a notifications/e-mails/
+  summary, 8.3b GraphQL messages through a central catalog, 8.3c setup
+  wizard by LC_ALL/LC_MESSAGES/LANG with a `--lang` flag) and agent (the
+  details of 8.3a below)
+- **Context:** D-236 stores each account's language. Inbox rows, e-mails,
+  personal webhook payloads and the periodic summary were English only.
+- **Decision:**
+  1. Server texts live in one `i18n.Catalog` per package (key → fmt
+     format string per language). `Catalog.Problems()` (asserted by each
+     package's tests) refuses missing or extra keys, empty texts and
+     formatting verbs that differ from English. `i18n.FormatTime` formats
+     dates with Dutch month and day names for NL, same layouts.
+  2. A text is rendered in its recipient's language: `users.locale`, else
+     English (`i18n.Resolve(stored, "")`). Fan-out renders once per
+     language and stores each inbox row in its recipient's language (rows
+     are not re-rendered when the user changes language later). Delivery
+     renders e-mails and personal webhooks in the recipient's language;
+     shared channels have no recipient and stay English. Webhook payload
+     keys and event types never change; only `title`/`summary` values
+     follow the language.
+  3. The periodic summary is rendered per recipient (as before) in the
+     recipient's language, with Dutch goldens next to the English ones
+     (same size budget and 375 px check).
+  4. `email.Notice.Locale` drives the layout's own texts (footer, button
+     fallback) and `<html lang>`. The verification e-mail uses the
+     account's stored language, else the request's (Accept-Language); the
+     SMTP test e-mail uses the request's language.
+  5. Not covered by 8.3a: the notification catalog labels the API serves
+     and stored delivery status messages (8.3b), the setup wizard (8.3c),
+     and the fixed personal webhook test payload (a protocol check, not a
+     notification). Payload values other than `title`/`summary` (e.g. the
+     deleted-job marker in `job.name`) stay English.
+- **Alternatives considered:** rendering inbox rows at read time (would
+  need the event and names kept forever; rows outlive events); a server-
+  wide language for shared channels (no recipient to ask; may come as a
+  setting later); Go text templates per language (the texts are short
+  sentences, a catalog with verb checks is simpler and safer).
+- **Consequences:** a new notification text needs both languages (the
+  parity tests fail otherwise). No security impact: texts stay static
+  format strings with escaped values; the security alert wording keeps
+  its meaning in Dutch (reviewed).
+- **Related:** plan tasks 8.3a–8.3c, `internal/i18n/catalog.go`,
+  `internal/notify/texts.go`, `internal/notify/summary/texts.go`,
+  `internal/notify/email`, D-226, D-235, D-236.

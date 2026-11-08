@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden e-mails in testdata/")
@@ -72,9 +74,10 @@ func goldenNotices() map[string]Notice {
 	allOK.Tables = []Table{allOK.Tables[0]}
 	allOK.Tables[0].Rows = allOK.Tables[0].Rows[4:6]
 	return map[string]Notice{
-		"status":       statusNotice(),
-		"all_ok":       allOK,
-		"verification": verificationNotice("https://bekup.example.com/profile/notifications/verify#Zm9vYmFy"),
+		"status":          statusNotice(),
+		"all_ok":          allOK,
+		"verification":    verificationNotice("https://bekup.example.com/profile/notifications/verify#Zm9vYmFy", i18n.EN),
+		"verification_nl": verificationNotice("https://bekup.example.com/profile/notifications/verify#Zm9vYmFy", i18n.NL),
 		"security_alert": {
 			Subject:    "[bekup] Security alert",
 			Heading:    "Security alert",
@@ -481,5 +484,44 @@ func TestPaletteMatchesTheme(t *testing.T) {
 	}
 	if checked != 2*(9+4*3) {
 		t.Fatalf("checked %d colors", checked)
+	}
+}
+
+// TestTextsParity: the layout's and this package's e-mail texts exist in
+// every language with the same formatting verbs (D-237).
+func TestTextsParity(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]i18n.Catalog{"layoutTexts": layoutTexts, "mailTexts": mailTexts} {
+		if p := c.Problems(); len(p) > 0 {
+			t.Errorf("%s: %q", name, p)
+		}
+	}
+}
+
+// TestRenderLocale: the layout's own texts and the lang attribute follow
+// Notice.Locale; an unknown locale falls back to English.
+func TestRenderLocale(t *testing.T) {
+	t.Parallel()
+	n := Notice{Subject: "s", Heading: "h", Action: &Action{Label: "a", URL: "https://bekup.example.com/"}}
+	for _, tc := range []struct {
+		l          i18n.Locale
+		lang, text string
+	}{
+		{i18n.NL, `lang="nl"`, "Werkt de knop niet?"},
+		{i18n.EN, `lang="en"`, "If the button does not work"},
+		{"", `lang="en"`, "If the button does not work"},
+		{"de", `lang="en"`, "If the button does not work"},
+	} {
+		n.Locale = tc.l
+		c, err := Render(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(c.HTML, tc.lang) || !strings.Contains(c.HTML, tc.text) {
+			t.Errorf("locale %q: lang or fallback text missing", tc.l)
+		}
+		if !strings.Contains(c.Text, DefaultFooter(i18n.Resolve(nil, tc.l))) {
+			t.Errorf("locale %q: footer missing from the text part", tc.l)
+		}
 	}
 }

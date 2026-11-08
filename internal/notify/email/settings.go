@@ -24,6 +24,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/hostname"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/serviceutil"
@@ -137,6 +138,10 @@ type UpdateInput struct {
 type Actor struct {
 	UserID uuid.UUID
 	IP     netip.Addr
+	// Locale is the request's language (Accept-Language; D-237): the test
+	// e-mail's language, and the verification e-mail's when the account
+	// has no stored choice.
+	Locale i18n.Locale
 }
 
 // Errors of the settings service.

@@ -369,6 +369,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `RequireSession` syncs it (`useAccountLocale`). Server side, pick a
   language only with `internal/i18n` (`Resolve(stored, meta.Locale)`;
   `auth.RequestMeta.Locale` comes from Accept-Language, bounded).
+  Server texts (D-237) live in one `i18n.Catalog` per package (key →
+  format string per language; `Problems()` asserted by a test: same keys
+  and fmt verbs); render inbox rows, e-mails and personal webhooks in the
+  recipient's `users.locale` (shared channels English), dates with
+  `i18n.FormatTime`, and set `email.Notice.Locale`.
 - Every signed-in route declares `handle: access.…` (`lib/route-access`,
   derived from the nav roles); the single `RequireRole` guard denies routes
   without one (D-199). Format sizes/durations only with `lib/format`
@@ -1050,9 +1055,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   The e-mail lists every job (status rule in `jobRow.status`, worst
   first, ≤ 100 rows with every problem first; `fitJobs` lists fewer when
   the HTML as sent would exceed `maxSummaryHTML`); failures show only the
-  fixed texts of `failureTexts` (add one for every new `jobs.Code*`,
-  `runstate.Code*` or runner reason; `TestFailureTextsCoverCodes` reads
-  them from the sources), never stored messages. The "previous one could
+  fixed `failure.<code>` texts of the package catalog (`texts.go`, both
+  languages; add one for every new `jobs.Code*`, `runstate.Code*` or
+  runner reason; `TestFailureTextsCoverCodes` reads them from the sources
+  per language), never stored messages. Summaries render in the
+  recipient's language (D-237; Dutch goldens next to the English ones). The "previous one could
   not be sent on time" note follows only the event detail `catch_up`
   (`decide`'s `CatchUp`).
 - Dashboard aggregates (D-196): `Job.missed`/`missedSince` read

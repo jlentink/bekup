@@ -1,0 +1,65 @@
+!! 2 mislukt: 2 van de 12 taken zijn mislukt, 2 taken hebben hun back-ups gemist en 3 andere taken vragen aandacht in de afgelopen 24 uur; 1 bestemming heeft weinig vrije ruimte en er is 1 beveiligingsmelding. !!
+
+Dagelijkse samenvatting
+
+Periode: za 7 nov 2026, 08:00 – zo 8 nov 2026, 08:00 (Europe/Amsterdam).
+
+Back-ups: 26 runs afgerond (22 geslaagd, 2 gedeeltelijk mislukt, 2 mislukt).
+
+Taken OK: 1/12  |  Mislukt/gemist: 2/2  |  Geschreven: 10,0 GiB  |  Testherstel: 3/5
+
+Beveiliging
+   Status    Beveiligingsmeldingen
+   --------  -------------------------------------
+>> Bekijken  1 beveiligingsmelding in deze periode
+             bekijk ze in bekup
+
+Taken
+   Status    Taak       OK/Fout  Laatste run  Grootte  Opgeslagen
+   --------  ---------  -------  -----------  -------  ----------
+>> Mislukt   Billing        1/2  8 nov 07:00      0 B           –
+             doel niet bereikbaar (2 mislukte runs); 1 gedeeltelijk mislukte run
+>> Mislukt   Forms          7/0  8 nov 07:00  1,0 GiB           –
+             2 keer testherstel mislukt
+>> Gemist    CRM            0/0            –        –           –
+             gemist sinds do 5 nov 2026, 04:00
+>> Gemist    Docs           0/0            –        –           –
+             geen geslaagde back-up in deze periode
+>> Deels     Ledger         1/0  8 nov 07:00  1,0 GiB           –
+             1 gedeeltelijk mislukte run
+>> Let op    Mail           1/0  8 nov 07:00  2,0 GiB           –
+             1 run met waarschuwingen
+>> Blokkade  Events         7/0  8 nov 07:00  1,0 GiB           –
+             het bewaarbeleid houdt 3 onvolledige back-ups vast op 2 bestemmingen
+   OK        Garden         7/0  8 nov 07:00  5,0 GiB           –
+   Geen run  Handbook       0/0            –        –           –
+   Geen run  Journal        0/0            –        –           –
+   Geen run  Kiosk          0/0            –        –           –
+   Uit       Inventory      0/0            –        –           –
+
+Herstel
+   Resultaat        Soort        Aantal
+   ---------------  -----------  ------
+   Geslaagd         Herstel           2
+>> Mislukt          Herstel           1
+   Geslaagd         Testherstel       3
+>> Mislukt          Testherstel       1
+>> Niet uitgevoerd  Testherstel       1
+
+Opslag
+   Status     Bestemming        Opgeslagen      Vrij  Back-ups
+   ---------  ----------------  ----------  --------  --------
+>> Bijna vol  nas-01               2,4 TiB  96,0 GiB       412
+              minder dan 10% vrij; gecontroleerd om 07:25
+>> Verouderd  offsite s3           3,0 TiB         –       512
+              geen limiet gemeld: S3-buckets hebben geen vaste grootte; laatst gecontroleerd op 5 nov 08:00, meer dan 3 uur geleden
+   OK         sftp backup host     3,0 TiB   4,0 TiB       380
+              gecontroleerd om 07:25
+>> Fout       webdav archive     320,0 GiB         –        61
+              de bestemming was niet bereikbaar; gecontroleerd om 07:25
+
+Dashboard openen:
+https://bekup.example.com/
+
+--
+Tijden zijn in Europe/Amsterdam. In je meldingsinstellingen kies je hoe vaak je deze samenvatting krijgt, of zet je hem uit. Dit bericht is automatisch verstuurd door bekup. Het bevat geen afbeeldingen, geen tracking en geen geheimen.

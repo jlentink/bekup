@@ -10,6 +10,8 @@ import (
 	"strings"
 	texttemplate "text/template"
 	"unicode/utf8"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 //go:embed templates/*.tmpl
@@ -103,6 +105,10 @@ type Notice struct {
 	// normally built from server.base_url).
 	Action *Action
 	Footer string
+	// Locale is the recipient's language: the layout's own texts (footer,
+	// button fallback) and the HTML lang attribute (D-237). Empty means
+	// i18n.Default. The caller writes every other text in it.
+	Locale i18n.Locale
 }
 
 // Banner is the overall status: a colored strip and a block with the
@@ -164,13 +170,16 @@ type Content struct {
 	HTML    string
 }
 
-// DefaultFooter is used when a Notice has no footer.
-const DefaultFooter = "This message was sent automatically by bekup. It contains no images, no tracking and no secrets."
+// DefaultFooter is the footer of a Notice without one, in l.
+func DefaultFooter(l i18n.Locale) string { return layoutTexts.T(l, "footer") }
 
 // Render validates n and renders its text and HTML parts.
 func Render(n Notice) (Content, error) {
+	if _, ok := i18n.Parse(string(n.Locale)); !ok {
+		n.Locale = i18n.Default
+	}
 	if n.Footer == "" {
-		n.Footer = DefaultFooter
+		n.Footer = DefaultFooter(n.Locale)
 	}
 	if err := n.validate(); err != nil {
 		return Content{}, err
