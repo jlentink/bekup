@@ -17,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Errors of the service. Resolvers map them to API error codes.
@@ -522,6 +523,30 @@ func (s *Service) User(ctx context.Context, id uuid.UUID) (sqlc.User, error) {
 	u, err := sqlc.New(s.o.DB).GetUserByID(ctx, id)
 	if err != nil {
 		return sqlc.User{}, fmt.Errorf("auth: load user: %w", err)
+	}
+	return u, nil
+}
+
+// SetLocale stores the caller's UI language (nil: follow the browser;
+// D-236). A personal preference without security meaning, so it is not
+// audited (like the summary settings). ErrUserNotFound when the account
+// was deleted or disabled meanwhile.
+func (s *Service) SetLocale(ctx context.Context, p Principal, locale *i18n.Locale) (sqlc.User, error) {
+	var stored *string
+	if locale != nil {
+		l, ok := i18n.Parse(string(*locale))
+		if !ok {
+			return sqlc.User{}, fmt.Errorf("auth: unsupported locale %q", *locale)
+		}
+		v := string(l)
+		stored = &v
+	}
+	u, err := sqlc.New(s.o.DB).SetUserLocale(ctx, sqlc.SetUserLocaleParams{ID: p.UserID, Locale: stored})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return sqlc.User{}, fmt.Errorf("auth: store locale: %w", err)
 	}
 	return u, nil
 }

@@ -8,6 +8,8 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 func TestCookiePolicyHTTPS(t *testing.T) {
@@ -116,5 +118,19 @@ func TestCookieSetterContext(t *testing.T) {
 	s.SetSessionCookie("x")
 	if r.set != 1 {
 		t.Fatal("setter not used")
+	}
+}
+
+func TestRequestMetaWithAcceptLanguage(t *testing.T) {
+	t.Parallel()
+	m := NewRequestMeta(netip.MustParseAddr("192.0.2.1"), "ua")
+	if got := m.WithAcceptLanguage("de-DE,nl;q=0.8,en;q=0.5").Locale; got != i18n.NL {
+		t.Errorf("Locale = %q, want nl", got)
+	}
+	if got := m.WithAcceptLanguage("fr").Locale; got != "" {
+		t.Errorf("Locale = %q for an unsupported language, want empty", got)
+	}
+	if m.Locale != "" {
+		t.Error("WithAcceptLanguage changed the receiver")
 	}
 }

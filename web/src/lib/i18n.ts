@@ -135,27 +135,113 @@ export function defineMessages<M>(tables: { en: M; nl: NoInfer<Messages<M>> }): 
 export const definedTables: { en: unknown; nl: unknown }[] = [];
 
 /**
- * Stores the choice and reloads, so every table and formatter is rebuilt
- * in the new language. `null` returns to following the browser.
+ * localStorage key recording that the stored language is the account's
+ * (D-236: copied from or saved to `users.locale`). Absent for a choice
+ * made in this browser only (D-235), which an account without a choice
+ * leaves alone.
+ */
+export const LOCALE_SOURCE_KEY = "bekup.locale.source";
+
+/**
+ * Reloads the page; `run` is replaceable in tests (jsdom cannot navigate)
+ * and `pending` records that this page already asked for a reload.
+ */
+export const pageReload = {
+  pending: false,
+  run: (): void => {
+    window.location.reload();
+  },
+};
+
+/** True once this page asked for a reload into another language. */
+export function isReloadPending(): boolean {
+  return pageReload.pending;
+}
+
+/**
+ * Stores the choice (`null`: follow the browser again) and, unless
+ * `reload` is false, reloads so every table and formatter is rebuilt in
+ * the new language. `fromAccount` marks the stored value as the account's.
+ * False (and no reload) when the browser refuses the storage.
  */
 export function setLocale(
   next: Locale | null,
-  reload: () => void = () => {
-    window.location.reload();
-  },
-): void {
+  options: { fromAccount?: boolean; reload?: boolean } = {},
+): boolean {
   try {
-    if (next === null) window.localStorage.removeItem(LOCALE_STORAGE_KEY);
-    else window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+    if (next === null) {
+      window.localStorage.removeItem(LOCALE_STORAGE_KEY);
+      window.localStorage.removeItem(LOCALE_SOURCE_KEY);
+    } else {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, next);
+      if (options.fromAccount) window.localStorage.setItem(LOCALE_SOURCE_KEY, "account");
+      else window.localStorage.removeItem(LOCALE_SOURCE_KEY);
+    }
   } catch {
-    return;
+    return false;
   }
-  reload();
+  if (options.reload !== false) {
+    pageReload.pending = true;
+    pageReload.run();
+  }
+  return true;
+}
+
+/** True when the stored language came from the account (D-236). */
+export function storedFromAccount(): boolean {
+  try {
+    return window.localStorage.getItem(LOCALE_SOURCE_KEY) === "account";
+  } catch {
+    return false;
+  }
+}
+
+/** The language this browser would get without any stored choice. */
+export function browserLocale(): Locale {
+  return detectLocale(null, browserLanguages());
+}
+
+/** The API's `Locale` enum ("EN", "NL") as a page locale; null for none. */
+export function localeFromApi(value: string | null | undefined): Locale | null {
+  const l = value?.toLowerCase();
+  return isLocale(l) ? l : null;
+}
+
+/** A page locale as the API's `Locale` enum. */
+export function localeToApi(l: Locale): "EN" | "NL" {
+  return l === "nl" ? "NL" : "EN";
 }
 
 /** True while the user has picked a language explicitly. */
 export function hasStoredLocale(): boolean {
   return isLocale(readStored());
+}
+
+/**
+ * True when this browser lets bekup store the language (checked once per
+ * page load). Without it the page cannot follow the account's choice.
+ */
+export const canStoreLocale: boolean = storageWorks();
+
+/**
+ * Probes the storage now (it can fail later than at page load: quota,
+ * a privacy setting changed). Cheap and idempotent.
+ */
+export function storageWorks(): boolean {
+  try {
+    const probe = `${LOCALE_STORAGE_KEY}.probe`;
+    window.localStorage.setItem(probe, "1");
+    window.localStorage.removeItem(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The language stored in this browser right now (null: none or invalid). */
+export function storedLocale(): Locale | null {
+  const s = readStored();
+  return isLocale(s) ? s : null;
 }
 
 const pluralRules = new Intl.PluralRules(intlLocale);

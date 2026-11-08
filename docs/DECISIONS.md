@@ -258,6 +258,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-233](#d-233-remote-runners-dial-out-to-bekup) | Remote runners dial out to bekup | proposed |
 | [D-234](#d-234-kubernetes-through-a-jobs-executor-in-the-runner) | Kubernetes through a Jobs executor in the runner | proposed |
 | [D-235](#d-235-ui-translations-as-typed-message-tables-per-language-english-dutch) | UI translations as typed message tables per language (English, Dutch) | proposed |
+| [D-236](#d-236-the-ui-language-per-account-and-the-request-language) | The UI language per account and the request language | proposed |
 
 ---
 
@@ -15736,3 +15737,58 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   is unchanged.
 - **Related:** plan task 8.1, `web/src/lib/i18n.ts`,
   `web/src/lib/messages.ts`, D-230.
+
+## D-236: The UI language per account and the request language
+
+- **Date:** 2026-11-08
+- **Status:** proposed
+- **Decided by:** agent (task 8.2 of D-230)
+- **Context:** D-235 keeps the language choice in one browser. A user who
+  signs in elsewhere sees the browser's language again, and the server
+  (task 8.3: e-mails, notification contents, GraphQL messages) needs to
+  know the language of a user and of a request.
+- **Decision:**
+  1. `users.locale` (migration 00045): `'en'`, `'nl'` or NULL (follow the
+     browser; English for e-mails, i18n.Default), CHECK-constrained.
+     Written only by `auth.Service.SetLocale` (query `SetUserLocale`, the
+     signed-in account, active accounts only).
+  2. GraphQL: `User.locale: Locale` (enum `EN`, `NL`; also visible to
+     admins in their user views, harmless) and
+     `setMyLocale(locale: Locale): User! @authenticated`, operation
+     `account.locale_edit` (every role, no step-up; restricted principals
+     are refused like every operation not in their allowed set). A
+     personal preference without security meaning, so it is not audited
+     (like the summary settings, D-226).
+  3. The web UI follows the account: the profile's language select saves
+     with `setMyLocale`, then stores the choice in the browser and reloads
+     when the language changes; "Same as this browser" saves NULL. A value
+     stored from the account is marked (`bekup.locale.source = account`),
+     a choice made in one browser alone (D-235) is not. After sign-in
+     (`RequireSession`, `accountLocaleAction`): an account choice that
+     differs from the page's language is stored and the page reloads
+     once (placeholder meanwhile; also when another tab stored it
+     already); an account choice the page already shows is stored
+     quietly; with a NULL account choice only a marked copy is dropped
+     (reloading if the browser's language differs), a browser-only choice
+     stays and the select shows it as "this browser only" with a "Save
+     for my account" button. Nothing happens before `me` is loaded.
+     Storage is probed on every render: a browser that refuses it keeps
+     its language (the profile says so) and never stays on the
+     placeholder; no reload loop.
+  4. `internal/i18n` (Go) holds the server's `Locale` type, the bounded
+     Accept-Language parser (`FromAcceptLanguage`: at most 512 bytes and
+     16 entries, q-values, fuzzed) and `Resolve` (stored choice, else the
+     request's language, else English). The session middleware puts the
+     request's language into `auth.RequestMeta.Locale`; task 8.3 uses it
+     for texts rendered for a request.
+- **Alternatives considered:** keeping the choice per browser only (the
+  server could not pick a language for e-mails); auditing language
+  changes (no security value, noise in the audit log); a cookie with the
+  language (another client-controlled input the server would have to
+  trust for nothing).
+- **Consequences:** one more nullable column on `users` and one
+  self-service mutation. The Accept-Language header is client-controlled:
+  it only ever selects between the supported languages, never content.
+- **Related:** plan task 8.2, `internal/i18n`, `internal/auth`,
+  `web/src/features/auth/use-account-locale.ts`,
+  `web/src/features/account/language-section.tsx`, D-235.

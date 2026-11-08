@@ -318,7 +318,7 @@ Scope and order: D-230 (plan `analize-the-current-application-cosmic-hammock.md`
 
 ### M8 Internationalization (English, Dutch)
 - [x] **8.1** i18n foundation in the web UI (D-235: typed `defineMessages({ en, nl })` tables in `web/src/lib/i18n.ts` instead of i18next, Dutch with "je", glossary `web/src/lib/i18n-glossary.md`): every table and literal in both languages (compiler parity via `Messages<typeof en>`), language chosen per page load (stored choice in Profile → Account, else browser, else English; switching reloads), `intlLocale` for every `Intl` formatter and `lib/format`, ESLint rule `bekup/no-ui-literals`, setup SPA chrome, `pnpm csp-check` with a Dutch pass. *deps: P3.0*
-- [ ] **8.2** Locale per user (`users.locale`, `Accept-Language` before sign-in, `updateMyLocale` + authz row). *deps: 8.1*
+- [x] **8.2** Locale per user (D-236): `users.locale` (migration 00045, CHECK en/nl, NULL = browser), `User.locale` + `setMyLocale` (`account.locale_edit`, authz row, not audited), the UI saves the choice and follows the account after sign-in (`useAccountLocale`), `internal/i18n` (Locale, bounded Accept-Language parser, `Resolve`), `auth.RequestMeta.Locale` for 8.3. *deps: 8.1*
 - [ ] **8.3** Server-rendered texts per recipient/request locale (e-mails, notification contents, summary, `failureTexts`, GraphQL error messages, the browser setup wizard's step texts; Go catalog + parity test, goldens per locale, 375 px check). *deps: 8.2*
 - [ ] **8.4** Translation guide in `docs/development.md`. *deps: 8.1*
 

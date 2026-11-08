@@ -269,6 +269,8 @@ internal/
                   wizard.UI over HTTPS, Gate one-time code -> one session, in-memory
                   certificate, server.go API + lifetime, dbstep.go database step;
                   setup/configzip.go the non-secret config zip)
+                i18n (server languages: Locale, Accept-Language parser,
+                  Resolve; users.locale per account: D-236)
                 dbsetup (db bootstrap, migrate up, Verify and the setup version
                   guard, shared by the CLI and the browser setup: D-217)
                 apiaccess (the workers' side of the external API: run request
@@ -362,7 +364,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   "je" and the terms of `src/lib/i18n-glossary.md`; plurals via `plural()`;
   every `Intl` formatter takes `intlLocale`. The language is fixed per page
   load (switching reloads). Never translate texts the server compares
-  (type-to-confirm) or sends (error messages, until 8.3).
+  (type-to-confirm) or sends (error messages, until 8.3). The account's
+  choice (`users.locale`, `setMyLocale`, D-236) wins over the browser's:
+  `RequireSession` syncs it (`useAccountLocale`). Server side, pick a
+  language only with `internal/i18n` (`Resolve(stored, meta.Locale)`;
+  `auth.RequestMeta.Locale` comes from Accept-Language, bounded).
 - Every signed-in route declares `handle: access.…` (`lib/route-access`,
   derived from the nav roles); the single `RequireRole` guard denies routes
   without one (D-199). Format sizes/durations only with `lib/format`

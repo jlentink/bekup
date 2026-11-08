@@ -96,7 +96,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 }
 
 const getSessionWithUserByTokenHash = `-- name: GetSessionWithUserByTokenHash :one
-SELECT s.id, s.token_hash, s.user_id, s.aal, s.stepup_at, s.aal2_at, s.created_at, s.last_seen_at, s.idle_expires_at, s.absolute_expires_at, s.ip, s.user_agent, s.revoked_at, s.mfa_pending, u.id, u.email, u.display_name, u.password_hash, u.role, u.disabled, u.locked_until, u.failed_login_count, u.totp_secret_enc, u.totp_last_step, u.email_verified_at, u.created_at, u.updated_at, u.totp_pending_enc, u.totp_pending_expires_at, u.totp_enabled_at, u.mfa_failed_count, u.mfa_locked_until, u.deleted_at, u.password_temporary_until, u.mfa_reset_at
+SELECT s.id, s.token_hash, s.user_id, s.aal, s.stepup_at, s.aal2_at, s.created_at, s.last_seen_at, s.idle_expires_at, s.absolute_expires_at, s.ip, s.user_agent, s.revoked_at, s.mfa_pending, u.id, u.email, u.display_name, u.password_hash, u.role, u.disabled, u.locked_until, u.failed_login_count, u.totp_secret_enc, u.totp_last_step, u.email_verified_at, u.created_at, u.updated_at, u.totp_pending_enc, u.totp_pending_expires_at, u.totp_enabled_at, u.mfa_failed_count, u.mfa_locked_until, u.deleted_at, u.password_temporary_until, u.mfa_reset_at, u.locale
 FROM sessions s
 JOIN users u ON u.id = s.user_id
 WHERE s.token_hash = $1
@@ -151,6 +151,7 @@ func (q *Queries) GetSessionWithUserByTokenHash(ctx context.Context, tokenHash [
 		&i.User.DeletedAt,
 		&i.User.PasswordTemporaryUntil,
 		&i.User.MfaResetAt,
+		&i.User.Locale,
 	)
 	return i, err
 }

@@ -1319,6 +1319,9 @@ type Querier interface {
 	// SetTestRestoreRun records the run a test restore tests (once).
 	SetTestRestoreRun(ctx context.Context, arg SetTestRestoreRunParams) (int64, error)
 	SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error
+	// SetUserLocale stores the UI language of an active account (D-236; NULL
+	// follows the browser). No row: deleted or disabled.
+	SetUserLocale(ctx context.Context, arg SetUserLocaleParams) (User, error)
 	// SetUserPassword sets a password (temporary until the given time, or
 	// permanent when NULL) and clears the lockout state.
 	SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error)

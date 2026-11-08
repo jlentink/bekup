@@ -2795,6 +2795,8 @@ type User struct {
 	Email       string    `json:"email"`
 	DisplayName string    `json:"displayName"`
 	Role        Role      `json:"role"`
+	// The account's UI language; null follows the browser (D-236).
+	Locale *Locale `json:"locale,omitempty"`
 	// True when the account's e-mail address is verified (needed for e-mail notifications).
 	EmailVerified   bool       `json:"emailVerified"`
 	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
@@ -4101,6 +4103,62 @@ func (e *JobVerification) UnmarshalJSON(b []byte) error {
 }
 
 func (e JobVerification) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// A language of the bekup UI (D-235).
+type Locale string
+
+const (
+	LocaleEn Locale = "EN"
+	LocaleNl Locale = "NL"
+)
+
+var AllLocale = []Locale{
+	LocaleEn,
+	LocaleNl,
+}
+
+func (e Locale) IsValid() bool {
+	switch e {
+	case LocaleEn, LocaleNl:
+		return true
+	}
+	return false
+}
+
+func (e Locale) String() string {
+	return string(e)
+}
+
+func (e *Locale) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = Locale(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid Locale", str)
+	}
+	return nil
+}
+
+func (e Locale) MarshalGQL(w io.Writer) {
+	_, _ = fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *Locale) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e Locale) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

@@ -2808,6 +2808,7 @@ type User struct {
 	DeletedAt              *time.Time `json:"deletedAt"`
 	PasswordTemporaryUntil *time.Time `json:"passwordTemporaryUntil"`
 	MfaResetAt             *time.Time `json:"mfaResetAt"`
+	Locale                 *string    `json:"locale"`
 }
 
 type UserChannel struct {

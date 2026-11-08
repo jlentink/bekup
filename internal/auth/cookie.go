@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Session cookie names (D-047, D-095).
@@ -104,6 +106,17 @@ type RequestMeta struct {
 	IP netip.Addr
 	// UserAgent is the sanitized, truncated User-Agent header.
 	UserAgent string
+	// Locale is the supported language the client prefers by its
+	// Accept-Language header ("" when it names none; D-236). Server texts
+	// take the account's stored choice first (i18n.Resolve).
+	Locale i18n.Locale
+}
+
+// WithAcceptLanguage returns meta with Locale parsed from a raw
+// Accept-Language header (bounded; i18n.FromAcceptLanguage).
+func (m RequestMeta) WithAcceptLanguage(header string) RequestMeta {
+	m.Locale, _ = i18n.FromAcceptLanguage(header)
+	return m
 }
 
 // NewRequestMeta returns meta for ip and a raw User-Agent header: control

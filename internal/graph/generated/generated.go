@@ -779,6 +779,7 @@ type ComplexityRoot struct {
 		SetJobRecipient               func(childComplexity int, jobID uuid.UUID, recipient string, label *string) int
 		SetJobSchemaVersion           func(childComplexity int, jobID uuid.UUID, input model.JobSchemaVersionInput) int
 		SetJobTestRestore             func(childComplexity int, jobID uuid.UUID, input model.JobTestRestoreInput) int
+		SetMyLocale                   func(childComplexity int, locale *model.Locale) int
 		SetNotificationPreference     func(childComplexity int, event string, channel model.NotificationChannelType, enabled bool, jobID *uuid.UUID) int
 		SetSummarySettings            func(childComplexity int, input model.SummarySettingsInput) int
 		SetTLSMode                    func(childComplexity int, id uuid.UUID, mode model.ConnectionTLSMode) int
@@ -1753,6 +1754,7 @@ type ComplexityRoot struct {
 		EmailVerifiedAt             func(childComplexity int) int
 		ID                          func(childComplexity int) int
 		LastSeenAt                  func(childComplexity int) int
+		Locale                      func(childComplexity int) int
 		LockedUntil                 func(childComplexity int) int
 		PasswordChangeRequired      func(childComplexity int) int
 		Role                        func(childComplexity int) int
@@ -1861,6 +1863,7 @@ type MutationResolver interface {
 	Logout(ctx context.Context) (bool, error)
 	RevokeSession(ctx context.Context, id uuid.UUID) (bool, error)
 	ChangePassword(ctx context.Context, currentPassword string, newPassword string) (bool, error)
+	SetMyLocale(ctx context.Context, locale *model.Locale) (*model.User, error)
 	CreateAPIToken(ctx context.Context, input model.CreateAPITokenInput) (*model.CreatedAPIToken, error)
 	RevokeAPIToken(ctx context.Context, id uuid.UUID) (*model.APIToken, error)
 	UpdateAPITokenAddresses(ctx context.Context, id uuid.UUID, allowedCidrs []string, allowAnyAddress bool) (*model.APIToken, error)
@@ -5619,6 +5622,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetJobTestRestore(childComplexity, args["jobId"].(uuid.UUID), args["input"].(model.JobTestRestoreInput)), true
+	case "Mutation.setMyLocale":
+		if e.ComplexityRoot.Mutation.SetMyLocale == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setMyLocale_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetMyLocale(childComplexity, args["locale"].(*model.Locale)), true
 	case "Mutation.setNotificationPreference":
 		if e.ComplexityRoot.Mutation.SetNotificationPreference == nil {
 			break
@@ -10034,6 +10048,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.User.LastSeenAt(childComplexity), true
+	case "User.locale":
+		if e.ComplexityRoot.User.Locale == nil {
+			break
+		}
+
+		return e.ComplexityRoot.User.Locale(childComplexity), true
 	case "User.lockedUntil":
 		if e.ComplexityRoot.User.LockedUntil == nil {
 			break
@@ -10757,6 +10777,13 @@ type Mutation {
   cookie.
   """
   changePassword(currentPassword: String!, newPassword: String!): Boolean! @stepUp
+
+  """
+  Stores your UI language for every browser (D-236); null follows the
+  browser again. From task 8.3 it also decides the language of the
+  e-mails and notification texts bekup sends you.
+  """
+  setMyLocale(locale: Locale): User! @authenticated
 }
 
 extend type Query {
@@ -10773,6 +10800,14 @@ type User {
   email: String!
   displayName: String!
   role: Role!
+  "The account's UI language; null follows the browser (D-236)."
+  locale: Locale
+}
+
+"A language of the bekup UI (D-235)."
+enum Locale {
+  EN
+  NL
 }
 
 "Kinds of second factors (tasks 1.7-1.9)."
@@ -18767,6 +18802,8 @@ func (ec *executionContext) childFields_User(ctx context.Context, field graphql.
 		return ec.fieldContext_User_displayName(ctx, field)
 	case "role":
 		return ec.fieldContext_User_role(ctx, field)
+	case "locale":
+		return ec.fieldContext_User_locale(ctx, field)
 	case "emailVerified":
 		return ec.fieldContext_User_emailVerified(ctx, field)
 	case "emailVerifiedAt":
@@ -20452,6 +20489,20 @@ func (ec *executionContext) field_Mutation_setJobTestRestore_args(ctx context.Co
 		return nil, err
 	}
 	args["input"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setMyLocale_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "locale",
+		func(ctx context.Context, v any) (*model.Locale, error) {
+			return ec.unmarshalOLocale2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐLocale(ctx, v)
+		})
+	if err != nil {
+		return nil, err
+	}
+	args["locale"] = arg0
 	return args, nil
 }
 
@@ -32348,6 +32399,63 @@ func (ec *executionContext) fieldContext_Mutation_changePassword(ctx context.Con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_changePassword_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setMyLocale(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_Mutation_setMyLocale(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetMyLocale(ctx, fc.Args["locale"].(*model.Locale))
+		},
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.Directives.Authenticated == nil {
+					var zeroVal *model.User
+					return zeroVal, errors.New("directive authenticated is not implemented")
+				}
+				return ec.Directives.Authenticated(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
+		func(ctx context.Context, selections ast.SelectionSet, v *model.User) graphql.Marshaler {
+			return ec.marshalNUser2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐUser(ctx, selections, v)
+		},
+		true,
+		true,
+	)
+}
+func (ec *executionContext) fieldContext_Mutation_setMyLocale(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.childFields_User(ctx, field)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setMyLocale_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -56644,6 +56752,29 @@ func (ec *executionContext) fieldContext_User_role(_ context.Context, field grap
 	return graphql.NewScalarFieldContext("User", field, false, false, "Role")
 }
 
+func (ec *executionContext) _User_locale(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return ec.fieldContext_User_locale(ctx, field)
+		},
+		func(ctx context.Context) (any, error) {
+			return obj.Locale, nil
+		},
+		nil,
+		func(ctx context.Context, selections ast.SelectionSet, v *model.Locale) graphql.Marshaler {
+			return ec.marshalOLocale2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐLocale(ctx, selections, v)
+		},
+		true,
+		false,
+	)
+}
+func (ec *executionContext) fieldContext_User_locale(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	return graphql.NewScalarFieldContext("User", field, false, false, "Locale")
+}
+
 func (ec *executionContext) _User_emailVerified(ctx context.Context, field graphql.CollectedField, obj *model.User) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -66383,6 +66514,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setMyLocale":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setMyLocale(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createApiToken":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createApiToken(ctx, field)
@@ -73208,6 +73346,11 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "locale":
+			out.Values[i] = ec._User_locale(ctx, field, obj)
+			if out.Values[i] == graphql.RequiredNull {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "emailVerified":
 			out.Values[i] = ec._User_emailVerified(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -77990,6 +78133,22 @@ func (ec *executionContext) unmarshalOJobVerification2ᚖgithubᚗcomᚋjlentink
 }
 
 func (ec *executionContext) marshalOJobVerification2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐJobVerification(ctx context.Context, sel ast.SelectionSet, v *model.JobVerification) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOLocale2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐLocale(ctx context.Context, v any) (*model.Locale, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(model.Locale)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOLocale2ᚖgithubᚗcomᚋjlentinkᚋbekupᚋinternalᚋgraphᚋmodelᚐLocale(ctx context.Context, sel ast.SelectionSet, v *model.Locale) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

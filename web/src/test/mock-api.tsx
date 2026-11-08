@@ -93,6 +93,7 @@ export function meFixture(
       passwordChangeRequired: false,
       twoFactorRequired: false,
       twoFactorEnrollmentDeadline: null,
+      locale: null,
       ...overrides,
     },
   };

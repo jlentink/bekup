@@ -30,6 +30,7 @@ type Documents = {
     "\n  mutation FinishPasskeyRegistration($name: String!, $response: JSON!) {\n    finishPasskeyRegistration(name: $name, response: $response) {\n      id\n      name\n    }\n  }\n": typeof types.FinishPasskeyRegistrationDocument,
     "\n  mutation RenamePasskey($id: UUID!, $name: String!) {\n    renamePasskey(id: $id, name: $name) {\n      id\n      name\n    }\n  }\n": typeof types.RenamePasskeyDocument,
     "\n  mutation DeletePasskey($id: UUID!) {\n    deletePasskey(id: $id)\n  }\n": typeof types.DeletePasskeyDocument,
+    "\n  mutation SetMyLocale($locale: Locale) {\n    setMyLocale(locale: $locale) {\n      id\n      locale\n    }\n  }\n": typeof types.SetMyLocaleDocument,
     "\n  fragment SmtpSettingsFields on SmtpSettings {\n    configured\n    enabled\n    host\n    port\n    mode\n    username\n    hasPassword\n    fromAddress\n    fromName\n    caBundlePem\n    connectTimeoutSeconds\n    sendTimeoutSeconds\n    mayBeUnencrypted\n    updatedAt\n  }\n": typeof types.SmtpSettingsFieldsFragmentDoc,
     "\n  query AdminSmtpSettings {\n    smtpSettings {\n      ...SmtpSettingsFields\n    }\n  }\n": typeof types.AdminSmtpSettingsDocument,
     "\n  mutation AdminUpdateSmtpSettings($input: UpdateSmtpSettingsInput!) {\n    updateSmtpSettings(input: $input) {\n      ...SmtpSettingsFields\n    }\n  }\n": typeof types.AdminUpdateSmtpSettingsDocument,
@@ -67,7 +68,7 @@ type Documents = {
     "\n  mutation CreateApiToken($input: CreateApiTokenInput!) {\n    createApiToken(input: $input) {\n      plaintext\n      token {\n        id\n        name\n        prefix\n        jobs {\n          id\n          name\n          deleted\n        }\n        expiresAt\n        neverExpires\n      }\n    }\n  }\n": typeof types.CreateApiTokenDocument,
     "\n  mutation RevokeApiToken($id: UUID!) {\n    revokeApiToken(id: $id) {\n      id\n      revokedAt\n    }\n  }\n": typeof types.RevokeApiTokenDocument,
     "\n  mutation UpdateApiTokenAddresses(\n    $id: UUID!\n    $allowedCidrs: [String!]!\n    $allowAnyAddress: Boolean!\n  ) {\n    updateApiTokenAddresses(\n      id: $id\n      allowedCidrs: $allowedCidrs\n      allowAnyAddress: $allowAnyAddress\n    ) {\n      id\n      allowedCidrs\n      allowAnyAddress\n    }\n  }\n": typeof types.UpdateApiTokenAddressesDocument,
-    "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n    }\n  }\n": typeof types.MeDocument,
+    "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n      locale\n    }\n  }\n": typeof types.MeDocument,
     "\n  mutation Login($email: String!, $password: String!) {\n    login(email: $email, password: $password) {\n      secondFactorRequired\n      availableFactors\n      passwordChangeRequired\n      twoFactorEnrollmentRequired\n      user {\n        id\n        email\n        displayName\n        role\n      }\n    }\n  }\n": typeof types.LoginDocument,
     "\n  mutation Logout {\n    logout\n  }\n": typeof types.LogoutDocument,
     "\n  mutation BeginPasskeyLogin {\n    beginPasskeyLogin\n  }\n": typeof types.BeginPasskeyLoginDocument,
@@ -247,6 +248,7 @@ const documents: Documents = {
     "\n  mutation FinishPasskeyRegistration($name: String!, $response: JSON!) {\n    finishPasskeyRegistration(name: $name, response: $response) {\n      id\n      name\n    }\n  }\n": types.FinishPasskeyRegistrationDocument,
     "\n  mutation RenamePasskey($id: UUID!, $name: String!) {\n    renamePasskey(id: $id, name: $name) {\n      id\n      name\n    }\n  }\n": types.RenamePasskeyDocument,
     "\n  mutation DeletePasskey($id: UUID!) {\n    deletePasskey(id: $id)\n  }\n": types.DeletePasskeyDocument,
+    "\n  mutation SetMyLocale($locale: Locale) {\n    setMyLocale(locale: $locale) {\n      id\n      locale\n    }\n  }\n": types.SetMyLocaleDocument,
     "\n  fragment SmtpSettingsFields on SmtpSettings {\n    configured\n    enabled\n    host\n    port\n    mode\n    username\n    hasPassword\n    fromAddress\n    fromName\n    caBundlePem\n    connectTimeoutSeconds\n    sendTimeoutSeconds\n    mayBeUnencrypted\n    updatedAt\n  }\n": types.SmtpSettingsFieldsFragmentDoc,
     "\n  query AdminSmtpSettings {\n    smtpSettings {\n      ...SmtpSettingsFields\n    }\n  }\n": types.AdminSmtpSettingsDocument,
     "\n  mutation AdminUpdateSmtpSettings($input: UpdateSmtpSettingsInput!) {\n    updateSmtpSettings(input: $input) {\n      ...SmtpSettingsFields\n    }\n  }\n": types.AdminUpdateSmtpSettingsDocument,
@@ -284,7 +286,7 @@ const documents: Documents = {
     "\n  mutation CreateApiToken($input: CreateApiTokenInput!) {\n    createApiToken(input: $input) {\n      plaintext\n      token {\n        id\n        name\n        prefix\n        jobs {\n          id\n          name\n          deleted\n        }\n        expiresAt\n        neverExpires\n      }\n    }\n  }\n": types.CreateApiTokenDocument,
     "\n  mutation RevokeApiToken($id: UUID!) {\n    revokeApiToken(id: $id) {\n      id\n      revokedAt\n    }\n  }\n": types.RevokeApiTokenDocument,
     "\n  mutation UpdateApiTokenAddresses(\n    $id: UUID!\n    $allowedCidrs: [String!]!\n    $allowAnyAddress: Boolean!\n  ) {\n    updateApiTokenAddresses(\n      id: $id\n      allowedCidrs: $allowedCidrs\n      allowAnyAddress: $allowAnyAddress\n    ) {\n      id\n      allowedCidrs\n      allowAnyAddress\n    }\n  }\n": types.UpdateApiTokenAddressesDocument,
-    "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n    }\n  }\n": types.MeDocument,
+    "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n      locale\n    }\n  }\n": types.MeDocument,
     "\n  mutation Login($email: String!, $password: String!) {\n    login(email: $email, password: $password) {\n      secondFactorRequired\n      availableFactors\n      passwordChangeRequired\n      twoFactorEnrollmentRequired\n      user {\n        id\n        email\n        displayName\n        role\n      }\n    }\n  }\n": types.LoginDocument,
     "\n  mutation Logout {\n    logout\n  }\n": types.LogoutDocument,
     "\n  mutation BeginPasskeyLogin {\n    beginPasskeyLogin\n  }\n": types.BeginPasskeyLoginDocument,
@@ -526,6 +528,10 @@ export function graphql(source: "\n  mutation DeletePasskey($id: UUID!) {\n    d
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  mutation SetMyLocale($locale: Locale) {\n    setMyLocale(locale: $locale) {\n      id\n      locale\n    }\n  }\n"): (typeof documents)["\n  mutation SetMyLocale($locale: Locale) {\n    setMyLocale(locale: $locale) {\n      id\n      locale\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  fragment SmtpSettingsFields on SmtpSettings {\n    configured\n    enabled\n    host\n    port\n    mode\n    username\n    hasPassword\n    fromAddress\n    fromName\n    caBundlePem\n    connectTimeoutSeconds\n    sendTimeoutSeconds\n    mayBeUnencrypted\n    updatedAt\n  }\n"): (typeof documents)["\n  fragment SmtpSettingsFields on SmtpSettings {\n    configured\n    enabled\n    host\n    port\n    mode\n    username\n    hasPassword\n    fromAddress\n    fromName\n    caBundlePem\n    connectTimeoutSeconds\n    sendTimeoutSeconds\n    mayBeUnencrypted\n    updatedAt\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -674,7 +680,7 @@ export function graphql(source: "\n  mutation UpdateApiTokenAddresses(\n    $id:
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n    }\n  }\n"];
+export function graphql(source: "\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n      locale\n    }\n  }\n"): (typeof documents)["\n  query Me {\n    me {\n      id\n      email\n      displayName\n      role\n      passwordChangeRequired\n      twoFactorRequired\n      twoFactorEnrollmentDeadline\n      locale\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

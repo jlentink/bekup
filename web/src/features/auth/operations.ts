@@ -11,6 +11,7 @@ export const MeQuery = graphql(`
       passwordChangeRequired
       twoFactorRequired
       twoFactorEnrollmentDeadline
+      locale
     }
   }
 `);

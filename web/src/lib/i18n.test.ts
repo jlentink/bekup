@@ -1,14 +1,22 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  LOCALE_SOURCE_KEY,
   LOCALE_STORAGE_KEY,
+  browserLocale,
   defineMessages,
   detectIntlLocale,
   detectLocale,
   hasStoredLocale,
   isLocale,
+  isReloadPending,
+  localeFromApi,
+  localeToApi,
+  pageReload,
   plural,
   setLocale,
+  storedFromAccount,
+  storedLocale,
   type Messages,
 } from "./i18n";
 
@@ -56,6 +64,17 @@ describe("isLocale", () => {
   });
 });
 
+describe("API locale enum", () => {
+  it("maps both ways", () => {
+    expect(localeFromApi("NL")).toBe("nl");
+    expect(localeFromApi("EN")).toBe("en");
+    expect(localeFromApi(null)).toBeNull();
+    expect(localeFromApi("DE")).toBeNull();
+    expect(localeToApi("nl")).toBe("NL");
+    expect(localeToApi("en")).toBe("EN");
+  });
+});
+
 describe("plural", () => {
   it("picks one and other", () => {
     expect(plural(1, { one: "1 file", other: "n files" })).toBe("1 file");
@@ -65,23 +84,45 @@ describe("plural", () => {
 });
 
 describe("setLocale", () => {
+  const realRun = pageReload.run;
+  let reload: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    reload = vi.fn();
+    pageReload.run = reload as unknown as () => void;
+    pageReload.pending = false;
+  });
   afterEach(() => {
     window.localStorage.clear();
+    pageReload.run = realRun;
+    pageReload.pending = false;
   });
   it("stores the choice and reloads", () => {
-    const reload = vi.fn();
-    setLocale("nl", reload);
+    expect(setLocale("nl")).toBe(true);
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("nl");
     expect(hasStoredLocale()).toBe(true);
+    expect(storedLocale()).toBe("nl");
+    expect(storedFromAccount()).toBe(false);
+    expect(isReloadPending()).toBe(true);
     expect(reload).toHaveBeenCalledOnce();
   });
+  it("marks the account's choice and can skip the reload", () => {
+    expect(setLocale("nl", { fromAccount: true, reload: false })).toBe(true);
+    expect(storedFromAccount()).toBe(true);
+    expect(isReloadPending()).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    setLocale("en", { reload: false });
+    expect(storedFromAccount()).toBe(false);
+  });
   it("null follows the browser again", () => {
-    const reload = vi.fn();
-    window.localStorage.setItem(LOCALE_STORAGE_KEY, "nl");
-    setLocale(null, reload);
+    setLocale("nl", { fromAccount: true, reload: false });
+    setLocale(null);
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(LOCALE_SOURCE_KEY)).toBeNull();
     expect(hasStoredLocale()).toBe(false);
     expect(reload).toHaveBeenCalledOnce();
+  });
+  it("the browser's own language is English in the test browser", () => {
+    expect(browserLocale()).toBe("en");
   });
 });
 
