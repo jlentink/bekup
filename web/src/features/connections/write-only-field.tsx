@@ -4,6 +4,31 @@ import type { ReactNode } from "react";
 import { Tag } from "@/components/status/tag";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { defineMessages } from "@/lib/i18n";
+
+const T = defineMessages({
+  en: {
+    removeInstead: (label: string) => `Remove the stored ${label.toLowerCase()} instead`,
+    keep: (label: string) => `Keep the stored ${label.toLowerCase()}`,
+    removedOnSave: "Removed on save",
+    stored: "Stored",
+    writeOnly: "Write-only: never shown again.",
+    undo: "Undo",
+    change: (label: string) => `Change ${label.toLowerCase()}`,
+    remove: "Remove",
+  },
+  nl: {
+    removeInstead: (label: string) =>
+      `In plaats daarvan de opgeslagen waarde van „${label}” verwijderen`,
+    keep: (label: string) => `De opgeslagen waarde van „${label}” behouden`,
+    removedOnSave: "Wordt verwijderd bij opslaan",
+    stored: "Opgeslagen",
+    writeOnly: "Alleen-schrijven: wordt nooit meer getoond.",
+    undo: "Ongedaan maken",
+    change: (label: string) => `${label} wijzigen`,
+    remove: "Verwijderen",
+  },
+});
 
 export type WriteOnlyAction = "keep" | "set" | "clear";
 
@@ -51,7 +76,7 @@ export function WriteOnlyField({
               onAction("clear");
             }}
           >
-            Remove the stored {label.toLowerCase()} instead
+            {T.removeInstead(label)}
           </Button>
         ) : null}
       </div>
@@ -70,7 +95,7 @@ export function WriteOnlyField({
             onAction("keep");
           }}
         >
-          <RotateCcw aria-hidden="true" /> Keep the stored {label.toLowerCase()}
+          <RotateCcw aria-hidden="true" /> {T.keep(label)}
         </Button>
       </div>
     );
@@ -80,14 +105,15 @@ export function WriteOnlyField({
       <span className="text-sm font-medium">{label}</span>
       <div className="flex flex-wrap items-center gap-2">
         {action === "clear" ? (
-          <Tag tone="warning">Removed on save</Tag>
+          <Tag tone="warning">{T.removedOnSave}</Tag>
         ) : (
           <Tag tone="success">
-            <span className="sr-only">{label}: </span>Stored
+            <span className="sr-only">{label}: </span>
+            {T.stored}
           </Tag>
         )}
         <span className="text-xs text-muted-foreground">
-          {action === "clear" ? "" : "Write-only: never shown again."}
+          {action === "clear" ? "" : T.writeOnly}
         </span>
         {action === "clear" ? (
           <Button
@@ -98,7 +124,7 @@ export function WriteOnlyField({
               onAction("keep");
             }}
           >
-            Undo
+            {T.undo}
           </Button>
         ) : (
           <>
@@ -110,7 +136,7 @@ export function WriteOnlyField({
                 onAction("set");
               }}
             >
-              Change {label.toLowerCase()}
+              {T.change(label)}
             </Button>
             {allowClear ? (
               <Button
@@ -121,7 +147,7 @@ export function WriteOnlyField({
                   onAction("clear");
                 }}
               >
-                Remove
+                {T.remove}
               </Button>
             ) : null}
           </>

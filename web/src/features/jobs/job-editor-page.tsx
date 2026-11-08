@@ -38,6 +38,7 @@ import type {
   UpdateJobInput,
 } from "@/graphql/gen/graphql";
 import { apiErrors, applyFieldErrors, userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { EncryptionPanel, MIN_JOB_PASSPHRASE } from "./encryption-panel";
@@ -66,104 +67,213 @@ type Job = NonNullable<JobDetailResult["job"]>;
 const AGE_RECIPIENT_RE = /^age1[02-9ac-hj-np-z]{58}$/;
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-const T = {
-  newEyebrow: "New job",
-  newTitle: "Create a backup job",
-  editEyebrow: "Edit job",
-  back: "Back to jobs",
-  backJob: "Back to the job",
-  sections: {
-    basics: "Job",
-    source: "Source",
-    schedule: "Schedule",
-    retention: "Retention and limits",
-    destinations: "Destinations",
-    encryption: "Encryption",
-    owners: "Backup owners",
-    testRestore: "Test restores",
-    schemaVersion: "Schema version",
-    notifications: "Notifications",
+const T = defineMessages({
+  en: {
+    newEyebrow: "New job",
+    newTitle: "Create a backup job",
+    editEyebrow: "Edit job",
+    back: "Back to jobs",
+    backJob: "Back to the job",
+    sections: {
+      basics: "Job",
+      source: "Source",
+      schedule: "Schedule",
+      retention: "Retention and limits",
+      destinations: "Destinations",
+      encryption: "Encryption",
+      owners: "Backup owners",
+      testRestore: "Test restores",
+      schemaVersion: "Schema version",
+      notifications: "Notifications",
+    },
+    leads: {
+      basics:
+        "A name for people; the slug names the job's directory on every destination and never changes.",
+      source:
+        "The connection and the databases to dump. Temporary restore connections are not offered.",
+      schedule: "When bekup runs the job on its own. You can always start it by hand.",
+      retention:
+        "How many backups each destination keeps. Set at least one limit; a backup is kept while either rule keeps it.",
+      destinations: "Uploads fan out in this order. 1 to 16 destinations.",
+      encryption: "Backups are always encrypted with age unless an administrator turns it off.",
+      owners: "Owners with role User can view and run this job and download its backups.",
+      testRestore:
+        "Prove the backups restore: a regular restore into a scratch database, compared with the source statistics.",
+      schemaVersion:
+        "Record each database's migration version with its backup, read in the same snapshot as the dump.",
+      notifications:
+        "Shared channels that receive this job's events, and a shortcut to your own per-job preferences.",
+    },
+    name: "Name",
+    slug: "Slug",
+    slugHint: "Optional; derived from the name. Lower-case letters, digits and inner hyphens.",
+    slugFixed: "Fixed when the job was created.",
+    description: "Description",
+    connection: "Connection",
+    chooseConnection: "Choose a connection",
+    dbMode: "Databases",
+    dbModeAll: "All",
+    dbModeAllHint: "Every database on the server is backed up, including ones created later.",
+    dbModeExclude: "Exclude",
+    dbModeSelected: "Select only",
+    includeGlobals: "Include cluster globals",
+    includeGlobalsHint: "Roles and tablespaces (pg_dumpall --globals-only). PostgreSQL only.",
+    keepLast: "Keep the newest",
+    keepLastHint: "backups",
+    keepDays: "Keep backups younger than",
+    keepDaysHint: "days; empty: no day limit",
+    retentionRulesLabel: "How retention decides",
+    retentionRules: [
+      "The two rules add up: a backup is kept while either rule keeps it, so the larger one wins.",
+      "The newest complete backup on a destination is always kept, whatever the limits say.",
+      "Incomplete backups newer than the newest complete one are kept too, until a newer complete backup exists.",
+    ],
+    retentionApplies:
+      "Saving a retention change applies it right away: bekup checks this job's backups again and deletes what the new limits no longer keep.",
+    retentionRequired: "Set at least one limit.",
+    positive: "Enter a whole number of 1 or more.",
+    timeout: "Run timeout (minutes)",
+    timeoutHint: "Empty: the server default (workers.backup_timeout).",
+    verification: "Completeness evidence",
+    verificationStandard: "Standard: object counts and row estimates",
+    verificationDeep: "Deep: exact per-table row counts",
+    verificationHint:
+      "Deep only adds exactness for PostgreSQL: MySQL and MariaDB always record estimates (D-153). Deep costs a count(*) per table at dump time.",
+    enabled: "Enable the schedule right away",
+    keyChoice: "Key",
+    keyGeneratePassphrase: "Generate a passphrase (recommended)",
+    keyGenerateKeypair: "Generate an age keypair (private key shown once)",
+    keyPassphrase: "Use my passphrase",
+    keyRecipient: "Encrypt to my age recipient",
+    keyAdminNote:
+      "Choosing your own key or a keypair is an admin action and needs a fresh identity check.",
+    keyDefaultNote:
+      "bekup generates a strong passphrase and shows it to you once. Administrators can change keys later.",
+    passphrase: "Passphrase",
+    passphraseTooShort: `At least ${String(MIN_JOB_PASSPHRASE)} characters.`,
+    recipient: "Recipient public key",
+    recipientInvalid: "Enter an age X25519 public key (age1…).",
+    keyLabel: "Label (optional)",
+    encryptionAfter:
+      "Key changes, the opt-out and the passphrase export are on the job's edit page.",
+    ownersAfter: "Owners can be added once the job exists.",
+    create: "Create job",
+    save: "Save changes",
+    cancel: "Cancel",
+    created: "Job created.",
+    saved: "Job saved.",
+    notFound: "This job does not exist or was deleted.",
+    destinationsRequired: "Choose at least one destination.",
+    databasesRequired: "Select at least one database.",
+    excludeRequired: "Choose at least one database to exclude, or pick All.",
+    nameRequired: "Enter a name.",
+    connectionRequired: "Choose a connection.",
   },
-  leads: {
-    basics:
-      "A name for people; the slug names the job's directory on every destination and never changes.",
-    source:
-      "The connection and the databases to dump. Temporary restore connections are not offered.",
-    schedule: "When bekup runs the job on its own. You can always start it by hand.",
-    retention:
-      "How many backups each destination keeps. Set at least one limit; a backup is kept while either rule keeps it.",
-    destinations: "Uploads fan out in this order. 1 to 16 destinations.",
-    encryption: "Backups are always encrypted with age unless an administrator turns it off.",
-    owners: "Owners with role User can view and run this job and download its backups.",
-    testRestore:
-      "Prove the backups restore: a regular restore into a scratch database, compared with the source statistics.",
-    schemaVersion:
-      "Record each database's migration version with its backup, read in the same snapshot as the dump.",
-    notifications:
-      "Shared channels that receive this job's events, and a shortcut to your own per-job preferences.",
+  nl: {
+    newEyebrow: "Nieuwe taak",
+    newTitle: "Een back-uptaak maken",
+    editEyebrow: "Taak bewerken",
+    back: "Terug naar de taken",
+    backJob: "Terug naar de taak",
+    sections: {
+      basics: "Taak",
+      source: "Bron",
+      schedule: "Planning",
+      retention: "Bewaarbeleid en limieten",
+      destinations: "Bestemmingen",
+      encryption: "Versleuteling",
+      owners: "Back-upeigenaren",
+      testRestore: "Testherstels",
+      schemaVersion: "Schemaversie",
+      notifications: "Meldingen",
+    },
+    leads: {
+      basics:
+        "Een naam voor mensen; de slug is de naam van de map van de taak op elke bestemming en verandert nooit.",
+      source:
+        "De verbinding en de databases om te dumpen. Tijdelijke herstelverbindingen worden niet aangeboden.",
+      schedule: "Wanneer bekup de taak zelf uitvoert. Je kunt hem altijd handmatig starten.",
+      retention:
+        "Hoeveel back-ups elke bestemming bewaart. Stel minstens één limiet in; een back-up blijft bewaard zolang een van beide regels hem bewaart.",
+      destinations: "Uploads gaan in deze volgorde. 1 tot 16 bestemmingen.",
+      encryption:
+        "Back-ups worden altijd met age versleuteld, tenzij een beheerder dat uitschakelt.",
+      owners:
+        "Eigenaren met de rol Gebruiker kunnen deze taak bekijken en uitvoeren en de back-ups ervan downloaden.",
+      testRestore:
+        "Bewijs dat de back-ups te herstellen zijn: een regelmatig herstel in een tijdelijke database, vergeleken met de statistieken van de bron.",
+      schemaVersion:
+        "Leg bij elke back-up de migratieversie van elke database vast, gelezen in dezelfde snapshot als de dump.",
+      notifications:
+        "Gedeelde kanalen die de gebeurtenissen van deze taak ontvangen, en een snelkoppeling naar je eigen voorkeuren per taak.",
+    },
+    name: "Naam",
+    slug: "Slug",
+    slugHint: "Optioneel; afgeleid van de naam. Kleine letters, cijfers en koppeltekens binnenin.",
+    slugFixed: "Vastgelegd toen de taak werd aangemaakt.",
+    description: "Beschrijving",
+    connection: "Verbinding",
+    chooseConnection: "Kies een verbinding",
+    dbMode: "Databases",
+    dbModeAll: "Alle",
+    dbModeAllHint:
+      "Van elke database op de server wordt een back-up gemaakt, ook van databases die later worden aangemaakt.",
+    dbModeExclude: "Uitsluiten",
+    dbModeSelected: "Alleen geselecteerde",
+    includeGlobals: "Globale objecten van het cluster meenemen",
+    includeGlobalsHint: "Rollen en tablespaces (pg_dumpall --globals-only). Alleen PostgreSQL.",
+    keepLast: "De nieuwste bewaren",
+    keepLastHint: "back-ups",
+    keepDays: "Back-ups bewaren die jonger zijn dan",
+    keepDaysHint: "dagen; leeg: geen dagenlimiet",
+    retentionRulesLabel: "Hoe het bewaarbeleid beslist",
+    retentionRules: [
+      "De twee regels vullen elkaar aan: een back-up blijft bewaard zolang een van beide regels hem bewaart, dus de grootste wint.",
+      "De nieuwste volledige back-up op een bestemming blijft altijd bewaard, wat de limieten ook zeggen.",
+      "Onvolledige back-ups die nieuwer zijn dan de nieuwste volledige blijven ook bewaard, tot er een nieuwere volledige back-up is.",
+    ],
+    retentionApplies:
+      "Een wijziging van het bewaarbeleid geldt direct na het opslaan: bekup controleert de back-ups van deze taak opnieuw en verwijdert wat de nieuwe limieten niet meer bewaren.",
+    retentionRequired: "Stel minstens één limiet in.",
+    positive: "Vul een geheel getal van 1 of meer in.",
+    timeout: "Maximale duur van een run (minuten)",
+    timeoutHint: "Leeg: de standaard van de server (workers.backup_timeout).",
+    verification: "Volledigheidsbewijs",
+    verificationStandard: "Standaard: aantallen objecten en geschatte aantallen rijen",
+    verificationDeep: "Grondig: exacte aantallen rijen per tabel",
+    verificationHint:
+      "Grondig voegt alleen voor PostgreSQL exactheid toe: MySQL en MariaDB leggen altijd schattingen vast (D-153). Grondig kost een count(*) per tabel tijdens de dump.",
+    enabled: "De planning direct inschakelen",
+    keyChoice: "Sleutel",
+    keyGeneratePassphrase: "Een wachtwoordzin genereren (aanbevolen)",
+    keyGenerateKeypair: "Een age-sleutelpaar genereren (privésleutel wordt één keer getoond)",
+    keyPassphrase: "Mijn wachtwoordzin gebruiken",
+    keyRecipient: "Versleutelen voor mijn age-ontvanger",
+    keyAdminNote:
+      "Een eigen sleutel of een sleutelpaar kiezen is een beheerdersactie en vraagt opnieuw om je identiteit te bevestigen.",
+    keyDefaultNote:
+      "bekup genereert een sterke wachtwoordzin en toont die één keer aan je. Beheerders kunnen sleutels later wijzigen.",
+    passphrase: "Wachtwoordzin",
+    passphraseTooShort: `Minstens ${String(MIN_JOB_PASSPHRASE)} tekens.`,
+    recipient: "Publieke sleutel van de ontvanger",
+    recipientInvalid: "Vul een publieke age-sleutel in (X25519, age1…).",
+    keyLabel: "Label (optioneel)",
+    encryptionAfter:
+      "Sleutelwijzigingen, het uitschakelen van versleuteling en de export van wachtwoordzinnen staan op de bewerkpagina van de taak.",
+    ownersAfter: "Eigenaren kun je toevoegen zodra de taak bestaat.",
+    create: "Taak maken",
+    save: "Wijzigingen opslaan",
+    cancel: "Annuleren",
+    created: "Taak aangemaakt.",
+    saved: "Taak opgeslagen.",
+    notFound: "Deze taak bestaat niet of is verwijderd.",
+    destinationsRequired: "Kies minstens één bestemming.",
+    databasesRequired: "Selecteer minstens één database.",
+    excludeRequired: "Kies minstens één database om uit te sluiten, of kies Alle.",
+    nameRequired: "Vul een naam in.",
+    connectionRequired: "Kies een verbinding.",
   },
-  name: "Name",
-  slug: "Slug",
-  slugHint: "Optional; derived from the name. Lower-case letters, digits and inner hyphens.",
-  slugFixed: "Fixed when the job was created.",
-  description: "Description",
-  connection: "Connection",
-  chooseConnection: "Choose a connection",
-  dbMode: "Databases",
-  dbModeAll: "All",
-  dbModeAllHint: "Every database on the server is backed up, including ones created later.",
-  dbModeExclude: "Exclude",
-  dbModeSelected: "Select only",
-  includeGlobals: "Include cluster globals",
-  includeGlobalsHint: "Roles and tablespaces (pg_dumpall --globals-only). PostgreSQL only.",
-  keepLast: "Keep the newest",
-  keepLastHint: "backups",
-  keepDays: "Keep backups younger than",
-  keepDaysHint: "days; empty: no day limit",
-  retentionRulesLabel: "How retention decides",
-  retentionRules: [
-    "The two rules add up: a backup is kept while either rule keeps it, so the larger one wins.",
-    "The newest complete backup on a destination is always kept, whatever the limits say.",
-    "Incomplete backups newer than the newest complete one are kept too, until a newer complete backup exists.",
-  ],
-  retentionApplies:
-    "Saving a retention change applies it right away: bekup checks this job's backups again and deletes what the new limits no longer keep.",
-  retentionRequired: "Set at least one limit.",
-  positive: "Enter a whole number of 1 or more.",
-  timeout: "Run timeout (minutes)",
-  timeoutHint: "Empty: the server default (workers.backup_timeout).",
-  verification: "Completeness evidence",
-  verificationStandard: "Standard: object counts and row estimates",
-  verificationDeep: "Deep: exact per-table row counts",
-  verificationHint:
-    "Deep only adds exactness for PostgreSQL: MySQL and MariaDB always record estimates (D-153). Deep costs a count(*) per table at dump time.",
-  enabled: "Enable the schedule right away",
-  keyChoice: "Key",
-  keyGeneratePassphrase: "Generate a passphrase (recommended)",
-  keyGenerateKeypair: "Generate an age keypair (private key shown once)",
-  keyPassphrase: "Use my passphrase",
-  keyRecipient: "Encrypt to my age recipient",
-  keyAdminNote:
-    "Choosing your own key or a keypair is an admin action and needs a fresh identity check.",
-  keyDefaultNote:
-    "bekup generates a strong passphrase and shows it to you once. Administrators can change keys later.",
-  passphrase: "Passphrase",
-  passphraseTooShort: `At least ${String(MIN_JOB_PASSPHRASE)} characters.`,
-  recipient: "Recipient public key",
-  recipientInvalid: "Enter an age X25519 public key (age1…).",
-  keyLabel: "Label (optional)",
-  encryptionAfter: "Key changes, the opt-out and the passphrase export are on the job's edit page.",
-  ownersAfter: "Owners can be added once the job exists.",
-  create: "Create job",
-  save: "Save changes",
-  cancel: "Cancel",
-  created: "Job created.",
-  saved: "Job saved.",
-  notFound: "This job does not exist or was deleted.",
-  destinationsRequired: "Choose at least one destination.",
-  databasesRequired: "Select at least one database.",
-  excludeRequired: "Choose at least one database to exclude, or pick All.",
-} as const;
+});
 
 const positiveOrEmpty = z
   .string()
@@ -172,13 +282,13 @@ const positiveOrEmpty = z
 
 const schema = z
   .object({
-    name: z.string().trim().min(1, "Enter a name.").max(200),
+    name: z.string().trim().min(1, T.nameRequired).max(200),
     slug: z
       .string()
       .trim()
       .refine((v) => v === "" || (SLUG_RE.test(v) && v.length <= 63), T.slugHint),
     description: z.string().max(2000),
-    connectionId: z.string().min(1, "Choose a connection."),
+    connectionId: z.string().min(1, T.connectionRequired),
     // ALL and EXCLUDE are both the server's mode ALL (EXCLUDE with names).
     dbMode: z.enum(["ALL", "EXCLUDE", "SELECTED"]),
     databases: z.array(z.string()),

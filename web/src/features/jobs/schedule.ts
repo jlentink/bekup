@@ -1,4 +1,24 @@
 import type { ScheduleInput, ScheduleKind, ScheduleUnit } from "@/graphql/gen/graphql";
+import { defineMessages, intlLocale } from "@/lib/i18n";
+
+const T = defineMessages({
+  en: {
+    zone: "Choose a time zone.",
+    cronFields: "A cron expression has exactly 5 fields.",
+    every: "Enter a whole number of 1 or more.",
+    date: "Enter the start date.",
+    time: "Enter the start time as HH:MM.",
+    dayOfMonth: "Day of month is 1 to 31.",
+  },
+  nl: {
+    zone: "Kies een tijdzone.",
+    cronFields: "Een cron-expressie heeft precies 5 velden.",
+    every: "Vul een geheel getal van 1 of meer in.",
+    date: "Vul de startdatum in.",
+    time: "Vul de starttijd in als UU:MM.",
+    dayOfMonth: "De dag van de maand is 1 tot en met 31.",
+  },
+});
 
 /** A stored schedule as the API returns it (Schedule, D-143). */
 export interface Schedule {
@@ -138,18 +158,18 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
  */
 export function draftProblem(d: ScheduleDraft): string | null {
   if (d.kind === "MANUAL") return null;
-  if (d.timezone.trim() === "") return "Choose a time zone.";
+  if (d.timezone.trim() === "") return T.zone;
   if (d.kind === "CRON") {
     const fields = d.cron.trim().split(/\s+/);
-    return fields.length === 5 ? null : "A cron expression has exactly 5 fields.";
+    return fields.length === 5 ? null : T.cronFields;
   }
   const every = Number(d.every);
-  if (!Number.isInteger(every) || every < 1) return "Enter a whole number of 1 or more.";
-  if (!DATE_RE.test(d.anchorDate)) return "Enter the start date.";
-  if (!TIME_RE.test(d.anchorTime)) return "Enter the start time as HH:MM.";
+  if (!Number.isInteger(every) || every < 1) return T.every;
+  if (!DATE_RE.test(d.anchorDate)) return T.date;
+  if (!TIME_RE.test(d.anchorTime)) return T.time;
   if (d.unit === "MONTHS" && d.dayOfMonth !== "") {
     const dom = Number(d.dayOfMonth);
-    if (!Number.isInteger(dom) || dom < 1 || dom > 31) return "Day of month is 1 to 31.";
+    if (!Number.isInteger(dom) || dom < 1 || dom > 31) return T.dayOfMonth;
   }
   return null;
 }
@@ -203,8 +223,8 @@ export function formatInZone(iso: string, zone: string | null | undefined): stri
     hourCycle: "h23",
   };
   try {
-    return new Intl.DateTimeFormat(undefined, { ...opts, timeZone: zone ?? undefined }).format(d);
+    return new Intl.DateTimeFormat(intlLocale, { ...opts, timeZone: zone ?? undefined }).format(d);
   } catch {
-    return new Intl.DateTimeFormat(undefined, opts).format(d);
+    return new Intl.DateTimeFormat(intlLocale, opts).format(d);
   }
 }

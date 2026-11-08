@@ -7,6 +7,8 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import bekup from "./eslint-rules/no-ui-literals.js";
+
 export default defineConfig(
   {
     ignores: [
@@ -79,6 +81,14 @@ export default defineConfig(
         },
       ],
     },
+  },
+  {
+    // UI text only from message tables, en + nl (D-235). The design page is
+    // a dev-only showcase.
+    files: ["src/**/*.tsx"],
+    ignores: ["**/*.test.tsx", "src/test/**", "src/routes/design.tsx"],
+    plugins: { bekup },
+    rules: { "bekup/no-ui-literals": "error" },
   },
   {
     // shadcn/ui primitives: generated, exported with their variant helpers.

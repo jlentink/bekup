@@ -2,13 +2,37 @@ import { CalendarClock } from "lucide-react";
 import { Link } from "react-router";
 
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, intlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { HOUR_MS, type UpcomingRun } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
-const clock = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const clock = new Intl.DateTimeFormat(intlLocale, { hour: "2-digit", minute: "2-digit" });
 const LIST_MAX = 6;
+
+const T = defineMessages({
+  en: {
+    title: "Next 24 hours",
+    link: "Calendar",
+    loading: "Loading planned runs",
+    empty: "No runs planned in the next 24 hours.",
+    listLabel: "Planned runs",
+    now: "now",
+    overdue: "Overdue",
+    more: (n: number) => `and ${String(n)} more today`,
+  },
+  nl: {
+    title: "Komende 24 uur",
+    link: "Kalender",
+    loading: "Geplande runs laden",
+    empty: "Geen runs gepland in de komende 24 uur.",
+    listLabel: "Geplande runs",
+    now: "nu",
+    overdue: "Te laat",
+    more: (n: number) => `en nog ${String(n)} vandaag`,
+  },
+});
 
 /**
  * The next 24 hours as one ruled strip (SVG attributes only: CSP-safe),
@@ -34,7 +58,7 @@ function Strip({ runs, now }: { runs: UpcomingRun[]; now: number }) {
                 textAnchor={h === 0 ? "start" : "middle"}
                 className="dash-strip-label"
               >
-                {h === 0 ? "now" : clock.format(new Date(now + h * HOUR_MS))}
+                {h === 0 ? T.now : clock.format(new Date(now + h * HOUR_MS))}
               </text>
             ) : null}
           </g>
@@ -71,23 +95,23 @@ export function UpcomingTile({
   return (
     <Tile
       folio="04"
-      title="Next 24 hours"
+      title={T.title}
       to="/calendar?view=day"
-      linkLabel="Calendar"
+      linkLabel={T.link}
       testId="tile-upcoming"
     >
       {loading && runs.length === 0 ? (
-        <TileSkeleton rows={3} label="Loading planned runs" />
+        <TileSkeleton rows={3} label={T.loading} />
       ) : error && runs.length === 0 ? (
         <TileError error={error} />
       ) : runs.length === 0 ? (
         <TileEmpty icon={<CalendarClock aria-hidden="true" className="size-4" />}>
-          No runs planned in the next 24 hours.
+          {T.empty}
         </TileEmpty>
       ) : (
         <div className="flex flex-col gap-3">
           <Strip runs={runs} now={now} />
-          <ol aria-label="Planned runs" className="flex flex-col gap-1.5">
+          <ol aria-label={T.listLabel} className="flex flex-col gap-1.5">
             {runs.slice(0, LIST_MAX).map((r, i) => (
               <li
                 key={`${r.jobId}-${r.at}-${String(i)}`}
@@ -104,7 +128,7 @@ export function UpcomingTile({
                   {r.jobName}
                 </Link>
                 {r.overdue ? (
-                  <span className="text-2xs font-medium text-status-missed-fg">Overdue</span>
+                  <span className="text-2xs font-medium text-status-missed-fg">{T.overdue}</span>
                 ) : (
                   <span className="text-2xs text-muted-foreground">
                     {formatRelative(r.at, now)}
@@ -114,9 +138,7 @@ export function UpcomingTile({
             ))}
           </ol>
           {runs.length > LIST_MAX ? (
-            <p className="text-2xs text-muted-foreground">
-              and {runs.length - LIST_MAX} more today
-            </p>
+            <p className="text-2xs text-muted-foreground">{T.more(runs.length - LIST_MAX)}</p>
           ) : null}
         </div>
       )}

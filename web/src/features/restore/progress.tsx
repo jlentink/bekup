@@ -17,8 +17,10 @@ import type {
 } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatBytes, formatDateTime, formatDuration } from "@/lib/format";
+import { intlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import { ENGINE_LABELS, isActive, neutralizedFunctions, PHASES, STATUS_LABELS } from "./model";
 import {
   RestoreCancelMutation,
@@ -28,6 +30,9 @@ import {
   RestoreUpdatedSubscription,
 } from "./operations";
 import { RestoreStatusBadge } from "./restore-status";
+
+const T = restoreMessages.progress;
+const C = restoreMessages.common;
 
 type LogLine = NonNullable<RestoreLogsResult["restoreLogs"]>["lines"][number];
 
@@ -68,7 +73,7 @@ export function RestoreProgress({ restoreId }: { restoreId: string }) {
   if (!restore) {
     return (
       <Alert>
-        <AlertDescription>That restore does not exist.</AlertDescription>
+        <AlertDescription>{T.notFound}</AlertDescription>
       </Alert>
     );
   }
@@ -95,35 +100,35 @@ export function RestoreProgress({ restoreId }: { restoreId: string }) {
 function Overview({ restore: r }: { restore: RestoreFieldsFragment }) {
   return (
     <dl className="grid gap-px overflow-hidden rounded-md border bg-rule sm:grid-cols-2 lg:grid-cols-4">
-      <Cell label="Status">
+      <Cell label={C.status}>
         <RestoreStatusBadge status={r.status} />
       </Cell>
-      <Cell label="Backup">
+      <Cell label={C.backup}>
         <Link to={`/jobs/${r.job.id}`} className="font-medium hover:underline">
           {r.job.name}
         </Link>
         <span className="font-mono text-xs text-muted-foreground">
-          {r.kind === "GLOBALS" ? "cluster globals" : r.sourceDatabase}
+          {r.kind === "GLOBALS" ? C.clusterGlobals : r.sourceDatabase}
           {" · "}
           <Link to={`/runs/${r.runId}`} className="hover:underline">
-            run
+            {T.run}
           </Link>
         </span>
       </Cell>
-      <Cell label={r.mode === "OVERWRITE" ? "Replaces" : r.kind === "GLOBALS" ? "Into" : "Creates"}>
+      <Cell label={r.mode === "OVERWRITE" ? C.replaces : r.kind === "GLOBALS" ? T.into : C.creates}>
         <span className="font-mono">{r.targetDatabase ?? r.target.name}</span>
         <span className="text-xs text-muted-foreground">
-          on {r.target.name} ({ENGINE_LABELS[r.target.engine] ?? r.target.engine})
-          {r.target.temporary ? ", temporary" : ""}
-          {r.target.deleted ? ", deleted" : ""}
+          {T.on(r.target.name, ENGINE_LABELS[r.target.engine] ?? r.target.engine)}
+          {r.target.temporary ? T.temporary : ""}
+          {r.target.deleted ? T.deleted : ""}
         </span>
       </Cell>
-      <Cell label="Timing">
+      <Cell label={T.timing}>
         <time dateTime={r.createdAt}>{formatDateTime(r.createdAt)}</time>
         <span className="text-xs text-muted-foreground" data-numeric>
-          {r.durationSeconds != null ? formatDuration(r.durationSeconds) : "not finished"}
-          {r.stagedBytes > 0 ? ` · ${formatBytes(r.stagedBytes)} staged` : ""}
-          {r.requestedBy ? ` · by ${r.requestedBy.displayName}` : ""}
+          {r.durationSeconds != null ? formatDuration(r.durationSeconds) : T.notFinished}
+          {r.stagedBytes > 0 ? T.staged(formatBytes(r.stagedBytes)) : ""}
+          {r.requestedBy ? T.by(r.requestedBy.displayName) : ""}
         </span>
       </Cell>
     </dl>
@@ -144,12 +149,12 @@ function PhaseStrip({ status }: { status: RestoreStatus }) {
   const finished = !isActive(status);
   const current = PHASES.indexOf(status);
   return (
-    <ol aria-label="Restore phases" className="grid grid-cols-5 gap-1">
+    <ol aria-label={T.phases} className="grid grid-cols-5 gap-1">
       {[...PHASES, "DONE" as const].map((phase, i) => {
         const isFinal = phase === "DONE";
         const done = finished || i < current;
         const now = !finished && i === current;
-        const finalLabel = finished ? STATUS_LABELS[status] : "Done";
+        const finalLabel = finished ? STATUS_LABELS[status] : T.done;
         return (
           <li key={phase} aria-current={now ? "step" : undefined} className="flex flex-col gap-1.5">
             <span
@@ -170,7 +175,7 @@ function PhaseStrip({ status }: { status: RestoreStatus }) {
               )}
             >
               {isFinal ? finalLabel : STATUS_LABELS[phase]}
-              <span className="sr-only">{done ? " (done)" : now ? " (current)" : ""}</span>
+              <span className="sr-only">{done ? C.done : now ? C.current : ""}</span>
             </span>
           </li>
         );
@@ -191,19 +196,19 @@ function CancelButton({ restoreId }: { restoreId: string }) {
         }}
       >
         <Ban aria-hidden="true" />
-        Cancel restore
+        {T.cancel}
       </Button>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
-        title="Cancel this restore?"
-        description="A restore that has not started is canceled at once; a running one stops as soon as its worker notices. A PostgreSQL overwrite leaves the target unchanged until the swap."
-        confirmLabel="Cancel restore"
+        title={T.cancelTitle}
+        description={T.cancelText}
+        confirmLabel={T.cancel}
         destructive
         onConfirm={async () => {
           try {
             await client.mutate({ mutation: RestoreCancelMutation, variables: { id: restoreId } });
-            toast.success("Cancellation requested.");
+            toast.success(T.cancelRequested);
           } catch (err) {
             toast.error(userMessage(err));
             throw err;
@@ -218,39 +223,36 @@ function Outcome({ restore: r, lines }: { restore: RestoreFieldsFragment; lines:
   const neutralized = neutralizedFunctions(lines);
   const hasSecdef = r.warnings.some((w) => w.code === "secdef_neutralized");
   return (
-    <section aria-label="Result" className="flex flex-col gap-4">
+    <section aria-label={T.result} className="flex flex-col gap-4">
       {r.status === "SUCCEEDED" ? (
         <div className="flex items-start gap-3 rounded-md border border-status-success/40 bg-status-success-soft p-4">
           <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 text-status-success-fg" />
           <div className="flex flex-col gap-1">
-            <h3 className="font-display text-2xl leading-tight">Restore complete</h3>
+            <h3 className="font-display text-2xl leading-tight">{T.complete}</h3>
             <p className="text-sm">
               {r.kind === "GLOBALS"
-                ? `The roles and tablespaces were applied to ${r.target.name}.`
-                : `${r.targetDatabase ?? ""} on ${r.target.name} holds the restored backup.`}
+                ? T.globalsApplied(r.target.name)
+                : T.databaseRestored(r.targetDatabase ?? "", r.target.name)}
             </p>
             {r.kind === "DATABASE" && r.target.engine === "POSTGRES" ? (
-              <p className="text-xs text-muted-foreground">
-                PUBLIC has no CONNECT on the restored database: grant CONNECT to the roles your
-                applications use.
-              </p>
+              <p className="text-xs text-muted-foreground">{T.grantConnect}</p>
             ) : null}
           </div>
         </div>
       ) : r.status === "FAILED" ? (
         <Alert variant="destructive">
           <OctagonX aria-hidden="true" />
-          <AlertTitle>The restore failed</AlertTitle>
+          <AlertTitle>{T.failed}</AlertTitle>
           <AlertDescription>
-            <p>{r.errorMessage ?? "No details were recorded."}</p>
+            <p>{r.errorMessage ?? T.noDetails}</p>
             {r.errorCode ? <p className="font-mono text-xs">{r.errorCode}</p> : null}
           </AlertDescription>
         </Alert>
       ) : (
         <Alert>
           <Ban aria-hidden="true" />
-          <AlertTitle>The restore was canceled</AlertTitle>
-          <AlertDescription>{r.errorMessage ?? "It stopped before it finished."}</AlertDescription>
+          <AlertTitle>{T.canceled}</AlertTitle>
+          <AlertDescription>{r.errorMessage ?? T.stoppedEarly}</AlertDescription>
         </Alert>
       )}
 
@@ -278,12 +280,9 @@ function Outcome({ restore: r, lines }: { restore: RestoreFieldsFragment; lines:
         >
           <h3 id="restore-secdef" className="flex items-center gap-2 font-semibold">
             <Lock aria-hidden="true" className="size-4 text-primary" />
-            Switched to SECURITY INVOKER
+            {T.switched}
           </h3>
-          <p className="text-sm text-muted-foreground">
-            These routines would have run with the restore role's rights for every caller. Re-enable
-            SECURITY DEFINER only after reviewing each one.
-          </p>
+          <p className="text-sm text-muted-foreground">{T.switchedText}</p>
           {neutralized.functions.length > 0 ? (
             <ul className="flex flex-col gap-1 font-mono text-xs">
               {neutralized.functions.map((f) => (
@@ -292,11 +291,11 @@ function Outcome({ restore: r, lines }: { restore: RestoreFieldsFragment; lines:
                 </li>
               ))}
               {neutralized.more > 0 ? (
-                <li className="px-2 text-muted-foreground">... and {neutralized.more} more</li>
+                <li className="px-2 text-muted-foreground">{T.more(neutralized.more)}</li>
               ) : null}
             </ul>
           ) : (
-            <p className="text-xs text-muted-foreground">The list is in the restore log below.</p>
+            <p className="text-xs text-muted-foreground">{T.listInLog}</p>
           )}
         </section>
       ) : null}
@@ -388,11 +387,11 @@ function LogViewer({
       <div className="flex items-center gap-2">
         <ScrollText aria-hidden="true" className="size-4 text-muted-foreground" />
         <h3 id="restore-log" className="font-semibold">
-          Restore log
+          {T.log}
         </h3>
         <span className="font-mono text-xs text-muted-foreground">
-          {lines.length} line{lines.length === 1 ? "" : "s"}
-          {dropped > 0 ? `, ${dropped} dropped (log cap)` : ""}
+          {T.lines(lines.length)}
+          {dropped > 0 ? T.dropped(dropped) : ""}
         </span>
       </div>
       {error ? (
@@ -403,19 +402,19 @@ function LogViewer({
       <div
         role="log"
         aria-live="polite"
-        aria-label="Restore log lines"
+        aria-label={T.logLines}
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the scrollable log must be reachable by keyboard (WCAG 2.1.1)
         tabIndex={0}
         className="max-h-96 overflow-auto rounded-md border bg-surface-sunken px-3 py-2 font-mono text-xs leading-relaxed"
       >
         {lines.length === 0 ? (
-          <p className="text-muted-foreground">No log lines yet.</p>
+          <p className="text-muted-foreground">{T.noLines}</p>
         ) : (
           <ol>
             {lines.map((l) => (
               <li key={l.id} className="grid grid-cols-[auto_auto_1fr] gap-3">
                 <time dateTime={l.time} className="text-muted-foreground">
-                  {new Date(l.time).toLocaleTimeString()}
+                  {new Date(l.time).toLocaleTimeString(intlLocale)}
                 </time>
                 <span className={cn("w-10", LEVEL_CLASS[l.level])}>{l.level}</span>
                 <span className="break-all whitespace-pre-wrap">{l.line}</span>

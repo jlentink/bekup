@@ -11,6 +11,7 @@ import type {
   RunDetailQuery as RunDetailResult,
 } from "@/graphql/gen/graphql";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import { codeTitle } from "./codes";
 import { RunItemStatsSection } from "./item-stats";
@@ -20,31 +21,58 @@ import { groupIssues } from "./completeness-model";
 
 type Run = NonNullable<RunDetailResult["run"]>;
 
-const T = {
-  title: "Completeness evidence",
-  lead: "Whether this backup is complete, not only intact (D-141).",
-  counts: "Row counts",
-  exactness: {
-    pgDeep: "Exact: counted per table inside the dump's own snapshot.",
-    pgStandard:
-      "Estimates (planner statistics); object counts are exact. Deep verification makes PostgreSQL counts exact.",
-    mysql:
-      "Estimates: MySQL and MariaDB row counts are always approximate (information_schema); object counts are exact.",
-    unknown: "Unknown (the job is no longer visible).",
+const T = defineMessages({
+  en: {
+    title: "Completeness evidence",
+    lead: "Whether this backup is complete, not only intact (D-141).",
+    counts: "Row counts",
+    exactness: {
+      pgDeep: "Exact: counted per table inside the dump's own snapshot.",
+      pgStandard:
+        "Estimates (planner statistics); object counts are exact. Deep verification makes PostgreSQL counts exact.",
+      mysql:
+        "Estimates: MySQL and MariaDB row counts are always approximate (information_schema); object counts are exact.",
+      unknown: "Unknown (the job is no longer visible).",
+    },
+    level: { STANDARD: "standard", DEEP: "deep" },
+    verified: "Verified databases",
+    manifest: "Signed manifest",
+    manifestCovers: (c: number, t: number) => `covers ${String(c)} of ${String(t)}`,
+    unsigned: "not signed",
+    key: (id: string) => `key ${id}`,
+    issues: "Completeness warnings",
+    noIssues: "No completeness warnings: every object was readable and counted.",
+    objects: (n: number) => plural(n, { one: "1 object", other: `${String(n)} objects` }),
+    testRestore: "Test restore of this run",
+    noTestRestore: "No test restore has checked this run.",
+    openTestRestore: "Open the test restore",
   },
-  level: { STANDARD: "standard", DEEP: "deep" },
-  verified: "Verified databases",
-  manifest: "Signed manifest",
-  manifestCovers: (c: number, t: number) => `covers ${String(c)} of ${String(t)}`,
-  unsigned: "not signed",
-  key: (id: string) => `key ${id}`,
-  issues: "Completeness warnings",
-  noIssues: "No completeness warnings: every object was readable and counted.",
-  objects: (n: number) => `${String(n)} object${n === 1 ? "" : "s"}`,
-  testRestore: "Test restore of this run",
-  noTestRestore: "No test restore has checked this run.",
-  openTestRestore: "Open the test restore",
-} as const;
+  nl: {
+    title: "Volledigheidsbewijs",
+    lead: "Of deze back-up volledig is, niet alleen intact (D-141).",
+    counts: "Aantallen rijen",
+    exactness: {
+      pgDeep: "Exact: per tabel geteld binnen de eigen snapshot van de dump.",
+      pgStandard:
+        "Schattingen (plannerstatistieken); aantallen objecten zijn exact. Diepe verificatie maakt de PostgreSQL-aantallen exact.",
+      mysql:
+        "Schattingen: aantallen rijen van MySQL en MariaDB zijn altijd benaderd (information_schema); aantallen objecten zijn exact.",
+      unknown: "Onbekend (de taak is niet meer zichtbaar).",
+    },
+    level: { STANDARD: "standaard", DEEP: "grondig" },
+    verified: "Geverifieerde databases",
+    manifest: "Ondertekend manifest",
+    manifestCovers: (c, t) => `dekt ${String(c)} van ${String(t)}`,
+    unsigned: "niet ondertekend",
+    key: (id) => `sleutel ${id}`,
+    issues: "Waarschuwingen over volledigheid",
+    noIssues: "Geen waarschuwingen over volledigheid: elk object was leesbaar en is geteld.",
+    objects: (n) => plural(n, { one: "1 object", other: `${String(n)} objecten` }),
+    testRestore: "Testherstel van deze run",
+    noTestRestore: "Geen testherstel heeft deze run gecontroleerd.",
+    openTestRestore: "Testherstel openen",
+  },
+});
 
 function exactness(engine: DatabaseEngine | undefined, level: JobVerification | undefined): string {
   if (!engine || !level) return T.exactness.unknown;

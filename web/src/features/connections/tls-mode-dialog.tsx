@@ -18,10 +18,53 @@ import { Label } from "@/components/ui/label";
 import { isStepUpCancelled, useStepUp } from "@/features/auth/use-step-up";
 import type { ConnectionTlsMode } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { TLS_MODE, TLS_MODES, weakensTls } from "./labels";
 import { ConnectionDetailQuery, SetTlsModeMutation } from "./operations";
+
+const T = defineMessages({
+  en: {
+    pinnedAgain: "TLS is pinned again. Confirm the server's certificate to use the connection.",
+    changed: (label: string) => `TLS mode changed to ${label.toLowerCase()}.`,
+    title: "Change the TLS mode",
+    description:
+      "Pinned TLS is the only mode that stops someone on the network from impersonating the database.",
+    legend: "TLS mode",
+    current: " (current)",
+    weakensTitle: "This weakens the connection's security",
+    weakensBody:
+      "The change is recorded in the audit log, every admin gets a security alert, and the connection carries a permanent “Insecure transport” badge. The certificate pins are kept but no longer checked.",
+    typeBefore: "Type the connection name ",
+    typeAfter: " to confirm",
+    needsPin:
+      "After switching, the connection needs a confirmed certificate pin before it can be used.",
+    cancel: "Cancel",
+    weaken: "Weaken TLS",
+    change: "Change mode",
+  },
+  nl: {
+    pinnedAgain:
+      "TLS is weer vastgepind. Bevestig het certificaat van de server om de verbinding te gebruiken.",
+    changed: (label: string) => `TLS-modus gewijzigd naar „${label}”.`,
+    title: "TLS-modus wijzigen",
+    description:
+      "Vastgepinde TLS is de enige modus die voorkomt dat iemand op het netwerk zich voordoet als de database.",
+    legend: "TLS-modus",
+    current: " (huidig)",
+    weakensTitle: "Dit verzwakt de beveiliging van de verbinding",
+    weakensBody:
+      "De wijziging wordt vastgelegd in de auditlog, elke beheerder krijgt een beveiligingsmelding en de verbinding krijgt een permanent label „Onveilig transport”. De certificaatpins blijven bewaard maar worden niet meer gecontroleerd.",
+    typeBefore: "Typ de naam van de verbinding ",
+    typeAfter: " om te bevestigen",
+    needsPin:
+      "Na het overschakelen heeft de verbinding een bevestigde certificaatpin nodig voordat je haar kunt gebruiken.",
+    cancel: "Annuleren",
+    weaken: "TLS verzwakken",
+    change: "Modus wijzigen",
+  },
+});
 
 export interface TlsModeDialogProps {
   id: string;
@@ -64,11 +107,7 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
     setError(undefined);
     try {
       await withStepUp(() => setMode({ variables: { id, mode } }));
-      toast.success(
-        mode === "PINNED"
-          ? "TLS is pinned again. Confirm the server's certificate to use the connection."
-          : `TLS mode changed to ${TLS_MODE[mode].label.toLowerCase()}.`,
-      );
+      toast.success(mode === "PINNED" ? T.pinnedAgain : T.changed(TLS_MODE[mode].label));
       close();
     } catch (err) {
       if (!isStepUpCancelled(err)) setError(userMessage(err));
@@ -87,14 +126,11 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
     >
       <DialogContent className="gap-5 sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Change the TLS mode</DialogTitle>
-          <DialogDescription>
-            Pinned TLS is the only mode that stops someone on the network from impersonating the
-            database.
-          </DialogDescription>
+          <DialogTitle>{T.title}</DialogTitle>
+          <DialogDescription>{T.description}</DialogDescription>
         </DialogHeader>
         <fieldset className="flex flex-col gap-2">
-          <legend className="sr-only">TLS mode</legend>
+          <legend className="sr-only">{T.legend}</legend>
           {TLS_MODES.map((m) => {
             const id = `${group}-${m}`;
             return (
@@ -121,7 +157,7 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
                 <div className="flex flex-col gap-0.5">
                   <label htmlFor={id} className="cursor-pointer font-medium">
                     {TLS_MODE[m].label}
-                    {m === current ? " (current)" : ""}
+                    {m === current ? T.current : ""}
                   </label>
                   <p className="text-sm text-muted-foreground">{TLS_MODE[m].description}</p>
                 </div>
@@ -133,16 +169,14 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
         {weakening ? (
           <Alert variant="destructive" className="hatch-insecure border-status-insecure/60">
             <ShieldOff aria-hidden="true" />
-            <AlertTitle>This weakens the connection&apos;s security</AlertTitle>
+            <AlertTitle>{T.weakensTitle}</AlertTitle>
             <AlertDescription>
-              <p>
-                The change is recorded in the audit log, every admin gets a security alert, and the
-                connection carries a permanent &ldquo;Insecure transport&rdquo; badge. The
-                certificate pins are kept but no longer checked.
-              </p>
+              <p>{T.weakensBody}</p>
               <div className="mt-2 grid w-full gap-2">
                 <Label htmlFor={typedId} className="text-foreground">
-                  Type the connection name <span className="font-mono">{name}</span> to confirm
+                  {T.typeBefore}
+                  <span className="font-mono">{name}</span>
+                  {T.typeAfter}
                 </Label>
                 <Input
                   id={typedId}
@@ -158,10 +192,7 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
           </Alert>
         ) : mode === "PINNED" && current !== "PINNED" ? (
           <Alert>
-            <AlertDescription>
-              After switching, the connection needs a confirmed certificate pin before it can be
-              used.
-            </AlertDescription>
+            <AlertDescription>{T.needsPin}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -173,7 +204,7 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
 
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={close}>
-            Cancel
+            {T.cancel}
           </Button>
           <Button
             type="button"
@@ -182,7 +213,7 @@ export function TlsModeDialog({ id, name, current, open, onOpenChange }: TlsMode
             onClick={() => void submit()}
           >
             {busy ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-            {weakening ? "Weaken TLS" : "Change mode"}
+            {weakening ? T.weaken : T.change}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,6 +1,44 @@
 import { z } from "zod";
 
 import type { SmtpMode, UpdateSmtpSettingsInput } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
+
+const M = defineMessages({
+  en: {
+    starttlsLead:
+      "Plain connection upgraded with STARTTLS; refused when the server does not offer it.",
+    implicitLabel: "Implicit TLS",
+    implicitLead: "TLS from the first byte (SMTPS).",
+    autoLabel: "Auto",
+    autoLead:
+      "STARTTLS when offered, otherwise unencrypted (AUTH included). An attacker on the path can suppress the offer.",
+    noneLabel: "None",
+    noneLead: "Never encrypt: mail and AUTH travel in clear text.",
+    hostMissing: "Enter the SMTP host.",
+    hostLong: "Host name is too long.",
+    port: "Enter a port from 1 to 65535.",
+    from: "Enter a valid sender address.",
+    connectTimeout: "1 to 60 seconds.",
+    sendTimeout: "5 to 300 seconds.",
+  },
+  nl: {
+    starttlsLead:
+      "Onversleutelde verbinding die met STARTTLS wordt beveiligd; geweigerd als de server het niet aanbiedt.",
+    implicitLabel: "Impliciete TLS",
+    implicitLead: "TLS vanaf de eerste byte (SMTPS).",
+    autoLabel: "Automatisch",
+    autoLead:
+      "STARTTLS als het wordt aangeboden, anders onversleuteld (AUTH inbegrepen). Een aanvaller op de route kan het aanbod onderdrukken.",
+    noneLabel: "Geen",
+    noneLead: "Nooit versleutelen: e-mail en AUTH gaan als leesbare tekst over het netwerk.",
+    hostMissing: "Vul de SMTP-host in.",
+    hostLong: "De hostnaam is te lang.",
+    port: "Vul een poort van 1 tot en met 65535 in.",
+    from: "Vul een geldig afzenderadres in.",
+    connectTimeout: "1 tot 60 seconden.",
+    sendTimeout: "5 tot 300 seconden.",
+  },
+});
 
 export const SMTP_MODES: readonly SmtpMode[] = ["STARTTLS", "IMPLICIT_TLS", "AUTO", "NONE"];
 
@@ -13,22 +51,22 @@ export const modeInfo: Record<SmtpMode, { label: string; port: number; lead: str
   STARTTLS: {
     label: "STARTTLS",
     port: 587,
-    lead: "Plain connection upgraded with STARTTLS; refused when the server does not offer it.",
+    lead: M.starttlsLead,
   },
   IMPLICIT_TLS: {
-    label: "Implicit TLS",
+    label: M.implicitLabel,
     port: 465,
-    lead: "TLS from the first byte (SMTPS).",
+    lead: M.implicitLead,
   },
   AUTO: {
-    label: "Auto",
+    label: M.autoLabel,
     port: 587,
-    lead: "STARTTLS when offered, otherwise unencrypted (AUTH included). An attacker on the path can suppress the offer.",
+    lead: M.autoLead,
   },
   NONE: {
-    label: "None",
+    label: M.noneLabel,
     port: 25,
-    lead: "Never encrypt: mail and AUTH travel in clear text.",
+    lead: M.noneLead,
   },
 };
 
@@ -43,17 +81,17 @@ const int = (min: number, max: number, msg: string) =>
 
 export const smtpSchema = z.object({
   enabled: z.boolean(),
-  host: z.string().trim().min(1, "Enter the SMTP host.").max(253, "Host name is too long."),
-  port: int(1, 65535, "Enter a port from 1 to 65535."),
+  host: z.string().trim().min(1, M.hostMissing).max(253, M.hostLong),
+  port: int(1, 65535, M.port),
   mode: z.enum(["AUTO", "STARTTLS", "IMPLICIT_TLS", "NONE"]),
   username: z.string().trim().max(256),
   passwordAction: z.enum(["keep", "set", "clear"]),
   password: z.string().max(1024),
-  fromAddress: z.string().trim().pipe(z.email("Enter a valid sender address.")),
+  fromAddress: z.string().trim().pipe(z.email(M.from)),
   fromName: z.string().trim().max(100),
   caBundlePem: z.string().max(65536),
-  connectTimeoutSeconds: int(1, 60, "1 to 60 seconds."),
-  sendTimeoutSeconds: int(5, 300, "5 to 300 seconds."),
+  connectTimeoutSeconds: int(1, 60, M.connectTimeout),
+  sendTimeoutSeconds: int(5, 300, M.sendTimeout),
 });
 export type SmtpFormValues = z.infer<typeof smtpSchema>;
 

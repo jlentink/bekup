@@ -20,6 +20,7 @@ import {
 import { formatDuration } from "@/lib/format";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 
 import {
   JobDetailQuery,
@@ -37,47 +38,96 @@ import { TestRestoreVerdict } from "./test-restore-verdict";
 
 const PAGE_SIZE = 20;
 
-const T = {
-  eyebrow: "Test restores",
-  title: (job: string) => `Test restores of ${job}`,
-  titleFallback: "Test restores",
-  lead: "Each test restore copies the newest verified backup into a scratch database, compares it with the backup's source statistics and drops it again.",
-  back: "Back to the job",
-  history: "All test restores",
-  empty: "No test restore has run for this job yet.",
-  emptyHint:
-    "Designate a scratch target in the job settings, then run one now or wait for the schedule.",
-  runNow: "Run test restore now",
-  queued: "Test restore queued.",
-  cols: {
-    verdict: "Verdict",
-    when: "When",
-    trigger: "Trigger",
-    target: "Scratch target",
+const T = defineMessages({
+  en: {
+    eyebrow: "Test restores",
+    title: (job: string) => `Test restores of ${job}`,
+    titleFallback: "Test restores",
+    lead: "Each test restore copies the newest verified backup into a scratch database, compares it with the backup's source statistics and drops it again.",
+    back: "Back to the job",
+    history: "All test restores",
+    empty: "No test restore has run for this job yet.",
+    emptyHint:
+      "Designate a scratch target in the job settings, then run one now or wait for the schedule.",
+    runNow: "Run test restore now",
+    queued: "Test restore queued.",
+    cols: {
+      verdict: "Verdict",
+      when: "When",
+      trigger: "Trigger",
+      target: "Scratch target",
+      databases: "Databases",
+      duration: "Duration",
+    },
+    trigger: { SCHEDULE: "Scheduled", MANUAL: "Manual" },
+    counts: (p: number, w: number, f: number, total: number) =>
+      `${String(p)} passed · ${String(w)} warned · ${String(f)} failed of ${String(total)}`,
+    open: "Details",
+    notFound: "This test restore does not exist or you cannot see it.",
+    facts: {
+      run: "Tested run",
+      target: "Scratch target",
+      trigger: "Trigger",
+      requestedBy: "Requested by",
+      started: "Started",
+      finished: "Finished",
+      duration: "Duration",
+    },
+    openRun: "Open the run",
+    noRun: "No backup qualified",
+    deleted: "deleted",
+    diff: "Differences",
     databases: "Databases",
-    duration: "Duration",
+    noDatabases: "No database was restored.",
+    retry: "Try again",
+    finishedAt: (at: string) => `Finished ${at}`,
+    openLabel: (at: string) => `Details: ${at}`,
   },
-  trigger: { SCHEDULE: "Scheduled", MANUAL: "Manual" },
-  counts: (p: number, w: number, f: number, total: number) =>
-    `${String(p)} passed · ${String(w)} warned · ${String(f)} failed of ${String(total)}`,
-  open: "Details",
-  notFound: "This test restore does not exist or you cannot see it.",
-  facts: {
-    run: "Tested run",
-    target: "Scratch target",
-    trigger: "Trigger",
-    requestedBy: "Requested by",
-    started: "Started",
-    finished: "Finished",
-    duration: "Duration",
+  nl: {
+    eyebrow: "Testherstels",
+    title: (job: string) => `Testherstels van ${job}`,
+    titleFallback: "Testherstels",
+    lead: "Elk testherstel kopieert de nieuwste geverifieerde back-up naar een tijdelijke database, vergelijkt die met de bronstatistieken van de back-up en verwijdert hem weer.",
+    back: "Terug naar de taak",
+    history: "Alle testherstels",
+    empty: "Er is voor deze taak nog geen testherstel uitgevoerd.",
+    emptyHint:
+      "Wijs in de taakinstellingen een tijdelijk hersteldoel aan en voer er dan nu een uit, of wacht op de planning.",
+    runNow: "Testherstel nu uitvoeren",
+    queued: "Testherstel in de wachtrij gezet.",
+    cols: {
+      verdict: "Oordeel",
+      when: "Wanneer",
+      trigger: "Aanleiding",
+      target: "Tijdelijk hersteldoel",
+      databases: "Databases",
+      duration: "Duur",
+    },
+    trigger: { SCHEDULE: "Gepland", MANUAL: "Handmatig" },
+    counts: (p: number, w: number, f: number, total: number) =>
+      `${String(p)} geslaagd · ${String(w)} met waarschuwingen · ${String(f)} mislukt van ${String(total)}`,
+    open: "Details",
+    notFound: "Dit testherstel bestaat niet of je kunt het niet zien.",
+    facts: {
+      run: "Geteste run",
+      target: "Tijdelijk hersteldoel",
+      trigger: "Aanleiding",
+      requestedBy: "Aangevraagd door",
+      started: "Gestart",
+      finished: "Klaar",
+      duration: "Duur",
+    },
+    openRun: "De run openen",
+    noRun: "Geen geschikte back-up",
+    deleted: "verwijderd",
+    diff: "Verschillen",
+    databases: "Databases",
+    noDatabases: "Er is geen database hersteld.",
+    retry: "Opnieuw proberen",
+    finishedAt: (at: string) => `Klaar op ${at}`,
+    openLabel: (at: string) => `Details: ${at}`,
   },
-  openRun: "Open the run",
-  noRun: "No backup qualified",
-  deleted: "deleted",
-  diff: "Differences",
-  databases: "Databases",
-  noDatabases: "No database was restored.",
-} as const;
+});
 
 /** "Run test restore now" (staff, needs a scratch target; audited server-side). */
 export function RunTestRestoreNowButton({ jobId }: { jobId: string }) {
@@ -139,7 +189,7 @@ export function TestRestoreHistoryPage() {
           <AlertDescription className="flex flex-wrap items-center gap-3">
             {userMessage(error)}
             <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              Try again
+              {T.retry}
             </Button>
           </AlertDescription>
         </Alert>
@@ -168,7 +218,7 @@ export function TestRestoreHistoryPage() {
                   <TableCell className="py-3">
                     <Link
                       to={`/jobs/${jobId}/test-restores/${tr.id}`}
-                      aria-label={`${T.open}: ${formatDateTime(tr.createdAt)}`}
+                      aria-label={T.openLabel(formatDateTime(tr.createdAt))}
                       className="inline-flex rounded-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                     >
                       <TestRestoreVerdict status={tr.status} />
@@ -316,7 +366,7 @@ export function TestRestoreDetailPage() {
             {formatDuration(tr.durationSeconds) || "—"}
             {tr.finishedAt ? (
               <span className="block text-muted-foreground">
-                {T.facts.finished} {formatDateTime(tr.finishedAt)}
+                {T.finishedAt(formatDateTime(tr.finishedAt))}
               </span>
             ) : null}
           </span>

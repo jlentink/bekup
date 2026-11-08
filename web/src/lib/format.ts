@@ -1,11 +1,26 @@
 /**
  * The one place for user-visible formatting of API values: timestamps
- * (RFC 3339, locale-aware), sizes (always binary IEC units: KiB, MiB, ...)
+ * (RFC 3339, in the UI language's locale, `lib/i18n`), sizes (always binary IEC units: KiB, MiB, ...)
  * and durations. Features never format these themselves.
  */
 
-const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+import { intlLocale } from "./i18n";
+
+const dateTime = new Intl.DateTimeFormat(intlLocale, { dateStyle: "medium", timeStyle: "short" });
+const relative = new Intl.RelativeTimeFormat(intlLocale, { numeric: "auto" });
+const decimals = [0, 1, 2].map(
+  (n) =>
+    new Intl.NumberFormat(intlLocale, {
+      minimumFractionDigits: n,
+      maximumFractionDigits: n,
+      useGrouping: false,
+    }),
+);
+
+/** `v` with exactly `digits` (0-2) fraction digits in the page's locale. */
+function fixed(v: number, digits: number): string {
+  return (decimals[digits] ?? decimals[0])?.format(v) ?? v.toFixed(digits);
+}
 
 function parse(iso: string | null | undefined): Date | null {
   if (!iso) return null;
@@ -36,9 +51,9 @@ export function formatZonedDateTime(iso: string | null | undefined, timeZone: st
     hourCycle: "h23",
   };
   try {
-    return new Intl.DateTimeFormat(undefined, { ...opts, timeZone }).format(d);
+    return new Intl.DateTimeFormat(intlLocale, { ...opts, timeZone }).format(d);
   } catch {
-    return new Intl.DateTimeFormat(undefined, opts).format(d);
+    return new Intl.DateTimeFormat(intlLocale, opts).format(d);
   }
 }
 
@@ -74,13 +89,13 @@ export function formatBytes(bytes: number | null | undefined): string {
     i++;
   }
   const digits = i === 0 || v >= 100 ? 0 : v >= 10 ? 1 : 2;
-  return `${v.toFixed(digits)} ${BYTE_UNITS[i] ?? "B"}`;
+  return `${fixed(v, digits)} ${BYTE_UNITS[i] ?? "B"}`;
 }
 
 /** "2h 05m", "3m 07s", "42s", "0.4s"; empty for invalid input. */
 export function formatDuration(seconds: number | null | undefined): string {
   if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "";
-  if (seconds < 1) return `${seconds.toFixed(1)}s`;
+  if (seconds < 1) return `${fixed(seconds, 1)}s`;
   const s = Math.round(seconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);

@@ -49,6 +49,7 @@ import { applyFieldErrors, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { restoreMessages } from "./messages";
 import { ENGINE_LABELS, PRIVILEGE_LABELS, privilegeReasonLabel } from "./model";
 import {
   RestoreConfirmCertificatePinMutation,
@@ -62,36 +63,39 @@ import {
   RestoreTestConnectionMutation,
 } from "./operations";
 
+const T = restoreMessages.temp;
+const C = restoreMessages.common;
+
 type TempConnection = RestoreTempConnectionFieldsFragment;
 
 const port = z
   .string()
   .trim()
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 65535), {
-    message: "Enter a port between 1 and 65535.",
+    message: T.port,
   });
 
 const schema = z
   .object({
-    name: z.string().trim().max(200, "Use at most 200 characters."),
-    versionKey: z.string().min(1, "Choose the server's version."),
-    host: z.string().trim().min(1, "Enter the database host.").max(253, "The host is too long."),
+    name: z.string().trim().max(200, T.max200),
+    versionKey: z.string().min(1, T.chooseVersion),
+    host: z.string().trim().min(1, T.enterHost).max(253, T.hostTooLong),
     port,
-    username: z.string().trim().min(1, "Enter the user name.").max(128, "The name is too long."),
-    password: z.string().max(1024, "The password is too long."),
+    username: z.string().trim().min(1, T.enterUser).max(128, T.nameTooLong),
+    password: z.string().max(1024, T.passwordTooLong),
     tlsMode: z.enum(["PINNED", "UNVERIFIED", "DISABLED"]),
     sshEnabled: z.boolean(),
-    sshHost: z.string().trim().max(253, "The host is too long."),
+    sshHost: z.string().trim().max(253, T.hostTooLong),
     sshPort: port,
-    sshUser: z.string().trim().max(128, "The name is too long."),
-    sshPassword: z.string().max(1024, "The password is too long."),
+    sshUser: z.string().trim().max(128, T.nameTooLong),
+    sshPassword: z.string().max(1024, T.passwordTooLong),
   })
   .superRefine((v, ctx) => {
     if (!v.sshEnabled) return;
     if (v.sshHost === "")
-      ctx.addIssue({ code: "custom", path: ["sshHost"], message: "Enter the bastion host." });
+      ctx.addIssue({ code: "custom", path: ["sshHost"], message: T.enterBastionHost });
     if (v.sshUser === "")
-      ctx.addIssue({ code: "custom", path: ["sshUser"], message: "Enter the bastion user." });
+      ctx.addIssue({ code: "custom", path: ["sshUser"], message: T.enterBastionUser });
   });
 type Values = z.infer<typeof schema>;
 
@@ -167,19 +171,15 @@ export function TemporaryConnectionPanel({
         </span>
         <div className="flex flex-col gap-0.5">
           <h3 id={headingId} className="font-semibold">
-            Temporary restore connection
+            {T.title}
           </h3>
-          <p className="text-sm text-muted-foreground">
-            Usable only as a restore target. It and its stored credentials are deleted once the
-            restores that used it have finished, or when it expires (the instance's
-            restore.temp_connection_ttl).
-          </p>
+          <p className="text-sm text-muted-foreground">{T.lead}</p>
         </div>
         <Button
           variant="ghost"
           size="icon-sm"
           className="ml-auto"
-          aria-label="Close the temporary connection form"
+          aria-label={T.close}
           onClick={onClose}
         >
           <X aria-hidden="true" />
@@ -275,9 +275,9 @@ function CreateForm({
           name="name"
           render={({ field }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Name (optional)</FormLabel>
+              <FormLabel>{T.name}</FormLabel>
               <FormControl>
-                <Input {...field} autoComplete="off" placeholder="Temporary: <host>" />
+                <Input {...field} autoComplete="off" placeholder={T.namePlaceholder} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -288,17 +288,17 @@ function CreateForm({
           name="versionKey"
           render={({ field }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>{ENGINE_LABELS[engine] ?? engine} version</FormLabel>
+              <FormLabel>{T.version(ENGINE_LABELS[engine] ?? engine)}</FormLabel>
               <Select value={field.value} onValueChange={field.onChange}>
                 <FormControl>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Server release series" />
+                    <SelectValue placeholder={T.versionPlaceholder} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   {(versions.data?.engineVersions ?? []).map((v) => (
                     <SelectItem key={v.key} value={v.key}>
-                      {v.key} (client {v.clientVersion}){v.legacy ? ", end of life" : ""}
+                      {T.versionItem(v.key, v.clientVersion, v.legacy)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -312,7 +312,7 @@ function CreateForm({
           name="host"
           render={({ field }) => (
             <FormItem className="md:col-span-4">
-              <FormLabel>Host</FormLabel>
+              <FormLabel>{T.host}</FormLabel>
               <FormControl>
                 <Input {...field} autoComplete="off" spellCheck={false} className="font-mono" />
               </FormControl>
@@ -325,7 +325,7 @@ function CreateForm({
           name="port"
           render={({ field }) => (
             <FormItem className="md:col-span-2">
-              <FormLabel>Port</FormLabel>
+              <FormLabel>{C.port}</FormLabel>
               <FormControl>
                 <Input
                   {...field}
@@ -343,7 +343,7 @@ function CreateForm({
           name="username"
           render={({ field }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>User</FormLabel>
+              <FormLabel>{C.user}</FormLabel>
               <FormControl>
                 <Input {...field} autoComplete="off" spellCheck={false} />
               </FormControl>
@@ -356,11 +356,11 @@ function CreateForm({
           name="password"
           render={({ field }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Password</FormLabel>
+              <FormLabel>{T.password}</FormLabel>
               <FormControl>
                 <Input {...field} type="password" autoComplete="new-password" />
               </FormControl>
-              <FormDescription>Write-only: stored encrypted, never shown again.</FormDescription>
+              <FormDescription>{T.writeOnly}</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -370,7 +370,7 @@ function CreateForm({
           name="tlsMode"
           render={({ field }) => (
             <FormItem className="md:col-span-3">
-              <FormLabel>Transport security</FormLabel>
+              <FormLabel>{T.transport}</FormLabel>
               <Select
                 value={field.value}
                 onValueChange={(v) => {
@@ -383,9 +383,9 @@ function CreateForm({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="PINNED">TLS, pinned certificate (recommended)</SelectItem>
-                  <SelectItem value="UNVERIFIED">TLS without verification (insecure)</SelectItem>
-                  <SelectItem value="DISABLED">No TLS (insecure)</SelectItem>
+                  <SelectItem value="PINNED">{T.pinned}</SelectItem>
+                  <SelectItem value="UNVERIFIED">{T.unverified}</SelectItem>
+                  <SelectItem value="DISABLED">{T.disabled}</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -400,14 +400,13 @@ function CreateForm({
               <FormControl>
                 <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
-              <FormLabel>Reach it through an SSH bastion</FormLabel>
+              <FormLabel>{T.useBastion}</FormLabel>
             </FormItem>
           )}
         />
         {tlsMode !== "PINNED" ? (
           <div className="hatch-insecure rounded-md border border-status-insecure/40 px-3 py-2 text-sm text-status-insecure-fg md:col-span-6">
-            Without a pinned certificate the restored data travels without a verified server
-            identity. This opt-out is audited and raises a security alert.
+            {T.insecureWarning}
           </div>
         ) : null}
         {sshEnabled ? (
@@ -417,7 +416,7 @@ function CreateForm({
               name="sshHost"
               render={({ field }) => (
                 <FormItem className="md:col-span-2">
-                  <FormLabel>Bastion host</FormLabel>
+                  <FormLabel>{T.bastionHost}</FormLabel>
                   <FormControl>
                     <Input {...field} autoComplete="off" spellCheck={false} className="font-mono" />
                   </FormControl>
@@ -430,7 +429,7 @@ function CreateForm({
               name="sshPort"
               render={({ field }) => (
                 <FormItem className="md:col-span-1">
-                  <FormLabel>Port</FormLabel>
+                  <FormLabel>{C.port}</FormLabel>
                   <FormControl>
                     <Input {...field} inputMode="numeric" autoComplete="off" placeholder="22" />
                   </FormControl>
@@ -443,7 +442,7 @@ function CreateForm({
               name="sshUser"
               render={({ field }) => (
                 <FormItem className="md:col-span-1">
-                  <FormLabel>User</FormLabel>
+                  <FormLabel>{C.user}</FormLabel>
                   <FormControl>
                     <Input {...field} autoComplete="off" spellCheck={false} />
                   </FormControl>
@@ -456,7 +455,7 @@ function CreateForm({
               name="sshPassword"
               render={({ field }) => (
                 <FormItem className="md:col-span-2">
-                  <FormLabel>Bastion password</FormLabel>
+                  <FormLabel>{T.bastionPassword}</FormLabel>
                   <FormControl>
                     <Input {...field} type="password" autoComplete="new-password" />
                   </FormControl>
@@ -476,7 +475,7 @@ function CreateForm({
             {form.formState.isSubmitting ? (
               <Loader2 aria-hidden="true" className="animate-spin" />
             ) : null}
-            Create temporary connection
+            {T.create}
           </Button>
         </div>
       </form>
@@ -527,7 +526,7 @@ function TemporaryConnectionSetup({
         {c.expiresAt ? (
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <Clock3 aria-hidden="true" className="size-3.5" />
-            Expires {formatRelative(c.expiresAt)} (
+            {T.expires(formatRelative(c.expiresAt))}
             <time dateTime={c.expiresAt}>{formatDateTime(c.expiresAt)}</time>)
           </span>
         ) : null}
@@ -535,13 +534,13 @@ function TemporaryConnectionSetup({
       <ol className="flex flex-col divide-y divide-rule rounded-md border bg-surface">
         <SetupRow
           done={!needsPin}
-          title={c.tlsMode === "PINNED" ? "Certificate pin" : "Certificate pin (not used)"}
+          title={c.tlsMode === "PINNED" ? T.certPin : T.certPinUnused}
           detail={
             c.tlsMode !== "PINNED"
-              ? "Transport security is not pinned (insecure opt-out)."
+              ? T.notPinned
               : c.settings?.tlsPin
-                ? `Pinned: ${c.settings.tlsPin.subject}`
-                : "Fetch the server's certificate and compare it out of band."
+                ? T.pinnedTo(c.settings.tlsPin.subject)
+                : T.fetchCertHint
           }
         >
           {needsPin ? (
@@ -573,11 +572,11 @@ function TemporaryConnectionSetup({
         {c.sshEnabled ? (
           <SetupRow
             done={!needsHostKey}
-            title="SSH host key"
+            title={T.hostKey}
             detail={
               c.settings?.ssh?.hostKey?.confirmedAt
-                ? `Pinned: ${c.settings.ssh.hostKey.fingerprintSha256}`
-                : "Fetch the bastion's host key and compare its fingerprint out of band."
+                ? T.pinnedTo(c.settings.ssh.hostKey.fingerprintSha256)
+                : T.fetchKeyHint
             }
           >
             {needsHostKey ? (
@@ -614,13 +613,13 @@ function TemporaryConnectionSetup({
         ) : null}
         <SetupRow
           done={test?.ok === true}
-          title="Connection test"
+          title={T.test}
           detail={
             test
               ? test.ok
-                ? `Connected${test.serverVersion ? ` (server ${test.serverVersion})` : ""}.`
-                : (test.message ?? "The test failed.")
-              : "Optional: connect once with the stored credentials."
+                ? T.connected(test.serverVersion)
+                : (test.message ?? T.testFailed)
+              : T.testHint
           }
         >
           <Button
@@ -639,12 +638,14 @@ function TemporaryConnectionSetup({
             }}
           >
             {busy === "test" ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-            Test connection
+            {T.testButton}
           </Button>
           {test?.privileges?.acknowledgementRequired ? (
             <p className="text-xs text-destructive">
-              Role verdict: {PRIVILEGE_LABELS[test.privileges.status]} (
-              {test.privileges.reasons.map(privilegeReasonLabel).join("; ")}).
+              {T.verdict(
+                PRIVILEGE_LABELS[test.privileges.status],
+                test.privileges.reasons.map(privilegeReasonLabel).join("; "),
+              )}
             </p>
           ) : null}
         </SetupRow>
@@ -662,7 +663,7 @@ function TemporaryConnectionSetup({
           }}
         >
           <CheckCircle2 aria-hidden="true" />
-          Use as restore target
+          {T.useTarget}
         </Button>
         <Button
           variant="ghost"
@@ -680,7 +681,7 @@ function TemporaryConnectionSetup({
           }}
         >
           <Trash2 aria-hidden="true" />
-          Delete it
+          {T.delete}
         </Button>
       </div>
     </div>
@@ -719,7 +720,7 @@ function SetupRow({
         <div className="flex min-w-0 flex-col">
           <span className="font-medium">
             {title}
-            <span className="sr-only">{done ? " (done)" : " (to do)"}</span>
+            <span className="sr-only">{done ? C.done : C.toDo}</span>
           </span>
           <span className="text-xs break-all text-muted-foreground">{detail}</span>
         </div>
@@ -776,7 +777,7 @@ function PinFlow({
           ) : (
             <ShieldCheck aria-hidden="true" />
           )}
-          Fetch certificate
+          {T.fetchCert}
         </Button>
       </div>
     );
@@ -785,7 +786,7 @@ function PinFlow({
   return (
     <div className="flex flex-col gap-3">
       <fieldset className="flex flex-col gap-2">
-        <legend className="eyebrow mb-1">Presented chain (leaf first)</legend>
+        <legend className="eyebrow mb-1">{T.chain}</legend>
         {chain.certificates.map((cert, i) => (
           <label
             key={cert.fingerprintSha256}
@@ -807,15 +808,18 @@ function PinFlow({
             <span className="grid min-w-0 gap-0.5 font-medium">
               {cert.subject}
 
-              <span className="font-normal text-muted-foreground">issued by {cert.issuer}</span>
+              <span className="font-normal text-muted-foreground">{T.issuedBy(cert.issuer)}</span>
               <span className="text-muted-foreground">
-                valid {formatDateTime(cert.notBefore)} to {formatDateTime(cert.notAfter)}
-                {cert.isCa ? ", CA" : ""}
-                {cert.selfSigned ? ", self-signed" : ""}
+                {T.valid(
+                  formatDateTime(cert.notBefore),
+                  formatDateTime(cert.notAfter),
+                  cert.isCa,
+                  cert.selfSigned,
+                )}
               </span>
-              <span className="font-mono break-all">SHA-256 {cert.fingerprintSha256}</span>
+              <span className="font-mono break-all">{T.sha256(cert.fingerprintSha256)}</span>
               <span className="font-mono break-all text-muted-foreground">
-                SPKI {cert.spkiSha256Hex}
+                {T.spki(cert.spkiSha256Hex)}
               </span>
             </span>
           </label>
@@ -824,7 +828,7 @@ function PinFlow({
       {needsPem ? (
         <div className="grid gap-1.5">
           <label htmlFor={pemId} className="text-sm font-medium">
-            Root CA certificate (PEM), obtained out of band
+            {T.rootPem}
           </label>
           <textarea
             id={pemId}
@@ -848,7 +852,7 @@ function PinFlow({
             setCompared(e.target.checked);
           }}
         />
-        I compared the fingerprint with the server's certificate through another channel.
+        {T.comparedCert}
       </label>
       <div>
         <Button
@@ -867,7 +871,7 @@ function PinFlow({
           }}
         >
           {busy === "pin" ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-          Pin this certificate
+          {T.pinCert}
         </Button>
       </div>
     </div>
@@ -908,7 +912,7 @@ function HostKeyFlow({
           ) : (
             <KeyRound aria-hidden="true" />
           )}
-          Fetch host key
+          {T.fetchKey}
         </Button>
       </div>
     );
@@ -919,7 +923,7 @@ function HostKeyFlow({
         <Fingerprint aria-hidden="true" className="mt-0.5 size-4 text-muted-foreground" />
         <span className="grid gap-0.5">
           <span>
-            {key.type} from{" "}
+            {T.keyFrom(key.type)}
             <span className="font-mono">
               {key.host}:{key.port}
             </span>
@@ -937,7 +941,7 @@ function HostKeyFlow({
             setCompared(e.target.checked);
           }}
         />
-        I compared this fingerprint with the bastion's host key through another channel.
+        {T.comparedKey}
       </label>
       <div>
         <Button
@@ -948,7 +952,7 @@ function HostKeyFlow({
           }}
         >
           {busy === "host-key" ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
-          Pin this host key
+          {T.pinKey}
         </Button>
       </div>
     </div>

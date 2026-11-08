@@ -22,6 +22,7 @@ import { useCursorPager } from "@/features/jobs/use-cursor-pager";
 import type { AdminSecurityInboxQuery, NotificationSeverity } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -32,35 +33,69 @@ import { ALERT_PAGE, alertPath } from "./alert-types";
 
 type Item = AdminSecurityInboxQuery["notifications"]["edges"][number]["node"];
 
-const T = {
-  title: "Security alerts",
-  lead: "Security events from your inbox: weakened settings, impersonation signs, tampering, break-glass use and credential attacks. They always reach every admin by inbox and e-mail and cannot be turned off.",
-  guide: "Alert reference",
-  filter: "Severity",
-  all: "All",
-  scan: (n: number) => `Up to ${String(n)} security alerts per page, newest first.`,
-  scanPage: (page: number) => `Page ${String(page)}.`,
-  severityNote: "Severity counts cover this page.",
-  unreadOnly: "Unread only",
-  emptyTitle: "No security alerts here",
-  emptyLead: "No security alert in your inbox matches this view.",
-  unread: "Unread",
-  open: "Open",
-  pager: "Inbox pages",
-  typesTitle: "Alert types",
-  typesLead: "What raises a security.system alert, its severity and how often it repeats.",
-  colAlert: "Alert",
-  colSeverity: "Severity",
-  colSent: "Sent",
-  typesFailed: "The alert reference could not be loaded.",
-  inbox: "Open the inbox",
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Security alerts",
+    lead: "Security events from your inbox: weakened settings, impersonation signs, tampering, break-glass use and credential attacks. They always reach every admin by inbox and e-mail and cannot be turned off.",
+    guide: "Alert reference",
+    filter: "Severity",
+    all: "All",
+    scan: (n: number) => `Up to ${String(n)} security alerts per page, newest first.`,
+    scanPage: (page: number) => `Page ${String(page)}.`,
+    severityNote: "Severity counts cover this page.",
+    unreadOnly: "Unread only",
+    emptyTitle: "No security alerts here",
+    emptyLead: "No security alert in your inbox matches this view.",
+    unread: "Unread",
+    open: "Open",
+    pager: "Inbox pages",
+    typesTitle: "Alert types",
+    typesLead: "What raises a security.system alert, its severity and how often it repeats.",
+    colAlert: "Alert",
+    colSeverity: "Severity",
+    colSent: "Sent",
+    typesFailed: "The alert reference could not be loaded.",
+    inbox: "Open the inbox",
+    critical: "Critical",
+    error: "Error",
+    warning: "Warning",
+    info: "Info",
+  },
+  nl: {
+    title: "Beveiligingsmeldingen",
+    lead: "Beveiligingsgebeurtenissen uit je inbox: verzwakte instellingen, tekenen van imitatie, manipulatie, noodtoegang en aanvallen op inloggegevens. Ze bereiken altijd elke beheerder via inbox en e-mail en kunnen niet worden uitgeschakeld.",
+    guide: "Overzicht van meldingen",
+    filter: "Ernst",
+    all: "Alle",
+    scan: (n: number) => `Maximaal ${String(n)} beveiligingsmeldingen per pagina, nieuwste eerst.`,
+    scanPage: (page: number) => `Pagina ${String(page)}.`,
+    severityNote: "De aantallen per ernst gelden voor deze pagina.",
+    unreadOnly: "Alleen ongelezen",
+    emptyTitle: "Geen beveiligingsmeldingen hier",
+    emptyLead: "Geen enkele beveiligingsmelding in je inbox past bij deze weergave.",
+    unread: "Ongelezen",
+    open: "Openen",
+    pager: "Pagina's van de inbox",
+    typesTitle: "Soorten meldingen",
+    typesLead:
+      "Wat een security.system-melding veroorzaakt, hoe ernstig die is en hoe vaak die terugkomt.",
+    colAlert: "Melding",
+    colSeverity: "Ernst",
+    colSent: "Verstuurd",
+    typesFailed: "Het overzicht van meldingen kon niet worden geladen.",
+    inbox: "Inbox openen",
+    critical: "Kritiek",
+    error: "Fout",
+    warning: "Waarschuwing",
+    info: "Info",
+  },
+});
 
 const SEVERITY: Record<NotificationSeverity, { label: string; tone: Tone; icon: LucideIcon }> = {
-  CRITICAL: { label: "Critical", tone: "danger", icon: AlertOctagon },
-  ERROR: { label: "Error", tone: "danger", icon: XCircle },
-  WARNING: { label: "Warning", tone: "warning", icon: TriangleAlert },
-  INFO: { label: "Info", tone: "info", icon: Info },
+  CRITICAL: { label: T.critical, tone: "danger", icon: AlertOctagon },
+  ERROR: { label: T.error, tone: "danger", icon: XCircle },
+  WARNING: { label: T.warning, tone: "warning", icon: TriangleAlert },
+  INFO: { label: T.info, tone: "info", icon: Info },
 };
 const SEVERITIES: readonly NotificationSeverity[] = ["CRITICAL", "ERROR", "WARNING", "INFO"];
 

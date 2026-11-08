@@ -28,6 +28,7 @@ import { getFragmentData } from "@/graphql/gen";
 import type { SsrfAllowlistFieldsFragment, SsrfScope } from "@/graphql/gen/graphql";
 import { ApiCode, apiErrors, hasApiCode, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -56,103 +57,210 @@ import {
 import { RT } from "./runner-messages";
 import { RunnerTargetsPart } from "./runner-targets";
 
-const T = {
-  title: "Network allowlists",
-  pageLead:
-    "Two separate lists decide where connections may go: one for bekup's own connections to storage and notification services, and one for the runner's connections to database servers.",
-  ownPart: "bekup's own connections (S3, SFTP, WebDAV, SMTP, webhooks)",
-  ownIndex: "01",
-  runnerIndex: "02",
-  lead: "Every outbound connection of bekup (S3, SFTP, WebDAV, SMTP, webhooks) passes a dial-time SSRF guard. Public addresses are allowed; private ranges only when they are on this allowlist, and only for the uses each entry names.",
-  runnerNote:
-    "Database servers and SSH bastions are not reached through this list: the runner connects to them, under its own list shown below.",
-  guide: "[netguard] reference",
-  stepUp: "Changes need a step-up",
-  cidrsTitle: "Networks (CIDRs)",
-  cidrsLead:
-    "Private ranges bekup may connect to, e.g. 10.20.0.0/16 or 192.0.2.10/32 for one address.",
-  hostsTitle: "Host names",
-  hostsLead:
-    "Re-allow private addresses only for the exact name dialed, or *.suffix for its subdomains. IP literals go into the CIDR list.",
-  config: "From bekup.toml",
-  configLead: "Bootstrap entries of [netguard]; read-only here, always applied.",
-  configScopes: "Applies to",
-  configNeverPersonal: "Never to personal webhooks.",
-  scopeNames: {
-    DESTINATIONS: "Destinations",
-    SMTP: "SMTP",
-    SHARED_WEBHOOKS: "Shared webhooks",
-    PERSONAL_WEBHOOKS: "Personal webhooks",
-  } satisfies Record<SsrfScope, string>,
-  scopeHelp: {
-    DESTINATIONS: "S3, SFTP and WebDAV destinations",
-    SMTP: "The SMTP server",
-    SHARED_WEBHOOKS: "Notification webhooks configured by admins",
-    PERSONAL_WEBHOOKS: "Webhooks any user can enter for themselves",
-  } satisfies Record<SsrfScope, string>,
-  scopesLegend: (kind: ListKind, n: number) =>
-    `Uses of ${kind === "cidrs" ? "CIDR" : "host name"} ${String(n)}`,
-  scopesTitle: "Scopes",
-  scopesLead: (defaults: string) =>
-    `Each entry opens a private target only for the uses ticked next to it. New entries start with: ${defaults}.`,
-  personalBadgeLead:
-    "At least one entry lets every user's personal webhooks reach a private target. This stays visible while any entry carries the personal webhooks scope.",
-  noConfig: "No bootstrap entries.",
-  managed: "Managed here",
-  empty: "No entries.",
-  add: (kind: ListKind) => (kind === "cidrs" ? "Add CIDR" : "Add host name"),
-  entryLabel: (kind: ListKind, n: number) =>
-    `${kind === "cidrs" ? "CIDR" : "Host name"} ${String(n)}`,
-  remove: (v: string) => `Remove ${v || "empty entry"}`,
-  placeholder: (kind: ListKind) => (kind === "cidrs" ? "10.20.0.0/16" : "minio.internal.example"),
-  max: (used: number, max: number) => `${String(used)} of ${String(max)}`,
-  tooMany: (max: number) => `At most ${String(max)} entries.`,
-  ignoredTitle: "Some stored entries are not applied",
-  ignored: (n: number) =>
-    `${String(n)} stored ${n === 1 ? "entry is" : "entries are"} rejected by this server (for example loopback after leaving dev mode) and not applied. Saving the list drops ${n === 1 ? "it" : "them"}.`,
-  loopback:
-    "Dev mode: loopback (127.0.0.0/8, ::1) may be allowlisted. Outside dev mode it is always denied.",
-  updated: (when: string) => `Last changed ${when}.`,
-  never: "Never changed here.",
-  widenTitle: "This widens what bekup may connect to",
-  widenLead:
-    "The new entries or uses let bekup reach more private hosts. The change is audited and raises a security alert to every admin.",
-  widenNew: "new",
-  personalTitle: "Every user's personal webhooks could reach these targets",
-  personalLead:
-    "Any user can enter a personal webhook URL. With the personal webhooks scope, every account (not only admins) can make bekup send requests to these private hosts or networks, which can be used to probe or hit internal services. Grant it only for a receiver that every user may reach. The change is audited and raises a security alert stating that personal webhooks gained access.",
-  personalAck: "I understand that every user can make bekup send requests to these private targets",
-  widenAck: "I understand that bekup may connect to these additional hosts or networks",
-  save: "Save allowlist",
-  saving: "Saving…",
-  reset: "Discard changes",
-  saved: "Allowlist saved; every bekup process applies it within seconds.",
-  noChanges: "Nothing changed.",
-  conflictTitle: "Changed in the meantime",
-  conflict:
-    "Another admin saved the allowlist after you opened this page. Reload it and apply your edits again.",
-  reload: "Reload",
-  rulesTitle: "What can never be allowed",
-  rulesLead:
-    "These ranges are denied before the allowlist is consulted, so no entry can open them.",
-  softTitle: "Allowlistable private ranges",
-  hard: [
-    "Loopback (127.0.0.0/8, ::1), except in dev mode",
-    "Link-local (169.254.0.0/16, fe80::/10)",
-    "Cloud metadata (169.254.169.254, 100.100.100.200, fd00:ec2::254)",
-    "Unspecified, multicast, broadcast and 240.0.0.0/4",
-    "IPv4-compatible / translated IPv6, Teredo, IPv6 outside 2000::/3",
-    "/0 or overly broad CIDRs that overlap any of the above",
-  ],
-  soft: [
-    "RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16",
-    "Carrier-grade NAT 100.64.0.0/10",
-    "Unique local IPv6 fc00::/7",
-    "Documentation and benchmarking ranges",
-  ],
-  noProxy:
-    "Egress proxies are not supported: a proxy resolves and connects by itself and would bypass the dial-time check. Redirects are never followed.",
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Network allowlists",
+    pageLead:
+      "Two separate lists decide where connections may go: one for bekup's own connections to storage and notification services, and one for the runner's connections to database servers.",
+    ownPart: "bekup's own connections (S3, SFTP, WebDAV, SMTP, webhooks)",
+    ownIndex: "01",
+    runnerIndex: "02",
+    lead: "Every outbound connection of bekup (S3, SFTP, WebDAV, SMTP, webhooks) passes a dial-time SSRF guard. Public addresses are allowed; private ranges only when they are on this allowlist, and only for the uses each entry names.",
+    runnerNote:
+      "Database servers and SSH bastions are not reached through this list: the runner connects to them, under its own list shown below.",
+    guide: "[netguard] reference",
+    stepUp: "Changes need a step-up",
+    cidrsTitle: "Networks (CIDRs)",
+    cidrsLead:
+      "Private ranges bekup may connect to, e.g. 10.20.0.0/16 or 192.0.2.10/32 for one address.",
+    hostsTitle: "Host names",
+    hostsLead:
+      "Re-allow private addresses only for the exact name dialed, or *.suffix for its subdomains. IP literals go into the CIDR list.",
+    config: "From bekup.toml",
+    configLead: "Bootstrap entries of [netguard]; read-only here, always applied.",
+    configScopes: "Applies to",
+    configNeverPersonal: "Never to personal webhooks.",
+    scopeNames: {
+      DESTINATIONS: "Destinations",
+      SMTP: "SMTP",
+      SHARED_WEBHOOKS: "Shared webhooks",
+      PERSONAL_WEBHOOKS: "Personal webhooks",
+    } satisfies Record<SsrfScope, string>,
+    scopeHelp: {
+      DESTINATIONS: "S3, SFTP and WebDAV destinations",
+      SMTP: "The SMTP server",
+      SHARED_WEBHOOKS: "Notification webhooks configured by admins",
+      PERSONAL_WEBHOOKS: "Webhooks any user can enter for themselves",
+    } satisfies Record<SsrfScope, string>,
+    scopesLegend: (kind: ListKind, n: number) =>
+      `Uses of ${kind === "cidrs" ? "CIDR" : "host name"} ${String(n)}`,
+    scopesTitle: "Scopes",
+    scopesLead: (defaults: string) =>
+      `Each entry opens a private target only for the uses ticked next to it. New entries start with: ${defaults}.`,
+    personalBadgeLead:
+      "At least one entry lets every user's personal webhooks reach a private target. This stays visible while any entry carries the personal webhooks scope.",
+    noConfig: "No bootstrap entries.",
+    managed: "Managed here",
+    empty: "No entries.",
+    add: (kind: ListKind) => (kind === "cidrs" ? "Add CIDR" : "Add host name"),
+    entryLabel: (kind: ListKind, n: number) =>
+      `${kind === "cidrs" ? "CIDR" : "Host name"} ${String(n)}`,
+    remove: (v: string) => `Remove ${v || "empty entry"}`,
+    placeholder: (kind: ListKind) => (kind === "cidrs" ? "10.20.0.0/16" : "minio.internal.example"),
+    max: (used: number, max: number) => `${String(used)} of ${String(max)}`,
+    tooMany: (max: number) => `At most ${String(max)} entries.`,
+    ignoredTitle: "Some stored entries are not applied",
+    ignored: (n: number) =>
+      plural(n, {
+        one: "1 stored entry is rejected by this server (for example loopback after leaving dev mode) and not applied. Saving the list drops it.",
+        other: `${String(n)} stored entries are rejected by this server (for example loopback after leaving dev mode) and not applied. Saving the list drops them.`,
+      }),
+    loopback:
+      "Dev mode: loopback (127.0.0.0/8, ::1) may be allowlisted. Outside dev mode it is always denied.",
+    updated: (when: string) => `Last changed ${when}.`,
+    never: "Never changed here.",
+    widenTitle: "This widens what bekup may connect to",
+    widenLead:
+      "The new entries or uses let bekup reach more private hosts. The change is audited and raises a security alert to every admin.",
+    widenNew: "new",
+    personalTitle: "Every user's personal webhooks could reach these targets",
+    personalLead:
+      "Any user can enter a personal webhook URL. With the personal webhooks scope, every account (not only admins) can make bekup send requests to these private hosts or networks, which can be used to probe or hit internal services. Grant it only for a receiver that every user may reach. The change is audited and raises a security alert stating that personal webhooks gained access.",
+    personalAck:
+      "I understand that every user can make bekup send requests to these private targets",
+    widenAck: "I understand that bekup may connect to these additional hosts or networks",
+    save: "Save allowlist",
+    saving: "Saving…",
+    reset: "Discard changes",
+    saved: "Allowlist saved; every bekup process applies it within seconds.",
+    noChanges: "Nothing changed.",
+    conflictTitle: "Changed in the meantime",
+    conflict:
+      "Another admin saved the allowlist after you opened this page. Reload it and apply your edits again.",
+    reload: "Reload",
+    rulesTitle: "What can never be allowed",
+    rulesLead:
+      "These ranges are denied before the allowlist is consulted, so no entry can open them.",
+    softTitle: "Allowlistable private ranges",
+    hard: [
+      "Loopback (127.0.0.0/8, ::1), except in dev mode",
+      "Link-local (169.254.0.0/16, fe80::/10)",
+      "Cloud metadata (169.254.169.254, 100.100.100.200, fd00:ec2::254)",
+      "Unspecified, multicast, broadcast and 240.0.0.0/4",
+      "IPv4-compatible / translated IPv6, Teredo, IPv6 outside 2000::/3",
+      "/0 or overly broad CIDRs that overlap any of the above",
+    ],
+    soft: [
+      "RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16",
+      "Carrier-grade NAT 100.64.0.0/10",
+      "Unique local IPv6 fc00::/7",
+      "Documentation and benchmarking ranges",
+    ],
+    noProxy:
+      "Egress proxies are not supported: a proxy resolves and connects by itself and would bypass the dial-time check. Redirects are never followed.",
+  },
+  nl: {
+    title: "Toegestane netwerklijsten",
+    pageLead:
+      "Twee aparte lijsten bepalen waarheen verbindingen mogen: één voor de eigen verbindingen van bekup met opslag- en meldingsdiensten, en één voor de verbindingen van de runner met databaseservers.",
+    ownPart: "Eigen verbindingen van bekup (S3, SFTP, WebDAV, SMTP, webhooks)",
+    ownIndex: "01",
+    runnerIndex: "02",
+    lead: "Elke uitgaande verbinding van bekup (S3, SFTP, WebDAV, SMTP, webhooks) gaat bij het verbinden door een SSRF-beveiliging. Publieke adressen zijn toegestaan; privébereiken alleen als ze op deze toegestane lijst staan, en alleen voor het gebruik dat elke vermelding noemt.",
+    runnerNote:
+      "Databaseservers en SSH-bastionhosts worden niet via deze lijst bereikt: de runner maakt verbinding met ze, volgens zijn eigen lijst hieronder.",
+    guide: "Referentie [netguard]",
+    stepUp: "Voor wijzigingen moet je je identiteit bevestigen",
+    cidrsTitle: "Netwerken (CIDR's)",
+    cidrsLead:
+      "Privébereiken waarmee bekup verbinding mag maken, bijvoorbeeld 10.20.0.0/16, of 192.0.2.10/32 voor één adres.",
+    hostsTitle: "Hostnamen",
+    hostsLead:
+      "Sta privéadressen opnieuw toe, alleen voor precies de gebelde naam, of *.achtervoegsel voor de subdomeinen ervan. IP-adressen horen in de CIDR-lijst.",
+    config: "Uit bekup.toml",
+    configLead: "Opstartvermeldingen van [netguard]; hier alleen-lezen, altijd toegepast.",
+    configScopes: "Geldt voor",
+    configNeverPersonal: "Nooit voor persoonlijke webhooks.",
+    scopeNames: {
+      DESTINATIONS: "Bestemmingen",
+      SMTP: "SMTP",
+      SHARED_WEBHOOKS: "Gedeelde webhooks",
+      PERSONAL_WEBHOOKS: "Persoonlijke webhooks",
+    },
+    scopeHelp: {
+      DESTINATIONS: "S3-, SFTP- en WebDAV-bestemmingen",
+      SMTP: "De SMTP-server",
+      SHARED_WEBHOOKS: "Meldingswebhooks die beheerders instellen",
+      PERSONAL_WEBHOOKS: "Webhooks die elke gebruiker voor zichzelf kan invullen",
+    },
+    scopesLegend: (kind: ListKind, n: number) =>
+      kind === "cidrs" ? `Gebruik van CIDR ${String(n)}` : `Gebruik van hostnaam ${String(n)}`,
+    scopesTitle: "Gebruik",
+    scopesLead: (defaults: string) =>
+      `Elke vermelding opent een privédoel alleen voor het gebruik dat ernaast is aangevinkt. Nieuwe vermeldingen beginnen met: ${defaults}.`,
+    personalBadgeLead:
+      "Minstens één vermelding laat de persoonlijke webhooks van elke gebruiker een privédoel bereiken. Dit blijft zichtbaar zolang een vermelding het gebruik persoonlijke webhooks heeft.",
+    noConfig: "Geen opstartvermeldingen.",
+    managed: "Hier beheerd",
+    empty: "Geen vermeldingen.",
+    add: (kind: ListKind) => (kind === "cidrs" ? "CIDR toevoegen" : "Hostnaam toevoegen"),
+    entryLabel: (kind: ListKind, n: number) =>
+      kind === "cidrs" ? `CIDR ${String(n)}` : `Hostnaam ${String(n)}`,
+    remove: (v: string) => (v ? `${v} verwijderen` : "Lege vermelding verwijderen"),
+    placeholder: (kind: ListKind) => (kind === "cidrs" ? "10.20.0.0/16" : "minio.internal.example"),
+    max: (used: number, max: number) => `${String(used)} van ${String(max)}`,
+    tooMany: (max: number) => `Maximaal ${String(max)} vermeldingen.`,
+    ignoredTitle: "Sommige opgeslagen vermeldingen worden niet toegepast",
+    ignored: (n: number) =>
+      plural(n, {
+        one: "1 opgeslagen vermelding wordt door deze server geweigerd (bijvoorbeeld loopback na het verlaten van de dev-modus) en niet toegepast. Bij het opslaan van de lijst vervalt die.",
+        other: `${String(n)} opgeslagen vermeldingen worden door deze server geweigerd (bijvoorbeeld loopback na het verlaten van de dev-modus) en niet toegepast. Bij het opslaan van de lijst vervallen die.`,
+      }),
+    loopback:
+      "Dev-modus: loopback (127.0.0.0/8, ::1) mag op de toegestane lijst. Buiten de dev-modus wordt het altijd geweigerd.",
+    updated: (when: string) => `Laatst gewijzigd ${when}.`,
+    never: "Hier nooit gewijzigd.",
+    widenTitle: "Dit verruimt waarmee bekup verbinding mag maken",
+    widenLead:
+      "Met de nieuwe vermeldingen of het nieuwe gebruik kan bekup meer privéhosts bereiken. De wijziging komt in de auditlog en stuurt elke beheerder een beveiligingsmelding.",
+    widenNew: "nieuw",
+    personalTitle: "De persoonlijke webhooks van elke gebruiker kunnen deze doelen bereiken",
+    personalLead:
+      "Elke gebruiker kan een persoonlijke webhook-URL invullen. Met het gebruik persoonlijke webhooks kan elk account (niet alleen beheerders) bekup verzoeken laten sturen naar deze privéhosts of -netwerken, wat kan worden misbruikt om interne diensten af te tasten of aan te vallen. Sta het alleen toe voor een ontvanger die elke gebruiker mag bereiken. De wijziging komt in de auditlog en stuurt een beveiligingsmelding dat persoonlijke webhooks toegang hebben gekregen.",
+    personalAck:
+      "Ik begrijp dat elke gebruiker bekup verzoeken kan laten sturen naar deze privédoelen",
+    widenAck: "Ik begrijp dat bekup verbinding mag maken met deze extra hosts of netwerken",
+    save: "Toegestane lijst opslaan",
+    saving: "Opslaan…",
+    reset: "Wijzigingen verwerpen",
+    saved: "Toegestane lijst opgeslagen; elk bekup-proces past hem binnen enkele seconden toe.",
+    noChanges: "Er is niets gewijzigd.",
+    conflictTitle: "Intussen gewijzigd",
+    conflict:
+      "Een andere beheerder heeft de toegestane lijst opgeslagen nadat je deze pagina opende. Laad hem opnieuw en voer je wijzigingen nogmaals uit.",
+    reload: "Opnieuw laden",
+    rulesTitle: "Wat nooit kan worden toegestaan",
+    rulesLead:
+      "Deze bereiken worden geweigerd voordat de toegestane lijst wordt geraadpleegd, dus geen enkele vermelding kan ze openzetten.",
+    softTitle: "Privébereiken die je kunt toestaan",
+    hard: [
+      "Loopback (127.0.0.0/8, ::1), behalve in de dev-modus",
+      "Link-local (169.254.0.0/16, fe80::/10)",
+      "Cloudmetadata (169.254.169.254, 100.100.100.200, fd00:ec2::254)",
+      "Niet-gespecificeerd, multicast, broadcast en 240.0.0.0/4",
+      "IPv4-compatibele / vertaalde IPv6, Teredo, IPv6 buiten 2000::/3",
+      "/0 of te brede CIDR's die een van de bovenstaande overlappen",
+    ],
+    soft: [
+      "RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16",
+      "Carrier-grade NAT 100.64.0.0/10",
+      "Unique local IPv6 fc00::/7",
+      "Bereiken voor documentatie en benchmarks",
+    ],
+    noProxy:
+      "Uitgaande proxy's worden niet ondersteund: een proxy zoekt namen op en verbindt zelf, en zou zo de controle bij het verbinden omzeilen. Doorverwijzingen worden nooit gevolgd.",
+  },
+});
 
 type Errors = Partial<Record<string, string>>;
 

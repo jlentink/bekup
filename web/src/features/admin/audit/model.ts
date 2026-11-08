@@ -1,4 +1,20 @@
 import type { AuditActorKind, AuditLogFilter } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
+
+const M = defineMessages({
+  en: {
+    userId: "Enter a user ID (UUID).",
+    time: "Enter a valid time.",
+    afterStart: "Must be after the start.",
+    tooLong: "Too long.",
+  },
+  nl: {
+    userId: "Vul een gebruikers-ID (UUID) in.",
+    time: "Vul een geldige tijd in.",
+    afterStart: "Moet na het begin liggen.",
+    tooLong: "Te lang.",
+  },
+});
 
 /** Entries per page (the API allows 1..200). */
 export const AUDIT_PAGE_SIZE = 50;
@@ -37,14 +53,13 @@ function localToIso(v: string): string | null {
 
 export function validateDraft(d: AuditFilterDraft): DraftErrors {
   const e: DraftErrors = {};
-  if (d.actorUserId.trim() !== "" && !UUID_RE.test(d.actorUserId.trim()))
-    e.actorUserId = "Enter a user ID (UUID).";
-  if (d.from !== "" && localToIso(d.from) === null) e.from = "Enter a valid time.";
-  if (d.to !== "" && localToIso(d.to) === null) e.to = "Enter a valid time.";
+  if (d.actorUserId.trim() !== "" && !UUID_RE.test(d.actorUserId.trim())) e.actorUserId = M.userId;
+  if (d.from !== "" && localToIso(d.from) === null) e.from = M.time;
+  if (d.to !== "" && localToIso(d.to) === null) e.to = M.time;
   const from = localToIso(d.from);
   const to = localToIso(d.to);
-  if (from && to && from >= to) e.to = "Must be after the start.";
-  if (d.action.length > 200) e.action = "Too long.";
+  if (from && to && from >= to) e.to = M.afterStart;
+  if (d.action.length > 200) e.action = M.tooLong;
   return e;
 }
 

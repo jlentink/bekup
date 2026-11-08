@@ -7,6 +7,7 @@ import type { RunLogLevel } from "@/graphql/gen/graphql";
 import { cn } from "@/lib/utils";
 
 import { formatClock } from "@/lib/format";
+import { defineMessages, intlLocale, plural } from "@/lib/i18n";
 import type { LogLine } from "./log-model";
 
 /** Fixed row height of the virtualized list, in px (matches the row classes). */
@@ -20,20 +21,45 @@ const LEVEL_STYLE: Record<RunLogLevel, string> = {
   ERROR: "text-status-failed-fg font-semibold",
 };
 
-const T = {
-  title: "Log",
-  follow: "Follow",
-  following: "Following the tail",
-  paused: "Paused",
-  copy: "Copy log",
-  copied: "Log copied to the clipboard.",
-  copyFailed: "Copying failed.",
-  empty: "No log lines yet.",
-  loadMore: "Load more",
-  live: "live",
-  dropped: (n: number) => `${String(n)} line${n === 1 ? "" : "s"} dropped (log cap reached).`,
-  count: (n: number) => `${n.toLocaleString()} line${n === 1 ? "" : "s"}`,
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Log",
+    follow: "Follow",
+    following: "Following the tail",
+    paused: "Paused",
+    copy: "Copy log",
+    copied: "Log copied to the clipboard.",
+    copyFailed: "Copying failed.",
+    empty: "No log lines yet.",
+    loadMore: "Load more",
+    live: "live",
+    dropped: (n: number) =>
+      plural(n, {
+        one: "1 line dropped (log cap reached).",
+        other: `${String(n)} lines dropped (log cap reached).`,
+      }),
+    count: (n: number) =>
+      plural(n, { one: "1 line", other: `${n.toLocaleString(intlLocale)} lines` }),
+  },
+  nl: {
+    title: "Log",
+    follow: "Volgen",
+    following: "Volgt de nieuwste regels",
+    paused: "Gepauzeerd",
+    copy: "Log kopiëren",
+    copied: "Log naar het klembord gekopieerd.",
+    copyFailed: "Kopiëren mislukt.",
+    empty: "Nog geen logregels.",
+    loadMore: "Meer laden",
+    live: "live",
+    dropped: (n) =>
+      plural(n, {
+        one: "1 regel weggelaten (maximale loggrootte bereikt).",
+        other: `${String(n)} regels weggelaten (maximale loggrootte bereikt).`,
+      }),
+    count: (n) => plural(n, { one: "1 regel", other: `${n.toLocaleString(intlLocale)} regels` }),
+  },
+});
 
 /**
  * A virtualized log viewer: fixed-height rows, only the visible window is

@@ -26,6 +26,7 @@ import { reportActionError } from "@/features/auth/use-step-up";
 import { getFragmentData } from "@/graphql/gen";
 import type { JobSharedChannelAttachmentsQuery as AttachmentsResult } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 
 import { NativeSelect } from "./fields";
 import { JobSharedChannelAttachmentsQuery } from "./operations";
@@ -35,30 +36,57 @@ type Attachment = NonNullable<
   NonNullable<AttachmentsResult["job"]>["sharedChannelAttachments"]
 >[number];
 
-const T = {
-  attached: "Shared channels for this job",
-  none: "No shared channel receives this job's events.",
-  noChannels: "No shared channels exist yet.",
-  manage: "Manage shared channels",
-  pick: "Shared channel",
-  pickPlaceholder: "Choose a channel",
-  attach: "Attach",
-  allAttached: "Every shared channel is attached.",
-  disabled: "disabled",
-  emailList: "E-mail list",
-  editFilter: (name: string) => `Change the events ${name} receives`,
-  detach: (name: string) => `Detach ${name}`,
-  detachTitle: (name: string) => `Detach ${name} from this job?`,
-  detachLead: "The channel stops receiving this job's events at once.",
-  detachConfirm: "Detach",
-  attachedToast: "Channel attached.",
-  filterSaved: "Event filter saved.",
-  detachedToast: "Channel detached.",
-  staffNote:
-    "Shared channels (team e-mail lists and webhooks) are attached by administrators. Ask an admin to change which channels receive this job's events.",
-  personal: "Your own notifications for this job",
-  personalLead: "Per-job overrides of your personal preferences: e-mail, webhooks and the inbox.",
-} as const;
+const T = defineMessages({
+  en: {
+    attached: "Shared channels for this job",
+    none: "No shared channel receives this job's events.",
+    noChannels: "No shared channels exist yet.",
+    manage: "Manage shared channels",
+    pick: "Shared channel",
+    pickPlaceholder: "Choose a channel",
+    attach: "Attach",
+    allAttached: "Every shared channel is attached.",
+    disabled: "disabled",
+    emailList: "E-mail list",
+    editFilter: (name: string) => `Change the events ${name} receives`,
+    detach: (name: string) => `Detach ${name}`,
+    detachTitle: (name: string) => `Detach ${name} from this job?`,
+    detachLead: "The channel stops receiving this job's events at once.",
+    detachConfirm: "Detach",
+    attachedToast: "Channel attached.",
+    filterSaved: "Event filter saved.",
+    detachedToast: "Channel detached.",
+    staffNote:
+      "Shared channels (team e-mail lists and webhooks) are attached by administrators. Ask an admin to change which channels receive this job's events.",
+    personal: "Your own notifications for this job",
+    personalLead: "Per-job overrides of your personal preferences: e-mail, webhooks and the inbox.",
+  },
+  nl: {
+    attached: "Gedeelde kanalen voor deze taak",
+    none: "Geen enkel gedeeld kanaal ontvangt de gebeurtenissen van deze taak.",
+    noChannels: "Er zijn nog geen gedeelde kanalen.",
+    manage: "Gedeelde kanalen beheren",
+    pick: "Gedeeld kanaal",
+    pickPlaceholder: "Kies een kanaal",
+    attach: "Koppelen",
+    allAttached: "Elk gedeeld kanaal is gekoppeld.",
+    disabled: "uitgeschakeld",
+    emailList: "E-maillijst",
+    editFilter: (name: string) => `De gebeurtenissen wijzigen die ${name} ontvangt`,
+    detach: (name: string) => `${name} ontkoppelen`,
+    detachTitle: (name: string) => `${name} ontkoppelen van deze taak?`,
+    detachLead: "Het kanaal ontvangt de gebeurtenissen van deze taak direct niet meer.",
+    detachConfirm: "Ontkoppelen",
+    attachedToast: "Kanaal gekoppeld.",
+    filterSaved: "Gebeurtenisfilter opgeslagen.",
+    detachedToast: "Kanaal ontkoppeld.",
+    staffNote:
+      "Gedeelde kanalen (e-maillijsten en webhooks van het team) worden door beheerders gekoppeld. Vraag een beheerder om te wijzigen welke kanalen de gebeurtenissen van deze taak ontvangen.",
+    personal: "Je eigen meldingen voor deze taak",
+    personalLead:
+      "Afwijkingen per taak van je persoonlijke voorkeuren: e-mail, webhooks en de inbox.",
+  },
+});
 
 /**
  * Notifications of a job in the job editor (staff). Admins and maintainers

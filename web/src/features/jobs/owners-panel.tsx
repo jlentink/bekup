@@ -11,26 +11,54 @@ import { UserPicker } from "@/features/users/user-picker";
 import { type PickedUser } from "@/features/users/user-picker-model";
 import type { JobDetailQuery as JobDetailResult } from "@/graphql/gen/graphql";
 import { formatDateTime } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
+import { messages } from "@/lib/messages";
 import { AssignJobOwnersMutation, RemoveJobOwnerMutation } from "@/lib/operations";
 
 import { JobDetailQuery } from "./operations";
 
 type Job = NonNullable<JobDetailResult["job"]>;
 
-const T = {
-  none: "No backup owners. Owners (role User) can view this job, run it and download its backups.",
-  roleNote: "has no owner rights: only accounts with role User gain rights from ownership",
-  disabled: "disabled",
-  added: (at: string) => `added ${at}`,
-  remove: (name: string) => `Remove ${name}`,
-  removeTitle: (name: string) => `Remove ${name} as owner?`,
-  removeLead: "They lose access to this job, its runs and downloads at once. Audited and alerted.",
-  removed: "Owner removed.",
-  add: (n: number) => (n > 1 ? `Add ${String(n)} owners` : "Add owner"),
-  addedToast: (n: number) => (n > 1 ? `${String(n)} owners added.` : "Owner added."),
-  picker: "Add backup owners",
-  selfNote: "Maintainers cannot add themselves.",
-} as const;
+/** Role names in the page's language (the shared shell table). */
+const ROLE_NAMES: Readonly<Record<string, string>> = messages.roles;
+
+const T = defineMessages({
+  en: {
+    none: "No backup owners. Owners (role User) can view this job, run it and download its backups.",
+    roleNote: (role: string) =>
+      `${role.toLowerCase()} has no owner rights: only accounts with role User gain rights from ownership`,
+    disabled: "disabled",
+    added: (at: string) => `added ${at}`,
+    remove: (name: string) => `Remove ${name}`,
+    removeTitle: (name: string) => `Remove ${name} as owner?`,
+    removeLead:
+      "They lose access to this job, its runs and downloads at once. Audited and alerted.",
+    removed: "Owner removed.",
+    add: (n: number) => (n > 1 ? `Add ${String(n)} owners` : "Add owner"),
+    addedToast: (n: number) => (n > 1 ? `${String(n)} owners added.` : "Owner added."),
+    picker: "Add backup owners",
+    selfNote: "Maintainers cannot add themselves.",
+    removeConfirm: "Remove owner",
+  },
+  nl: {
+    none: "Geen back-upeigenaren. Eigenaren (rol Gebruiker) kunnen deze taak bekijken, uitvoeren en de back-ups ervan downloaden.",
+    roleNote: (role: string) =>
+      `Rol ${(Object.hasOwn(ROLE_NAMES, role) ? ROLE_NAMES[role] : undefined) ?? role} heeft geen eigenaarsrechten: alleen accounts met de rol Gebruiker krijgen rechten door eigenaarschap`,
+    disabled: "uitgeschakeld",
+    added: (at: string) => `toegevoegd ${at}`,
+    remove: (name: string) => `${name} verwijderen`,
+    removeTitle: (name: string) => `${name} als eigenaar verwijderen?`,
+    removeLead:
+      "Diegene verliest direct de toegang tot deze taak, de runs en de downloads. Wordt geaudit en gemeld.",
+    removed: "Eigenaar verwijderd.",
+    add: (n: number) => (n > 1 ? `${String(n)} eigenaren toevoegen` : "Eigenaar toevoegen"),
+    addedToast: (n: number) =>
+      n > 1 ? `${String(n)} eigenaren toegevoegd.` : "Eigenaar toegevoegd.",
+    picker: "Back-upeigenaren toevoegen",
+    selfNote: "Onderhouders kunnen zichzelf niet toevoegen.",
+    removeConfirm: "Eigenaar verwijderen",
+  },
+});
 
 /**
  * Backup owners of a job (staff). Adding and removing need a fresh step-up
@@ -84,9 +112,7 @@ export function OwnersPanel({ job, admin }: { job: Job; admin: boolean }) {
                   {o.email} · {T.added(formatDateTime(o.addedAt))}
                 </span>
                 {o.role !== "USER" ? (
-                  <span className="text-2xs text-status-partial-fg">
-                    {o.role.toLowerCase()} {T.roleNote}
-                  </span>
+                  <span className="text-2xs text-status-partial-fg">{T.roleNote(o.role)}</span>
                 ) : null}
               </div>
               <Button
@@ -131,7 +157,7 @@ export function OwnersPanel({ job, admin }: { job: Job; admin: boolean }) {
         }}
         title={T.removeTitle(removing?.name ?? "")}
         description={T.removeLead}
-        confirmLabel="Remove owner"
+        confirmLabel={T.removeConfirm}
         destructive
         onConfirm={async () => {
           if (!removing) return;

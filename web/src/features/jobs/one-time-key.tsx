@@ -12,26 +12,50 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { downloadText } from "@/lib/download";
+import { defineMessages } from "@/lib/i18n";
 
 import type { OneTimeKey } from "./one-time-key-model";
 
-const T = {
-  eyebrow: "Shown once",
-  passphraseTitle: "Save the new passphrase",
-  identityTitle: "Save the private key",
-  passphraseLead:
-    "bekup stores this passphrase encrypted, but you need it to decrypt backups outside bekup. It is not shown again.",
-  identityLead:
-    "bekup keeps only the public key. Without this private key the job's backups cannot be decrypted: store it offline now. It is never shown again.",
-  version: (v: number) => `Version ${String(v)}`,
-  recipient: "Public key (recipient)",
-  copied: "Copied to the clipboard.",
-  copyFailed: "Copying failed. Select the text and copy it by hand.",
-  acknowledge: "I've saved it somewhere safe",
-  done: "Done",
-  copy: "Copy",
-  download: "Download",
-} as const;
+const T = defineMessages({
+  en: {
+    eyebrow: "Shown once",
+    passphraseTitle: "Save the new passphrase",
+    identityTitle: "Save the private key",
+    passphraseLead:
+      "bekup stores this passphrase encrypted, but you need it to decrypt backups outside bekup. It is not shown again.",
+    identityLead:
+      "bekup keeps only the public key. Without this private key the job's backups cannot be decrypted: store it offline now. It is never shown again.",
+    version: (v: number) => `Version ${String(v)}`,
+    recipient: "Public key (recipient)",
+    copied: "Copied to the clipboard.",
+    copyFailed: "Copying failed. Select the text and copy it by hand.",
+    acknowledge: "I've saved it somewhere safe",
+    done: "Done",
+    copy: "Copy",
+    download: "Download",
+    privateKeyLabel: "Private key",
+    passphraseLabel: "Passphrase",
+  },
+  nl: {
+    eyebrow: "Eenmalig getoond",
+    passphraseTitle: "Bewaar de nieuwe wachtwoordzin",
+    identityTitle: "Bewaar de privésleutel",
+    passphraseLead:
+      "bekup slaat deze wachtwoordzin versleuteld op, maar je hebt hem nodig om back-ups buiten bekup te ontsleutelen. Hij wordt niet opnieuw getoond.",
+    identityLead:
+      "bekup bewaart alleen de publieke sleutel. Zonder deze privésleutel kunnen de back-ups van de taak niet worden ontsleuteld: bewaar hem nu offline. Hij wordt nooit meer getoond.",
+    version: (v: number) => `Versie ${String(v)}`,
+    recipient: "Publieke sleutel (ontvanger)",
+    copied: "Gekopieerd naar het klembord.",
+    copyFailed: "Kopiëren is mislukt. Selecteer de tekst en kopieer hem zelf.",
+    acknowledge: "Ik heb hem op een veilige plek bewaard",
+    done: "Klaar",
+    copy: "Kopiëren",
+    download: "Downloaden",
+    privateKeyLabel: "Privésleutel",
+    passphraseLabel: "Wachtwoordzin",
+  },
+});
 
 /**
  * Shows a generated passphrase or age identity once. The value lives only
@@ -80,7 +104,7 @@ export function OneTimeKeyDialog({
           <DialogDescription>{identity ? T.identityLead : T.passphraseLead}</DialogDescription>
         </DialogHeader>
         <output
-          aria-label={identity ? "Private key" : "Passphrase"}
+          aria-label={identity ? T.privateKeyLabel : T.passphraseLabel}
           className="block rounded-md border border-dashed border-border-strong/60 bg-surface-sunken px-4 py-3.5 font-mono text-sm break-all select-all"
         >
           {value?.value}

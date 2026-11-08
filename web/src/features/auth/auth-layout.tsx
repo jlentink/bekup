@@ -3,17 +3,14 @@ import type { ReactNode } from "react";
 import { Wordmark } from "@/components/brand/logo";
 import { InsecureTransportBanner } from "@/components/shell/insecure-transport-banner";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
-const GUARANTEES = [
-  ["Encrypted", "age, per-job keys, on by default"],
-  ["Signed", "ed25519 manifests, verified before restore"],
-  ["Isolated", "only the runner can reach Docker"],
-  ["Guarded", "a fresh second factor for every restore"],
-] as const;
+const T = messages.authLayout;
+const GUARANTEES = T.guarantees;
 
 /** Ledger step markers of the sign-in: password → second factor → in. */
-const STEPS = ["Password", "Second factor", "Signed in"] as const;
+const STEPS = T.steps;
 
 export interface AuthLayoutProps {
   eyebrow: string;
@@ -49,16 +46,16 @@ export function AuthLayout({
       <InsecureTransportBanner />
       <div className="grid flex-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <section
-          aria-label="About bekup"
+          aria-label={T.brandRegion}
           className="dark relative hidden flex-col justify-between overflow-hidden bg-background p-12 text-foreground lg:flex"
         >
           <div className="ledger-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_30%_40%,black,transparent_75%)] opacity-70" />
           <Wordmark className="relative" />
           <div className="relative flex flex-col gap-10">
             <p className="font-display text-display-lg tracking-tight">
-              Every backup,
+              {T.taglineStart}
               <br />
-              <em className="text-primary">accounted for.</em>
+              <em className="text-primary">{T.taglineEnd}</em>
             </p>
             <dl className="grid max-w-md grid-cols-[auto_1fr] border-t border-rule">
               {GUARANTEES.map(([term, detail]) => (
@@ -73,7 +70,7 @@ export function AuthLayout({
             </dl>
           </div>
           <p className="relative font-mono text-xs text-muted-foreground">
-            v{__BEKUP_VERSION__} · self-hosted
+            {T.footer(__BEKUP_VERSION__)}
           </p>
         </section>
 
@@ -93,7 +90,7 @@ export function AuthLayout({
             )}
           >
             {step !== undefined ? (
-              <ol aria-label="Sign-in steps" className="flex items-center gap-2">
+              <ol aria-label={T.stepsLabel} className="flex items-center gap-2">
                 {STEPS.map((label, i) => (
                   <li
                     key={label}

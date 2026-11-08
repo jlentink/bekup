@@ -47,6 +47,7 @@ import type {
 import { RiskDecision } from "@/features/accepted-risks/risk-badge";
 import { ApiCode, hasApiCode, userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -79,151 +80,307 @@ import {
   type Verdict,
 } from "./model";
 
-const T = {
-  title: "Configuration",
-  lead: "Reload bekup.toml without restarting. Each serve and worker process re-reads its own file; live settings apply at once, everything else waits for a restart.",
-  guide: "Reloading reference",
-  stepUp: "Needs a step-up",
-  reload: "Reload configuration",
-  howTitle: "How a reload works",
-  howLead:
-    "Only key names are shown here, never values or the file path. Details are in each process's log.",
-  how: [
-    "Every serve and worker process re-reads the bekup.toml it started with.",
-    "Live settings apply immediately; changed keys that are not live are reported as “restart required”.",
-    "A file that cannot be read or is invalid is refused, and the running configuration stays in place.",
-    "A change that weakens a security setting raises a security alert to every admin.",
-  ],
-  signalTitle: "One process only",
-  signalLead:
-    "Operators can also send SIGHUP to a single process. It reloads alone and its result appears in the table below.",
-  signalCommand: "docker compose kill -s HUP serve",
-  processesTitle: "Processes",
-  processesLead: "The newest result of every process, newest first.",
-  counts: (listening: number, stopped: number) =>
-    `${String(listening)} listening · ${String(stopped)} stopped`,
-  countsNote:
-    "Every process listening now is listed, however long it has been running. Processes that stopped or lost their database connection stay listed for 7 days after their last report.",
-  noProcesses: "No process has reported yet.",
-  stoppedTitle: "Stopped or not listening",
-  stoppedLead:
-    "These processes no longer receive reload requests. Their last result is history: nothing to restart or fix here.",
-  notListening: "Not listening",
-  lastResult: (status: string) => `Last result: ${status}`,
-  stoppedSince: "Stopped since",
-  colProcess: "Process",
-  colStarted: "Running since",
-  colResult: "Last result",
-  colKeys: "Keys",
-  version: (v: string) => `v${v}`,
-  liveTitle: "Live settings",
-  liveLead:
-    "Applied by a reload without a restart. Every other key needs a restart of the process.",
-  liveShow: (n: number) => `Show the ${String(n)} live ${n === 1 ? "key" : "keys"}`,
-  liveNone: "This version has no live keys: every change needs a restart.",
-  liveTopLevel: "Top level",
-  kind: { SERVE: "serve", WORKER: "worker" } satisfies Record<BekupProcessKind, string>,
-  status: {
-    LOADED: "Started",
-    APPLIED: "Applied",
-    UNCHANGED: "Unchanged",
-    RESTART_REQUIRED: "Restart required",
-    REJECTED: "Rejected",
-    FAILED: "Failed",
-  } satisfies Record<ConfigReloadStatus, string>,
-  errorKind: {
-    FILE: "File unreadable or fails the ownership/mode checks",
-    SYNTAX: "Not valid TOML",
-    INVALID: "Unknown key or invalid value",
-    APPLY: "A component refused the new values",
-  } satisfies Record<ConfigReloadErrorKind, string>,
-  origin: {
-    startup: "At startup",
-    latest: "Latest reload",
-    ui: "Earlier reload",
-    signal: "SIGHUP",
-  } satisfies Record<Origin, string>,
-  keys: {
-    restart: "Restart needed",
-    restartStale: "Changed, needed a restart",
-    applied: "Applied",
-    errors: "Errors",
-    weakened: "Weakened",
+const T = defineMessages({
+  en: {
+    title: "Configuration",
+    lead: "Reload bekup.toml without restarting. Each serve and worker process re-reads its own file; live settings apply at once, everything else waits for a restart.",
+    guide: "Reloading reference",
+    stepUp: "Needs a step-up",
+    reload: "Reload configuration",
+    howTitle: "How a reload works",
+    howLead:
+      "Only key names are shown here, never values or the file path. Details are in each process's log.",
+    how: [
+      "Every serve and worker process re-reads the bekup.toml it started with.",
+      "Live settings apply immediately; changed keys that are not live are reported as “restart required”.",
+      "A file that cannot be read or is invalid is refused, and the running configuration stays in place.",
+      "A change that weakens a security setting raises a security alert to every admin.",
+    ],
+    signalTitle: "One process only",
+    signalLead:
+      "Operators can also send SIGHUP to a single process. It reloads alone and its result appears in the table below.",
+    signalCommand: "docker compose kill -s HUP serve",
+    processesTitle: "Processes",
+    processesLead: "The newest result of every process, newest first.",
+    counts: (listening: number, stopped: number) =>
+      `${String(listening)} listening · ${String(stopped)} stopped`,
+    countsNote:
+      "Every process listening now is listed, however long it has been running. Processes that stopped or lost their database connection stay listed for 7 days after their last report.",
+    noProcesses: "No process has reported yet.",
+    stoppedTitle: "Stopped or not listening",
+    stoppedLead:
+      "These processes no longer receive reload requests. Their last result is history: nothing to restart or fix here.",
+    notListening: "Not listening",
+    lastResult: (status: string) => `Last result: ${status}`,
+    stoppedSince: "Stopped since",
+    colProcess: "Process",
+    colStarted: "Running since",
+    colResult: "Last result",
+    colKeys: "Keys",
+    version: (v: string) => `v${v}`,
+    liveTitle: "Live settings",
+    liveLead:
+      "Applied by a reload without a restart. Every other key needs a restart of the process.",
+    liveShow: (n: number) =>
+      plural(n, { one: "Show the 1 live key", other: `Show the ${String(n)} live keys` }),
+    liveNone: "This version has no live keys: every change needs a restart.",
+    liveTopLevel: "Top level",
+    kind: { SERVE: "serve", WORKER: "worker" } satisfies Record<BekupProcessKind, string>,
+    status: {
+      LOADED: "Started",
+      APPLIED: "Applied",
+      UNCHANGED: "Unchanged",
+      RESTART_REQUIRED: "Restart required",
+      REJECTED: "Rejected",
+      FAILED: "Failed",
+    } satisfies Record<ConfigReloadStatus, string>,
+    errorKind: {
+      FILE: "File unreadable or fails the ownership/mode checks",
+      SYNTAX: "Not valid TOML",
+      INVALID: "Unknown key or invalid value",
+      APPLY: "A component refused the new values",
+    } satisfies Record<ConfigReloadErrorKind, string>,
+    origin: {
+      startup: "At startup",
+      latest: "Latest reload",
+      ui: "Earlier reload",
+      signal: "SIGHUP",
+    } satisfies Record<Origin, string>,
+    keys: {
+      restart: "Restart needed",
+      restartStale: "Changed, needed a restart",
+      applied: "Applied",
+      errors: "Errors",
+      weakened: "Weakened",
+    },
+    noKeys: "No changed keys",
+    outcome: {
+      applied: (n: number) => `${String(n)} applied`,
+      restart: (n: number) => `${String(n)} restart required`,
+      unchanged: (n: number) => `${String(n)} unchanged`,
+      rejected: (n: number) => `${String(n)} rejected`,
+      failed: (n: number) => `${String(n)} failed`,
+      stopped: (n: number) => `${String(n)} stopped since`,
+    } satisfies Record<Outcome, (n: number) => string>,
+    verdict: {
+      problem: "Some processes refused the file or could not apply it",
+      restart: "Applied where possible; some changes need a restart",
+      applied: "Live settings applied",
+      unchanged: "Nothing changed",
+      stopped: "The processes that answered have stopped since",
+      none: "Waiting for answers",
+    } satisfies Record<Verdict, string>,
+    running: "Reload in progress",
+    last: "Latest reload",
+    requested: (when: string) => `Requested ${when}`,
+    progress: (n: number, m: number) =>
+      plural(m, {
+        one: `${String(n)} of 1 process answered`,
+        other: `${String(n)} of ${String(m)} processes answered`,
+      }),
+    timedOut:
+      "Not every process answered within 30 seconds. Busy or restarting processes catch up within 10 minutes; reload this page later to see their results.",
+    pollFailed: "Could not load the answers",
+    weakenedTitle: "Security settings were weakened",
+    weakenedLead: "Every admin received a security alert for these keys.",
+    dialogEyebrow: "Every serve and worker process",
+    dialogTitle: "Reload the configuration?",
+    dialogLead: "Each process re-reads its own bekup.toml now.",
+    dialogPoints: [
+      "Live settings apply immediately; other changed keys wait for a restart.",
+      "An unreadable or invalid file is refused and the running configuration stays.",
+      "Weakening a security setting alerts every admin.",
+      "You confirm your identity before the request is sent.",
+    ],
+    confirm: "Reload",
+    outcomeLabel: "Outcome per process",
+    rateLimited: "A reload was just requested. Wait a few seconds and try again.",
+    dbTitle: "App database",
+    dbLead:
+      "How the serve process that answered connects to bekup's own database. These settings need a restart.",
+    dbMode: "Credentials",
+    dbTLS: "TLS mode",
+    dbModes: {
+      URL: "Connection URL files",
+      FIELDS: "Host and password files (external PostgreSQL)",
+      SINGLE_ACCOUNT: "One account for everything",
+    } satisfies Record<DatabaseConfigMode, string>,
+    dbWeakened: "Weakened",
+    dbStrict: "verify-full",
+    dbTLSWeakTitle: "The database connection is not fully verified",
+    dbTLSWeakLead:
+      "database.tls_mode is weaker than verify-full: a network attacker could impersonate the database or read the traffic. Every start is audited and admins are alerted daily.",
+    dbSingleTitle: "Single-account mode is on",
+    dbSingleLead:
+      "bekup runs migrations and the app with one database account, so a compromised server process could change the schema and the audit log. Create the two least-privilege roles with bekup db bootstrap.",
+    imageTitle: "Image",
+    imageLead:
+      "How the bekup image of the serve process that answered is referenced, and the version bekup setup prepared the deployment for.",
+    imageRef: "Reference",
+    imagePinned: "Pinned by digest",
+    imageFollowing: "Follows a tag",
+    imageWeakened: "Not pinned",
+    imageSetupVersion: "Set up for",
+    imageVersion: "Running",
+    imageUnknown: "not recorded",
+    imageFollowingTitle: "The image follows a tag instead of a digest",
+    imageFollowingLead:
+      "Whoever moves the tag decides which code runs. Processes refuse to start until bekup setup upgrade has prepared a new version, every start is audited and admins are alerted daily. Pin a digest with bekup setup upgrade --image <repo>:<tag>@sha256:<digest>.",
+    imageUnknownTitle: "The setup version is not recorded",
+    imageUnknownLead:
+      "BEKUP_SETUP_VERSION is not set, so bekup cannot refuse an image that setup has not prepared. Run docker compose run --rm setup upgrade once to record it.",
   },
-  noKeys: "No changed keys",
-  outcome: {
-    applied: (n: number) => `${String(n)} applied`,
-    restart: (n: number) => `${String(n)} restart required`,
-    unchanged: (n: number) => `${String(n)} unchanged`,
-    rejected: (n: number) => `${String(n)} rejected`,
-    failed: (n: number) => `${String(n)} failed`,
-    stopped: (n: number) => `${String(n)} stopped since`,
-  } satisfies Record<Outcome, (n: number) => string>,
-  verdict: {
-    problem: "Some processes refused the file or could not apply it",
-    restart: "Applied where possible; some changes need a restart",
-    applied: "Live settings applied",
-    unchanged: "Nothing changed",
-    stopped: "The processes that answered have stopped since",
-    none: "Waiting for answers",
-  } satisfies Record<Verdict, string>,
-  running: "Reload in progress",
-  last: "Latest reload",
-  requested: (when: string) => `Requested ${when}`,
-  progress: (n: number, m: number) =>
-    `${String(n)} of ${String(m)} ${m === 1 ? "process" : "processes"} answered`,
-  timedOut:
-    "Not every process answered within 30 seconds. Busy or restarting processes catch up within 10 minutes; reload this page later to see their results.",
-  pollFailed: "Could not load the answers",
-  weakenedTitle: "Security settings were weakened",
-  weakenedLead: "Every admin received a security alert for these keys.",
-  dialogEyebrow: "Every serve and worker process",
-  dialogTitle: "Reload the configuration?",
-  dialogLead: "Each process re-reads its own bekup.toml now.",
-  dialogPoints: [
-    "Live settings apply immediately; other changed keys wait for a restart.",
-    "An unreadable or invalid file is refused and the running configuration stays.",
-    "Weakening a security setting alerts every admin.",
-    "You confirm your identity before the request is sent.",
-  ],
-  confirm: "Reload",
-  outcomeLabel: "Outcome per process",
-  rateLimited: "A reload was just requested. Wait a few seconds and try again.",
-  dbTitle: "App database",
-  dbLead:
-    "How the serve process that answered connects to bekup's own database. These settings need a restart.",
-  dbMode: "Credentials",
-  dbTLS: "TLS mode",
-  dbModes: {
-    URL: "Connection URL files",
-    FIELDS: "Host and password files (external PostgreSQL)",
-    SINGLE_ACCOUNT: "One account for everything",
-  } satisfies Record<DatabaseConfigMode, string>,
-  dbWeakened: "Weakened",
-  dbStrict: "verify-full",
-  dbTLSWeakTitle: "The database connection is not fully verified",
-  dbTLSWeakLead:
-    "database.tls_mode is weaker than verify-full: a network attacker could impersonate the database or read the traffic. Every start is audited and admins are alerted daily.",
-  dbSingleTitle: "Single-account mode is on",
-  dbSingleLead:
-    "bekup runs migrations and the app with one database account, so a compromised server process could change the schema and the audit log. Create the two least-privilege roles with bekup db bootstrap.",
-  imageTitle: "Image",
-  imageLead:
-    "How the bekup image of the serve process that answered is referenced, and the version bekup setup prepared the deployment for.",
-  imageRef: "Reference",
-  imagePinned: "Pinned by digest",
-  imageFollowing: "Follows a tag",
-  imageWeakened: "Not pinned",
-  imageSetupVersion: "Set up for",
-  imageVersion: "Running",
-  imageUnknown: "not recorded",
-  imageFollowingTitle: "The image follows a tag instead of a digest",
-  imageFollowingLead:
-    "Whoever moves the tag decides which code runs. Processes refuse to start until bekup setup upgrade has prepared a new version, every start is audited and admins are alerted daily. Pin a digest with bekup setup upgrade --image <repo>:<tag>@sha256:<digest>.",
-  imageUnknownTitle: "The setup version is not recorded",
-  imageUnknownLead:
-    "BEKUP_SETUP_VERSION is not set, so bekup cannot refuse an image that setup has not prepared. Run docker compose run --rm setup upgrade once to record it.",
-} as const;
+  nl: {
+    title: "Configuratie",
+    lead: "Laad bekup.toml opnieuw zonder herstart. Elk serve- en workerproces leest zijn eigen bestand opnieuw; live-instellingen gelden meteen, al het andere wacht op een herstart.",
+    guide: "Referentie opnieuw laden",
+    stepUp: "Je moet je identiteit bevestigen",
+    reload: "Configuratie opnieuw laden",
+    howTitle: "Zo werkt opnieuw laden",
+    howLead:
+      "Hier worden alleen namen van sleutels getoond, nooit waarden of het bestandspad. Details staan in de log van elk proces.",
+    how: [
+      "Elk serve- en workerproces leest de bekup.toml waarmee het is gestart opnieuw.",
+      "Live-instellingen gelden meteen; gewijzigde sleutels die niet live zijn, worden gemeld als „herstart nodig”.",
+      "Een bestand dat niet leesbaar of ongeldig is, wordt geweigerd en de lopende configuratie blijft van kracht.",
+      "Een wijziging die een beveiligingsinstelling verzwakt, stuurt elke beheerder een beveiligingsmelding.",
+    ],
+    signalTitle: "Eén proces",
+    signalLead:
+      "Operators kunnen ook SIGHUP naar één proces sturen. Dat laadt dan alleen opnieuw en het resultaat verschijnt in de tabel hieronder.",
+    signalCommand: "docker compose kill -s HUP serve",
+    processesTitle: "Processen",
+    processesLead: "Het nieuwste resultaat van elk proces, nieuwste eerst.",
+    counts: (listening: number, stopped: number) =>
+      `${String(listening)} luisterend · ${String(stopped)} gestopt`,
+    countsNote:
+      "Elk proces dat nu luistert, staat in de lijst, hoe lang het ook al draait. Processen die zijn gestopt of hun databaseverbinding kwijt zijn, blijven nog 7 dagen na hun laatste melding in de lijst.",
+    noProcesses: "Er heeft nog geen proces gereageerd.",
+    stoppedTitle: "Gestopt of luistert niet",
+    stoppedLead:
+      "Deze processen ontvangen geen verzoeken tot opnieuw laden meer. Hun laatste resultaat is geschiedenis: hier hoeft niets te worden herstart of opgelost.",
+    notListening: "Luistert niet",
+    lastResult: (status: string) => `Laatste resultaat: ${status}`,
+    stoppedSince: "Gestopt sinds",
+    colProcess: "Proces",
+    colStarted: "Draait sinds",
+    colResult: "Laatste resultaat",
+    colKeys: "Sleutels",
+    version: (v: string) => `v${v}`,
+    liveTitle: "Live-instellingen",
+    liveLead:
+      "Worden bij opnieuw laden toegepast zonder herstart. Elke andere sleutel heeft een herstart van het proces nodig.",
+    liveShow: (n: number) =>
+      plural(n, { one: "De 1 live-sleutel tonen", other: `De ${String(n)} live-sleutels tonen` }),
+    liveNone: "Deze versie heeft geen live-sleutels: elke wijziging heeft een herstart nodig.",
+    liveTopLevel: "Hoogste niveau",
+    kind: { SERVE: "serve", WORKER: "worker" },
+    status: {
+      LOADED: "Gestart",
+      APPLIED: "Toegepast",
+      UNCHANGED: "Ongewijzigd",
+      RESTART_REQUIRED: "Herstart nodig",
+      REJECTED: "Geweigerd",
+      FAILED: "Mislukt",
+    },
+    errorKind: {
+      FILE: "Bestand niet leesbaar of voldoet niet aan de controles op eigenaar/rechten",
+      SYNTAX: "Geen geldige TOML",
+      INVALID: "Onbekende sleutel of ongeldige waarde",
+      APPLY: "Een onderdeel weigerde de nieuwe waarden",
+    },
+    origin: {
+      startup: "Bij het starten",
+      latest: "Laatste keer opnieuw laden",
+      ui: "Eerdere keer opnieuw laden",
+      signal: "SIGHUP",
+    },
+    keys: {
+      restart: "Herstart nodig",
+      restartStale: "Gewijzigd, had een herstart nodig",
+      applied: "Toegepast",
+      errors: "Fouten",
+      weakened: "Verzwakt",
+    },
+    noKeys: "Geen gewijzigde sleutels",
+    outcome: {
+      applied: (n: number) => `${String(n)} toegepast`,
+      restart: (n: number) => `${String(n)} herstart nodig`,
+      unchanged: (n: number) => `${String(n)} ongewijzigd`,
+      rejected: (n: number) => `${String(n)} geweigerd`,
+      failed: (n: number) => `${String(n)} mislukt`,
+      stopped: (n: number) => `${String(n)} inmiddels gestopt`,
+    },
+    verdict: {
+      problem: "Sommige processen weigerden het bestand of konden het niet toepassen",
+      restart: "Toegepast waar mogelijk; sommige wijzigingen hebben een herstart nodig",
+      applied: "Live-instellingen toegepast",
+      unchanged: "Er is niets gewijzigd",
+      stopped: "De processen die reageerden, zijn inmiddels gestopt",
+      none: "Wachten op antwoorden",
+    },
+    running: "Bezig met opnieuw laden",
+    last: "Laatste keer opnieuw laden",
+    requested: (when: string) => `Aangevraagd ${when}`,
+    progress: (n: number, m: number) =>
+      plural(m, {
+        one: `${String(n)} van 1 proces heeft gereageerd`,
+        other: `${String(n)} van ${String(m)} processen hebben gereageerd`,
+      }),
+    timedOut:
+      "Niet elk proces reageerde binnen 30 seconden. Drukke of herstartende processen halen dit binnen 10 minuten in; laad deze pagina later opnieuw om hun resultaten te zien.",
+    pollFailed: "De antwoorden konden niet worden geladen",
+    weakenedTitle: "Beveiligingsinstellingen zijn verzwakt",
+    weakenedLead: "Elke beheerder heeft voor deze instellingen een beveiligingsmelding gekregen.",
+    dialogEyebrow: "Elk serve- en workerproces",
+    dialogTitle: "Configuratie opnieuw laden?",
+    dialogLead: "Elk proces leest nu zijn eigen bekup.toml opnieuw.",
+    dialogPoints: [
+      "Live-instellingen gelden meteen; andere gewijzigde sleutels wachten op een herstart.",
+      "Een onleesbaar of ongeldig bestand wordt geweigerd en de lopende configuratie blijft.",
+      "Het verzwakken van een beveiligingsinstelling stuurt elke beheerder een melding.",
+      "Je bevestigt je identiteit voordat het verzoek wordt verstuurd.",
+    ],
+    confirm: "Opnieuw laden",
+    outcomeLabel: "Resultaat per proces",
+    rateLimited:
+      "Er is net om opnieuw laden gevraagd. Wacht een paar seconden en probeer het opnieuw.",
+    dbTitle: "App-database",
+    dbLead:
+      "Hoe het serve-proces dat reageerde verbinding maakt met de eigen database van bekup. Deze instellingen hebben een herstart nodig.",
+    dbMode: "Inloggegevens",
+    dbTLS: "TLS-modus",
+    dbModes: {
+      URL: "Bestanden met verbindings-URL",
+      FIELDS: "Host- en wachtwoordbestanden (externe PostgreSQL)",
+      SINGLE_ACCOUNT: "Eén account voor alles",
+    },
+    dbWeakened: "Verzwakt",
+    dbStrict: "verify-full",
+    dbTLSWeakTitle: "De databaseverbinding wordt niet volledig gecontroleerd",
+    dbTLSWeakLead:
+      "database.tls_mode is zwakker dan verify-full: een aanvaller op het netwerk kan zich voordoen als de database of het verkeer meelezen. Elke start komt in de auditlog en beheerders krijgen dagelijks een melding.",
+    dbSingleTitle: "De modus met één account staat aan",
+    dbSingleLead:
+      "bekup voert migraties en de app uit met één databaseaccount, dus een gecompromitteerd serverproces kan het schema en de auditlog wijzigen. Maak de twee rollen met minimale rechten aan met bekup db bootstrap.",
+    imageTitle: "Image",
+    imageLead:
+      "Hoe de bekup-image van het serve-proces dat reageerde wordt aangeduid, en voor welke versie bekup setup de installatie heeft voorbereid.",
+    imageRef: "Verwijzing",
+    imagePinned: "Vastgepind op digest",
+    imageFollowing: "Volgt een tag",
+    imageWeakened: "Niet vastgepind",
+    imageSetupVersion: "Ingericht voor",
+    imageVersion: "Draait",
+    imageUnknown: "niet vastgelegd",
+    imageFollowingTitle: "De image volgt een tag in plaats van een digest",
+    imageFollowingLead:
+      "Wie de tag verplaatst, bepaalt welke code draait. Processen weigeren te starten tot bekup setup upgrade een nieuwe versie heeft voorbereid, elke start komt in de auditlog en beheerders krijgen dagelijks een melding. Pin een digest vast met bekup setup upgrade --image <repo>:<tag>@sha256:<digest>.",
+    imageUnknownTitle: "De setupversie is niet vastgelegd",
+    imageUnknownLead:
+      "BEKUP_SETUP_VERSION is niet ingesteld, dus bekup kan een image die setup niet heeft voorbereid niet weigeren. Voer eenmalig docker compose run --rm setup upgrade uit om hem vast te leggen.",
+  },
+});
 
 interface ImagePosture {
   following: boolean;

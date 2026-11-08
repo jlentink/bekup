@@ -4,6 +4,8 @@
  * answers travel as raw bytes, never inside JSON.
  */
 
+import { T } from "./messages";
+
 export type StepKind = "note" | "sensitive" | "select" | "input" | "secret" | "confirm";
 
 export interface StepOption {
@@ -46,7 +48,7 @@ export class SetupApiError extends Error {
 const MARKER = { "X-Bekup-Setup": "1" };
 
 async function fail(res: Response): Promise<never> {
-  let message = `request failed (${res.status})`;
+  let message = T.requestFailed(res.status);
   try {
     const body = (await res.json()) as { error?: string };
     if (body.error) message = body.error;

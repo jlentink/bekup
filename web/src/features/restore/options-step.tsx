@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils";
 
 import { extractIdentity } from "@/lib/age-identity";
 
+import { restoreMessages } from "./messages";
+
+const T = restoreMessages.options;
+
 /** Largest identity file read (an age identity file is well under 1 KiB). */
 const MAX_IDENTITY_FILE_BYTES = 16 * 1024;
 
@@ -48,10 +52,11 @@ export function OptionsStep({
           <Sparkles aria-hidden="true" className="mt-0.5 size-4 text-primary" />
         )}
         <div className="flex flex-col gap-0.5">
-          <span className="eyebrow">Mode {overwrite ? "OVERWRITE" : "NEW_DB"}</span>
+          <span className="eyebrow">{T.mode(overwrite ? "OVERWRITE" : "NEW_DB")}</span>
           <span className="text-sm">
-            {overwrite ? "Replace " : "Create "}
-            <span className="font-mono font-medium">{targetDatabase}</span> on {targetName}
+            {overwrite ? T.replaceOn : T.createOn}
+            <span className="font-mono font-medium">{targetDatabase}</span>
+            {T.onTarget(targetName)}
           </span>
         </div>
       </div>
@@ -60,13 +65,9 @@ export function OptionsStep({
         <div className="flex items-start justify-between gap-6 border-b border-rule pb-6">
           <div className="flex flex-col gap-1">
             <label htmlFor={ownersId} className="font-medium">
-              Keep object owners
+              {T.keepOwners}
             </label>
-            <p className="max-w-prose text-sm text-muted-foreground">
-              Off (recommended): every restored object belongs to the target connection's role. On:
-              objects go to the roles of the same names on the target server, which may not be the
-              roles you expect.
-            </p>
+            <p className="max-w-prose text-sm text-muted-foreground">{T.keepOwnersHint}</p>
           </div>
           <Switch id={ownersId} checked={keepOwners} onCheckedChange={onKeepOwners} />
         </div>
@@ -75,9 +76,7 @@ export function OptionsStep({
       {needsIdentity ? (
         <IdentityField value={identity} onChange={onIdentity} />
       ) : (
-        <p className="text-sm text-muted-foreground">
-          bekup holds the key of this backup; no identity is needed.
-        </p>
+        <p className="text-sm text-muted-foreground">{T.keyHeld}</p>
       )}
     </div>
   );
@@ -100,13 +99,11 @@ function IdentityField({ value, onChange }: { value: string; onChange: (v: strin
       <div className="flex items-center gap-2">
         <FileKey2 aria-hidden="true" className="size-4 text-primary" />
         <label htmlFor={fieldId} className="font-medium">
-          Age identity
+          {T.identity}
         </label>
       </div>
       <p id={hintId} className="max-w-prose text-sm text-muted-foreground">
-        This backup is encrypted to an age recipient. Paste its private key (AGE-SECRET-KEY-1...) or
-        load the identity file. It is sent only with the restore request, kept sealed by the server
-        until the restore starts, and cleared from this page afterwards.
+        {T.identityHint}
       </p>
       <textarea
         id={fieldId}
@@ -143,13 +140,13 @@ function IdentityField({ value, onChange }: { value: string; onChange: (v: strin
             setFileProblem(undefined);
             if (!file) return;
             if (file.size > MAX_IDENTITY_FILE_BYTES) {
-              setFileProblem("That file is too large to be an age identity.");
+              setFileProblem(T.fileTooLarge);
               return;
             }
             void file.text().then((text) => {
               const key = extractIdentity(text);
               if (key) onChange(key);
-              else setFileProblem("No AGE-SECRET-KEY-1 line found in that file.");
+              else setFileProblem(T.noKeyInFile);
             });
           }}
         />
@@ -162,7 +159,7 @@ function IdentityField({ value, onChange }: { value: string; onChange: (v: strin
           }}
         >
           <Upload aria-hidden="true" />
-          Load identity file
+          {T.loadFile}
         </Button>
         {value !== "" ? (
           <Button
@@ -173,16 +170,16 @@ function IdentityField({ value, onChange }: { value: string; onChange: (v: strin
               onChange("");
             }}
           >
-            Clear
+            {T.clear}
           </Button>
         ) : null}
         <span role="status" className="text-sm">
           {fileProblem ? (
             <span className="text-destructive">{fileProblem}</span>
           ) : value === "" ? null : valid ? (
-            <span className="text-status-success-fg">Identity recognized.</span>
+            <span className="text-status-success-fg">{T.recognized}</span>
           ) : (
-            <span className="text-destructive">This is not an age identity.</span>
+            <span className="text-destructive">{T.notIdentity}</span>
           )}
         </span>
       </div>

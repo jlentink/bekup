@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { ScheduleKind } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { Field, NativeSelect } from "./fields";
@@ -22,31 +23,76 @@ import {
 } from "./schedule";
 import { useDebounced } from "./use-debounced";
 
-const T = {
-  legend: "Schedule",
-  kinds: {
-    MANUAL: { label: "Manual", hint: "Only when started by hand" },
-    INTERVAL: { label: "Interval", hint: "Every N units from a start" },
-    CRON: { label: "Cron", hint: "A 5-field expression" },
-  } satisfies Record<ScheduleKind, { label: string; hint: string }>,
-  every: "Every",
-  unit: "Unit",
-  units: { MINUTES: "minutes", HOURS: "hours", DAYS: "days", WEEKS: "weeks", MONTHS: "months" },
-  anchorDate: "Starting on",
-  anchorTime: "At",
-  anchorHint: "Local time in the schedule's zone; occurrences count from here.",
-  weekday: "On weekday",
-  weekdayAuto: "Same as the start date",
-  dayOfMonth: "On day of month",
-  dayOfMonthHint: "Shorter months use their last day. Empty: the start date's day.",
-  cron: "Cron expression",
-  cronHint: "minute hour day-of-month month day-of-week, e.g. 15 2 * * 1-5",
-  timezone: "Time zone",
-  timezoneHint: "IANA name, e.g. Europe/Amsterdam. Daylight saving is handled.",
-  preview: "Next 5 runs",
-  manualPreview: "No planned runs: this job only runs when someone starts it.",
-  checking: "Checking the schedule",
-} as const;
+const T = defineMessages({
+  en: {
+    legend: "Schedule",
+    kinds: {
+      MANUAL: { label: "Manual", hint: "Only when started by hand" },
+      INTERVAL: { label: "Interval", hint: "Every N units from a start" },
+      CRON: { label: "Cron", hint: "A 5-field expression" },
+    } satisfies Record<ScheduleKind, { label: string; hint: string }>,
+    every: "Every",
+    unit: "Unit",
+    units: { MINUTES: "minutes", HOURS: "hours", DAYS: "days", WEEKS: "weeks", MONTHS: "months" },
+    anchorDate: "Starting on",
+    anchorTime: "At",
+    anchorHint: "Local time in the schedule's zone; occurrences count from here.",
+    weekday: "On weekday",
+    weekdayAuto: "Same as the start date",
+    dayOfMonth: "On day of month",
+    dayOfMonthHint: "Shorter months use their last day. Empty: the start date's day.",
+    cron: "Cron expression",
+    cronHint: "minute hour day-of-month month day-of-week, e.g. 15 2 * * 1-5",
+    timezone: "Time zone",
+    timezoneHint: "IANA name, e.g. Europe/Amsterdam. Daylight saving is handled.",
+    preview: "Next 5 runs",
+    manualPreview: "No planned runs: this job only runs when someone starts it.",
+    checking: "Checking the schedule",
+    weekdays: {
+      monday: "Monday",
+      tuesday: "Tuesday",
+      wednesday: "Wednesday",
+      thursday: "Thursday",
+      friday: "Friday",
+      saturday: "Saturday",
+      sunday: "Sunday",
+    },
+  },
+  nl: {
+    legend: "Planning",
+    kinds: {
+      MANUAL: { label: "Handmatig", hint: "Alleen als iemand hem start" },
+      INTERVAL: { label: "Interval", hint: "Elke N eenheden vanaf een start" },
+      CRON: { label: "Cron", hint: "Een expressie met 5 velden" },
+    },
+    every: "Elke",
+    unit: "Eenheid",
+    units: { MINUTES: "minuten", HOURS: "uren", DAYS: "dagen", WEEKS: "weken", MONTHS: "maanden" },
+    weekdays: {
+      monday: "Maandag",
+      tuesday: "Dinsdag",
+      wednesday: "Woensdag",
+      thursday: "Donderdag",
+      friday: "Vrijdag",
+      saturday: "Zaterdag",
+      sunday: "Zondag",
+    },
+    anchorDate: "Vanaf",
+    anchorTime: "Om",
+    anchorHint: "Lokale tijd in de tijdzone van de planning; de momenten tellen vanaf hier.",
+    weekday: "Op weekdag",
+    weekdayAuto: "Dezelfde als de startdatum",
+    dayOfMonth: "Op dag van de maand",
+    dayOfMonthHint: "Kortere maanden gebruiken hun laatste dag. Leeg: de dag van de startdatum.",
+    cron: "Cron-expressie",
+    cronHint: "minuut uur dag-van-de-maand maand dag-van-de-week, bijv. 15 2 * * 1-5",
+    timezone: "Tijdzone",
+    timezoneHint: "IANA-naam, bijv. Europe/Amsterdam. Zomer- en wintertijd worden verwerkt.",
+    preview: "Volgende 5 runs",
+    manualPreview: "Geen geplande runs: deze taak draait alleen als iemand hem start.",
+    checking: "Bezig met controleren van de planning",
+  },
+});
 
 const KIND_ICONS: Record<ScheduleKind, LucideIcon> = {
   MANUAL: Hand,
@@ -210,7 +256,7 @@ export function ScheduleBuilder({ value, onChange, error, onValidity }: Schedule
                   <option value="">{T.weekdayAuto}</option>
                   {WEEKDAYS.map((d) => (
                     <option key={d} value={d}>
-                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                      {T.weekdays[d]}
                     </option>
                   ))}
                 </NativeSelect>

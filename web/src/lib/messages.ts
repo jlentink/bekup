@@ -1,10 +1,14 @@
+import { defineMessages, plural, type Messages } from "./i18n";
+
 /**
- * User-facing strings of the shell and the account pages, in one place so a
- * translation layer can replace this module later (English only for now).
- * Parameterized strings are functions. Keep messages short, calm and free
- * of internal details.
+ * User-facing strings of the shell and the account pages, in English and
+ * Dutch (D-235). Parameterized strings are functions. Keep messages short,
+ * calm and free of internal details; the Dutch texts use "je".
  */
-export const messages = {
+
+type Strength = [string, string, string, string, string];
+
+const en = {
   /** Accepted security risks in the shell and the status badges (D-228). */
   risks: {
     acceptedUntil: (at: string) => `Accepted until ${at}`,
@@ -40,6 +44,7 @@ export const messages = {
   },
   shell: {
     skipToContent: "Skip to content",
+    navMain: "Main",
     openNavigation: "Open navigation",
     mainNavigation: "Main navigation",
     accountMenu: "Account menu",
@@ -127,6 +132,7 @@ export const messages = {
     verifying: "Verifying",
     timedOut: "The sign-in took too long. Start again with your password.",
     useOtherAccount: "Use another account",
+    methodLegend: "Method",
   },
   stepUp: {
     title: "Confirm your identity",
@@ -162,7 +168,7 @@ export const messages = {
     tooShort: (n: number) => `Use at least ${n} characters.`,
     tooLong: "Use at most 1024 characters.",
     changed: "Password changed. Your other sessions were signed out.",
-    strength: ["Very weak", "Weak", "Fair", "Strong", "Very strong"] as const,
+    strength: ["Very weak", "Weak", "Fair", "Strong", "Very strong"] as Strength,
     strengthLabel: "Estimated strength",
     strengthNote: "The server makes the final check: length, common passwords and guessability.",
     containsAccount: "Do not use your e-mail address or name.",
@@ -185,6 +191,13 @@ export const messages = {
     passwordHeading: "Password",
     passwordLead:
       "Changing your password signs out every other session. You may be asked to confirm your identity first.",
+    languageHeading: "Language",
+    languageLead: "The language of bekup in this browser. Changing it reloads the page.",
+    languageBrowser: "Same as this browser",
+    languageLabel: "Language",
+    nameLabel: "Name",
+    emailLabel: "E-mail",
+    roleLabel: "Role",
   },
   totp: {
     heading: "Authenticator app",
@@ -214,7 +227,8 @@ export const messages = {
   recovery: {
     heading: "Recovery codes",
     lead: "Single-use codes for when your passkey or app is not at hand.",
-    remaining: (n: number) => (n === 1 ? "1 unused code left" : `${n} unused codes left`),
+    remaining: (n: number) =>
+      plural(n, { one: "1 unused code left", other: `${n} unused codes left` }),
     none: "No recovery codes. They are created when you add a second factor.",
     regenerate: "Create new codes",
     regenerateTitle: "Create new recovery codes?",
@@ -226,6 +240,9 @@ export const messages = {
     done: "Done",
     fileName: "bekup-recovery-codes.txt",
     copiedToast: "Recovery codes copied.",
+    fileHeading: (account: string, host: string) =>
+      `bekup recovery codes for ${account} at ${host}`,
+    fileNote: "Each code works once. Keep them somewhere safe.",
   },
   passkeys: {
     heading: "Passkeys",
@@ -233,7 +250,7 @@ export const messages = {
     unavailable: "Passkeys cannot be used with this server.",
     unsupportedBrowser: "This browser does not support passkeys.",
     empty: "No passkeys yet.",
-    count: (n: number) => (n === 1 ? "1 registered" : `${n} registered`),
+    count: (n: number) => plural(n, { one: "1 registered", other: `${n} registered` }),
     add: "Add a passkey",
     nameLabel: "Passkey name",
     nameHint: "Something you will recognize, e.g. “Work laptop”.",
@@ -259,6 +276,7 @@ export const messages = {
     lead: "Every browser signed in to your account. Revoke the ones you do not recognize.",
     current: "This session",
     unknownDevice: "Unknown browser",
+    deviceOn: (browser: string, os: string) => `${browser} on ${os}`,
     lastSeen: (when: string) => `Last active ${when}`,
     signedIn: (when: string) => `Signed in ${when}`,
     expires: (when: string) => `Expires ${when}`,
@@ -275,7 +293,361 @@ export const messages = {
     back: "Back to the dashboard",
   },
   routeError: {
+    eyebrow: "Error",
     title: "Something went wrong",
     body: "The page failed to load. Reload, or go back to the dashboard.",
   },
-} as const;
+  fullPageError: {
+    eyebrow: "Unavailable",
+    title: "Cannot load bekup",
+  },
+  insecureTransport: {
+    label: "Not encrypted",
+    body: "Connection is not encrypted (no HTTPS). Passwords and session data travel in clear text.",
+  },
+  theme: {
+    legend: "Color theme",
+    light: "Light",
+    dark: "Dark",
+    system: "System",
+  },
+  authLayout: {
+    brandRegion: "About bekup",
+    taglineStart: "Every backup,",
+    taglineEnd: "accounted for.",
+    guarantees: [
+      ["Encrypted", "age, per-job keys, on by default"],
+      ["Signed", "ed25519 manifests, verified before restore"],
+      ["Isolated", "only the runner can reach Docker"],
+      ["Guarded", "a fresh second factor for every restore"],
+    ] as [string, string][],
+    footer: (v: string) => `v${v} · self-hosted`,
+    stepsLabel: "Sign-in steps",
+    steps: ["Password", "Second factor", "Signed in"],
+  },
+};
+
+const nl: Messages<typeof en> = {
+  /** Accepted security risks in the shell and the status badges (D-228). */
+  risks: {
+    acceptedUntil: (at: string) => `Geaccepteerd tot ${at}`,
+    acceptedForever: "Geaccepteerd, zonder einddatum",
+    bannerUntil: (at: string) => `Geaccepteerd als risico tot ${at}.`,
+    bannerForever: "Geaccepteerd als risico zonder einddatum.",
+  },
+  common: {
+    cancel: "Annuleren",
+    close: "Sluiten",
+    continue: "Doorgaan",
+    save: "Opslaan",
+    copy: "Kopiëren",
+    copied: "Gekopieerd",
+    download: "Downloaden",
+    retry: "Opnieuw proberen",
+    reload: "Opnieuw laden",
+    signOut: "Uitloggen",
+    signOutFailed: "Uitloggen is niet gelukt. Je bent nog ingelogd; probeer het opnieuw.",
+    loading: "Laden",
+    requestId: (id: string) => `Referentie: ${id}`,
+  },
+  errors: {
+    generic: "Er ging iets mis. Probeer het zo opnieuw.",
+    internal: "Er trad een interne fout op in de server.",
+    network: "De server is niet bereikbaar. Controleer je verbinding en probeer het opnieuw.",
+    forbidden: "Je hebt hier geen toegang toe.",
+    notFound: "Dit item bestaat niet meer of is niet zichtbaar voor jou.",
+    conflict: "Dit botst met de huidige situatie. Laad opnieuw en probeer het nog eens.",
+    rateLimited: "Te veel pogingen. Wacht even en probeer het opnieuw.",
+    sessionEnded: "Je sessie is beëindigd. Log opnieuw in om verder te gaan.",
+    secondFactorRequired: "Rond eerst het inloggen af met je tweede factor.",
+  },
+  shell: {
+    skipToContent: "Naar de inhoud",
+    navMain: "Hoofdmenu",
+    openNavigation: "Navigatie openen",
+    mainNavigation: "Hoofdnavigatie",
+    accountMenu: "Accountmenu",
+    notifications: "Meldingen",
+    profile: "Profiel en beveiliging",
+    instance: "Instantie",
+    loadingPage: "Pagina laden",
+    enrollmentDeadline: (when: string) =>
+      `Tweestapsverificatie is verplicht voor je rol. Stel vóór ${when} een passkey of authenticator-app in; daarna kun je alleen nog een tweede factor instellen.`,
+    enrollmentDeadlineAction: "Nu instellen",
+    streamLimitTitle: "Te veel tabbladen open",
+    streamLimit:
+      "Live-updates zijn gepauzeerd in dit tabblad: je sessie heeft te veel live weergaven open. Sluit andere bekup-tabbladen; de updates gaan daarna vanzelf verder.",
+  },
+  about: {
+    open: "Over",
+    openDrawer: "Over bekup",
+    title: "Over bekup",
+    description: "Versie en licentie van deze bekup-instantie.",
+    uiVersion: "Webinterface",
+    serverVersion: "Server",
+    version: (v: string) => `v${v}`,
+    product: (v: string) => `bekup v${v}`,
+    serverLoading: "Laden",
+    serverUnavailable: "Niet beschikbaar",
+    license: "Licentie",
+    licenseName: "MIT",
+    docs: "Documentatie",
+    changelog: "Release-opmerkingen",
+    newTab: "(opent in een nieuw tabblad)",
+  },
+  roles: { ADMIN: "Beheerder", MAINTAINER: "Onderhouder", USER: "Gebruiker" },
+  access: {
+    admin: {
+      title: "Alleen voor beheerders",
+      lead: "Deze pagina is alleen beschikbaar voor beheerders. Vraag een beheerder als je hier iets wilt veranderen.",
+    },
+    staff: {
+      title: "Alleen voor beheerders en onderhouders",
+      lead: "Alleen beheerders en onderhouders kunnen deze pagina openen.",
+    },
+    other: {
+      title: "Geen toegang",
+      lead: "Met jouw rol kun je deze pagina niet openen.",
+    },
+    backHome: "Terug naar het dashboard",
+  },
+  login: {
+    eyebrow: "Inloggen",
+    title: "Welkom terug",
+    email: "E-mailadres",
+    password: "Wachtwoord",
+    submit: "Inloggen",
+    submitting: "Bezig met inloggen",
+    emailRequired: "Vul je e-mailadres in.",
+    emailInvalid: "Vul een geldig e-mailadres in.",
+    passwordRequired: "Vul je wachtwoord in.",
+    invalidCredentials: "Het e-mailadres of wachtwoord klopt niet.",
+    noRecoveryByMail: "bekup vraagt nooit per e-mail of chat om je herstelcodes.",
+    sessionEnded: "Je sessie is beëindigd. Log opnieuw in om verder te gaan.",
+    passkeyNote:
+      "Na je wachtwoord wordt gevraagd om een passkey of een code uit je authenticator-app.",
+  },
+  secondFactor: {
+    eyebrow: "Tweede factor",
+    title: "Bevestig dat jij het bent",
+    lead: "Je wachtwoord is geaccepteerd. Rond het inloggen af met een van je tweede factoren.",
+    methods: {
+      PASSKEY: "Passkey",
+      TOTP: "Authenticator-app",
+      RECOVERY_CODE: "Herstelcode",
+      PASSWORD: "Wachtwoord",
+    },
+    passkeyLead: "Gebruik de passkey op dit apparaat of een beveiligingssleutel.",
+    passkeyButton: "Een passkey gebruiken",
+    passkeyWorking: "Wachten op je passkey",
+    passkeyCancelled: "De passkeycontrole is geannuleerd of verlopen.",
+    passkeyUnsupported: "Deze browser kan hier geen passkeys gebruiken. Kies een andere methode.",
+    totpLabel: "Code van 6 cijfers",
+    totpHint: "Open je authenticator-app en vul de huidige code voor bekup in.",
+    totpInvalidFormat: "Vul de 6 cijfers uit je app in.",
+    recoveryLabel: "Herstelcode",
+    recoveryHint: "Elke herstelcode werkt één keer. Bij gebruik worden de beheerders gewaarschuwd.",
+    recoveryRequired: "Vul een herstelcode in.",
+    verify: "Controleren",
+    verifying: "Bezig met controleren",
+    timedOut: "Het inloggen duurde te lang. Begin opnieuw met je wachtwoord.",
+    useOtherAccount: "Een ander account gebruiken",
+    methodLegend: "Methode",
+  },
+  stepUp: {
+    title: "Bevestig je identiteit",
+    lead: "Voor deze actie is een nieuwe bevestiging nodig. Die blijft een paar minuten geldig.",
+    leadAal2: "Voor deze actie is een nieuwe controle met een passkey of authenticator-code nodig.",
+    passwordLabel: "Je wachtwoord",
+    passwordHint:
+      "Je account heeft geen tweede factor, dus je bevestigt met je wachtwoord dat jij het bent.",
+    passwordRequired: "Vul je wachtwoord in.",
+    cancelled: "Bevestiging geannuleerd.",
+    confirm: "Bevestigen",
+    noMethods: "Er is geen bevestigingsmethode beschikbaar voor deze actie.",
+    enrollmentNeeded: "Stel eerst een passkey of authenticator-app in.",
+  },
+  forced: {
+    passwordEyebrow: "Tijdelijk wachtwoord",
+    passwordTitle: "Kies je eigen wachtwoord",
+    passwordLead:
+      "Je bent ingelogd met een tijdelijk wachtwoord van een beheerder. Kies een nieuw wachtwoord om verder te gaan.",
+    temporaryPassword: "Tijdelijk wachtwoord",
+    enrollEyebrow: "Tweestapsverificatie verplicht",
+    enrollTitle: "Voeg een tweede factor toe",
+    enrollLead:
+      "Je rol vereist tweestapsverificatie en de overgangsperiode is voorbij. Stel een passkey of authenticator-app in om verder te gaan.",
+  },
+  password: {
+    current: "Huidig wachtwoord",
+    new: "Nieuw wachtwoord",
+    confirm: "Herhaal het nieuwe wachtwoord",
+    submit: "Wachtwoord wijzigen",
+    submitting: "Bezig met wijzigen",
+    currentRequired: "Vul je huidige wachtwoord in.",
+    mismatch: "De wachtwoorden komen niet overeen.",
+    tooShort: (n: number) => `Gebruik minstens ${n} tekens.`,
+    tooLong: "Gebruik hooguit 1024 tekens.",
+    changed: "Wachtwoord gewijzigd. Je andere sessies zijn uitgelogd.",
+    strength: ["Zeer zwak", "Zwak", "Redelijk", "Sterk", "Zeer sterk"],
+    strengthLabel: "Geschatte sterkte",
+    strengthNote:
+      "De server doet de laatste controle: lengte, veelgebruikte wachtwoorden en raadbaarheid.",
+    containsAccount: "Gebruik niet je e-mailadres of naam.",
+    hints: {
+      length: "Langer is sterker: een wachtwoordzin van vier of meer woorden werkt goed.",
+      variety: "Combineer woorden, cijfers en symbolen, of voeg meer woorden toe.",
+      repeat: "Vermijd herhaalde tekens en eenvoudige reeksen.",
+    },
+  },
+  profile: {
+    eyebrow: "Je account",
+    title: "Profiel en beveiliging",
+    tabs: {
+      account: "Account",
+      security: "Tweestaps",
+      sessions: "Sessies",
+      notifications: "Meldingen",
+    },
+    accountHeading: "Account",
+    passwordHeading: "Wachtwoord",
+    passwordLead:
+      "Als je je wachtwoord wijzigt, worden al je andere sessies uitgelogd. Mogelijk moet je eerst je identiteit bevestigen.",
+    languageHeading: "Taal",
+    languageLead:
+      "De taal van bekup in deze browser. Bij een wijziging wordt de pagina opnieuw geladen.",
+    languageBrowser: "Zelfde als deze browser",
+    languageLabel: "Taal",
+    nameLabel: "Naam",
+    emailLabel: "E-mail",
+    roleLabel: "Rol",
+  },
+  totp: {
+    heading: "Authenticator-app",
+    lead: "Tijdgebonden codes (TOTP) uit een app zoals 1Password, Bitwarden of Aegis.",
+    enabledSince: (when: string) => `Ingeschakeld sinds ${when}`,
+    notEnabled: "Niet ingesteld",
+    pending: "Instellen gestart maar niet bevestigd",
+    enroll: "Een authenticator-app instellen",
+    restart: "Opnieuw beginnen",
+    scan: "Scan deze code met je authenticator-app",
+    scanShort: "Scan met je app",
+    on: "Aan",
+    manual: "Of vul deze sleutel handmatig in",
+    manualDetails: "SHA-1 · 6 cijfers · 30 seconden",
+    shownOnce: "Deze sleutel wordt alleen nu getoond. bekup laat hem nooit meer zien.",
+    expires: (when: string) => `Bevestig vóór ${when}.`,
+    confirmLabel: "Code uit de app",
+    confirm: "Bevestigen en inschakelen",
+    enabled: "Authenticator-app ingeschakeld.",
+    disable: "Uitschakelen",
+    disableTitle: "Authenticator-app uitschakelen?",
+    disableLead:
+      "Codes uit je app werken dan niet meer. Is dit je laatste tweede factor, dan worden ook je herstelcodes verwijderd.",
+    disabled: "Authenticator-app uitgeschakeld.",
+    qrUnavailable: "De QR-code kan niet worden getoond. Vul de sleutel handmatig in.",
+  },
+  recovery: {
+    heading: "Herstelcodes",
+    lead: "Codes voor eenmalig gebruik, voor als je passkey of app niet bij de hand is.",
+    remaining: (n: number) =>
+      plural(n, { one: "Nog 1 ongebruikte code", other: `Nog ${n} ongebruikte codes` }),
+    none: "Geen herstelcodes. Ze worden aangemaakt zodra je een tweede factor toevoegt.",
+    regenerate: "Nieuwe codes aanmaken",
+    regenerateTitle: "Nieuwe herstelcodes aanmaken?",
+    regenerateLead: "Je huidige herstelcodes werken direct niet meer.",
+    newCodesTitle: "Bewaar je herstelcodes",
+    newCodesLead:
+      "Bewaar ze op een veilige plek, zoals een wachtwoordmanager. Ze worden alleen deze keer getoond; oudere codes werken niet meer.",
+    acknowledge: "Ik heb deze codes bewaard",
+    done: "Klaar",
+    fileName: "bekup-herstelcodes.txt",
+    copiedToast: "Herstelcodes gekopieerd.",
+    fileHeading: (account: string, host: string) => `bekup-herstelcodes voor ${account} op ${host}`,
+    fileNote: "Elke code werkt één keer. Bewaar ze op een veilige plek.",
+  },
+  passkeys: {
+    heading: "Passkeys",
+    lead: "Bevestigingen bij het inloggen met Touch ID, Windows Hello, je telefoon of een beveiligingssleutel.",
+    unavailable: "Passkeys kunnen met deze server niet worden gebruikt.",
+    unsupportedBrowser: "Deze browser ondersteunt geen passkeys.",
+    empty: "Nog geen passkeys.",
+    count: (n: number) => plural(n, { one: "1 geregistreerd", other: `${n} geregistreerd` }),
+    add: "Een passkey toevoegen",
+    nameLabel: "Naam van de passkey",
+    nameHint: "Iets wat je herkent, bijv. „Werklaptop”.",
+    nameRequired: "Vul een naam in (1 tot 64 tekens).",
+    added: "Passkey toegevoegd.",
+    rename: "Naam wijzigen",
+    renamed: "Naam van de passkey gewijzigd.",
+    delete: "Verwijderen",
+    deleteTitle: (name: string) => `De passkey „${name}” verwijderen?`,
+    deleteLead: "Je kunt hem dan niet meer gebruiken om in te loggen of acties te bevestigen.",
+    deleted: "Passkey verwijderd.",
+    created: (when: string) => `Toegevoegd ${when}`,
+    lastUsed: (when: string) => `Laatst gebruikt ${when}`,
+    neverUsed: "Nooit gebruikt",
+    synced: "Gesynchroniseerd",
+    deviceBound: "Apparaatgebonden",
+    verified: "Pincode of biometrie",
+    anomaly:
+      "Mogelijk gekloond: de handtekeningteller ging achteruit. Overweeg hem te verwijderen.",
+    cancelled: "Het registreren van de passkey is geannuleerd of verlopen.",
+  },
+  sessions: {
+    heading: "Actieve sessies",
+    lead: "Elke browser die op je account is ingelogd. Trek de sessies in die je niet herkent.",
+    current: "Deze sessie",
+    unknownDevice: "Onbekende browser",
+    deviceOn: (browser: string, os: string) => `${browser} op ${os}`,
+    lastSeen: (when: string) => `Laatst actief ${when}`,
+    signedIn: (when: string) => `Ingelogd ${when}`,
+    expires: (when: string) => `Verloopt ${when}`,
+    aal: (n: number) => (n >= 2 ? "Tweestaps" : "Alleen wachtwoord"),
+    revoke: "Intrekken",
+    revokeTitle: "Deze sessie intrekken?",
+    revokeCurrentTitle: "Uitloggen uit deze sessie?",
+    revokeLead: "Die browser wordt direct uitgelogd.",
+    revoked: "Sessie ingetrokken.",
+  },
+  notFound: {
+    title: "Hier ligt niets",
+    body: "Deze pagina bestaat niet.",
+    back: "Terug naar het dashboard",
+  },
+  routeError: {
+    eyebrow: "Fout",
+    title: "Er ging iets mis",
+    body: "De pagina kon niet worden geladen. Laad opnieuw of ga terug naar het dashboard.",
+  },
+  fullPageError: {
+    eyebrow: "Niet beschikbaar",
+    title: "bekup kan niet worden geladen",
+  },
+  insecureTransport: {
+    label: "Niet versleuteld",
+    body: "De verbinding is niet versleuteld (geen HTTPS). Wachtwoorden en sessiegegevens gaan onversleuteld over het netwerk.",
+  },
+  theme: {
+    legend: "Kleurthema",
+    light: "Licht",
+    dark: "Donker",
+    system: "Systeem",
+  },
+  authLayout: {
+    brandRegion: "Over bekup",
+    taglineStart: "Elke back-up,",
+    taglineEnd: "verantwoord.",
+    guarantees: [
+      ["Versleuteld", "age, sleutels per taak, standaard aan"],
+      ["Ondertekend", "ed25519-manifesten, gecontroleerd vóór herstel"],
+      ["Geïsoleerd", "alleen de runner kan Docker bereiken"],
+      ["Beschermd", "een verse tweede factor voor elk herstel"],
+    ],
+    footer: (v: string) => `v${v} · zelf gehost`,
+    stepsLabel: "Stappen van het inloggen",
+    steps: ["Wachtwoord", "Tweede factor", "Ingelogd"],
+  },
+};
+
+export const messages = defineMessages({ en, nl });

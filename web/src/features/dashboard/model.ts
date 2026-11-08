@@ -18,6 +18,94 @@ import type {
   TargetPrivilegeStatus,
   TlsPinStatus,
 } from "@/graphql/gen/graphql";
+import { defineMessages, intlLocale } from "@/lib/i18n";
+
+const M = defineMessages({
+  en: {
+    tls: {
+      PINNED: "TLS pinned",
+      UNVERIFIED: "TLS without verification",
+      DISABLED: "TLS disabled",
+    },
+    risk: {
+      INSECURE_TRANSPORT: "Plain HTTP",
+      INSECURE_DB_TLS: "App database TLS",
+      INSECURE_DB_ROLES: "Single database account",
+      UNPINNED_IMAGE: "Unpinned image",
+      SMTP_UNENCRYPTED: "Unencrypted e-mail",
+    },
+    findings: {
+      identityMismatch: "Server identity mismatch",
+      certMismatch: "Certificate does not match the pin",
+      hostKeyMismatch: "SSH host key does not match",
+      pinExpired: "Pinned certificate expired",
+      expired: "Expired",
+      instance: "Weakened instance settings",
+      unencrypted: "Unencrypted jobs",
+      optedOut: "Encryption opted out",
+      insecureTransport: "Insecure transport",
+      privileged: "Privileged database roles",
+      privilegedRole: "Privileged role",
+      privilegesUnknown: "Privileges unknown (treated as privileged)",
+      staleTest: " · last test is stale",
+      pinExpiring: "Pinned certificates expiring",
+      within7: "Within 7 days",
+      within30: "Within 30 days",
+    },
+    health: {
+      failing: "Failing",
+      missed: "Missed",
+      overdue: "Overdue",
+      warning: "Warnings",
+      running: "Running",
+      never: "Never run",
+      healthy: "Healthy",
+      paused: "Paused",
+    },
+  },
+  nl: {
+    tls: {
+      PINNED: "TLS vastgepind",
+      UNVERIFIED: "TLS zonder verificatie",
+      DISABLED: "TLS uitgeschakeld",
+    },
+    risk: {
+      INSECURE_TRANSPORT: "Onversleuteld HTTP",
+      INSECURE_DB_TLS: "TLS van de app-database",
+      INSECURE_DB_ROLES: "Eén databaseaccount",
+      UNPINNED_IMAGE: "Niet-vastgepinde image",
+      SMTP_UNENCRYPTED: "Onversleutelde e-mail",
+    },
+    findings: {
+      identityMismatch: "Serveridentiteit komt niet overeen",
+      certMismatch: "Certificaat komt niet overeen met de pin",
+      hostKeyMismatch: "SSH-hostsleutel komt niet overeen",
+      pinExpired: "Vastgepind certificaat verlopen",
+      expired: "Verlopen",
+      instance: "Verzwakte instellingen van de instantie",
+      unencrypted: "Onversleutelde taken",
+      optedOut: "Versleuteling uitgeschakeld",
+      insecureTransport: "Onveilig transport",
+      privileged: "Bevoorrechte databaserollen",
+      privilegedRole: "Bevoorrechte rol",
+      privilegesUnknown: "Rechten onbekend (behandeld als verhoogd)",
+      staleTest: " · laatste test is verouderd",
+      pinExpiring: "Vastgepinde certificaten verlopen binnenkort",
+      within7: "Binnen 7 dagen",
+      within30: "Binnen 30 dagen",
+    },
+    health: {
+      failing: "Mislukt",
+      missed: "Gemist",
+      overdue: "Te laat",
+      warning: "Waarschuwingen",
+      running: "Bezig",
+      never: "Nooit uitgevoerd",
+      healthy: "Gezond",
+      paused: "Gepauzeerd",
+    },
+  },
+});
 
 export const DAY_MS = 86_400_000;
 export const HOUR_MS = 3_600_000;
@@ -179,7 +267,8 @@ export function jobHealth(job: JobInput, ctx: HealthContext): JobHealth {
 export function sortHealth(rows: JobHealth[]): JobHealth[] {
   return [...rows].sort(
     (a, b) =>
-      HEALTH_ORDER.indexOf(a.state) - HEALTH_ORDER.indexOf(b.state) || a.name.localeCompare(b.name),
+      HEALTH_ORDER.indexOf(a.state) - HEALTH_ORDER.indexOf(b.state) ||
+      a.name.localeCompare(b.name, intlLocale),
   );
 }
 
@@ -379,11 +468,7 @@ export interface SecurityFinding {
   items: FindingItem[];
 }
 
-const TLS_DETAIL: Record<ConnectionTlsMode, string> = {
-  PINNED: "TLS pinned",
-  UNVERIFIED: "TLS without verification",
-  DISABLED: "TLS disabled",
-};
+const TLS_DETAIL: Record<ConnectionTlsMode, string> = M.tls;
 
 /** An acceptable risk from Query.securityRisks (D-228). */
 export interface RiskInput {
@@ -395,11 +480,11 @@ export interface RiskInput {
 }
 
 const INSTANCE_RISK: Partial<Record<RiskKind, { name: string; to: string }>> = {
-  INSECURE_TRANSPORT: { name: "Plain HTTP", to: "/admin/settings/configuration" },
-  INSECURE_DB_TLS: { name: "App database TLS", to: "/admin/settings/configuration" },
-  INSECURE_DB_ROLES: { name: "Single database account", to: "/admin/settings/configuration" },
-  UNPINNED_IMAGE: { name: "Unpinned image", to: "/admin/settings/configuration" },
-  SMTP_UNENCRYPTED: { name: "Unencrypted e-mail", to: "/admin/settings" },
+  INSECURE_TRANSPORT: { name: M.risk.INSECURE_TRANSPORT, to: "/admin/settings/configuration" },
+  INSECURE_DB_TLS: { name: M.risk.INSECURE_DB_TLS, to: "/admin/settings/configuration" },
+  INSECURE_DB_ROLES: { name: M.risk.INSECURE_DB_ROLES, to: "/admin/settings/configuration" },
+  UNPINNED_IMAGE: { name: M.risk.UNPINNED_IMAGE, to: "/admin/settings/configuration" },
+  SMTP_UNENCRYPTED: { name: M.risk.SMTP_UNENCRYPTED, to: "/admin/settings" },
 };
 
 /** The number of accepted risks (D-228): shown, but not as open issues. */
@@ -435,11 +520,11 @@ export function securityFindings(
     to: `/connections/${c.id}`,
     detail,
   });
-  const byName = (a: FindingItem, b: FindingItem) => a.name.localeCompare(b.name);
+  const byName = (a: FindingItem, b: FindingItem) => a.name.localeCompare(b.name, intlLocale);
   const findings: SecurityFinding[] = [
     {
       kind: "identity-mismatch",
-      title: "Server identity mismatch",
+      title: M.findings.identityMismatch,
       severity: "critical",
       items: connections
         .filter(
@@ -453,20 +538,22 @@ export function securityFindings(
           conn(
             c,
             c.lastTest?.code === "TLS_PIN_MISMATCH"
-              ? "Certificate does not match the pin"
-              : "SSH host key does not match",
+              ? M.findings.certMismatch
+              : M.findings.hostKeyMismatch,
           ),
         ),
     },
     {
       kind: "pin-expired",
-      title: "Pinned certificate expired",
+      title: M.findings.pinExpired,
       severity: "critical",
-      items: connections.filter((c) => c.pinStatus === "EXPIRED").map((c) => conn(c, "Expired")),
+      items: connections
+        .filter((c) => c.pinStatus === "EXPIRED")
+        .map((c) => conn(c, M.findings.expired)),
     },
     {
       kind: "instance",
-      title: "Weakened instance settings",
+      title: M.findings.instance,
       severity: "warning",
       items: (risks ?? []).flatMap((r) => {
         const meta = INSTANCE_RISK[r.kind];
@@ -476,15 +563,15 @@ export function securityFindings(
     },
     {
       kind: "unencrypted",
-      title: "Unencrypted jobs",
+      title: M.findings.unencrypted,
       severity: "warning",
       items: jobs
         .filter((j) => isUnencrypted(j.encryption) && !isAccepted("ENCRYPTION_OPT_OUT", j.id))
-        .map((j) => job(j, "Encryption opted out")),
+        .map((j) => job(j, M.findings.optedOut)),
     },
     {
       kind: "insecure-transport",
-      title: "Insecure transport",
+      title: M.findings.insecureTransport,
       severity: "warning",
       items: connections
         .filter(
@@ -495,7 +582,7 @@ export function securityFindings(
     },
     {
       kind: "privileged-target",
-      title: "Privileged database roles",
+      title: M.findings.privileged,
       severity: "warning",
       items: connections
         .filter((c) => {
@@ -506,15 +593,14 @@ export function securityFindings(
           conn(
             c,
             (c.lastTest?.privileges?.status === "PRIVILEGED"
-              ? "Privileged role"
-              : "Privileges unknown (treated as privileged)") +
-              (c.lastTest?.stale ? " · last test is stale" : ""),
+              ? M.findings.privilegedRole
+              : M.findings.privilegesUnknown) + (c.lastTest?.stale ? M.findings.staleTest : ""),
           ),
         ),
     },
     {
       kind: "pin-expiring",
-      title: "Pinned certificates expiring",
+      title: M.findings.pinExpiring,
       severity: "warning",
       items: connections
         .filter(
@@ -522,7 +608,10 @@ export function securityFindings(
             c.pinStatus === "EXPIRES_WITHIN_7_DAYS" || c.pinStatus === "EXPIRES_WITHIN_30_DAYS",
         )
         .map((c) =>
-          conn(c, c.pinStatus === "EXPIRES_WITHIN_7_DAYS" ? "Within 7 days" : "Within 30 days"),
+          conn(
+            c,
+            c.pinStatus === "EXPIRES_WITHIN_7_DAYS" ? M.findings.within7 : M.findings.within30,
+          ),
         ),
     },
   ];
@@ -566,7 +655,7 @@ export function storageByDestination(usage: readonly UsageInput[]): StorageRow[]
   const max = Math.max(0, ...rows.map((r) => r.bytes));
   return rows
     .map((r) => ({ ...r, share: max > 0 ? r.bytes / max : 0 }))
-    .sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+    .sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name, intlLocale));
 }
 
 /* ------------------------------------------------------------------ */
@@ -650,12 +739,12 @@ export const ACTIVE_RESTORE: ReadonlySet<RestoreStatus> = new Set([
 ]);
 
 export const HEALTH_META: Record<HealthState, { label: string; ui: UiStatus; fill: string }> = {
-  failing: { label: "Failing", ui: "failed", fill: "fill-status-failed" },
-  missed: { label: "Missed", ui: "missed", fill: "fill-status-missed" },
-  overdue: { label: "Overdue", ui: "missed", fill: "fill-status-missed" },
-  warning: { label: "Warnings", ui: "partial", fill: "fill-status-partial" },
-  running: { label: "Running", ui: "running", fill: "fill-status-running" },
-  never: { label: "Never run", ui: "queued", fill: "fill-status-neutral" },
-  healthy: { label: "Healthy", ui: "success", fill: "fill-status-success" },
-  paused: { label: "Paused", ui: "queued", fill: "fill-status-neutral" },
+  failing: { label: M.health.failing, ui: "failed", fill: "fill-status-failed" },
+  missed: { label: M.health.missed, ui: "missed", fill: "fill-status-missed" },
+  overdue: { label: M.health.overdue, ui: "missed", fill: "fill-status-missed" },
+  warning: { label: M.health.warning, ui: "partial", fill: "fill-status-partial" },
+  running: { label: M.health.running, ui: "running", fill: "fill-status-running" },
+  never: { label: M.health.never, ui: "queued", fill: "fill-status-neutral" },
+  healthy: { label: M.health.healthy, ui: "success", fill: "fill-status-success" },
+  paused: { label: M.health.paused, ui: "queued", fill: "fill-status-neutral" },
 };

@@ -3,19 +3,48 @@ import { Link } from "react-router";
 
 import { backups, holdReason } from "@/features/jobs/retention-model";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import type { AttentionItem } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
-const T = {
-  empty: "No failures in the last 7 days, no missed backups and no stuck retention.",
-  listLabel: "Failures, missed backups and retention holds",
-  retention: "Retention",
-  held: (n: number, dest: string, deleted: boolean) =>
-    `keeps ${backups(n)} incomplete on ${dest}${deleted ? " (deleted)" : ""}`,
-  heldSince: (at: string) => `Oldest held backup from ${at}`,
-  since: (rel: string) => `since ${rel}`,
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Needs attention",
+    link: "Run history",
+    window: "7 days",
+    loading: "Loading failures",
+    empty: "No failures in the last 7 days, no missed backups and no stuck retention.",
+    listLabel: "Failures, missed backups and retention holds",
+    failed: "Failed",
+    retention: "Retention",
+    held: (n: number, dest: string, deleted: boolean) =>
+      `keeps ${backups(n)} incomplete on ${dest}${deleted ? " (deleted)" : ""}`,
+    heldSince: (at: string) => `Oldest held backup from ${at}`,
+    since: (rel: string) => `since ${rel}`,
+    missed: "Missed",
+    missedDetail: " · no successful backup in its window",
+    missedSince: (at: string) => `Missed since ${at}`,
+  },
+  nl: {
+    title: "Aandacht nodig",
+    link: "Rungeschiedenis",
+    window: "7 dagen",
+    loading: "Fouten laden",
+    empty:
+      "Geen fouten in de afgelopen 7 dagen, geen gemiste back-ups en geen vastgelopen bewaarbeleid.",
+    listLabel: "Fouten, gemiste back-ups en bewaarblokkades",
+    failed: "Mislukt",
+    retention: "Bewaarbeleid",
+    held: (n: number, dest: string, deleted: boolean) =>
+      `${plural(n, { one: "bewaart 1 onvolledige back-up", other: `bewaart ${String(n)} onvolledige back-ups` })} op ${dest}${deleted ? " (verwijderd)" : ""}`,
+    heldSince: (at: string) => `Oudste bewaarde back-up van ${at}`,
+    since: (rel: string) => `sinds ${rel}`,
+    missed: "Gemist",
+    missedDetail: " · geen geslaagde back-up binnen het tijdvenster",
+    missedSince: (at: string) => `Gemist sinds ${at}`,
+  },
+});
 
 /**
  * Failed runs of the last 7 days, jobs in an ongoing missed-backup outage
@@ -36,14 +65,14 @@ export function AttentionTile({
   return (
     <Tile
       folio="03"
-      title="Needs attention"
+      title={T.title}
       to="/runs"
-      linkLabel="Run history"
-      aside={<span className="font-mono text-2xs text-muted-foreground">7 days</span>}
+      linkLabel={T.link}
+      aside={<span className="font-mono text-2xs text-muted-foreground">{T.window}</span>}
       testId="tile-attention"
     >
       {loading && items.length === 0 ? (
-        <TileSkeleton rows={3} label="Loading failures" />
+        <TileSkeleton rows={3} label={T.loading} />
       ) : error && items.length === 0 ? (
         <TileError error={error} />
       ) : items.length === 0 ? (
@@ -69,7 +98,7 @@ export function AttentionTile({
                     {item.run.job.name}
                   </Link>
                   <span className="block truncate text-xs text-muted-foreground">
-                    <span className="text-status-failed-fg">Failed</span>
+                    <span className="text-status-failed-fg">{T.failed}</span>
                     {item.run.errorMessage ? ` · ${item.run.errorMessage}` : ""}
                   </span>
                 </span>
@@ -130,17 +159,17 @@ export function AttentionTile({
                     {item.job.name}
                   </Link>
                   <span className="block truncate text-xs text-muted-foreground">
-                    <span className="text-status-missed-fg">Missed</span> · no successful backup in
-                    its window
+                    <span className="text-status-missed-fg">{T.missed}</span>
+                    {T.missedDetail}
                   </span>
                 </span>
                 {item.at ? (
                   <time
                     dateTime={item.at}
-                    title={`Missed since ${formatDateTime(item.at)}`}
+                    title={T.missedSince(formatDateTime(item.at))}
                     className="font-mono text-2xs whitespace-nowrap text-muted-foreground"
                   >
-                    since {formatRelative(item.at, now)}
+                    {T.since(formatRelative(item.at, now))}
                   </time>
                 ) : (
                   <span />

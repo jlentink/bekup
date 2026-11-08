@@ -6,33 +6,59 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DestinationType, JobDbMode } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { ListDatabasesMutation } from "@/lib/operations";
 import { cn } from "@/lib/utils";
 
 import { NativeSelect } from "./fields";
 
-const T = {
-  load: "Load databases from the server",
-  reload: "Reload",
-  loading: "Asking the server",
-  excludeLegend: "Exclude these databases",
-  excludeHint: "Every other database is backed up, including ones created later.",
-  selectLegend: "Back up these databases",
-  selectHint: "Only the checked databases are backed up.",
-  notReported: "not reported by the server",
-  addName: "Add a database by name",
-  add: "Add",
-  noneLoaded: "Load the list from the server or add names by hand.",
-  noConnection: "Choose a connection first.",
-  destinations: "Destinations in fan-out order",
-  addDestination: "Add a destination",
-  chooseDestination: "Choose a destination",
-  up: (n: string) => `Move ${n} up`,
-  down: (n: string) => `Move ${n} down`,
-  remove: (n: string) => `Remove ${n}`,
-  notReady: "not ready",
-  noDestinations: "No destination chosen yet.",
-} as const;
+const T = defineMessages({
+  en: {
+    load: "Load databases from the server",
+    reload: "Reload",
+    loading: "Asking the server",
+    excludeLegend: "Exclude these databases",
+    excludeHint: "Every other database is backed up, including ones created later.",
+    selectLegend: "Back up these databases",
+    selectHint: "Only the checked databases are backed up.",
+    notReported: "not reported by the server",
+    addName: "Add a database by name",
+    add: "Add",
+    noneLoaded: "Load the list from the server or add names by hand.",
+    noConnection: "Choose a connection first.",
+    destinations: "Destinations in fan-out order",
+    addDestination: "Add a destination",
+    chooseDestination: "Choose a destination",
+    up: (n: string) => `Move ${n} up`,
+    down: (n: string) => `Move ${n} down`,
+    remove: (n: string) => `Remove ${n}`,
+    notReady: "not ready",
+    noDestinations: "No destination chosen yet.",
+  },
+  nl: {
+    load: "Databases van de server laden",
+    reload: "Opnieuw laden",
+    loading: "Bezig met opvragen bij de server",
+    excludeLegend: "Deze databases uitsluiten",
+    excludeHint:
+      "Van elke andere database wordt een back-up gemaakt, ook van databases die later worden aangemaakt.",
+    selectLegend: "Van deze databases een back-up maken",
+    selectHint: "Alleen van de aangevinkte databases wordt een back-up gemaakt.",
+    notReported: "niet gemeld door de server",
+    addName: "Een database op naam toevoegen",
+    add: "Toevoegen",
+    noneLoaded: "Laad de lijst van de server of voeg namen zelf toe.",
+    noConnection: "Kies eerst een verbinding.",
+    destinations: "Bestemmingen in uploadvolgorde",
+    addDestination: "Een bestemming toevoegen",
+    chooseDestination: "Kies een bestemming",
+    up: (n: string) => `${n} omhoog verplaatsen`,
+    down: (n: string) => `${n} omlaag verplaatsen`,
+    remove: (n: string) => `${n} verwijderen`,
+    notReady: "niet gereed",
+    noDestinations: "Nog geen bestemming gekozen.",
+  },
+});
 
 /**
  * Database selection of a job: in mode ALL the checked names are excluded,

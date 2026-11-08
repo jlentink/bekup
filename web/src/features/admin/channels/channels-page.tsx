@@ -38,6 +38,7 @@ import { getFragmentData } from "@/graphql/gen";
 import type { SharedChannelFieldsFragment } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -62,55 +63,118 @@ import { describeFilter, toFilterInput, type CatalogGroup, type FilterDraft } fr
 
 type Channel = SharedChannelFieldsFragment;
 
-const T = {
-  eyebrow: "Administration · Notifications",
-  title: "Shared channels",
-  lead: "Team e-mail lists and webhooks that receive the events of the jobs they are attached to. Security alerts never go to shared channels: they reach every admin personally.",
-  create: "New channel",
-  guide: "Shared channels guide",
-  emptyTitle: "No shared channels yet",
-  emptyLead:
-    "Create an e-mail list for the on-call team or a webhook for your chat tool, then attach it to jobs.",
-  webhook: "Webhook",
-  emailList: "E-mail list",
-  enabled: "Enabled",
-  disabled: "Disabled",
-  autoDisabled: "Auto-disabled",
-  failures: (n: number) => `${String(n)} failed deliver${n === 1 ? "y" : "ies"} in a row`,
-  lastFailure: (code: string, when: string) => `Last failure: ${code}, ${when}`,
-  attachments: "Attached jobs",
-  noAttachments: "Not attached to a job: it receives nothing yet.",
-  attach: "Attach to a job",
-  editFilter: (job: string) => `Change the events from ${job}`,
-  detach: (job: string) => `Detach from ${job}`,
-  actions: (name: string) => `Actions for ${name}`,
-  test: "Send test",
-  testing: "Sending…",
-  edit: "Edit",
-  rotate: "Rotate signing key",
-  enable: "Enable",
-  disable: "Disable",
-  delete: "Delete",
-  created: "Channel created.",
-  saved: "Channel saved.",
-  deletedToast: "Channel deleted.",
-  enabledToast: "Channel enabled.",
-  disabledToast: "Channel disabled.",
-  attached: "Channel attached.",
-  filterSaved: "Event filter saved.",
-  detached: "Channel detached.",
-  testOk: (status?: number | null) =>
-    status ? `Test delivered (HTTP ${String(status)}).` : "Test delivered.",
-  testFailed: (msg: string) => `Test failed: ${msg}`,
-  deleteTitle: (name: string) => `Delete ${name}?`,
-  deleteLead:
-    "The channel and its job attachments are removed. Receivers stop getting events at once. This cannot be undone.",
-  rotateTitle: "Rotate the signing key?",
-  rotateLead:
-    "The old key stops working at once: receivers reject bekup's requests until you store the new key, which is shown only once.",
-  detachTitle: (job: string) => `Detach from ${job}?`,
-  detachLead: "The channel stops receiving events of this job.",
-} as const;
+const T = defineMessages({
+  en: {
+    eyebrow: "Administration · Notifications",
+    title: "Shared channels",
+    lead: "Team e-mail lists and webhooks that receive the events of the jobs they are attached to. Security alerts never go to shared channels: they reach every admin personally.",
+    create: "New channel",
+    guide: "Shared channels guide",
+    emptyTitle: "No shared channels yet",
+    emptyLead:
+      "Create an e-mail list for the on-call team or a webhook for your chat tool, then attach it to jobs.",
+    webhook: "Webhook",
+    emailList: "E-mail list",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    autoDisabled: "Auto-disabled",
+    failures: (n: number) =>
+      plural(n, {
+        one: "1 failed delivery in a row",
+        other: `${String(n)} failed deliveries in a row`,
+      }),
+    lastFailure: (code: string, when: string) => `Last failure: ${code}, ${when}`,
+    attachments: "Attached jobs",
+    noAttachments: "Not attached to a job: it receives nothing yet.",
+    attach: "Attach to a job",
+    editFilter: (job: string) => `Change the events from ${job}`,
+    detach: (job: string) => `Detach from ${job}`,
+    actions: (name: string) => `Actions for ${name}`,
+    test: "Send test",
+    testing: "Sending…",
+    edit: "Edit",
+    rotate: "Rotate signing key",
+    enable: "Enable",
+    disable: "Disable",
+    delete: "Delete",
+    created: "Channel created.",
+    saved: "Channel saved.",
+    deletedToast: "Channel deleted.",
+    enabledToast: "Channel enabled.",
+    disabledToast: "Channel disabled.",
+    attached: "Channel attached.",
+    filterSaved: "Event filter saved.",
+    detached: "Channel detached.",
+    testOk: (status?: number | null) =>
+      status ? `Test delivered (HTTP ${String(status)}).` : "Test delivered.",
+    testFailed: (msg: string) => `Test failed: ${msg}`,
+    deleteTitle: (name: string) => `Delete ${name}?`,
+    deleteLead:
+      "The channel and its job attachments are removed. Receivers stop getting events at once. This cannot be undone.",
+    rotateTitle: "Rotate the signing key?",
+    rotateLead:
+      "The old key stops working at once: receivers reject bekup's requests until you store the new key, which is shown only once.",
+    detachTitle: (job: string) => `Detach from ${job}?`,
+    detachLead: "The channel stops receiving events of this job.",
+    detachConfirm: "Detach",
+    unknownError: "unknown error",
+  },
+  nl: {
+    eyebrow: "Beheer · Meldingen",
+    title: "Gedeelde kanalen",
+    lead: "E-maillijsten en webhooks van het team die de gebeurtenissen ontvangen van de taken waaraan ze gekoppeld zijn. Beveiligingsmeldingen gaan nooit naar gedeelde kanalen: die bereiken elke beheerder persoonlijk.",
+    create: "Nieuw kanaal",
+    guide: "Handleiding gedeelde kanalen",
+    emptyTitle: "Nog geen gedeelde kanalen",
+    emptyLead:
+      "Maak een e-maillijst voor wie dienst heeft of een webhook voor je chattool en koppel die daarna aan taken.",
+    webhook: "Webhook",
+    emailList: "E-maillijst",
+    enabled: "Ingeschakeld",
+    disabled: "Uitgeschakeld",
+    autoDisabled: "Automatisch uitgeschakeld",
+    failures: (n: number) =>
+      plural(n, {
+        one: "1 mislukte bezorging op rij",
+        other: `${String(n)} mislukte bezorgingen op rij`,
+      }),
+    lastFailure: (code: string, when: string) => `Laatste fout: ${code}, ${when}`,
+    attachments: "Gekoppelde taken",
+    noAttachments: "Niet aan een taak gekoppeld: het kanaal ontvangt nog niets.",
+    attach: "Aan een taak koppelen",
+    editFilter: (job: string) => `Gebeurtenissen van ${job} wijzigen`,
+    detach: (job: string) => `Ontkoppelen van ${job}`,
+    actions: (name: string) => `Acties voor ${name}`,
+    test: "Test versturen",
+    testing: "Versturen…",
+    edit: "Bewerken",
+    rotate: "Ondertekeningssleutel vernieuwen",
+    enable: "Inschakelen",
+    disable: "Uitschakelen",
+    delete: "Verwijderen",
+    created: "Kanaal aangemaakt.",
+    saved: "Kanaal opgeslagen.",
+    deletedToast: "Kanaal verwijderd.",
+    enabledToast: "Kanaal ingeschakeld.",
+    disabledToast: "Kanaal uitgeschakeld.",
+    attached: "Kanaal gekoppeld.",
+    filterSaved: "Gebeurtenisfilter opgeslagen.",
+    detached: "Kanaal ontkoppeld.",
+    testOk: (status?: number | null) =>
+      status ? `Test bezorgd (HTTP ${String(status)}).` : "Test bezorgd.",
+    testFailed: (msg: string) => `Test mislukt: ${msg}`,
+    deleteTitle: (name: string) => `${name} verwijderen?`,
+    deleteLead:
+      "Het kanaal en de koppelingen met taken worden verwijderd. Ontvangers krijgen meteen geen gebeurtenissen meer. Dit kan niet ongedaan worden gemaakt.",
+    rotateTitle: "Ondertekeningssleutel vernieuwen?",
+    rotateLead:
+      "De oude sleutel werkt meteen niet meer: ontvangers weigeren de verzoeken van bekup tot je de nieuwe sleutel opslaat, die maar één keer wordt getoond.",
+    detachTitle: (job: string) => `Ontkoppelen van ${job}?`,
+    detachLead: "Het kanaal ontvangt geen gebeurtenissen van deze taak meer.",
+    detachConfirm: "Ontkoppelen",
+    unknownError: "onbekende fout",
+  },
+});
 
 type Pending =
   | { kind: "create" }
@@ -332,7 +396,7 @@ export function SharedChannelsPage() {
         }}
         title={pending?.kind === "detach" ? T.detachTitle(pending.job.name) : ""}
         description={T.detachLead}
-        confirmLabel="Detach"
+        confirmLabel={T.detachConfirm}
         onConfirm={async () => {
           if (pending?.kind !== "detach") return;
           try {
@@ -550,7 +614,7 @@ function ChannelCard({
                 const res = r.data?.testSharedChannel;
                 if (!res) return;
                 if (res.ok) toast.success(T.testOk(res.statusCode));
-                else toast.error(T.testFailed(res.message ?? res.code ?? "unknown error"));
+                else toast.error(T.testFailed(res.message ?? res.code ?? T.unknownError));
               })
               .catch((err: unknown) => {
                 reportActionError(err);

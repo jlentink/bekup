@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { userMessage } from "@/lib/api-error";
+import { intlLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { Legend } from "./event-chip";
@@ -35,11 +36,14 @@ import {
 } from "./model";
 import { CalendarJobsQuery, CalendarQuery, CalendarRunUpdatedSubscription } from "./operations";
 import { DayGrid, DayTimeline } from "./views";
+import { messages } from "./messages";
+
+const P = messages.page;
 
 const VIEWS: { id: CalendarView; label: string }[] = [
-  { id: "month", label: "Month" },
-  { id: "week", label: "Week" },
-  { id: "day", label: "Day" },
+  { id: "month", label: P.views.month },
+  { id: "week", label: P.views.week },
+  { id: "day", label: P.views.day },
 ];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,14 +99,14 @@ export function CalendarPage() {
   const connections = useMemo(
     () =>
       [...new Map(jobs.map((j) => [j.connection.id, j.connection])).values()].sort((a, b) =>
-        a.name.localeCompare(b.name),
+        a.name.localeCompare(b.name, intlLocale),
       ),
     [jobs],
   );
   const destinations = useMemo(
     () =>
       [...new Map(jobs.flatMap((j) => j.destinations).map((d) => [d.id, d])).values()].sort(
-        (a, b) => a.name.localeCompare(b.name),
+        (a, b) => a.name.localeCompare(b.name, intlLocale),
       ),
     [jobs],
   );
@@ -172,17 +176,13 @@ export function CalendarPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Overview"
-        title="Calendar"
-        description="Planned backups, runs, skips and retention expiries. Times are shown in the zone you choose."
-      />
+      <PageHeader eyebrow={P.eyebrow} title={P.title} description={P.description} />
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <div
             role="group"
-            aria-label="View"
+            aria-label={P.viewGroup}
             className="inline-flex rounded-md border bg-surface-sunken p-0.5"
           >
             {VIEWS.map((v) => (
@@ -206,7 +206,7 @@ export function CalendarPage() {
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label={`Previous ${view}`}
+              aria-label={P.previous[view]}
               onClick={() => {
                 setParam({ date: dayKey(shiftAnchor(view, anchor, -1)) });
               }}
@@ -220,12 +220,12 @@ export function CalendarPage() {
                 setParam({ date: undefined });
               }}
             >
-              Today
+              {P.today}
             </Button>
             <Button
               variant="outline"
               size="icon-sm"
-              aria-label={`Next ${view}`}
+              aria-label={P.next[view]}
               onClick={() => {
                 setParam({ date: dayKey(shiftAnchor(view, anchor, 1)) });
               }}
@@ -238,12 +238,16 @@ export function CalendarPage() {
           </h2>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="group" aria-label="Filters">
+        <div
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          role="group"
+          aria-label={P.filters}
+        >
           <FilterSelect
             id={jobSel}
-            label="Job"
+            label={P.job}
             value={filters.jobId}
-            any="All jobs"
+            any={P.allJobs}
             options={jobs.map((j) => ({ id: j.id, name: j.name }))}
             onChange={(v) => {
               setParam({ job: v });
@@ -251,9 +255,9 @@ export function CalendarPage() {
           />
           <FilterSelect
             id={connSel}
-            label="Connection"
+            label={P.connection}
             value={filters.connectionId}
-            any="All connections"
+            any={P.allConnections}
             options={connections}
             onChange={(v) => {
               setParam({ connection: v });
@@ -261,9 +265,9 @@ export function CalendarPage() {
           />
           <FilterSelect
             id={destSel}
-            label="Destination"
+            label={P.destination}
             value={filters.destinationId}
-            any="All destinations"
+            any={P.allDestinations}
             options={destinations}
             onChange={(v) => {
               setParam({ destination: v });
@@ -272,7 +276,7 @@ export function CalendarPage() {
           <div className="grid gap-1.5">
             <label htmlFor={tzId} className="flex items-center gap-1.5 text-sm font-medium">
               <Globe aria-hidden="true" className="size-3.5 text-muted-foreground" />
-              Time zone
+              {P.timeZone}
             </label>
             <select
               id={tzId}
@@ -284,7 +288,7 @@ export function CalendarPage() {
             >
               {zoneOptions(tz).map((z) => (
                 <option key={z} value={z}>
-                  {z === browserZone() ? `${z} (this browser)` : z}
+                  {z === browserZone() ? P.thisBrowser(z) : z}
                 </option>
               ))}
             </select>
@@ -295,11 +299,8 @@ export function CalendarPage() {
       {cal?.truncated ? (
         <Alert>
           <TriangleAlert aria-hidden="true" />
-          <AlertTitle>Some events are not shown</AlertTitle>
-          <AlertDescription>
-            This range hit the calendar's limits, so only its earliest events are listed. Narrow the
-            view or filter by job, connection or destination.
-          </AlertDescription>
+          <AlertTitle>{P.truncatedTitle}</AlertTitle>
+          <AlertDescription>{P.truncatedBody}</AlertDescription>
         </Alert>
       ) : null}
       {calQ.error ? (
@@ -307,9 +308,7 @@ export function CalendarPage() {
           <AlertDescription>{userMessage(calQ.error)}</AlertDescription>
         </Alert>
       ) : null}
-      {empty ? (
-        <p className="text-sm text-muted-foreground">No job matches these filters.</p>
-      ) : null}
+      {empty ? <p className="text-sm text-muted-foreground">{P.noJobs}</p> : null}
 
       <div
         className={cn("overflow-x-auto transition-opacity", calQ.loading && !cal && "opacity-60")}
@@ -342,12 +341,9 @@ export function CalendarPage() {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-rule pt-4">
-        <p className="eyebrow">Legend</p>
+        <p className="eyebrow">{P.legend}</p>
         <Legend />
-        <p className="text-xs text-muted-foreground">
-          Projected expiries assume every planned run succeeds; exact ones follow keep-days or
-          Object Lock. Arrow keys move between days (the view follows), Enter opens a day.
-        </p>
+        <p className="text-xs text-muted-foreground">{P.legendHint}</p>
       </div>
     </div>
   );

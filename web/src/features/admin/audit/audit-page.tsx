@@ -24,6 +24,7 @@ import { useCursorPager } from "@/features/jobs/use-cursor-pager";
 import type { AdminAuditLogQuery, AuditActorKind } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 
@@ -45,64 +46,135 @@ import {
 
 type Entry = AdminAuditLogQuery["auditLog"]["edges"][number]["node"];
 
-const T = {
-  eyebrow: "Administration · Security",
-  title: "Audit log",
-  lead: "Every security-relevant action, newest first. Entries are hash chained and append-only; details are redacted when recorded and never hold secrets.",
-  guide: "Audit guide",
-  filters: "Filters",
-  action: "Action",
-  actionHint: "Exact (user.created) or a prefix ending in “.” or “*”.",
-  actorKind: "Actor",
-  anyActor: "Anyone",
-  actorKinds: {
-    USER: "User",
-    SYSTEM: "bekup (system)",
-    CLI: "Host operator (CLI)",
-    API: "API token",
-  } satisfies Record<AuditActorKind, string>,
-  actorUserId: "Actor user ID",
-  targetType: "Target type",
-  targetId: "Target ID",
-  from: "From",
-  to: "Before",
-  apply: "Apply filters",
-  clear: "Clear",
-  quick: "Quick filters",
-  colTime: "Time",
-  colAction: "Action",
-  colActor: "Actor",
-  colTarget: "Target",
-  colIp: "Address",
-  colHash: "Chain",
-  empty: "No entries match",
-  emptyLead: "Widen the time range or clear a filter.",
-  pager: "Audit log pages",
-  open: (action: string, when: string) => `Details of ${action} at ${when}`,
-  detailTitle: "Audit entry",
-  details: "Details (redacted)",
-  hash: "Chain hash",
-  copyHash: "Copy chain hash",
-  id: "Entry",
-  chainTitle: "Chain integrity",
-  chainOk: "Last verification passed",
-  chainFailed: "Chain verification failed",
-  chainNever: "Not verified yet",
-  chainNeverLead:
-    "The periodic check runs every hour (new entries) and in full daily and after every restart; its first result appears here.",
-  chainOkLead: (when: string, full: boolean) =>
-    `${full ? "Full" : "Incremental"} check ${when}. This reflects what the server recorded; it is not a proof.`,
-  chainFailedLead: (when: string, full: boolean) =>
-    `${full ? "Full" : "Incremental"} check ${when} found a problem. Treat the log as tampered with until you have checked it on the host.`,
-  finding: "Finding",
-  verifiedThrough: "Verified through",
-  head: "Newest entry",
-  signedHead: "Latest signed head",
-  noSignedHead: "None yet (tail truncation cannot be detected without one)",
-  showFailures: "Show audit.verify.failed entries",
-  chainUnknown: "Chain status unavailable",
-  chainProof: "For a full offline proof against the signed head, run on the host:",
-} as const;
+const T = defineMessages({
+  en: {
+    eyebrow: "Administration · Security",
+    title: "Audit log",
+    lead: "Every security-relevant action, newest first. Entries are hash chained and append-only; details are redacted when recorded and never hold secrets.",
+    guide: "Audit guide",
+    filters: "Filters",
+    action: "Action",
+    actionHint: "Exact (user.created) or a prefix ending in “.” or “*”.",
+    actorKind: "Actor",
+    anyActor: "Anyone",
+    actorKinds: {
+      USER: "User",
+      SYSTEM: "bekup (system)",
+      CLI: "Host operator (CLI)",
+      API: "API token",
+    } satisfies Record<AuditActorKind, string>,
+    actorUserId: "Actor user ID",
+    targetType: "Target type",
+    targetId: "Target ID",
+    from: "From",
+    to: "Before",
+    apply: "Apply filters",
+    clear: "Clear",
+    quick: "Quick filters",
+    colTime: "Time",
+    colAction: "Action",
+    colActor: "Actor",
+    colTarget: "Target",
+    colIp: "Address",
+    colHash: "Chain",
+    empty: "No entries match",
+    emptyLead: "Widen the time range or clear a filter.",
+    pager: "Audit log pages",
+    open: (action: string, when: string) => `Details of ${action} at ${when}`,
+    detailTitle: "Audit entry",
+    details: "Details (redacted)",
+    hash: "Chain hash",
+    copyHash: "Copy chain hash",
+    id: "Entry",
+    chainTitle: "Chain integrity",
+    chainOk: "Last verification passed",
+    chainFailed: "Chain verification failed",
+    chainNever: "Not verified yet",
+    chainNeverLead:
+      "The periodic check runs every hour (new entries) and in full daily and after every restart; its first result appears here.",
+    chainOkLead: (when: string, full: boolean) =>
+      `${full ? "Full" : "Incremental"} check ${when}. This reflects what the server recorded; it is not a proof.`,
+    chainFailedLead: (when: string, full: boolean) =>
+      `${full ? "Full" : "Incremental"} check ${when} found a problem. Treat the log as tampered with until you have checked it on the host.`,
+    finding: "Finding",
+    verifiedThrough: "Verified through",
+    head: "Newest entry",
+    signedHead: "Latest signed head",
+    noSignedHead: "None yet (tail truncation cannot be detected without one)",
+    showFailures: "Show audit.verify.failed entries",
+    chainUnknown: "Chain status unavailable",
+    chainProof: "For a full offline proof against the signed head, run on the host:",
+    activeCount: (n: number) => `${String(n)} active`,
+    keyId: (id: string) => `key ${id}`,
+    userFallback: "user",
+  },
+  nl: {
+    eyebrow: "Beheer · Beveiliging",
+    title: "Auditlog",
+    lead: "Elke beveiligingsrelevante actie, nieuwste eerst. Items zijn met hashes aan elkaar geketend en kunnen alleen worden toegevoegd; details worden bij het vastleggen geredigeerd en bevatten nooit geheimen.",
+    guide: "Handleiding auditlog",
+    filters: "Filters",
+    action: "Actie",
+    actionHint: "Exact (user.created) of een voorvoegsel dat eindigt op „.” of „*”.",
+    actorKind: "Uitvoerder",
+    anyActor: "Iedereen",
+    actorKinds: {
+      USER: "Gebruiker",
+      SYSTEM: "bekup (systeem)",
+      CLI: "Hostbeheerder (CLI)",
+      API: "API-token",
+    },
+    actorUserId: "Gebruikers-ID van uitvoerder",
+    targetType: "Soort doel",
+    targetId: "Doel-ID",
+    from: "Vanaf",
+    to: "Vóór",
+    apply: "Filters toepassen",
+    clear: "Wissen",
+    quick: "Snelle filters",
+    colTime: "Tijd",
+    colAction: "Actie",
+    colActor: "Uitvoerder",
+    colTarget: "Doel",
+    colIp: "Adres",
+    colHash: "Keten",
+    empty: "Geen overeenkomende items",
+    emptyLead: "Vergroot de periode of wis een filter.",
+    pager: "Pagina's van de auditlog",
+    open: (action: string, when: string) => `Details van ${action} op ${when}`,
+    detailTitle: "Auditlogitem",
+    details: "Details (geredigeerd)",
+    hash: "Ketenhash",
+    copyHash: "Ketenhash kopiëren",
+    id: "Item",
+    chainTitle: "Integriteit van de keten",
+    chainOk: "Laatste controle geslaagd",
+    chainFailed: "Controle van de keten mislukt",
+    chainNever: "Nog niet gecontroleerd",
+    chainNeverLead:
+      "De periodieke controle draait elk uur (nieuwe items), dagelijks en na elke herstart volledig; het eerste resultaat verschijnt hier.",
+    chainOkLead: (when: string, full: boolean) =>
+      `${full ? "Volledige" : "Incrementele"} controle ${when}. Dit geeft weer wat de server heeft vastgelegd; het is geen bewijs.`,
+    chainFailedLead: (when: string, full: boolean) =>
+      `${full ? "Volledige" : "Incrementele"} controle ${when} vond een probleem. Beschouw de log als gemanipuleerd tot je hem op de host hebt gecontroleerd.`,
+    finding: "Bevinding",
+    verifiedThrough: "Gecontroleerd tot en met",
+    head: "Nieuwste item",
+    signedHead: "Laatste ondertekende kop",
+    noSignedHead:
+      "Nog geen (zonder ondertekende kop is het afkappen van het einde niet te detecteren)",
+    showFailures: "audit.verify.failed-items tonen",
+    chainUnknown: "Status van de keten niet beschikbaar",
+    chainProof:
+      "Voer voor een volledig offline bewijs tegen de ondertekende kop dit uit op de host:",
+    activeCount: (n: number) => `${String(n)} actief`,
+    keyId: (id: string) => `sleutel ${id}`,
+    userFallback: "gebruiker",
+  },
+});
+
+/** The host command of the offline proof (code, never translated). */
+const VERIFY_COMMAND = "bekup audit verify";
 
 /** The audit log viewer (admin, D-101) with the chain status (D-190, D-196). */
 export function AuditLogPage() {
@@ -320,7 +392,7 @@ function ChainStatus({ onShowFailures }: { onShowFailures: () => void }) {
                     <time dateTime={signed.signedAt} title={formatDateTime(signed.signedAt)}>
                       {formatRelative(signed.signedAt)}
                     </time>
-                    <span className="font-mono text-muted-foreground">key {signed.keyId}</span>
+                    <span className="font-mono text-muted-foreground">{T.keyId(signed.keyId)}</span>
                   </span>
                 ) : (
                   <span className="text-muted-foreground">{T.noSignedHead}</span>
@@ -332,7 +404,7 @@ function ChainStatus({ onShowFailures }: { onShowFailures: () => void }) {
       </div>
       <div className="flex flex-col gap-2 text-sm text-muted-foreground">
         <p>{T.chainProof}</p>
-        <Command>bekup audit verify</Command>
+        <Command>{VERIFY_COMMAND}</Command>
       </div>
     </section>
   );
@@ -402,7 +474,7 @@ function FilterBar({
       <div className="flex items-center gap-2">
         <Filter aria-hidden="true" className="size-3.5 text-muted-foreground" />
         <p className="eyebrow">{T.filters}</p>
-        {active > 0 ? <Tag tone="info">{`${String(active)} active`}</Tag> : null}
+        {active > 0 ? <Tag tone="info">{T.activeCount(active)}</Tag> : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="sm:col-span-2">
@@ -477,7 +549,7 @@ function FilterBar({
 }
 
 function actorLabel(e: Entry): string {
-  if (e.actorKind === "USER") return e.actorUserId ?? "user";
+  if (e.actorKind === "USER") return e.actorUserId ?? T.userFallback;
   return T.actorKinds[e.actorKind];
 }
 

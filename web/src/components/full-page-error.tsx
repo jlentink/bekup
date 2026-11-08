@@ -14,8 +14,8 @@ export function FullPageError({ error, onRetry }: { error: unknown; onRetry: () 
         className="flex max-w-md flex-col items-start gap-4 rounded-lg border bg-surface p-8 shadow-overlay"
       >
         <LogoMark />
-        <p className="eyebrow">Unavailable</p>
-        <h1 className="font-display text-display leading-none">Cannot load bekup</h1>
+        <p className="eyebrow">{messages.fullPageError.eyebrow}</p>
+        <h1 className="font-display text-display leading-none">{messages.fullPageError.title}</h1>
         <p className="text-sm text-muted-foreground">{userMessage(error)}</p>
         <Button variant="outline" onClick={onRetry}>
           <RotateCw aria-hidden="true" /> {messages.common.retry}

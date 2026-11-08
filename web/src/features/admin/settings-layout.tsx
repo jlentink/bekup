@@ -11,16 +11,47 @@ import {
 import { Link, NavLink, Outlet } from "react-router";
 
 import { PageHeader } from "@/components/page-header";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-const T = {
-  eyebrow: "Administration",
-  title: "Settings",
-  lead: "Instance-wide settings. Changes that touch credentials or weaken a control need a fresh identity check and are written to the audit log.",
-  nav: "Settings sections",
-  related: "Related",
-  twoFactor: "Two-factor policy",
-} as const;
+const T = defineMessages({
+  en: {
+    eyebrow: "Administration",
+    title: "Settings",
+    lead: "Instance-wide settings. Changes that touch credentials or weaken a control need a fresh identity check and are written to the audit log.",
+    nav: "Settings sections",
+    related: "Related",
+    twoFactor: "Two-factor policy",
+    smtp: "E-mail (SMTP)",
+    smtpHint: "Mail relay and transport security",
+    alerts: "Security alerts",
+    alertsHint: "security.* events in your inbox",
+    network: "Network allowlists",
+    networkHint: "Outbound guard and runner targets",
+    configuration: "Configuration",
+    configurationHint: "Reload bekup.toml",
+    recovery: "Recovery",
+    recoveryHint: "Passphrase and key escrow",
+  },
+  nl: {
+    eyebrow: "Beheer",
+    title: "Instellingen",
+    lead: "Instellingen voor de hele instantie. Wijzigingen die inloggegevens raken of een beveiliging verzwakken, vragen opnieuw om je identiteit te bevestigen en komen in de auditlog.",
+    nav: "Onderdelen van de instellingen",
+    related: "Gerelateerd",
+    twoFactor: "Beleid voor tweestapsverificatie",
+    smtp: "E-mail (SMTP)",
+    smtpHint: "Mailrelay en transportbeveiliging",
+    alerts: "Beveiligingsmeldingen",
+    alertsHint: "security.*-gebeurtenissen in je inbox",
+    network: "Toegestane netwerklijsten",
+    networkHint: "Uitgaande beveiliging en runnerdoelen",
+    configuration: "Configuratie",
+    configurationHint: "bekup.toml opnieuw laden",
+    recovery: "Noodherstel",
+    recoveryHint: "Wachtwoordzinnen en sleutelbewaring",
+  },
+});
 
 const SECTIONS: readonly {
   to: string;
@@ -29,38 +60,32 @@ const SECTIONS: readonly {
   icon: LucideIcon;
   end: boolean;
 }[] = [
-  {
-    to: "/admin/settings",
-    label: "E-mail (SMTP)",
-    hint: "Mail relay and transport security",
-    icon: Mail,
-    end: true,
-  },
+  { to: "/admin/settings", label: T.smtp, hint: T.smtpHint, icon: Mail, end: true },
   {
     to: "/admin/settings/security-alerts",
-    label: "Security alerts",
-    hint: "security.* events in your inbox",
+    label: T.alerts,
+    hint: T.alertsHint,
     icon: ShieldAlert,
     end: false,
   },
   {
     to: "/admin/settings/network",
-    label: "Network allowlists",
-    hint: "Outbound guard and runner targets",
+    label: T.network,
+    hint: T.networkHint,
     icon: Network,
     end: false,
   },
   {
     to: "/admin/settings/configuration",
-    label: "Configuration",
-    hint: "Reload bekup.toml",
+    label: T.configuration,
+    hint: T.configurationHint,
     icon: FileCog,
     end: false,
   },
   {
     to: "/admin/settings/recovery",
-    label: "Recovery",
-    hint: "Passphrase and key escrow",
+    label: T.recovery,
+    hint: T.recoveryHint,
     icon: KeyRound,
     end: false,
   },

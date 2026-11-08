@@ -4,18 +4,19 @@ import type {
   RiskEndReason,
   RiskKind,
 } from "@/graphql/gen/graphql";
+import { defineMessages, plural, type Messages } from "@/lib/i18n";
 import { messages } from "@/lib/messages";
 
-/** Strings of the accepted risks feature (D-228). */
-export const T = {
+const en = {
   page: {
     eyebrow: "Security",
     title: "Accepted risks",
     lead: "Weakened settings that an administrator or a backup owner accepted. They stay marked, but they are no longer open issues on the dashboard, in reminders or in the summary. Every acceptance is audited; a changed condition is flagged again.",
     open: (n: number) =>
-      n === 1
-        ? "1 risk is open and can be accepted"
-        : `${String(n)} risks are open and can be accepted`,
+      plural(n, {
+        one: "1 risk is open and can be accepted",
+        other: `${String(n)} risks are open and can be accepted`,
+      }),
     openHeading: "Open risks",
     openLead: "These weakened settings are flagged as open issues now.",
     ledgerHeading: "Ledger",
@@ -36,6 +37,7 @@ export const T = {
   },
   instance: "This instance",
   deleted: "deleted",
+  quoted: (text: string) => `“${text}”`,
   noEnd: "No end date",
   byYou: "You",
   unknownPerson: "Not shown",
@@ -94,3 +96,97 @@ export const T = {
     ACCEPTOR_LOST_RIGHTS: "The acceptor may no longer decide",
   } satisfies Record<RiskEndReason, string>,
 };
+
+const nl: Messages<typeof en> = {
+  page: {
+    eyebrow: "Beveiliging",
+    title: "Geaccepteerde risico's",
+    lead: "Verzwakte instellingen die een beheerder of een eigenaar van een back-uptaak heeft geaccepteerd. Ze blijven gemarkeerd, maar gelden niet meer als open punt op het dashboard, in herinneringen of in de samenvatting. Elke acceptatie komt in de auditlog; verandert de situatie, dan wordt het risico opnieuw gemarkeerd.",
+    open: (n: number) =>
+      plural(n, {
+        one: "1 risico staat open en kan worden geaccepteerd",
+        other: `${String(n)} risico's staan open en kunnen worden geaccepteerd`,
+      }),
+    openHeading: "Open risico's",
+    openLead: "Deze verzwakte instellingen zijn nu als open punt gemarkeerd.",
+    ledgerHeading: "Register",
+    filters: { ACTIVE: "Actief", ENDED: "Beëindigd", ALL: "Alle" },
+    filterLabel: "Tonen",
+    empty: "Geen geaccepteerde risico's",
+    emptyActive: "Er is nu niets geaccepteerd: elke verzwakte instelling is gemarkeerd.",
+    emptyEnded: "Er is nog geen acceptatie beëindigd.",
+    emptyOpen: "Er is nu geen open risico dat kan worden geaccepteerd.",
+  },
+  columns: {
+    risk: "Risico",
+    subject: "Op",
+    reason: "Reden",
+    by: "Geaccepteerd door",
+    until: "Tot",
+    status: "Status",
+  },
+  instance: "Deze instantie",
+  deleted: "verwijderd",
+  quoted: (text: string) => `„${text}”`,
+  noEnd: "Geen einddatum",
+  byYou: "Jij",
+  unknownPerson: "Niet getoond",
+  accept: "Risico accepteren",
+  acceptedUntil: messages.risks.acceptedUntil,
+  acceptedForever: messages.risks.acceptedForever,
+  acceptAgain: "Verlengen",
+  revoke: "Intrekken",
+  revokeTitle: "Deze acceptatie intrekken?",
+  revokeLead: (what: string) =>
+    `${what} wordt meteen weer als open punt gemarkeerd: op het dashboard, in herinneringen en in de samenvatting. Het intrekken komt in de auditlog.`,
+  revoked: "Acceptatie ingetrokken; het risico is weer gemarkeerd.",
+  accepted: "Risico geaccepteerd.",
+  dialog: {
+    title: "Dit risico accepteren",
+    lead: "bekup markeert deze verzwakte instelling niet langer als open punt. De badge blijft, de beslissing komt in de auditlog en de beheerders krijgen een melding. Verandert de situatie, dan wordt het risico opnieuw gemarkeerd.",
+    condition: "Situatie",
+    duration: "Accepteren voor",
+    reason: "Reden",
+    reasonHint:
+      "Waarom kan dit niet worden opgelost? Iedereen die het risico ziet, ziet ook dit (1–500 tekens).",
+    reasonMissing: "Geef aan waarom het risico wordt geaccepteerd.",
+    reasonTooLong: "Maximaal 500 tekens.",
+    foreverWarning:
+      "Zonder einddatum wordt het risico nooit meer gemarkeerd, tot iemand de acceptatie intrekt of de situatie verandert. De beheerders krijgen een melding op foutniveau.",
+    submit: "Risico accepteren",
+    changed: "De situatie is veranderd sinds je dit opende. Bekijk het risico opnieuw.",
+  },
+  durations: {
+    ONE_MONTH: "1 maand",
+    ONE_YEAR: "1 jaar",
+    FOREVER: "Voor altijd",
+  },
+  kinds: {
+    INSECURE_TRANSPORT: "Onversleuteld HTTP",
+    INSECURE_DB_TLS: "TLS van de app-database",
+    INSECURE_DB_ROLES: "Eén databaseaccount",
+    UNPINNED_IMAGE: "Niet vastgepinde image",
+    CONNECTION_TLS: "TLS van de verbinding",
+    PRIVILEGED_ROLE: "Bevoorrechte rol",
+    SMTP_UNENCRYPTED: "Onversleutelde e-mail",
+    ENCRYPTION_OPT_OUT: "Onversleutelde back-ups",
+  },
+  statuses: {
+    ACTIVE: "Actief",
+    EXPIRED: "Verlopen",
+    REVOKED: "Ingetrokken",
+    ENDED: "Beëindigd",
+  },
+  endReasons: {
+    REVOKED: "Ingetrokken",
+    SUPERSEDED: "Vervangen door een nieuwe acceptatie",
+    EXPIRED: "Verlopen",
+    CONDITION_CHANGED: "De situatie is veranderd",
+    RESOLVED: "Het risico is opgelost",
+    SUBJECT_DELETED: "Verwijderd",
+    ACCEPTOR_LOST_RIGHTS: "Wie accepteerde, mag hier niet meer over beslissen",
+  },
+};
+
+/** Strings of the accepted risks feature (D-228), in English and Dutch (D-235). */
+export const T = defineMessages({ en, nl });

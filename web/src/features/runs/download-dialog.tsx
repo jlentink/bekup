@@ -20,6 +20,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { extractIdentity } from "@/lib/age-identity";
 import { userMessage } from "@/lib/api-error";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { CreateDownloadTicketMutation } from "./operations";
@@ -34,36 +35,72 @@ export interface DownloadableArtifact {
   encryption: { mode?: JobEncryptionMode | null };
 }
 
-const T = {
-  title: "Download backup",
-  lead: (what: string) => `A single-use link for ${what}. Downloads are audited.`,
-  mode: "What to download",
-  raw: "Raw file",
-  rawHint:
-    "The stored object unchanged: zstd-compressed and, normally, age-encrypted. Verify or decrypt it offline with bekup decrypt or age.",
-  plain: "Ready to use",
-  plainHint: "Decrypted and decompressed on the server, ready for the restore command below.",
-  identity: "age private key",
-  identityHint:
-    "This backup is encrypted to an age recipient. Paste the AGE-SECRET-KEY-1… line or choose the identity file. It is sent only with this request and kept sealed until the download starts.",
-  identityFile: "Choose identity file",
-  identityInvalid: "Enter one AGE-SECRET-KEY-1… identity.",
-  create: "Create link",
-  cancel: "Cancel",
-  close: "Close",
-  ready: "Your link is ready",
-  readyLead: "It works once, in this browser session, until it expires.",
-  expiresIn: (s: number) => `Expires in ${String(s)} s`,
-  expired: "The link expired. Create a new one.",
-  used: "Link used. Create a new one for another download.",
-  get: (name: string) => `Download ${name}`,
-  command: "Restore it with",
-  commandHint: "Placeholders in angle brackets are yours to fill in.",
-  copy: "Copy command",
-  copied: "Command copied.",
-  copyFailed: "Copying failed.",
-  unencrypted: "This backup is not encrypted.",
-} as const;
+const T = defineMessages({
+  en: {
+    title: "Download backup",
+    lead: (what: string) => `A single-use link for ${what}. Downloads are audited.`,
+    mode: "What to download",
+    raw: "Raw file",
+    rawHint:
+      "The stored object unchanged: zstd-compressed and, normally, age-encrypted. Verify or decrypt it offline with bekup decrypt or age.",
+    plain: "Ready to use",
+    plainHint: "Decrypted and decompressed on the server, ready for the restore command below.",
+    identity: "age private key",
+    identityHint:
+      "This backup is encrypted to an age recipient. Paste the AGE-SECRET-KEY-1… line or choose the identity file. It is sent only with this request and kept sealed until the download starts.",
+    identityFile: "Choose identity file",
+    identityInvalid: "Enter one AGE-SECRET-KEY-1… identity.",
+    create: "Create link",
+    cancel: "Cancel",
+    close: "Close",
+    ready: "Your link is ready",
+    readyLead: "It works once, in this browser session, until it expires.",
+    expiresIn: (s: number) => `Expires in ${String(s)} s`,
+    expired: "The link expired. Create a new one.",
+    used: "Link used. Create a new one for another download.",
+    get: (name: string) => `Download ${name}`,
+    command: "Restore it with",
+    commandHint: "Placeholders in angle brackets are yours to fill in.",
+    copy: "Copy command",
+    copied: "Command copied.",
+    copyFailed: "Copying failed.",
+    unencrypted: "This backup is not encrypted.",
+    whatGlobals: "the cluster globals",
+    whatArtifact: "this artifact",
+  },
+  nl: {
+    title: "Back-up downloaden",
+    lead: (what) => `Een eenmalige link voor ${what}. Downloads worden gelogd in de auditlog.`,
+    mode: "Wat wil je downloaden?",
+    raw: "Ruw bestand",
+    rawHint:
+      "Het opgeslagen object ongewijzigd: met zstd gecomprimeerd en normaal met age versleuteld. Controleer of ontsleutel het offline met bekup decrypt of age.",
+    plain: "Klaar voor gebruik",
+    plainHint: "Op de server ontsleuteld en uitgepakt, klaar voor het herstelcommando hieronder.",
+    identity: "age-privésleutel",
+    identityHint:
+      "Deze back-up is versleuteld voor een age-ontvanger. Plak de regel AGE-SECRET-KEY-1… of kies het identiteitsbestand. Hij wordt alleen met dit verzoek verstuurd en blijft verzegeld tot de download begint.",
+    identityFile: "Identiteitsbestand kiezen",
+    identityInvalid: "Vul één AGE-SECRET-KEY-1…-identiteit in.",
+    create: "Link maken",
+    cancel: "Annuleren",
+    close: "Sluiten",
+    ready: "Je link staat klaar",
+    readyLead: "Hij werkt één keer, in deze browsersessie, tot hij verloopt.",
+    expiresIn: (s) => `Verloopt over ${String(s)} s`,
+    expired: "De link is verlopen. Maak een nieuwe.",
+    used: "Link gebruikt. Maak een nieuwe voor een volgende download.",
+    get: (name) => `${name} downloaden`,
+    command: "Herstel hem met",
+    commandHint: "Plaatshouders tussen punthaken vul je zelf in.",
+    copy: "Commando kopiëren",
+    copied: "Commando gekopieerd.",
+    copyFailed: "Kopiëren mislukt.",
+    unencrypted: "Deze back-up is niet versleuteld.",
+    whatGlobals: "de globale objecten van het cluster",
+    whatArtifact: "dit back-upbestand",
+  },
+});
 
 /**
  * The download dialog (D-150): admins and the job's owners only (the
@@ -98,8 +135,7 @@ export function DownloadDialog({
   const identity = needsIdentity ? extractIdentity(identityText) : null;
   const identityError =
     needsIdentity && identityText.trim() !== "" && !identity ? T.identityInvalid : null;
-  const what =
-    artifact.database ?? (artifact.kind === "GLOBALS" ? "the cluster globals" : "this artifact");
+  const what = artifact.database ?? (artifact.kind === "GLOBALS" ? T.whatGlobals : T.whatArtifact);
 
   const expiresAt = ticket ? Date.parse(ticket.expiresAt) : 0;
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
@@ -234,7 +270,7 @@ export function DownloadDialog({
                 {identityError ? <p className="text-xs text-destructive">{identityError}</p> : null}
                 <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs hover:bg-accent has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50">
                   <Upload aria-hidden="true" className="size-3.5" />
-                  <span>Choose identity file</span>
+                  <span>{T.identityFile}</span>
                   <input
                     aria-label={T.identityFile}
                     type="file"

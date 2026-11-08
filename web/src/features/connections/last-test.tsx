@@ -4,6 +4,7 @@ import { Tag } from "@/components/status/tag";
 import type { TargetPrivilegeStatus } from "@/graphql/gen/graphql";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { RiskDecision } from "@/features/accepted-risks/risk-badge";
+import { defineMessages } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import { PRIVILEGE_META, privilegeReason } from "./labels";
@@ -26,20 +27,50 @@ export interface StoredPrivileges {
   acknowledgementRequired: boolean;
 }
 
-const STALE_HINT = "The settings changed after this test; run it again.";
+const T = defineMessages({
+  en: {
+    staleHint: "The settings changed after this test; run it again.",
+    notTested: "Not tested",
+    passed: "Passed",
+    failed: "Failed",
+    stale: "Stale",
+    notChecked: "Not checked",
+    fromStale: "from a stale test",
+    lastTest: "Last test",
+    staleLong: "Stale: the settings changed after this test. Run it again for a current result.",
+    rolePrivileges: "Role privileges",
+    privilegeReasons: "Privilege reasons",
+  },
+  nl: {
+    staleHint: "De instellingen zijn na deze test gewijzigd; voer de test opnieuw uit.",
+    notTested: "Niet getest",
+    passed: "Geslaagd",
+    failed: "Mislukt",
+    stale: "Verouderd",
+    notChecked: "Niet gecontroleerd",
+    fromStale: "uit een verouderde test",
+    lastTest: "Laatste test",
+    staleLong:
+      "Verouderd: de instellingen zijn na deze test gewijzigd. Voer de test opnieuw uit voor een actueel resultaat.",
+    rolePrivileges: "Rechten van de rol",
+    privilegeReasons: "Redenen voor de rechten",
+  },
+});
+
+const STALE_HINT = T.staleHint;
 
 /** List cell: Passed/Failed, the code, the time and a stale marker. */
 export function LastTestCell({ test }: { test: StoredTest | null | undefined }) {
-  if (!test) return <span className="text-xs text-muted-foreground">Not tested</span>;
+  if (!test) return <span className="text-xs text-muted-foreground">{T.notTested}</span>;
   return (
     <div className="flex flex-col items-start gap-1" data-testid="last-test">
       <div className="flex flex-wrap items-center gap-1.5">
         <Tag tone={test.ok ? "success" : "danger"} title={formatDateTime(test.at)}>
-          {test.ok ? "Passed" : "Failed"}
+          {test.ok ? T.passed : T.failed}
         </Tag>
         {test.stale ? (
           <Tag tone="neutral" title={STALE_HINT}>
-            Stale
+            {T.stale}
           </Tag>
         ) : null}
       </div>
@@ -58,17 +89,15 @@ export function PrivilegeVerdictCell({
   test: (StoredTest & { privileges?: StoredPrivileges | null }) | null | undefined;
 }) {
   const status = test?.privileges?.status;
-  if (!test) return <span className="text-xs text-muted-foreground">Not tested</span>;
-  if (!status) return <span className="text-xs text-muted-foreground">Not checked</span>;
+  if (!test) return <span className="text-xs text-muted-foreground">{T.notTested}</span>;
+  if (!status) return <span className="text-xs text-muted-foreground">{T.notChecked}</span>;
   const meta = PRIVILEGE_META[status];
   return (
     <div className="flex flex-col items-start gap-1">
       <Tag tone={meta.tone} title={meta.description}>
         {meta.label}
       </Tag>
-      {test.stale ? (
-        <span className="text-2xs text-muted-foreground">from a stale test</span>
-      ) : null}
+      {test.stale ? <span className="text-2xs text-muted-foreground">{T.fromStale}</span> : null}
     </div>
   );
 }
@@ -104,8 +133,8 @@ export function StoredTestPanel({
     >
       <div className="flex flex-wrap items-center gap-2">
         <History aria-hidden="true" className="size-3.5 text-muted-foreground" />
-        <span className="eyebrow">Last test</span>
-        <Tag tone={test.ok ? "success" : "danger"}>{test.ok ? "Passed" : "Failed"}</Tag>
+        <span className="eyebrow">{T.lastTest}</span>
+        <Tag tone={test.ok ? "success" : "danger"}>{test.ok ? T.passed : T.failed}</Tag>
         {!test.ok && test.code ? (
           <code className="font-mono text-2xs text-muted-foreground">{test.code}</code>
         ) : null}
@@ -117,15 +146,11 @@ export function StoredTestPanel({
           {formatRelative(test.at)}
         </time>
       </div>
-      {test.stale ? (
-        <p className="text-xs text-status-partial-fg">
-          Stale: the settings changed after this test. Run it again for a current result.
-        </p>
-      ) : null}
+      {test.stale ? <p className="text-xs text-status-partial-fg">{T.staleLong}</p> : null}
       {privileges && meta ? (
         <div className="flex flex-col gap-2 border-t border-rule pt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="eyebrow">Role privileges</span>
+            <span className="eyebrow">{T.rolePrivileges}</span>
             <Tag tone={meta.tone}>{meta.label}</Tag>
             {connectionId && privileges.status !== "NOT_PRIVILEGED" ? (
               <RiskDecision kind="PRIVILEGED_ROLE" subjectId={connectionId} />
@@ -133,7 +158,7 @@ export function StoredTestPanel({
           </div>
           <p className="text-sm text-muted-foreground">{meta.description}</p>
           {privileges.reasons.length > 0 ? (
-            <ul aria-label="Privilege reasons" className="flex flex-wrap gap-1.5">
+            <ul aria-label={T.privilegeReasons} className="flex flex-wrap gap-1.5">
               {privileges.reasons.map((r) => (
                 <li
                   key={r}

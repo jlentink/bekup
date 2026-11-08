@@ -2,11 +2,33 @@ import { HardDrive } from "lucide-react";
 import { Link } from "react-router";
 
 import { formatBytes } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import type { StorageRow } from "./model";
 import { Tile, TileEmpty, TileError, TileSkeleton } from "./tile";
 
-const TYPE_LABEL = { DISK: "Disk", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" } as const;
+const T = defineMessages({
+  en: {
+    title: "Storage",
+    link: "Destinations",
+    loading: "Loading storage",
+    empty: "No destinations yet.",
+    listLabel: "Stored bytes per destination",
+    objects: (n: number) => plural(n, { one: "1 object", other: `${String(n)} objects` }),
+    type: { DISK: "Disk", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" },
+  },
+  nl: {
+    title: "Opslag",
+    link: "Bestemmingen",
+    loading: "Opslag laden",
+    empty: "Nog geen bestemmingen.",
+    listLabel: "Opgeslagen bytes per bestemming",
+    objects: (n: number) => plural(n, { one: "1 object", other: `${String(n)} objecten` }),
+    type: { DISK: "Schijf", S3: "S3", SFTP: "SFTP", WEBDAV: "WebDAV" },
+  },
+});
+
+const TYPE_LABEL = T.type;
 
 /**
  * Bytes of present artifacts per destination (destinationUsage, an exact
@@ -23,23 +45,15 @@ export function StorageTile({
   error: unknown;
 }) {
   return (
-    <Tile
-      folio="06"
-      title="Storage"
-      to="/destinations"
-      linkLabel="Destinations"
-      testId="tile-storage"
-    >
+    <Tile folio="06" title={T.title} to="/destinations" linkLabel={T.link} testId="tile-storage">
       {loading && rows.length === 0 ? (
-        <TileSkeleton rows={3} label="Loading storage" />
+        <TileSkeleton rows={3} label={T.loading} />
       ) : error && rows.length === 0 ? (
         <TileError error={error} />
       ) : rows.length === 0 ? (
-        <TileEmpty icon={<HardDrive aria-hidden="true" className="size-4" />}>
-          No destinations yet.
-        </TileEmpty>
+        <TileEmpty icon={<HardDrive aria-hidden="true" className="size-4" />}>{T.empty}</TileEmpty>
       ) : (
-        <ul aria-label="Stored bytes per destination" className="flex flex-col gap-3">
+        <ul aria-label={T.listLabel} className="flex flex-col gap-3">
           {rows.map((r) => (
             <li key={r.id} data-testid="storage-row" className="flex flex-col gap-1">
               <span className="flex items-baseline gap-2">
@@ -73,9 +87,7 @@ export function StorageTile({
                   />
                 ) : null}
               </svg>
-              <span className="text-2xs text-muted-foreground">
-                {r.objects === 1 ? "1 object" : `${String(r.objects)} objects`}
-              </span>
+              <span className="text-2xs text-muted-foreground">{T.objects(r.objects)}</span>
             </li>
           ))}
         </ul>

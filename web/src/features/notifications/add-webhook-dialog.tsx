@@ -34,6 +34,9 @@ import { webhookUrlProblem } from "./model";
 import { AddMyWebhookMutation } from "./operations";
 import type { IssuedKey } from "./signing-key-dialog";
 
+/** An example URL, the same in every language. */
+const URL_PLACEHOLDER = "https://hooks.example.com/bekup";
+
 function schemaFor(allowHttp: boolean) {
   return z.object({
     label: z
@@ -158,7 +161,7 @@ export function AddWebhookDialog({
                       inputMode="url"
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="https://hooks.example.com/bekup"
+                      placeholder={URL_PLACEHOLDER}
                       className="font-mono text-[0.8125rem]"
                       {...field}
                     />

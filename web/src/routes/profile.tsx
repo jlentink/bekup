@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router";
 
 import { PageHeader } from "@/components/page-header";
 import { ChangePasswordForm } from "@/features/account/change-password-form";
+import { LanguageSection } from "@/features/account/language-section";
 import { Section } from "@/features/account/section";
 import { SessionsSection } from "@/features/account/sessions-section";
 import { TwoFactorPanel } from "@/features/account/two-factor-panel";
@@ -56,11 +57,11 @@ export function ProfileAccountPage() {
     <div className="flex flex-col">
       <Section icon={UserRound} title={M.accountHeading}>
         <dl className="grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
-          <dt className="eyebrow self-center">Name</dt>
+          <dt className="eyebrow self-center">{M.nameLabel}</dt>
           <dd>{user.displayName}</dd>
-          <dt className="eyebrow self-center">E-mail</dt>
+          <dt className="eyebrow self-center">{M.emailLabel}</dt>
           <dd className="font-mono text-[0.8125rem]">{user.email}</dd>
-          <dt className="eyebrow self-center">Role</dt>
+          <dt className="eyebrow self-center">{M.roleLabel}</dt>
           <dd>{messages.roles[user.role]}</dd>
         </dl>
       </Section>
@@ -69,6 +70,7 @@ export function ProfileAccountPage() {
           <ChangePasswordForm account={[user.email, user.displayName]} />
         </div>
       </Section>
+      <LanguageSection />
     </div>
   );
 }

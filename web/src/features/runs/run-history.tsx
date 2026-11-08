@@ -24,6 +24,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 
 import { formatBytes, formatDuration } from "@/lib/format";
 import { RunsListQuery, RunUpdatedSubscription } from "./operations";
@@ -32,28 +33,52 @@ import { STATUSES, TRIGGERS } from "./run-history-model";
 
 const PAGE_SIZE = 20;
 
-const T = {
-  status: "Status",
-  statusAll: "Any status",
-  trigger: "Trigger",
-  triggerAll: "Any trigger",
-  cols: {
+const T = defineMessages({
+  en: {
     status: "Status",
-    job: "Job",
+    statusAll: "Any status",
     trigger: "Trigger",
-    started: "Queued",
-    duration: "Duration",
-    items: "Databases",
-    size: "Stored",
+    triggerAll: "Any trigger",
+    cols: {
+      status: "Status",
+      job: "Job",
+      trigger: "Trigger",
+      started: "Queued",
+      duration: "Duration",
+      items: "Databases",
+      size: "Stored",
+    },
+    empty: "No runs yet.",
+    emptyFiltered: "No runs match.",
+    pager: "Run pages",
+    live: "Live",
+    warnings: (n: number) => plural(n, { one: "1 warning", other: `${String(n)} warnings` }),
+    attempt: (n: number) => `attempt ${String(n)}`,
+    planned: (at: string) => `planned for ${at}`,
   },
-  empty: "No runs yet.",
-  emptyFiltered: "No runs match.",
-  pager: "Run pages",
-  live: "Live",
-  warnings: (n: number) => `${String(n)} warning${n === 1 ? "" : "s"}`,
-  attempt: (n: number) => `attempt ${String(n)}`,
-  planned: (at: string) => `planned for ${at}`,
-} as const;
+  nl: {
+    status: "Status",
+    statusAll: "Elke status",
+    trigger: "Aanleiding",
+    triggerAll: "Elke aanleiding",
+    cols: {
+      status: "Status",
+      job: "Taak",
+      trigger: "Aanleiding",
+      started: "In wachtrij gezet",
+      duration: "Duur",
+      items: "Databases",
+      size: "Opgeslagen",
+    },
+    empty: "Nog geen runs.",
+    emptyFiltered: "Geen runs gevonden.",
+    pager: "Pagina's met runs",
+    live: "Live",
+    warnings: (n) => plural(n, { one: "1 waarschuwing", other: `${String(n)} waarschuwingen` }),
+    attempt: (n) => `poging ${String(n)}`,
+    planned: (at) => `gepland voor ${at}`,
+  },
+});
 
 /**
  * Paginated run history with status/trigger filters. With `live` it opens

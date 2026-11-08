@@ -5,6 +5,32 @@
  */
 
 import type { SsrfScope } from "@/graphql/gen/graphql";
+import { defineMessages } from "@/lib/i18n";
+
+const M = defineMessages({
+  en: {
+    cidrNotation: "Use CIDR notation, e.g. 10.20.0.0/16 or 192.0.2.10/32.",
+    prefixNumber: "The prefix length must be a number.",
+    zeroPrefix: "/0 would match every address and is never accepted.",
+    addressPart: "The address part must be an IPv4 or IPv6 address.",
+    hostOnly: "A host name only: no scheme, port, path or spaces.",
+    ipInHosts: "IP addresses go into the CIDR list (e.g. with /32).",
+    wildcardLabels: "A wildcard needs at least two labels, e.g. *.corp.example.",
+    wildcardSuffix: "Wildcards are only allowed as *.suffix.",
+    pickScope: "Pick at least one use this entry allows.",
+  },
+  nl: {
+    cidrNotation: "Gebruik CIDR-notatie, bijvoorbeeld 10.20.0.0/16 of 192.0.2.10/32.",
+    prefixNumber: "De prefixlengte moet een getal zijn.",
+    zeroPrefix: "/0 zou elk adres omvatten en wordt nooit geaccepteerd.",
+    addressPart: "Het adresdeel moet een IPv4- of IPv6-adres zijn.",
+    hostOnly: "Alleen een hostnaam: geen schema, poort, pad of spaties.",
+    ipInHosts: "IP-adressen horen in de CIDR-lijst (bijvoorbeeld met /32).",
+    wildcardLabels: "Een wildcard heeft minstens twee labels nodig, bijvoorbeeld *.corp.example.",
+    wildcardSuffix: "Wildcards zijn alleen toegestaan als *.achtervoegsel.",
+    pickScope: "Kies minstens één gebruik dat deze vermelding toestaat.",
+  },
+});
 
 export type ListKind = "cidrs" | "hosts";
 
@@ -125,29 +151,29 @@ export function hint(kind: ListKind, value: string): string | null {
   if (kind === "cidrs") {
     const [addr, bits, extra] = v.split("/");
     if (bits === undefined || extra !== undefined || addr === undefined || addr === "") {
-      return "Use CIDR notation, e.g. 10.20.0.0/16 or 192.0.2.10/32.";
+      return M.cidrNotation;
     }
-    if (!/^\d{1,3}$/.test(bits)) return "The prefix length must be a number.";
-    if (Number(bits) === 0) return "/0 would match every address and is never accepted.";
+    if (!/^\d{1,3}$/.test(bits)) return M.prefixNumber;
+    if (Number(bits) === 0) return M.zeroPrefix;
     if (!IPV4.test(addr) && !(addr.includes(":") && IPV6ISH.test(addr))) {
-      return "The address part must be an IPv4 or IPv6 address.";
+      return M.addressPart;
     }
     return null;
   }
   if (/[/:@\s]/.test(v) || v.includes("://")) {
-    return "A host name only: no scheme, port, path or spaces.";
+    return M.hostOnly;
   }
-  if (IPV4.test(v)) return "IP addresses go into the CIDR list (e.g. with /32).";
+  if (IPV4.test(v)) return M.ipInHosts;
   if (v.startsWith("*.") && !v.slice(2).includes(".")) {
-    return "A wildcard needs at least two labels, e.g. *.corp.example.";
+    return M.wildcardLabels;
   }
-  if (v.includes("*") && !v.startsWith("*.")) return "Wildcards are only allowed as *.suffix.";
+  if (v.includes("*") && !v.startsWith("*.")) return M.wildcardSuffix;
   return null;
 }
 
 /** A hint for the scopes of a non-empty entry (null: fine). */
 export function scopeHint(scopes: readonly SsrfScope[]): string | null {
-  return scopes.length === 0 ? "Pick at least one use this entry allows." : null;
+  return scopes.length === 0 ? M.pickScope : null;
 }
 
 export interface FieldRef {

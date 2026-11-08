@@ -20,6 +20,7 @@ import type {
 } from "@/graphql/gen/graphql";
 import { userMessage } from "@/lib/api-error";
 import { formatRelative } from "@/lib/format";
+import { defineMessages, plural } from "@/lib/i18n";
 import { ListDatabasesMutation } from "@/lib/operations";
 import { cn } from "@/lib/utils";
 
@@ -37,12 +38,82 @@ type Outcome =
   | { kind: "pull"; value: PrePullConnectionImageMutation["prePullImage"] }
   | { kind: "error"; check: Check; message: string };
 
-const CHECK_LABEL: Record<Check, string> = {
-  test: "Test connection",
-  detect: "Detect version",
-  list: "List databases",
-  pull: "Pre-pull image",
-};
+const T = defineMessages({
+  en: {
+    checks: {
+      test: "Test connection",
+      detect: "Detect version",
+      list: "List databases",
+      pull: "Pre-pull image",
+    },
+    works: "Connection works",
+    failed: "Connection failed",
+    tested: (when: string) => `tested ${when}`,
+    server: "Server",
+    detectedKey: "Detected key",
+    noClientFits: "no allowlisted client fits",
+    clientImage: "Client image",
+    compatible: "Compatible",
+    notCompatible: "Not compatible",
+    legacy: "Legacy series",
+    databases: "Databases",
+    rolePrivileges: "Role privileges",
+    privilegeReasons: "Privilege reasons",
+    checkFailed: (check: string) => `${check} failed`,
+    serverVersion: (v: string) => `Server version ${v}`,
+    suggestedKey: "Suggested key",
+    noneFits: "none fits",
+    currentImage: "Current image",
+    fits: "fits the server",
+    doesNotFit: "does not fit: edit the version key",
+    series: "Series",
+    endOfLife: "end of life (legacy)",
+    databaseCount: (n: number) => plural(n, { one: `${n} database`, other: `${n} databases` }),
+    noDatabases: "The server reports no user databases (system databases are hidden).",
+    alreadyPresent: "Image already present",
+    pulled: "Image pulled",
+    neverTested:
+      "Never tested. A test also reports whether the backup role is privileged (relevant for restores).",
+  },
+  nl: {
+    checks: {
+      test: "Verbinding testen",
+      detect: "Versie detecteren",
+      list: "Databases tonen",
+      pull: "Image vooraf ophalen",
+    },
+    works: "Verbinding werkt",
+    failed: "Verbinding mislukt",
+    tested: (when: string) => `getest ${when}`,
+    server: "Server",
+    detectedKey: "Gedetecteerde sleutel",
+    noClientFits: "geen toegestane client past",
+    clientImage: "Client-image",
+    compatible: "Compatibel",
+    notCompatible: "Niet compatibel",
+    legacy: "Verouderde reeks",
+    databases: "Databases",
+    rolePrivileges: "Rechten van de rol",
+    privilegeReasons: "Redenen voor de rechten",
+    checkFailed: (check: string) => `${check} mislukt`,
+    serverVersion: (v: string) => `Serverversie ${v}`,
+    suggestedKey: "Voorgestelde sleutel",
+    noneFits: "geen past",
+    currentImage: "Huidige image",
+    fits: "past bij de server",
+    doesNotFit: "past niet: wijzig de versiesleutel",
+    series: "Reeks",
+    endOfLife: "einde levensduur (verouderd)",
+    databaseCount: (n: number) => plural(n, { one: `${n} database`, other: `${n} databases` }),
+    noDatabases: "De server meldt geen gebruikersdatabases (systeemdatabases zijn verborgen).",
+    alreadyPresent: "Image al aanwezig",
+    pulled: "Image opgehaald",
+    neverTested:
+      "Nooit getest. Een test meldt ook of de back-uprol bevoorrecht is (van belang voor herstel).",
+  },
+});
+
+const CHECK_LABEL: Record<Check, string> = T.checks;
 
 function Warnings({ codes }: { codes: readonly string[] }) {
   if (codes.length === 0) return null;
@@ -100,8 +171,8 @@ export function TestResultPanel({ result, at }: { result: ConnectionTestResult; 
   return (
     <ResultFrame
       ok={result.ok}
-      title={result.ok ? "Connection works" : "Connection failed"}
-      meta={`tested ${formatRelative(new Date(at).toISOString())}`}
+      title={result.ok ? T.works : T.failed}
+      meta={T.tested(formatRelative(new Date(at).toISOString()))}
     >
       {!result.ok && (result.message || result.code) ? (
         <p className="text-sm">
@@ -113,37 +184,37 @@ export function TestResultPanel({ result, at }: { result: ConnectionTestResult; 
       ) : null}
       <Facts>
         {result.serverVersion ? (
-          <Fact term="Server" mono>
+          <Fact term={T.server} mono>
             {result.serverVersion}
           </Fact>
         ) : null}
-        <Fact term="Detected key" mono>
-          {result.detectedVersionKey ?? "no allowlisted client fits"}
+        <Fact term={T.detectedKey} mono>
+          {result.detectedVersionKey ?? T.noClientFits}
         </Fact>
-        <Fact term="Client image">
+        <Fact term={T.clientImage}>
           {result.compatible ? (
-            <Tag tone="success">Compatible</Tag>
+            <Tag tone="success">{T.compatible}</Tag>
           ) : (
-            <Tag tone="danger">Not compatible</Tag>
+            <Tag tone="danger">{T.notCompatible}</Tag>
           )}
           {result.legacy ? (
             <Tag tone="warning" className="ml-2">
-              Legacy series
+              {T.legacy}
             </Tag>
           ) : null}
         </Fact>
-        {result.ok ? <Fact term="Databases">{result.databaseCount}</Fact> : null}
+        {result.ok ? <Fact term={T.databases}>{result.databaseCount}</Fact> : null}
       </Facts>
       <Warnings codes={result.warnings} />
       {priv && meta ? (
         <div className="flex flex-col gap-2 border-t border-rule pt-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="eyebrow">Role privileges</span>
+            <span className="eyebrow">{T.rolePrivileges}</span>
             <Tag tone={meta.tone}>{meta.label}</Tag>
           </div>
           <p className="text-sm text-muted-foreground">{meta.description}</p>
           {priv.reasons.length > 0 ? (
-            <ul aria-label="Privilege reasons" className="flex flex-wrap gap-1.5">
+            <ul aria-label={T.privilegeReasons} className="flex flex-wrap gap-1.5">
               {priv.reasons.map((r) => (
                 <li
                   key={r}
@@ -165,22 +236,20 @@ function OutcomePanel({ outcome }: { outcome: Outcome }) {
   switch (outcome.kind) {
     case "error":
       return (
-        <ResultFrame ok={false} title={`${CHECK_LABEL[outcome.check]} failed`}>
+        <ResultFrame ok={false} title={T.checkFailed(CHECK_LABEL[outcome.check])}>
           <p className="text-sm">{outcome.message}</p>
         </ResultFrame>
       );
     case "detect": {
       const v = outcome.value;
       return (
-        <ResultFrame ok={v.currentCompatible} title={`Server version ${v.serverVersion}`}>
+        <ResultFrame ok={v.currentCompatible} title={T.serverVersion(v.serverVersion)}>
           <Facts>
-            <Fact term="Suggested key" mono>
-              {v.suggestedVersionKey ?? "none fits"}
+            <Fact term={T.suggestedKey} mono>
+              {v.suggestedVersionKey ?? T.noneFits}
             </Fact>
-            <Fact term="Current image">
-              {v.currentCompatible ? "fits the server" : "does not fit: edit the version key"}
-            </Fact>
-            {v.legacy ? <Fact term="Series">end of life (legacy)</Fact> : null}
+            <Fact term={T.currentImage}>{v.currentCompatible ? T.fits : T.doesNotFit}</Fact>
+            {v.legacy ? <Fact term={T.series}>{T.endOfLife}</Fact> : null}
           </Facts>
           <Warnings codes={v.warnings} />
         </ResultFrame>
@@ -188,10 +257,7 @@ function OutcomePanel({ outcome }: { outcome: Outcome }) {
     }
     case "list":
       return (
-        <ResultFrame
-          ok
-          title={`${outcome.value.databases.length} database${outcome.value.databases.length === 1 ? "" : "s"}`}
-        >
+        <ResultFrame ok title={T.databaseCount(outcome.value.databases.length)}>
           {outcome.value.databases.length > 0 ? (
             <ul className="grid gap-x-6 gap-y-1 font-mono text-xs sm:grid-cols-2 lg:grid-cols-3">
               {outcome.value.databases.map((d) => (
@@ -202,19 +268,14 @@ function OutcomePanel({ outcome }: { outcome: Outcome }) {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              The server reports no user databases (system databases are hidden).
-            </p>
+            <p className="text-sm text-muted-foreground">{T.noDatabases}</p>
           )}
           <Warnings codes={outcome.value.warnings} />
         </ResultFrame>
       );
     case "pull":
       return (
-        <ResultFrame
-          ok
-          title={outcome.value.alreadyPresent ? "Image already present" : "Image pulled"}
-        >
+        <ResultFrame ok title={outcome.value.alreadyPresent ? T.alreadyPresent : T.pulled}>
           <p className="font-mono text-xs break-all">{outcome.value.imageRef}</p>
         </ResultFrame>
       );
@@ -330,7 +391,7 @@ export function ConnectionChecks({
           test={lastTest}
           privileges={lastTest?.privileges}
           connectionId={id}
-          emptyText="Never tested. A test also reports whether the backup role is privileged (relevant for restores)."
+          emptyText={T.neverTested}
         />
       ) : null}
     </div>
