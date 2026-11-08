@@ -15501,7 +15501,9 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
      test) keeps its privileged-role acceptance instead of ending it as
      resolved. Residual: a verdict that flips privileged → not privileged
      → privileged with the same reasons between two hourly sweeps is
-     covered again (restore gating is unaffected).
+     covered again (restore gating is unaffected); accepted by the user
+     (2026-11-08). The connection hook is covered by
+     `TestRiskEnderOnConnectionChanges`.
   5. An insert guard sets `created_at = now()` and clears the warning and
      end columns on every new row (no backdated or pre-ended rows, also
      not from `bekup_app`).
