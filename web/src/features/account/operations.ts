@@ -116,3 +116,13 @@ export const DeletePasskeyMutation = graphql(`
     deletePasskey(id: $id)
   }
 `);
+
+/** Stores the own UI language for every browser (D-236); null follows the browser. */
+export const SetMyLocaleMutation = graphql(`
+  mutation SetMyLocale($locale: Locale) {
+    setMyLocale(locale: $locale) {
+      id
+      locale
+    }
+  }
+`);

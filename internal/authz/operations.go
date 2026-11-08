@@ -33,6 +33,8 @@ const (
 	OpAccountSessionsView      Operation = "account.sessions_view"      // list own sessions, accountEvents
 	OpAccountSessionsRevoke    Operation = "account.sessions_revoke"    // revoke own sessions
 	OpAccountSecondFactorEdit  Operation = "account.second_factor_edit" // TOTP, passkeys, recovery codes (own)
+	// OpAccountLocaleEdit stores the own UI language (setMyLocale; D-236).
+	OpAccountLocaleEdit Operation = "account.locale_edit"
 	// Own e-mail verification (task 5.1, D-178): request a link, redeem
 	// it (only the signed-in account it was issued to).
 	OpAccountEmailVerifyRequest Operation = "account.email_verify_request"
@@ -343,6 +345,7 @@ var policy = map[Operation]Rule{
 	OpAccountSessionsView:       {Roles: everyone},
 	OpAccountSessionsRevoke:     {Roles: everyone},
 	OpAccountSecondFactorEdit:   {Roles: everyone, Fresh: FreshStepUp},
+	OpAccountLocaleEdit:         {Roles: everyone},
 	OpAccountEmailVerifyRequest: {Roles: everyone},
 	OpAccountEmailVerify:        {Roles: everyone},
 

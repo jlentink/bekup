@@ -133,7 +133,7 @@ function serveStream(req, res, allowedOrigin) {
 }
 
 /** State of the fake API; reset at the start of every walk-through. */
-const api = { signedIn: false, steppedUp: false };
+const api = { signedIn: false, steppedUp: false, locale: null };
 
 const CONFIG_REQ = "7d1e0c55-0000-4000-8000-0000000000f1";
 
@@ -174,6 +174,7 @@ function configRequest(results) {
 function resetApi() {
   api.signedIn = false;
   api.steppedUp = false;
+  api.locale = null;
 }
 
 const ME = {
@@ -2408,7 +2409,13 @@ const OPERATIONS = {
     },
   }),
   Me: () =>
-    api.signedIn ? { data: { me: ME } } : err("UNAUTHENTICATED", "authentication required"),
+    api.signedIn
+      ? { data: { me: { ...ME, locale: api.locale } } }
+      : err("UNAUTHENTICATED", "authentication required"),
+  SetMyLocale: (v) => {
+    api.locale = v.locale ?? null;
+    return { data: { setMyLocale: { __typename: "User", id: ME.id, locale: api.locale } } };
+  },
   Login: () => ({
     data: {
       login: {
@@ -2530,13 +2537,16 @@ function serveOperation(req, res, allowedOrigin) {
   });
   req.on("end", () => {
     let name = "";
+    let variables = {};
     try {
-      name = JSON.parse(body).operationName ?? "";
+      const parsed = JSON.parse(body);
+      name = parsed.operationName ?? "";
+      variables = parsed.variables ?? {};
     } catch {
       /* answered below */
     }
     const handler = OPERATIONS[name];
-    const result = handler ? handler() : err("INTERNAL", `unmocked operation ${name}`);
+    const result = handler ? handler(variables) : err("INTERNAL", `unmocked operation ${name}`);
     res
       .writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
       .end(JSON.stringify(result));
@@ -3232,6 +3242,12 @@ async function exerciseDutch(page, base, violations) {
   await page.getByRole("heading", { name: "Profiel en beveiliging" }).waitFor();
   const lang = await page.evaluate(() => document.documentElement.lang);
   if (lang !== "nl") throw new Error(`html lang is "${lang}" after switching to Dutch`);
+  // The choice is stored on the account (D-236) ...
+  if (api.locale !== "NL") throw new Error(`account locale is ${api.locale} after the switch`);
+  // ... and a browser without it follows the account (one reload).
+  await page.evaluate(() => window.localStorage.clear());
+  await page.goto(`${base}/profile`);
+  await page.getByRole("heading", { name: "Profiel en beveiliging" }).waitFor();
   const routes = [
     "/",
     "/connections",

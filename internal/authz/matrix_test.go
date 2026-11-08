@@ -54,6 +54,7 @@ var matrix = map[authz.Operation]expect{
 	authz.OpAccountSecondFactorEdit:   {"YYYYYU", "S"},
 	authz.OpAccountEmailVerifyRequest: {"YYYYYU", "-"},
 	authz.OpAccountEmailVerify:        {"YYYYYU", "-"},
+	authz.OpAccountLocaleEdit:         {"YYYYYU", "-"},
 
 	authz.OpUserList:             {"YFFFFU", "-"},
 	authz.OpUserView:             {"YFFFFU", "-"},

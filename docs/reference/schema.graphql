@@ -44,7 +44,10 @@ type ApiToken {
   "The caller created the token."
   createdByMe: Boolean!
   createdAt: Time!
-  expiresAt: Time!
+  "When the token expires; null exactly when neverExpires."
+  expiresAt: Time
+  "The token never expires (an explicit choice; alerted, a permanent warning)."
+  neverExpires: Boolean!
   revokedAt: Time
   """
   The networks (canonical CIDRs) the token may be used from; empty when
@@ -77,8 +80,13 @@ input CreateApiTokenInput {
   they own.
   """
   jobIds: [UUID!]!
-  "Between 1 and 365 days from now."
-  expiresAt: Time!
+  """
+  Between 1 and 365 days from now; null when neverExpires is set (exactly
+  one of the two).
+  """
+  expiresAt: Time
+  "Explicitly create a token that never expires (audited and alerted)."
+  neverExpires: Boolean! = false
   """
   1-32 IPv4/IPv6 networks or addresses (a bare address is a /32 or /128);
   must be empty when allowAnyAddress is set.
@@ -271,6 +279,13 @@ type Mutation {
   cookie.
   """
   changePassword(currentPassword: String!, newPassword: String!): Boolean! @stepUp
+
+  """
+  Stores your UI language for every browser (D-236); null follows the
+  browser again. From task 8.3 it also decides the language of the
+  e-mails and notification texts bekup sends you.
+  """
+  setMyLocale(locale: Locale): User! @authenticated
 }
 
 extend type Query {
@@ -287,6 +302,14 @@ type User {
   email: String!
   displayName: String!
   role: Role!
+  "The account's UI language; null follows the browser (D-236)."
+  locale: Locale
+}
+
+"A language of the bekup UI (D-235)."
+enum Locale {
+  EN
+  NL
 }
 
 "Kinds of second factors (tasks 1.7-1.9)."
@@ -1229,6 +1252,13 @@ type Destination {
   tested. Normalized codes only.
   """
   lastTest: DestinationLastTest
+  """
+  The stored answer of the newest space check (D-227: the hourly check,
+  or a destinationSpace call that asked the backend); null when the
+  destination was never checked or its settings changed since. Reading it
+  never asks the backend.
+  """
+  spaceCheck: DestinationSpace
 }
 
 "The stored outcome of the newest testDestination (D-187)."
@@ -1514,6 +1544,12 @@ type DestinationSpace {
   low: Boolean!
   "When the backend was asked (null: not asked, e.g. S3 or not ready)."
   checkedAt: Time
+  """
+  The answer is older than 3 hours: the hourly space check has not
+  refreshed it (stored answers only; any status, since the check refreshes
+  every answer, including UNSUPPORTED and not-ready ones).
+  """
+  stale: Boolean!
 }
 
 extend type Mutation {
@@ -3492,6 +3528,157 @@ extend type Subscription {
   """
   restoresUpdated: Restore! @hasRole(roles: [ADMIN, MAINTAINER, USER])
 }
+# Accepted security risks (D-228): a weakened condition accepted for one
+# month, one year or forever is no open issue any more (dashboard, daily
+# reminders, startup alert). Badges stay ("accepted until ..."), and every
+# decision is audited and alerted.
+
+"What an acceptance is about."
+enum RiskKind {
+  "bekup is served over plain HTTP (server.base_url)."
+  INSECURE_TRANSPORT
+  "The app database's TLS mode is require or disable."
+  INSECURE_DB_TLS
+  "One database account for migrations and the app (single-account mode)."
+  INSECURE_DB_ROLES
+  "The bekup image follows a tag instead of a pinned digest."
+  UNPINNED_IMAGE
+  "A connection's TLS mode is UNVERIFIED or DISABLED."
+  CONNECTION_TLS
+  "A connection's role is privileged (or its privileges are unknown)."
+  PRIVILEGED_ROLE
+  "The SMTP mode may send e-mail unencrypted (auto or none)."
+  SMTP_UNENCRYPTED
+  "A job's backups are not encrypted (opted out)."
+  ENCRYPTION_OPT_OUT
+}
+
+enum RiskDuration {
+  ONE_MONTH
+  ONE_YEAR
+  "No end date: until revoked or the condition changes (alerted as an error)."
+  FOREVER
+}
+
+enum RiskAcceptanceStatus {
+  ACTIVE
+  "The end date passed."
+  EXPIRED
+  "Someone revoked it."
+  REVOKED
+  "It ended otherwise (see endReason)."
+  ENDED
+}
+
+enum RiskEndReason {
+  REVOKED
+  "A new acceptance replaced it."
+  SUPERSEDED
+  EXPIRED
+  "The condition changed (a different risk now)."
+  CONDITION_CHANGED
+  "The risk is gone."
+  RESOLVED
+  "The connection or job was deleted."
+  SUBJECT_DELETED
+  "The account that accepted it may no longer decide about it."
+  ACCEPTOR_LOST_RIGHTS
+}
+
+enum RiskAcceptanceFilter {
+  ACTIVE
+  ENDED
+  ALL
+}
+
+"Who accepted a risk."
+type RiskAcceptor {
+  id: UUID!
+  displayName: String!
+  "Admins (and the acceptor themselves) only."
+  email: String
+  deleted: Boolean!
+}
+
+"An acceptance as the caller may see it."
+type RiskAcceptance {
+  id: UUID!
+  kind: RiskKind!
+  "The connection (connection kinds)."
+  connectionId: UUID
+  "The job (ENCRYPTION_OPT_OUT)."
+  jobId: UUID
+  "The connection's or job's name; null for instance-wide kinds."
+  subjectName: String
+  subjectDeleted: Boolean!
+  "A short readable form of the accepted condition."
+  condition: String!
+  duration: RiskDuration!
+  "Why the risk was accepted."
+  reason: String!
+  "For staff and the acceptor; null otherwise."
+  createdBy: RiskAcceptor
+  createdByMe: Boolean!
+  createdAt: Time!
+  "null: no end date."
+  expiresAt: Time
+  endedAt: Time
+  endReason: RiskEndReason
+  status: RiskAcceptanceStatus!
+}
+
+"An acceptable risk that exists now."
+type SecurityRisk {
+  kind: RiskKind!
+  "The opaque id of the current condition; acceptRisk must name it."
+  conditionId: String!
+  condition: String!
+  connectionId: UUID
+  jobId: UUID
+  subjectName: String
+  "The active acceptance covering exactly this condition; null: open."
+  acceptance: RiskAcceptance
+  "The caller may accept it (admins; backup owners for their jobs)."
+  canAccept: Boolean!
+}
+
+input AcceptRiskInput {
+  kind: RiskKind!
+  "Connection kinds only."
+  connectionId: UUID
+  "ENCRYPTION_OPT_OUT only."
+  jobId: UUID
+  "SecurityRisk.conditionId as shown (CONFLICT when the condition changed since)."
+  conditionId: String!
+  duration: RiskDuration!
+  "1-500 characters."
+  reason: String!
+}
+
+extend type Query {
+  """
+  The acceptable risks that exist now: staff see all (instance, SMTP,
+  connections, jobs), backup owners the encryption opt-outs of their jobs.
+  """
+  securityRisks: [SecurityRisk!]! @hasRole(roles: [ADMIN, MAINTAINER, USER])
+  """
+  Acceptances, newest first (first ≤ 500): staff every one, backup owners
+  those on jobs they own.
+  """
+  riskAcceptances(filter: RiskAcceptanceFilter = ACTIVE, first: Int = 200): [RiskAcceptance!]!
+    @hasRole(roles: [ADMIN, MAINTAINER, USER])
+}
+
+extend type Mutation {
+  """
+  Accepts the current condition of a risk (admins; backup owners for a job
+  they own; fresh step-up; audited and alerted). A live acceptance of the
+  same risk is replaced.
+  """
+  acceptRisk(input: AcceptRiskInput!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+  "Revokes an active acceptance: the risk is flagged again (same callers; fresh step-up; audited)."
+  revokeRiskAcceptance(id: UUID!): RiskAcceptance! @hasRole(roles: [ADMIN, USER]) @stepUp
+}
 # Backup runs (tasks 3.6 and 3.7; D-147, D-149). Admins and maintainers
 # see every run; backup owners see the runs and artifacts of the jobs they
 # own only (listings are filtered, single objects of other jobs answer
@@ -4347,8 +4534,9 @@ extend type Mutation {
   setSummarySettings(input: SummarySettingsInput!): MySummarySettings! @authenticated
 
   """
-  Sends your summary of the current period so far now, marked as a
-  preview (inbox and e-mail; rate limited). VALIDATION when you can see no
+  Sends your summary of one full period up to now (the last 24 hours, 48
+  hours, 7 days or month), marked as a preview (inbox and e-mail; rate
+  limited; the schedule is not moved). VALIDATION when you can see no
   backup job.
   """
   sendSummaryPreview: SummaryPreviewResult! @authenticated

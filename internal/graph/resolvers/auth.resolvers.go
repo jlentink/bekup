@@ -29,6 +29,10 @@ func (r *mutationResolver) ChangePassword(ctx context.Context, currentPassword s
 	return r.changePassword(ctx, currentPassword, newPassword)
 }
 
+func (r *mutationResolver) SetMyLocale(ctx context.Context, locale *model.Locale) (*model.User, error) {
+	return r.setMyLocale(ctx, locale)
+}
+
 func (r *queryResolver) Me(ctx context.Context) (*model.User, error) {
 	return r.me(ctx)
 }

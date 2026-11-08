@@ -9,6 +9,7 @@ import { loginPathFor, RETURN_PARAM, safeReturnPath } from "@/lib/return-path";
 
 import { MeQuery } from "./operations";
 import { enrollmentState, type SessionUser } from "./session-model";
+import { useAccountLocale } from "./use-account-locale";
 import { SessionContext } from "./use-session-user";
 
 export function SessionProvider({ user, children }: { user: SessionUser; children: ReactNode }) {
@@ -34,6 +35,8 @@ export interface RequireSessionProps {
 export function RequireSession({ children, passwordChange, enrollment }: RequireSessionProps) {
   const location = useLocation();
   const { data, error, loading, refetch } = useQuery(MeQuery, { fetchPolicy: "cache-first" });
+  // The account's language wins over this browser's (D-236).
+  const switchingLocale = useAccountLocale(data?.me ? data.me.locale : undefined);
   const here = location.pathname + location.search + location.hash;
 
   if (error) {
@@ -59,6 +62,7 @@ export function RequireSession({ children, passwordChange, enrollment }: Require
   if (!data) return loading ? <ShellSkeleton /> : <Navigate to={loginPathFor(here)} replace />;
   const user = data.me;
   if (!user) return <Navigate to={loginPathFor(here)} replace />;
+  if (switchingLocale) return <ShellSkeleton />;
 
   let content = children;
   if (user.passwordChangeRequired) content = passwordChange;

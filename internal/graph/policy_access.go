@@ -19,6 +19,7 @@ var RootFieldOperations = map[string]authz.Operation{
 	// Own account and sessions (task 1.5). Mutation.login is public
 	// (PublicRootFields) and rate limited by internal/auth.
 	"Query.me":                authz.OpAccountView,
+	"Mutation.setMyLocale":    authz.OpAccountLocaleEdit,
 	"Query.mySessions":        authz.OpAccountSessionsView,
 	"Mutation.logout":         authz.OpAccountLogout,
 	"Mutation.revokeSession":  authz.OpAccountSessionsRevoke,

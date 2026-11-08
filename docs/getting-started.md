@@ -257,8 +257,9 @@ links to its detail page.
 
 The web interface is available in English and Dutch (D-235). It follows
 the browser's language until you pick one under **Profile → Account →
-Language**; the choice is stored in that browser and the page reloads in
-the new language. Messages sent by the server (error details, e-mails,
+Language**; the choice is saved with your account (D-236), so every
+browser you sign in with switches to it, and the page reloads in the new
+language. "Same as this browser" goes back to the browser's language. Messages sent by the server (error details, e-mails,
 the browser setup's questions) are still in English.
 
 ## Your first backup

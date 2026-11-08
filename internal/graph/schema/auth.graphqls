@@ -33,6 +33,13 @@ type Mutation {
   cookie.
   """
   changePassword(currentPassword: String!, newPassword: String!): Boolean! @stepUp
+
+  """
+  Stores your UI language for every browser (D-236); null follows the
+  browser again. From task 8.3 it also decides the language of the
+  e-mails and notification texts bekup sends you.
+  """
+  setMyLocale(locale: Locale): User! @authenticated
 }
 
 extend type Query {
@@ -49,6 +56,14 @@ type User {
   email: String!
   displayName: String!
   role: Role!
+  "The account's UI language; null follows the browser (D-236)."
+  locale: Locale
+}
+
+"A language of the bekup UI (D-235)."
+enum Locale {
+  EN
+  NL
 }
 
 "Kinds of second factors (tasks 1.7-1.9)."

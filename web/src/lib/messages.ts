@@ -194,6 +194,10 @@ const en = {
     languageHeading: "Language",
     languageLead: "The language of bekup in this browser. Changing it reloads the page.",
     languageBrowser: "Same as this browser",
+    languageNoStorage:
+      "This browser does not let bekup store the language, so it keeps the browser's language. Your choice is saved for your other browsers.",
+    languageBrowserOnly: "Chosen in this browser only; your other browsers do not follow it.",
+    languageSaveForAccount: "Save for my account",
     languageLabel: "Language",
     nameLabel: "Name",
     emailLabel: "E-mail",
@@ -517,6 +521,11 @@ const nl: Messages<typeof en> = {
     languageLead:
       "De taal van bekup in deze browser. Bij een wijziging wordt de pagina opnieuw geladen.",
     languageBrowser: "Zelfde als deze browser",
+    languageNoStorage:
+      "Deze browser laat bekup de taal niet opslaan en houdt daarom de taal van de browser. Je keuze is opgeslagen voor je andere browsers.",
+    languageBrowserOnly:
+      "Alleen in deze browser gekozen; je andere browsers volgen deze keuze niet.",
+    languageSaveForAccount: "Opslaan voor mijn account",
     languageLabel: "Taal",
     nameLabel: "Naam",
     emailLabel: "E-mail",

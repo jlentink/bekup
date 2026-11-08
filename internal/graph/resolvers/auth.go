@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 var (
@@ -252,7 +254,52 @@ func userModel(u sqlc.User) (*model.User, error) {
 		PasswordChangeRequired: u.PasswordTemporaryUntil != nil, TemporaryPasswordExpiresAt: u.PasswordTemporaryUntil,
 		CreatedAt: u.CreatedAt, UpdatedAt: u.UpdatedAt, DeletedAt: u.DeletedAt,
 		EmailVerified: u.EmailVerifiedAt != nil, EmailVerifiedAt: u.EmailVerifiedAt,
+		Locale: modelLocale(u.Locale),
 	}, nil
+}
+
+// modelLocale maps the stored users.locale to the GraphQL enum (nil for
+// NULL or a value the API does not know).
+func modelLocale(stored *string) *model.Locale {
+	if stored == nil {
+		return nil
+	}
+	l, ok := i18n.Parse(*stored)
+	if !ok {
+		return nil
+	}
+	m := model.Locale(strings.ToUpper(string(l)))
+	if !m.IsValid() {
+		return nil
+	}
+	return &m
+}
+
+func (r *Resolver) setMyLocale(ctx context.Context, locale *model.Locale) (*model.User, error) {
+	svc, err := r.authService()
+	if err != nil {
+		return nil, err
+	}
+	p, err := caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var want *i18n.Locale
+	if locale != nil {
+		l, ok := i18n.Parse(strings.ToLower(string(*locale)))
+		if !ok {
+			return nil, apierror.Invalid("locale", "unsupported language")
+		}
+		want = &l
+	}
+	u, err := svc.SetLocale(ctx, p, want)
+	if errors.Is(err, auth.ErrUserNotFound) {
+		return nil, apierror.New(apierror.NotFound, "account not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return userModel(u)
 }
 
 func sessionModel(s *sqlc.Session, current uuid.UUID) model.Session {

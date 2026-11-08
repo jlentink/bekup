@@ -30,7 +30,7 @@ func (q *Queries) ActiveAdminExists(ctx context.Context) (bool, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, display_name, password_hash, role, password_temporary_until)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at
+RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale
 `
 
 type CreateUserParams struct {
@@ -72,6 +72,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -102,7 +103,7 @@ func (q *Queries) DeleteUserWebAuthnCredentials(ctx context.Context, userID uuid
 
 const getActiveUserByEmail = `-- name: GetActiveUserByEmail :one
 
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE email = $1 AND deleted_at IS NULL
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale FROM users WHERE email = $1 AND deleted_at IS NULL
 `
 
 // User administration (task 1.6, D-110): admin CRUD in the API and the
@@ -132,12 +133,13 @@ func (q *Queries) GetActiveUserByEmail(ctx context.Context, email string) (User,
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
 `
 
 // GetUserForUpdate locks a user row that is not deleted.
@@ -166,6 +168,7 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -233,7 +236,7 @@ func (q *Queries) ListUserDirectory(ctx context.Context, arg ListUserDirectoryPa
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale FROM users
 WHERE ($1::boolean IS TRUE OR deleted_at IS NULL)
   AND ($2::user_role IS NULL OR role = $2::user_role)
   AND ($3::boolean IS NULL OR disabled = $3::boolean)
@@ -297,6 +300,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.DeletedAt,
 			&i.PasswordTemporaryUntil,
 			&i.MfaResetAt,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}

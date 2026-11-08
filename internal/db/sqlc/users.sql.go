@@ -13,7 +13,7 @@ import (
 )
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE email = $1 AND deleted_at IS NULL
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale FROM users WHERE email = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -41,12 +41,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at FROM users WHERE id = $1
+SELECT id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -74,6 +75,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -81,7 +83,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 const insertUser = `-- name: InsertUser :one
 INSERT INTO users (email, display_name, password_hash, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at
+RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale
 `
 
 type InsertUserParams struct {
@@ -121,6 +123,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 		&i.DeletedAt,
 		&i.PasswordTemporaryUntil,
 		&i.MfaResetAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -209,6 +212,50 @@ WHERE id = $1
 func (q *Queries) ResetLoginFailures(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, resetLoginFailures, id)
 	return err
+}
+
+const setUserLocale = `-- name: SetUserLocale :one
+UPDATE users
+SET locale = $1::text
+WHERE id = $2 AND deleted_at IS NULL AND NOT disabled
+RETURNING id, email, display_name, password_hash, role, disabled, locked_until, failed_login_count, totp_secret_enc, totp_last_step, email_verified_at, created_at, updated_at, totp_pending_enc, totp_pending_expires_at, totp_enabled_at, mfa_failed_count, mfa_locked_until, deleted_at, password_temporary_until, mfa_reset_at, locale
+`
+
+type SetUserLocaleParams struct {
+	Locale *string   `json:"locale"`
+	ID     uuid.UUID `json:"id"`
+}
+
+// SetUserLocale stores the UI language of an active account (D-236; NULL
+// follows the browser). No row: deleted or disabled.
+func (q *Queries) SetUserLocale(ctx context.Context, arg SetUserLocaleParams) (User, error) {
+	row := q.db.QueryRow(ctx, setUserLocale, arg.Locale, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.PasswordHash,
+		&i.Role,
+		&i.Disabled,
+		&i.LockedUntil,
+		&i.FailedLoginCount,
+		&i.TotpSecretEnc,
+		&i.TotpLastStep,
+		&i.EmailVerifiedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TotpPendingEnc,
+		&i.TotpPendingExpiresAt,
+		&i.TotpEnabledAt,
+		&i.MfaFailedCount,
+		&i.MfaLockedUntil,
+		&i.DeletedAt,
+		&i.PasswordTemporaryUntil,
+		&i.MfaResetAt,
+		&i.Locale,
+	)
+	return i, err
 }
 
 const updateUserPassword = `-- name: UpdateUserPassword :execrows

@@ -120,7 +120,8 @@ func sessionMiddleware(o SessionOptions, users *RateLimiter[uuid.UUID], logger *
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
-			meta := auth.NewRequestMeta(ClientIP(ctx), r.UserAgent())
+			meta := auth.NewRequestMeta(ClientIP(ctx), r.UserAgent()).
+				WithAcceptLanguage(r.Header.Get("Accept-Language"))
 			sink := &cookieSink{w: w, policy: o.Cookies}
 			ctx = auth.WithRequestMeta(auth.WithCookieSetter(ctx, sink), meta)
 			values := sessionCookies(r, name)

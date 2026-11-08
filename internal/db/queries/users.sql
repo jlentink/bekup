@@ -54,3 +54,11 @@ UPDATE users
 SET password_hash = @new_hash
 WHERE id = @id
   AND password_hash = @old_hash;
+
+-- SetUserLocale stores the UI language of an active account (D-236; NULL
+-- follows the browser). No row: deleted or disabled.
+-- name: SetUserLocale :one
+UPDATE users
+SET locale = sqlc.narg(locale)::text
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND NOT disabled
+RETURNING *;
