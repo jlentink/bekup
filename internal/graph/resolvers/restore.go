@@ -55,7 +55,7 @@ func restoreError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.As(err, &ve):
 		return apierror.New(apierror.Conflict, "the backup failed its verification against the signed manifest and cannot be restored; this was recorded as a security event")
 	case errors.Is(err, restore.ErrNotFound):

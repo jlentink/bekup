@@ -322,7 +322,7 @@ func (s *Service) DeleteUnrecordedFile(ctx context.Context, actor Actor, destID,
 		return "", ErrNoDeleteMode
 	}
 	if v := r.view(); !v.Ready {
-		return "", &NotReadyError{Reason: v.NotReadyReason}
+		return "", notReady(v.NotReadyMsg)
 	}
 	release, err := s.acquire(actor)
 	if err != nil {

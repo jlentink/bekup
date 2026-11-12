@@ -21,6 +21,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/serviceutil"
@@ -45,9 +46,16 @@ var (
 
 // NotReadyError reports that the connection cannot be used yet; Reason is
 // presentable.
-type NotReadyError struct{ Reason string }
+type NotReadyError struct {
+	Reason string
+	// ReasonMsg is Reason translatable (D-238).
+	ReasonMsg i18n.Msg
+}
 
 func (e *NotReadyError) Error() string { return "connections: not ready: " + e.Reason }
+
+// notReady returns a *NotReadyError with the reason m.
+func notReady(m i18n.Msg) *NotReadyError { return &NotReadyError{Reason: m.String(), ReasonMsg: m} }
 
 // RateLimitedError reports that the caller exceeded the per-user limit of
 // runner operations.
@@ -243,7 +251,8 @@ func (s *Service) view(row *sqlc.Connection) Connection {
 		}
 		c.SSH = sh
 	}
-	c.NotReadyReason = notReadyReason(&c)
+	c.NotReadyMsg = notReadyMsg(&c)
+	c.NotReadyReason = c.NotReadyMsg.String()
 	c.Ready = c.NotReadyReason == ""
 	c.LastTest = lastTestOf(row)
 	return c
@@ -287,21 +296,29 @@ func pinStatus(mode TLSMode, p *Pin, now time.Time) PinStatus {
 	}
 }
 
-// notReadyReason says what is missing before c can be used.
-func notReadyReason(c *Connection) string {
-	var missing []string
+// Not-ready reasons of a connection.
+const (
+	reasonNeedsTLSPin     = "fetch and confirm the server's TLS certificate"
+	reasonNeedsSSHHostKey = "fetch and confirm the SSH bastion's host key"
+	reasonNeedsSSHAuth    = "set an SSH password or key"
+)
+
+// notReadyMsg says what is missing before c can be used (zero when
+// nothing is).
+func notReadyMsg(c *Connection) i18n.Msg {
+	var missing []i18n.Msg
 	if c.TLSMode == TLSPinned && c.Pin == nil {
-		missing = append(missing, "fetch and confirm the server's TLS certificate")
+		missing = append(missing, i18n.M(reasonNeedsTLSPin))
 	}
 	if c.SSH != nil {
 		if c.SSH.HostKey == nil {
-			missing = append(missing, "fetch and confirm the SSH bastion's host key")
+			missing = append(missing, i18n.M(reasonNeedsSSHHostKey))
 		}
 		if c.SSH.Auth == SSHAuthNone {
-			missing = append(missing, "set an SSH password or key")
+			missing = append(missing, i18n.M(reasonNeedsSSHAuth))
 		}
 	}
-	return strings.Join(missing, "; ")
+	return i18n.Join("; ", missing...)
 }
 
 // List returns every connection that is not deleted, ordered by name.

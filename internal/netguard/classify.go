@@ -2,6 +2,8 @@ package netguard
 
 import (
 	"net/netip"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Reason says why an address is denied. The values are stable, short and
@@ -34,6 +36,59 @@ const (
 	Reason6to4Embedded        Reason = "6to4 address embedding a denied IPv4 address"
 	ReasonTeredo              Reason = "Teredo tunnel"
 )
+
+// Msg returns the reason as a translatable text (D-238).
+func (r Reason) Msg() i18n.Msg {
+	switch r {
+	case ReasonInvalid:
+		return i18n.Text("invalid address")
+	case ReasonUnspecified:
+		return i18n.Text("unspecified")
+	case ReasonThisNetwork:
+		return i18n.Text("this network (0.0.0.0/8)")
+	case ReasonLoopback:
+		return i18n.Text("loopback")
+	case ReasonPrivate:
+		return i18n.Text("private network")
+	case ReasonSharedAddress:
+		return i18n.Text("shared address space (CGNAT)")
+	case ReasonLinkLocal:
+		return i18n.Text("link-local")
+	case ReasonMetadata:
+		return i18n.Text("cloud metadata endpoint")
+	case ReasonMulticast:
+		return i18n.Text("multicast")
+	case ReasonBroadcast:
+		return i18n.Text("broadcast")
+	case ReasonReserved:
+		return i18n.Text("reserved")
+	case ReasonDocumentation:
+		return i18n.Text("documentation range")
+	case ReasonBenchmarking:
+		return i18n.Text("benchmarking range")
+	case ReasonProtocolAssignments:
+		return i18n.Text("IETF protocol assignments")
+	case ReasonUniqueLocal:
+		return i18n.Text("unique-local (fc00::/7)")
+	case ReasonSiteLocal:
+		return i18n.Text("site-local (deprecated)")
+	case ReasonDiscard:
+		return i18n.Text("discard-only")
+	case ReasonIPv4Compatible:
+		return i18n.Text("IPv4-compatible IPv6 (deprecated)")
+	case ReasonIPv4Translated:
+		return i18n.Text("IPv4-translated IPv6")
+	case ReasonNAT64Local:
+		return i18n.Text("local-use NAT64")
+	case ReasonNAT64Embedded:
+		return i18n.Text("NAT64 address embedding a denied IPv4 address")
+	case Reason6to4Embedded:
+		return i18n.Text("6to4 address embedding a denied IPv4 address")
+	case ReasonTeredo:
+		return i18n.Text("Teredo tunnel")
+	}
+	return i18n.Text("not allowed")
+}
 
 // Classification is the verdict for one address.
 type Classification struct {

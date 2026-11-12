@@ -260,6 +260,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-235](#d-235-ui-translations-as-typed-message-tables-per-language-english-dutch) | UI translations as typed message tables per language (English, Dutch) | proposed |
 | [D-236](#d-236-the-ui-language-per-account-and-the-request-language) | The UI language per account and the request language | proposed |
 | [D-237](#d-237-server-rendered-notification-texts-in-the-recipients-language) | Server-rendered notification texts in the recipient's language | proposed |
+| [D-238](#d-238-api-texts-as-translatable-messages-format-and-arguments-through-a-central-catalog) | API texts as translatable messages: format and arguments through a central catalog | proposed |
 
 ---
 
@@ -15842,3 +15843,67 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** plan tasks 8.3a–8.3c, `internal/i18n/catalog.go`,
   `internal/notify/texts.go`, `internal/notify/summary/texts.go`,
   `internal/notify/email`, D-226, D-235, D-236.
+
+## D-238: API texts as translatable messages: format and arguments through a central catalog
+
+- **Date:** 2026-11-08
+- **Status:** proposed
+- **Decided by:** user (8.3b split into 8.3b1 error messages, 8.3b2 server
+  prose in field values, 8.3b3 persisted English; texts passed on from
+  other packages become typed messages at their source, sentences built
+  from fragments become whole sentences) and agent (the mechanism below)
+- **Context:** D-237 left the texts the GraphQL API returns in English.
+  About 560 of them exist: `apierror` messages, the `FieldError` types of
+  the services, password-policy and similar errors, and server prose in
+  field values. They reach the error presenter already formatted, so a
+  catalog cannot find them, and some are built from another package's
+  `err.Error()` or from sentence fragments.
+- **Decision:**
+  1. `i18n.Msg` (English fmt format + arguments, or a constant text
+     without arguments from `i18n.Text`, shown as is) is the one
+     translatable message type; `i18n.M`/`Errorf` are printf wrappers for
+     go vet, so formats are checked against their arguments. Arguments that are themselves `Msg` are translated too;
+     every other argument (names, numbers, type-to-confirm phrases) is
+     formatted as is and never translated. `i18n.Errorf` returns an error
+     carrying a `Msg` (`i18n.MsgOf(err)`, `MsgsOf` for joined errors,
+     `ErrorOf` for a built Msg), for errors whose text another package
+     passes on. Data that clients need from an error travels in
+     `extensions` (`extensions.jobs` of an in-use conflict), never in the
+     text.
+  2. `apierror.Error`, `serviceutil.FieldError` and the other user-facing
+     error types (auth `FieldError`/`PolicyError`, egress/netguard entry
+     errors, calendar, passkey, connections/destinations target, not-ready,
+     host-key and certificate errors) carry a `Msg` next to their English
+     `Message`. No call site formats a user-facing text from another
+     error's string or from sentence fragments.
+  3. One central catalog keyed by the English format string
+     (`internal/i18n`, Dutch table), checked by `Catalog.Problems` (same
+     verbs). The error presenter and the protocol/transport error paths
+     render in `i18n.Resolve(account locale, Accept-Language)`; the
+     account locale travels on `auth.Principal` (loaded with the session,
+     no extra query). An unknown format falls back to English.
+  4. A source-walking test (go/parser over `internal/` and `cmd/`) collects
+     every format literal passed to the message constructors (and the
+     string constants used as formats) and fails for one without a Dutch
+     entry, for a non-constant format, for a formatting verb in a constant
+     text, for a format without words of its own (`"%s"`), for an argument
+     that is another text (`.Error()`, `.Message`, `.Reason`) and for an
+     error literal setting `Message` without `Msg`. Unused catalog entries
+     fail too.
+  5. Error codes, `extensions`, field names and type-to-confirm texts never
+     change with the language (D-235); clients keep switching on codes.
+- **Alternatives considered:** stable keys per message (8.3a style: call
+  sites lose their readable English and the 560 keys need names); a catalog
+  of whole rendered texts (texts with names or numbers would stay
+  English); translating in the web client (the server owns these texts and
+  their arguments).
+- **Consequences:** a new user-facing message needs its Dutch text in the
+  same change (the test fails otherwise). Security: messages stay static
+  formats with plain arguments, translation only selects a different
+  format with the same verbs, so no new data reaches clients; the
+  presenter still masks every non-`apierror` error. Persisted English
+  (run and restore error messages, old inbox rows) is 8.3b3; server prose
+  in field values, gqlgen's complexity-limit message and the masked
+  "internal error" text are 8.3b2. The web client never reads data from
+  a message (the in-use job list moved to `extensions.jobs`).
+- **Related:** plan tasks 8.3b1–8.3b3, D-105, D-235, D-236, D-237.

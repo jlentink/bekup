@@ -33,7 +33,7 @@ func egressError(err error, entries map[string]bool) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(entryField(fe.Field, entries), fe.Message)
+		return apierror.InvalidMsg(entryField(fe.Field, entries), fe.Msg)
 	case errors.Is(err, egress.ErrConflict):
 		return apierror.New(apierror.Conflict, "the allowlist was changed in the meantime; reload and try again")
 	default:
@@ -129,7 +129,7 @@ func (r *Resolver) ssrfAllowlist(ctx context.Context) (*model.SsrfAllowlist, err
 func allowlistInput(plain []string, entries []model.SsrfAllowlistEntryInput, list string) ([]netguard.Entry, bool, error) {
 	switch {
 	case plain != nil && entries != nil:
-		return nil, false, apierror.Invalid(entryLists[list], "give either "+list+" or "+entryLists[list])
+		return nil, false, apierror.Invalidf(entryLists[list], "give either %s or %s", list, entryLists[list])
 	case entries != nil:
 		out := make([]netguard.Entry, len(entries))
 		for i, e := range entries {
@@ -139,7 +139,7 @@ func allowlistInput(plain []string, entries []model.SsrfAllowlistEntryInput, lis
 	case plain != nil:
 		return egress.Values(plain), false, nil
 	default:
-		return nil, false, apierror.Invalid(entryLists[list], list+" or "+entryLists[list]+" is required")
+		return nil, false, apierror.Invalidf(entryLists[list], "%s or %s is required", list, entryLists[list])
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/streams"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // EventStreamMediaType is the Accept value that asks for a subscription as
@@ -102,7 +103,7 @@ func (h *Handler) serveJSON(w http.ResponseWriter, r *http.Request, body []byte)
 	ctx := graphql.StartOperationTrace(r.Context())
 	params, err := rawParams(body, r.Header)
 	if err != nil {
-		writeTransportError(w, http.StatusBadRequest, err.Error())
+		writeTransportError(w, r, http.StatusBadRequest, msgBadBody)
 		return
 	}
 	rc, opErr := h.srv.CreateOperationContext(ctx, params)
@@ -126,39 +127,39 @@ func (h *Handler) serveJSON(w http.ResponseWriter, r *http.Request, body []byte)
 func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, body []byte) {
 	o := h.opts.Streams
 	if r.Header.Get("Origin") == "" || !httpserver.OriginAllowed(r, o.AllowedOrigins) {
-		writeTransportError(w, http.StatusForbidden, "origin not allowed")
+		writeTransportError(w, r, http.StatusForbidden, i18n.M("origin not allowed"))
 		return
 	}
 	p, ok := auth.FromContext(r.Context())
 	if !ok {
-		writeTransportError(w, http.StatusUnauthorized, "authentication required")
+		writeTransportError(w, r, http.StatusUnauthorized, i18n.M("authentication required"))
 		return
 	}
 	if p.MFAPending {
 		// A login waiting for its second factor gets no stream (task
 		// 1.9); completing it rotates the session.
-		writeTransportError(w, http.StatusUnauthorized, "complete the sign-in with your second factor first")
+		writeTransportError(w, r, http.StatusUnauthorized, i18n.M("complete the sign-in with your second factor first"))
 		return
 	}
 	if p.EnrollmentRequired {
 		// The 2FA policy requires a factor first (task 1.9): no
 		// subscription is allowed to such a principal.
-		writeTransportError(w, http.StatusForbidden, "set up a second factor first")
+		writeTransportError(w, r, http.StatusForbidden, i18n.M("set up a second factor first"))
 		return
 	}
 	c, err := o.Hub.Acquire(p)
 	switch {
 	case errors.Is(err, streams.ErrTooManyForUser), errors.Is(err, streams.ErrTooManyForSession):
 		w.Header().Set("Retry-After", "30")
-		writeTransportError(w, http.StatusTooManyRequests, "too many event streams")
+		writeTransportError(w, r, http.StatusTooManyRequests, i18n.M("too many event streams"))
 		return
 	case errors.Is(err, streams.ErrHubClosed):
 		w.Header().Set("Retry-After", "5")
-		writeTransportError(w, http.StatusServiceUnavailable, "the server is shutting down")
+		writeTransportError(w, r, http.StatusServiceUnavailable, i18n.M("the server is shutting down"))
 		return
 	case err != nil:
 		w.Header().Set("Retry-After", "30")
-		writeTransportError(w, http.StatusServiceUnavailable, "too many event streams")
+		writeTransportError(w, r, http.StatusServiceUnavailable, i18n.M("too many event streams"))
 		return
 	}
 	defer c.Release()
@@ -166,7 +167,7 @@ func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, body []byt
 	ctx := c.Start(graphql.StartOperationTrace(r.Context()))
 	params, err := rawParams(body, r.Header)
 	if err != nil {
-		writeTransportError(w, http.StatusBadRequest, err.Error())
+		writeTransportError(w, r, http.StatusBadRequest, msgBadBody)
 		return
 	}
 	rc, opErr := h.srv.CreateOperationContext(ctx, params)
@@ -210,7 +211,7 @@ func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, body []byt
 	}
 	stop()
 	if end := c.End(); end != nil {
-		if !sw.next(&graphql.Response{Errors: gqlerror.List{protocolError(end.Code, end.Message)}}) {
+		if !sw.next(&graphql.Response{Errors: gqlerror.List{apiProtocolError(ctx, end)}}) {
 			return
 		}
 	}
@@ -347,7 +348,7 @@ func streamRefusalStatus(errs gqlerror.List) int {
 func writeJSON(w http.ResponseWriter, status int, resp *graphql.Response) {
 	b, err := json.Marshal(resp)
 	if err != nil {
-		writeTransportError(w, http.StatusInternalServerError, MaskedMessage)
+		writeTransportText(w, http.StatusInternalServerError, MaskedMessage)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -387,9 +388,9 @@ func (g transportGate) MutateOperationContext(ctx context.Context, opCtx *graphq
 	isSub := opCtx.Operation.Operation == ast.Subscription
 	switch {
 	case overStream && !isSub:
-		return protocolError(apierror.Forbidden, "only subscriptions are accepted as event streams")
+		return protocolError(ctx, apierror.Forbidden, i18n.M("only subscriptions are accepted as event streams"))
 	case !overStream && isSub:
-		return protocolError(apierror.Forbidden, "subscriptions are only available as event streams (Accept: text/event-stream)")
+		return protocolError(ctx, apierror.Forbidden, i18n.M("subscriptions are only available as event streams (Accept: text/event-stream)"))
 	case !isSub:
 		return nil
 	}
@@ -403,13 +404,13 @@ func (g transportGate) MutateOperationContext(ctx context.Context, opCtx *graphq
 		}
 		op, mapped := g.ops[name]
 		if !mapped || f.Definition == nil || !isGuarded(f.Definition) {
-			return protocolError(apierror.Forbidden, "operation not allowed")
+			return protocolError(ctx, apierror.Forbidden, i18n.M("operation not allowed"))
 		}
 		if err := g.access.CheckOperation(ctx, op); err != nil {
 			if ae, ok := apierror.As(err); ok {
-				return protocolError(ae.Code, ae.Message)
+				return apiProtocolError(ctx, ae)
 			}
-			return protocolError(apierror.Forbidden, "operation not allowed")
+			return protocolError(ctx, apierror.Forbidden, i18n.M("operation not allowed"))
 		}
 	}
 	return nil

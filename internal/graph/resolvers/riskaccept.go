@@ -23,7 +23,7 @@ func riskError(err error) error {
 	var fe *serviceutil.FieldError
 	switch {
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.Is(err, riskaccept.ErrConditionChanged):
 		return apierror.New(apierror.Conflict, "the condition changed; review the risk again")
 	case errors.Is(err, riskaccept.ErrNotARisk):

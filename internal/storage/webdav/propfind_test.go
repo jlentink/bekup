@@ -160,8 +160,8 @@ func TestParseURL(t *testing.T) {
 	for _, raw := range bad {
 		if _, err := ParseURL(raw, false); !errors.Is(err, ErrInvalidConfig) {
 			t.Errorf("ParseURL(%q) accepted: %v", raw, err)
-		} else if raw != "" && strings.Contains(Message(err), raw) {
-			t.Errorf("message repeats the input: %q", Message(err))
+		} else if raw != "" && strings.Contains(Message(err).String(), raw) {
+			t.Errorf("message repeats the input: %q", Message(err).String())
 		}
 	}
 	if _, err := ParseURL("http://dav.example.com", true); err != nil {

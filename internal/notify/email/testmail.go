@@ -54,7 +54,7 @@ var ErrBusy = serviceutil.ErrBusy
 // audited; invalid input as a *FieldError.
 func (t *TestMailer) SendTest(ctx context.Context, actor Actor, to string) (Delivery, error) {
 	if err := CheckAddress(to); err != nil {
-		return Delivery{}, fieldErr("to", "%s", err.Error())
+		return Delivery{}, serviceutil.FieldErrFrom("to", err, i18n.M("invalid e-mail address"))
 	}
 	release, err := t.limiter.Acquire("smtp_test:" + actor.UserID.String())
 	if err != nil {

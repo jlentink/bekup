@@ -419,6 +419,17 @@ func securityFromAudit(ev audit.Event) []Event {
 			if id, err := uuid.Parse(detailString(ev.Details, "connection_id")); err == nil {
 				s.Subject.ConnectionID = id
 			}
+		case KindArtifactDeletedExternally:
+			// The audit entry names the destination, run and object key.
+			for k, v := range ArtifactMissingDetail(detailString(ev.Details, "object"), detailTrue(ev.Details, "newest_complete")) {
+				s.Detail[k] = v
+			}
+			if id, err := uuid.Parse(detailString(ev.Details, "destination_id")); err == nil {
+				s.Subject.DestinationID = id
+			}
+			if id, err := uuid.Parse(detailString(ev.Details, "run_id")); err == nil {
+				s.Subject.RunID = id
+			}
 		case KindServeAliasConflict, KindExternalAPIAliasConflict:
 			// Container addresses only (bounded).
 			s.Detail["addresses"] = joinBounded(detailAddrs(ev.Details, "addresses"), MaxDetailString)

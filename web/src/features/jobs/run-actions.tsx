@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ApiCode, firstApiError, userMessage } from "@/lib/api-error";
+import { userMessage } from "@/lib/api-error";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { defineMessages } from "@/lib/i18n";
 
@@ -47,11 +47,8 @@ const T = defineMessages({
     confirm: "Start now",
     cancel: "Cancel",
     view: "View run",
-    conflict: "A run of this job is already queued or running. Wait for it to finish.",
     noPlanned: "This job has no planned run to start early.",
     disabledHint: "The job is disabled.",
-    oneAhead:
-      "Only one occurrence can be pulled forward. You can start the following one early once the original time has passed.",
   },
   nl: {
     runNow: "Nu uitvoeren",
@@ -74,12 +71,8 @@ const T = defineMessages({
     confirm: "Nu starten",
     cancel: "Annuleren",
     view: "Run bekijken",
-    conflict:
-      "Er staat al een run van deze taak in de wachtrij of er is er een bezig. Wacht tot die klaar is.",
     noPlanned: "Deze taak heeft geen geplande run om eerder te starten.",
     disabledHint: "De taak is uitgeschakeld.",
-    oneAhead:
-      "Er kan maar één moment naar voren worden gehaald. Je kunt het volgende moment eerder starten zodra de oorspronkelijke tijd voorbij is.",
   },
 });
 
@@ -146,11 +139,12 @@ export function RunActions({ job, canPreview }: { job: JobLike; canPreview: bool
   );
 }
 
-/** Maps the two endpoints' refusals to one message (D-160 item 6). */
+/**
+ * The two endpoints' refusals (D-160 item 6). The server's message is
+ * complete and already in the user's language (D-238); never match its
+ * text.
+ */
 function runRefusal(err: unknown): string {
-  const e = firstApiError(err);
-  if (e?.code === ApiCode.conflict && /queued|running|active/i.test(e.message)) return T.conflict;
-  if (e?.code === ApiCode.validation && /early/i.test(e.message)) return T.oneAhead;
   return userMessage(err);
 }
 

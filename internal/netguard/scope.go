@@ -1,12 +1,12 @@
 package netguard
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/jlentink/bekup/internal/config"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Scope is an outbound use an allowlist entry widens (D-198). Every use
@@ -46,11 +46,11 @@ func (s Scope) Valid() bool { return slices.Contains(AllScopes(), s) }
 // AllScopes order; an empty or unknown scope is an error.
 func CanonicalScopes(scopes []Scope) ([]Scope, error) {
 	if len(scopes) == 0 {
-		return nil, errors.New("at least one scope is required")
+		return nil, i18n.Errorf("at least one scope is required")
 	}
 	for _, s := range scopes {
 		if !s.Valid() {
-			return nil, fmt.Errorf("unknown scope %q", truncate(string(s), 40))
+			return nil, i18n.Errorf("unknown scope %q", truncate(string(s), 40))
 		}
 	}
 	out := []Scope{}
@@ -150,7 +150,7 @@ func (s *Set) NormalizeEntries(cidrs, hosts []Entry) (outCIDRs, outHosts []Entry
 		for i, e := range in {
 			v, err := g.normalizeValue(list, e.Value)
 			if err != nil {
-				errs = append(errs, &EntryError{List: list, Index: i, Message: err.Error()})
+				errs = append(errs, &EntryError{List: list, Index: i, Message: err.Error(), Msg: entryMsg(err)})
 				continue
 			}
 			scopes := e.Scopes
@@ -159,7 +159,7 @@ func (s *Set) NormalizeEntries(cidrs, hosts []Entry) (outCIDRs, outHosts []Entry
 			}
 			cs, err := CanonicalScopes(scopes)
 			if err != nil {
-				errs = append(errs, &EntryError{List: list, Index: i, Field: "scopes", Message: err.Error()})
+				errs = append(errs, &EntryError{List: list, Index: i, Field: "scopes", Message: err.Error(), Msg: entryMsg(err)})
 				continue
 			}
 			if j, ok := idx[v]; ok {

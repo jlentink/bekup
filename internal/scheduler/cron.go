@@ -68,7 +68,7 @@ func parseCron(expr string) (spec *cronSpec, canon string, err error) {
 	}
 	sched, err := safeParse(canon)
 	if err != nil {
-		return nil, "", invalid("cron expression: %s", err.Error())
+		return nil, "", invalid("the cron expression is not valid")
 	}
 	ss, ok := sched.(*cron.SpecSchedule)
 	if !ok {

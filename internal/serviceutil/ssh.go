@@ -3,6 +3,8 @@ package serviceutil
 import (
 	"errors"
 
+	"github.com/jlentink/bekup/internal/i18n"
+
 	"github.com/jlentink/bekup/internal/sshpolicy"
 )
 
@@ -21,7 +23,7 @@ func CheckSSHPrivateKey(pemBytes, passphrase []byte, keyField, passField string)
 			field = passField
 		}
 		// The sshpolicy messages are static and never describe the key.
-		return "", FieldErr(field, "%s", err.Error())
+		return "", FieldErrFrom(field, err, i18n.M("the private key is not valid"))
 	}
 	defer key.Destroy()
 	return key.AuthorizedKey(), nil
@@ -39,6 +41,6 @@ func HostKeyLine(line, field string) (sshpolicy.HostKeyInfo, error) {
 	case errors.Is(err, sshpolicy.ErrUnsupportedHostKey):
 		return info, FieldErr(field, "host key type not accepted (ssh-ed25519, ECDSA or RSA ≥ 2048 bits required)")
 	default:
-		return info, FieldErr(field, "%s", err.Error())
+		return info, FieldErrFrom(field, err, i18n.M("the host key is not valid"))
 	}
 }

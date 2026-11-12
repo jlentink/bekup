@@ -5,13 +5,14 @@ import (
 	"bytes"
 	_ "embed"
 	"errors"
-	"strconv"
 	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/ccojocar/zxcvbn-go"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Password policy bounds (D-047, D-073).
@@ -49,10 +50,18 @@ const (
 	ReasonUnchanged       PolicyReason = "unchanged"
 )
 
-// PolicyError is a refused password. Message is safe to show to the user.
+// PolicyError is a refused password. Message is safe to show to the user
+// (English); Msg is the same text translatable (D-238).
 type PolicyError struct {
 	Reason  PolicyReason
 	Message string
+	Msg     i18n.Msg
+}
+
+// policyErr returns a *PolicyError with the message format and args.
+func policyErr(reason PolicyReason, format string, args ...any) *PolicyError {
+	m := i18n.M(format, args...)
+	return &PolicyError{Reason: reason, Message: m.String(), Msg: m}
 }
 
 func (e *PolicyError) Error() string { return "auth: password refused: " + string(e.Reason) }
@@ -80,33 +89,33 @@ func NewPasswordPolicy(minLength, minScore int) PasswordPolicy {
 // feed the strength estimate as known inputs.
 func (p PasswordPolicy) Check(password string, account ...string) error {
 	if !utf8.ValidString(password) {
-		return &PolicyError{ReasonInvalid, "the password contains invalid characters"}
+		return policyErr(ReasonInvalid, "the password contains invalid characters")
 	}
 	for _, r := range password {
 		if r == 0 || (unicode.IsControl(r) && r != '\t') {
-			return &PolicyError{ReasonInvalid, "the password must not contain control characters"}
+			return policyErr(ReasonInvalid, "the password must not contain control characters")
 		}
 	}
 	n := utf8.RuneCountInString(password)
 	minLen := max(p.MinLength, MinPasswordLength)
 	if n < minLen {
-		return &PolicyError{ReasonTooShort, "the password is too short (at least " + strconv.Itoa(minLen) + " characters)"}
+		return policyErr(ReasonTooShort, "the password is too short (at least %d characters)", minLen)
 	}
 	if n > MaxPasswordLength || len(password) > MaxPasswordBytes {
-		return &PolicyError{ReasonTooLong, "the password is too long (at most " + strconv.Itoa(MaxPasswordLength) + " characters)"}
+		return policyErr(ReasonTooLong, "the password is too long (at most %d characters)", MaxPasswordLength)
 	}
 	if IsCommonPassword(password) {
-		return &PolicyError{ReasonCommon, "this password is too common; choose another one"}
+		return policyErr(ReasonCommon, "this password is too common; choose another one")
 	}
 	inputs := identityParts(account)
 	lower := strings.ToLower(password)
 	for _, part := range inputs {
 		if strings.Contains(lower, part) {
-			return &PolicyError{ReasonContainsAccount, "the password must not contain your e-mail address or name"}
+			return policyErr(ReasonContainsAccount, "the password must not contain your e-mail address or name")
 		}
 	}
 	if Strength(password, inputs) < max(p.MinScore, MinPasswordScore) {
-		return &PolicyError{ReasonWeak, "the password is too easy to guess; use a longer passphrase or more varied characters"}
+		return policyErr(ReasonWeak, "the password is too easy to guess; use a longer passphrase or more varied characters")
 	}
 	return nil
 }

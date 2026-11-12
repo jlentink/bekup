@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/scheduler"
 	"github.com/jlentink/bekup/internal/serviceutil"
 )
@@ -244,7 +245,7 @@ func checkSchedule(s scheduler.Schedule, lim scheduler.Limits) (scheduler.Schedu
 // scheduler's messages describe the input only.
 func scheduleErr(err error) error {
 	if errors.Is(err, scheduler.ErrInvalid) {
-		return fieldErr("schedule", "%s", strings.TrimPrefix(err.Error(), scheduler.ErrInvalid.Error()+": "))
+		return serviceutil.FieldErrFrom("schedule", err, i18n.M("the schedule is not valid"))
 	}
 	if errors.Is(err, scheduler.ErrNoOccurrence) || errors.Is(err, scheduler.ErrOutOfRange) {
 		return fieldErr("schedule", "the schedule has no future occurrence")

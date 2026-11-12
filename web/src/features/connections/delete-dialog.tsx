@@ -15,8 +15,6 @@ import { isStepUpCancelled } from "@/features/auth/use-step-up";
 import { ApiCode, firstApiError, userMessage } from "@/lib/api-error";
 import { defineMessages } from "@/lib/i18n";
 
-import { jobsInUse } from "./delete-dialog-utils";
-
 type Kind = "connection" | "destination";
 
 const T = defineMessages({
@@ -81,7 +79,7 @@ export function DeleteDialog({
         const e = firstApiError(err);
         setError({
           message: userMessage(err),
-          jobs: e?.code === ApiCode.conflict ? jobsInUse(e.message) : [],
+          jobs: e?.code === ApiCode.conflict ? (e.jobs ?? []) : [],
         });
       }
     } finally {

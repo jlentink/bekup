@@ -419,7 +419,11 @@ housekeeping) run on River queues in the app database (D-043, D-145).
   leftovers on disk/SFTP. Objects that vanished outside bekup and aborted
   sweeps are logged as `retention alert` WARN lines and alerted
   (`artifact.missing` to the job's audience and a security alert to every
-  admin; [notifications](guides/notifications.md#security-alerts)). See
+  admin; [notifications](guides/notifications.md#security-alerts)). Both
+  name the missing file (its object key), the backup's time, the
+  destination and whether it belonged to the newest complete backup
+  (then nothing is deleted on that destination until a new backup
+  completes); the job notification links to the run. See
   [Retention](guides/retention.md).
 - **Housekeeping:** besides the daily retention fan-out, the leader runs
   `schedule_skip_cleanup` (maintenance queue) every 6 hours and once at

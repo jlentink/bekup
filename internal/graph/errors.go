@@ -10,8 +10,10 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // MaskedMessage is the message of every masked internal error.
@@ -22,6 +24,7 @@ const (
 	ExtCode      = "code"
 	ExtRequestID = "requestId"
 	ExtField     = "field"
+	ExtJobs      = "jobs"
 )
 
 // errPanic is what the recover func turns a panic into; it is masked.
@@ -51,8 +54,11 @@ func errorPresenter(logger *slog.Logger) graphql.ErrorPresenterFunc {
 			if ae.Field != "" {
 				ext[ExtField] = ae.Field
 			}
+			if len(ae.Jobs) > 0 {
+				ext[ExtJobs] = ae.Jobs
+			}
 			return &gqlerror.Error{
-				Message:    ae.Message,
+				Message:    ae.Localized(textLocale(ctx)),
 				Path:       gqlErr.Path,
 				Locations:  gqlErr.Locations,
 				Extensions: ext,
@@ -73,6 +79,13 @@ func errorPresenter(logger *slog.Logger) graphql.ErrorPresenterFunc {
 			Extensions: map[string]any{ExtCode: string(apierror.Internal), ExtRequestID: rid},
 		}
 	}
+}
+
+// textLocale is the language of the texts sent to this request's caller:
+// the account's choice, else Accept-Language, else English (D-238).
+func textLocale(ctx context.Context) i18n.Locale {
+	p, _ := auth.FromContext(ctx)
+	return p.TextLocale(auth.RequestMetaFrom(ctx).Locale)
 }
 
 // recoverFunc logs a resolver panic with its stack; the client gets the

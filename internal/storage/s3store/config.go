@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jlentink/bekup/internal/crypto"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/storage"
 )
@@ -167,14 +168,13 @@ type validated struct {
 
 // validate checks the configuration and fills defaults in place.
 func (c *Config) validate() (*validated, error) {
+	// Every problem is an i18n.Errorf (D-238): internal/destinations shows
+	// them in the caller's language (i18n.MsgsOf).
 	var errs []error
-	bad := func(format string, a ...any) {
-		errs = append(errs, fmt.Errorf(format, a...))
-	}
 	v := &validated{}
 
 	if c.Guard == nil {
-		bad("a netguard is required")
+		errs = append(errs, i18n.Errorf("a netguard is required"))
 	}
 	if c.Endpoint != "" {
 		u, err := parseEndpoint(c.Endpoint, c.AllowHTTP)
@@ -184,31 +184,31 @@ func (c *Config) validate() (*validated, error) {
 		v.endpoint = u
 	}
 	if !regionRE.MatchString(c.Region) {
-		bad("invalid region")
+		errs = append(errs, i18n.Errorf("invalid region"))
 	}
 	if !bucketRE.MatchString(c.Bucket) || strings.Contains(c.Bucket, "..") {
-		bad("invalid bucket name")
+		errs = append(errs, i18n.Errorf("invalid bucket name"))
 	} else if net.ParseIP(c.Bucket) != nil {
-		bad("bucket name must not be an IP address")
+		errs = append(errs, i18n.Errorf("bucket name must not be an IP address"))
 	}
 	if p, err := storage.ParsePrefix(c.Prefix); err != nil {
-		bad("invalid prefix: %v", err)
+		errs = append(errs, i18n.ErrorOf(storage.ProblemMsg(i18n.M("invalid prefix"), err)))
 	} else {
 		v.prefix = p
 	}
 	if !accessKeyRE.MatchString(c.AccessKeyID) {
-		bad("invalid access key id")
+		errs = append(errs, i18n.Errorf("invalid access key id"))
 	}
 	if c.SecretAccessKey.Len() == 0 {
-		bad("the secret access key is required")
+		errs = append(errs, i18n.Errorf("the secret access key is required"))
 	}
 	if len(c.CABundlePEM) > 0 {
 		if len(c.CABundlePEM) > maxCABundleBytes {
-			bad("CA bundle too large")
+			errs = append(errs, i18n.Errorf("CA bundle too large"))
 		} else {
 			pool := x509.NewCertPool()
 			if !pool.AppendCertsFromPEM(c.CABundlePEM) {
-				bad("CA bundle contains no PEM certificate")
+				errs = append(errs, i18n.Errorf("CA bundle contains no PEM certificate"))
 			}
 			v.roots = pool
 		}
@@ -216,18 +216,18 @@ func (c *Config) validate() (*validated, error) {
 	switch c.SSE {
 	case SSENone, SSES3:
 		if c.KMSKeyID != "" {
-			bad("a KMS key id requires SSE-KMS")
+			errs = append(errs, i18n.Errorf("a KMS key id requires SSE-KMS"))
 		}
 	case SSEKMS:
 		if c.KMSKeyID != "" && (len(c.KMSKeyID) > 2048 || !kmsKeyRE.MatchString(c.KMSKeyID)) {
-			bad("invalid KMS key id")
+			errs = append(errs, i18n.Errorf("invalid KMS key id"))
 		}
 	default:
-		bad("unknown server-side encryption mode")
+		errs = append(errs, i18n.Errorf("unknown server-side encryption mode"))
 	}
 	if c.StorageClass != "" {
 		if _, ok := allowedStorageClasses[c.StorageClass]; !ok {
-			bad("storage class %q is not allowed (archive classes cannot be restored directly)", c.StorageClass)
+			errs = append(errs, i18n.Errorf("storage class %q is not allowed (archive classes cannot be restored directly)", c.StorageClass))
 		}
 	}
 	switch c.Checksum {
@@ -235,31 +235,31 @@ func (c *Config) validate() (*validated, error) {
 		c.Checksum = ChecksumWhenSupported
 	case ChecksumWhenSupported, ChecksumWhenRequired:
 	default:
-		bad("unknown checksum mode")
+		errs = append(errs, i18n.Errorf("unknown checksum mode"))
 	}
 	switch c.LockMode {
 	case storage.LockNone:
 		if c.RetentionDays != 0 {
-			bad("retention days require a lock mode")
+			errs = append(errs, i18n.Errorf("retention days require a lock mode"))
 		}
 	case storage.LockGovernance, storage.LockCompliance:
 		if c.RetentionDays < 1 || c.RetentionDays > MaxRetentionDays {
-			bad("retention days must be 1..%d", MaxRetentionDays)
+			errs = append(errs, i18n.Errorf("retention days must be 1..%d", MaxRetentionDays))
 		}
 	default:
-		bad("unknown lock mode")
+		errs = append(errs, i18n.Errorf("unknown lock mode"))
 	}
 	switch {
 	case c.PartSize == 0:
 		c.PartSize = DefaultPartSize
 	case c.PartSize < MinPartSize || c.PartSize > MaxPartSize:
-		bad("part size must be %d..%d bytes", MinPartSize, MaxPartSize)
+		errs = append(errs, i18n.Errorf("part size must be %d..%d bytes", MinPartSize, MaxPartSize))
 	}
 	switch {
 	case c.Concurrency == 0:
 		c.Concurrency = DefaultConcurrency
 	case c.Concurrency < 1 || c.Concurrency > MaxConcurrency:
-		bad("concurrency must be 1..%d", MaxConcurrency)
+		errs = append(errs, i18n.Errorf("concurrency must be 1..%d", MaxConcurrency))
 	}
 	if c.Logger == nil {
 		c.Logger = slog.Default()
@@ -274,29 +274,29 @@ func (c *Config) validate() (*validated, error) {
 func parseEndpoint(s string, allowHTTP bool) (*url.URL, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return nil, errors.New("invalid endpoint URL")
+		return nil, i18n.Errorf("invalid endpoint URL")
 	}
 	switch u.Scheme {
 	case "https":
 	case "http":
 		if !allowHTTP {
-			return nil, errors.New("endpoint must use https (http only in dev mode)")
+			return nil, i18n.Errorf("endpoint must use https (http only in dev mode)")
 		}
 	default:
-		return nil, errors.New("endpoint must be an https URL")
+		return nil, i18n.Errorf("endpoint must be an https URL")
 	}
 	if u.User != nil {
-		return nil, errors.New("endpoint must not contain user info")
+		return nil, i18n.Errorf("endpoint must not contain user info")
 	}
 	if u.Hostname() == "" {
-		return nil, errors.New("endpoint has no host")
+		return nil, i18n.Errorf("endpoint has no host")
 	}
 	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
-		return nil, errors.New("endpoint must not have a path, query or fragment")
+		return nil, i18n.Errorf("endpoint must not have a path, query or fragment")
 	}
 	if p := u.Port(); p != "" {
 		if n, err := strconv.ParseUint(p, 10, 16); err != nil || n == 0 {
-			return nil, errors.New("invalid endpoint port")
+			return nil, i18n.Errorf("invalid endpoint port")
 		}
 	}
 	u.Path = ""

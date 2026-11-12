@@ -66,7 +66,7 @@ func pageSize(first *int) (int, error) {
 		return audit.DefaultListLimit, nil
 	}
 	if *first < 1 || *first > audit.MaxListLimit {
-		return 0, apierror.Invalid("first", "first must be between 1 and "+strconv.Itoa(audit.MaxListLimit))
+		return 0, apierror.Invalidf("first", "first must be between 1 and %d", audit.MaxListLimit)
 	}
 	return *first, nil
 }
@@ -83,7 +83,7 @@ func optString(field string, s *string, maxLen int) (string, error) {
 		return "", nil
 	}
 	if *s == "" || !utf8.ValidString(*s) || utf8.RuneCountInString(*s) > maxLen {
-		return "", apierror.Invalid(field, "must be 1 to "+strconv.Itoa(maxLen)+" characters")
+		return "", apierror.Invalidf(field, "must be 1 to %d characters", maxLen)
 	}
 	return *s, nil
 }

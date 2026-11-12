@@ -42,7 +42,7 @@ func (r *Resolver) calendar(ctx context.Context, from, to time.Time, timezone st
 	}
 	c, err := r.Calendar.Build(ctx, cs, calendar.Request{From: from, To: to, Timezone: timezone, JobIDs: jobIDs})
 	if ve := (*calendar.ValidationError)(nil); errors.As(err, &ve) {
-		return nil, apierror.Invalid(ve.Field, ve.Message)
+		return nil, apierror.InvalidMsg(ve.Field, ve.Msg)
 	}
 	if err != nil {
 		return nil, err

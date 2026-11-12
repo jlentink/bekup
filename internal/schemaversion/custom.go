@@ -2,10 +2,11 @@ package schemaversion
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Mode is a job's version-capture mode (jobs.version_query_mode).
@@ -72,7 +73,7 @@ var schemaRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
 // ValidateSchema checks the schema name of a preset's table.
 func ValidateSchema(s string) error {
 	if !schemaRe.MatchString(s) {
-		return errors.New("a schema name is a letter or underscore followed by up to 62 letters, digits or underscores")
+		return i18n.Errorf("a schema name is a letter or underscore followed by up to 62 letters, digits or underscores")
 	}
 	return nil
 }
@@ -113,12 +114,20 @@ func ValidValue(v string) bool {
 
 // SQLError is a refused custom query; Message is safe to show (it may
 // quote a word of the caller's own query).
-type SQLError struct{ Message string }
+type SQLError struct {
+	Message string
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
+}
 
 func (e *SQLError) Error() string { return "schemaversion: " + e.Message }
 
+// I18nMsg implements i18n.Messager.
+func (e *SQLError) I18nMsg() i18n.Msg { return e.Msg }
+
 func sqlErr(format string, args ...any) error {
-	return &SQLError{Message: fmt.Sprintf(format, args...)}
+	m := i18n.M(format, args...)
+	return &SQLError{Message: m.String(), Msg: m}
 }
 
 // The custom query check (D-210). It is deliberately simple and strict:
@@ -175,14 +184,17 @@ var (
 )
 
 // deniedSequences are refused anywhere in the text.
-var deniedSequences = []struct{ seq, what string }{
-	{";", "a semicolon (;)"},
-	{"--", "a comment (--)"},
-	{"/*", "a comment (/*)"},
-	{"*/", "a comment (*/)"},
-	{"#", "a comment (#)"},
-	{`\`, `a backslash (\)`},
-	{"$", "a dollar sign ($)"},
+var deniedSequences = []struct {
+	seq  string
+	what i18n.Msg
+}{
+	{";", i18n.M("a semicolon (;)")},
+	{"--", i18n.M("a comment (--)")},
+	{"/*", i18n.M("a comment (/*)")},
+	{"*/", i18n.M("a comment (*/)")},
+	{"#", i18n.M("a comment (#)")},
+	{`\`, i18n.M(`a backslash (\)`)},
+	{"$", i18n.M("a dollar sign ($)")},
 }
 
 func wordSet(words ...string) map[string]bool {

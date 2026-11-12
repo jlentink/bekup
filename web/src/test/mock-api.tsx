@@ -66,10 +66,11 @@ export function gqlError(
   code: string,
   message = code.toLowerCase(),
   field?: string,
+  extensions: Record<string, unknown> = {},
 ): FormattedExecutionResult {
   return {
     data: null,
-    errors: [{ message, extensions: { code, ...(field ? { field } : {}) } }],
+    errors: [{ message, extensions: { code, ...(field ? { field } : {}), ...extensions } }],
   };
 }
 

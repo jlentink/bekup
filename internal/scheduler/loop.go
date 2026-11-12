@@ -384,13 +384,13 @@ func decide(raw []byte, nextRunAt, now time.Time) (Decision, error) {
 
 func decodeStored(raw []byte) (Schedule, error) {
 	if len(raw) > MaxJSONBytes {
-		return Schedule{}, fmt.Errorf("%w: stored schedule too large", ErrInvalid)
+		return Schedule{}, invalid("stored schedule too large")
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var s Schedule
 	if err := dec.Decode(&s); err != nil {
-		return Schedule{}, fmt.Errorf("%w: malformed stored schedule", ErrInvalid)
+		return Schedule{}, invalid("malformed stored schedule")
 	}
 	return s, nil
 }

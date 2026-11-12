@@ -117,7 +117,7 @@ func (p *Plan) nextMonths(after time.Time) (time.Time, error) {
 // repeated calls of Next.
 func (p *Plan) NextN(after time.Time, n int) ([]time.Time, error) {
 	if n < 1 || n > MaxPreview {
-		return nil, fmt.Errorf("%w: preview size must be between 1 and %d", ErrInvalid, MaxPreview)
+		return nil, invalid("preview size must be between 1 and %d", MaxPreview)
 	}
 	out := make([]time.Time, 0, n)
 	t := after

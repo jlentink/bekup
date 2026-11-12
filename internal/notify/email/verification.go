@@ -151,7 +151,7 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 		return VerificationRequest{}, ErrAlreadyVerified
 	}
 	if err := CheckAddress(st.Email); err != nil {
-		return VerificationRequest{}, fieldErr("email", "the account's e-mail address cannot receive mail: %s", err.Error())
+		return VerificationRequest{}, fieldErr("email", "the account's e-mail address cannot receive mail: %s", addressProblem(err))
 	}
 	code := make([]byte, codeBytes)
 	if _, err := rand.Read(code); err != nil {
@@ -354,4 +354,12 @@ func IsVerified(ctx context.Context, d sqlc.DBTX, userID uuid.UUID) (Recipient, 
 		return Recipient{}, fmt.Errorf("email: load account: %w", err)
 	}
 	return Recipient{Email: st.Email, Verified: st.EmailVerifiedAt != nil && !st.Disabled}, nil
+}
+
+// addressProblem is the translatable problem of a CheckAddress error.
+func addressProblem(err error) i18n.Msg {
+	if m, ok := i18n.MsgOf(err); ok {
+		return m
+	}
+	return i18n.Text("invalid e-mail address")
 }

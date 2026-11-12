@@ -33,6 +33,8 @@ export interface ApiErrorInfo {
   field?: string;
   /** extensions.requestId of a masked INTERNAL error. */
   requestId?: string;
+  /** extensions.jobs of an in-use CONFLICT: the jobs that still use it. */
+  jobs?: string[];
 }
 
 function str(v: unknown): string | undefined {
@@ -50,6 +52,11 @@ export function apiErrors(error: unknown): ApiErrorInfo[] {
       const requestId = str(ext["requestId"]);
       if (field) info.field = field;
       if (requestId) info.requestId = requestId;
+      const jobs = ext["jobs"];
+      if (Array.isArray(jobs)) {
+        const names = jobs.filter((j): j is string => typeof j === "string" && j !== "");
+        if (names.length > 0) info.jobs = names;
+      }
       return info;
     });
   }

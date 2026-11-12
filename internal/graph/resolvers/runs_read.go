@@ -52,7 +52,7 @@ func runPageSize(first *int, def, maxN int) (int, error) {
 		return def, nil
 	}
 	if *first < 1 || *first > maxN {
-		return 0, apierror.Invalid("first", "first must be between 1 and "+strconv.Itoa(maxN))
+		return 0, apierror.Invalidf("first", "first must be between 1 and %d", maxN)
 	}
 	return *first, nil
 }

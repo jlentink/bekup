@@ -13,6 +13,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/tunnel"
@@ -84,11 +85,11 @@ func hostKeyFetchError(err error) error {
 	case errors.Is(err, context.Canceled):
 		return err
 	case errors.Is(err, tunnel.ErrUnsupportedHostKey):
-		return &HostKeyFetchError{Message: msgFetchUnsupported, err: err}
+		return &HostKeyFetchError{Message: msgFetchUnsupported, Msg: i18n.M(msgFetchUnsupported), err: err}
 	case errors.Is(netguard.Normalize(err), netguard.ErrNotAllowed):
-		return &HostKeyFetchError{Message: msgFetchNotAllowed, err: err}
+		return &HostKeyFetchError{Message: msgFetchNotAllowed, Msg: i18n.M(msgFetchNotAllowed), err: err}
 	default:
-		return &HostKeyFetchError{Message: msgFetchUnreachable, err: err}
+		return &HostKeyFetchError{Message: msgFetchUnreachable, Msg: i18n.M(msgFetchUnreachable), err: err}
 	}
 }
 

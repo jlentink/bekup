@@ -20,6 +20,7 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/pubsub"
 )
@@ -46,9 +47,16 @@ var (
 type FieldError struct {
 	Field   string
 	Message string
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
 }
 
 func (e *FieldError) Error() string { return "egress: " + e.Field + ": " + e.Message }
+
+// fieldErrMsg returns a *FieldError with a translatable message.
+func fieldErrMsg(field string, m i18n.Msg) *FieldError {
+	return &FieldError{Field: field, Message: m.String(), Msg: m}
+}
 
 // DB is what the service needs (*pgxpool.Pool).
 type DB interface {
@@ -349,9 +357,9 @@ func Values(values []string) []netguard.Entry {
 func (s *Service) Validate(in Update) (cidrs, hosts []netguard.Entry, err error) {
 	switch {
 	case len(in.CIDRs) > MaxEntries:
-		return nil, nil, &FieldError{Field: netguard.ListCIDRs, Message: "at most " + strconv.Itoa(MaxEntries) + " CIDRs"}
+		return nil, nil, fieldErrMsg(netguard.ListCIDRs, i18n.M("at most %d CIDRs", MaxEntries))
 	case len(in.Hosts) > MaxEntries:
-		return nil, nil, &FieldError{Field: netguard.ListHosts, Message: "at most " + strconv.Itoa(MaxEntries) + " host names"}
+		return nil, nil, fieldErrMsg(netguard.ListHosts, i18n.M("at most %d host names", MaxEntries))
 	}
 	for _, l := range []struct {
 		list    string
@@ -360,10 +368,10 @@ func (s *Service) Validate(in Update) (cidrs, hosts []netguard.Entry, err error)
 		list := l.list
 		for i, v := range l.entries {
 			if len(v.Value) > maxEntryBytes {
-				return nil, nil, &FieldError{Field: list + "." + strconv.Itoa(i), Message: "the entry is too long"}
+				return nil, nil, fieldErrMsg(list+"."+strconv.Itoa(i), i18n.M("the entry is too long"))
 			}
 			if len(v.Scopes) > len(netguard.AllScopes())*2 {
-				return nil, nil, &FieldError{Field: list + "." + strconv.Itoa(i) + ".scopes", Message: "too many scopes"}
+				return nil, nil, fieldErrMsg(list+"."+strconv.Itoa(i)+".scopes", i18n.M("too many scopes"))
 			}
 		}
 	}
@@ -374,7 +382,7 @@ func (s *Service) Validate(in Update) (cidrs, hosts []netguard.Entry, err error)
 		if e.Field != "" {
 			f += "." + e.Field
 		}
-		return nil, nil, &FieldError{Field: f, Message: e.Message}
+		return nil, nil, fieldErrMsg(f, e.Msg)
 	}
 	return cidrs, hosts, nil
 }

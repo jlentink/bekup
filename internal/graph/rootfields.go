@@ -14,6 +14,7 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // SingleRootFields are the root fields ("Type.field") that verify, set or
@@ -250,12 +251,12 @@ func (g rootFieldGate) MutateOperationContext(ctx context.Context, opCtx *graphq
 	if len(fields) > 1 {
 		for _, f := range fields {
 			if g.single[typ+"."+f] {
-				return protocolError(apierror.Validation, f+" must be the only field of its operation")
+				return protocolError(ctx, apierror.Validation, i18n.M("%s must be the only field of its operation", f))
 			}
 		}
 	}
 	if ok, wait := httpserver.ChargeUser(ctx, len(fields)-1); !ok {
-		return protocolError(apierror.RateLimited, fmt.Sprintf("too many requests; try again in %d seconds",
+		return protocolError(ctx, apierror.RateLimited, i18n.M("too many requests; try again in %d seconds",
 			httpserver.RetryAfterSeconds(wait)))
 	}
 	return nil

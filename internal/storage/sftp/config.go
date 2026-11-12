@@ -13,6 +13,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/hostname"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/sshpolicy"
 	"github.com/jlentink/bekup/internal/storage"
@@ -40,6 +41,23 @@ var ErrInvalidConfig = fmt.Errorf("%w: invalid sftp configuration", storage.ErrI
 
 func invalid(msg string) error {
 	return fmt.Errorf("%w: %s", ErrInvalidConfig, msg)
+}
+
+// targetError is a ValidateTarget problem: it wraps ErrInvalidConfig and
+// carries a whole, translatable sentence (D-238).
+type targetError struct{ msg i18n.Msg }
+
+func (e *targetError) Error() string     { return ErrInvalidConfig.Error() + ": " + e.msg.String() }
+func (e *targetError) Unwrap() error     { return ErrInvalidConfig }
+func (e *targetError) I18nMsg() i18n.Msg { return e.msg }
+
+// invalidTarget returns a targetError with m, or with the message of err
+// when it carries one.
+func invalidTarget(m i18n.Msg, err error) error {
+	if em, ok := i18n.MsgOf(err); ok {
+		m = em
+	}
+	return &targetError{msg: m}
 }
 
 // Auth holds the client credentials: exactly one of PrivateKey (PEM,
@@ -212,17 +230,17 @@ func (c *Config) validate() (*settings, error) {
 func validateBasePath(p string) error {
 	switch {
 	case p == "":
-		return errors.New("required")
+		return i18n.Errorf("the base path is required")
 	case len(p) > maxBasePathLen:
-		return errors.New("too long")
+		return i18n.Errorf("the base path is too long")
 	case p[0] != '/':
-		return errors.New("must be absolute")
+		return i18n.Errorf("the base path must be absolute")
 	case path.Clean(p) != p:
-		return errors.New("must be clean (no '..', '.', duplicate or trailing slashes)")
+		return i18n.Errorf("the base path must be clean (no '..', '.', duplicate or trailing slashes)")
 	}
 	for i := 0; i < len(p); i++ {
 		if c := p[i]; c < ' ' || c == 0x7f || c == '\\' {
-			return errors.New("contains a control character or backslash")
+			return i18n.Errorf("the base path contains a control character or backslash")
 		}
 	}
 	return nil
@@ -280,19 +298,19 @@ func ValidateTarget(host string, port int, user, basePath, dir string) error {
 		port = DefaultPort
 	}
 	if _, err := hostname.ValidateBracketed(host); err != nil {
-		return invalid("host: " + err.Error())
+		return invalidTarget(i18n.M("the host name is not valid"), nil)
 	}
 	if port < 1 || port > 65535 {
-		return invalid("port out of range")
+		return invalidTarget(i18n.M("the port must be between 1 and 65535"), nil)
 	}
 	if err := sshpolicy.ValidateUser(user); err != nil {
-		return invalid("user: " + err.Error())
+		return invalidTarget(i18n.M("the user name is not valid"), err)
 	}
 	if err := validateBasePath(basePath); err != nil {
-		return invalid("base path: " + err.Error())
+		return invalidTarget(i18n.M("the base path is not valid"), err)
 	}
 	if _, err := storage.ParsePrefix(dir); err != nil {
-		return fmt.Errorf("sftp directory: %w", err)
+		return invalidTarget(storage.ProblemMsg(i18n.M("the directory is not valid"), err), nil)
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // DB is what the auth services need from the app database: queries and
@@ -244,6 +245,11 @@ func principalOf(sess sqlc.Session, user sqlc.User, role Role) Principal {
 		UserID: sess.UserID, Role: role, SessionID: sess.ID, AAL: int(sess.Aal),
 		PasswordChangeRequired: user.PasswordTemporaryUntil != nil,
 		MFAPending:             sess.MfaPending,
+	}
+	if user.Locale != nil {
+		if l, ok := i18n.Parse(*user.Locale); ok {
+			p.Locale = l
+		}
 	}
 	if sess.StepupAt != nil {
 		p.StepUpAt = *sess.StepupAt

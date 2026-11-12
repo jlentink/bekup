@@ -16,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
@@ -35,6 +36,13 @@ const prePullTimeout = 10 * time.Minute
 type TargetError struct {
 	Code    string
 	Message string
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
+}
+
+// targetErr returns a *TargetError with code and the message m.
+func targetErr(code string, m i18n.Msg) *TargetError {
+	return &TargetError{Code: code, Message: m.String(), Msg: m}
 }
 
 func (e *TargetError) Error() string { return "connections: target: " + e.Code }
@@ -60,18 +68,18 @@ const (
 )
 
 // reasonMessages are the presentable texts of the runner reasons.
-var reasonMessages = map[runnerpb.Reason]string{
-	runnerpb.ReasonUnreachable:           "the database server could not be reached",
-	runnerpb.ReasonAuthFailed:            "the database rejected the user name or password",
-	runnerpb.ReasonTLSFailed:             "the TLS handshake with the database failed (does the server support TLS?)",
-	runnerpb.ReasonTimeout:               "the database did not answer in time",
-	runnerpb.ReasonPermission:            "the database user lacks a required privilege",
-	runnerpb.ReasonUnsupportedServer:     "the server version is not supported by the allowlisted client images",
-	runnerpb.ReasonDatabaseNotFound:      "the database does not exist on the server",
-	runnerpb.ReasonDatabaseExists:        "the database already exists on the server",
-	runnerpb.ReasonSSHAuthFailed:         "the SSH bastion rejected the user or key",
-	runnerpb.ReasonSSHHostKeyUnsupported: "the SSH server's host key type is not accepted (ssh-ed25519, ECDSA or RSA ≥ 2048 bits required)",
-	runnerpb.ReasonFailed:                "the database operation failed",
+var reasonMessages = map[runnerpb.Reason]i18n.Msg{
+	runnerpb.ReasonUnreachable:           i18n.M("the database server could not be reached"),
+	runnerpb.ReasonAuthFailed:            i18n.M("the database rejected the user name or password"),
+	runnerpb.ReasonTLSFailed:             i18n.M("the TLS handshake with the database failed (does the server support TLS?)"),
+	runnerpb.ReasonTimeout:               i18n.M("the database did not answer in time"),
+	runnerpb.ReasonPermission:            i18n.M("the database user lacks a required privilege"),
+	runnerpb.ReasonUnsupportedServer:     i18n.M("the server version is not supported by the allowlisted client images"),
+	runnerpb.ReasonDatabaseNotFound:      i18n.M("the database does not exist on the server"),
+	runnerpb.ReasonDatabaseExists:        i18n.M("the database already exists on the server"),
+	runnerpb.ReasonSSHAuthFailed:         i18n.M("the SSH bastion rejected the user or key"),
+	runnerpb.ReasonSSHHostKeyUnsupported: i18n.M("the SSH server's host key type is not accepted (ssh-ed25519, ECDSA or RSA ≥ 2048 bits required)"),
+	runnerpb.ReasonFailed:                i18n.M("the database operation failed"),
 }
 
 // acquire takes a token from the caller's limiter and a concurrency slot.
@@ -137,24 +145,24 @@ func (s *Service) runnerError(ctx context.Context, actor Actor, row *sqlc.Connec
 	case "":
 	default:
 		if msg, ok := reasonMessages[reason]; ok {
-			return &TargetError{Code: string(reason), Message: msg}
+			return targetErr(string(reason), msg)
 		}
 	}
 	code := status.Code(err)
 	s.o.Logger.InfoContext(ctx, "runner call failed", slog.String("op", op), slog.String("code", code.String()))
 	switch code {
 	case codes.PermissionDenied:
-		return &TargetError{Code: CodeTargetNotAllowed, Message: "the runner's target allowlist (runner.toml [targets]) does not allow this host"}
+		return targetErr(CodeTargetNotAllowed, i18n.M("the runner's target allowlist (runner.toml [targets]) does not allow this host"))
 	case codes.InvalidArgument:
-		return &TargetError{Code: CodeInvalidRequest, Message: "the runner rejected the connection settings"}
+		return targetErr(CodeInvalidRequest, i18n.M("the runner rejected the connection settings"))
 	case codes.ResourceExhausted:
 		return ErrBusy
 	case codes.DeadlineExceeded:
-		return &TargetError{Code: string(runnerpb.ReasonTimeout), Message: reasonMessages[runnerpb.ReasonTimeout]}
+		return targetErr(string(runnerpb.ReasonTimeout), reasonMessages[runnerpb.ReasonTimeout])
 	case codes.Unavailable, codes.Unimplemented:
 		return ErrRunnerUnavailable
 	case codes.FailedPrecondition, codes.NotFound, codes.AlreadyExists:
-		return &TargetError{Code: CodeRunnerFailed, Message: "the runner could not perform the operation"}
+		return targetErr(CodeRunnerFailed, i18n.M("the runner could not perform the operation"))
 	case codes.Canceled:
 		return context.Canceled
 	default:
@@ -166,7 +174,7 @@ func (s *Service) runnerError(ctx context.Context, actor Actor, row *sqlc.Connec
 // (false for reasons without one).
 func ReasonMessage(r runnerpb.Reason) (string, bool) {
 	m, ok := reasonMessages[r]
-	return m, ok
+	return m.String(), ok
 }
 
 // RecordRunFailure handles the security events of a runner call a worker

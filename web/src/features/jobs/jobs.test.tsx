@@ -577,7 +577,10 @@ describe("job detail", () => {
       ...detailHandlers(),
       RunJobNow: () =>
         active
-          ? gqlError("CONFLICT", "a run of this job is already active")
+          ? gqlError(
+              "CONFLICT",
+              "a run of this job is already queued or running; wait for it to finish",
+            )
           : ok({
               runJobNow: {
                 __typename: "RunJobNowResult",
@@ -624,7 +627,11 @@ describe("job detail", () => {
                 job: { __typename: "Job", id: JOB_ID, nextRunAt: "2026-10-30T03:00:00Z" },
               },
             })
-          : gqlError("VALIDATION", "the next planned run was already started early", "id");
+          : gqlError(
+              "VALIDATION",
+              "the next planned run was already started early; only one occurrence can be pulled forward, the following one once its original time has passed",
+              "id",
+            );
       },
     });
     await user.click(await screen.findByRole("button", { name: "Start next planned run early" }));
@@ -642,7 +649,7 @@ describe("job detail", () => {
     dialog = await screen.findByRole("dialog", { name: "Start the next planned run now?" });
     await user.click(within(dialog).getByRole("button", { name: "Start now" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      /Only one occurrence can be pulled forward/,
+      /only one occurrence can be pulled forward/,
     );
   });
 

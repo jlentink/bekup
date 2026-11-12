@@ -290,7 +290,10 @@ func (s *Settings) Update(ctx context.Context, actor Actor, in UpdateInput) (Vie
 		return View{}, err
 	}
 	if err := checkHost(ctx, s.o.Guard, cfg.Host); err != nil {
-		return View{}, fieldErr("host", "%s", err.Error())
+		if errors.Is(err, context.Canceled) {
+			return View{}, err
+		}
+		return View{}, serviceutil.FieldErrFrom("host", err, i18n.M("the host is not allowed"))
 	}
 	if len(in.Password) >= 4 {
 		defer logging.DefaultRegistry.Register(in.Password)()
@@ -442,7 +445,7 @@ func validate(in *UpdateInput) (Config, error) {
 		return c, fieldErr("host", "the SMTP host is required")
 	}
 	if err := hostname.Validate(c.Host); err != nil {
-		return c, fieldErr("host", "invalid host name: %s", err.Error())
+		return c, fieldErr("host", "the host name is not valid")
 	}
 	if c.Port < 1 || c.Port > 65535 {
 		return c, fieldErr("port", "the port must be between 1 and 65535")
@@ -454,7 +457,7 @@ func validate(in *UpdateInput) (Config, error) {
 		return c, fieldErr("username", "the username must be at most %d characters without control characters or surrounding spaces", maxUsernameLen)
 	}
 	if err := CheckAddress(c.FromAddress); err != nil {
-		return c, fieldErr("fromAddress", "%s", err.Error())
+		return c, serviceutil.FieldErrFrom("fromAddress", err, i18n.M("invalid e-mail address"))
 	}
 	if len(c.FromName) > maxFromNameLen || hasControl(c.FromName) {
 		return c, fieldErr("fromName", "the sender name must be at most %d characters without control characters", maxFromNameLen)
@@ -529,11 +532,11 @@ func checkHost(ctx context.Context, g *netguard.Guard, host string) error {
 		var blocked *netguard.BlockedAddressError
 		switch {
 		case errors.As(err, &blocked):
-			return fmt.Errorf("the host resolves to %s, which is not allowed (%s); private relays must be on the SSRF allowlist", blocked.IP, blocked.Reason)
+			return i18n.Errorf("the host resolves to %s, which is not allowed (%s); private relays must be on the SSRF allowlist", blocked.IP, blocked.Reason.Msg())
 		case errors.Is(err, context.Canceled):
 			return err
 		default:
-			return errors.New("the host cannot be resolved")
+			return i18n.Errorf("the host cannot be resolved")
 		}
 	}
 	return nil
@@ -543,18 +546,18 @@ func checkHost(ctx context.Context, g *netguard.Guard, host string) error {
 // comments, no control characters, at most 254 bytes).
 func CheckAddress(addr string) error {
 	if addr == "" {
-		return errors.New("the e-mail address is required")
+		return i18n.Errorf("the e-mail address is required")
 	}
 	if len(addr) > maxAddressLen || hasControl(addr) {
-		return errors.New("invalid e-mail address")
+		return i18n.Errorf("invalid e-mail address")
 	}
 	a, err := mail.ParseAddress(addr)
 	if err != nil || a.Name != "" || a.Address != addr {
-		return errors.New("invalid e-mail address")
+		return i18n.Errorf("invalid e-mail address")
 	}
 	local, domain, ok := strings.Cut(addr, "@")
 	if !ok || local == "" || domain == "" || strings.ContainsAny(addr, " <>\"(),;:\\[]") {
-		return errors.New("invalid e-mail address")
+		return i18n.Errorf("invalid e-mail address")
 	}
 	return nil
 }

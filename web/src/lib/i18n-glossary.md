@@ -197,6 +197,8 @@ synonym for an existing one.
 | live settings / restart required                                                       | live-instellingen / herstart nodig                                         |
 | image (container) / pinned by digest                                                   | image / vastgepind op digest                                               |
 | scheduler / work queues                                                                | planner / werkwachtrijen                                                   |
+| control characters                                                                     | stuurtekens (never "besturingstekens")                                     |
+| required (field, value)                                                                | verplicht ("vereist" only as a verb: "vereist TLS")                        |
 | weakened settings                                                                      | verzwakte instellingen                                                     |
 | getting started                                                                        | aan de slag                                                                |
 | setup (browser setup) / access code / report                                           | installatie / toegangscode / verslag                                       |

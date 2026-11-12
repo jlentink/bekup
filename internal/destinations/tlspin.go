@@ -16,6 +16,8 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
+	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/storage/webdav"
 )
 
@@ -34,7 +36,9 @@ var ErrCertificateChanged = errors.New("destinations: the server now presents an
 // be captured; Message is presentable.
 type CertificateFetchError struct {
 	Message string
-	err     error
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
+	err error
 }
 
 func (e *CertificateFetchError) Error() string {
@@ -80,7 +84,7 @@ func (s *Service) PinCertificate(ctx context.Context, actor Actor, id uuid.UUID,
 	}
 	u, err := webdav.ParseURL(r.webdav.URL, s.o.AllowHTTP)
 	if err != nil {
-		return Destination{}, fieldErr("webdav.url", "%s", webdav.Message(err))
+		return Destination{}, serviceutil.FieldErrMsg("webdav.url", webdav.Message(err))
 	}
 	if u.Scheme() != "https" {
 		return Destination{}, fieldErr("webdav.url", "a plain http URL (dev mode) has no certificate to pin")
@@ -104,9 +108,8 @@ func (s *Service) PinCertificate(ctx context.Context, actor Actor, id uuid.UUID,
 	if rep.Certificate == nil {
 		s.o.Logger.InfoContext(ctx, "capturing a WebDAV certificate failed",
 			slog.String("destination_id", id.String()), slog.Any("error", rep.Err))
-		return Destination{}, &CertificateFetchError{
-			Message: "the server could not be reached or presented no certificate", err: rep.Err,
-		}
+		m := i18n.M("the server could not be reached or presented no certificate")
+		return Destination{}, &CertificateFetchError{Message: m.String(), Msg: m, err: rep.Err}
 	}
 	if subtle.ConstantTimeCompare(rep.Certificate.SPKISHA256, want) != 1 {
 		return Destination{}, ErrCertificateChanged
@@ -116,7 +119,7 @@ func (s *Service) PinCertificate(ctx context.Context, actor Actor, id uuid.UUID,
 		return Destination{}, fmt.Errorf("destinations: parse captured certificate: %w", err)
 	}
 	if err := webdav.CheckPinnable(cert, u.Host(), s.now()); err != nil {
-		return Destination{}, fieldErr("fingerprint", "%s", err.Error())
+		return Destination{}, serviceutil.FieldErrFrom("fingerprint", err, i18n.M("the certificate cannot be used as a pin"))
 	}
 	spki := hex.EncodeToString(rep.Certificate.SPKISHA256)
 	pemText := string(rep.Certificate.PEM())

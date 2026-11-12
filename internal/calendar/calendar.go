@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/retention"
 	"github.com/jlentink/bekup/internal/scheduler"
 )
@@ -116,9 +117,17 @@ func (s Scope) valid() bool { return s.All || s.Owner != uuid.Nil }
 type ValidationError struct {
 	Field   string
 	Message string
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
 }
 
 func (e *ValidationError) Error() string { return "calendar: " + e.Field + ": " + e.Message }
+
+// invalid returns a *ValidationError with the message format and args.
+func invalid(field, format string, args ...any) *ValidationError {
+	m := i18n.M(format, args...)
+	return &ValidationError{Field: field, Message: m.String(), Msg: m}
+}
 
 // ErrBadScope reports an empty scope (a bug in the caller).
 var ErrBadScope = errors.New("calendar: invalid scope")
@@ -129,17 +138,17 @@ func validate(req Request) (Request, error) {
 	from, to := req.From.UTC(), req.To.UTC()
 	switch {
 	case from.Before(minTime) || !to.Before(maxTime):
-		return Request{}, &ValidationError{"from", fmt.Sprintf("the range must lie between %d and %d", scheduler.MinAnchorYear, scheduler.MaxAnchorYear)}
+		return Request{}, invalid("from", "the range must lie between %d and %d", scheduler.MinAnchorYear, scheduler.MaxAnchorYear)
 	case !from.Before(to):
-		return Request{}, &ValidationError{"to", "to must be after from"}
+		return Request{}, invalid("to", "to must be after from")
 	case to.Sub(from) > MaxRange:
-		return Request{}, &ValidationError{"to", "the range must not exceed 93 days"}
+		return Request{}, invalid("to", "the range must not exceed 93 days")
 	}
 	if _, err := scheduler.LoadZone(req.Timezone); err != nil {
-		return Request{}, &ValidationError{"timezone", "timezone must be an IANA zone name such as Europe/Amsterdam or UTC"}
+		return Request{}, invalid("timezone", "timezone must be an IANA zone name such as Europe/Amsterdam or UTC")
 	}
 	if len(req.JobIDs) > MaxJobIDs {
-		return Request{}, &ValidationError{"jobIds", fmt.Sprintf("at most %d job ids", MaxJobIDs)}
+		return Request{}, invalid("jobIds", "at most %d job ids", MaxJobIDs)
 	}
 	var ids []uuid.UUID
 	if req.JobIDs != nil {

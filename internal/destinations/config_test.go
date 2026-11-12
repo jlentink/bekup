@@ -450,19 +450,19 @@ func TestWebDAVConfigOf(t *testing.T) {
 
 func TestWebDAVNotReady(t *testing.T) {
 	d := &Destination{Type: TypeWebDAV}
-	if r := notReadyReason(d); r != "set the password" {
+	if r := notReadyMsg(d).String(); r != "set the password" {
 		t.Fatalf("reason %q", r)
 	}
 	d.HasPassword = true
-	if r := notReadyReason(d); r != "" {
+	if r := notReadyMsg(d).String(); r != "" {
 		t.Fatalf("reason %q", r)
 	}
 	d.LastTest = &LastTest{OK: false, Code: "overwrite_ignored"}
-	if r := notReadyReason(d); r != overwriteIgnoredReason {
+	if r := notReadyMsg(d).String(); r != overwriteIgnoredReason {
 		t.Fatalf("reason %q", r)
 	}
 	d.LastTest.Stale = true // the settings changed since: test again
-	if r := notReadyReason(d); r != "" {
+	if r := notReadyMsg(d).String(); r != "" {
 		t.Fatalf("stale reason %q", r)
 	}
 }

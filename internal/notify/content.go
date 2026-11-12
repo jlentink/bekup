@@ -223,8 +223,14 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names, l i18n.Loc
 				str(d, "since"), cause)
 			path = idPath("/jobs", ev.JobID)
 		case ArtifactMissing:
-			body = t("body.artifact.missing", job)
+			body = artifactMissingBody(t, l, job, n.destination, d)
+			if body == "" {
+				body = t("body.artifact.missing", job)
+			}
 			path = idPath("/jobs", ev.JobID)
+			if ev.RunID != nil {
+				path = idPath("/runs", ev.RunID)
+			}
 		case DestinationTestFailed:
 			body = t("body.destination.test_failed", n.destination)
 			path = idPath("/destinations", ev.DestinationID)
@@ -274,6 +280,11 @@ func (s *Service) render(ev *sqlc.NotificationEvent, m Meta, n names, l i18n.Loc
 		} else {
 			path = "/admin/audit"
 			body = systemBody(t, l, d)
+			if str(d, "kind") == KindArtifactDeletedExternally {
+				if b := artifactMissingBody(t, l, job, n.destination, d); b != "" {
+					body = b
+				}
+			}
 		}
 		if body == "" {
 			body = t("body.security.fallback")

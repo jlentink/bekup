@@ -170,8 +170,15 @@ func (a *App) retentionAlerts() retention.AlertFunc {
 			Subject: notify.Subject{
 				JobID: al.JobID, RunID: al.RunID, ArtifactID: al.ArtifactID, DestinationID: al.DestinationID,
 			},
+			Detail: notify.ArtifactMissingDetail(al.Object, newestComplete(al.Details)),
 		})
 	}
+}
+
+// newestComplete reads the newest_complete flag of a retention alert.
+func newestComplete(d map[string]any) bool {
+	b, ok := d["newest_complete"].(bool)
+	return ok && b
 }
 
 // destinationTestFailed emits destination.test_failed.

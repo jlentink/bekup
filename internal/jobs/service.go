@@ -1317,7 +1317,7 @@ func (s *Service) StartNextRunEarly(ctx context.Context, actor Actor, id uuid.UU
 		original := job.NextRunAt.UTC()
 		next, err := earlyNextRun(sched, original, now)
 		if errors.Is(err, errAlreadyEarly) {
-			return fieldErr("id", "the next planned run was already started early")
+			return fieldErr("id", "the next planned run was already started early; only one occurrence can be pulled forward, the following one once its original time has passed")
 		}
 		if err != nil {
 			return scheduleErr(err)

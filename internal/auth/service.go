@@ -628,7 +628,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, current, next
 		return Issued{}, err
 	}
 	if subtle.ConstantTimeCompare([]byte(current), []byte(next)) == 1 {
-		return Issued{}, &PolicyError{ReasonUnchanged, "the new password must differ from the current one"}
+		return Issued{}, policyErr(ReasonUnchanged, "the new password must differ from the current one")
 	}
 	if err := s.limits.Policy().Check(next, user.Email, user.DisplayName); err != nil {
 		return Issued{}, err

@@ -11,15 +11,25 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // FieldError is invalid input for one field (VALIDATION in the API).
+// Message is the English text, Msg the same text translatable (D-238).
 type FieldError struct {
 	Field   string
 	Message string
+	Msg     i18n.Msg
 }
 
 func (e *FieldError) Error() string { return "auth: invalid " + e.Field + ": " + e.Message }
+
+// fieldErr returns a *FieldError with the constant message text.
+func fieldErr(field, message string) *FieldError {
+	m := i18n.Text(message)
+	return &FieldError{Field: field, Message: m.String(), Msg: m}
+}
 
 // maxDisplayNameLength is the users.display_name limit.
 const maxDisplayNameLength = 200
@@ -31,20 +41,20 @@ func NormalizeEmail(field, email string) (string, error) {
 	email = strings.TrimSpace(email)
 	n := utf8.RuneCountInString(email)
 	if !utf8.ValidString(email) || n < 3 || n > maxEmailLength {
-		return "", &FieldError{field, "enter a valid e-mail address (at most 254 characters)"}
+		return "", fieldErr(field, "enter a valid e-mail address (at most 254 characters)")
 	}
 	for _, r := range email {
 		if unicode.IsSpace(r) || unicode.IsControl(r) {
-			return "", &FieldError{field, "enter a valid e-mail address"}
+			return "", fieldErr(field, "enter a valid e-mail address")
 		}
 	}
 	addr, err := mail.ParseAddress(email)
 	if err != nil || addr.Address != email || addr.Name != "" {
-		return "", &FieldError{field, "enter a valid e-mail address"}
+		return "", fieldErr(field, "enter a valid e-mail address")
 	}
 	local, domain, ok := strings.Cut(email, "@")
 	if !ok || local == "" || domain == "" || strings.Contains(domain, "@") {
-		return "", &FieldError{field, "enter a valid e-mail address"}
+		return "", fieldErr(field, "enter a valid e-mail address")
 	}
 	return email, nil
 }
@@ -54,11 +64,11 @@ func NormalizeEmail(field, email string) (string, error) {
 func NormalizeDisplayName(field, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if !utf8.ValidString(name) || name == "" || utf8.RuneCountInString(name) > maxDisplayNameLength {
-		return "", &FieldError{field, "enter a display name of 1 to 200 characters"}
+		return "", fieldErr(field, "enter a display name of 1 to 200 characters")
 	}
 	for _, r := range name {
 		if unicode.IsControl(r) {
-			return "", &FieldError{field, "the display name must not contain control characters"}
+			return "", fieldErr(field, "the display name must not contain control characters")
 		}
 	}
 	return name, nil
