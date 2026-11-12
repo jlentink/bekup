@@ -3,7 +3,8 @@
 # A signed `vX.Y.Z` tag pushed by `just release` (D-072) builds, scans,
 # signs and publishes ghcr.io/<owner>/<repo>:X.Y.Z (and `latest` when X.Y.Z
 # is the highest released version), then creates the GitHub release with
-# notes from CHANGELOG.md. Nothing is published from branches.
+# notes from CHANGELOG.md. This workflow publishes nothing from branches
+# (devel.yml publishes :devel/:develop from main, D-239).
 #
 # Same rules as ci.yml:
 # - Every action is pinned by full commit SHA with a `# vX.Y.Z` comment and

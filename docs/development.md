@@ -588,11 +588,13 @@ visual direction.
 ## Continuous integration (GitHub Actions)
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull
-request and, as the release gate, on version tags (D-027, D-091, D-218);
-nothing else starts a workflow. Superseded runs of the same pull request are
-cancelled; the release gate never is. CI only tests: it never publishes an
-image. Images are built, signed and pushed only by `release.yml`, on a signed
-`vX.Y.Z` tag. Jobs
+request, as the release gate on version tags (D-027, D-091, D-218) and as
+the gate of the devel image on every push to `main` (D-239); nothing else
+starts a workflow. Superseded runs of the same pull request are cancelled,
+and a newer push to `main` supersedes the running devel workflow; the
+release gate is never cancelled. CI only tests: it never publishes an image.
+Images are built, signed and pushed only by `release.yml` (on a signed
+`vX.Y.Z` tag) and `devel.yml` (`:devel` / `:develop` from `main`). Jobs
 call the same `just` recipes you run locally where possible, so a green
 `just lint test sec` locally should mean a green CI run.
 
@@ -690,3 +692,43 @@ rotate or extend the key: export the new public key into the file, update
 **before** tagging with the new key. A new signing subkey of the pinned key
 or an extended expiry needs only a refreshed file (same fingerprint). An
 SSH-signed tag is refused.
+
+### Devel image workflow (`devel.yml`)
+
+[`.github/workflows/devel.yml`](../.github/workflows/devel.yml) (D-239) runs
+for every push to `main` and publishes that commit as
+`ghcr.io/jlentink/bekup:devel` and `:develop` (two names for one digest).
+It is the release chain without the tag checks, the compose files and the
+GitHub release:
+
+| Job | What it does | Permissions |
+|---|---|---|
+| `ci` | The full `ci.yml` (`workflow_call`, `disable_cache: true`) | `contents: read` |
+| `build` | Needs `ci`. Only `docker/*` actions. Version `release_ci.sh devel-version` (`VERSION` x.y.z, run N → `x.y.(z+1)-dev.N`, also shown by the web UI); builds `linux/amd64` + `linux/arm64` like `release.yml` and **pushes by digest only** | `contents: read`, `packages: write` |
+| `scan` | Trivy per platform, same settings as the release | `contents: read`, `packages: read` |
+| `publish` | `cosign sign --recursive`, an SPDX SBOM attestation per platform, `actions/attest-build-provenance`; then, only while the commit is still the head of `main` (`release_ci.sh is-head`), tags the digest `:devel` and `:develop` and checks both resolve to it | `contents: read`, `packages: write`, `id-token: write`, `attestations: write` |
+
+A newer push cancels the running workflow, and a run that finishes after a
+newer commit landed leaves the tags alone. Don't re-run a superseded run:
+it cancels the newer run and then tags nothing (push again, or re-run the
+newest run). `:X.Y.Z` and `:latest` are never touched. Verify a devel image
+with the devel identity:
+
+```sh
+cosign verify ghcr.io/jlentink/bekup:devel \
+  --certificate-identity https://github.com/jlentink/bekup/.github/workflows/devel.yml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+or with the GitHub CLI: `gh attestation verify oci://ghcr.io/jlentink/bekup:devel
+--repo jlentink/bekup --signer-workflow jlentink/bekup/.github/workflows/devel.yml
+--source-ref refs/heads/main`.
+
+Devel images are for testing, not production: pin them by digest, and
+`bekup setup` needs `--allow-version-mismatch` for them (the tag does not
+name the binary version). Every build has its own version
+(`0.0.18-dev.142`), so the version guard refuses a newer devel build until
+`setup upgrade` ran from it, also when you follow `:devel`. It treats
+`0.0.18-dev.N` as newer than `0.0.17`, so returning to the release
+afterwards is a downgrade.
+

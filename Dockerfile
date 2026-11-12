@@ -68,8 +68,18 @@ RUN --mount=type=cache,id=bekup-pnpm-store,target=/pnpm/store \
 
 COPY --from=websrc /websrc/ ./
 # vite.config.ts reads the release version from ../VERSION (/src/VERSION);
-# the copy above only puts it next to the web files.
+# the copy above only puts it next to the web files. A VERSION build-arg
+# (devel images, D-239: x.y.z-dev.N) replaces it there, checked against the
+# same SemVer rule as the Go stage, so the UI shows the binary's version.
 COPY --from=websrc /websrc/VERSION /src/VERSION
+ARG VERSION=""
+RUN set -eu; \
+    if [ -n "${VERSION}" ]; then \
+        v="${VERSION#v}"; \
+        echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$' \
+          || { echo "invalid VERSION: $v" >&2; exit 1; }; \
+        printf '%s\n' "$v" > /src/VERSION; \
+    fi
 
 # The placeholder has no browser setup (dist-setup without index.html):
 # `setup web` then refuses to start (D-217) instead of listening, as root,

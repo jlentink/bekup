@@ -44,8 +44,10 @@
      "$NEW"
    ```
    The release notes repeat this command with the exact identity of the
-   version; `gh attestation verify "oci://$NEW" --repo jlentink/bekup`
-   checks the build provenance instead
+   version; `gh attestation verify "oci://$NEW" --repo jlentink/bekup
+   --signer-workflow jlentink/bekup/.github/workflows/release.yml
+   --source-ref refs/tags/vX.Y.Z` checks the build provenance instead
+   (without the two pins a devel image from `main` would pass too)
    ([verifying release images](compose.md#verifying-release-images)).
 
 ## Applying the upgrade

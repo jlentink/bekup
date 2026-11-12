@@ -215,6 +215,8 @@ for needle in \
 	"--certificate-identity 'https://github.com/jlentink/bekup/.github/workflows/release.yml@refs/tags/v1.2.3'" \
 	'--certificate-oidc-issuer https://token.actions.githubusercontent.com' \
 	"gh attestation verify oci://ghcr.io/jlentink/bekup@$digest --repo jlentink/bekup" \
+	'--signer-workflow jlentink/bekup/.github/workflows/release.yml' \
+	'--source-ref refs/tags/v1.2.3' \
 	'compose.own-proxy.yaml' \
 	'compose.external-db.yaml' \
 	'compose.own-proxy.external-db.yaml' \
@@ -455,6 +457,60 @@ refuse state 1 'dial tcp: lookup ghcr.io: no such host'
 refuse state 1 'sh: docker: not found'
 refuse state 0 'Name: x' 'ghcr.io/jlentink/bekup:latest'   # only version tags
 refuse state 0 'Name: x' 'ghcr.io/x/y:1.2.3;id'
+
+# --- devel-version -----------------------------------------------------------
+want 1.2.4-dev.142 "$rc" devel-version 142 "$tmp/VERSION"
+# The output passes the SemVer rule of the Dockerfile (Go and web stages)
+# and internal/deployguard (versionRe); the ordering is tested in Go
+# (deployguard TestCheckVersion, setup IsDowngrade).
+semver_re='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'
+for n in 1 9 99 142 4294967296; do
+	count=$((count + 1))
+	v=$("$rc" devel-version "$n" "$tmp/VERSION" 2>/dev/null) || v='<error>'
+	if ! printf '%s\n' "$v" | grep -Eq "$semver_re"; then
+		printf 'FAIL: devel-version %s: %s is not SemVer\n' "$n" "$v" >&2
+		fail=1
+	fi
+done
+printf '0.0.9\n' >"$tmp/V9"
+want 0.0.10-dev.1 "$rc" devel-version 1 "$tmp/V9"          # numeric, not lexical
+printf ' 0.0.9 ' >"$tmp/VSPACE"
+want 0.0.10-dev.7 "$rc" devel-version 7 "$tmp/VSPACE"       # whitespace, no newline
+printf '1.2\n.3\n' >"$tmp/VSPLIT"
+refuse "$rc" devel-version 1 "$tmp/VSPLIT"                   # first line only
+printf '0.0.9999999999\n' >"$tmp/VBIG"
+refuse "$rc" devel-version 1 "$tmp/VBIG"                     # no overflow
+printf '1.2.3-rc.1\n' >"$tmp/VPRE"
+refuse "$rc" devel-version 1 "$tmp/VPRE"                     # VERSION is a release
+printf '01.2.3\n' >"$tmp/VZERO"
+refuse "$rc" devel-version 1 "$tmp/VZERO"
+: >"$tmp/VEMPTY"
+refuse "$rc" devel-version 1 "$tmp/VEMPTY"
+refuse "$rc" devel-version 1 "$tmp/missing"
+refuse "$rc" devel-version 1 "$tmp/BADVERSION"
+refuse "$rc" devel-version 0 "$tmp/VERSION"                  # run numbers start at 1
+refuse "$rc" devel-version 042 "$tmp/VERSION"
+refuse "$rc" devel-version '1;id' "$tmp/VERSION"
+refuse "$rc" devel-version 12345678901 "$tmp/VERSION"
+refuse "$rc" devel-version
+refuse "$rc" devel-version 1 "$tmp/VERSION" extra
+
+# --- is-head ------------------------------------------------------------------
+sha=0123456789abcdef0123456789abcdef01234567
+other=fedcba9876543210fedcba9876543210fedcba98
+# shellcheck disable=SC2317 # invoked through want/refuse
+head_is() { printf '%s\n' "$2" | "$rc" is-head "$1"; }
+want true head_is "$sha" "$sha"
+want false head_is "$sha" "$other"
+refuse head_is "$sha" ''
+refuse head_is "$sha" 'not-a-sha'
+refuse head_is "$sha" 0123456789ABCDEF0123456789ABCDEF01234567 # uppercase
+refuse head_is 'HEAD' "$sha"
+count=$((count + 1))
+if out=$("$rc" is-head "$sha" </dev/null 2>/dev/null); then
+	printf 'FAIL: is-head with empty stdin: want error, got %s\n' "$out" >&2
+	fail=1
+fi
 
 # --- tag-object-name ----------------------------------------------------------
 # shellcheck disable=SC2317 # invoked through want/refuse

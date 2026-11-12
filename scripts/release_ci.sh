@@ -1,6 +1,7 @@
 #!/bin/sh
 # release_ci.sh: the testable logic of the release workflow
-# (.github/workflows/release.yml, task 7.4, D-204).
+# (.github/workflows/release.yml, task 7.4, D-204) and of the devel image
+# workflow (.github/workflows/devel.yml, D-239).
 #
 # Usage:
 #   release_ci.sh check-tag <tag> [version-file]
@@ -33,6 +34,17 @@
 #       registry "not found" (manifest/name unknown, 404) counts as absent;
 #       any other error (auth, network, rate limit) fails: the immutability
 #       check of version tags fails closed.
+#   release_ci.sh devel-version <run-number> [version-file]
+#       Prints the version of a devel image built from main (D-239): the
+#       next patch release of VERSION as a pre-release numbered by the
+#       workflow run, <x.y.z+1>-dev.<run-number> (VERSION 0.0.17, run 142
+#       -> 0.0.18-dev.142). Newer than the last release, older than the
+#       next one, unique per build (the D-212 version guard tells devel
+#       builds apart) and never equal to a release version.
+#   release_ci.sh is-head <commit-sha>
+#       Reads the current head commit of main from stdin and prints "true"
+#       when it equals <commit-sha>, else "false" (both 40 hex digits): a
+#       devel run that is no longer the head never moves the devel tag.
 #   release_ci.sh tag-object-name
 #       Reads `git cat-file tag <ref>` from stdin and prints the tag name
 #       recorded in the annotated tag object (header `tag` line).
@@ -227,8 +239,11 @@ cosign verify \\
   --certificate-identity '$identity' \\
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
   $repo@$digest
-# or with the GitHub CLI (build provenance):
-gh attestation verify oci://$repo@$digest --repo $gh_repo
+# or with the GitHub CLI (build provenance of the release workflow; devel
+# images from main are attested too, so pin the workflow and the tag):
+gh attestation verify oci://$repo@$digest --repo $gh_repo \\
+  --signer-workflow $gh_repo/.github/workflows/release.yml \\
+  --source-ref refs/tags/v$version
 \`\`\`
 
 ## Install with Docker Compose
@@ -472,6 +487,33 @@ sbom_generator() {
 	printf '%s\n' "$gen"
 }
 
+devel_version() {
+	run=$1
+	file=${2:-VERSION}
+	matches "$run" '^[1-9][0-9]{0,9}$' || die "run number '$run' is not a positive integer"
+	[ -f "$file" ] || die "version file '$file' not found"
+	IFS= read -r v <"$file" || [ -n "$v" ] || die "version file '$file' is empty"
+	v=$(printf '%s' "$v" | tr -d ' \t\r')
+	matches "$v" '^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$' ||
+		die "VERSION '$v' is not a valid x.y.z version"
+	major=${v%%.*} rest=${v#*.}
+	minor=${rest%%.*} patch=${rest#*.}
+	printf '%s.%s.%s-dev.%s\n' "$major" "$minor" "$((patch + 1))" "$run"
+}
+
+is_head() {
+	sha=$1
+	matches "$sha" '^[0-9a-f]{40}$' || die "commit '$sha' is not 40 lowercase hex digits"
+	IFS= read -r head || [ -n "$head" ] || die "no head commit on stdin"
+	head=$(printf '%s' "$head" | tr -d ' \t\r')
+	matches "$head" '^[0-9a-f]{40}$' || die "head commit is not 40 lowercase hex digits"
+	if [ "$head" = "$sha" ]; then
+		printf 'true\n'
+	else
+		printf 'false\n'
+	fi
+}
+
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 case $cmd in
@@ -509,6 +551,14 @@ tag-state)
 	[ $# -eq 1 ] || die "usage: release_ci.sh tag-state <repo:x.y.z>"
 	tag_state "$1"
 	;;
+devel-version)
+	if [ $# -lt 1 ] || [ $# -gt 2 ]; then die "usage: release_ci.sh devel-version <run-number> [version-file]"; fi
+	devel_version "$@"
+	;;
+is-head)
+	[ $# -eq 1 ] || die "usage: release_ci.sh is-head <commit-sha> <head"
+	is_head "$1"
+	;;
 tag-object-name)
 	[ $# -eq 0 ] || die "usage: release_ci.sh tag-object-name <tag-object"
 	tag_object_name
@@ -530,6 +580,6 @@ assets-digest)
 	assets_digest "$1"
 	;;
 *)
-	die "usage: release_ci.sh check-tag | is-latest | verify-signer | changelog-section | image-repo | release-notes | sbom-generator | tag-state | tag-object-name | render-compose | compose-assets | committed-compose | assets-digest"
+	die "usage: release_ci.sh check-tag | is-latest | verify-signer | changelog-section | image-repo | release-notes | sbom-generator | tag-state | devel-version | is-head | tag-object-name | render-compose | compose-assets | committed-compose | assets-digest"
 	;;
 esac

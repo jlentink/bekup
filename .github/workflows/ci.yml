@@ -9,15 +9,17 @@
 # - step-security/harden-runner (egress audit) is the first step of every job.
 # - Tools installed with `go install`/`go run` are pinned to an exact version
 #   and verified against the Go checksum database.
-# - Runs only on pull requests, and on version tags as the gate of
-#   release.yml (D-218). It never publishes anything: images are built,
-#   signed and pushed only by release.yml.
+# - Runs on pull requests, and as the gate of release.yml (version tags,
+#   D-218) and devel.yml (pushes to main, D-239). It never publishes
+#   anything itself: images are built, signed and pushed only by release.yml
+#   (:X.Y.Z, :latest) and devel.yml (:devel, :develop).
 name: CI
 
 on:
   pull_request:
-  # The release workflow (release.yml, D-204) runs the full CI on the tag
-  # and publishes nothing unless it passes. It disables every cache, so no
+  # The release workflow (release.yml, D-204) runs the full CI on the tag,
+  # the devel workflow (devel.yml, D-239) on every push to main; neither
+  # publishes anything unless it passes. It disables every cache, so no
   # state written by other workflows enters a release.
   workflow_call:
     inputs:

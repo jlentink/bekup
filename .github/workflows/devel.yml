@@ -1,0 +1,298 @@
+# Devel image workflow (D-239, proposed).
+#
+# Every push to main builds, scans, signs and publishes the image of that
+# commit as ghcr.io/<owner>/<repo>:devel and :develop (two names for the
+# same digest, moved on every successful main build). The binary reports
+# the next patch release as a pre-release numbered by the run (VERSION
+# 0.0.17, run 142 -> 0.0.18-dev.142, `release_ci.sh devel-version`), so the
+# D-212 version guard tells every devel build apart. Release images (:X.Y.Z, :latest) come only
+# from release.yml.
+#
+# Same rules as release.yml:
+# - Every action is pinned by full commit SHA with a `# vX.Y.Z` comment and
+#   every image by digest (Renovate keeps both up to date, see renovate.json).
+# - step-security/harden-runner (egress audit) is the first step of every job.
+# - No secrets except the workflow's own GITHUB_TOKEN; top-level
+#   permissions are empty and each job asks only for what it needs;
+#   checkout never persists credentials; no `pull_request_target`.
+# - No caches: the called ci.yml gets `disable_cache: true`, and
+#   setup-qemu/setup-buildx cache nothing.
+# - Credentials with write access never meet third-party tools: the build
+#   job (packages: write) runs only docker/* actions, the Trivy scan runs in
+#   its own job with packages: read, and the publish job (packages: write,
+#   id-token: write) runs only sigstore/cosign-installer,
+#   actions/attest-build-provenance, docker/login + imagetools and gh.
+# - Values from the event reach `run:` scripts only through env variables;
+#   the testable logic lives in scripts/release_ci.sh.
+#
+# Order: the full CI on the pushed commit, then push by digest only
+# (build), Trivy (scan), cosign keyless signature + SBOM and provenance
+# attestations, and only then the devel tags (publish), and only while the
+# commit is still the head of main: a newer push cancels an older run, and
+# a run that finishes late never moves the tags back.
+name: Devel image
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  # One devel run at a time; a newer push to main supersedes the older run
+  # (its image would be replaced right away anyway). Do not re-run a
+  # superseded run: it cancels the newer one and then leaves the tags alone
+  # (not the head of main); push again or re-run the newest run instead.
+  group: devel-image
+  cancel-in-progress: true
+
+env:
+  PLATFORMS: linux/amd64,linux/arm64
+  # renovate: datasource=github-releases depName=sigstore/cosign
+  COSIGN_VERSION: v3.1.4
+  # renovate: datasource=github-releases depName=aquasecurity/trivy
+  TRIVY_VERSION: v0.76.1
+
+jobs:
+  ci:
+    name: CI
+    permissions:
+      contents: read
+    # The same commit's ci.yml (checked out by GitHub, not by a step). The
+    # newer self-repository form `$/...` is not understood by actionlint yet.
+    uses: ./.github/workflows/ci.yml # zizmor: ignore[self-repository]
+    with:
+      disable_cache: true
+
+  # Build and push by digest only: no tag exists before scan and signature.
+  # Only docker/* actions see the packages: write token here.
+  build:
+    name: Image (build, push by digest)
+    needs: [ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write # push to GHCR (by digest)
+    outputs:
+      repo: ${{ steps.meta.outputs.repo }}
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build metadata
+        id: meta
+        run: |
+          repo=$(scripts/release_ci.sh image-repo "$GITHUB_REPOSITORY")
+          version=$(scripts/release_ci.sh devel-version "$GITHUB_RUN_NUMBER" VERSION)
+          epoch=$(git show -s --format=%ct HEAD)
+          build_date=$(TZ=UTC git show -s --date=format-local:%Y-%m-%dT%H:%M:%SZ --format=%cd HEAD)
+          sbom_generator=$(scripts/release_ci.sh sbom-generator)
+          {
+            echo "repo=$repo"
+            echo "version=$version"
+            echo "epoch=$epoch"
+            echo "build_date=$build_date"
+            echo "sbom_generator=$sbom_generator"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+          cache-image: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+          cache-binary: false
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push by digest (no tags)
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.epoch }}
+        with:
+          context: .
+          target: runtime
+          platforms: ${{ env.PLATFORMS }}
+          pull: true
+          no-cache: true
+          provenance: mode=max
+          sbom: generator=${{ steps.meta.outputs.sbom_generator }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
+          annotations: |
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            index:org.opencontainers.image.licenses=MIT
+            index:org.opencontainers.image.description=Development build of bekup from main (not a release)
+          outputs: type=image,name=${{ steps.meta.outputs.repo }},push-by-digest=true,name-canonical=true,push=true
+
+  # Trivy runs with a read-only package token.
+  scan:
+    name: Image (Trivy scan)
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read # pull the pushed digest
+    env:
+      IMAGE: ${{ needs.build.outputs.repo }}@${{ needs.build.outputs.digest }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout (.trivyignore)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to GHCR (read only)
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Trivy (linux/amd64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: ${{ env.TRIVY_VERSION }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          cache: false
+
+      - name: Trivy (linux/arm64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: ${{ env.TRIVY_VERSION }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          cache: false
+          skip-setup-trivy: true
+
+  # Sign, attest and tag the scanned digest.
+  publish:
+    name: Image (sign, attest, tag devel)
+    needs: [build, scan]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read # read the head of main
+      packages: write # signatures, attestations, tags
+      id-token: write # cosign keyless + attestations (OIDC)
+      attestations: write # actions/attest-build-provenance
+    env:
+      REPO: ${{ needs.build.outputs.repo }}
+      DIGEST: ${{ needs.build.outputs.digest }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout (scripts/release_ci.sh)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Sign (cosign keyless) and attest the SBOMs
+        run: |
+          # The index and every platform manifest.
+          cosign sign --yes --recursive "$REPO@$DIGEST"
+          # One SPDX SBOM (from BuildKit, pinned generator) per platform
+          # manifest, attested to that manifest's digest.
+          docker buildx imagetools inspect --raw "$REPO@$DIGEST" >"$RUNNER_TEMP/index.json"
+          for platform in ${PLATFORMS//,/ }; do
+            os=${platform%%/*} arch=${platform#*/}
+            pdigest=$(jq -r --arg os "$os" --arg arch "$arch" \
+              '[.manifests[] | select(.platform.os == $os and .platform.architecture == $arch)] | if length == 1 then .[0].digest else error("platform manifest not unique") end' \
+              "$RUNNER_TEMP/index.json")
+            sbom="$RUNNER_TEMP/sbom-$os-$arch.spdx.json"
+            docker buildx imagetools inspect "$REPO@$DIGEST" \
+              --format "{{ json (index .SBOM \"$platform\").SPDX }}" >"$sbom"
+            jq -e '.spdxVersion' "$sbom" >/dev/null
+            cosign attest --yes --type spdxjson --predicate "$sbom" "$REPO@$pdigest"
+          done
+
+      - name: Attest build provenance (GitHub)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ needs.build.outputs.repo }}
+          subject-digest: ${{ needs.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Tag the verified digest (devel, develop)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only the head of main moves the devel tags: a run that finished
+          # after a newer push leaves them to the newer run.
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          current=$(printf '%s\n' "$head" | scripts/release_ci.sh is-head "$GITHUB_SHA")
+          if [ "$current" != true ]; then
+            echo "::notice::$GITHUB_SHA is no longer the head of main ($head); the devel tags stay where they are"
+            exit 0
+          fi
+          docker buildx imagetools create --tag "$REPO:devel" --tag "$REPO:develop" "$REPO@$DIGEST"
+          # Both tags must name exactly the scanned and signed digest.
+          for tag in devel develop; do
+            got=$(docker buildx imagetools inspect "$REPO:$tag" --format '{{ json .Manifest }}' | jq -r .digest)
+            if [ "$got" != "$DIGEST" ]; then
+              echo "::error::$REPO:$tag resolves to $got, not the signed digest $DIGEST"
+              exit 1
+            fi
+          done
+          echo "published $REPO:devel and :develop = $VERSION@$DIGEST ($GITHUB_SHA)"
