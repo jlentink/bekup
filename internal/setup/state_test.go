@@ -187,6 +187,11 @@ func TestVersionChecks(t *testing.T) {
 	}{
 		{"1.2.3", "1.2.4", false}, {"1.2.3", "1.2.3", false}, {"1.3.0", "1.2.9", true},
 		{"1.0.0", "1.0.0-rc.1", true}, {"garbage", "1.0.0", false},
+		// Devel images (D-239): <x.y.z+1>-dev.<run>.
+		{"0.0.17", "0.0.18-dev.1", false}, {"0.0.18-dev.142", "0.0.18-dev.143", false},
+		{"0.0.18-dev.143", "0.0.18-dev.142", true}, {"0.0.18-dev.999", "0.0.18-dev.1000", false},
+		{"0.0.18-dev.1000", "0.0.18-dev.999", true}, {"0.0.18-dev.5", "0.0.17", true},
+		{"0.0.18-dev.5", "0.0.18", false},
 	} {
 		if got := IsDowngrade(tc.prev, tc.next); got != tc.down {
 			t.Errorf("IsDowngrade(%s, %s) = %v", tc.prev, tc.next, got)

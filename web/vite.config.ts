@@ -19,8 +19,9 @@ const styleSingletonShim = fileURLToPath(
 
 /**
  * The release version from the repository's VERSION file (`../VERSION`; the
- * Dockerfile's web stage copies it to /src/VERSION for this). A production
- * build refuses to run without a valid x.y.z version, so a missing file can
+ * Dockerfile's web stage copies it to /src/VERSION for this, or writes the
+ * VERSION build-arg there: devel images carry x.y.z-dev.N, D-239). A
+ * production build refuses to run without a valid SemVer version, so a missing file can
  * never ship a UI that says "v0.0.0-dev"; the dev server and vitest fall
  * back to it.
  */
@@ -32,8 +33,8 @@ function readVersion(strict: boolean): string {
     if (strict) throw new Error("vite build: cannot read ../VERSION", { cause: err });
     return "0.0.0-dev";
   }
-  if (!/^\d+\.\d+\.\d+$/.test(version)) {
-    if (strict) throw new Error(`vite build: ../VERSION is not x.y.z: ${JSON.stringify(version)}`);
+  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/.test(version)) {
+    if (strict) throw new Error(`vite build: ../VERSION is not SemVer: ${JSON.stringify(version)}`);
     return "0.0.0-dev";
   }
   return version;

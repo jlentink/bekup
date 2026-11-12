@@ -57,6 +57,14 @@ func TestCheckVersion(t *testing.T) {
 		{name: "dev build against a release", binary: "0.0.0-dev", setup: "0.0.3", refuse: true, msg: "downgrade"},
 		{name: "other build of the same version", binary: "0.0.3+b", setup: "0.0.3+a", refuse: true, msg: "another build"},
 		{name: "prerelease to release", binary: "0.0.3", setup: "0.0.3-rc.1", refuse: true, msg: UpgradeCommand},
+		// Devel images (D-239): <x.y.z+1>-dev.<run>, ordered by SemVer.
+		{name: "same devel build", binary: "0.0.18-dev.142", setup: "0.0.18-dev.142"},
+		{name: "release to devel", binary: "0.0.18-dev.1", setup: "0.0.17", refuse: true, msg: UpgradeCommand},
+		{name: "newer devel build", binary: "0.0.18-dev.143", setup: "0.0.18-dev.142", refuse: true, msg: UpgradeCommand},
+		{name: "devel runs compare as numbers", binary: "0.0.18-dev.1000", setup: "0.0.18-dev.999", refuse: true, msg: UpgradeCommand},
+		{name: "older devel build", binary: "0.0.18-dev.9", setup: "0.0.18-dev.10", refuse: true, msg: "downgrade"},
+		{name: "devel back to the release", binary: "0.0.17", setup: "0.0.18-dev.5", refuse: true, msg: "downgrade"},
+		{name: "devel to the next release", binary: "0.0.18", setup: "0.0.18-dev.5", refuse: true, msg: UpgradeCommand},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

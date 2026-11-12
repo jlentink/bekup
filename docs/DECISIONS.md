@@ -240,7 +240,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-215](#d-215-own-reverse-proxy-joins-the-proxys-network-and-is-trusted-by-container-name-a-database-container-on-its-docker-network-four-database-tls-choices-four-compose-files-with-setup-only-overlays) | Own reverse proxy joins the proxy's network and is trusted by container name, a database container on its Docker network, four database TLS choices, four compose files with setup-only overlays | proposed (amendment 1: join-shape listener filter, `bekup-serve` alias check and alert, name trust limited to the proxy subnet, no proxy on another machine in the wizard, lenient system bundle; amendment 2: `traefik` allowed as a proxy name; amended by D-216) |
 | [D-216](#d-216-a-database-container-may-share-the-own-proxys-network-join-mode) | A database container may share the own proxy's network (join mode) | proposed |
 | [D-217](#d-217-browser-setup-mode-setup-web) | Browser setup mode (`setup web`) | proposed (amendment 1: review findings) |
-| [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed |
+| [D-218](#d-218-ci-only-on-pull-requests-and-version-tags) | CI only on pull requests and version tags | proposed (amended by D-239: pushes to main build the devel image) |
 | [D-219](#d-219-changelog-from-every-commit-a-changelog-section-is-optional-for-a-release) | Changelog from every commit; a changelog section is optional for a release | proposed |
 | [D-220](#d-220-external-ci-api-a-separate-bekup-external-api-with-its-own-role-per-job-api-tokens-security-definer-functions-instead-of-views) | External CI API: a separate `bekup external-api` with its own role, per-job API tokens, SECURITY DEFINER functions instead of views | proposed (amendment 1: client address allowlist per token, access denials and their alert; amendment 2: the external API process, token format implementation, endpoint codes and throttles; amendment 3: token management in GraphQL and the web UI, curl examples; amendment 4: compose, proxies and setup; amendment 5: review fixes; amended by D-229: tokens without expiry) |
 | [D-221](#d-221-sftp-uploads-verify-the-stored-size-by-path-after-closing-cloud-backed-gateways-drop-messages-carry-a-curated-detail) | SFTP uploads verify the stored size by path after closing (cloud-backed gateways); drop messages carry a curated detail | proposed |
@@ -261,6 +261,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-236](#d-236-the-ui-language-per-account-and-the-request-language) | The UI language per account and the request language | proposed |
 | [D-237](#d-237-server-rendered-notification-texts-in-the-recipients-language) | Server-rendered notification texts in the recipient's language | proposed |
 | [D-238](#d-238-api-texts-as-translatable-messages-format-and-arguments-through-a-central-catalog) | API texts as translatable messages: format and arguments through a central catalog | proposed |
+| [D-239](#d-239-devel-image-from-every-push-to-main-devel-and-develop-version-xyz1-devrun) | Devel image from every push to main: `:devel` and `:develop`, version `<x.y.z+1>-dev.<run>` | proposed |
 
 ---
 
@@ -13515,7 +13516,7 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 ## D-218: CI only on pull requests and version tags
 
 - **Date:** 2026-11-02
-- **Status:** proposed
+- **Status:** proposed (amended by D-239: a push to `main` runs `devel.yml`, which calls the full CI and publishes the devel image)
 - **Decided by:** user
 - **Context:** `ci.yml` ran on `pull_request`, on `push` to `main` and on
   `merge_group` (D-091), and as the gate of the release workflow
@@ -15909,3 +15910,98 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
   "internal error" text are 8.3b2. The web client never reads data from
   a message (the in-use job list moved to `extensions.jobs`).
 - **Related:** plan tasks 8.3b1–8.3b3, D-105, D-235, D-236, D-237.
+
+## D-239: Devel image from every push to main: `:devel` and `:develop`, version `<x.y.z+1>-dev.<run>`
+
+- **Date:** 2026-11-12
+- **Status:** proposed
+- **Decided by:** user (tags, version scheme, publishing from `main`);
+  agent (pipeline details)
+- **Context:** D-218 limited GitHub Actions to pull requests and version
+  tags, and only `release.yml` publishes images. The user wants every build
+  of `main` available as a container image, under two fixed tags `devel`
+  and `develop`, and explicitly not with an `x.y.z+devel` version.
+- **Decision:**
+  1. A new workflow `.github/workflows/devel.yml` runs on `push` to `main`
+     only. `ci.yml` keeps its triggers (pull requests, `workflow_call`) and
+     still never publishes; it is now also called by `devel.yml`.
+  2. Same chain as a release (D-204): the full `ci.yml` (`disable_cache:
+     true`) must pass; the image (`linux/amd64`, `linux/arm64`) is pushed
+     to `ghcr.io/<owner>/<repo>` **by digest only**; Trivy (HIGH/CRITICAL
+     with a fix fail, `.trivyignore`) in a job with `packages: read`;
+     `cosign sign --recursive` (keyless), an SPDX SBOM attestation per
+     platform and GitHub build provenance; only then
+     `docker buildx imagetools create` gives that digest both tags, and
+     both are checked to resolve to the signed digest. Same hardening:
+     `permissions: {}` at the top, per-job least privilege, SHA-pinned
+     actions, digest-pinned images, harden-runner, no caches, no event
+     text in `run:` blocks.
+  3. The tags `devel` and `develop` are aliases of one digest and move
+     with every successful build. Release tags (`X.Y.Z`, `latest`) are
+     never touched.
+  4. A newer push cancels the running workflow (`concurrency: devel-image`,
+     `cancel-in-progress: true`), and the publish job moves the tags only
+     while the run's commit is still the head of `main`
+     (`release_ci.sh is-head` on `gh api repos/.../commits/main`): an older
+     run that finishes late never moves them back.
+  5. The binary reports the next patch release as a pre-release numbered
+     by the workflow run: `release_ci.sh devel-version` turns `VERSION`
+     x.y.z and `GITHUB_RUN_NUMBER` N into `x.y.(z+1)-dev.N` (0.0.17, run
+     142 → 0.0.18-dev.142). SemVer orders it after the last release,
+     before the next one and after every earlier devel build (numeric
+     pre-release identifiers), and it never equals a release version, so
+     the D-212 version guard tells every devel build apart and asks for
+     `setup upgrade` after each new one. The web UI shows the same
+     version: the Dockerfile's web stage writes the `VERSION` build-arg
+     into `/src/VERSION` (same SemVer check) and `vite.config.ts` accepts
+     a pre-release. The OCI annotations carry the version and the commit
+     (`org.opencontainers.image.revision`).
+  6. The image `gh attestation verify` commands in the release notes
+     (`release_ci.sh release-notes`), `docs/installation/compose.md` and
+     `upgrades.md` pin `--signer-workflow .../release.yml` and
+     `--source-ref refs/tags/vX.Y.Z`: devel.yml attests its builds in the
+     same repository, and `--repo` alone would accept a devel image as a
+     release.
+- **Alternatives considered:** `x.y.z+devel.<sha>` build metadata
+  (rejected by the user); the plain `VERSION` (the setup version guard
+  could not tell a devel build from the release); `0.0.0-dev` (older than
+  every release, so the version guard would treat a devel image as a
+  downgrade); `x.y.(z+1)-dev` without the run number (the first version
+  of this entry: every devel build until the next release had the same
+  version, so after a pull of a moved `:devel` the guard saw no change
+  and new migrations or assets ran without `setup upgrade`; found in
+  review, the user chose the run number); restricting D-212 following to
+  `:latest` only (offered after the review, declined by the user: any
+  tag of the official repository can still be followed, and the unique
+  devel version makes the guard catch every moved `:devel`); an immutable per-commit tag next to the moving ones (not
+  requested; a build stays addressable by its digest); publishing from
+  `ci.yml` itself (would mix the read-only test workflow with write
+  access).
+- **Consequences:** every merge to `main` costs a full CI run plus a
+  multi-arch build. Devel images are signed by the workflow identity
+  `https://github.com/<owner>/<repo>/.github/workflows/devel.yml@refs/heads/main`,
+  not `release.yml@refs/tags/...`: a `cosign verify` pinned to the release
+  identity refuses them, which keeps the two apart. Devel images are not
+  releases: `bekup setup` refuses the `devel`/`develop` tag (it does not
+  name the binary version, D-203) unless `--allow-version-mismatch`, and
+  the version guard (D-212) treats `0.0.18-dev` as newer than 0.0.17, so
+  going back to the release afterwards is a downgrade
+  (`--allow-downgrade`, after restoring a matching database backup).
+  Following `:devel` without a digest works (D-212) but means every
+  successful push to `main` changes what the next pull runs; the guard
+  then refuses until `setup upgrade` ran from the new image. Re-running a
+  superseded devel run cancels the newer run and then leaves the tags
+  alone (not the head of `main`), so `:devel` stays on the older build
+  until the next push. Security: a second publishing path, gated by the
+  same CI, scan and signing; anyone with write access to `main` decides
+  what the devel tags point at (branch protection is the root of trust,
+  as for releases). GHCR has no per-tag protection: the immutability of
+  `:X.Y.Z` and the `:latest` rule are enforced by release.yml's checks,
+  not by the registry, and devel.yml now holds `packages: write` on every
+  push to `main` (a workflow on `main` could always be given that).
+  Untagged devel digests accumulate in GHCR until pruned.
+- **Related:** D-204, D-212, D-218; `.github/workflows/devel.yml`,
+  `.github/workflows/ci.yml`, `.github/workflows/release.yml` (header),
+  `scripts/release_ci.sh`, `Dockerfile` (web stage), `web/vite.config.ts`,
+  `docs/development.md`, `docs/installation/compose.md`,
+  `docs/installation/upgrades.md`, `SECURITY.md` (SC-S2), `AGENTS.md`.

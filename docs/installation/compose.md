@@ -1216,8 +1216,11 @@ cosign verify \
   --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "$IMAGE"
-# Or GitHub's build provenance attestation:
-gh attestation verify "oci://$IMAGE" --repo jlentink/bekup
+# Or GitHub's build provenance attestation (pin the release workflow and the
+# tag: devel images built from main are attested in the same repository):
+gh attestation verify "oci://$IMAGE" --repo jlentink/bekup \
+  --signer-workflow jlentink/bekup/.github/workflows/release.yml \
+  --source-ref refs/tags/vX.Y.Z
 # SBOM of one platform (attested to that platform's manifest digest):
 cosign verify-attestation --type spdxjson \
   --certificate-identity-regexp '^https://github\.com/jlentink/bekup/\.github/workflows/release\.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$' \

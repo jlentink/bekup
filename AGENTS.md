@@ -302,7 +302,7 @@ deploy/                 # postgres init, traefik/nginx proxy configs, dev/ keys 
 scripts/                # helpers behind the justfile (doctor, bump, release, ...)
 docs/                   # user/operator docs; docs/DECISIONS.md is the decision log
 plans/                  # the living plan with the task checklist
-.github/workflows/      # CI (SHA-pinned actions); release workflow in task 7.4
+.github/workflows/      # CI (SHA-pinned actions); release.yml (task 7.4); devel.yml (D-239)
 ```
 
 Each `internal/` package has a `doc.go` describing its responsibility.
@@ -1962,8 +1962,16 @@ Recipe arguments are passed as positional parameters, never interpolated
 (D-071); recipes for tooling from later tasks fail with "not available yet
 (task X.Y)". `just bump` / `just release` follow D-072 (strict x.y.z, clean
 `main` only, signed commit + tag, git-cliff changelog); agents never run them.
-GitHub Actions run only on pull requests (`ci.yml`, tests only, read-only
-token, never publishes) and on version tags (D-218, proposed).
+GitHub Actions run on pull requests (`ci.yml`, tests only, read-only
+token, never publishes), on version tags (D-218, proposed) and on pushes
+to `main` (D-239, proposed): `.github/workflows/devel.yml` calls the full
+`ci.yml`, then builds, scans and signs the image like a release and moves
+`:devel` and `:develop` to that digest (only while the commit is still the
+head of `main`); the binary and the web UI report `x.y.(z+1)-dev.<run
+number>` (`release_ci.sh devel-version`, unique per build for the D-212
+guard). Never let it touch `:X.Y.Z` or `:latest`; image
+`gh attestation verify` commands pin `--signer-workflow` and
+`--source-ref`, since devel builds are attested in the same repository.
 The pushed tag starts `.github/workflows/release.yml` (D-204, proposed):
 tag = `v$(cat VERSION)`, annotated, on `main`, OpenPGP-signed by the key in
 `.github/release-signers.asc` with the primary fingerprint pinned in the
