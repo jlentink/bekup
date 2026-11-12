@@ -236,7 +236,7 @@ func TestStartNextRunEarlyOnlyOnceAhead(t *testing.T) {
 		actor Actor
 	}{{e.owner.ctx, e.owner.actor}, {e.admin.ctx, e.admin.actor}} {
 		_, err := e.svc.StartNextRunEarly(u.ctx, u.actor, j.ID)
-		fieldError(t, err, "the next planned run was already started early")
+		fieldError(t, err, "the next planned run was already started early;")
 	}
 	if got := e.nextRunAt(j.ID); got == nil || !got.Equal(first.NextRunAt) {
 		t.Fatalf("next_run_at after the refusal: %v", got)

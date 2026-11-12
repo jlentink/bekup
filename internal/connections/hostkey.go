@@ -10,6 +10,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/runnerpb"
 	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/sshpolicy"
@@ -49,7 +50,7 @@ func (s *Service) FetchHostKey(ctx context.Context, actor Actor, id uuid.UUID) (
 	// Re-check what the runner returned before showing it.
 	info, err := sshpolicy.ParseHostKeyLine(resp.GetAuthorizedKey())
 	if err != nil || info.Type != resp.GetType() || info.FingerprintSHA256 != resp.GetFingerprintSha256() {
-		return HostKeyInfo{}, &TargetError{Code: CodeRunnerFailed, Message: "the runner returned an invalid host key"}
+		return HostKeyInfo{}, targetErr(CodeRunnerFailed, i18n.M("the runner returned an invalid host key"))
 	}
 	return HostKeyInfo{
 		Type: info.Type, Fingerprint: info.FingerprintSHA256, AuthorizedKey: info.AuthorizedKey,

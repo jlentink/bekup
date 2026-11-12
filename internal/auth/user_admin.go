@@ -232,7 +232,7 @@ func (s *UserAdmin) List(ctx context.Context, f UserFilter, after *UserCursor, l
 	}
 	if f.Role != "" {
 		if !f.Role.Valid() {
-			return nil, false, &FieldError{"filter.role", "unknown role"}
+			return nil, false, fieldErr("filter.role", "unknown role")
 		}
 		r := sqlc.UserRole(f.Role)
 		p.Role = &r
@@ -354,7 +354,7 @@ func (s *UserAdmin) Create(ctx context.Context, a Actor, in NewUser) (sqlc.User,
 		return sqlc.User{}, nil, err
 	}
 	if !in.Role.Valid() {
-		return sqlc.User{}, nil, &FieldError{"role", "unknown role"}
+		return sqlc.User{}, nil, fieldErr("role", "unknown role")
 	}
 	var (
 		hash string
@@ -429,7 +429,7 @@ func (s *UserAdmin) Update(ctx context.Context, a Actor, id uuid.UUID, c UserCha
 		name = n
 	}
 	if c.Role != nil && !c.Role.Valid() {
-		return UpdateResult{}, &FieldError{"role", "unknown role"}
+		return UpdateResult{}, fieldErr("role", "unknown role")
 	}
 	var res UpdateResult
 	err := db.Tx(ctx, s.o.DB, func(q *sqlc.Queries) error {

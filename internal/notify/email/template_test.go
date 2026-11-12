@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 func TestRenderEscapes(t *testing.T) {
@@ -36,7 +38,7 @@ func TestRenderEscapes(t *testing.T) {
 	if !strings.Contains(c.Text, "https://bekup.example.com/jobs/1?a=1&b=\"2\"") || !strings.Contains(c.Text, "<script>") {
 		t.Fatalf("text part should carry values verbatim:\n%s", c.Text)
 	}
-	if !strings.Contains(c.Text, DefaultFooter) || !strings.Contains(c.HTML, "no tracking") {
+	if !strings.Contains(c.Text, DefaultFooter(i18n.EN)) || !strings.Contains(c.HTML, "no tracking") {
 		t.Fatal("default footer missing")
 	}
 }

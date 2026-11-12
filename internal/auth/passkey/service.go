@@ -23,6 +23,7 @@ import (
 	"github.com/jlentink/bekup/internal/auth"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Limits and ceremony parameters (D-109).
@@ -83,10 +84,11 @@ var (
 	ErrNoPasskeys = errors.New("passkey: the user has no passkeys")
 )
 
-// NameError is an invalid passkey name.
-type NameError struct{ Message string }
+// NameError is an invalid passkey name; Msg is a whole sentence about the
+// name (D-238).
+type NameError struct{ Msg i18n.Msg }
 
-func (e *NameError) Error() string { return "passkey: invalid name: " + e.Message }
+func (e *NameError) Error() string { return "passkey: invalid name: " + e.Msg.String() }
 
 // EventKind is the kind of a security-relevant passkey event.
 type EventKind string
@@ -269,13 +271,13 @@ func ValidateName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	switch {
 	case !utf8.ValidString(name):
-		return "", &NameError{"must be valid UTF-8"}
+		return "", &NameError{i18n.M("the passkey name must be valid UTF-8")}
 	case name == "":
-		return "", &NameError{"must not be empty"}
+		return "", &NameError{i18n.M("the passkey name must not be empty")}
 	case utf8.RuneCountInString(name) > MaxNameLength:
-		return "", &NameError{fmt.Sprintf("must be at most %d characters", MaxNameLength)}
+		return "", &NameError{i18n.M("the passkey name must be at most %d characters", MaxNameLength)}
 	case strings.IndexFunc(name, unicode.IsControl) >= 0:
-		return "", &NameError{"must not contain control characters"}
+		return "", &NameError{i18n.M("the passkey name must not contain control characters")}
 	}
 	return name, nil
 }

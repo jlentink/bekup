@@ -8,26 +8,43 @@ package serviceutil
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // FieldError is an invalid input; Field names the input field (GraphQL
-// path such as "ssh.password") and Message is presentable.
+// path such as "ssh.password"), Message is the presentable English text
+// and Msg the same text translatable (D-238; resolvers pass Msg on).
 type FieldError struct {
 	Field   string
 	Message string
+	Msg     i18n.Msg
 }
 
 func (e *FieldError) Error() string { return "invalid " + e.Field + ": " + e.Message }
 
 // FieldErr returns a *FieldError with a formatted message.
 func FieldErr(field, format string, a ...any) error {
-	return &FieldError{Field: field, Message: fmt.Sprintf(format, a...)}
+	return FieldErrMsg(field, i18n.M(format, a...))
+}
+
+// FieldErrMsg returns a *FieldError with a translatable message.
+func FieldErrMsg(field string, m i18n.Msg) error {
+	return &FieldError{Field: field, Message: m.String(), Msg: m}
+}
+
+// FieldErrFrom returns a *FieldError with the message of err when err
+// carries one (i18n.Errorf), else with fallback. Never pass err.Error()
+// on to users instead.
+func FieldErrFrom(field string, err error, fallback i18n.Msg) error {
+	if m, ok := i18n.MsgOf(err); ok {
+		return FieldErrMsg(field, m)
+	}
+	return FieldErrMsg(field, fallback)
 }
 
 // RateLimitedError reports that the caller exceeded the per-user limit of

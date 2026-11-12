@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jlentink/bekup/internal/audit"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
@@ -53,21 +54,21 @@ var ErrBusy = serviceutil.ErrBusy
 // audited; invalid input as a *FieldError.
 func (t *TestMailer) SendTest(ctx context.Context, actor Actor, to string) (Delivery, error) {
 	if err := CheckAddress(to); err != nil {
-		return Delivery{}, fieldErr("to", "%s", err.Error())
+		return Delivery{}, serviceutil.FieldErrFrom("to", err, i18n.M("invalid e-mail address"))
 	}
 	release, err := t.limiter.Acquire("smtp_test:" + actor.UserID.String())
 	if err != nil {
 		return Delivery{}, err
 	}
 	defer release()
+	l := i18n.Resolve(nil, actor.Locale)
+	tr := mailTexts.For(l)
 	c, err := Render(Notice{
-		Subject: "bekup test e-mail",
-		Heading: "Your SMTP settings work",
-		Paragraphs: []string{
-			"This is a test message from bekup. An administrator sent it to check the SMTP settings.",
-			"No action is needed.",
-		},
-		Details: []Detail{{Label: "Sent at", Value: t.now().UTC().Format(time.RFC1123)}},
+		Subject:    tr("test.subject"),
+		Heading:    tr("test.heading"),
+		Paragraphs: []string{tr("test.p1"), tr("test.p2")},
+		Details:    []Detail{{Label: tr("test.sent_at"), Value: i18n.FormatTime(l, t.now().UTC(), "Mon 2 Jan 2006 15:04:05 MST")}},
+		Locale:     l,
 	})
 	if err != nil {
 		return Delivery{}, err

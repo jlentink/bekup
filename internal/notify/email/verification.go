@@ -20,6 +20,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
@@ -150,7 +151,7 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 		return VerificationRequest{}, ErrAlreadyVerified
 	}
 	if err := CheckAddress(st.Email); err != nil {
-		return VerificationRequest{}, fieldErr("email", "the account's e-mail address cannot receive mail: %s", err.Error())
+		return VerificationRequest{}, fieldErr("email", "the account's e-mail address cannot receive mail: %s", addressProblem(err))
 	}
 	code := make([]byte, codeBytes)
 	if _, err := rand.Read(code); err != nil {
@@ -195,7 +196,7 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 		return VerificationRequest{}, err
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(code)
-	c, err := Render(verificationNotice(v.link(encoded)))
+	c, err := Render(verificationNotice(v.link(encoded), i18n.Resolve(st.Locale, actor.Locale)))
 	if err == nil {
 		err = v.o.Mailer.Send(ctx, NewMessage([]string{st.Email}, c))
 	}
@@ -211,16 +212,15 @@ func (v *Verifier) Request(ctx context.Context, actor Actor) (VerificationReques
 	return VerificationRequest{SentTo: st.Email, ExpiresAt: expires}, nil
 }
 
-// verificationNotice is the verification e-mail with its link.
-func verificationNotice(link string) Notice {
+// verificationNotice is the verification e-mail with its link, in l.
+func verificationNotice(link string, l i18n.Locale) Notice {
+	t := mailTexts.For(l)
 	return Notice{
-		Subject: "Verify your e-mail address for bekup",
-		Heading: "Verify your e-mail address",
-		Paragraphs: []string{
-			"Someone (hopefully you) asked bekup to send notifications to this address. Open the link below while signed in to bekup to confirm it.",
-			"The link works once and expires in 24 hours. If you did not ask for this, ignore this message: nothing will be sent to this address.",
-		},
-		Action: &Action{Label: "Verify e-mail address", URL: link},
+		Subject:    t("verify.subject"),
+		Heading:    t("verify.heading"),
+		Paragraphs: []string{t("verify.p1"), t("verify.p2")},
+		Action:     &Action{Label: t("verify.action"), URL: link},
+		Locale:     l,
 	}
 }
 
@@ -354,4 +354,12 @@ func IsVerified(ctx context.Context, d sqlc.DBTX, userID uuid.UUID) (Recipient, 
 		return Recipient{}, fmt.Errorf("email: load account: %w", err)
 	}
 	return Recipient{Email: st.Email, Verified: st.EmailVerifiedAt != nil && !st.Disabled}, nil
+}
+
+// addressProblem is the translatable problem of a CheckAddress error.
+func addressProblem(err error) i18n.Msg {
+	if m, ok := i18n.MsgOf(err); ok {
+		return m
+	}
+	return i18n.Text("invalid e-mail address")
 }

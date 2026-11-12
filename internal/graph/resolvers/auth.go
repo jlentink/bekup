@@ -42,7 +42,7 @@ func authError(err error) error {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return errInvalidCredentials
 	case errors.As(err, &pe):
-		return apierror.Invalid("newPassword", pe.Message)
+		return apierror.InvalidMsg("newPassword", pe.Msg)
 	case errors.Is(err, auth.ErrWrongPassword):
 		return apierror.Invalid("currentPassword", "the current password is wrong")
 	case errors.Is(err, auth.ErrSessionNotFound):

@@ -32,4 +32,4 @@ WHERE id = @id AND email = @email AND deleted_at IS NULL;
 -- GetEmailVerificationState returns what decides whether a user may get
 -- e-mail: the address and when it was verified.
 -- name: GetEmailVerificationState :one
-SELECT email, email_verified_at, disabled FROM users WHERE id = $1 AND deleted_at IS NULL;
+SELECT email, email_verified_at, disabled, locale FROM users WHERE id = $1 AND deleted_at IS NULL;

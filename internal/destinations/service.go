@@ -19,6 +19,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/logging"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/serviceutil"
@@ -44,9 +45,16 @@ var (
 
 // NotReadyError reports that the destination cannot be opened yet; Reason is
 // presentable.
-type NotReadyError struct{ Reason string }
+type NotReadyError struct {
+	Reason string
+	// ReasonMsg is Reason translatable (D-238).
+	ReasonMsg i18n.Msg
+}
 
 func (e *NotReadyError) Error() string { return "destinations: not ready: " + e.Reason }
+
+// notReady returns a *NotReadyError with the reason m.
+func notReady(m i18n.Msg) *NotReadyError { return &NotReadyError{Reason: m.String(), ReasonMsg: m} }
 
 // RateLimitedError reports that the caller exceeded the per-user limit of network
 // operations.
@@ -56,7 +64,9 @@ type RateLimitedError = serviceutil.RateLimitedError
 // normalized, presentable reason.
 type HostKeyFetchError struct {
 	Message string
-	err     error
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
+	err error
 }
 
 func (e *HostKeyFetchError) Error() string { return "destinations: fetch host key: " + e.Message }
@@ -233,7 +243,8 @@ func (r *record) view() Destination {
 		}
 	}
 	d.Space = spaceColumnsOf(&row).stored(d.Type)
-	d.NotReadyReason = notReadyReason(&d)
+	d.NotReadyMsg = notReadyMsg(&d)
+	d.NotReadyReason = d.NotReadyMsg.String()
 	d.Ready = d.NotReadyReason == ""
 	return d
 }
@@ -264,32 +275,33 @@ func overwriteIgnoredByTest(d *Destination) bool {
 		d.LastTest.Code == string(storage.CodeOverwriteIgnored)
 }
 
-// notReadyReason says what is missing before d can be opened.
-func notReadyReason(d *Destination) string {
+// notReadyMsg says what is missing before d can be opened (zero when
+// nothing is).
+func notReadyMsg(d *Destination) i18n.Msg {
 	switch d.Type {
 	case TypeWebDAV:
 		if !d.HasPassword {
-			return "set the password"
+			return i18n.M("set the password")
 		}
 		if overwriteIgnoredByTest(d) {
-			return overwriteIgnoredReason
+			return i18n.M(overwriteIgnoredReason)
 		}
 	case TypeS3:
 		if !d.HasSecretAccessKey {
-			return "the secret access key is missing"
+			return i18n.M("the secret access key is missing")
 		}
 	case TypeSFTP:
 		switch {
 		case d.HostKey == nil && !d.HasPassword && !d.HasPrivateKey:
-			return "confirm the server's host key and set a password or SSH key"
+			return i18n.M("confirm the server's host key and set a password or SSH key")
 		case d.HostKey == nil:
-			return "confirm the server's host key"
+			return i18n.M("confirm the server's host key")
 		case !d.HasPassword && !d.HasPrivateKey:
-			return "set a password or SSH key"
+			return i18n.M("set a password or SSH key")
 		}
 	case TypeDisk:
 	}
-	return ""
+	return i18n.Msg{}
 }
 
 // List returns every destination that is not deleted, ordered by name.
@@ -749,7 +761,7 @@ func (s *Service) applyS3(ctx context.Context, st *state, in *S3Input) error {
 	err = cfg.Validate()
 	cfg.SecretAccessKey.Destroy()
 	if err != nil {
-		return fieldErr("s3", "%s", s3Message(err))
+		return serviceutil.FieldErrMsg("s3", problemsMsg(err, i18n.M("the S3 settings are not valid")))
 	}
 	if c.Endpoint != "" {
 		u, err := url.Parse(c.Endpoint)
@@ -757,7 +769,7 @@ func (s *Service) applyS3(ctx context.Context, st *state, in *S3Input) error {
 			return fieldErr("s3.endpoint", "invalid endpoint URL")
 		}
 		if err := s.checkHost(ctx, u.Hostname()); err != nil {
-			return fieldErr("s3.endpoint", "%s", err.Error())
+			return hostFieldErr("s3.endpoint", err)
 		}
 	}
 	st.s3 = &c
@@ -766,16 +778,6 @@ func (s *Service) applyS3(ctx context.Context, st *state, in *S3Input) error {
 		st.lockDays = 0
 	}
 	return nil
-}
-
-// s3Message strips the sentinel prefix of an s3store validation error and
-// joins the individual problems.
-func s3Message(err error) string {
-	msg := err.Error()
-	if _, rest, ok := strings.Cut(msg, "s3 destination: "); ok {
-		msg = rest
-	}
-	return strings.ReplaceAll(msg, "\n", "; ")
 }
 
 func (s *Service) applySFTP(ctx context.Context, st *state, prev *SFTPConfig, in *SFTPInput) error {
@@ -787,7 +789,7 @@ func (s *Service) applySFTP(ctx context.Context, st *state, prev *SFTPConfig, in
 		c.AuthMethod, c.HasPassphrase, c.PublicKey = prev.AuthMethod, prev.HasPassphrase, prev.PublicKey
 	}
 	if err := sftp.ValidateTarget(c.Host, c.Port, c.User, c.BasePath, c.Dir); err != nil {
-		return fieldErr("sftp", "%s", sftpMessage(err))
+		return serviceutil.FieldErrFrom("sftp", err, i18n.M("the SFTP settings are not valid"))
 	}
 	// D-140: a stored password is never sent to a new endpoint. When the
 	// host, port, user or base path changes, a stored password must be
@@ -833,7 +835,7 @@ func (s *Service) applySFTP(ctx context.Context, st *state, prev *SFTPConfig, in
 		c.AuthMethod, c.HasPassphrase, c.PublicKey = AuthPrivateKey, len(in.Passphrase) > 0, line
 	}
 	if err := s.checkHost(ctx, c.Host); err != nil {
-		return fieldErr("sftp.host", "%s", err.Error())
+		return hostFieldErr("sftp.host", err)
 	}
 	if prev != nil && (prev.Host != c.Host || prev.Port != c.Port) {
 		st.clearHostKey = true
@@ -842,24 +844,13 @@ func (s *Service) applySFTP(ctx context.Context, st *state, prev *SFTPConfig, in
 	return nil
 }
 
-// sftpMessage strips the sentinel prefix of an sftp validation error.
-func sftpMessage(err error) string {
-	if _, rest, ok := strings.Cut(err.Error(), "invalid sftp configuration: "); ok {
-		return rest
-	}
-	if _, rest, ok := strings.Cut(err.Error(), "sftp directory: "); ok {
-		return "directory: " + rest
-	}
-	return "invalid settings"
-}
-
 func (s *Service) applyWebDAV(ctx context.Context, st *state, prev *WebDAVConfig, in *WebDAVInput) error {
 	c, err := webdavConfigOf(in)
 	if err != nil {
 		return err
 	}
 	if err := webdav.ValidateTarget(c.URL, webdav.Flavor(c.Flavor), c.Username, c.Path, s.o.AllowHTTP); err != nil {
-		return fieldErr("webdav", "%s", webdav.Message(err))
+		return serviceutil.FieldErrMsg("webdav", webdav.Message(err))
 	}
 	// D-140: a stored password is never sent to a new endpoint. When the
 	// URL, the flavor (it changes the addressed resources) or the username
@@ -881,10 +872,10 @@ func (s *Service) applyWebDAV(ctx context.Context, st *state, prev *WebDAVConfig
 	}
 	u, err := webdav.ParseURL(c.URL, s.o.AllowHTTP)
 	if err != nil {
-		return fieldErr("webdav.url", "%s", webdav.Message(err))
+		return serviceutil.FieldErrMsg("webdav.url", webdav.Message(err))
 	}
 	if err := s.checkHost(ctx, u.Host()); err != nil {
-		return fieldErr("webdav.url", "%s", err.Error())
+		return hostFieldErr("webdav.url", err)
 	}
 	// The certificate pin belongs to the server the URL named (D-222).
 	if prev != nil && prev.URL != c.URL {
@@ -952,16 +943,34 @@ func (s *Service) resolveWebDAVUser(ctx context.Context, st *state, pin *webdav.
 // checkHost resolves host and checks every address against the SSRF
 // guard (the dial-time check still applies later). The messages are for
 // admins (D-120: the blocked address and reason are admin information).
+// hostFieldErr is the field error of a checkHost failure; a canceled
+// check stays a cancellation.
+func hostFieldErr(field string, err error) error {
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	return serviceutil.FieldErrFrom(field, err, i18n.M("the host is not allowed"))
+}
+
+// problemsMsg joins the messages of every problem in err ("; "), or
+// returns fallback when none carries one.
+func problemsMsg(err error, fallback i18n.Msg) i18n.Msg {
+	if ms := i18n.MsgsOf(err); len(ms) > 0 {
+		return i18n.Join("; ", ms...)
+	}
+	return fallback
+}
+
 func (s *Service) checkHost(ctx context.Context, host string) error {
 	if _, err := s.o.Guard.ResolveAndCheck(ctx, host); err != nil {
 		var blocked *netguard.BlockedAddressError
 		switch {
 		case errors.As(err, &blocked):
-			return fmt.Errorf("the host resolves to %s, which is not allowed (%s); private addresses must be on the SSRF allowlist", blocked.IP, blocked.Reason)
+			return i18n.Errorf("the host resolves to %s, which is not allowed (%s); private addresses must be on the SSRF allowlist", blocked.IP, blocked.Reason.Msg())
 		case errors.Is(err, context.Canceled):
 			return err
 		default:
-			return errors.New("the host cannot be resolved")
+			return i18n.Errorf("the host cannot be resolved")
 		}
 	}
 	return nil

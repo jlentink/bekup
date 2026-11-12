@@ -15,6 +15,7 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
@@ -74,7 +75,7 @@ func (s *Service) Open(ctx context.Context, id uuid.UUID) (storage.Destination, 
 func (s *Service) open(ctx context.Context, r *record) (storage.Destination, error) {
 	v := r.view()
 	if !v.Ready {
-		return nil, &NotReadyError{Reason: v.NotReadyReason}
+		return nil, notReady(v.NotReadyMsg)
 	}
 	return s.openBackend(ctx, r, &v)
 }
@@ -86,7 +87,7 @@ func (s *Service) openBackend(ctx context.Context, r *record, v *Destination) (s
 	switch v.Type {
 	case TypeDisk:
 		if s.o.DiskRoot == "" {
-			return nil, &NotReadyError{Reason: "storage.disk_root is not configured"}
+			return nil, notReady(i18n.M("storage.disk_root is not configured"))
 		}
 		return storage.OpenDisk(storage.DiskConfig{Root: s.o.DiskRoot, Dir: r.disk.Path, NoDelete: v.NoDelete})
 	case TypeS3:
@@ -249,7 +250,7 @@ func (s *Service) Test(ctx context.Context, actor Actor, id uuid.UUID) (TestResu
 	}
 	v := r.view()
 	if !v.Ready && v.NotReadyReason != overwriteIgnoredReason {
-		return TestResult{}, &NotReadyError{Reason: v.NotReadyReason}
+		return TestResult{}, notReady(v.NotReadyMsg)
 	}
 	release, err := s.acquire(actor)
 	if err != nil {

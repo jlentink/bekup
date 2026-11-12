@@ -527,10 +527,14 @@ vite-plugins/         csp-strict-styles (build-time CSP hardening)
 - **TOTP QR code.** The server's SVG can't be inserted as markup under
   Trusted Types, so `lib/qr-svg.ts` parses its exact shape and the page
   re-renders it as React SVG. Anything else falls back to the manual key.
-- **Strings.** English only, kept apart from the markup so a translation
-  layer can replace them: the shell, auth and account strings in
-  `lib/messages.ts`; every feature keeps its own (a `messages.ts` in the
-  feature folder or a `T` table at the top of the component).
+- **Strings.** Every UI string lives in a `defineMessages({ en, nl })`
+  table (D-235): the shell, auth and account strings in `lib/messages.ts`;
+  every feature keeps its own (a `messages.ts` in the feature folder or a
+  `T` table at the top of the component).
+- **Server messages.** Error messages from the API arrive already in the
+  user's language (the account's choice, else the browser's; D-238): show
+  `userMessage(error)` as is and switch on `extensions.code`, never on the
+  message text.
 - **Tests.** `renderApp(path, handlers)` from `src/test/mock-api.tsx`
   renders the real routes and links over a fake GraphQL server that answers
   by operation name (`baseHandlers`, `meFixture`, `ok`, `gqlError`). Use it

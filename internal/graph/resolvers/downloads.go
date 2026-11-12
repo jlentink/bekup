@@ -23,7 +23,7 @@ func downloadError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.As(err, &rl):
 		return apierror.New(apierror.RateLimited, "too many open download tickets; use or let them expire first")
 	case errors.Is(err, downloads.ErrNotFound):

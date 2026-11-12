@@ -1,0 +1,11 @@
+Bevestig je e-mailadres
+
+Iemand (hopelijk jij) heeft bekup gevraagd meldingen naar dit adres te sturen. Open de link hieronder terwijl je bij bekup bent ingelogd om dit te bevestigen.
+
+De link werkt één keer en verloopt na 24 uur. Heb je hier niet om gevraagd? Negeer dit bericht dan: er wordt niets naar dit adres gestuurd.
+
+E-mailadres bevestigen:
+https://bekup.example.com/profile/notifications/verify#Zm9vYmFy
+
+--
+Dit bericht is automatisch verstuurd door bekup. Het bevat geen afbeeldingen, geen tracking en geen geheimen.

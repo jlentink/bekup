@@ -17,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/storage"
 	"github.com/jlentink/bekup/internal/storage/s3store"
 	"github.com/jlentink/bekup/internal/storage/webdav"
@@ -48,14 +49,14 @@ func destinationError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.As(err, &nr):
-		return apierror.New(apierror.Conflict, "the destination is not ready: "+nr.Reason)
+		return apierror.Newf(apierror.Conflict, "the destination is not ready: %s", nr.ReasonMsg)
 	case errors.As(err, &rl):
 		return apierror.Newf(apierror.RateLimited, "too many destination checks; try again in %d seconds",
 			httpserver.RetryAfterSeconds(rl.RetryAfter))
 	case errors.As(err, &hk):
-		return apierror.New(apierror.ConnectionFailed, hk.Message)
+		return apierror.NewMsg(apierror.ConnectionFailed, hk.Msg)
 	case errors.Is(err, destinations.ErrBusy):
 		return errBusy
 	case errors.Is(err, destinations.ErrNotFound):
@@ -65,11 +66,11 @@ func destinationError(err error) error {
 	case errors.Is(err, destinations.ErrConflict):
 		return apierror.New(apierror.Conflict, "the destination was changed in the meantime; reload and try again")
 	case errors.As(err, &inUse):
-		return apierror.New(apierror.Conflict, "the destination is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
+		return apierror.InUse(i18n.M("the destination is still used by these jobs: %s", strings.Join(inUse.Jobs, ", ")), inUse.Jobs)
 	case errors.Is(err, destinations.ErrInUse):
 		return apierror.New(apierror.Conflict, "the destination is still used by a job")
 	case errors.As(err, &cf):
-		return apierror.New(apierror.ConnectionFailed, cf.Message)
+		return apierror.NewMsg(apierror.ConnectionFailed, cf.Msg)
 	case errors.Is(err, destinations.ErrCertificateChanged):
 		return apierror.New(apierror.Conflict, "the server now presents another certificate than the one you confirmed; test again and compare the new fingerprint")
 	case errors.Is(err, destinations.ErrWrongType):

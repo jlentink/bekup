@@ -259,6 +259,8 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 | [D-234](#d-234-kubernetes-through-a-jobs-executor-in-the-runner) | Kubernetes through a Jobs executor in the runner | proposed |
 | [D-235](#d-235-ui-translations-as-typed-message-tables-per-language-english-dutch) | UI translations as typed message tables per language (English, Dutch) | proposed |
 | [D-236](#d-236-the-ui-language-per-account-and-the-request-language) | The UI language per account and the request language | proposed |
+| [D-237](#d-237-server-rendered-notification-texts-in-the-recipients-language) | Server-rendered notification texts in the recipient's language | proposed |
+| [D-238](#d-238-api-texts-as-translatable-messages-format-and-arguments-through-a-central-catalog) | API texts as translatable messages: format and arguments through a central catalog | proposed |
 
 ---
 
@@ -15794,3 +15796,116 @@ Task numbers (for example `0.3`, `2.7a`) refer to the checklist in
 - **Related:** plan task 8.2, `internal/i18n`, `internal/auth`,
   `web/src/features/auth/use-account-locale.ts`,
   `web/src/features/account/language-section.tsx`, D-235.
+
+## D-237: Server-rendered notification texts in the recipient's language
+
+- **Date:** 2026-11-08
+- **Status:** proposed
+- **Decided by:** user (task 8.3 split into 8.3a notifications/e-mails/
+  summary, 8.3b GraphQL messages through a central catalog, 8.3c setup
+  wizard by LC_ALL/LC_MESSAGES/LANG with a `--lang` flag) and agent (the
+  details of 8.3a below)
+- **Context:** D-236 stores each account's language. Inbox rows, e-mails,
+  personal webhook payloads and the periodic summary were English only.
+- **Decision:**
+  1. Server texts live in one `i18n.Catalog` per package (key → fmt
+     format string per language). `Catalog.Problems()` (asserted by each
+     package's tests) refuses missing or extra keys, empty texts and
+     formatting verbs that differ from English. `i18n.FormatTime` formats
+     dates with Dutch month and day names for NL, same layouts.
+  2. A text is rendered in its recipient's language: `users.locale`, else
+     English (`i18n.Resolve(stored, "")`). Fan-out renders once per
+     language and stores each inbox row in its recipient's language (rows
+     are not re-rendered when the user changes language later). Delivery
+     renders e-mails and personal webhooks in the recipient's language;
+     shared channels have no recipient and stay English. Webhook payload
+     keys and event types never change; only `title`/`summary` values
+     follow the language.
+  3. The periodic summary is rendered per recipient (as before) in the
+     recipient's language, with Dutch goldens next to the English ones
+     (same size budget and 375 px check).
+  4. `email.Notice.Locale` drives the layout's own texts (footer, button
+     fallback) and `<html lang>`. The verification e-mail uses the
+     account's stored language, else the request's (Accept-Language); the
+     SMTP test e-mail uses the request's language.
+  5. Not covered by 8.3a: the notification catalog labels the API serves
+     and stored delivery status messages (8.3b), the setup wizard (8.3c),
+     and the fixed personal webhook test payload (a protocol check, not a
+     notification). Payload values other than `title`/`summary` (e.g. the
+     deleted-job marker in `job.name`) stay English.
+- **Alternatives considered:** rendering inbox rows at read time (would
+  need the event and names kept forever; rows outlive events); a server-
+  wide language for shared channels (no recipient to ask; may come as a
+  setting later); Go text templates per language (the texts are short
+  sentences, a catalog with verb checks is simpler and safer).
+- **Consequences:** a new notification text needs both languages (the
+  parity tests fail otherwise). No security impact: texts stay static
+  format strings with escaped values; the security alert wording keeps
+  its meaning in Dutch (reviewed).
+- **Related:** plan tasks 8.3a–8.3c, `internal/i18n/catalog.go`,
+  `internal/notify/texts.go`, `internal/notify/summary/texts.go`,
+  `internal/notify/email`, D-226, D-235, D-236.
+
+## D-238: API texts as translatable messages: format and arguments through a central catalog
+
+- **Date:** 2026-11-08
+- **Status:** proposed
+- **Decided by:** user (8.3b split into 8.3b1 error messages, 8.3b2 server
+  prose in field values, 8.3b3 persisted English; texts passed on from
+  other packages become typed messages at their source, sentences built
+  from fragments become whole sentences) and agent (the mechanism below)
+- **Context:** D-237 left the texts the GraphQL API returns in English.
+  About 560 of them exist: `apierror` messages, the `FieldError` types of
+  the services, password-policy and similar errors, and server prose in
+  field values. They reach the error presenter already formatted, so a
+  catalog cannot find them, and some are built from another package's
+  `err.Error()` or from sentence fragments.
+- **Decision:**
+  1. `i18n.Msg` (English fmt format + arguments, or a constant text
+     without arguments from `i18n.Text`, shown as is) is the one
+     translatable message type; `i18n.M`/`Errorf` are printf wrappers for
+     go vet, so formats are checked against their arguments. Arguments that are themselves `Msg` are translated too;
+     every other argument (names, numbers, type-to-confirm phrases) is
+     formatted as is and never translated. `i18n.Errorf` returns an error
+     carrying a `Msg` (`i18n.MsgOf(err)`, `MsgsOf` for joined errors,
+     `ErrorOf` for a built Msg), for errors whose text another package
+     passes on. Data that clients need from an error travels in
+     `extensions` (`extensions.jobs` of an in-use conflict), never in the
+     text.
+  2. `apierror.Error`, `serviceutil.FieldError` and the other user-facing
+     error types (auth `FieldError`/`PolicyError`, egress/netguard entry
+     errors, calendar, passkey, connections/destinations target, not-ready,
+     host-key and certificate errors) carry a `Msg` next to their English
+     `Message`. No call site formats a user-facing text from another
+     error's string or from sentence fragments.
+  3. One central catalog keyed by the English format string
+     (`internal/i18n`, Dutch table), checked by `Catalog.Problems` (same
+     verbs). The error presenter and the protocol/transport error paths
+     render in `i18n.Resolve(account locale, Accept-Language)`; the
+     account locale travels on `auth.Principal` (loaded with the session,
+     no extra query). An unknown format falls back to English.
+  4. A source-walking test (go/parser over `internal/` and `cmd/`) collects
+     every format literal passed to the message constructors (and the
+     string constants used as formats) and fails for one without a Dutch
+     entry, for a non-constant format, for a formatting verb in a constant
+     text, for a format without words of its own (`"%s"`), for an argument
+     that is another text (`.Error()`, `.Message`, `.Reason`) and for an
+     error literal setting `Message` without `Msg`. Unused catalog entries
+     fail too.
+  5. Error codes, `extensions`, field names and type-to-confirm texts never
+     change with the language (D-235); clients keep switching on codes.
+- **Alternatives considered:** stable keys per message (8.3a style: call
+  sites lose their readable English and the 560 keys need names); a catalog
+  of whole rendered texts (texts with names or numbers would stay
+  English); translating in the web client (the server owns these texts and
+  their arguments).
+- **Consequences:** a new user-facing message needs its Dutch text in the
+  same change (the test fails otherwise). Security: messages stay static
+  formats with plain arguments, translation only selects a different
+  format with the same verbs, so no new data reaches clients; the
+  presenter still masks every non-`apierror` error. Persisted English
+  (run and restore error messages, old inbox rows) is 8.3b3; server prose
+  in field values, gqlgen's complexity-limit message and the masked
+  "internal error" text are 8.3b2. The web client never reads data from
+  a message (the in-use job list moved to `extensions.jobs`).
+- **Related:** plan tasks 8.3b1–8.3b3, D-105, D-235, D-236, D-237.

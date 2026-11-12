@@ -7,10 +7,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"slices"
-	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Limits shared by every SSH client and the services storing SSH settings.
@@ -49,16 +50,21 @@ var (
 	ErrMalformedHostKeyLine = errors.New("malformed ssh host key line")
 )
 
-// policyError is a static, secret-free message classified by kind.
+// policyError is a static, secret-free message classified by kind; its
+// text is translatable (i18n.MsgOf, D-238).
 type policyError struct {
 	kind error
-	msg  string
+	msg  i18n.Msg
 }
 
-func (e *policyError) Error() string { return e.msg }
-func (e *policyError) Unwrap() error { return e.kind }
+func (e *policyError) Error() string     { return e.msg.String() }
+func (e *policyError) Unwrap() error     { return e.kind }
+func (e *policyError) I18nMsg() i18n.Msg { return e.msg }
 
-func errorf(kind error, msg string) error { return &policyError{kind: kind, msg: msg} }
+// errorf returns a policyError of kind with the message format and args.
+func errorf(kind error, format string, args ...any) error {
+	return &policyError{kind: kind, msg: i18n.M(format, args...)}
+}
 
 // hostKeyAlgos maps an accepted host-key type to the signature algorithms
 // offered for it. RSA keys are only accepted with SHA-2 signatures.
@@ -112,7 +118,7 @@ func FetchHostKeyAlgorithms() []string {
 // The error wraps ErrUnsupportedHostKey.
 func CheckHostKey(key ssh.PublicKey) error {
 	if !AcceptedHostKeyType(key.Type()) {
-		return errorf(ErrUnsupportedHostKey, "host key type "+strconv.Quote(key.Type())+" not accepted")
+		return errorf(ErrUnsupportedHostKey, "host key type %q not accepted", key.Type())
 	}
 	if key.Type() == ssh.KeyAlgoRSA {
 		ck, ok := key.(ssh.CryptoPublicKey)

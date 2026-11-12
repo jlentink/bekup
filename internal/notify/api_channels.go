@@ -20,6 +20,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/notify/webhook"
 	"github.com/jlentink/bekup/internal/serviceutil"
@@ -167,7 +168,7 @@ func checkAddresses(in []string) ([]string, error) {
 	for _, a := range in {
 		a = strings.TrimSpace(a)
 		if err := email.CheckAddress(a); err != nil {
-			return nil, fieldErr("addresses", "%s", err.Error())
+			return nil, serviceutil.FieldErrFrom("addresses", err, i18n.M("invalid e-mail address"))
 		}
 		if k := strings.ToLower(a); !seen[k] {
 			seen[k] = true
@@ -190,16 +191,24 @@ func (a *API) checkURL(ctx context.Context, raw string, personal bool) (string, 
 		if errors.Is(err, context.Canceled) {
 			return "", err
 		}
-		var msg string
+		var msg i18n.Msg
 		switch {
-		case errors.Is(err, webhook.ErrURLTooLong), errors.Is(err, webhook.ErrInsecureScheme),
-			errors.Is(err, webhook.ErrUserinfo), errors.Is(err, webhook.ErrFragment),
-			errors.Is(err, webhook.ErrHostNotAllowed), errors.Is(err, webhook.ErrHostUnreachable):
-			msg = err.Error()
+		case errors.Is(err, webhook.ErrURLTooLong):
+			msg = i18n.M("webhook URL is too long")
+		case errors.Is(err, webhook.ErrInsecureScheme):
+			msg = i18n.M("webhook URL must use https")
+		case errors.Is(err, webhook.ErrUserinfo):
+			msg = i18n.M("webhook URL must not contain a user name or password")
+		case errors.Is(err, webhook.ErrFragment):
+			msg = i18n.M("webhook URL must not contain a fragment")
+		case errors.Is(err, webhook.ErrHostNotAllowed):
+			msg = i18n.M("webhook host is not allowed")
+		case errors.Is(err, webhook.ErrHostUnreachable):
+			msg = i18n.M("webhook host could not be resolved")
 		default:
-			msg = webhook.ErrInvalidURL.Error()
+			msg = i18n.M("invalid webhook URL")
 		}
-		return "", fieldErr("url", "%s", msg)
+		return "", serviceutil.FieldErrMsg("url", msg)
 	}
 	return webhook.DisplayURL(u.String()), nil
 }

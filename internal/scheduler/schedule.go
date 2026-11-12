@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"time"
 	_ "time/tzdata" // embedded zone database (D-028, D-044)
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Kind is the type of a schedule.
@@ -131,16 +132,16 @@ func DefaultLimits() Limits { return Limits{MinInterval: DefaultMinInterval} }
 // MaxJSONBytes are rejected.
 func Parse(data []byte, lim Limits) (Schedule, error) {
 	if len(data) > MaxJSONBytes {
-		return Schedule{}, fmt.Errorf("%w: document larger than %d bytes", ErrInvalid, MaxJSONBytes)
+		return Schedule{}, invalid("document larger than %d bytes", MaxJSONBytes)
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var s Schedule
 	if err := dec.Decode(&s); err != nil {
-		return Schedule{}, fmt.Errorf("%w: malformed JSON", ErrInvalid)
+		return Schedule{}, invalid("malformed JSON")
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return Schedule{}, fmt.Errorf("%w: trailing data after the schedule object", ErrInvalid)
+		return Schedule{}, invalid("trailing data after the schedule object")
 	}
 	n, err := s.Normalize()
 	if err != nil {
@@ -192,12 +193,12 @@ func (s Schedule) CheckLimits(lim Limits) error {
 	case KindInterval:
 		if p.unit == UnitMinutes || p.unit == UnitHours {
 			if p.step < minIv {
-				return fmt.Errorf("%w: interval %s is shorter than the minimum %s", ErrInvalid, p.step, minIv)
+				return invalid("interval %s is shorter than the minimum %s", p.step, minIv)
 			}
 		}
 	case KindCron:
 		if gap := p.cron.minGap(); gap < minIv {
-			return fmt.Errorf("%w: cron occurrences can be %s apart, the minimum is %s", ErrInvalid, gap, minIv)
+			return invalid("cron occurrences can be %s apart, the minimum is %s", gap, minIv)
 		}
 	case KindManual:
 	}
@@ -232,8 +233,17 @@ func (p *Plan) Schedule() Schedule { return p.canon }
 // Location returns the plan's zone (nil for manual schedules).
 func (p *Plan) Location() *time.Location { return p.loc }
 
+// invalidError is a schedule problem: it wraps ErrInvalid and carries a
+// translatable text describing the input only (D-238).
+type invalidError struct{ msg i18n.Msg }
+
+func (e *invalidError) Error() string     { return ErrInvalid.Error() + ": " + e.msg.String() }
+func (e *invalidError) Unwrap() error     { return ErrInvalid }
+func (e *invalidError) I18nMsg() i18n.Msg { return e.msg }
+
+// invalid returns an invalidError with the message format and args.
 func invalid(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrInvalid, fmt.Sprintf(format, args...))
+	return &invalidError{msg: i18n.M(format, args...)}
 }
 
 func compile(s Schedule) (*Plan, error) {

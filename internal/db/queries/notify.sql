@@ -61,12 +61,12 @@ SELECT pg_advisory_xact_lock(hashtextextended(@lock_key::text, 0));
 -- ListNotifiableUsers returns the active accounts (not deleted, not
 -- disabled) with their role and e-mail verification.
 -- name: ListNotifiableUsers :many
-SELECT id, role, email, email_verified_at FROM users
+SELECT id, role, email, email_verified_at, locale FROM users
 WHERE deleted_at IS NULL AND NOT disabled
 ORDER BY id;
 
 -- name: GetNotifiableUser :one
-SELECT id, role, email, email_verified_at FROM users
+SELECT id, role, email, email_verified_at, locale FROM users
 WHERE id = $1 AND deleted_at IS NULL AND NOT disabled;
 
 -- ListActiveAdminIDs returns the active admins.

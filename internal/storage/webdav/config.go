@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/hostname"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/storage"
 )
@@ -67,8 +67,17 @@ const (
 // storage.ErrInvalidArgument.
 var ErrInvalidConfig = fmt.Errorf("%w: invalid webdav configuration", storage.ErrInvalidArgument)
 
-func invalid(msg string) error {
-	return fmt.Errorf("%w: %s", ErrInvalidConfig, msg)
+// configError is a validation problem: it wraps ErrInvalidConfig and
+// carries a whole, translatable sentence (D-238).
+type configError struct{ msg i18n.Msg }
+
+func (e *configError) Error() string     { return ErrInvalidConfig.Error() + ": " + e.msg.String() }
+func (e *configError) Unwrap() error     { return ErrInvalidConfig }
+func (e *configError) I18nMsg() i18n.Msg { return e.msg }
+
+// invalid returns a configError with the constant message text.
+func invalid(message string) error {
+	return &configError{msg: i18n.Text(message)}
 }
 
 // Pin is a pinned server certificate (D-222): the certificate itself is
@@ -323,7 +332,7 @@ func ParseURL(raw string, allowHTTP bool) (ParsedURL, error) {
 	}
 	host := u.Hostname()
 	if err := hostname.Validate(host); err != nil {
-		return ParsedURL{}, invalid("host: " + err.Error())
+		return ParsedURL{}, invalid("the host name in the URL is not valid")
 	}
 	if p := u.Port(); p != "" {
 		n, err := strconv.ParseUint(p, 10, 16)
@@ -416,30 +425,17 @@ func ValidateTarget(rawURL string, flavor Flavor, user, path string, allowHTTP b
 		return err
 	}
 	if _, err := storage.ParsePrefix(path); err != nil {
-		return fmt.Errorf("webdav path: %w", err)
+		return &configError{msg: storage.ProblemMsg(i18n.M("the path is not valid"), err)}
 	}
 	return nil
 }
 
-// errMessage strips the sentinel prefix of a validation error for
-// presentation.
-func errMessage(err error) string {
-	msg := err.Error()
-	if _, rest, ok := strings.Cut(msg, "invalid webdav configuration: "); ok {
-		return rest
-	}
-	if _, rest, ok := strings.Cut(msg, "webdav path: "); ok {
-		return "path: " + rest
-	}
-	return "invalid settings"
-}
-
 // Message returns the presentable text of a validation error from
-// ParseURL, ValidateUser, ValidateTarget or Open ("invalid settings" for
-// anything else).
-func Message(err error) string {
-	if !errors.Is(err, storage.ErrInvalidArgument) && !errors.Is(err, storage.ErrInvalidKey) {
-		return "invalid settings"
+// ParseURL, ValidateUser, ValidateTarget or Open ("the settings are not
+// valid" for anything else).
+func Message(err error) i18n.Msg {
+	if m, ok := i18n.MsgOf(err); ok {
+		return m
 	}
-	return errMessage(err)
+	return i18n.M("the settings are not valid")
 }

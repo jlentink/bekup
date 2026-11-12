@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/destinations"
 	"github.com/jlentink/bekup/internal/graph/apierror"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify"
 	"github.com/jlentink/bekup/internal/riskaccept"
 	"github.com/jlentink/bekup/internal/scheduler"
@@ -82,6 +82,8 @@ type summaryPeriod struct {
 	preview     bool
 	// catchUp: the summary covers missed due times too.
 	catchUp bool
+	// locale is the recipient's language (D-237).
+	locale i18n.Locale
 }
 
 // storedDetail is the stored detail of a summary event (written by
@@ -279,6 +281,7 @@ func (s *Service) Render(ctx context.Context, q *sqlc.Queries, ev *sqlc.Notifica
 	if err != nil {
 		return nil, fmt.Errorf("notify: load summary user: %w", err)
 	}
+	p.locale = i18n.Resolve(u.Locale, "")
 	sc, err := s.scopeOf(ctx, u.ID, u.Role)
 	if err != nil {
 		return nil, err
@@ -517,15 +520,4 @@ func (d *summaryData) lowDestinations() int {
 		}
 	}
 	return n
-}
-
-// joinAnd joins parts as "a, b and c".
-func joinAnd(parts []string) string {
-	switch len(parts) {
-	case 0:
-		return ""
-	case 1:
-		return parts[0]
-	}
-	return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 }

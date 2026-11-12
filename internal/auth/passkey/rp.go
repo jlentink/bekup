@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // DevOrigin is the Vite dev server origin, accepted as an additional
@@ -19,6 +21,20 @@ const (
 	ReasonIPHost     = "Passkeys need a domain name: server.base_url uses an IP address, which cannot be a WebAuthn relying party ID."
 	ReasonInvalidURL = "Passkeys are unavailable: server.base_url is not a valid URL."
 )
+
+// ReasonMsg returns the translatable text of a Reason (D-238); an unknown
+// reason gets a generic text.
+func ReasonMsg(reason string) i18n.Msg {
+	switch reason {
+	case ReasonInsecureContext:
+		return i18n.M(ReasonInsecureContext)
+	case ReasonIPHost:
+		return i18n.M(ReasonIPHost)
+	case ReasonInvalidURL:
+		return i18n.M(ReasonInvalidURL)
+	}
+	return i18n.M("Passkeys are unavailable.")
+}
 
 // RelyingParty is the WebAuthn relying party derived from server.base_url.
 type RelyingParty struct {

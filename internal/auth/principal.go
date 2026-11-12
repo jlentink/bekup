@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Role is a bekup user role (the user_role enum of the app DB, D-011).
@@ -64,6 +66,21 @@ type Principal struct {
 	// grace period is over (task 1.9): only enrolling a factor, viewing the
 	// own account and logging out are allowed.
 	EnrollmentRequired bool
+	// Locale is the account's stored language (users.locale), empty when
+	// the account follows the browser. Server texts use
+	// i18n.Resolve(Locale, the request's Accept-Language) (D-236, D-238).
+	// It decides no access.
+	Locale i18n.Locale
+}
+
+// TextLocale returns the language of server texts for this caller:
+// the account's choice, else the request's Accept-Language, else English.
+func (p Principal) TextLocale(requested i18n.Locale) i18n.Locale {
+	if p.Locale == "" {
+		return i18n.Resolve(nil, requested)
+	}
+	stored := string(p.Locale)
+	return i18n.Resolve(&stored, requested)
 }
 
 // Valid reports whether p is complete enough to authorize anything: a

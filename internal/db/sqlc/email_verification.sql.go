@@ -68,13 +68,14 @@ func (q *Queries) GetEmailVerificationForUpdate(ctx context.Context, userID uuid
 }
 
 const getEmailVerificationState = `-- name: GetEmailVerificationState :one
-SELECT email, email_verified_at, disabled FROM users WHERE id = $1 AND deleted_at IS NULL
+SELECT email, email_verified_at, disabled, locale FROM users WHERE id = $1 AND deleted_at IS NULL
 `
 
 type GetEmailVerificationStateRow struct {
 	Email           string     `json:"email"`
 	EmailVerifiedAt *time.Time `json:"emailVerifiedAt"`
 	Disabled        bool       `json:"disabled"`
+	Locale          *string    `json:"locale"`
 }
 
 // GetEmailVerificationState returns what decides whether a user may get
@@ -82,7 +83,12 @@ type GetEmailVerificationStateRow struct {
 func (q *Queries) GetEmailVerificationState(ctx context.Context, id uuid.UUID) (GetEmailVerificationStateRow, error) {
 	row := q.db.QueryRow(ctx, getEmailVerificationState, id)
 	var i GetEmailVerificationStateRow
-	err := row.Scan(&i.Email, &i.EmailVerifiedAt, &i.Disabled)
+	err := row.Scan(
+		&i.Email,
+		&i.EmailVerifiedAt,
+		&i.Disabled,
+		&i.Locale,
+	)
 	return i, err
 }
 

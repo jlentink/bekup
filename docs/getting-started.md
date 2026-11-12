@@ -259,8 +259,11 @@ The web interface is available in English and Dutch (D-235). It follows
 the browser's language until you pick one under **Profile → Account →
 Language**; the choice is saved with your account (D-236), so every
 browser you sign in with switches to it, and the page reloads in the new
-language. "Same as this browser" goes back to the browser's language. Messages sent by the server (error details, e-mails,
-the browser setup's questions) are still in English.
+language. "Same as this browser" goes back to the browser's language.
+Inbox entries, e-mails, summaries and personal webhooks follow the
+language saved with your account (D-237; "Same as this browser" means
+English there, shared channels are always English). Error details from
+the server and the browser setup's questions are still in English.
 
 ## Your first backup
 

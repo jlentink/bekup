@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/jlentink/bekup/internal/hostname"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // allowlist is an immutable, validated set of CIDRs and host patterns.
@@ -74,28 +75,28 @@ func isCarveOut(r rangeRule, p netip.Prefix) bool {
 func parseAllowPrefix(s string, loopbackSoft bool) (netip.Prefix, error) {
 	p, err := netip.ParsePrefix(strings.TrimSpace(s))
 	if err != nil {
-		return netip.Prefix{}, fmt.Errorf("invalid CIDR %q", s)
+		return netip.Prefix{}, i18n.Errorf("invalid CIDR %q", s)
 	}
 	if p.Addr().Zone() != "" {
-		return netip.Prefix{}, fmt.Errorf("CIDR %q must not have a zone", s)
+		return netip.Prefix{}, i18n.Errorf("CIDR %q must not have a zone", s)
 	}
 	p = p.Masked()
 	if p.Bits() == 0 {
-		return netip.Prefix{}, fmt.Errorf("CIDR %q matches every address", s)
+		return netip.Prefix{}, i18n.Errorf("CIDR %q matches every address", s)
 	}
 	if p.Addr().Is6() && p.Overlaps(v4Mapped) {
 		if p.Bits() <= v4Mapped.Bits() {
-			return netip.Prefix{}, fmt.Errorf("CIDR %q covers the whole IPv4-mapped range", s)
+			return netip.Prefix{}, i18n.Errorf("CIDR %q covers the whole IPv4-mapped range", s)
 		}
 		p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-v4Mapped.Bits()).Masked()
 	}
 	if p.Addr().Is4() {
 		if !loopbackSoft && p.Overlaps(v4Loopback) {
-			return netip.Prefix{}, fmt.Errorf("CIDR %q overlaps the loopback range (only allowed in dev mode)", s)
+			return netip.Prefix{}, i18n.Errorf("CIDR %q overlaps the loopback range (only allowed in dev mode)", s)
 		}
 		for _, r := range v4Rules {
 			if r.hard && p.Overlaps(r.prefix) && !isCarveOut(r, p) {
-				return netip.Prefix{}, fmt.Errorf("CIDR %q overlaps the always-denied range %s (%s)", s, r.prefix, r.reason)
+				return netip.Prefix{}, i18n.Errorf("CIDR %q overlaps the always-denied range %s (%s)", s, r.prefix, r.reason.Msg())
 			}
 		}
 		return p, nil
@@ -111,15 +112,15 @@ func parseAllowPrefix(s string, loopbackSoft bool) (netip.Prefix, error) {
 		}
 	}
 	if !inside {
-		return netip.Prefix{}, fmt.Errorf("CIDR %q is outside the allowlistable IPv6 ranges", s)
+		return netip.Prefix{}, i18n.Errorf("CIDR %q is outside the allowlistable IPv6 ranges", s)
 	}
 	for _, r := range v6Rules {
 		if r.hard && p.Overlaps(r.prefix) && !isCarveOut(r, p) {
-			return netip.Prefix{}, fmt.Errorf("CIDR %q overlaps the always-denied range %s (%s)", s, r.prefix, r.reason)
+			return netip.Prefix{}, i18n.Errorf("CIDR %q overlaps the always-denied range %s (%s)", s, r.prefix, r.reason.Msg())
 		}
 	}
 	if p.Overlaps(sixToFour) {
-		return netip.Prefix{}, fmt.Errorf("CIDR %q overlaps the 6to4 range %s; allowlist the IPv4 address instead", s, sixToFour)
+		return netip.Prefix{}, i18n.Errorf("CIDR %q overlaps the 6to4 range %s; allowlist the IPv4 address instead", s, sixToFour)
 	}
 	return p, nil
 }
@@ -169,27 +170,27 @@ func parseHostPattern(s string) (pattern string, wildcard bool, err error) {
 	h := normalizeHost(s)
 	if rest, ok := strings.CutPrefix(h, "*."); ok {
 		if !validHostName(rest) || !strings.Contains(rest, ".") {
-			return "", false, fmt.Errorf("invalid wildcard host %q (use *.example.com)", s)
+			return "", false, i18n.Errorf("invalid wildcard host %q (use *.example.com)", s)
 		}
 		if _, err := netip.ParseAddr(rest); err == nil {
-			return "", false, fmt.Errorf("invalid wildcard host %q", s)
+			return "", false, i18n.Errorf("invalid wildcard host %q", s)
 		}
 		if isPublicSuffix(rest) {
-			return "", false, fmt.Errorf("wildcard host %q covers a public suffix (anyone can register names under it)", s)
+			return "", false, i18n.Errorf("wildcard host %q covers a public suffix (anyone can register names under it)", s)
 		}
 		if underWildcardDNSService(rest) {
-			return "", false, fmt.Errorf("wildcard host %q is under a public wildcard-DNS service", s)
+			return "", false, i18n.Errorf("wildcard host %q is under a public wildcard-DNS service", s)
 		}
 		return "." + rest, true, nil
 	}
 	if _, err := netip.ParseAddr(h); err == nil {
-		return "", false, fmt.Errorf("host %q is an IP address; use a CIDR such as %s/32", s, h)
+		return "", false, i18n.Errorf("host %q is an IP address; use a CIDR such as %s/32", s, h)
 	}
 	if !validHostName(h) {
-		return "", false, fmt.Errorf("invalid host name %q (no scheme, port or path)", s)
+		return "", false, i18n.Errorf("invalid host name %q (no scheme, port or path)", s)
 	}
 	if underWildcardDNSService(h) {
-		return "", false, fmt.Errorf("host %q is under a public wildcard-DNS service", s)
+		return "", false, i18n.Errorf("host %q is under a public wildcard-DNS service", s)
 	}
 	return h, false, nil
 }
@@ -229,6 +230,14 @@ const (
 	ListHosts = "hosts"
 )
 
+// entryMsg returns the translatable text of an entry error.
+func entryMsg(err error) i18n.Msg {
+	if m, ok := i18n.MsgOf(err); ok {
+		return m
+	}
+	return i18n.M("the entry is not valid")
+}
+
 // EntryError is one rejected allowlist entry: the list it belongs to
 // (ListCIDRs or ListHosts), its index there and a presentable reason
 // (it quotes the entry, never anything else).
@@ -239,6 +248,8 @@ type EntryError struct {
 	// (Set.NormalizeEntries).
 	Field   string
 	Message string
+	// Msg is Message translatable (D-238).
+	Msg i18n.Msg
 }
 
 func (e *EntryError) Error() string {
@@ -260,7 +271,7 @@ func (g *Guard) NormalizeAllowlist(cidrs, hosts []string) (outCIDRs, outHosts []
 	for i, s := range cidrs {
 		p, err := parseAllowPrefix(s, g.loopbackSoft)
 		if err != nil {
-			errs = append(errs, &EntryError{List: ListCIDRs, Index: i, Message: err.Error()})
+			errs = append(errs, &EntryError{List: ListCIDRs, Index: i, Message: err.Error(), Msg: entryMsg(err)})
 			continue
 		}
 		c := p.String()
@@ -272,7 +283,7 @@ func (g *Guard) NormalizeAllowlist(cidrs, hosts []string) (outCIDRs, outHosts []
 	for i, s := range hosts {
 		pat, wildcard, err := parseHostPattern(s)
 		if err != nil {
-			errs = append(errs, &EntryError{List: ListHosts, Index: i, Message: err.Error()})
+			errs = append(errs, &EntryError{List: ListHosts, Index: i, Message: err.Error(), Msg: entryMsg(err)})
 			continue
 		}
 		h := pat

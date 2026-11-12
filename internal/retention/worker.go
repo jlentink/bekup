@@ -818,7 +818,7 @@ func (w *Worker) alertMissing(ctx context.Context, log *slog.Logger, jobID uuid.
 	log.WarnContext(ctx, "retention: object missing from the destination (deleted outside bekup)", slog.Bool("newest_complete", newest))
 	w.o.Alerts(ctx, Alert{
 		Kind: AlertArtifactMissing, JobID: jobID, DestinationID: a.DestinationID, RunID: a.RunID, ArtifactID: a.ID,
-		Details: map[string]any{"newest_complete": newest},
+		Object: a.Key, Details: map[string]any{"newest_complete": newest},
 	})
 }
 

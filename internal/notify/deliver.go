@@ -16,6 +16,7 @@ import (
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify/email"
 	"github.com/jlentink/bekup/internal/notify/webhook"
 	"github.com/jlentink/bekup/internal/queue"
@@ -66,6 +67,9 @@ type target struct {
 	channel uuid.UUID
 	owner   uuid.UUID // user channel owner
 	shared  bool
+	// locale is the recipient's language (D-237); shared channels have no
+	// recipient and get i18n.Default.
+	locale i18n.Locale
 }
 
 func (t *target) zero() {
@@ -122,7 +126,7 @@ func (s *Service) Deliver(ctx context.Context, id uuid.UUID, final bool) (time.D
 	if err != nil {
 		return 0, err
 	}
-	c := s.render(&ev, m, n)
+	c := s.render(&ev, m, n, t.locale)
 	var out outcome
 	if Channel(d.Channel) == ChannelEmail {
 		out = s.sendEmail(ctx, &d, &ev, c, n, t)
@@ -149,7 +153,7 @@ func (s *Service) Deliver(ctx context.Context, id uuid.UUID, final bool) (time.D
 // resolveTarget re-checks the recipient at delivery time and opens the
 // channel. A non-empty skip code means: do not send.
 func (s *Service) resolveTarget(ctx context.Context, q *sqlc.Queries, d *sqlc.NotificationDelivery, ev *sqlc.NotificationEvent, m Meta) (*target, string, error) {
-	t := &target{}
+	t := &target{locale: i18n.Default}
 	if d.UserID != nil {
 		u, err := q.GetNotifiableUser(ctx, *d.UserID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -158,6 +162,7 @@ func (s *Service) resolveTarget(ctx context.Context, q *sqlc.Queries, d *sqlc.No
 		if err != nil {
 			return nil, "", fmt.Errorf("notify: load recipient: %w", err)
 		}
+		t.locale = i18n.Resolve(u.Locale, "")
 		ok, err := s.allowed(ctx, u.ID, u.Role, m, ev)
 		if err != nil {
 			return nil, "", err
@@ -270,9 +275,9 @@ func (s *Service) sendEmail(ctx context.Context, d *sqlc.NotificationDelivery, e
 	var content email.Content
 	var err error
 	if d.Summary {
-		content, err = s.floodEmail(s.CurrentLimits().MaxPerUserPerHour)
+		content, err = s.floodEmail(s.CurrentLimits().MaxPerUserPerHour, t.locale)
 	} else {
-		content, err = emailFor(ev, c, n)
+		content, err = emailFor(ev, c, n, t.locale)
 	}
 	if err != nil {
 		return outcome{status: sqlc.NotificationDeliveryStatusFailed, code: string(email.CodeInvalidMessage), message: email.CodeInvalidMessage.Message()}
@@ -321,7 +326,7 @@ func (s *Service) sendWebhook(ctx context.Context, d *sqlc.NotificationDelivery,
 	}
 	typ, at, data := ev.Type, ev.CreatedAt, any(c.Data)
 	if d.Summary {
-		typ, at, data = FloodSummaryType, s.o.Now(), s.floodData(s.CurrentLimits().MaxPerUserPerHour)
+		typ, at, data = FloodSummaryType, s.o.Now(), s.floodData(s.CurrentLimits().MaxPerUserPerHour, t.locale)
 	}
 	body, err := webhook.BuildPayload(ev.ID.String(), typ, at, data)
 	if err != nil {

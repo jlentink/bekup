@@ -12,6 +12,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/hostname"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/sshpolicy"
 	"github.com/jlentink/bekup/internal/storage"
@@ -185,6 +186,8 @@ type Destination struct {
 	// NotReadyReason says what is missing (a fixed, presentable text).
 	Ready          bool
 	NotReadyReason string
+	// NotReadyMsg is NotReadyReason translatable (D-238).
+	NotReadyMsg i18n.Msg
 
 	CreatedBy *uuid.UUID
 	CreatedAt time.Time

@@ -187,7 +187,9 @@ describe("destination detail", () => {
       DestinationDetail: () => ok({ destination: destinationFixture("DISK") }),
       DestinationUnrecordedFiles: noUnrecorded,
       DeleteDestination: () =>
-        gqlError("CONFLICT", "the destination is still used by these jobs: nightly"),
+        gqlError("CONFLICT", "the destination is still used by these jobs: nightly", undefined, {
+          jobs: ["nightly"],
+        }),
     });
     await user.click(await screen.findByRole("button", { name: "Delete destination" }));
     const dialog = await screen.findByRole("dialog", { name: /Delete the destination/ });

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="{{.Lang}}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -114,7 +114,7 @@ a{color:{{.L.Primary}}}
 </td></tr>
 {{end}}{{with .Action}}<tr><td class="px" style="padding:28px 32px 0;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="btn" bgcolor="{{$.L.Primary}}" style="border-radius:6px;background-color:{{$.L.Primary}};mso-padding-alt:12px 22px;"><a class="btl" href="{{.URL}}" target="_blank" style="display:inline-block;padding:12px 22px;font-size:15px;line-height:20px;font-weight:600;color:{{$.L.OnPrimary}};text-decoration:none;border-radius:6px;">{{.Label}}</a></td></tr></table>
-<p class="mu" style="margin:14px 0 0;font-size:13px;line-height:19px;color:{{$.L.Muted}};">If the button does not work, copy this address into your browser:<br><span class="lk" style="word-break:break-all;color:{{$.L.Primary}};">{{.URL}}</span></p>
+<p class="mu" style="margin:14px 0 0;font-size:13px;line-height:19px;color:{{$.L.Muted}};">{{$.ButtonMissing}}<br><span class="lk" style="word-break:break-all;color:{{$.L.Primary}};">{{.URL}}</span></p>
 </td></tr>
 {{end}}<tr><td class="px" style="padding:28px 32px 28px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;"><tr><td class="hr mu" style="padding-top:14px;border-top:1px solid {{.L.Border}};font-size:12px;line-height:18px;color:{{.L.Muted}};">{{.Footer}}</td></tr></table>

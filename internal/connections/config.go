@@ -14,6 +14,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/crypto"
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/serviceutil"
 	"github.com/jlentink/bekup/internal/sshpolicy"
 )
@@ -151,6 +152,8 @@ type Connection struct {
 	// NotReadyReason says what is missing (a fixed, presentable text).
 	Ready          bool
 	NotReadyReason string
+	// NotReadyMsg is NotReadyReason translatable (D-238).
+	NotReadyMsg i18n.Msg
 	// MaxConcurrentRuns is the connection's own run limit as stored (nil =
 	// the global workers.max_runs_per_connection); it may exceed a since
 	// lowered workers.max_concurrent_runs. EffectiveMaxConcurrentRuns is the
@@ -339,7 +342,7 @@ func checkPassword(field string, pw []byte) error {
 // printable ASCII without spaces, not starting with '-').
 func checkSSHUser(u string) error {
 	if err := sshpolicy.ValidateUser(u); err != nil {
-		return fieldErr("ssh.user", "the SSH user is invalid (%s)", err.Error())
+		return serviceutil.FieldErrFrom("ssh.user", err, i18n.M("the SSH user name is not valid"))
 	}
 	return nil
 }

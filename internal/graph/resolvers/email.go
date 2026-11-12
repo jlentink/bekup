@@ -38,7 +38,7 @@ func emailError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.As(err, &rl):
 		return apierror.Newf(apierror.RateLimited, "too many e-mail requests; try again in %d seconds",
 			httpserver.RetryAfterSeconds(rl.RetryAfter))
@@ -68,7 +68,8 @@ func emailActor(ctx context.Context) (email.Actor, error) {
 	if err != nil {
 		return email.Actor{}, err
 	}
-	return email.Actor{UserID: p.UserID, IP: auth.RequestMetaFrom(ctx).IP}, nil
+	meta := auth.RequestMetaFrom(ctx)
+	return email.Actor{UserID: p.UserID, IP: meta.IP, Locale: meta.Locale}, nil
 }
 
 func smtpModeModel(m email.Mode) model.SMTPMode {

@@ -32,7 +32,10 @@ type Alert struct {
 	DestinationID uuid.UUID
 	RunID         uuid.UUID
 	ArtifactID    uuid.UUID
-	Details       map[string]any
+	// Object is the artifact's object key (AlertArtifactMissing) for the
+	// notification; never logged (the audit entry records it).
+	Object  string
+	Details map[string]any
 }
 
 // AlertFunc receives anomalies after they were recorded. It must not block

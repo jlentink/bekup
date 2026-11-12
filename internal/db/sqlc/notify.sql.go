@@ -191,7 +191,7 @@ func (q *Queries) GetJobSharedChannelFilter(ctx context.Context, arg GetJobShare
 }
 
 const getNotifiableUser = `-- name: GetNotifiableUser :one
-SELECT id, role, email, email_verified_at FROM users
+SELECT id, role, email, email_verified_at, locale FROM users
 WHERE id = $1 AND deleted_at IS NULL AND NOT disabled
 `
 
@@ -200,6 +200,7 @@ type GetNotifiableUserRow struct {
 	Role            UserRole   `json:"role"`
 	Email           string     `json:"email"`
 	EmailVerifiedAt *time.Time `json:"emailVerifiedAt"`
+	Locale          *string    `json:"locale"`
 }
 
 func (q *Queries) GetNotifiableUser(ctx context.Context, id uuid.UUID) (GetNotifiableUserRow, error) {
@@ -210,6 +211,7 @@ func (q *Queries) GetNotifiableUser(ctx context.Context, id uuid.UUID) (GetNotif
 		&i.Role,
 		&i.Email,
 		&i.EmailVerifiedAt,
+		&i.Locale,
 	)
 	return i, err
 }
@@ -898,7 +900,7 @@ func (q *Queries) ListJobSharedChannels(ctx context.Context, jobID uuid.UUID) ([
 }
 
 const listNotifiableUsers = `-- name: ListNotifiableUsers :many
-SELECT id, role, email, email_verified_at FROM users
+SELECT id, role, email, email_verified_at, locale FROM users
 WHERE deleted_at IS NULL AND NOT disabled
 ORDER BY id
 `
@@ -908,6 +910,7 @@ type ListNotifiableUsersRow struct {
 	Role            UserRole   `json:"role"`
 	Email           string     `json:"email"`
 	EmailVerifiedAt *time.Time `json:"emailVerifiedAt"`
+	Locale          *string    `json:"locale"`
 }
 
 // ListNotifiableUsers returns the active accounts (not deleted, not
@@ -926,6 +929,7 @@ func (q *Queries) ListNotifiableUsers(ctx context.Context) ([]ListNotifiableUser
 			&i.Role,
 			&i.Email,
 			&i.EmailVerifiedAt,
+			&i.Locale,
 		); err != nil {
 			return nil, err
 		}

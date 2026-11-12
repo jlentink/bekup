@@ -10,6 +10,7 @@ import (
 
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
 
@@ -70,7 +71,7 @@ func sshTunnel(row *sqlc.Connection, creds *Credentials) (*runnerpb.SshTunnel, e
 		return nil, nil
 	}
 	if row.SshHostKeyAuthorizedKey == nil || row.SshHostKeyType == nil || row.SshHostKeyFingerprint == nil {
-		return nil, &NotReadyError{Reason: "fetch and confirm the SSH bastion's host key"}
+		return nil, notReady(i18n.M(reasonNeedsSSHHostKey))
 	}
 	t := &runnerpb.SshTunnel{
 		Host: deref(row.SshHost), Port: uint32(deref(row.SshPort)), User: deref(row.SshUser), //nolint:gosec // G115: validated port
@@ -85,7 +86,7 @@ func sshTunnel(row *sqlc.Connection, creds *Credentials) (*runnerpb.SshTunnel, e
 	case len(creds.SSHPassword) > 0:
 		t.Password = cloneBytes(creds.SSHPassword)
 	default:
-		return nil, &NotReadyError{Reason: "set an SSH password or key"}
+		return nil, notReady(i18n.M(reasonNeedsSSHAuth))
 	}
 	return t, nil
 }
@@ -110,7 +111,7 @@ func buildTarget(row *sqlc.Connection, creds *Credentials) (*runnerpb.Target, er
 		}
 		if cur == nil {
 			runnerpb.ZeroSecrets(t)
-			return nil, &NotReadyError{Reason: "fetch and confirm the server's TLS certificate"}
+			return nil, notReady(i18n.M(reasonNeedsTLSPin))
 		}
 		t.Pins = append(t.Pins, cur)
 		if staged, err := certPin(row.TlsBackupPinCertPem, row.TlsBackupPinSpki); err != nil {

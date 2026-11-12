@@ -14,7 +14,9 @@ import (
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/schemaversion"
+	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
 // Schema version (D-210). A job may capture the schema (migration) version
@@ -79,7 +81,7 @@ func checkSchemaVersion(in SchemaVersionInput) (SchemaVersionInput, error) {
 		out.Preset = in.Preset
 		if in.Schema != "" {
 			if err := schemaversion.ValidateSchema(in.Schema); err != nil {
-				return out, fieldErr("schema", "%s", err.Error())
+				return out, serviceutil.FieldErrFrom("schema", err, i18n.M("the schema name is not valid"))
 			}
 			out.Schema = in.Schema
 		}
@@ -87,7 +89,7 @@ func checkSchemaVersion(in SchemaVersionInput) (SchemaVersionInput, error) {
 		if err := schemaversion.ValidateCustomSQL(in.CustomSQL); err != nil {
 			var se *schemaversion.SQLError
 			if errors.As(err, &se) {
-				return out, fieldErr("customSql", "%s", se.Message)
+				return out, serviceutil.FieldErrMsg("customSql", se.Msg)
 			}
 			return out, fieldErr("customSql", "the query is not allowed")
 		}

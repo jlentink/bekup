@@ -10,6 +10,7 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/jlentink/bekup/internal/graph/apierror"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 func init() {
@@ -19,8 +20,15 @@ func init() {
 	errcode.RegisterErrorType(string(apierror.QueryTooComplex), errcode.KindProtocol)
 }
 
-func protocolError(code apierror.Code, msg string) *gqlerror.Error {
-	return &gqlerror.Error{Message: msg, Extensions: map[string]any{ExtCode: string(code)}}
+// protocolError is an error outside field execution, in the request's
+// language (D-238).
+func protocolError(ctx context.Context, code apierror.Code, msg i18n.Msg) *gqlerror.Error {
+	return &gqlerror.Error{Message: msg.In(textLocale(ctx)), Extensions: map[string]any{ExtCode: string(code)}}
+}
+
+// apiProtocolError is protocolError for a typed API error.
+func apiProtocolError(ctx context.Context, ae *apierror.Error) *gqlerror.Error {
+	return &gqlerror.Error{Message: ae.Localized(textLocale(ctx)), Extensions: map[string]any{ExtCode: string(ae.Code)}}
 }
 
 // --- depth limit -----------------------------------------------------------
@@ -41,14 +49,14 @@ func (depthLimit) ExtensionName() string { return "DepthLimit" }
 
 func (depthLimit) Validate(graphql.ExecutableSchema) error { return nil }
 
-func (d depthLimit) MutateOperationContext(_ context.Context, opCtx *graphql.OperationContext) *gqlerror.Error {
+func (d depthLimit) MutateOperationContext(ctx context.Context, opCtx *graphql.OperationContext) *gqlerror.Error {
 	op := opCtx.Doc.Operations.ForName(opCtx.OperationName)
 	if op == nil {
 		return nil
 	}
 	w := depthWalker{doc: opCtx.Doc, memo: map[string]int{}, active: map[string]bool{}}
 	if got := w.depth(op.SelectionSet); got > d.Max() {
-		return protocolError(apierror.QueryTooDeep, "operation exceeds the maximum depth")
+		return protocolError(ctx, apierror.QueryTooDeep, i18n.M("operation exceeds the maximum depth"))
 	}
 	return nil
 }
@@ -133,7 +141,7 @@ func (g introspectionGate) MutateOperationContext(ctx context.Context, opCtx *gr
 	opCtx.DisableIntrospection = true
 	op := opCtx.Doc.Operations.ForName(opCtx.OperationName)
 	if op != nil && selectsIntrospection(opCtx.Doc, op.SelectionSet, map[string]bool{}) {
-		return protocolError(apierror.IntrospectionDisabled, "introspection is disabled")
+		return protocolError(ctx, apierror.IntrospectionDisabled, i18n.M("introspection is disabled"))
 	}
 	return nil
 }

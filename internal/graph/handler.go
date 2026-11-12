@@ -34,6 +34,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/graph/resolvers"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/jobkeys"
 	"github.com/jlentink/bekup/internal/jobs"
 	"github.com/jlentink/bekup/internal/notify"
@@ -322,39 +323,39 @@ type request struct {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		writeTransportError(w, http.StatusMethodNotAllowed, "only POST is supported")
+		writeTransportError(w, r, http.StatusMethodNotAllowed, i18n.M("only POST is supported"))
 		return
 	}
 	if len(r.Header.Values("Upgrade")) > 0 {
 		// No protocol switches (WebSocket, h2c) on /graphql.
-		writeTransportError(w, http.StatusBadRequest, "unexpected Upgrade header")
+		writeTransportError(w, r, http.StatusBadRequest, i18n.M("unexpected Upgrade header"))
 		return
 	}
 	if !isJSONContentType(r.Header.Values("Content-Type")) {
-		writeTransportError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		writeTransportError(w, r, http.StatusUnsupportedMediaType, i18n.M("Content-Type must be application/json"))
 		return
 	}
 	maxBody := h.limits.Load().MaxBodyBytes
 	if r.ContentLength > maxBody {
-		writeTransportError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		writeTransportError(w, r, http.StatusRequestEntityTooLarge, i18n.M("request body too large"))
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
 	if err != nil {
 		if httpserver.IsBodyTooLarge(err) {
-			writeTransportError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			writeTransportError(w, r, http.StatusRequestEntityTooLarge, i18n.M("request body too large"))
 			return
 		}
-		writeTransportError(w, http.StatusBadRequest, "could not read the request body")
+		writeTransportError(w, r, http.StatusBadRequest, i18n.M("could not read the request body"))
 		return
 	}
 	if err := checkRequestBody(body); err != nil {
-		writeTransportError(w, http.StatusBadRequest, err.Error())
+		writeTransportError(w, r, http.StatusBadRequest, msgBadBody)
 		return
 	}
 	if acceptsEventStream(r) {
 		if h.opts.Streams == nil {
-			writeTransportError(w, http.StatusNotAcceptable, "event streams are not enabled")
+			writeTransportError(w, r, http.StatusNotAcceptable, i18n.M("event streams are not enabled"))
 			return
 		}
 		h.serveStream(w, r, body)
@@ -381,8 +382,12 @@ func isJSONContentType(values []string) bool {
 	return true
 }
 
-// errBadBody is the generic 400 message; it never echoes the body.
-var errBadBody = errors.New("the request body must be one JSON object with a query string")
+// errBadBody is the generic 400 error; it never echoes the body.
+// msgBadBody is its text for clients.
+var (
+	msgBadBody = i18n.M("the request body must be one JSON object with a query string")
+	errBadBody = errors.New(msgBadBody.String())
+)
 
 // checkRequestBody accepts exactly one JSON object with the known fields
 // and a non-empty query. It runs before gqlgen, whose own decode errors
@@ -404,10 +409,15 @@ func checkRequestBody(body []byte) error {
 }
 
 // writeTransportError writes a GraphQL-shaped error for a request rejected
-// before execution (code BAD_REQUEST).
-func writeTransportError(w http.ResponseWriter, status int, msg string) {
+// before execution (code BAD_REQUEST), in the request's language.
+func writeTransportError(w http.ResponseWriter, r *http.Request, status int, msg i18n.Msg) {
+	writeTransportText(w, status, msg.In(textLocale(r.Context())))
+}
+
+// writeTransportText is writeTransportError with a rendered text.
+func writeTransportText(w http.ResponseWriter, status int, text string) {
 	resp := graphql.Response{Errors: []*gqlerror.Error{{
-		Message:    msg,
+		Message:    text,
 		Extensions: map[string]any{ExtCode: "BAD_REQUEST"},
 	}}}
 	b, err := json.Marshal(resp)

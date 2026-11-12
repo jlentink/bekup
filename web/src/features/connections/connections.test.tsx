@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { baseHandlers, gqlError, meFixture, ok, renderApp } from "@/test/mock-api";
 
-import { jobsInUse } from "./delete-dialog-utils";
 import { retarget, toUpdateInput, valuesFrom, type Original } from "./form-model";
 import {
   chainFixture,
@@ -365,7 +364,13 @@ describe("connection detail", () => {
       ...baseHandlers(),
       ConnectionDetail: detail(connectionFixture()),
       DeleteConnection: () =>
-        gqlError("CONFLICT", "the connection is still used by these jobs: nightly, weekly"),
+        gqlError(
+          "CONFLICT",
+          // Dutch on purpose: the dialog reads extensions.jobs, never the text (D-238).
+          "de verbinding wordt nog door deze taken gebruikt: nightly, weekly",
+          undefined,
+          { jobs: ["nightly", "weekly"] },
+        ),
     });
     await user.click(await screen.findByRole("button", { name: "Delete connection" }));
     const dialog = await screen.findByRole("dialog", { name: /Delete the connection/ });
@@ -489,10 +494,5 @@ describe("form model", () => {
       clearPassword: true,
       disableSsh: true,
     });
-  });
-
-  it("reads the jobs out of an in-use conflict", () => {
-    expect(jobsInUse("the connection is still used by these jobs: a, b c")).toEqual(["a", "b c"]);
-    expect(jobsInUse("the connection is still used by a job")).toEqual([]);
   });
 });

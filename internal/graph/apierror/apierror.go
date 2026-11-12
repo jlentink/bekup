@@ -4,13 +4,17 @@
 // error presenter as "internal error" plus the request ID, and the real
 // error is logged.
 //
-// Messages are shown to the user verbatim: they must never contain secrets,
-// connection strings, SQL, file paths or other internal details.
+// Messages are shown to the user: they must never contain secrets,
+// connection strings, SQL, file paths or other internal details. Each
+// message keeps its English format and arguments (Msg, D-238); the error
+// presenter renders it in the request language from the central catalog
+// in internal/i18n, so every text needs a Dutch entry there.
 package apierror
 
 import (
 	"errors"
-	"fmt"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Code is the value of `extensions.code` of a GraphQL error.
@@ -84,27 +88,65 @@ func Codes() []Code {
 
 // Error is a typed, user-facing GraphQL error.
 type Error struct {
-	Code    Code
+	Code Code
+	// Message is the English text (logs, Error()); clients get Msg in their
+	// language (Localized).
 	Message string
+	// Msg is the translatable text (D-238).
+	Msg i18n.Msg
 	// Field optionally names the input field a Validation error is about
 	// (extensions.field).
 	Field string
+	// Jobs optionally names the jobs an in-use Conflict is about
+	// (extensions.jobs), so clients never parse them from the message.
+	Jobs []string
 }
 
 func (e *Error) Error() string { return string(e.Code) + ": " + e.Message }
 
-// New returns an *Error with the given code and user-facing message.
-func New(code Code, message string) *Error { return &Error{Code: code, Message: message} }
+// Localized returns the message in l.
+func (e *Error) Localized(l i18n.Locale) string {
+	if e.Msg.IsZero() {
+		return e.Message
+	}
+	return e.Msg.In(l)
+}
+
+// NewMsg returns an *Error with the given code and translatable message.
+func NewMsg(code Code, m i18n.Msg) *Error {
+	return &Error{Code: code, Message: m.String(), Msg: m}
+}
+
+// New returns an *Error with the given code and user-facing message (a
+// constant text, shown as is; use Newf for arguments).
+func New(code Code, message string) *Error { return NewMsg(code, i18n.Text(message)) }
 
 // Newf is New with a formatted message. Never format secrets or internal
 // errors into it.
 func Newf(code Code, format string, args ...any) *Error {
-	return &Error{Code: code, Message: fmt.Sprintf(format, args...)}
+	return NewMsg(code, i18n.M(format, args...))
 }
 
-// Invalid returns a Validation error about field.
-func Invalid(field, message string) *Error {
-	return &Error{Code: Validation, Message: message, Field: field}
+// InUse returns a Conflict naming the jobs that still use an object.
+func InUse(m i18n.Msg, jobs []string) *Error {
+	e := NewMsg(Conflict, m)
+	e.Jobs = jobs
+	return e
+}
+
+// InvalidMsg returns a Validation error about field with a translatable
+// message.
+func InvalidMsg(field string, m i18n.Msg) *Error {
+	return &Error{Code: Validation, Message: m.String(), Msg: m, Field: field}
+}
+
+// Invalid returns a Validation error about field (a constant text without
+// shown as is; use Invalidf for arguments).
+func Invalid(field, message string) *Error { return InvalidMsg(field, i18n.Text(message)) }
+
+// Invalidf is Invalid with a formatted message.
+func Invalidf(field, format string, args ...any) *Error {
+	return InvalidMsg(field, i18n.M(format, args...))
 }
 
 // As returns the *Error in err's chain, if any.

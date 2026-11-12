@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/jlentink/bekup/internal/crypto"
+	"github.com/jlentink/bekup/internal/serviceutil"
 )
 
 // Credentials are the secret parts of a destination. They exist in memory
@@ -140,7 +141,7 @@ func sealCredentials(kr *crypto.Keyring, id uuid.UUID, c *Credentials) ([]byte, 
 	plain := c.marshal()
 	defer crypto.Zero(plain)
 	if len(plain) > maxCredentialsBytes {
-		return nil, &FieldError{Field: "credentials", Message: "credentials are too large"}
+		return nil, serviceutil.FieldErr("credentials", "credentials are too large")
 	}
 	out, err := kr.Seal(plain, credentialsAAD(id))
 	if err != nil {

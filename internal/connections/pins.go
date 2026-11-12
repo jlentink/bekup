@@ -19,6 +19,7 @@ import (
 	"github.com/jlentink/bekup/internal/db"
 	"github.com/jlentink/bekup/internal/db/sqlc"
 	"github.com/jlentink/bekup/internal/engine"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/runner/pinning"
 	"github.com/jlentink/bekup/internal/runnerpb"
 )
@@ -84,7 +85,7 @@ func (s *Service) capture(ctx context.Context, actor Actor, row *sqlc.Connection
 		return nil, s.runnerError(ctx, actor, row, "fetch_certificate", err)
 	}
 	if len(resp.GetChain()) == 0 {
-		return nil, &TargetError{Code: CodeRunnerFailed, Message: "the server presented no certificate"}
+		return nil, targetErr(CodeRunnerFailed, i18n.M("the server presented no certificate"))
 	}
 	return resp, nil
 }
@@ -105,7 +106,7 @@ func (s *Service) FetchCertificate(ctx context.Context, actor Actor, id uuid.UUI
 	for _, pc := range resp.GetChain() {
 		cert, err := x509.ParseCertificate(pc.GetDer())
 		if err != nil {
-			return CertificateChain{}, &TargetError{Code: CodeRunnerFailed, Message: "the server presented a certificate that does not parse"}
+			return CertificateChain{}, targetErr(CodeRunnerFailed, i18n.M("the server presented a certificate that does not parse"))
 		}
 		out.Chain = append(out.Chain, chainCertificate(cert))
 	}
@@ -250,7 +251,7 @@ func (s *Service) choosePin(ctx context.Context, actor Actor, row *sqlc.Connecti
 		for _, c := range resp.GetChain() {
 			cert, err := x509.ParseCertificate(c.GetDer())
 			if err != nil {
-				return nil, &TargetError{Code: CodeRunnerFailed, Message: "the server presented a certificate that does not parse"}
+				return nil, targetErr(CodeRunnerFailed, i18n.M("the server presented a certificate that does not parse"))
 			}
 			chain = append(chain, cert)
 		}

@@ -270,7 +270,9 @@ internal/
                   certificate, server.go API + lifetime, dbstep.go database step;
                   setup/configzip.go the non-secret config zip)
                 i18n (server languages: Locale, Accept-Language parser,
-                  Resolve; users.locale per account: D-236)
+                  Resolve; users.locale per account: D-236; Msg/Errorf/
+                  MsgOf/Join and the central API text catalog
+                  apitexts*.go + its source-walking test: D-238)
                 dbsetup (db bootstrap, migrate up, Verify and the setup version
                   guard, shared by the CLI and the browser setup: D-217)
                 apiaccess (the workers' side of the external API: run request
@@ -369,6 +371,31 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   `RequireSession` syncs it (`useAccountLocale`). Server side, pick a
   language only with `internal/i18n` (`Resolve(stored, meta.Locale)`;
   `auth.RequestMeta.Locale` comes from Accept-Language, bounded).
+  Server texts (D-237) live in one `i18n.Catalog` per package (key →
+  format string per language; `Problems()` asserted by a test: same keys
+  and fmt verbs); render inbox rows, e-mails and personal webhooks in the
+  recipient's `users.locale` (shared channels English), dates with
+  `i18n.FormatTime`, and set `email.Notice.Locale`.
+  API texts (D-238): every text the GraphQL API sends is an `i18n.Msg`
+  (constant English fmt format + arguments, or `i18n.Text` for a constant
+  shown as is; a `Msg` argument is translated too, any other argument
+  never). Build them only with `i18n.M`/`i18n.Text`, `i18n.Errorf`/
+  `ErrorOf` (an error another package shows: `i18n.MsgOf`/`MsgsOf` read
+  it back), `apierror.New/Newf/Invalid/Invalidf/NewMsg/InvalidMsg`,
+  `serviceutil.FieldErr/FieldErrMsg/FieldErrFrom` or a package helper that
+  forwards to them; user-facing error types carry a `Msg` next to their
+  English `Message` (an `...Error{Message: ...}` literal without `Msg`
+  fails the test). Never pass `err.Error()` or sentence fragments on as a
+  message (`"%s"`-only formats fail); make the source an `i18n.Errorf`
+  instead. Every format needs its Dutch entry in the central catalog
+  `internal/i18n/apitexts_nl_<area>.go` (keyed by the exact English
+  format, same verbs; `TestAPITextsHaveDutch` walks the sources and also
+  fails for unused entries; `BEKUP_DUMP_API_TEXTS=<file>` lists the missing
+  ones). The presenter, protocol and transport errors render in
+  `auth.Principal.TextLocale(meta.Locale)` (account, then Accept-Language);
+  codes, `extensions` and type-to-confirm texts never change. Data a
+  client needs travels in `extensions` (e.g. `apierror.InUse` →
+  `extensions.jobs`); the web client never parses a message.
 - Every signed-in route declares `handle: access.…` (`lib/route-access`,
   derived from the nav roles); the single `RequireRole` guard denies routes
   without one (D-199). Format sizes/durations only with `lib/format`
@@ -1050,9 +1077,11 @@ Each `internal/` package has a `doc.go` describing its responsibility.
   The e-mail lists every job (status rule in `jobRow.status`, worst
   first, ≤ 100 rows with every problem first; `fitJobs` lists fewer when
   the HTML as sent would exceed `maxSummaryHTML`); failures show only the
-  fixed texts of `failureTexts` (add one for every new `jobs.Code*`,
-  `runstate.Code*` or runner reason; `TestFailureTextsCoverCodes` reads
-  them from the sources), never stored messages. The "previous one could
+  fixed `failure.<code>` texts of the package catalog (`texts.go`, both
+  languages; add one for every new `jobs.Code*`, `runstate.Code*` or
+  runner reason; `TestFailureTextsCoverCodes` reads them from the sources
+  per language), never stored messages. Summaries render in the
+  recipient's language (D-237; Dutch goldens next to the English ones). The "previous one could
   not be sent on time" note follows only the event detail `catch_up`
   (`decide`'s `CatchUp`).
 - Dashboard aggregates (D-196): `Job.missed`/`missedSince` read

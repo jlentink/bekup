@@ -17,6 +17,7 @@ import (
 	"github.com/jlentink/bekup/internal/graph/apierror"
 	"github.com/jlentink/bekup/internal/graph/model"
 	"github.com/jlentink/bekup/internal/httpserver"
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Connection resolvers (task 2.11, D-135). Admins get the full non-secret
@@ -44,9 +45,9 @@ func connectionError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.As(err, &nr):
-		return apierror.New(apierror.Conflict, "the connection is not ready: "+nr.Reason)
+		return apierror.Newf(apierror.Conflict, "the connection is not ready: %s", nr.ReasonMsg)
 	case errors.As(err, &rl):
 		return apierror.Newf(apierror.RateLimited, "too many connection checks; try again in %d seconds",
 			httpserver.RetryAfterSeconds(rl.RetryAfter))
@@ -59,7 +60,7 @@ func connectionError(err error) error {
 			"the SSH bastion presented another host key than the pinned one; this was recorded as a security event. "+
 				"If the key was replaced on purpose, fetch and confirm the new one")
 	case errors.As(err, &te):
-		return apierror.New(apierror.ConnectionFailed, te.Message)
+		return apierror.NewMsg(apierror.ConnectionFailed, te.Msg)
 	case errors.Is(err, connections.ErrRunnerUnavailable):
 		return apierror.New(apierror.ConnectionFailed, "the runner is not reachable; try again later")
 	case errors.Is(err, connections.ErrBusy):
@@ -71,7 +72,7 @@ func connectionError(err error) error {
 	case errors.Is(err, connections.ErrConflict):
 		return apierror.New(apierror.Conflict, "the connection was changed in the meantime; reload and try again")
 	case errors.As(err, &inUse):
-		return apierror.New(apierror.Conflict, "the connection is still used by these jobs: "+strings.Join(inUse.Jobs, ", "))
+		return apierror.InUse(i18n.M("the connection is still used by these jobs: %s", strings.Join(inUse.Jobs, ", ")), inUse.Jobs)
 	case errors.Is(err, connections.ErrInUse):
 		return apierror.New(apierror.Conflict, "the connection is still used by a job")
 	case errors.Is(err, connections.ErrTooManyTemporary):

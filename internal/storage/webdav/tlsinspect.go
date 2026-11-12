@@ -12,6 +12,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/netguard"
 	"github.com/jlentink/bekup/internal/storage"
 )
@@ -203,12 +204,12 @@ func CheckPinnable(cert *x509.Certificate, host string, now time.Time) error {
 	)
 	switch {
 	case errors.As(err, &he):
-		return errors.New("the certificate does not name the host in the URL (a subject alternative name is required); create a certificate for this host name on the server")
+		return i18n.Errorf("the certificate does not name the host in the URL (a subject alternative name is required); create a certificate for this host name on the server")
 	case errors.As(err, &ci) && ci.Reason == x509.Expired:
-		return errors.New("the certificate has expired or is not valid yet")
+		return i18n.Errorf("the certificate has expired or is not valid yet")
 	case errors.As(err, &ci) && ci.Reason == x509.IncompatibleUsage:
-		return errors.New("the certificate is not valid for TLS servers")
+		return i18n.Errorf("the certificate is not valid for TLS servers")
 	default:
-		return errors.New("the certificate cannot be used as a pin")
+		return i18n.Errorf("the certificate cannot be used as a pin")
 	}
 }

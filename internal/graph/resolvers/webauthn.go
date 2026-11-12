@@ -22,11 +22,11 @@ func passkeyError(err error, rp passkey.RelyingParty) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, passkey.ErrUnavailable):
-		return apierror.New(apierror.Forbidden, rp.Reason)
+		return apierror.NewMsg(apierror.Forbidden, passkey.ReasonMsg(rp.Reason))
 	case errors.Is(err, passkey.ErrStepUpRequired):
 		return apierror.New(apierror.StepUpRequired, "please confirm your identity again")
 	case errors.As(err, &ne):
-		return apierror.Invalid("name", "the passkey name "+ne.Message)
+		return apierror.InvalidMsg("name", ne.Msg)
 	case errors.Is(err, passkey.ErrNoCeremony):
 		return apierror.Invalid("response", "no pending passkey registration for this session (expired or already used); start again")
 	case errors.Is(err, passkey.ErrInvalidResponse), errors.Is(err, passkey.ErrVerification):

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/jlentink/bekup/internal/i18n"
 )
 
 // Key limits. They are the strictest common denominator of the backends:
@@ -71,15 +73,29 @@ func MustParseKey(s string) Key {
 	return k
 }
 
+// keyError is a key problem that users see (a prefix or path they
+// entered): it wraps ErrInvalidKey and carries a translatable text
+// (D-238; i18n.MsgOf).
+type keyError struct{ msg i18n.Msg }
+
+func (e *keyError) Error() string     { return ErrInvalidKey.Error() + ": " + e.msg.String() }
+func (e *keyError) Unwrap() error     { return ErrInvalidKey }
+func (e *keyError) I18nMsg() i18n.Msg { return e.msg }
+
+// keyErr returns a keyError with the message format and args.
+func keyErr(format string, args ...any) error {
+	return &keyError{msg: i18n.M(format, args...)}
+}
+
 func parse(s string) (Key, error) {
 	if len(s) > MaxKeyLen {
-		return Key{}, fmt.Errorf("%w: longer than %d bytes", ErrInvalidKey, MaxKeyLen)
+		return Key{}, keyErr("longer than %d bytes", MaxKeyLen)
 	}
 	n := 0
 	for seg := range strings.SplitSeq(s, "/") {
 		n++
 		if n > MaxSegments {
-			return Key{}, fmt.Errorf("%w: more than %d segments", ErrInvalidKey, MaxSegments)
+			return Key{}, keyErr("more than %d segments", MaxSegments)
 		}
 		if err := ValidateSegment(seg); err != nil {
 			return Key{}, err
@@ -92,15 +108,15 @@ func parse(s string) (Key, error) {
 func ValidateSegment(seg string) error {
 	switch {
 	case seg == "":
-		return fmt.Errorf("%w: empty segment (absolute path or double slash)", ErrInvalidKey)
+		return keyErr("empty segment (absolute path or double slash)")
 	case len(seg) > MaxSegmentLen:
-		return fmt.Errorf("%w: segment longer than %d bytes", ErrInvalidKey, MaxSegmentLen)
+		return keyErr("segment longer than %d bytes", MaxSegmentLen)
 	case seg[0] == '.':
-		return fmt.Errorf("%w: segment starts with a dot", ErrInvalidKey)
+		return keyErr("segment starts with a dot")
 	}
 	for i := 0; i < len(seg); i++ {
 		if !segmentByte(seg[i]) {
-			return fmt.Errorf("%w: character %q not allowed at byte %d", ErrInvalidKey, seg[i], i)
+			return keyErr("character %q not allowed at byte %d", seg[i], i)
 		}
 	}
 	return nil
@@ -357,3 +373,12 @@ func DecodeDBName(enc string) (string, error) {
 // ValidUTF8DBName reports whether a decoded name is valid UTF-8 (for
 // display); non-UTF-8 names are legal but should be shown escaped.
 func ValidUTF8DBName(name string) bool { return utf8.ValidString(name) }
+
+// ProblemMsg returns what, followed by the key problem err carries
+// ("what: problem"), or what alone when err carries none.
+func ProblemMsg(what i18n.Msg, err error) i18n.Msg {
+	if m, ok := i18n.MsgOf(err); ok {
+		return i18n.Join(": ", what, m)
+	}
+	return what
+}

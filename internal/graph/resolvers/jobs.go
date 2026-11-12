@@ -47,7 +47,7 @@ func jobError(err error) error {
 	case err == nil:
 		return nil
 	case errors.As(err, &fe):
-		return apierror.Invalid(fe.Field, fe.Message)
+		return apierror.InvalidMsg(fe.Field, fe.Msg)
 	case errors.Is(err, jobs.ErrNotFound):
 		return errJobNotFound
 	case errors.Is(err, jobs.ErrNameTaken):
@@ -55,7 +55,7 @@ func jobError(err error) error {
 	case errors.Is(err, jobs.ErrSlugTaken):
 		return apierror.New(apierror.Conflict, "another job already uses this slug")
 	case errors.Is(err, jobs.ErrRunActive):
-		return apierror.New(apierror.Conflict, "a run of this job is already active")
+		return apierror.New(apierror.Conflict, "a run of this job is already queued or running; wait for it to finish")
 	case errors.Is(err, jobs.ErrDisabled):
 		return apierror.New(apierror.Conflict, "the job is disabled")
 	case errors.Is(err, jobs.ErrOwnerFilterForbidden):

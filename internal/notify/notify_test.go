@@ -14,6 +14,7 @@ import (
 	"github.com/jlentink/bekup/internal/audit"
 	"github.com/jlentink/bekup/internal/authz"
 	"github.com/jlentink/bekup/internal/db/sqlc"
+	"github.com/jlentink/bekup/internal/i18n"
 	"github.com/jlentink/bekup/internal/notify/webhook"
 )
 
@@ -386,7 +387,7 @@ func TestRenderMinimalAndLinked(t *testing.T) {
 		Detail: json.RawMessage(`{"status":"failed","error_code":"dump_failed"}`), CreatedAt: time.Now(),
 	}
 	m, _ := Lookup(BackupFailed)
-	c := s.render(ev, m, names{job: displayName("nightly\x07 <db>")})
+	c := s.render(ev, m, names{job: displayName("nightly\x07 <db>")}, i18n.EN)
 	if c.Title != "Backup failed: nightly  <db>" {
 		t.Fatalf("title %q", c.Title)
 	}
@@ -405,7 +406,7 @@ func TestRenderMinimalAndLinked(t *testing.T) {
 			t.Fatalf("payload lacks %s: %s", k, b)
 		}
 	}
-	if _, err := emailFor(ev, c, names{job: "nightly"}); err != nil {
+	if _, err := emailFor(ev, c, names{job: "nightly"}, i18n.EN); err != nil {
 		t.Fatal(err)
 	}
 	// Every catalog event renders a title, a body and a valid e-mail.
@@ -413,15 +414,15 @@ func TestRenderMinimalAndLinked(t *testing.T) {
 		user := uuid.New()
 		e := &sqlc.NotificationEvent{ID: uuid.New(), Type: string(m.Type), Severity: string(m.Severity), JobID: &job, UserID: &user,
 			ConnectionID: &job, DestinationID: &job, Detail: json.RawMessage(`{"kind":"sign_in"}`), CreatedAt: time.Now()}
-		c := s.render(e, m, names{job: "j", connection: "c", destination: "d"})
+		c := s.render(e, m, names{job: "j", connection: "c", destination: "d"}, i18n.EN)
 		if c.Title == "" || c.Body == "" || c.Link == "" {
 			t.Errorf("%s: %+v", m.Type, c)
 		}
-		if _, err := emailFor(e, c, names{job: "j"}); err != nil {
+		if _, err := emailFor(e, c, names{job: "j"}, i18n.EN); err != nil {
 			t.Errorf("%s: %v", m.Type, err)
 		}
 	}
-	if _, err := s.floodEmail(5); err != nil {
+	if _, err := s.floodEmail(5, i18n.EN); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -484,7 +485,7 @@ func TestRenderRetentionBlocked(t *testing.T) {
 	} {
 		ev := &sqlc.NotificationEvent{ID: uuid.New(), Type: string(RetentionBlocked), Severity: "warning", JobID: &job,
 			DestinationID: &dest, Detail: json.RawMessage(c.detail), CreatedAt: time.Now()}
-		got := s.render(ev, m, names{job: "nightly", destination: "offsite"})
+		got := s.render(ev, m, names{job: "nightly", destination: "offsite"}, i18n.EN)
 		for _, w := range c.want {
 			if !strings.Contains(got.Body, w) {
 				t.Errorf("body %q lacks %q", got.Body, w)
@@ -514,7 +515,7 @@ func TestRenderDestinationLowSpace(t *testing.T) {
 	} {
 		ev := &sqlc.NotificationEvent{ID: uuid.New(), Type: string(DestinationLowSpace), Severity: "warning",
 			DestinationID: &dest, Detail: json.RawMessage(c.detail), CreatedAt: time.Now()}
-		got := s.render(ev, m, names{destination: "offsite"})
+		got := s.render(ev, m, names{destination: "offsite"}, i18n.EN)
 		for _, w := range c.want {
 			if !strings.Contains(got.Body, w) {
 				t.Errorf("body %q lacks %q", got.Body, w)
