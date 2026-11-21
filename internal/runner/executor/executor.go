@@ -819,6 +819,21 @@ func (e *Executor) Run(ctx context.Context, rs RunSpec) (res Result, err error) 
 	}
 	cleanupFailed := false
 	defer func() { release(cleanupFailed) }()
+	e.mu.Lock()
+	selfID := e.self.ID
+	e.mu.Unlock()
+
+	// (1) per-run internal network, right after planning: a subnet taken
+	// in the meantime is planned again before anything depends on it.
+	var netID string
+	if !rs.Offline {
+		var removeNet func()
+		netID, removeNet, err = e.createRunNetwork(ctx, &rs, netName, selfID, &p, &release, &cleanupFailed)
+		defer removeNet()
+		if err != nil {
+			return Result{}, err
+		}
+	}
 
 	ep := ClientEndpoint{Host: p.clientHost, Port: rs.Target.Port}
 	cmd, err := rs.Command(ep)
@@ -838,9 +853,6 @@ func (e *Executor) Run(ctx context.Context, rs RunSpec) (res Result, err error) 
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrInvalidSpec, err)
 	}
-	e.mu.Lock()
-	selfID := e.self.ID
-	e.mu.Unlock()
 	sp.Config.Labels[LabelRunner] = selfID
 	if !rs.Offline {
 		sp.Networking.EndpointsConfig[netName].IPAMConfig = &network.EndpointIPAMConfig{IPv4Address: p.net.Client}
@@ -870,7 +882,7 @@ func (e *Executor) Run(ctx context.Context, rs RunSpec) (res Result, err error) 
 	var proxyAddr netip.AddrPort
 	if !rs.Offline {
 		var cleanup func()
-		proxyAddr, cleanup, err = e.connectRun(ctx, &rs, p, netName, selfID, &cleanupFailed)
+		proxyAddr, cleanup, err = e.connectRun(ctx, &rs, p, netID, selfID, &cleanupFailed)
 		defer cleanup()
 		if err != nil {
 			return Result{}, err
@@ -942,10 +954,65 @@ func (rs *RunSpec) name() string {
 	return NetworkPrefix + rs.RunID
 }
 
+// networkAttempts bounds how often a run's network is planned again after
+// Docker refused its subnet.
+const networkAttempts = 3
+
+// isPoolOverlap reports Docker's refusal of a subnet that another network
+// took ("invalid pool request: Pool overlaps with other one on this
+// address space"; the API has no error code of its own for it).
+func isPoolOverlap(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "pool overlaps")
+}
+
+// createRunNetwork creates the run's internal network for *p. Another
+// Docker client can take the planned subnet between makePlan's network
+// list and this call (a second runner on the host, a compose project
+// starting); Docker refuses that as a pool overlap, and the run is
+// planned again (*p and *release replaced: a fresh network list, the
+// pool's next /28), at most networkAttempts times. A /29 around a target
+// literal has no other subnet and is never planned again. remove must be
+// called (also on error).
+func (e *Executor) createRunNetwork(ctx context.Context, rs *RunSpec, name, selfID string, p *plan, release *func(bool), cleanupFailed *bool) (string, func(), error) {
+	for attempt := 1; ; attempt++ {
+		netID, err := e.d.NetworkCreate(ctx, NetworkRequest{
+			Name: name, Subnet: p.net.Subnet, Gateway: p.net.Gateway, Internal: true,
+			Options: NetworkOptions(), Labels: map[string]string{
+				spec.LabelManaged: "true", spec.LabelRunID: rs.RunID, LabelRunner: selfID,
+			},
+		})
+		if err == nil {
+			return netID, func() {
+				cctx, ccancel := e.bg(ctx)
+				defer ccancel()
+				if err := e.d.NetworkRemove(cctx, netID); err != nil && !IsNotFound(err) {
+					*cleanupFailed = true
+					e.log.ErrorContext(ctx, "runner network cleanup failed", slog.String("run_id", rs.RunID), slog.String("error", err.Error()))
+				}
+			}, nil
+		}
+		if !isPoolOverlap(err) || p.net.around || attempt >= networkAttempts {
+			return "", func() {}, fmt.Errorf("%w: create network: %w", ErrDocker, err)
+		}
+		e.log.WarnContext(ctx, "runner run subnet taken by another docker network; planning the run again",
+			slog.String("run_id", rs.RunID), slog.String("subnet", p.net.Subnet.String()), slog.Int("attempt", attempt))
+		// Nothing was created: the subnet goes back to the pool (the
+		// cursor has moved past it) and the run is planned afresh.
+		(*release)(false)
+		*release = func(bool) {}
+		np, nrel, err := e.makePlan(ctx, rs, name)
+		if err != nil {
+			return "", func() {}, err
+		}
+		*p, *release = np, nrel
+	}
+}
+
 // connectRun sets up the run's upstream (direct or SSH tunnel), the
-// per-run network, the runner's membership and the proxy. cleanup must be
-// called (also on error); it tears down what was set up, in reverse order.
-func (e *Executor) connectRun(ctx context.Context, rs *RunSpec, p plan, netName, selfID string, cleanupFailed *bool) (netip.AddrPort, func(), error) {
+// runner's membership in the per-run network netID and the proxy. cleanup
+// must be called (also on error); it tears down what was set up, in
+// reverse order.
+func (e *Executor) connectRun(ctx context.Context, rs *RunSpec, p plan, netID, selfID string, cleanupFailed *bool) (netip.AddrPort, func(), error) {
 	var stack []func()
 	cleanup := func() {
 		for i := len(stack) - 1; i >= 0; i-- {
@@ -972,25 +1039,6 @@ func (e *Executor) connectRun(ctx context.Context, rs *RunSpec, p plan, netName,
 		addr := net.JoinHostPort(rs.Target.Host, strconv.Itoa(rs.Target.Port))
 		dial = func(ctx context.Context) (net.Conn, error) { return e.guard.DialContext(ctx, "tcp", addr) }
 	}
-
-	// (1) per-run internal network.
-	netID, err := e.d.NetworkCreate(ctx, NetworkRequest{
-		Name: netName, Subnet: p.net.Subnet, Gateway: p.net.Gateway, Internal: true,
-		Options: NetworkOptions(), Labels: map[string]string{
-			spec.LabelManaged: "true", spec.LabelRunID: rs.RunID, LabelRunner: selfID,
-		},
-	})
-	if err != nil {
-		return netip.AddrPort{}, cleanup, fmt.Errorf("%w: create network: %w", ErrDocker, err)
-	}
-	stack = append(stack, func() {
-		cctx, ccancel := e.bg(ctx)
-		defer ccancel()
-		if err := e.d.NetworkRemove(cctx, netID); err != nil && !IsNotFound(err) {
-			*cleanupFailed = true
-			e.log.ErrorContext(ctx, "runner network cleanup failed", slog.String("run_id", rs.RunID), slog.String("error", err.Error()))
-		}
-	})
 
 	// (2) self-join with the fixed proxy address.
 	if err := e.d.NetworkConnect(ctx, netID, selfID, p.net.Proxy); err != nil {

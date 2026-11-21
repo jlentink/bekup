@@ -343,22 +343,11 @@ func (d *Destination) mkcolAll(ctx context.Context, segs []string, floor int) er
 	}
 	const op = "create a folder"
 	for attempt := 0; attempt < 3; attempt++ {
-		code, _, err := d.do(ctx, op, request{method: "MKCOL", segs: segs, coll: true}, nil)
-		if err != nil {
+		code, done, err := d.mkcol(ctx, op, segs)
+		if err != nil || done {
 			return err
 		}
 		switch code {
-		case http.StatusCreated, http.StatusOK, http.StatusNoContent:
-			return nil
-		case http.StatusMethodNotAllowed:
-			return nil // exists (a file in the way fails the following request)
-		case http.StatusForbidden, http.StatusLocked, http.StatusInternalServerError:
-			// A concurrent MKCOL of the same folder answers so on some
-			// servers (Apache): fine if the folder exists now.
-			if e, serr := d.stat(ctx, op, segs, true); serr == nil && e.coll {
-				return nil
-			}
-			return statusErr(op, code)
 		case http.StatusConflict:
 			if len(segs)-1 <= floor {
 				return storage.WithDetail(fmt.Errorf("%w: webdav: the base folder is missing", storage.ErrNotFound),
@@ -373,6 +362,39 @@ func (d *Destination) mkcolAll(ctx context.Context, segs []string, floor int) er
 	}
 	return storage.WithDetail(storage.WithCode(storage.CodeInternal, errors.New("webdav: folder creation did not settle")),
 		op+": the folder kept disappearing")
+}
+
+// mkcol sends one MKCOL of segs while holding the folder's mkcolLocks
+// entry (released before mkcolAll recurses to the parent, so no two are
+// ever held). done reports a folder that exists now; otherwise code is the
+// status for mkcolAll (409: a parent is missing) or err is set.
+func (d *Destination) mkcol(ctx context.Context, op string, segs []string) (code int, done bool, err error) {
+	unlock, err := mkcolLocks.lock(ctx, d.urlOf(segs, true))
+	if err != nil {
+		return 0, false, err
+	}
+	defer unlock()
+	code, _, err = d.do(ctx, op, request{method: "MKCOL", segs: segs, coll: true}, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	switch code {
+	case http.StatusCreated, http.StatusOK, http.StatusNoContent:
+		return code, true, nil
+	case http.StatusMethodNotAllowed:
+		return code, true, nil // exists (a file in the way fails the following request)
+	case http.StatusForbidden, http.StatusLocked, http.StatusInternalServerError:
+		// A concurrent MKCOL of the same folder (another process) answers
+		// so on some servers (Apache): fine if the folder exists now.
+		if e, serr := d.stat(ctx, op, segs, true); serr == nil && e.coll {
+			return code, true, nil
+		}
+		return code, false, statusErr(op, code)
+	case http.StatusConflict:
+		return code, false, nil
+	default:
+		return code, false, statusErr(op, code)
+	}
 }
 
 // Put implements storage.Destination: the bytes go to a hidden

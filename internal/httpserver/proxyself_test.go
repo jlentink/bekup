@@ -481,7 +481,9 @@ func TestJoinModeListenerFilter(t *testing.T) {
 	})
 	env.srv.live.hosts.refresh(context.Background())
 	t.Run("own address known", func(t *testing.T) { run(t, func(i int) bool { return cases[i].ok }) })
-	if !strings.Contains(env.logText(), "did not arrive on its address on the proxy network") &&
+	// Both kinds are logged within one refusedWarnInterval: the startup
+	// warning (own address unknown) must not hide the other-network one.
+	if !strings.Contains(env.logText(), "did not arrive on its address on the proxy network") ||
 		!strings.Contains(env.logText(), "address on the proxy network is unknown") {
 		t.Fatalf("missing refusal warning: %s", env.logText())
 	}

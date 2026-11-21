@@ -16,6 +16,16 @@ import (
 // twice (artifact keys carry the run).
 var putLocks = keyedLocks{m: map[string]*keyedLock{}}
 
+// mkcolLocks serializes the MKCOLs of one folder within this process.
+// ownCloud (and so TransIP STACK) locks a folder exclusively while a MKCOL
+// creates it, and a request that loses a concurrent creation keeps that
+// lock a little longer; a PUT into the folder meanwhile fails with 423
+// Locked. Taking turns lets only the first MKCOL create the folder: the
+// others find it (405) without locking, before their Put sends a byte.
+// Across processes the Puts of one run share no folder they create
+// concurrently except by chance (a separate run directory per run).
+var mkcolLocks = keyedLocks{m: map[string]*keyedLock{}}
+
 // keyedLocks is a set of context-aware locks, each held in the map only
 // while someone holds or waits for it.
 type keyedLocks struct {

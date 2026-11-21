@@ -45,6 +45,9 @@ type fakeDocker struct {
 	lastSpec   spec.Spec
 	lastCont   *fakeContainer
 	onList     func() // called at the start of ContainerList (reaper)
+	// onNetCreate runs at the start of NetworkCreate (outside the lock);
+	// a non-nil error is returned as Docker's answer.
+	onNetCreate func(f *fakeDocker, req NetworkRequest) error
 }
 
 func newFakeDocker() *fakeDocker {
@@ -119,6 +122,11 @@ func (f *fakeDocker) ImagePull(_ context.Context, ref string) error {
 func (f *fakeDocker) NetworkCreate(_ context.Context, req NetworkRequest) (string, error) {
 	if err := f.record("NetworkCreate"); err != nil {
 		return "", err
+	}
+	if f.onNetCreate != nil {
+		if err := f.onNetCreate(f, req); err != nil {
+			return "", err
+		}
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

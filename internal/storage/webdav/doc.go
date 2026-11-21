@@ -37,7 +37,9 @@
 //
 // WebDAV has no exclusive create, and some servers (Apache mod_dav) check
 // "Overwrite: F" and rename in two steps, so Puts of one key take turns
-// within the process (putLocks, D-222 amendment 2). Residual trust in the
+// within the process (putLocks, D-222 amendment 2). MKCOLs of one folder
+// take turns too (mkcolLocks): ownCloud locks a folder while creating it,
+// and a PUT into it meanwhile fails with 423. Residual trust in the
 // server: across processes the refusal to overwrite is the server's MOVE
 // implementation; bekup never writes the same key from two processes. Data integrity against a malicious server comes from age
 // encryption and the signed manifest, not from this backend.
