@@ -211,9 +211,19 @@ type proxyHosts struct {
 	selfKey     string
 	peerKey     string
 
+	// warnMu guards lastWarn, one slot per refusal kind, so the warning
+	// while the own address is still unknown (startup) never hides the
+	// later one for a connection from another network.
 	warnMu   sync.Mutex
-	lastWarn time.Time
+	lastWarn [refusedKinds]time.Time
 }
+
+// Kinds of refused-connection warnings, each rate-limited on its own.
+const (
+	refusedSelfUnknown = iota
+	refusedOtherNetwork
+	refusedKinds
+)
 
 // proxyHostsOptions are the optional parts of newProxyHosts.
 type proxyHostsOptions struct {
@@ -756,22 +766,26 @@ func (h *proxyHosts) acceptConn(local, remote net.Addr) bool {
 	return ok && slices.Contains(st.own, la) && isTrusted(ra, st.subnets)
 }
 
-// refused logs a refused connection (at most once per
+// refused logs a refused connection (each kind at most once per
 // refusedWarnInterval).
 func (h *proxyHosts) refused(c net.Conn) {
 	if h.logger == nil {
 		return
 	}
+	kind := refusedOtherNetwork
+	if !h.self.Load().known() {
+		kind = refusedSelfUnknown
+	}
 	now := h.now()
 	h.warnMu.Lock()
-	if !h.lastWarn.IsZero() && now.Sub(h.lastWarn) < refusedWarnInterval {
+	if last := h.lastWarn[kind]; !last.IsZero() && now.Sub(last) < refusedWarnInterval {
 		h.warnMu.Unlock()
 		return
 	}
-	h.lastWarn = now
+	h.lastWarn[kind] = now
 	h.warnMu.Unlock()
 	local, peer := slog.String("local", c.LocalAddr().String()), slog.String("peer", c.RemoteAddr().String())
-	if !h.self.Load().known() {
+	if kind == refusedSelfUnknown {
 		h.logger.Warn("connection closed because the own address on the proxy network is unknown (the own network alias does not resolve to this container); every non-loopback connection is refused until it does (D-215)", local, peer, slog.String("alias", h.alias))
 		return
 	}
